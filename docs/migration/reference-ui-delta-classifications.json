@@ -314,6 +314,26 @@
     "shared-ui.resource-bar.capacity": {
       "destination": "frontend/src/shared/ui/primitives/progress.test.tsx",
       "rationale": "A future utilization bar must test server-observed used, allocatable, marker, and severity data without treating a percentage alone as capacity evidence."
+    },
+    "logs.stream.clean-end.adapter": {
+      "destination": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+      "rationale": "The authenticated SSE adapter must preserve a typed clean-end reason through the product-owned log stream boundary."
+    },
+    "logs.stream.terminal-state": {
+      "destination": "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+      "rationale": "A clean terminal event must retain discovered workload pods, end the matching tab, and suppress a false retry affordance."
+    },
+    "logs.viewer.shared-input": {
+      "destination": "frontend/src/features/log-viewer/LogViewer.test.tsx",
+      "rationale": "Log search must consume the reusable accessible input primitive rather than maintaining a second raw input implementation."
+    },
+    "logs.viewer.empty-diagnostic": {
+      "destination": "frontend/src/app/LogStreamTab.test.tsx",
+      "rationale": "A future empty-log diagnostic must be a typed, redacted server projection; the tab test will cover its unavailable and rendered states."
+    },
+    "logs.workload.empty-diagnostic": {
+      "destination": "frontend/src/features/bottom-dock/BottomDockProvider.test.tsx",
+      "rationale": "A future workload-empty diagnostic must retain stream identity and be rendered only from an authenticated typed endpoint event."
     }
   },
   "classifications": {
@@ -3455,6 +3475,167 @@
             "state": "blocked",
             "blockedReason": "The current relationship canvas has no route-owned search/focus controller or keyboard interaction test, so adding a local string filter would not preserve source navigation semantics.",
             "rationale": "Search is deferred until it can focus the same typed resource identity that is used by the resource detail route."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/logs/useLogStream.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:stream:clean-end-event:v1",
+          "legacyContractIds": [],
+          "symbol": "LogStreamHandlers.onEnd and end event listener",
+          "interaction": "an authenticated log SSE clean-end envelope stops only its current stream generation and carries the typed terminal reason to the matching log tab",
+          "transport": "sse",
+          "realtime": {
+            "resume": "restart only a newly requested authorized target or a user-initiated retry; a clean end never reconnects itself",
+            "backpressure": "coalesce log events once per animation frame while retaining the bounded ordered line buffer",
+            "merge": "apply events only to the immutable target tab and mark it ended with the server-provided reason"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/features/log-stream/logStreamEndpointContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/features/bottom-dock/bottomDockState.ts",
+              "frontend/src/app/LogStreamTab.tsx",
+              "src/domains/log_stream/router.py",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.stream.clean-end.adapter",
+              "logs.stream.terminal-state"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product owns a strict fetch-SSE reader and Python-owned envelope contract. It maps the end reason through a typed adapter and reducer without importing the source EventSource hook."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/logs/LogCore.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:viewer:shared-input-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "LogCore search Input",
+          "interaction": "the controlled log search uses the shared accessible input boundary while keeping query, regex, case, and navigation state owned by the log viewer",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/log-viewer/LogViewer.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/features/log-viewer/LogViewer.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream"
+            ],
+            "plannedTestIds": [
+              "logs.viewer.shared-input"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product's typed log viewer already owns all search state and reuses the shared Input primitive; the regression test pins the canonical input slot without duplicating an untyped field."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:logs:viewer:empty-command-diagnostic:v1",
+          "legacyContractIds": [],
+          "symbol": "LogCore emptyCommand recovery control",
+          "interaction": "an empty log viewer may render a server-supplied diagnostic and offer a copy-only recovery command without constructing or executing a command in the browser",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.viewer.empty-diagnostic"
+            ],
+            "state": "blocked",
+            "blockedReason": "The log-stream envelope has typed end reasons only; it does not expose a redacted empty-message or copy-only recovery-command field bound to the authorized target.",
+            "rationale": "The browser must not derive, display, or execute a raw recovery command from log text. A future Python projection must supply a redacted diagnostic and copy-safe command explicitly."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/logs/WorkloadLogsViewer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workload-logs:stream:membership-terminal-state:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadLogsViewer pod-added, pod-removed, and onEnd handlers",
+          "interaction": "a workload log stream updates the current typed pod membership and preserves it when the matching server stream ends cleanly",
+          "transport": "sse",
+          "realtime": {
+            "resume": "open one authorized workload stream per explicit tab target and restart only after a user retry or target change",
+            "backpressure": "batch incoming per-tab events on the animation-frame boundary and retain a fixed maximum of ordered lines",
+            "merge": "merge pod membership and terminal state only into the tab whose immutable cluster, kind, namespace, and workload identity match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/features/bottom-dock/bottomDockState.ts",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+              "src/domains/log_stream/service.py",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.stream.terminal-state"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing product stream protocol carries typed pod membership and end envelopes. The dock reducer keeps membership and the terminal reason in the product-owned bounded state model."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workload-logs:empty:diagnostic-command:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadLogsResult emptyMessage and command",
+          "interaction": "a workload empty state may use an authorized diagnostic and copy-only command supplied by the server rather than browser inference",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.workload.empty-diagnostic"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python workload log contract exposes membership and terminal reasons but no typed redacted empty diagnostic or copy-safe command for this stream target.",
+            "rationale": "Rendering an invented kubectl command would bypass the product's audited target and capability model, so the source behavior remains explicitly blocked until the server contract exists."
           }
         }
       ]
