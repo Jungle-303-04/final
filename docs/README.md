@@ -278,6 +278,10 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [migration/parity-supervision-plan](migration/parity-supervision-plan.md)
 - [migration/timeline-p0-url-state-mapping](migration/timeline-p0-url-state-mapping.md)
 
+계획 문서는 아래에 있다.
+
+- [plans/vp-021-ai-assistant](plans/vp-021-ai-assistant.md)
+
 팀 문서는 아래에 있다.
 
 - [team/conventions](team/conventions.md)
@@ -365,6 +369,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [onboarding/gain-evidence-rca](onboarding/gain-evidence-rca.md)
 - [onboarding/minjeong-command-target-evidence](onboarding/minjeong-command-target-evidence.md)
 - [operations-deployment](operations-deployment.md)
+- [plans/vp-021-ai-assistant](plans/vp-021-ai-assistant.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
 - [rca-production-onboarding/00-current-runtime-flow](rca-production-onboarding/00-current-runtime-flow.md)
