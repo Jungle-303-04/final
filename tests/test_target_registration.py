@@ -2449,11 +2449,75 @@ def test_install_manifest_injects_control_namespaces_when_specified() -> None:
     assert 'CONTROL_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
     assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
 
+    docs = [document for document in yaml.safe_load_all(manifest) if document]
+    cronjob_roles = [
+        document
+        for document in docs
+        if document.get("kind") == "Role"
+        and document.get("metadata", {}).get("name") == "cluster-agent-cronjob-control"
+    ]
+    cronjob_bindings = [
+        document
+        for document in docs
+        if document.get("kind") == "RoleBinding"
+        and document.get("metadata", {}).get("name") == "cluster-agent-cronjob-control"
+    ]
+    assert {role["metadata"]["namespace"] for role in cronjob_roles} == {
+        "sandbox",
+        "prod-web",
+    }
+    assert {binding["metadata"]["namespace"] for binding in cronjob_bindings} == {
+        "sandbox",
+        "prod-web",
+    }
+    for role in cronjob_roles:
+        assert role["rules"] == [
+            {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create"]},
+            {"apiGroups": ["batch"], "resources": ["cronjobs"], "verbs": ["patch"]},
+        ]
+
 
 def test_install_manifest_omits_control_namespaces_by_default() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
     assert "CONTROL_ALLOWED_NAMESPACES" not in manifest
     assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox"' in manifest
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        target_install_manifest(target_request(), "agent-secret"),
+        (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text(
+            encoding="utf-8"
+        ),
+    ],
+)
+def test_target_manifest_packages_exact_cronjob_read_and_control_rbac(manifest: str) -> None:
+    docs = [document for document in yaml.safe_load_all(manifest) if document]
+    read_role = next(
+        document
+        for document in docs
+        if document.get("kind") == "ClusterRole"
+        and document.get("metadata", {}).get("name") == "cluster-agent-read"
+    )
+    batch_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == ["batch"])
+    assert batch_read == {
+        "apiGroups": ["batch"],
+        "resources": ["jobs", "cronjobs"],
+        "verbs": ["get", "list", "watch"],
+    }
+
+    control_role = next(
+        document
+        for document in docs
+        if document.get("kind") == "Role"
+        and document.get("metadata", {}).get("name") == "cluster-agent-cronjob-control"
+    )
+    assert control_role["metadata"]["namespace"] == "sandbox"
+    assert control_role["rules"] == [
+        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create"]},
+        {"apiGroups": ["batch"], "resources": ["cronjobs"], "verbs": ["patch"]},
+    ]
 
 
 def test_dev_runtime_can_default_target_control_namespaces(monkeypatch) -> None:

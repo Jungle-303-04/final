@@ -197,9 +197,10 @@ class ServiceKubernetesClient(StubKubernetesClient):
 
 
 class CronJobKubernetesClient(StubKubernetesClient):
-    def __init__(self) -> None:
+    def __init__(self, *, uid: str = "cronjob-uid-1") -> None:
         super().__init__()
         self.gets: list[dict[str, object]] = []
+        self.uid = uid
 
     async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.gets.append(kwargs)
@@ -209,7 +210,7 @@ class CronJobKubernetesClient(StubKubernetesClient):
             "metadata": {
                 "name": "nightly",
                 "namespace": str(kwargs["namespace"]),
-                "uid": "cronjob-uid-1",
+                "uid": self.uid,
             },
             "spec": {
                 "jobTemplate": {
@@ -225,6 +226,25 @@ class CronJobKubernetesClient(StubKubernetesClient):
                 }
             },
         }
+
+
+def cronjob_command_payload(
+    *,
+    namespace: str = "team-jobs",
+    uid: str = "cronjob-uid-1",
+) -> dict[str, object]:
+    return {
+        "namespace": namespace,
+        "name": "nightly",
+        "resource_ref": {
+            "api_group": "batch",
+            "version": "v1",
+            "kind": "CronJob",
+            "namespace": namespace,
+            "name": "nightly",
+            "uid": uid,
+        },
+    }
 
 
 def approval_evidence(
@@ -2200,7 +2220,7 @@ def test_cronjob_trigger_uses_observed_template_and_advertised_capability(
             {
                 "action": module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
                 "direct_execution": True,
-                "payload": {"namespace": "team-jobs", "name": "nightly"},
+                "payload": cronjob_command_payload(),
             }
         )
     )
@@ -2302,7 +2322,7 @@ def test_cronjob_schedule_control_is_typed_and_namespace_scoped(
             {
                 "action": getattr(module.Command, action),
                 "direct_execution": True,
-                "payload": {"namespace": "team-jobs", "name": "nightly"},
+                "payload": cronjob_command_payload(),
             }
         )
     )
@@ -2318,6 +2338,47 @@ def test_cronjob_schedule_control_is_typed_and_namespace_scoped(
             "body": {"spec": {"suspend": suspended}},
         }
     ]
+    assert agent.kubernetes.gets == [
+        {
+            "api_group": "batch",
+            "version": "v1",
+            "namespace": "team-jobs",
+            "resource": "cronjobs",
+            "name": "nightly",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "KUBERNETES_CRONJOB_TRIGGER_ACTION",
+        "KUBERNETES_CRONJOB_SUSPEND_ACTION",
+        "KUBERNETES_CRONJOB_RESUME_ACTION",
+    ],
+)
+def test_cronjob_control_rejects_a_recreated_uid_before_any_write(action: str) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = CronJobKubernetesClient(uid="cronjob-uid-recreated")
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": getattr(module.Command, action),
+                "direct_execution": True,
+                "payload": cronjob_command_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "selected CronJob identity is stale"
+    assert agent.kubernetes.creates == []
+    assert agent.kubernetes.patches == []
 
 
 def test_cronjob_control_rejects_namespace_outside_agent_policy() -> None:
@@ -2333,7 +2394,7 @@ def test_cronjob_control_rejects_namespace_outside_agent_policy() -> None:
             {
                 "action": module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
                 "direct_execution": True,
-                "payload": {"namespace": "kube-system", "name": "nightly"},
+                "payload": cronjob_command_payload(namespace="kube-system"),
             }
         )
     )

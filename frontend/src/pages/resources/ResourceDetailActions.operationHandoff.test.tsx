@@ -87,6 +87,97 @@ describe("ResourceDetailActions operation handoff", () => {
       DIAGNOSE_CAPABILITIES,
     ));
   });
+
+  it("reuses one exact CronJob execution key after a transport failure", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn()
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce({
+        accepted: true,
+        auditEventId: "event-cronjob-1",
+        correlationId: "correlation-cronjob-1",
+        commandId: "command-cronjob-1",
+        eventId: "event-cronjob-1",
+        status: "queued",
+      });
+    const cronjobDetail: ResourceDetail = {
+      ...detail,
+      identity: {
+        kind: "CronJob",
+        name: "nightly",
+        namespace: "shop",
+        resourceType: "workload",
+      },
+      resource: {
+        ...detail.resource,
+        apiVersion: "batch/v1",
+        inventoryKey: "resource-cronjob-nightly",
+        kind: "CronJob",
+        name: "nightly",
+        uid: "cronjob-uid-1",
+      },
+    };
+    const cronjobCapability: ResourceActionCapability = {
+      ...capability,
+      capabilityId: "cronjob.trigger",
+      description: "Create one Job from this CronJob.",
+      label: "Trigger",
+      path: "/clusters/cluster-1/namespaces/shop/cronjobs/nightly/trigger",
+    };
+    const cronjobCapabilities: ResourceCapabilitiesFrame = {
+      data: {
+        capabilities: [cronjobCapability],
+        revision: "a".repeat(64),
+        subject: {
+          clusterId: "cluster-1",
+          kind: "CronJob",
+          name: "nightly",
+          namespace: "shop",
+          resourceId: "resource-cronjob-nightly",
+          resourceType: "workload",
+          snapshotId: "snapshot-42",
+        },
+      },
+      failure: null,
+      phase: "ready",
+    };
+
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceDetailActions
+          actionsPort={{ execute }}
+          capabilities={cronjobCapabilities}
+          detail={cronjobDetail}
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Trigger" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await screen.findByText("The change request was not accepted.");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+    const firstContext = execute.mock.calls[0]?.[2];
+    const secondContext = execute.mock.calls[1]?.[2];
+    expect(firstContext).toEqual({
+      capabilityId: "cronjob.trigger",
+      idempotencyKey: expect.stringMatching(/^resource-action-/u),
+      resourceId: "resource-cronjob-nightly",
+      snapshotId: "snapshot-42",
+      revision: "a".repeat(64),
+      resource: {
+        apiGroup: "batch",
+        version: "v1",
+        kind: "CronJob",
+        namespace: "shop",
+        name: "nightly",
+        uid: "cronjob-uid-1",
+      },
+    });
+    expect(secondContext.idempotencyKey).toBe(firstContext.idempotencyKey);
+  });
 });
 
 async function submitRestart(user: ReturnType<typeof userEvent.setup>) {

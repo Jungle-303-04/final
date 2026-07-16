@@ -33,6 +33,7 @@ from domains.command.router import (
     uncordon_node,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
+from domains.inventory.capabilities import resource_capabilities_response
 from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
@@ -42,10 +43,12 @@ from packages.contracts.gateway.requests import (
     CommandResultRequest,
     CommandStartRequest,
     ConfirmedResourceActionRequest,
+    CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
 )
 from packages.contracts.gateway.responses import AcceptedResponse
+from packages.contracts.parity import ResourceRef
 from packages.runtime.operation_events import InMemoryOperationEventBroker
 
 AGENT_IDENTITY = ClusterAgentIdentity(
@@ -59,6 +62,8 @@ class SpyAccessDb:
         self.allowed = allowed
         self.cluster_role = cluster_role
         self.calls: list[tuple[str, str, str, str, str]] = []
+        self.inventory_resource: dict[str, object] | None = None
+        self.agent_command: dict[str, object] | None = None
 
     def user_has_resource_access(
         self,
@@ -79,6 +84,47 @@ class SpyAccessDb:
             "cluster_id": cluster_id,
             "settings": {"cluster_role": self.cluster_role},
         }
+
+    def get_inventory_resource_by_key(
+        self,
+        *,
+        workspace_id: str,
+        inventory_key: str,
+    ) -> dict[str, object] | None:
+        resource = self.inventory_resource
+        if (
+            workspace_id != "workspace-1"
+            or resource is None
+            or inventory_key != resource["inventory_key"]
+        ):
+            return None
+        return dict(resource)
+
+    def list_cluster_agent_statuses(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "workspace-1"
+        assert self.inventory_resource is not None
+        assert cluster_id == self.inventory_resource["cluster_id"]
+        return [
+            {
+                "status": "connected",
+                "capabilities": ["command_receiver", Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY],
+            }
+        ]
+
+    async def get_agent_command(
+        self,
+        command_id: str,
+        workspace_id: str,
+    ) -> dict[str, object] | None:
+        if workspace_id != "workspace-1" or self.agent_command is None:
+            return None
+        if command_id != self.agent_command["command_id"]:
+            return None
+        return self.agent_command
 
 
 class SpyDebugQueryDb(SpyAccessDb):
@@ -220,6 +266,50 @@ class ControlDb(SpyAccessDb):
 
 def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="workspace-1")
+
+
+def cronjob_control_request(
+    db: SpyAccessDb,
+    *,
+    cluster_id: str = "cluster-1",
+    namespace: str = "sandbox",
+    suspended: bool = False,
+    reason: str = "operator verified the exact CronJob",
+) -> CronJobControlRequest:
+    db.inventory_resource = {
+        "inventory_key": "resource-cronjob-nightly",
+        "snapshot_id": "snapshot-cronjob-42",
+        "workspace_id": "workspace-1",
+        "cluster_id": cluster_id,
+        "resource_type": "workload",
+        "api_version": "batch/v1",
+        "kind": "CronJob",
+        "namespace": namespace,
+        "name": "nightly",
+        "uid": "cronjob-uid-1",
+        "raw": {"spec": {"suspend": suspended}},
+    }
+    decision = resource_capabilities_response(
+        db,
+        workspace_id="workspace-1",
+        current=current_session(),
+        resource=db.inventory_resource,
+    )
+    return CronJobControlRequest(
+        confirmation=True,
+        reason=reason,
+        resource_id="resource-cronjob-nightly",
+        snapshot_id="snapshot-cronjob-42",
+        capability_revision=decision.revision,
+        resource=ResourceRef(
+            api_group="batch",
+            version="v1",
+            kind="CronJob",
+            namespace=namespace,
+            name="nightly",
+            uid="cronjob-uid-1",
+        ),
+    )
 
 
 class SpyCommandLeaseDb:
@@ -980,16 +1070,15 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
     async def run() -> None:
         events = SpyEvents()
         operation_events = SpyOperationEvents()
+        db = SpyAccessDb(allowed=True)
         response = await route(
             "cluster-1",
             "team-jobs",
             "nightly",
-            ConfirmedResourceActionRequest(
-                confirmation=True,
-                reason="operator verified the exact CronJob",
-            ),
+            cronjob_control_request(db, namespace="team-jobs"),
+            "cronjob-action-key-1",
             current_session(),
-            SpyAccessDb(allowed=True),
+            db,
             events,
             operation_events,
         )
@@ -1000,7 +1089,21 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
         assert events.body.action == action
         assert events.body.namespace == "team-jobs"
         assert events.body.diff.resource == "cronjob/nightly"
-        assert events.body.payload == {"namespace": "team-jobs", "name": "nightly"}
+        assert events.body.payload == {
+            "namespace": "team-jobs",
+            "name": "nightly",
+            "resource_ref": {
+                "api_group": "batch",
+                "version": "v1",
+                "kind": "CronJob",
+                "namespace": "team-jobs",
+                "name": "nightly",
+                "uid": "cronjob-uid-1",
+            },
+        }
+        assert events.body.diff.basis["capability_snapshot_id"] == "snapshot-cronjob-42"
+        assert events.body.diff.basis["capability_revision"]
+        assert events.body.diff.basis["request_fingerprint"]
         assert events.body.direct_execution is True
         assert events.body.direct_execution_confirmed is True
         plan = build_plan(events.body, response.correlation_id)
@@ -1025,27 +1128,20 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
     asyncio.run(run())
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        ConfirmedResourceActionRequest(),
-        ConfirmedResourceActionRequest(direct_execution=True),
-        ConfirmedResourceActionRequest(direct_execution_confirmed=True),
-    ],
-)
-def test_cronjob_control_requires_one_explicit_confirmation(
-    payload: ConfirmedResourceActionRequest,
-) -> None:
+def test_cronjob_control_requires_one_explicit_confirmation() -> None:
     async def run() -> None:
         events = SpyEvents()
+        db = SpyAccessDb(allowed=True)
+        payload = cronjob_control_request(db).model_copy(update={"confirmation": None})
         with pytest.raises(HTTPException) as excinfo:
             await trigger_cronjob(
                 "cluster-1",
                 "sandbox",
                 "nightly",
                 payload,
+                "cronjob-action-key-2",
                 current_session(),
-                SpyAccessDb(allowed=True),
+                db,
                 events,
             )
 
@@ -1060,13 +1156,15 @@ def test_cronjob_direct_confirmation_allows_management_cluster() -> None:
     async def run() -> None:
         events = SpyEvents()
         operation_events = SpyOperationEvents()
+        db = SpyAccessDb(allowed=True, cluster_role="management")
         response = await trigger_cronjob(
             "management-1",
             "sandbox",
             "nightly",
-            ConfirmedResourceActionRequest(confirmation=True),
+            cronjob_control_request(db, cluster_id="management-1"),
+            "cronjob-action-key-3",
             current_session(),
-            SpyAccessDb(allowed=True, cluster_role="management"),
+            db,
             events,
             operation_events,
         )
@@ -1076,6 +1174,87 @@ def test_cronjob_direct_confirmation_allows_management_cluster() -> None:
         assert events.body.direct_execution is True
         assert events.body.direct_execution_confirmed is True
         assert operation_events.published[0]["command_id"] == response.command_id
+
+    asyncio.run(run())
+
+
+def test_cronjob_control_rejects_a_stale_exact_resource_before_dispatch() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = cronjob_control_request(db).model_copy(
+            update={
+                "resource": ResourceRef(
+                    api_group="batch",
+                    version="v1",
+                    kind="CronJob",
+                    namespace="sandbox",
+                    name="nightly",
+                    uid="recreated-cronjob-uid",
+                )
+            }
+        )
+        events = SpyEvents()
+
+        with pytest.raises(HTTPException) as excinfo:
+            await trigger_cronjob(
+                "cluster-1",
+                "sandbox",
+                "nightly",
+                payload,
+                "cronjob-action-key-4",
+                current_session(),
+                db,
+                events,
+            )
+
+        assert excinfo.value.status_code == 409
+        assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_cronjob_control_replays_the_original_receipt_for_one_idempotency_key() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = cronjob_control_request(db)
+        first_events = SpyEvents()
+        first = await trigger_cronjob(
+            "cluster-1",
+            "sandbox",
+            "nightly",
+            payload,
+            "cronjob-action-replay-key",
+            current_session(),
+            db,
+            first_events,
+            SpyOperationEvents(),
+        )
+        assert isinstance(first_events.body, CommandRequestedBody)
+        plan = build_plan(first_events.body, first.correlation_id).to_body()
+        db.agent_command = {
+            "command_id": first.command_id,
+            "workspace_id": "workspace-1",
+            "correlation_id": first.correlation_id,
+            "confirmation_event_id": first.event_id,
+            "status": "queued",
+            "payload": plan,
+        }
+        replay_events = SpyEvents()
+
+        replay = await trigger_cronjob(
+            "cluster-1",
+            "sandbox",
+            "nightly",
+            payload,
+            "cronjob-action-replay-key",
+            current_session(),
+            db,
+            replay_events,
+            SpyOperationEvents(),
+        )
+
+        assert replay == first
+        assert replay_events.body is None
 
     asyncio.run(run())
 
