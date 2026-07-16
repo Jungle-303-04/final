@@ -1,7 +1,7 @@
 import type { MessageKey, TranslationFunction } from "../../shared/i18n";
 import { useI18n } from "../../shared/i18n";
 import { desktopBridge } from "../../desktop/desktopBridge";
-import { StatusMark } from "../../shared/ui/StatusMark";
+import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Collapse, CollapseChevron } from "../../shared/ui/primitives/collapse";
@@ -72,6 +72,7 @@ export function ProviderResourceDetailPanel({
       {detail.type === "prometheus-rule" ? (
         <PrometheusRuleGroupsPanel detail={detail} />
       ) : null}
+      {detail.type === "workflow" ? <WorkflowExecutionPanel detail={detail} /> : null}
       {detail.type === "sbom-report" ? <SbomComponentsPanel detail={detail} /> : null}
       {detail.type === "vulnerability-report" ? (
         <VulnerabilityReportPanel
@@ -94,6 +95,64 @@ type KedaDetail = Extract<
   { type: "keda-scaled-object" | "keda-scaled-job" }
 >;
 type PrometheusRuleDetail = Extract<ProviderResourceDetail, { type: "prometheus-rule" }>;
+type WorkflowDetail = Extract<ProviderResourceDetail, { type: "workflow" }>;
+
+function WorkflowExecutionPanel({ detail }: { detail: WorkflowDetail }) {
+  const { t } = useI18n();
+  if (detail.executionNodes.length === 0 && detail.problemSummaries.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-workflow-execution" className="grid gap-3">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h4 className="text-sm font-medium" id="provider-workflow-execution">
+          {t("resources.detail.provider.execution")}
+        </h4>
+        <Badge variant="outline">
+          {t("resources.detail.provider.nodeProjectionCount", {
+            count: detail.projectedNodeCount,
+            total: detail.observedNodeCount,
+          })}
+        </Badge>
+      </div>
+      {detail.problemSummaries.length > 0 ? (
+        <ul className="grid gap-2 rounded-lg border border-destructive/35 bg-destructive/5 p-3">
+          {detail.problemSummaries.map((summary) => (
+            <li className="text-sm text-destructive [overflow-wrap:anywhere]" key={summary}>
+              {summary}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <ol className="grid gap-2">
+        {detail.executionNodes.map((node) => (
+          <li
+            className="grid min-w-0 gap-1 rounded-lg border bg-background/65 px-3 py-2.5"
+            data-workflow-node={node.id}
+            key={node.id}
+            style={{ marginInlineStart: `${Math.min(node.depth, 6) * 0.75}rem` }}
+          >
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-sm font-medium" title={node.label}>
+                {node.label}
+              </span>
+              <StatusMark label={node.phase} tone={workflowNodeTone(node.phase)} />
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>{node.nodeType}</span>
+              {node.templateRef ? <span>{namedReferenceLabel(node.templateRef)}</span> : null}
+              {node.startedAt ? <span>{node.startedAt}</span> : null}
+              {node.finishedAt ? <span>{node.finishedAt}</span> : null}
+            </div>
+            {node.message ? (
+              <p className="line-clamp-2 text-xs text-destructive [overflow-wrap:anywhere]" title={node.message}>
+                {node.message}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 function ComplianceControlsPanel({ detail }: { detail: ComplianceDetail }) {
   const { t } = useI18n();
@@ -750,6 +809,24 @@ function providerSections(
       ["resources.detail.provider.composedResources", join(detail.composedResourceRefs.map(namedReferenceLabel))],
     ]),
   ];
+  if (detail.type === "crossplane-managed-resource") return [
+    section("managed-resource", "resources.detail.provider.managedResource", [
+      ["resources.detail.provider.kind", detail.kind],
+      ["resources.detail.provider.apiGroup", detail.apiGroup],
+      ["resources.detail.provider.externalName", detail.externalName],
+      ["resources.detail.provider.managementPolicies", join(detail.managementPolicies)],
+      ["resources.detail.provider.deletionPolicy", detail.deletionPolicy],
+      ["resources.detail.provider.paused", yesNo(detail.paused, t)],
+    ]),
+    section("managed-resource-refs", "resources.detail.provider.references", [
+      ["resources.detail.provider.providerConfiguration", namedReferenceLabel(detail.providerConfigRef)],
+      ["resources.detail.provider.composedBy", namedReferenceLabel(detail.composingResourceRef)],
+    ]),
+    section("managed-resource-fields", "resources.detail.provider.observedFields", [
+      ["resources.detail.provider.specFields", join(detail.observedSpecFields)],
+      ["resources.detail.provider.statusFields", join(detail.observedStatusFields)],
+    ]),
+  ];
   if (detail.type === "cron-workflow") return [
     section("schedule", "resources.detail.provider.schedule", [
       ["resources.detail.provider.schedules", join(detail.schedules)],
@@ -796,6 +873,74 @@ function providerSections(
       ["resources.detail.provider.engineVersion", detail.templateEngineVersion],
       ["resources.detail.provider.templateLabels", formatKeyValues(detail.templateLabels)],
       ["resources.detail.provider.templateAnnotations", formatKeyValues(detail.templateAnnotations)],
+    ]),
+  ];
+  if (detail.type === "persistent-volume-claim") return [
+    section("pvc-status", "resources.detail.provider.storage", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.capacity", detail.capacity],
+      ["resources.detail.provider.requested", detail.requested],
+      ["resources.detail.provider.storageClass", detail.storageClassName],
+      ["resources.detail.provider.accessModes", join(detail.accessModes)],
+      ["resources.detail.provider.volumeMode", detail.volumeMode],
+      ["resources.detail.provider.volumeName", detail.volumeName],
+    ]),
+    section("pvc-provisioning", "resources.detail.provider.provisioning", [
+      ["resources.detail.provider.provisioner", detail.provisioner],
+      ["resources.detail.provider.selectedNode", detail.selectedNode],
+      ["resources.detail.provider.bindCompleted", yesNo(detail.bindCompleted, t)],
+    ]),
+  ];
+  if (detail.type === "sealed-secret") return [
+    section("sealed-secret", "resources.detail.provider.sealedSecret", [
+      ["resources.detail.provider.synced", yesNo(detail.synced, t)],
+      ["resources.detail.provider.targetSecret", detail.targetSecretName],
+      ["resources.detail.provider.secretType", detail.secretType],
+      ["resources.detail.provider.scope", detail.scope],
+      ["resources.detail.provider.observedGeneration", number(detail.observedGeneration)],
+      ["resources.detail.provider.encryptedKeys", join(detail.encryptedKeys)],
+    ]),
+    section("sealed-secret-template", "resources.detail.provider.templateMetadata", [
+      ["resources.detail.provider.templateLabels", formatKeyValues(detail.templateLabels)],
+      ["resources.detail.provider.templateAnnotations", formatKeyValues(detail.templateAnnotations)],
+    ]),
+  ];
+  if (detail.type === "secret") return [
+    section("secret", "resources.detail.provider.secretMetadata", [
+      ["resources.detail.provider.secretType", detail.secretType],
+      ["resources.detail.provider.immutable", yesNo(detail.immutable, t)],
+      ["resources.detail.provider.secretKeys", join(detail.keyNames)],
+      ["resources.detail.provider.redactedValues", String(detail.keyNames.length)],
+    ]),
+  ];
+  if (detail.type === "secret-store") return [
+    section("secret-store", "resources.detail.provider.storeReference", [
+      ["resources.detail.provider.statusReady", yesNo(detail.ready, t)],
+      ["resources.detail.provider.scope", detail.clusterScope
+        ? t("resources.detail.provider.clusterScope")
+        : t("resources.detail.provider.namespaceScope")],
+      ["resources.detail.provider.provider", detail.providerType],
+      ["resources.detail.provider.controller", detail.controller],
+    ]),
+    section("secret-store-detail", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.providerDetails", formatKeyValues(detail.providerDetails)],
+      ["resources.detail.provider.maxRetries", number(detail.maxRetries)],
+      ["resources.detail.provider.retryInterval", detail.retryInterval],
+    ]),
+  ];
+  if (detail.type === "workflow") return [
+    section("workflow-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.started", detail.startedAt],
+      ["resources.detail.provider.finished", detail.finishedAt],
+      ["resources.detail.provider.progress", detail.progress],
+      ["resources.detail.provider.estimatedDuration", seconds(detail.estimatedDurationSeconds)],
+      ["resources.detail.provider.templateReference", namedReferenceLabel(detail.workflowTemplateRef)],
+    ]),
+    section("workflow-input", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.arguments", join(detail.argumentNames)],
+      ["resources.detail.provider.resourceUsage", formatKeyValues(detail.resourceDurations)],
+      ["resources.detail.provider.truncated", yesNo(detail.truncated, t)],
     ]),
   ];
   if (detail.type === "gateway-class") return [
@@ -1447,6 +1592,13 @@ function toggleSet(current: ReadonlySet<string>, value: string): ReadonlySet<str
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+function workflowNodeTone(phase: string): StatusTone {
+  if (phase === "Succeeded") return "healthy";
+  if (phase === "Failed" || phase === "Error") return "critical";
+  if (phase === "Running" || phase === "Pending" || phase === "Suspended") return "warning";
+  return "unknown";
 }
 
 function join(values: Array<string | null>): string | null {

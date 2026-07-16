@@ -1259,22 +1259,252 @@ def test_provider_detail_projects_crossplane_composite_by_bounded_shape() -> Non
     assert detail.composition_ref.name == "postgres"
 
 
-def test_provider_detail_does_not_misclassify_crossplane_managed_resource() -> None:
-    assert (
-        provider_detail_projection(
-            resource(
-                "Bucket",
-                {
-                    "spec": {
-                        "providerConfigRef": {"name": "prod"},
-                        "resourceRefs": [],
+def test_provider_detail_projects_crossplane_managed_resource_without_values() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Bucket",
+            {
+                "metadata": {
+                    "annotations": {
+                        "crossplane.io/external-name": "observed-bucket",
+                        "crossplane.io/paused": "true",
                     }
                 },
-                api_version="s3.aws.upbound.io/v1beta1",
-            )
+                "spec": {
+                    "providerConfigRef": {"name": "prod"},
+                    "forProvider": {
+                        "region": "ap-northeast-2",
+                        "secretAccessKey": "must-not-project",
+                    },
+                    "managementPolicies": ["Observe", "Update"],
+                    "deletionPolicy": "Orphan",
+                },
+                "status": {
+                    "atProvider": {
+                        "arn": "arn:aws:s3:::observed-bucket",
+                        "password": "must-not-project",
+                    },
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            api_version="s3.aws.upbound.io/v1beta1",
         )
-        is None
     )
+
+    assert detail is not None
+    assert detail.type == "crossplane-managed-resource"
+    assert detail.external_name == "observed-bucket"
+    assert detail.paused is True
+    assert detail.observed_spec_fields == ["region", "secretAccessKey"]
+    assert detail.observed_status_fields == ["arn", "password"]
+    serialized = detail.model_dump_json()
+    assert "must-not-project" not in serialized
+    assert "arn:aws" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("kind", "api_version", "raw", "detail_type"),
+    [
+        (
+            "PersistentVolumeClaim",
+            "v1",
+            {
+                "metadata": {
+                    "annotations": {
+                        "volume.kubernetes.io/storage-provisioner": "ebs.csi.aws.com",
+                        "pv.kubernetes.io/bind-completed": "true",
+                    }
+                },
+                "spec": {
+                    "storageClassName": "gp3",
+                    "accessModes": ["ReadWriteOnce"],
+                    "volumeMode": "Filesystem",
+                    "volumeName": "pvc-volume",
+                    "resources": {"requests": {"storage": "20Gi"}},
+                },
+                "status": {
+                    "phase": "Bound",
+                    "capacity": {"storage": "20Gi"},
+                },
+            },
+            "persistent-volume-claim",
+        ),
+        (
+            "SealedSecret",
+            "sealedsecrets.bitnami.com/v1alpha1",
+            {
+                "metadata": {
+                    "name": "database",
+                    "annotations": {
+                        "sealedsecrets.bitnami.com/namespace-wide": "true",
+                    },
+                },
+                "spec": {
+                    "encryptedData": {
+                        "password": "encrypted-secret-value",
+                        "username": "encrypted-secret-value",
+                    },
+                    "template": {
+                        "type": "Opaque",
+                        "metadata": {
+                            "labels": {"app": "database"},
+                            "annotations": {
+                                "description": "database credentials",
+                                "token-hint": "must-not-project",
+                            },
+                        },
+                    },
+                },
+                "status": {
+                    "observedGeneration": 3,
+                    "conditions": [{"type": "Synced", "status": "True"}],
+                },
+            },
+            "sealed-secret",
+        ),
+        (
+            "Secret",
+            "v1",
+            {
+                "type": "Opaque",
+                "immutable": True,
+                "data": {
+                    "password": "c2VjcmV0",
+                    "username": "YWRtaW4=",
+                },
+            },
+            "secret",
+        ),
+        (
+            "SecretStore",
+            "external-secrets.io/v1beta1",
+            {
+                "spec": {
+                    "provider": {
+                        "aws": {
+                            "region": "ap-northeast-2",
+                            "service": "SecretsManager",
+                            "auth": {
+                                "jwt": {
+                                    "serviceAccountRef": {
+                                        "name": "external-secrets",
+                                        "token": "must-not-project",
+                                    }
+                                }
+                            },
+                            "secretAccessKey": "must-not-project",
+                        }
+                    },
+                    "retrySettings": {"maxRetries": 5, "retryInterval": "10s"},
+                },
+                "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+            },
+            "secret-store",
+        ),
+    ],
+)
+def test_provider_detail_projects_storage_and_secret_metadata_without_values(
+    kind: str,
+    api_version: str,
+    raw: dict[str, Any],
+    detail_type: str,
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    assert detail.type == detail_type
+    serialized = detail.model_dump_json()
+    assert "encrypted-secret-value" not in serialized
+    assert "c2VjcmV0" not in serialized
+    assert "YWRtaW4=" not in serialized
+    assert "must-not-project" not in serialized
+
+
+def test_provider_detail_projects_bounded_workflow_execution_without_retry_false_positive() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Workflow",
+            {
+                "metadata": {"name": "retry-workflow", "namespace": "shop"},
+                "spec": {
+                    "workflowTemplateRef": {"name": "release"},
+                    "arguments": {
+                        "parameters": [
+                            {"name": "environment", "value": "production"},
+                            {"name": "token", "value": "must-not-project"},
+                        ]
+                    },
+                },
+                "status": {
+                    "phase": "Succeeded",
+                    "progress": "1/1",
+                    "nodes": {
+                        "root": {
+                            "displayName": "retry-workflow",
+                            "type": "Retry",
+                            "phase": "Succeeded",
+                            "children": ["attempt"],
+                        },
+                        "attempt": {
+                            "displayName": "retry-workflow(0)",
+                            "type": "Pod",
+                            "phase": "Failed",
+                            "message": "first attempt failed",
+                        },
+                    },
+                },
+            },
+            api_version="argoproj.io/v1alpha1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "workflow"
+    assert detail.problem_summaries == []
+    assert detail.argument_names == ["environment", "token"]
+    assert [node.id for node in detail.execution_nodes] == ["root", "attempt"]
+    assert {node.id: node.depth for node in detail.execution_nodes} == {
+        "root": 0,
+        "attempt": 1,
+    }
+    assert detail.workflow_template_ref is not None
+    assert detail.workflow_template_ref.name == "release"
+    assert "production" not in detail.model_dump_json()
+    assert "must-not-project" not in detail.model_dump_json()
+
+
+def test_provider_detail_bounds_workflow_failure_summaries() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Workflow",
+            {
+                "status": {
+                    "phase": "Failed",
+                    "message": "workflow failed",
+                    "nodes": {
+                        "root": {
+                            "displayName": "prepare",
+                            "type": "Pod",
+                            "phase": "Failed",
+                            "message": "x" * 500,
+                        },
+                        "publish": {
+                            "displayName": "publish",
+                            "type": "Pod",
+                            "phase": "Error",
+                        },
+                    },
+                }
+            },
+            api_version="argoproj.io/v1alpha1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "workflow"
+    assert detail.problem_summaries[0] == "workflow failed"
+    assert "publish failed" in detail.problem_summaries
+    assert all(len(summary) <= 300 for summary in detail.problem_summaries)
 
 
 @pytest.mark.parametrize(

@@ -380,4 +380,100 @@ describe("resource detail canonical mapping", () => {
       rules: [{ backends: [{ port: 9443 }] }],
     });
   });
+
+  it("maps redacted storage, secret, managed-resource, and workflow projections", () => {
+    expect(toProviderResourceDetail({
+      type: "secret",
+      secret_type: "Opaque",
+      immutable: true,
+      key_names: ["password", "username"],
+      conditions: [],
+    })).toEqual({
+      type: "secret",
+      secretType: "Opaque",
+      immutable: true,
+      keyNames: ["password", "username"],
+      conditions: [],
+    });
+
+    expect(toProviderResourceDetail({
+      type: "persistent-volume-claim",
+      phase: "Bound",
+      capacity: "20Gi",
+      requested: "20Gi",
+      storage_class_name: "gp3",
+      access_modes: ["ReadWriteOnce"],
+      volume_mode: "Filesystem",
+      volume_name: "pvc-volume",
+      provisioner: "ebs.csi.aws.com",
+      selected_node: null,
+      bind_completed: true,
+      conditions: [],
+    })).toMatchObject({
+      type: "persistent-volume-claim",
+      storageClassName: "gp3",
+      bindCompleted: true,
+    });
+
+    expect(toProviderResourceDetail({
+      type: "crossplane-managed-resource",
+      api_group: "s3.aws.upbound.io",
+      kind: "Bucket",
+      external_name: "observed-bucket",
+      management_policies: ["Observe"],
+      deletion_policy: "Orphan",
+      paused: false,
+      provider_config_ref: {
+        api_version: null,
+        kind: null,
+        namespace: null,
+        name: "prod",
+      },
+      composing_resource_ref: null,
+      observed_spec_fields: ["region"],
+      observed_status_fields: ["arn"],
+      conditions: [],
+    })).toMatchObject({
+      type: "crossplane-managed-resource",
+      externalName: "observed-bucket",
+      providerConfigRef: { name: "prod" },
+    });
+
+    expect(toProviderResourceDetail({
+      type: "workflow",
+      phase: "Succeeded",
+      started_at: "2026-07-16T00:00:00Z",
+      finished_at: "2026-07-16T00:01:00Z",
+      progress: "1/1",
+      estimated_duration_seconds: 60,
+      workflow_template_ref: {
+        api_version: "argoproj.io",
+        kind: "WorkflowTemplate",
+        namespace: "shop",
+        name: "release",
+      },
+      argument_names: ["environment"],
+      resource_durations: [{ key: "cpu", value: "12" }],
+      execution_nodes: [{
+        id: "root",
+        label: "release",
+        node_type: "DAG",
+        phase: "Succeeded",
+        depth: 0,
+        started_at: "2026-07-16T00:00:00Z",
+        finished_at: "2026-07-16T00:01:00Z",
+        message: null,
+        template_ref: null,
+      }],
+      observed_node_count: 1,
+      projected_node_count: 1,
+      truncated: false,
+      problem_summaries: [],
+      conditions: [],
+    })).toMatchObject({
+      type: "workflow",
+      workflowTemplateRef: { name: "release" },
+      executionNodes: [{ id: "root", depth: 0 }],
+    });
+  });
 });

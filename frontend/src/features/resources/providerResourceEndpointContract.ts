@@ -450,6 +450,20 @@ export interface CrossplaneCompositeProviderDetailEndpoint extends ProviderDetai
   composed_resource_refs: ProviderNamedReferenceEndpoint[];
 }
 
+export interface CrossplaneManagedResourceProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "crossplane-managed-resource";
+  api_group: string | null;
+  kind: string;
+  external_name: string | null;
+  management_policies: string[];
+  deletion_policy: string | null;
+  paused: boolean;
+  provider_config_ref: ProviderNamedReferenceEndpoint | null;
+  composing_resource_ref: ProviderNamedReferenceEndpoint | null;
+  observed_spec_fields: string[];
+  observed_status_fields: string[];
+}
+
 export interface CronWorkflowProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
   type: "cron-workflow";
   schedules: string[];
@@ -494,6 +508,80 @@ export interface ExternalSecretProviderDetailEndpoint extends ProviderDetailBase
   template_engine_version: string | null;
   template_labels: ProviderKeyValueEndpoint[];
   template_annotations: ProviderKeyValueEndpoint[];
+}
+
+export interface PersistentVolumeClaimProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "persistent-volume-claim";
+  phase: string | null;
+  capacity: string | null;
+  requested: string | null;
+  storage_class_name: string | null;
+  access_modes: string[];
+  volume_mode: string | null;
+  volume_name: string | null;
+  provisioner: string | null;
+  selected_node: string | null;
+  bind_completed: boolean | null;
+}
+
+export interface SealedSecretProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "sealed-secret";
+  synced: boolean | null;
+  target_secret_name: string | null;
+  secret_type: string | null;
+  scope: "strict" | "namespace-wide" | "cluster-wide";
+  observed_generation: number | null;
+  encrypted_keys: string[];
+  template_labels: ProviderKeyValueEndpoint[];
+  template_annotations: ProviderKeyValueEndpoint[];
+}
+
+export interface SecretProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "secret";
+  secret_type: string | null;
+  immutable: boolean | null;
+  key_names: string[];
+}
+
+export interface SecretStoreProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "secret-store";
+  cluster_scope: boolean;
+  ready: boolean | null;
+  provider_key: string | null;
+  provider_type: string | null;
+  provider_details: ProviderKeyValueEndpoint[];
+  controller: string | null;
+  max_retries: number | null;
+  retry_interval: string | null;
+}
+
+export interface WorkflowExecutionNodeEndpoint {
+  id: string;
+  label: string;
+  node_type: string;
+  phase: string;
+  depth: number;
+  started_at: string | null;
+  finished_at: string | null;
+  message: string | null;
+  template_ref: ProviderNamedReferenceEndpoint | null;
+}
+
+export interface WorkflowProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "workflow";
+  phase: string;
+  started_at: string | null;
+  finished_at: string | null;
+  progress: string | null;
+  estimated_duration_seconds: number | null;
+  workflow_template_ref: ProviderNamedReferenceEndpoint | null;
+  argument_names: string[];
+  resource_durations: ProviderKeyValueEndpoint[];
+  execution_nodes: WorkflowExecutionNodeEndpoint[];
+  observed_node_count: number;
+  projected_node_count: number;
+  truncated: boolean;
+  problem_summaries: string[];
 }
 
 export interface GatewayClassProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
@@ -781,8 +869,14 @@ export type ProviderResourceDetailEndpoint =
   | CertificateRequestProviderDetailEndpoint
   | ClusterComplianceReportProviderDetailEndpoint
   | CrossplaneCompositeProviderDetailEndpoint
+  | CrossplaneManagedResourceProviderDetailEndpoint
   | CronWorkflowProviderDetailEndpoint
   | ExternalSecretProviderDetailEndpoint
+  | PersistentVolumeClaimProviderDetailEndpoint
+  | SealedSecretProviderDetailEndpoint
+  | SecretProviderDetailEndpoint
+  | SecretStoreProviderDetailEndpoint
+  | WorkflowProviderDetailEndpoint
   | GatewayClassProviderDetailEndpoint
   | GcpMachineProviderDetailEndpoint
   | GcpManagedControlPlaneProviderDetailEndpoint

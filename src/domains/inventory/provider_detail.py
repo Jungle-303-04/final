@@ -33,6 +33,7 @@ from packages.contracts.inventory_provider import (
     ComplianceControlDetail,
     CronWorkflowProviderDetail,
     CrossplaneCompositeProviderDetail,
+    CrossplaneManagedResourceProviderDetail,
     ExternalSecretMappingDetail,
     ExternalSecretProviderDetail,
     ExternalSecretSourceDetail,
@@ -64,6 +65,7 @@ from packages.contracts.inventory_provider import (
     KedaScaledObjectProviderDetail,
     KedaScalingPolicyDetail,
     KedaTriggerDetail,
+    PersistentVolumeClaimProviderDetail,
     PrometheusRuleEntryDetail,
     PrometheusRuleGroupDetail,
     PrometheusRuleProviderDetail,
@@ -79,11 +81,16 @@ from packages.contracts.inventory_provider import (
     ResourceProviderDetail,
     SbomComponentDetail,
     SbomReportProviderDetail,
+    SealedSecretProviderDetail,
+    SecretProviderDetail,
+    SecretStoreProviderDetail,
     SecuritySeveritySummaryDetail,
     TcpRouteProviderDetail,
     TlsRouteProviderDetail,
     VulnerabilityFindingDetail,
     VulnerabilityReportProviderDetail,
+    WorkflowExecutionNodeDetail,
+    WorkflowProviderDetail,
 )
 
 INFRASTRUCTURE_GROUP = "infrastructure.cluster.x-k8s.io"
@@ -93,6 +100,7 @@ CERT_MANAGER_GROUP = "cert-manager.io"
 COMPLIANCE_GROUP = "aquasecurity.github.io"
 ARGO_GROUP = "argoproj.io"
 EXTERNAL_SECRETS_GROUP = "external-secrets.io"
+SEALED_SECRETS_GROUP = "sealedsecrets.bitnami.com"
 GATEWAY_GROUP = "gateway.networking.k8s.io"
 BATCH_GROUP = "batch"
 KARPENTER_GROUP = "karpenter.sh"
@@ -107,6 +115,7 @@ MAX_PROMETHEUS_GROUPS = 50
 MAX_PROMETHEUS_RULES = 500
 MAX_SBOM_COMPONENTS = 1_000
 MAX_VULNERABILITIES = 500
+MAX_WORKFLOW_NODES = 500
 MAX_SAFE_INTEGER = 9_007_199_254_740_991
 COMPLIANCE_SEVERITY_ORDER = {
     "CRITICAL": 0,
@@ -674,6 +683,46 @@ def _crossplane_composite(
     )
 
 
+def _crossplane_managed_resource(
+    resource: Mapping[str, Any], raw: Mapping[str, Any]
+) -> CrossplaneManagedResourceProviderDetail | None:
+    spec = _mapping_at(raw, "spec")
+    crossplane = _mapping(spec.get("crossplane"))
+    provider_config = _mapping(spec.get("providerConfigRef")) or _mapping(
+        crossplane.get("providerConfigRef")
+    )
+    for_provider = _mapping(spec.get("forProvider"))
+    if not provider_config or not for_provider:
+        return None
+    status_at_provider = _mapping_at(raw, "status", "atProvider")
+    composing_ref = next(
+        (
+            _named_reference_with_namespace(item, _text_at(raw, "metadata", "namespace"))
+            for item in _mapping_items(_value_at(raw, "metadata", "ownerReferences"))
+            if _text(item.get("apiVersion")) is not None
+            and (
+                _text(item.get("kind")) == "CompositeResourceDefinition"
+                or _text(item.get("controller")) == "true"
+                or item.get("controller") is True
+            )
+        ),
+        None,
+    )
+    return CrossplaneManagedResourceProviderDetail(
+        api_group=_api_group(resource.get("api_version")) or None,
+        kind=_text(resource.get("kind")) or "ManagedResource",
+        external_name=_text_at(raw, "metadata", "annotations", "crossplane.io/external-name"),
+        management_policies=_text_items(spec.get("managementPolicies")),
+        deletion_policy=_text(spec.get("deletionPolicy")),
+        paused=_text_at(raw, "metadata", "annotations", "crossplane.io/paused") == "true",
+        provider_config_ref=_named_reference(provider_config),
+        composing_resource_ref=composing_ref,
+        observed_spec_fields=sorted(for_provider)[:MAX_COLLECTION_ITEMS],
+        observed_status_fields=sorted(status_at_provider)[:MAX_COLLECTION_ITEMS],
+        conditions=_conditions(raw),
+    )
+
+
 def _cron_workflow(raw: Mapping[str, Any]) -> CronWorkflowProviderDetail:
     schedules = _text_items_at(raw, "spec", "schedules")
     if not schedules and (schedule := _text_at(raw, "spec", "schedule")) is not None:
@@ -761,6 +810,269 @@ def _external_secret_source(item: Mapping[str, Any]) -> ExternalSecretSourceDeta
             detail=_joined_text(source_ref.get("kind"), source_ref.get("name")),
         )
     return ExternalSecretSourceDetail(type="unknown")
+
+
+def _persistent_volume_claim(raw: Mapping[str, Any]) -> PersistentVolumeClaimProviderDetail:
+    annotations = _mapping_at(raw, "metadata", "annotations")
+    return PersistentVolumeClaimProviderDetail(
+        phase=_text_at(raw, "status", "phase"),
+        capacity=_scalar_text_at(raw, "status", "capacity", "storage"),
+        requested=_scalar_text_at(raw, "spec", "resources", "requests", "storage"),
+        storage_class_name=_text_at(raw, "spec", "storageClassName"),
+        access_modes=_text_items_at(raw, "spec", "accessModes"),
+        volume_mode=_text_at(raw, "spec", "volumeMode"),
+        volume_name=_text_at(raw, "spec", "volumeName"),
+        provisioner=_text(annotations.get("volume.kubernetes.io/storage-provisioner")),
+        selected_node=_text(annotations.get("volume.kubernetes.io/selected-node")),
+        bind_completed=_bool_text(annotations.get("pv.kubernetes.io/bind-completed")),
+        conditions=_conditions(raw),
+    )
+
+
+def _sealed_secret(raw: Mapping[str, Any]) -> SealedSecretProviderDetail:
+    annotations = _mapping_at(raw, "metadata", "annotations")
+    template = _mapping_at(raw, "spec", "template")
+    template_metadata = _mapping(template.get("metadata"))
+    return SealedSecretProviderDetail(
+        synced=_condition_truth(raw, "Synced"),
+        target_secret_name=_text_at(template_metadata, "name") or _text_at(raw, "metadata", "name"),
+        secret_type=_text(template.get("type")),
+        scope=(
+            "cluster-wide"
+            if annotations.get("sealedsecrets.bitnami.com/cluster-wide") == "true"
+            else "namespace-wide"
+            if annotations.get("sealedsecrets.bitnami.com/namespace-wide") == "true"
+            else "strict"
+        ),
+        observed_generation=_int_at(raw, "status", "observedGeneration"),
+        encrypted_keys=sorted(_mapping_at(raw, "spec", "encryptedData"))[:MAX_COLLECTION_ITEMS],
+        template_labels=_safe_key_values(_mapping(template_metadata.get("labels"))),
+        template_annotations=_safe_key_values(_mapping(template_metadata.get("annotations"))),
+        conditions=_conditions(raw),
+    )
+
+
+def _secret(raw: Mapping[str, Any]) -> SecretProviderDetail:
+    return SecretProviderDetail(
+        secret_type=_text_at(raw, "type"),
+        immutable=_bool_at(raw, "immutable"),
+        key_names=sorted(_mapping_at(raw, "data"))[:MAX_COLLECTION_ITEMS],
+        conditions=[],
+    )
+
+
+SECRET_STORE_PROVIDER_LABELS = {
+    "aws": "AWS Secrets Manager",
+    "azurekv": "Azure Key Vault",
+    "gcpsm": "GCP Secret Manager",
+    "vault": "HashiCorp Vault",
+    "kubernetes": "Kubernetes",
+    "oracle": "Oracle Vault",
+    "ibm": "IBM Secrets Manager",
+    "doppler": "Doppler",
+    "onepassword": "1Password",
+    "akeyless": "Akeyless",
+}
+
+
+def _secret_store(raw: Mapping[str, Any]) -> SecretStoreProviderDetail:
+    provider = _mapping_at(raw, "spec", "provider")
+    provider_key = next(
+        (key for key in SECRET_STORE_PROVIDER_LABELS if _mapping(provider.get(key))),
+        next(iter(sorted(provider)), None),
+    )
+    details = (
+        _secret_store_provider_details(provider_key, _mapping(provider.get(provider_key)))
+        if provider_key is not None
+        else []
+    )
+    return SecretStoreProviderDetail(
+        cluster_scope=_text_at(raw, "kind") == "ClusterSecretStore",
+        ready=_condition_truth(raw, "Ready"),
+        provider_key=provider_key,
+        provider_type=SECRET_STORE_PROVIDER_LABELS.get(provider_key, provider_key)
+        if provider_key is not None
+        else None,
+        provider_details=details,
+        controller=_text_at(raw, "spec", "controller"),
+        max_retries=_int_at(raw, "spec", "retrySettings", "maxRetries"),
+        retry_interval=_text_at(raw, "spec", "retrySettings", "retryInterval"),
+        conditions=_conditions(raw),
+    )
+
+
+def _cluster_secret_store(raw: Mapping[str, Any]) -> SecretStoreProviderDetail:
+    return _secret_store(raw).model_copy(update={"cluster_scope": True})
+
+
+def _secret_store_provider_details(
+    provider_key: str, provider: Mapping[str, Any]
+) -> list[ProviderKeyValue]:
+    paths: dict[str, tuple[tuple[str, ...], ...]] = {
+        "aws": (
+            ("region",),
+            ("service",),
+            ("auth", "jwt", "serviceAccountRef", "name"),
+        ),
+        "azurekv": (("vaultUrl",), ("tenantId",), ("authType",), ("environmentType",)),
+        "gcpsm": (("projectID",), ("location",)),
+        "vault": (("server",), ("path",), ("version",), ("namespace",)),
+        "kubernetes": (("server", "url"), ("remoteNamespace",)),
+        "oracle": (("vault",), ("region",)),
+        "ibm": (("serviceUrl",),),
+        "doppler": (("project",), ("config",)),
+        "onepassword": (("connectHost",),),
+        "akeyless": (("akeylessGWApiURL",),),
+    }
+    result: list[ProviderKeyValue] = []
+    for path in paths.get(provider_key, ()):
+        value = _text_at(provider, *path)
+        if value is not None:
+            result.append(ProviderKeyValue(key=".".join(path), value=value))
+    return result[:MAX_COLLECTION_ITEMS]
+
+
+def _workflow(raw: Mapping[str, Any]) -> WorkflowProviderDetail:
+    raw_nodes = _mapping_at(raw, "status", "nodes")
+    projected_nodes = _workflow_execution_nodes(raw_nodes)
+    phase = _text_at(raw, "status", "phase") or "Unknown"
+    problem_summaries = _workflow_problem_summaries(phase, raw, projected_nodes)
+    template_ref = _mapping_at(raw, "spec", "workflowTemplateRef")
+    return WorkflowProviderDetail(
+        phase=phase,
+        started_at=_text_at(raw, "status", "startedAt"),
+        finished_at=_text_at(raw, "status", "finishedAt"),
+        progress=_text_at(raw, "status", "progress"),
+        estimated_duration_seconds=_int_at(raw, "status", "estimatedDuration"),
+        workflow_template_ref=_workflow_template_reference(
+            template_ref,
+            _text_at(raw, "metadata", "namespace"),
+        ),
+        argument_names=[
+            name
+            for item in _mapping_items_at(raw, "spec", "arguments", "parameters")
+            if (name := _text(item.get("name"))) is not None
+        ],
+        resource_durations=[
+            ProviderKeyValue(key=key, value=value)
+            for key, raw_value in sorted(_mapping_at(raw, "status", "resourcesDuration").items())[
+                :MAX_COLLECTION_ITEMS
+            ]
+            if (value := _scalar_text(raw_value)) is not None
+        ],
+        execution_nodes=projected_nodes,
+        observed_node_count=len(raw_nodes),
+        projected_node_count=len(projected_nodes),
+        truncated=len(raw_nodes) > len(projected_nodes),
+        problem_summaries=problem_summaries,
+        conditions=_conditions(raw),
+    )
+
+
+def _workflow_execution_nodes(
+    raw_nodes: Mapping[str, Any],
+) -> list[WorkflowExecutionNodeDetail]:
+    nodes = {
+        node_id: _mapping(raw_node)
+        for node_id, raw_node in sorted(raw_nodes.items())[:MAX_WORKFLOW_NODES]
+        if _text(node_id) is not None and isinstance(raw_node, Mapping)
+    }
+    children: dict[str, list[str]] = {}
+    parents: dict[str, list[str]] = {node_id: [] for node_id in nodes}
+    for node_id, node in nodes.items():
+        related = [
+            child
+            for child in [
+                *_text_items(node.get("children")),
+                *_text_items(node.get("outboundNodes")),
+            ]
+            if child in nodes
+        ]
+        children[node_id] = list(dict.fromkeys(related))
+        for child in children[node_id]:
+            parents[child].append(node_id)
+    depths: dict[str, int] = {}
+    ordered_ids: list[str] = []
+
+    def visit(node_id: str, depth: int, path: frozenset[str]) -> None:
+        if node_id in path:
+            return
+        bounded_depth = min(depth, 20)
+        previous = depths.get(node_id)
+        if previous is not None and previous <= bounded_depth:
+            return
+        if previous is None:
+            ordered_ids.append(node_id)
+        depths[node_id] = bounded_depth
+        for child in children[node_id]:
+            visit(child, bounded_depth + 1, path | {node_id})
+
+    for node_id in nodes:
+        if not parents[node_id]:
+            visit(node_id, 0, frozenset())
+    for node_id in nodes:
+        if node_id not in depths:
+            visit(node_id, 0, frozenset())
+
+    def project(node_id: str) -> WorkflowExecutionNodeDetail:
+        node = nodes[node_id]
+        return WorkflowExecutionNodeDetail(
+            id=node_id,
+            label=_text(node.get("displayName")) or _text(node.get("name")) or node_id,
+            node_type=_text(node.get("type")) or "Unknown",
+            phase=_text(node.get("phase"))
+            or ("Skipped" if _text(node.get("type")) == "Skipped" else "Pending"),
+            depth=depths.get(node_id, 0),
+            started_at=_text(node.get("startedAt")),
+            finished_at=_text(node.get("finishedAt")),
+            message=_bounded_text(node.get("message"), 300),
+            template_ref=_workflow_template_reference(
+                _mapping(node.get("templateRef")),
+                None,
+            ),
+        )
+
+    return [project(node_id) for node_id in ordered_ids]
+
+
+def _workflow_template_reference(
+    value: Mapping[str, Any], namespace: str | None
+) -> ProviderNamedReference | None:
+    name = _text(value.get("name")) or _text(value.get("template"))
+    if name is None:
+        return None
+    cluster_scope = _bool(value.get("clusterScope")) is True
+    return ProviderNamedReference(
+        api_version=ARGO_GROUP,
+        kind="ClusterWorkflowTemplate" if cluster_scope else "WorkflowTemplate",
+        namespace=None if cluster_scope else namespace,
+        name=name,
+    )
+
+
+def _workflow_problem_summaries(
+    phase: str,
+    raw: Mapping[str, Any],
+    nodes: list[WorkflowExecutionNodeDetail],
+) -> list[str]:
+    if phase not in {"Failed", "Error"}:
+        return []
+    result: list[str] = []
+    top_level = _bounded_text(
+        _text_at(raw, "status", "message")
+        or ("Workflow failed" if phase == "Failed" else "Workflow error"),
+        300,
+    )
+    if top_level is not None:
+        result.append(top_level)
+    for node in nodes:
+        if node.phase not in {"Failed", "Error"}:
+            continue
+        summary = f"{node.label}: {node.message}" if node.message else f"{node.label} failed"
+        bounded = _bounded_text(summary, 300)
+        if bounded is not None and bounded not in result:
+            result.append(bounded)
+    return result[:MAX_COLLECTION_ITEMS]
 
 
 def _gateway_class(raw: Mapping[str, Any]) -> GatewayClassProviderDetail:
@@ -1788,7 +2100,13 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (CERT_MANAGER_GROUP, "CertificateRequest"): _certificate_request,
     (COMPLIANCE_GROUP, "ClusterComplianceReport"): _cluster_compliance_report,
     (ARGO_GROUP, "CronWorkflow"): _cron_workflow,
+    (ARGO_GROUP, "Workflow"): _workflow,
     (EXTERNAL_SECRETS_GROUP, "ExternalSecret"): _external_secret,
+    (EXTERNAL_SECRETS_GROUP, "SecretStore"): _secret_store,
+    (EXTERNAL_SECRETS_GROUP, "ClusterSecretStore"): _cluster_secret_store,
+    (SEALED_SECRETS_GROUP, "SealedSecret"): _sealed_secret,
+    ("", "PersistentVolumeClaim"): _persistent_volume_claim,
+    ("", "Secret"): _secret,
     (GATEWAY_GROUP, "GatewayClass"): _gateway_class,
     (INFRASTRUCTURE_GROUP, "GCPMachine"): _gcp_machine,
     (INFRASTRUCTURE_GROUP, "GCPManagedControlPlane"): _gcp_managed_control_plane,
@@ -1809,7 +2127,10 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (GATEWAY_GROUP, "TLSRoute"): _tls_route,
 }
 
-PROVIDER_DETAIL_MATCHERS: tuple[ProviderDetailMatcher, ...] = (_crossplane_composite,)
+PROVIDER_DETAIL_MATCHERS: tuple[ProviderDetailMatcher, ...] = (
+    _crossplane_managed_resource,
+    _crossplane_composite,
+)
 
 
 def _conditions(raw: Mapping[str, Any]) -> list[ProviderCondition]:
@@ -1912,12 +2233,31 @@ def _text(value: object) -> str | None:
     return normalized[:MAX_TEXT_LENGTH] if normalized else None
 
 
+def _bounded_text(value: object, limit: int) -> str | None:
+    normalized = _text(value)
+    if normalized is None or len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: max(0, limit - 1)]}…"
+
+
 def _text_at(value: Mapping[str, Any], *path: str) -> str | None:
     return _text(_value_at(value, *path))
 
 
 def _bool(value: object) -> bool | None:
     return value if isinstance(value, bool) else None
+
+
+def _bool_text(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    return None
 
 
 def _bool_at(value: Mapping[str, Any], *path: str) -> bool | None:

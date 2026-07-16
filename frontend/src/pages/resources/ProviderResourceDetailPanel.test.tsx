@@ -715,6 +715,71 @@ describe("ProviderResourceDetailPanel", () => {
       "https://security.example.test/CVE-2026-0001",
     );
   });
+
+  it("renders redacted secret metadata and hierarchical workflow execution", () => {
+    const { rerender } = renderPanel({
+      type: "secret",
+      secretType: "Opaque",
+      immutable: true,
+      keyNames: ["password", "username"],
+      conditions: [],
+    });
+
+    expect(screen.getByText("Secret metadata")).toBeTruthy();
+    expect(screen.getByText("password · username")).toBeTruthy();
+    expect(screen.queryByText("c2VjcmV0")).toBeNull();
+
+    rerender(panel({
+      type: "workflow",
+      phase: "Failed",
+      startedAt: "2026-07-16T00:00:00Z",
+      finishedAt: "2026-07-16T00:01:00Z",
+      progress: "1/2",
+      estimatedDurationSeconds: 60,
+      workflowTemplateRef: {
+        apiVersion: "argoproj.io",
+        kind: "WorkflowTemplate",
+        namespace: "shop",
+        name: "release",
+      },
+      argumentNames: ["environment"],
+      resourceDurations: [{ key: "cpu", value: "12" }],
+      executionNodes: [
+        {
+          id: "root",
+          label: "release",
+          nodeType: "DAG",
+          phase: "Failed",
+          depth: 0,
+          startedAt: "2026-07-16T00:00:00Z",
+          finishedAt: "2026-07-16T00:01:00Z",
+          message: null,
+          templateRef: null,
+        },
+        {
+          id: "publish",
+          label: "publish",
+          nodeType: "Pod",
+          phase: "Error",
+          depth: 1,
+          startedAt: null,
+          finishedAt: null,
+          message: "image pull failed",
+          templateRef: null,
+        },
+      ],
+      observedNodeCount: 2,
+      projectedNodeCount: 2,
+      truncated: false,
+      problemSummaries: ["publish: image pull failed"],
+      conditions: [],
+    }));
+
+    expect(screen.getByRole("heading", { name: "Execution" })).toBeTruthy();
+    expect(screen.getByText("2 of 2 nodes")).toBeTruthy();
+    expect(screen.getByText("publish: image pull failed")).toBeTruthy();
+    expect(document.querySelector("[data-workflow-node='publish']")).toBeTruthy();
+  });
 });
 
 function renderPanel(detail: ProviderResourceDetail) {

@@ -8797,6 +8797,407 @@
         }
       ]
     },
+    "packages/k8s-ui/src/components/resources/renderers/ManagedResourceRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:crossplane-managed:v1",
+          "legacyContractIds": [],
+          "symbol": "ManagedResourceRenderer",
+          "interaction": "an authorized Crossplane managed-resource detail presents observed identity, management policy, provider and composing references, bounded field-name inventories, pause state, and conditions without provider payload values or a duplicate issue alert",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the exact resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact identity, cap every field-name list, and never fan out provider-reference reads in the browser",
+            "merge": "replace the redacted managed-resource projection only while the response still matches the selected inventory identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses the existing provider-detail panel and central ResourceIssuesSection. Python projects only allow-listed metadata and field names; nested forProvider and atProvider values remain intentionally redacted."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/PVCRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:persistent-volume-claim:v1",
+          "legacyContractIds": [],
+          "symbol": "PVCRenderer",
+          "interaction": "an authorized PVC detail presents observed binding phase, capacity, request, storage class, access modes, volume identity, provisioner metadata, and conditions while the shared resource-issue surface remains the only problem alert authority",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the exact PVC detail read after identity or explicit refresh changes",
+            "backpressure": "share one bounded request per exact PVC identity and retain only typed scalar storage evidence",
+            "merge": "replace the complete PVC projection only when the selected inventory identity is unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing detail workspace now consumes one PVC-specific projection. Prometheus usage remains on the shared metrics panel rather than becoming a second renderer-owned fetch."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/SealedSecretRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:sealed-secret:v1",
+          "legacyContractIds": [],
+          "symbol": "SealedSecretRenderer",
+          "interaction": "an authorized SealedSecret detail presents sync state, target, scope, encrypted key names, safe template metadata, generation, and conditions without ciphertext or a duplicate failure alert",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the exact SealedSecret detail read after identity or explicit refresh changes",
+            "backpressure": "cap key, label, annotation, and condition collections and never decode ciphertext in the browser",
+            "merge": "replace the redacted projection only while the exact SealedSecret identity remains active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Ciphertext and sensitive annotation values never cross the typed detail boundary. ResourceIssuesSection owns operational alerts while provider conditions remain explanatory evidence."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/SecretRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:secret-editor:mutation-and-redaction:v1",
+          "legacyContractIds": [],
+          "symbol": "SecretRenderer secret value editor",
+          "interaction": "a Secret detail exposes only type, immutability, and bounded key names, while the audited manifest editor disables browser autocorrection and capitalization for exact YAML input",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact Secret metadata through the resource-detail lifecycle and reload edit authority before preview",
+            "backpressure": "project key names only, keep secret values absent, and allow one bounded manifest preview request at a time",
+            "merge": "replace metadata only for the active Secret identity and submit edits only through the existing preview and audited workflow"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction",
+              "shared-ui.input.identifier-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source browser-side base64 reveal/copy path is not duplicated. Product edits reuse the existing diff, reason, and audit workflow; plaintext retrieval requires a future separately audited, short-lived capability contract."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/SecretStoreRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:secret-store:v1",
+          "legacyContractIds": [],
+          "symbol": "SecretStoreRenderer",
+          "interaction": "an authorized SecretStore or ClusterSecretStore detail presents readiness, provider identity, allow-listed connection metadata, controller, retry policy, and conditions without credentials or duplicate issue alerts",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the exact store detail read after identity or explicit refresh changes",
+            "backpressure": "retain one bounded provider projection and exclude credential-bearing dynamic fields",
+            "merge": "replace the complete store projection only while the selected store identity remains active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Provider-specific fields are selected by Python allow-lists. Authentication material and unknown dynamic values remain absent, and operational problems continue through the shared issue projection."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/ServiceRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:service-port:shared-capability:v1",
+          "legacyContractIds": [],
+          "symbol": "ServicePortRenderProps and ServicePortCards",
+          "interaction": "an exact Service capability resolves one reusable typed port list and supplies the same port identity to request and local-forward actions without renderer-local parsing",
+          "transport": "poll",
+          "realtime": {
+            "resume": "resolve capabilities again when the selected Service inventory identity changes",
+            "backpressure": "share the bounded capability response and permit one active service request per user action",
+            "merge": "replace port capabilities only when the response revision and exact Service UID still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/service-access/serviceAccessContract.ts",
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
+              "src/packages/contracts/service_access.py",
+              "tests/test_service_access_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.service_access",
+              "domains.service_access.router"
+            ],
+            "plannedTestIds": [
+              "service-access.backend.contract",
+              "service-access.frontend.adapter",
+              "service-access.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing service-access capability is the shared port descriptor authority and already feeds both audited request execution and the manual desktop-forward boundary. EndpointSlice health remains available through inventory relations and evidence rather than a second raw browser query."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/WorkflowRenderer.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:workflow-execution:regression-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkflowRenderer retained retry and bounded failure tests",
+          "interaction": "workflow regression tests prove retained failed retry attempts do not override a successful terminal workflow and every failed terminal node receives a bounded summary",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/providerResourceCanonical.test.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Python owns terminal-state precedence and 300-character summary bounds; React only renders the validated execution projection and never reclassifies retained attempts."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/WorkflowRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:workflow-execution:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkflowRenderer",
+          "interaction": "an authorized Argo Workflow detail presents terminal phase, observed timing, progress, template identity, redacted argument names, bounded resource durations, hierarchical execution nodes, failure summaries, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the exact Workflow detail read after identity or explicit refresh changes",
+            "backpressure": "cap execution nodes at 500, conditions and summaries at the shared limit, and never start per-node browser reads",
+            "merge": "replace the complete execution projection only while the exact Workflow identity remains selected"
+          },
+          "motion": {
+            "reducedMotion": "running phases remain semantic status marks without requiring animation to communicate state.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/resources/renderers/WorkflowRenderer.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing provider-detail pipeline now carries a bounded server-owned execution hierarchy. Argument values stay redacted and live elapsed duration is not fabricated from the browser clock."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/resource-utils-capi.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:capi-condition:server-verbatim-message:v1",
+          "legacyContractIds": [],
+          "symbol": "parseCAPIConditionMessage",
+          "interaction": "CAPI detail conditions retain the exact bounded server-observed message and status while presentation avoids browser-owned provider parsing",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload condition evidence with the selected exact CAPI resource detail",
+            "backpressure": "cap conditions through the shared provider contract and transfer each message once",
+            "merge": "replace conditions only with the response for the active CAPI identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The typed condition contract intentionally preserves one verbatim message; a structured list requires an additive Python message-parts field and provider-version fixtures before presentation may split controller text.",
+            "rationale": "The source whitespace-only parser change is recorded without reintroducing browser parsing. Existing CAPI state, reason, message, and transition evidence remains available."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/resource-utils.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:cron-workflow:catalog-status:v1",
+          "legacyContractIds": [],
+          "symbol": "getCronWorkflowStatus and CronWorkflow cell filtering",
+          "interaction": "CronWorkflow catalog and detail state derive from the same server-observed suspension, active-run, and last-scheduled evidence instead of a parallel browser utility",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh CronWorkflow evidence with the owning inventory snapshot or exact detail request",
+            "backpressure": "reuse the bounded inventory projection and avoid a per-cell request or raw payload parser",
+            "merge": "replace catalog or detail evidence only when its cluster and resource identity still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing CronWorkflow projection already carries schedules, suspension, active runs, template metadata, and conditions. Missing controller defaults remain absent rather than becoming client constants."
+          }
+        }
+      ]
+    },
     "packages/k8s-ui/src/components/resources/renderers/GatewayClassRenderer.tsx": {
       "classification": "classified",
       "interactions": [

@@ -316,6 +316,20 @@ export function toProviderResourceDetail(
     boundResourceRef: namedReference(raw.bound_resource_ref),
     composedResourceRefs: namedReferences(raw.composed_resource_refs),
   };
+  if (type === "crossplane-managed-resource") return {
+    type,
+    conditions,
+    apiGroup: optionalString(raw.api_group),
+    kind: requiredString(raw.kind),
+    externalName: optionalString(raw.external_name),
+    managementPolicies: stringList(raw.management_policies),
+    deletionPolicy: optionalString(raw.deletion_policy),
+    paused: requiredBoolean(raw.paused),
+    providerConfigRef: namedReference(raw.provider_config_ref),
+    composingResourceRef: namedReference(raw.composing_resource_ref),
+    observedSpecFields: stringList(raw.observed_spec_fields),
+    observedStatusFields: stringList(raw.observed_status_fields),
+  };
   if (type === "cron-workflow") return {
     type,
     conditions,
@@ -361,6 +375,78 @@ export function toProviderResourceDetail(
     templateEngineVersion: optionalString(raw.template_engine_version),
     templateLabels: keyValues(raw.template_labels),
     templateAnnotations: keyValues(raw.template_annotations),
+  };
+  if (type === "persistent-volume-claim") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    capacity: optionalString(raw.capacity),
+    requested: optionalString(raw.requested),
+    storageClassName: optionalString(raw.storage_class_name),
+    accessModes: stringList(raw.access_modes),
+    volumeMode: optionalString(raw.volume_mode),
+    volumeName: optionalString(raw.volume_name),
+    provisioner: optionalString(raw.provisioner),
+    selectedNode: optionalString(raw.selected_node),
+    bindCompleted: optionalBoolean(raw.bind_completed),
+  };
+  if (type === "sealed-secret") return {
+    type,
+    conditions,
+    synced: optionalBoolean(raw.synced),
+    targetSecretName: optionalString(raw.target_secret_name),
+    secretType: optionalString(raw.secret_type),
+    scope: sealedSecretScope(raw.scope),
+    observedGeneration: optionalInteger(raw.observed_generation),
+    encryptedKeys: stringList(raw.encrypted_keys),
+    templateLabels: keyValues(raw.template_labels),
+    templateAnnotations: keyValues(raw.template_annotations),
+  };
+  if (type === "secret") return {
+    type,
+    conditions,
+    secretType: optionalString(raw.secret_type),
+    immutable: optionalBoolean(raw.immutable),
+    keyNames: stringList(raw.key_names),
+  };
+  if (type === "secret-store") return {
+    type,
+    conditions,
+    clusterScope: requiredBoolean(raw.cluster_scope),
+    ready: optionalBoolean(raw.ready),
+    providerKey: optionalString(raw.provider_key),
+    providerType: optionalString(raw.provider_type),
+    providerDetails: keyValues(raw.provider_details),
+    controller: optionalString(raw.controller),
+    maxRetries: optionalInteger(raw.max_retries),
+    retryInterval: optionalString(raw.retry_interval),
+  };
+  if (type === "workflow") return {
+    type,
+    conditions,
+    phase: requiredString(raw.phase),
+    startedAt: optionalString(raw.started_at),
+    finishedAt: optionalString(raw.finished_at),
+    progress: optionalString(raw.progress),
+    estimatedDurationSeconds: optionalInteger(raw.estimated_duration_seconds),
+    workflowTemplateRef: namedReference(raw.workflow_template_ref),
+    argumentNames: stringList(raw.argument_names),
+    resourceDurations: keyValues(raw.resource_durations),
+    executionNodes: records(raw.execution_nodes).map((item) => ({
+      id: requiredString(item.id),
+      label: requiredString(item.label),
+      nodeType: requiredString(item.node_type),
+      phase: requiredString(item.phase),
+      depth: requiredInteger(item.depth),
+      startedAt: optionalString(item.started_at),
+      finishedAt: optionalString(item.finished_at),
+      message: optionalString(item.message),
+      templateRef: namedReference(item.template_ref),
+    })),
+    observedNodeCount: requiredInteger(raw.observed_node_count),
+    projectedNodeCount: requiredInteger(raw.projected_node_count),
+    truncated: requiredBoolean(raw.truncated),
+    problemSummaries: stringList(raw.problem_summaries),
   };
   if (type === "gateway-class") return {
     type,
@@ -936,6 +1022,18 @@ function endpointAccess(
     normalized !== "private" &&
     normalized !== "public-and-private"
   ) invalidResponse();
+  return normalized;
+}
+
+function sealedSecretScope(
+  value: unknown,
+): "strict" | "namespace-wide" | "cluster-wide" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "strict"
+    && normalized !== "namespace-wide"
+    && normalized !== "cluster-wide"
+  ) return invalidResponse();
   return normalized;
 }
 

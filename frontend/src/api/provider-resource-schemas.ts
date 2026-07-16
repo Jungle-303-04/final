@@ -349,6 +349,21 @@ const crossplaneComposite = z.strictObject({
   conditions,
 });
 
+const crossplaneManagedResource = z.strictObject({
+  type: z.literal("crossplane-managed-resource"),
+  api_group: nullableString,
+  kind: z.string().min(1),
+  external_name: nullableString,
+  management_policies: z.array(z.string()).max(100),
+  deletion_policy: nullableString,
+  paused: z.boolean(),
+  provider_config_ref: namedReference.nullable(),
+  composing_resource_ref: namedReference.nullable(),
+  observed_spec_fields: z.array(z.string().min(1)).max(100),
+  observed_status_fields: z.array(z.string().min(1)).max(100),
+  conditions,
+});
+
 const cronWorkflow = z.strictObject({
   type: z.literal("cron-workflow"),
   schedules: z.array(z.string()).max(100),
@@ -394,6 +409,85 @@ const externalSecret = z.strictObject({
   template_engine_version: nullableString,
   template_labels: z.array(keyValue).max(100),
   template_annotations: z.array(keyValue).max(100),
+  conditions,
+});
+
+const persistentVolumeClaim = z.strictObject({
+  type: z.literal("persistent-volume-claim"),
+  phase: nullableString,
+  capacity: nullableString,
+  requested: nullableString,
+  storage_class_name: nullableString,
+  access_modes: z.array(z.string()).max(100),
+  volume_mode: nullableString,
+  volume_name: nullableString,
+  provisioner: nullableString,
+  selected_node: nullableString,
+  bind_completed: z.boolean().nullable(),
+  conditions,
+});
+
+const sealedSecret = z.strictObject({
+  type: z.literal("sealed-secret"),
+  synced: z.boolean().nullable(),
+  target_secret_name: nullableString,
+  secret_type: nullableString,
+  scope: z.enum(["strict", "namespace-wide", "cluster-wide"]),
+  observed_generation: nullableInteger,
+  encrypted_keys: z.array(z.string().min(1)).max(100),
+  template_labels: z.array(keyValue).max(100),
+  template_annotations: z.array(keyValue).max(100),
+  conditions,
+});
+
+const secret = z.strictObject({
+  type: z.literal("secret"),
+  secret_type: nullableString,
+  immutable: z.boolean().nullable(),
+  key_names: z.array(z.string().min(1)).max(100),
+  conditions,
+});
+
+const secretStore = z.strictObject({
+  type: z.literal("secret-store"),
+  cluster_scope: z.boolean(),
+  ready: z.boolean().nullable(),
+  provider_key: nullableString,
+  provider_type: nullableString,
+  provider_details: z.array(keyValue).max(100),
+  controller: nullableString,
+  max_retries: nullableInteger,
+  retry_interval: nullableString,
+  conditions,
+});
+
+const workflowExecutionNode = z.strictObject({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  node_type: z.string().min(1),
+  phase: z.string().min(1),
+  depth: z.number().int().safe().min(0).max(20),
+  started_at: nullableString,
+  finished_at: nullableString,
+  message: z.string().max(300).nullable(),
+  template_ref: namedReference.nullable(),
+});
+
+const workflow = z.strictObject({
+  type: z.literal("workflow"),
+  phase: z.string().min(1),
+  started_at: nullableString,
+  finished_at: nullableString,
+  progress: nullableString,
+  estimated_duration_seconds: nullableInteger,
+  workflow_template_ref: namedReference.nullable(),
+  argument_names: z.array(z.string().min(1)).max(100),
+  resource_durations: z.array(keyValue).max(100),
+  execution_nodes: z.array(workflowExecutionNode).max(500),
+  observed_node_count: nonnegativeSafeInteger,
+  projected_node_count: nonnegativeSafeInteger,
+  truncated: z.boolean(),
+  problem_summaries: z.array(z.string().min(1).max(300)).max(100),
   conditions,
 });
 
@@ -799,8 +893,14 @@ export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   certificateRequest,
   clusterComplianceReport,
   crossplaneComposite,
+  crossplaneManagedResource,
   cronWorkflow,
   externalSecret,
+  persistentVolumeClaim,
+  sealedSecret,
+  secret,
+  secretStore,
+  workflow,
   gatewayClass,
   gcpMachine,
   gcpManagedControlPlane,

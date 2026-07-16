@@ -417,6 +417,19 @@ export type ProviderResourceDetail =
       composedResourceRefs: ProviderNamedReference[];
     })
   | (ProviderDetailBase & {
+      type: "crossplane-managed-resource";
+      apiGroup: string | null;
+      kind: string;
+      externalName: string | null;
+      managementPolicies: string[];
+      deletionPolicy: string | null;
+      paused: boolean;
+      providerConfigRef: ProviderNamedReference | null;
+      composingResourceRef: ProviderNamedReference | null;
+      observedSpecFields: string[];
+      observedStatusFields: string[];
+    })
+  | (ProviderDetailBase & {
       type: "cron-workflow";
       schedules: string[];
       timezone: string | null;
@@ -459,6 +472,73 @@ export type ProviderResourceDetail =
       templateEngineVersion: string | null;
       templateLabels: ProviderKeyValue[];
       templateAnnotations: ProviderKeyValue[];
+    })
+  | (ProviderDetailBase & {
+      type: "persistent-volume-claim";
+      phase: string | null;
+      capacity: string | null;
+      requested: string | null;
+      storageClassName: string | null;
+      accessModes: string[];
+      volumeMode: string | null;
+      volumeName: string | null;
+      provisioner: string | null;
+      selectedNode: string | null;
+      bindCompleted: boolean | null;
+    })
+  | (ProviderDetailBase & {
+      type: "sealed-secret";
+      synced: boolean | null;
+      targetSecretName: string | null;
+      secretType: string | null;
+      scope: "strict" | "namespace-wide" | "cluster-wide";
+      observedGeneration: number | null;
+      encryptedKeys: string[];
+      templateLabels: ProviderKeyValue[];
+      templateAnnotations: ProviderKeyValue[];
+    })
+  | (ProviderDetailBase & {
+      type: "secret";
+      secretType: string | null;
+      immutable: boolean | null;
+      keyNames: string[];
+    })
+  | (ProviderDetailBase & {
+      type: "secret-store";
+      clusterScope: boolean;
+      ready: boolean | null;
+      providerKey: string | null;
+      providerType: string | null;
+      providerDetails: ProviderKeyValue[];
+      controller: string | null;
+      maxRetries: number | null;
+      retryInterval: string | null;
+    })
+  | (ProviderDetailBase & {
+      type: "workflow";
+      phase: string;
+      startedAt: string | null;
+      finishedAt: string | null;
+      progress: string | null;
+      estimatedDurationSeconds: number | null;
+      workflowTemplateRef: ProviderNamedReference | null;
+      argumentNames: string[];
+      resourceDurations: ProviderKeyValue[];
+      executionNodes: Array<{
+        id: string;
+        label: string;
+        nodeType: string;
+        phase: string;
+        depth: number;
+        startedAt: string | null;
+        finishedAt: string | null;
+        message: string | null;
+        templateRef: ProviderNamedReference | null;
+      }>;
+      observedNodeCount: number;
+      projectedNodeCount: number;
+      truncated: boolean;
+      problemSummaries: string[];
     })
   | (ProviderDetailBase & {
       type: "gateway-class";

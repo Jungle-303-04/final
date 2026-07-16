@@ -373,6 +373,21 @@ class CrossplaneCompositeProviderDetail(StrictModel):
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
+class CrossplaneManagedResourceProviderDetail(StrictModel):
+    type: Literal["crossplane-managed-resource"] = "crossplane-managed-resource"
+    api_group: str | None = None
+    kind: str
+    external_name: str | None = None
+    management_policies: list[str] = Field(default_factory=list)
+    deletion_policy: str | None = None
+    paused: bool
+    provider_config_ref: ProviderNamedReference | None = None
+    composing_resource_ref: ProviderNamedReference | None = None
+    observed_spec_fields: list[str] = Field(default_factory=list)
+    observed_status_fields: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 class CronWorkflowProviderDetail(StrictModel):
     type: Literal["cron-workflow"] = "cron-workflow"
     schedules: list[str] = Field(default_factory=list)
@@ -422,6 +437,85 @@ class ExternalSecretProviderDetail(StrictModel):
     template_engine_version: str | None = None
     template_labels: list[ProviderKeyValue] = Field(default_factory=list)
     template_annotations: list[ProviderKeyValue] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class PersistentVolumeClaimProviderDetail(StrictModel):
+    type: Literal["persistent-volume-claim"] = "persistent-volume-claim"
+    phase: str | None = None
+    capacity: str | None = None
+    requested: str | None = None
+    storage_class_name: str | None = None
+    access_modes: list[str] = Field(default_factory=list)
+    volume_mode: str | None = None
+    volume_name: str | None = None
+    provisioner: str | None = None
+    selected_node: str | None = None
+    bind_completed: bool | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class SealedSecretProviderDetail(StrictModel):
+    type: Literal["sealed-secret"] = "sealed-secret"
+    synced: bool | None = None
+    target_secret_name: str | None = None
+    secret_type: str | None = None
+    scope: Literal["strict", "namespace-wide", "cluster-wide"]
+    observed_generation: int | None = None
+    encrypted_keys: list[str] = Field(default_factory=list)
+    template_labels: list[ProviderKeyValue] = Field(default_factory=list)
+    template_annotations: list[ProviderKeyValue] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class SecretProviderDetail(StrictModel):
+    type: Literal["secret"] = "secret"
+    secret_type: str | None = None
+    immutable: bool | None = None
+    key_names: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class SecretStoreProviderDetail(StrictModel):
+    type: Literal["secret-store"] = "secret-store"
+    cluster_scope: bool
+    ready: bool | None = None
+    provider_key: str | None = None
+    provider_type: str | None = None
+    provider_details: list[ProviderKeyValue] = Field(default_factory=list)
+    controller: str | None = None
+    max_retries: int | None = None
+    retry_interval: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class WorkflowExecutionNodeDetail(StrictModel):
+    id: str
+    label: str
+    node_type: str
+    phase: str
+    depth: int = Field(ge=0, le=20)
+    started_at: str | None = None
+    finished_at: str | None = None
+    message: str | None = None
+    template_ref: ProviderNamedReference | None = None
+
+
+class WorkflowProviderDetail(StrictModel):
+    type: Literal["workflow"] = "workflow"
+    phase: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    progress: str | None = None
+    estimated_duration_seconds: int | None = None
+    workflow_template_ref: ProviderNamedReference | None = None
+    argument_names: list[str] = Field(default_factory=list)
+    resource_durations: list[ProviderKeyValue] = Field(default_factory=list)
+    execution_nodes: list[WorkflowExecutionNodeDetail] = Field(default_factory=list)
+    observed_node_count: int = Field(ge=0)
+    projected_node_count: int = Field(ge=0)
+    truncated: bool
+    problem_summaries: list[str] = Field(default_factory=list)
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
@@ -866,8 +960,14 @@ ResourceProviderDetail = Annotated[
     | CertificateRequestProviderDetail
     | ClusterComplianceReportProviderDetail
     | CrossplaneCompositeProviderDetail
+    | CrossplaneManagedResourceProviderDetail
     | CronWorkflowProviderDetail
     | ExternalSecretProviderDetail
+    | PersistentVolumeClaimProviderDetail
+    | SealedSecretProviderDetail
+    | SecretProviderDetail
+    | SecretStoreProviderDetail
+    | WorkflowProviderDetail
     | GatewayClassProviderDetail
     | GcpMachineProviderDetail
     | GcpManagedControlPlaneProviderDetail

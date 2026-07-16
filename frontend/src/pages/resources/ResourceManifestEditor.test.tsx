@@ -81,6 +81,9 @@ describe("ResourceManifestEditor", () => {
 
     await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
     const editor = await screen.findByRole("textbox", { name: "YAML 원문" });
+    expect(editor.getAttribute("autocapitalize")).toBe("off");
+    expect(editor.getAttribute("autocorrect")).toBe("off");
+    expect(editor.getAttribute("spellcheck")).toBe("false");
     fireEvent.change(editor, { target: { value: sourceYaml.replace("Always", "Never") } });
     await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
     expect(await screen.findByText("승인 준비 완료")).toBeTruthy();
