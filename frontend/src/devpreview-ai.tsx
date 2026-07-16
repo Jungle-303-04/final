@@ -42,9 +42,13 @@ function TextPart({ part, active, onReady }: { part: AiTextPart; active: boolean
     return () => window.clearInterval(id);
   }, [active]);
   if (!part.markdown) return null;
+  // 타이핑 중 미완성 마크다운 토큰(링크/코드/볼드)을 숨겨 원문 기호 노출 방지
+  let safe = part.markdown.slice(0, n).replace(/\[[^\]]*(\]\([^)]*)?$/, "");
+  if (((safe.match(/`/g) || []).length) % 2) safe = safe.replace(/`([^`]*)$/, "$1");
+  if (((safe.match(/\*\*/g) || []).length) % 2) safe = safe.replace(/\*\*([^*]*)$/, "$1");
   return (
     <p className="text-[13.5px] leading-[1.7] tracking-[-0.006em] text-foreground/90 [&_code]:rounded-md [&_code]:bg-muted/70 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.82em] [&_strong]:font-semibold [&_strong]:text-foreground">
-      <span dangerouslySetInnerHTML={{ __html: md(part.markdown.slice(0, n)) }} />
+      <span dangerouslySetInnerHTML={{ __html: md(safe) }} />
       {active && n < part.markdown.length ? <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-primary align-text-bottom" /> : null}
     </p>
   );
@@ -290,28 +294,31 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     return () => controls.stop();
   }, [collapsed]);
 
+  // 유일한 기준: collapsed 상태. 내용은 CSS opacity로만 교체(DOM 위치 조작 없음) → 높이 측정과 경쟁 없음
+  const overlay = (on: boolean): CSSProperties => on
+    ? { position: "relative" }
+    : { position: "absolute", top: 0, left: 0, right: 0, pointerEvents: "none" };
   return (
     <div ref={wrapRef} onClick={onSurfaceClick}
       className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.035] bg-card/75 px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] backdrop-blur-2xl animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
       style={{ height: "auto", borderRadius: 20 }}>
-      <div ref={innerRef} style={{ paddingTop: 14, paddingBottom: 14 }}>
-        <AnimatePresence mode="popLayout" initial={false}>
-          {collapsed ? (
-            <motion.div key="sum" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
-              className="flex items-center gap-2.5">
-              <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
-            </motion.div>
-          ) : (
-            <motion.div key="full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
-              className="grid gap-3.5">
-              {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
-                <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
-                  onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <div className="relative">
+        {/* 펼친 내용 */}
+        <div style={{ ...overlay(!collapsed), opacity: collapsed ? 0 : 1, transition: "opacity 0.16s ease", paddingTop: 14, paddingBottom: 14 }}>
+          <div className="grid gap-3.5">
+            {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
+              <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
+                onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
+            ))}
+          </div>
+        </div>
+        {/* 접힌 캡슐 */}
+        <div style={{ ...overlay(collapsed), opacity: collapsed ? 1 : 0, transition: "opacity 0.16s ease", paddingTop: 14, paddingBottom: 14 }}>
+          <div className="flex items-center gap-2.5">
+            <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
