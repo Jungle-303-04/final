@@ -8,6 +8,13 @@ const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
 const NETWORK_OBSERVATION_MS = 3_000;
+const FAILURE_PRODUCT_STATES = new Set([
+  "error",
+  "forbidden",
+  "not-found",
+  "offline",
+  "release",
+]);
 
 export function normalizeSurfaceText(value) {
   return value
@@ -37,6 +44,27 @@ export function isBenignNavigationAbort(errorText) {
   return normalized === "NET::ERR_ABORTED" || normalized === "NS_BINDING_ABORTED";
 }
 
+export function isApiErrorResponse(status, rawUrl, baseUrl) {
+  if (status < 400) return false;
+  try {
+    const responseUrl = new URL(rawUrl);
+    const applicationUrl = new URL(baseUrl);
+    return (
+      responseUrl.origin === applicationUrl.origin
+      && (
+        responseUrl.pathname === "/api"
+        || responseUrl.pathname.startsWith("/api/")
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isFailureProductState(state) {
+  return FAILURE_PRODUCT_STATES.has(state);
+}
+
 async function run() {
   const baseUrl = requiredEnvironment("BASE_URL");
   const email = requiredEnvironment("AUTH_EMAIL");
@@ -47,6 +75,7 @@ async function run() {
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const diagnostics = {
+    apiErrors: [],
     changeTimelineLimits: [],
     pageErrors: [],
     requestFailures: [],
@@ -65,11 +94,18 @@ async function run() {
     });
   });
   page.on("response", (response) => {
-    if (!isChangeTimelineLimitResponse(response.status(), response.url())) return;
-    diagnostics.changeTimelineLimits.push({
-      status: response.status(),
-      url: safeUrl(response.url()),
-    });
+    if (isApiErrorResponse(response.status(), response.url(), baseUrl)) {
+      diagnostics.apiErrors.push({
+        status: response.status(),
+        url: safeUrl(response.url()),
+      });
+    }
+    if (isChangeTimelineLimitResponse(response.status(), response.url())) {
+      diagnostics.changeTimelineLimits.push({
+        status: response.status(),
+        url: safeUrl(response.url()),
+      });
+    }
   });
 
   try {
@@ -100,8 +136,26 @@ async function run() {
       ]);
       await waitForRouteSurface(page, previous, route.pathname);
       await page.waitForTimeout(NETWORK_OBSERVATION_MS);
-      previous = await waitForRouteSurface(page, previous, route.pathname);
-      process.stdout.write(`route smoke passed: ${route.pathname}\n`);
+      const spaFrame = await waitForRouteSurface(page, previous, route.pathname);
+      assertDiagnostics(diagnostics);
+
+      const directUrl = new URL(observedHref, baseUrl);
+      await page.goto(directUrl.href, { waitUntil: "domcontentloaded" });
+      await waitForRouteSurface(
+        page,
+        null,
+        route.pathname,
+        AUTH_BOOTSTRAP_TIMEOUT_MS,
+      );
+      await page.waitForTimeout(NETWORK_OBSERVATION_MS);
+      previous = await waitForRouteSurface(page, null, route.pathname);
+      assert.equal(
+        previous.routeTitle,
+        spaFrame.routeTitle,
+        `direct route title changed for ${route.pathname}`,
+      );
+      assertDiagnostics(diagnostics);
+      process.stdout.write(`route smoke passed: ${route.pathname} (spa+direct)\n`);
     }
 
     assertDiagnostics(diagnostics);
@@ -160,12 +214,23 @@ async function releasedRouteLink(page, pathname) {
   throw new Error(`released route link disappeared: ${pathname}`);
 }
 
-async function waitForRouteSurface(page, previous, expectedPathname) {
-  const deadline = Date.now() + ROUTE_SETTLE_TIMEOUT_MS;
+async function waitForRouteSurface(
+  page,
+  previous,
+  expectedPathname,
+  timeoutMs = ROUTE_SETTLE_TIMEOUT_MS,
+) {
+  const deadline = Date.now() + timeoutMs;
   let last = null;
 
   while (Date.now() < deadline) {
     last = await readRouteSurface(page);
+    const failureState = last.productStates.find(isFailureProductState);
+    if (last.pathname === expectedPathname && failureState) {
+      throw new Error(
+        `route ${expectedPathname} rendered product state ${failureState}`,
+      );
+    }
     const transitioned = previous === null
       || (
         last.routeTitle !== previous.routeTitle
@@ -176,6 +241,7 @@ async function waitForRouteSurface(page, previous, expectedPathname) {
       && last.documentTitle
       && last.routeTitle
       && last.mainText
+      && !last.productStates.includes("loading")
       && transitioned
     ) {
       return last;
@@ -187,6 +253,7 @@ async function waitForRouteSurface(page, previous, expectedPathname) {
     `route surface did not transition to ${expectedPathname}: ${JSON.stringify({
       bodyChanged: previous ? last?.bodyFingerprint !== previous.bodyFingerprint : null,
       observedPathname: last?.pathname ?? null,
+      productStates: last?.productStates ?? [],
       routeTitle: last?.routeTitle ?? null,
       titleChanged: previous ? last?.routeTitle !== previous.routeTitle : null,
     })}`,
@@ -195,22 +262,34 @@ async function waitForRouteSurface(page, previous, expectedPathname) {
 
 async function readRouteSurface(page) {
   const main = page.locator("#product-main");
-  const [documentTitle, routeTitle, mainText] = await Promise.all([
+  const [documentTitle, routeTitle, mainText, productStates] = await Promise.all([
     page.title(),
     page.locator("header h1").first().innerText().catch(() => ""),
     main.innerText().catch(() => ""),
+    page
+      .locator("#product-main[data-product-state], #product-main [data-product-state]")
+      .evaluateAll((states) => (
+        states
+          .map((state) => state.getAttribute("data-product-state") ?? "")
+          .filter(Boolean)
+      ))
+      .catch(() => []),
   ]);
   return {
     bodyFingerprint: normalizeSurfaceText(mainText),
     documentTitle: documentTitle.trim(),
     mainText: mainText.trim(),
     pathname: new URL(page.url()).pathname,
+    productStates,
     routeTitle: routeTitle.trim(),
   };
 }
 
 function assertDiagnostics(diagnostics) {
   const failures = [];
+  if (diagnostics.apiErrors.length > 0) {
+    failures.push(`api_error=${JSON.stringify(diagnostics.apiErrors)}`);
+  }
   if (diagnostics.pageErrors.length > 0) {
     failures.push(`pageerror=${JSON.stringify(diagnostics.pageErrors)}`);
   }

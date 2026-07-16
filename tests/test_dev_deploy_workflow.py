@@ -196,6 +196,9 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert 'new URL("/api/auth/login", baseUrl).href' in script
     assert "page.request.post" in script
     assert "AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000" in script
+    assert 'page.goto(directUrl.href, { waitUntil: "domcontentloaded" })' in script
+    assert "data-product-state" in script
+    assert "diagnostics.apiErrors" in script
     assert 'input[name="email"]' not in script
     assert 'input[name="password"]' not in script
     assert names.index("Run post-deploy smoke") < names.index(

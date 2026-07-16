@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isApiErrorResponse,
   isBenignNavigationAbort,
   isChangeTimelineLimitResponse,
+  isFailureProductState,
   normalizeSurfaceText,
   orderRoutesForTraversal,
 } from "./post-deploy-route-smoke.mjs";
@@ -61,5 +63,39 @@ describe("post-deploy route smoke helpers", () => {
     expect(isBenignNavigationAbort("NS_BINDING_ABORTED")).toBe(true);
     expect(isBenignNavigationAbort("net::ERR_CONNECTION_RESET")).toBe(false);
     expect(isBenignNavigationAbort("unknown request failure")).toBe(false);
+  });
+
+  it("fails same-origin API errors without treating redirects or other origins as product errors", () => {
+    expect(
+      isApiErrorResponse(
+        503,
+        "https://example.test/api/resources",
+        "https://example.test",
+      ),
+    ).toBe(true);
+    expect(
+      isApiErrorResponse(
+        302,
+        "https://example.test/api/resources",
+        "https://example.test",
+      ),
+    ).toBe(false);
+    expect(
+      isApiErrorResponse(
+        503,
+        "https://agent.example.test/api/resources",
+        "https://example.test",
+      ),
+    ).toBe(false);
+  });
+
+  it("distinguishes terminal failures from loading and valid empty states", () => {
+    expect(isFailureProductState("error")).toBe(true);
+    expect(isFailureProductState("forbidden")).toBe(true);
+    expect(isFailureProductState("not-found")).toBe(true);
+    expect(isFailureProductState("offline")).toBe(true);
+    expect(isFailureProductState("release")).toBe(true);
+    expect(isFailureProductState("loading")).toBe(false);
+    expect(isFailureProductState("empty")).toBe(false);
   });
 });
