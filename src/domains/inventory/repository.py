@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.inventory.kubernetes_events import (
@@ -1033,6 +1033,95 @@ class InventoryRepository(DatabaseConnection):
             return related
 
         return related
+
+    def list_scheduled_run_inventory(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        owner_kind: str,
+        owner_name: str,
+        owner_uid: str,
+        run_kinds: Sequence[str],
+        limit: int = 100,
+        pod_limit: int = 1000,
+    ) -> JsonObject:
+        """Read retained scheduled runs and their Pods with two bounded queries.
+
+        Owner UID is mandatory so a recreated CronJob-like object cannot inherit
+        runs from an older object with the same name.  Pods are fetched in one
+        batch for all returned runs; no per-run query is issued.
+        """
+
+        effective_limit = max(1, min(limit, 100))
+        effective_pod_limit = max(1, min(pod_limit, 1000))
+        normalized_run_kinds = tuple(sorted({kind for kind in run_kinds if kind}))
+        if not owner_uid or not normalized_run_kinds:
+            return {
+                "runs": [],
+                "pods": [],
+                "runs_truncated": False,
+                "pods_truncated": False,
+            }
+
+        table = ClusterInventoryResourceRecord.__table__
+        runs_statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.namespace == namespace,
+                table.c.resource_type == WORKLOAD_RESOURCE_TYPE,
+                table.c.kind.in_(normalized_run_kinds),
+                table.c.deleted_at.is_(None),
+                table.c.summary["owner_uid"].astext == owner_uid,
+                table.c.summary["owner_kind"].astext == owner_kind,
+                table.c.summary["owner_name"].astext == owner_name,
+            )
+            .order_by(
+                table.c.summary["creation_timestamp"].astext.desc().nullslast(),
+                table.c.last_seen_at.desc(),
+                table.c.inventory_key.desc(),
+            )
+            .limit(effective_limit + 1)
+        )
+        with self.connection() as conn:
+            run_rows = [dict(row) for row in conn.execute(runs_statement).mappings().all()]
+            selected_runs = run_rows[:effective_limit]
+            run_owners = [
+                and_(
+                    table.c.summary["owner_uid"].astext == str(row["uid"]),
+                    table.c.summary["owner_kind"].astext == str(row["kind"]),
+                    table.c.summary["owner_name"].astext == str(row["name"]),
+                )
+                for row in selected_runs
+                if row.get("uid")
+            ]
+            pod_rows: list[JsonObject] = []
+            if run_owners:
+                pods_statement = (
+                    select(table)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.cluster_id == cluster_id,
+                        table.c.namespace == namespace,
+                        table.c.resource_type == POD_RESOURCE_TYPE,
+                        table.c.deleted_at.is_(None),
+                        or_(*run_owners),
+                    )
+                    .order_by(table.c.last_seen_at.desc(), table.c.inventory_key.desc())
+                    .limit(effective_pod_limit + 1)
+                )
+                pod_rows = [dict(row) for row in conn.execute(pods_statement).mappings().all()]
+        return {
+            "runs": [self.serialize_inventory_resource(row) for row in selected_runs],
+            "pods": [
+                self.serialize_inventory_resource(row) for row in pod_rows[:effective_pod_limit]
+            ],
+            "runs_truncated": len(run_rows) > effective_limit,
+            "pods_truncated": len(pod_rows) > effective_pod_limit,
+        }
 
     def list_resource_events(
         self,

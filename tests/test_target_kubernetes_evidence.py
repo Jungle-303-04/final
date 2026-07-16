@@ -506,7 +506,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         }
     )
 
-    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 11
+    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 13
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["detected_provider"] == "eks"
@@ -773,6 +773,8 @@ def test_kubernetes_snapshot_provider_scopes_one_rca_test_run(monkeypatch) -> No
         "/apis/apps/v1/namespaces/sandbox/statefulsets",
         "/apis/apps/v1/namespaces/sandbox/daemonsets",
         "/apis/apps/v1/namespaces/sandbox/replicasets",
+        "/apis/batch/v1/namespaces/sandbox/jobs",
+        "/apis/batch/v1/namespaces/sandbox/cronjobs",
         "/api/v1/namespaces/sandbox/services",
     }
     assert [item["name"] for item in kubernetes["pods"]] == ["pod-a"]

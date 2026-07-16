@@ -14,6 +14,7 @@ import {
   listClusters,
   listGlobalFilterFacets,
   openPodLogStream,
+  openScheduledWorkloadRunLogStream,
   openWorkloadLogStream,
   postAiChat,
   promoteAlertEvent,
@@ -56,7 +57,11 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getAiSuggestions,
     postAiChat,
   });
-  const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
+  const logStreamPort = createLogStreamAdapter({
+    openPodLogStream,
+    openScheduledWorkloadRunLogStream,
+    openWorkloadLogStream,
+  });
   const alertEventsPort = createAlertEventsAdapter({
     acknowledgeAlertEvent,
     listAlertEvents,

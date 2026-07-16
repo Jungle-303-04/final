@@ -18,15 +18,26 @@ export function createLogStreamAdapter(
         onEvent: (event: LogStreamEndpointEvent) => handlers.onEvent(toEvent(event)),
         onFailure: (error: unknown) => handlers.onFailure(toFailure(error)),
       };
-      return target.type === "pod"
-        ? endpoints.openPodLogStream(
+      if (target.type === "pod") {
+        return endpoints.openPodLogStream(
             target.clusterId,
             target.namespace,
             target.name,
             target.container,
             endpointHandlers,
-          )
-        : endpoints.openWorkloadLogStream(
+          );
+      }
+      if (target.type === "scheduled-run") {
+        return endpoints.openScheduledWorkloadRunLogStream(
+          target.clusterId,
+          target.kind,
+          target.namespace,
+          target.name,
+          target.runKey,
+          endpointHandlers,
+        );
+      }
+      return endpoints.openWorkloadLogStream(
             target.clusterId,
             target.kind,
             target.namespace,
@@ -56,7 +67,21 @@ function toEvent(event: LogStreamEndpointEvent): LogStreamEvent {
       pod: required(event.pod),
     };
   }
-  if (event.type === "end") return { type: "end", reason: required(event.reason) };
+  if (event.type === "end") {
+    return {
+      type: "end",
+      reason: required(event.reason),
+      diagnostic: event.diagnostic === null ? null : {
+        code: event.diagnostic.code,
+        recovery: event.diagnostic.recovery === null ? null : {
+          kind: "copy-command",
+          command: required(event.diagnostic.recovery.command),
+          clusterId: required(event.diagnostic.recovery.cluster_id),
+          readOnly: event.diagnostic.recovery.read_only,
+        },
+      },
+    };
+  }
   return {
     type: "error",
     code: required(event.code),

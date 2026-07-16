@@ -56,6 +56,8 @@ K8S_SNAPSHOT_NODES_KEY = "nodes"
 K8S_SNAPSHOT_WORKLOADS_KEY = "workloads"
 K8S_STATEFULSETS_KEY = "statefulsets"
 K8S_DAEMONSETS_KEY = "daemonsets"
+K8S_JOBS_KEY = "jobs"
+K8S_CRONJOBS_KEY = "cronjobs"
 
 MAX_KUBERNETES_PODS = 500
 MAX_KUBERNETES_EVENTS = 200
@@ -252,6 +254,22 @@ class KubernetesSnapshotProvider:
                     base_url,
                     headers,
                     f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_REPLICASETS}",
+                    label_selector=telemetry_query.label_selector,
+                ),
+                K8S_JOBS_KEY: await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    f"/apis/batch/v1/namespaces/{namespace}/{K8S_JOBS_KEY}",
+                    allow_not_found=True,
+                    label_selector=telemetry_query.label_selector,
+                ),
+                K8S_CRONJOBS_KEY: await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    f"/apis/batch/v1/namespaces/{namespace}/{K8S_CRONJOBS_KEY}",
+                    allow_not_found=True,
                     label_selector=telemetry_query.label_selector,
                 ),
                 K8S_RESOURCE_SERVICES: await self.get_json(
@@ -505,6 +523,8 @@ class KubernetesSnapshotProvider:
             K8S_KIND_REPLICA_SET: active_replicasets(
                 scoped_items(payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector)
             ),
+            "Job": scoped_items(payload.get(K8S_JOBS_KEY), telemetry_query.label_selector),
+            "CronJob": scoped_items(payload.get(K8S_CRONJOBS_KEY), telemetry_query.label_selector),
         }
         raw_services = scoped_items(
             payload.get(K8S_RESOURCE_SERVICES), telemetry_query.label_selector
@@ -1388,6 +1408,7 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
     owner_kind, owner_name = owner_ref(item)
     return {
         "kind": kind,
+        "api_version": "batch/v1" if kind in {"Job", "CronJob"} else "apps/v1",
         **bounded_label_summary(item),
         "uid": meta.get("uid"),
         "resource_version": meta.get("resourceVersion"),
@@ -1398,6 +1419,7 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
         "owner_uid": owner_uid(item),
         "owner_references_complete": owner_references_complete(item),
         "generation": meta.get("generation"),
+        "creation_timestamp": meta.get("creationTimestamp"),
         "observed_generation": workload_status.get("observedGeneration"),
         "desired_replicas": spec(item).get("replicas"),
         "ready_replicas": workload_status.get("readyReplicas", 0),
@@ -1406,6 +1428,15 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
         "unavailable_replicas": workload_status.get("unavailableReplicas", 0),
         "conditions": workload_status.get("conditions", []),
         "selector": spec(item).get("selector", {}),
+        "active": len(workload_status.get("active", []))
+        if isinstance(workload_status.get("active"), list)
+        else int(workload_status.get("active") or 0),
+        "succeeded": int(workload_status.get("succeeded") or 0),
+        "failed": int(workload_status.get("failed") or 0),
+        "completions": int(spec(item).get("completions") or 1),
+        "start_time": workload_status.get("startTime"),
+        "completion_time": workload_status.get("completionTime"),
+        "scheduled_run_kinds": ["Job"] if kind == "CronJob" else [],
     }
 
 

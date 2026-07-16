@@ -1,7 +1,9 @@
-import { ApiError, apiStreamResponse, type ApiPath } from "./client";
+import { ApiError, apiRequest, apiStreamResponse, type ApiPath } from "./client";
 import {
   logStreamEventSchema,
+  scheduledWorkloadRunCatalogSchema,
   type LogStreamEventEndpoint,
+  type ScheduledWorkloadRunCatalogEndpoint,
 } from "./log-stream-schemas";
 import { encodePathSegment, withQuery } from "./url";
 import { parseSseFrames } from "../shared/streaming/sse";
@@ -37,6 +39,33 @@ export function openWorkloadLogStream(
   handlers: LogStreamEndpointHandlers,
 ): () => void {
   const path = `/api/workloads/${segment(kind)}/${segment(namespace)}/${segment(name)}/logs/stream` as ApiPath;
+  return openStream(withQuery(path, [["cluster_id", required(clusterId, "cluster ID")]]), handlers);
+}
+
+export function getScheduledWorkloadRuns(
+  clusterId: string,
+  kind: string,
+  namespace: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<ScheduledWorkloadRunCatalogEndpoint> {
+  const path = `/api/workloads/scheduled/${segment(kind)}/${segment(namespace)}/${segment(name)}/runs` as ApiPath;
+  return apiRequest(
+    withQuery(path, [["cluster_id", required(clusterId, "cluster ID")]]),
+    scheduledWorkloadRunCatalogSchema,
+    { signal },
+  );
+}
+
+export function openScheduledWorkloadRunLogStream(
+  clusterId: string,
+  kind: string,
+  namespace: string,
+  name: string,
+  runKey: string,
+  handlers: LogStreamEndpointHandlers,
+): () => void {
+  const path = `/api/workloads/scheduled/${segment(kind)}/${segment(namespace)}/${segment(name)}/runs/${segment(runKey)}/logs/stream` as ApiPath;
   return openStream(withQuery(path, [["cluster_id", required(clusterId, "cluster ID")]]), handlers);
 }
 

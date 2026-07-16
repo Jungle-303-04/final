@@ -46,4 +46,9 @@ export type DockMessageKey =
   | "shell.dock.copyLine"
   | "shell.dock.copied"
   | "shell.dock.download"
-  | "shell.dock.follow";
+  | "shell.dock.follow"
+  | "shell.dock.diagnostic.noPods"
+  | "shell.dock.diagnostic.noLines"
+  | "shell.dock.diagnostic.cluster"
+  | "shell.dock.diagnostic.copy"
+  | "shell.dock.diagnostic.copied";

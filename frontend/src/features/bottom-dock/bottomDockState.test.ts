@@ -174,7 +174,7 @@ describe("bottom dock reducer", () => {
     state = bottomDockReducer(state, {
       type: "event",
       id: "two",
-      event: { type: "end", reason: "complete" },
+      event: { type: "end", reason: "complete", diagnostic: null },
     });
     expect(state.tabs[1]).toMatchObject({
       status: "ended",

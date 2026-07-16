@@ -1833,10 +1833,14 @@
           "realtime": null,
           "motion": null,
           "opsiaPort": {
-            "destinations": [
-              "frontend/src/app/LogStreamTab.tsx",
-              "frontend/src/features/log-stream/logStreamContract.ts",
-              "src/packages/contracts/log_stream.py"
+        "destinations": [
+          "frontend/src/app/LogStreamTab.tsx",
+          "frontend/src/features/log-stream/logStreamContract.ts",
+          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+          "frontend/src/app/LogStreamTab.test.tsx",
+          "src/packages/contracts/log_stream.py",
+          "src/domains/log_stream/service.py",
+          "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -1845,9 +1849,9 @@
             "plannedTestIds": [
               "logs.viewer.empty-diagnostic"
             ],
-            "state": "blocked",
-            "blockedReason": "The log-stream envelope has typed end reasons only; it does not expose a redacted empty-message or copy-only recovery-command field bound to the authorized target.",
-            "rationale": "The browser must not derive, display, or execute a raw recovery command from log text. A future Python projection must supply a redacted diagnostic and copy-safe command explicitly."
+        "state": "in_progress",
+        "blockedReason": null,
+        "rationale": "The Python terminal envelope now supplies a typed diagnostic and server-built read-only recovery command for the authorized target. The browser maps and renders it as copy-only content and never executes it."
           }
         }
       ]
@@ -1960,10 +1964,15 @@
           "realtime": null,
           "motion": null,
           "opsiaPort": {
-            "destinations": [
-              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
-              "frontend/src/features/log-stream/logStreamContract.ts",
-              "src/packages/contracts/log_stream.py"
+        "destinations": [
+          "frontend/src/app/LogStreamTab.tsx",
+          "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+          "frontend/src/features/bottom-dock/bottomDockState.ts",
+          "frontend/src/features/log-stream/logStreamContract.ts",
+          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+          "src/packages/contracts/log_stream.py",
+          "src/domains/log_stream/service.py",
+          "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -1972,9 +1981,9 @@
             "plannedTestIds": [
               "logs.workload.empty-diagnostic"
             ],
-            "state": "blocked",
-            "blockedReason": "The Python workload log contract exposes membership and terminal reasons but no typed redacted empty diagnostic or copy-safe command for this stream target.",
-            "rationale": "Rendering an invented kubectl command would bypass the product's audited target and capability model, so the source behavior remains explicitly blocked until the server contract exists."
+        "state": "in_progress",
+        "blockedReason": null,
+        "rationale": "Workload terminal events now carry the same typed server diagnostic as pod streams. The bounded dock state retains the diagnostic and the viewer exposes only a copy action for the authorized read-only command."
           }
         }
       ]
@@ -6014,12 +6023,18 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": [
-              "frontend/src/app/LogStreamTab.tsx",
-              "frontend/src/features/log-stream/logStreamContract.ts",
-              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
-              "src/packages/contracts/log_stream.py",
-              "src/domains/log_stream/router.py"
+        "destinations": [
+          "frontend/src/api/log-stream.ts",
+          "frontend/src/api/log-stream-schemas.ts",
+          "frontend/src/app/LogStreamTab.tsx",
+          "frontend/src/features/log-stream/logStreamContract.ts",
+          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+          "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+          "src/packages/contracts/log_stream.py",
+          "src/domains/log_stream/router.py",
+          "src/domains/log_stream/service.py",
+          "src/domains/inventory/repository.py",
+          "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -6028,9 +6043,9 @@
             "plannedTestIds": [
               "logs.scheduled-run.target"
             ],
-            "state": "blocked",
-            "blockedReason": "The Python log-stream target permits only deployments, statefulsets, and daemonsets; it has no authorized scheduled-owner-to-run catalog or immutable run-target projection.",
-            "rationale": "Routing by a browser-maintained scheduled-kind allowlist would be hardcoded and could open logs for the wrong execution, so the source behavior remains blocked until a typed Python run catalog exists."
+        "state": "in_progress",
+        "blockedReason": null,
+        "rationale": "The browser now routes a server-issued immutable run UID through the typed scheduled endpoint. Python re-resolves the owner/run UID and exact pod ownership before every persisted stream batch; final page-level picker composition remains in progress."
           }
         }
       ]
@@ -6492,12 +6507,19 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": [
-              "frontend/src/app/LogStreamTab.tsx",
-              "frontend/src/features/log-stream/logStreamContract.ts",
-              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
-              "src/packages/contracts/log_stream.py",
-              "src/domains/log_stream/router.py"
+        "destinations": [
+          "frontend/src/api/log-stream.ts",
+          "frontend/src/api/log-stream-schemas.ts",
+          "frontend/src/app/LogStreamTab.tsx",
+          "frontend/src/features/log-stream/logStreamContract.ts",
+          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+          "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+          "src/packages/contracts/log_stream.py",
+          "src/domains/log_stream/router.py",
+          "src/domains/log_stream/service.py",
+          "src/domains/inventory/repository.py",
+          "src/services/target/cluster-agent/providers/kubernetes_providers.py",
+          "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -6506,9 +6528,9 @@
             "plannedTestIds": [
               "logs.scheduled-run.target"
             ],
-            "state": "blocked",
-            "blockedReason": "No Python contract describes retained scheduled executions, their lifecycle, a default-run rule, or a scoped projection from a scheduler owner to the concrete workload target.",
-            "rationale": "The product must not infer a Job, Workflow, or pod name from a CronJob-like owner in the browser; the picker waits for the server-owned execution projection."
+        "state": "in_progress",
+        "blockedReason": null,
+        "rationale": "The Python catalog now returns retained executions, observed lifecycle counts, a server-selected default run, coverage reasons, and immutable resource references from two bounded queries. The strict browser schema consumes that catalog without deriving Job or pod names; final page-level picker composition remains in progress."
           }
         }
       ]

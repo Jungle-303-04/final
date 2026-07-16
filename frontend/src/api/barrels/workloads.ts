@@ -25,6 +25,8 @@ export {
 } from "../commands-schemas";
 export {
   openPodLogStream,
+  getScheduledWorkloadRuns,
+  openScheduledWorkloadRunLogStream,
   openWorkloadLogStream,
   type LogStreamEndpointHandlers,
 } from "../log-stream";
@@ -46,5 +48,7 @@ export {
   logStreamEventSchema,
   logStreamLineSchema,
   logStreamPodMembershipSchema,
+  scheduledWorkloadRunCatalogSchema,
   type LogStreamEventEndpoint,
+  type ScheduledWorkloadRunCatalogEndpoint,
 } from "../log-stream-schemas";

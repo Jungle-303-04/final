@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { openPodLogStream, openWorkloadLogStream } from "./log-stream";
+import {
+  getScheduledWorkloadRuns,
+  openPodLogStream,
+  openScheduledWorkloadRunLogStream,
+  openWorkloadLogStream,
+} from "./log-stream";
 import { MAX_SSE_FRAME_LENGTH, parseSseFrames } from "../shared/streaming/sse";
 
 describe("log stream API", () => {
@@ -19,7 +24,7 @@ describe("log stream API", () => {
         line: "plain <script> text",
         line_truncated: false,
       },
-      { type: "end", reason: "complete" },
+      { type: "end", reason: "complete", diagnostic: null },
     ]));
 
     const close = openPodLogStream("cluster-1", "shop", "checkout api", null, {
@@ -77,6 +82,33 @@ describe("log stream API", () => {
     });
     expect(() => parseSseFrames(`data: ${"x".repeat(MAX_SSE_FRAME_LENGTH)}`))
       .toThrow(/exceeded limit/u);
+  });
+
+  it("uses encoded owner and run identities for scheduled catalogs and streams", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scope: { workspace_id: "ws-1", cluster_id: "cluster-1", namespaces: ["shop"], freshness: "live" },
+        owner: { api_group: "batch", version: "v1", kind: "CronJob", namespace: "shop", name: "nightly", uid: "owner-1" },
+        runs: [],
+        default_run_key: null,
+        complete: true,
+        reason_codes: [],
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(sseResponse([{ type: "end", reason: "complete", diagnostic: null }]));
+
+    await getScheduledWorkloadRuns("cluster-1", "CronJob", "shop", "nightly job");
+    const onEvent = vi.fn();
+    openScheduledWorkloadRunLogStream(
+      "cluster-1", "CronJob", "shop", "nightly job", "uid:101", { onEvent, onFailure: vi.fn() },
+    );
+    await vi.waitFor(() => expect(onEvent).toHaveBeenCalledOnce());
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/workloads/scheduled/CronJob/shop/nightly%20job/runs?cluster_id=cluster-1",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "/api/workloads/scheduled/CronJob/shop/nightly%20job/runs/uid%3A101/logs/stream?cluster_id=cluster-1",
+    );
   });
 
   it("fails closed when the transport reaches EOF without a terminal envelope", async () => {

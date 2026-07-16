@@ -91,6 +91,10 @@ TRAFFIC_OVERVIEW_PATH = "/traffic/overview"
 COST_OVERVIEW_PATH = "/cost/overview"
 CHECKS_OVERVIEW_PATH = "/checks/overview"
 CHECKS_DETAIL_PATH = "/checks/{check_id}"
+SCHEDULED_WORKLOAD_RUNS_PATH = "/workloads/scheduled/{kind}/{namespace}/{name}/runs"
+SCHEDULED_WORKLOAD_RUN_LOG_STREAM_PATH = (
+    "/workloads/scheduled/{kind}/{namespace}/{name}/runs/{run_key}/logs/stream"
+)
 REPOSITORY_DISCOVERY_PROBE_PATH = "/repositories/discovery/probe"
 REPOSITORY_DISCOVERY_BRANCHES_PATH = "/repositories/discovery/branches"
 REPOSITORY_DISCOVERY_MANIFESTS_PATH = "/repositories/discovery/manifests"

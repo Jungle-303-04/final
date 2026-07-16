@@ -1,6 +1,7 @@
 import type {
   LogStreamEvent,
   LogStreamFailureCode,
+  LogStreamDiagnostic,
   LogStreamTarget,
 } from "../log-stream/logStreamContract";
 
@@ -32,6 +33,7 @@ export interface BottomDockTab {
   unseen: number;
   pods: string[];
   endReason: string | null;
+  diagnostic: LogStreamDiagnostic | null;
   failureCode: LogStreamFailureCode | string | null;
   retryable: boolean;
 }
@@ -93,6 +95,7 @@ export function bottomDockReducer(
         status: "connecting",
         streamId: null,
         endReason: null,
+        diagnostic: null,
         failureCode: null,
         retryable: false,
       } : tab),
@@ -138,6 +141,7 @@ function applyEvents(
   let status = tab.status;
   let streamId = tab.streamId;
   let endReason = tab.endReason;
+  let diagnostic = tab.diagnostic;
   let failureCode = tab.failureCode;
   let retryable = tab.retryable;
   let metadataChanged = false;
@@ -167,6 +171,7 @@ function applyEvents(
     } else if (event.type === "end") {
       status = "ended";
       endReason = event.reason;
+      diagnostic = event.diagnostic;
       retryable = false;
     } else {
       status = "failed";
@@ -204,6 +209,7 @@ function applyEvents(
     unseen: appendedLines.length === 0 ? tab.unseen : active ? 0 : tab.unseen + appendedLines.length,
     pods: pods === null ? tab.pods : [...pods].sort(),
     endReason,
+    diagnostic,
     failureCode,
     retryable,
   };
@@ -222,6 +228,7 @@ function newTab(id: string, target: LogStreamTarget): BottomDockTab {
     unseen: 0,
     pods: [],
     endReason: null,
+    diagnostic: null,
     failureCode: null,
     retryable: false,
   };

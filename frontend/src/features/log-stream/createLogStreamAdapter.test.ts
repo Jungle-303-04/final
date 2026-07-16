@@ -17,11 +17,12 @@ describe("log stream adapter", () => {
         line: "ready",
         line_truncated: false,
       });
-      handlers.onEvent({ type: "end", reason: "window_complete" });
+      handlers.onEvent({ type: "end", reason: "window_complete", diagnostic: null });
       return close;
     });
     const port = createLogStreamAdapter({
       openPodLogStream,
+      openScheduledWorkloadRunLogStream: vi.fn(),
       openWorkloadLogStream: vi.fn(),
     });
 
@@ -49,6 +50,7 @@ describe("log stream adapter", () => {
     expect(onEvent).toHaveBeenNthCalledWith(3, {
       type: "end",
       reason: "window_complete",
+      diagnostic: null,
     });
     dispose();
     expect(close).toHaveBeenCalledTimes(1);
@@ -61,6 +63,7 @@ describe("log stream adapter", () => {
         handlers.onFailure({ kind: "unauthorized", status: 401 });
         return vi.fn();
       }),
+      openScheduledWorkloadRunLogStream: vi.fn(),
       openWorkloadLogStream: vi.fn(),
     });
     port.open({
@@ -71,5 +74,32 @@ describe("log stream adapter", () => {
       container: null,
     }, { onEvent: vi.fn(), onFailure });
     expect(onFailure.mock.calls[0]?.[0]).toMatchObject({ code: "unauthorized" });
+  });
+
+  it("routes an owner-scoped run key only through the scheduled endpoint", () => {
+    const openScheduledWorkloadRunLogStream = vi.fn(() => vi.fn());
+    const port = createLogStreamAdapter({
+      openPodLogStream: vi.fn(),
+      openScheduledWorkloadRunLogStream,
+      openWorkloadLogStream: vi.fn(),
+    });
+
+    port.open({
+      type: "scheduled-run",
+      clusterId: "cluster-1",
+      kind: "CronJob",
+      namespace: "shop",
+      name: "nightly",
+      runKey: "uid-nightly-101",
+    }, { onEvent: vi.fn(), onFailure: vi.fn() });
+
+    expect(openScheduledWorkloadRunLogStream).toHaveBeenCalledWith(
+      "cluster-1",
+      "CronJob",
+      "shop",
+      "nightly",
+      "uid-nightly-101",
+      expect.any(Object),
+    );
   });
 });

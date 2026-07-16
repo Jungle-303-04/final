@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, RootModel, TypeAdapter, model_validator
 
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.security.log_lines import MAX_LOG_LINE_LENGTH
 
 LogStreamErrorCode = Literal[
@@ -16,6 +17,26 @@ LogStreamErrorCode = Literal[
     "target_unavailable",
     "stream_unavailable",
 ]
+LogStreamDiagnosticCode = Literal["no_matching_pods", "no_log_lines"]
+
+
+class LogStreamRecoveryCommand(StrictModel):
+    """Server-built, copy-only diagnostic command for the authorized target.
+
+    The browser may copy this value, but never executes it.  ``cluster_id`` is
+    carried separately because a local kubectl context cannot be inferred from
+    an Opsia cluster identity.
+    """
+
+    kind: Literal["copy_command"] = "copy_command"
+    command: str = Field(min_length=1, max_length=1024)
+    cluster_id: str = Field(min_length=1, max_length=512)
+    read_only: Literal[True] = True
+
+
+class LogStreamDiagnostic(StrictModel):
+    code: LogStreamDiagnosticCode
+    recovery: LogStreamRecoveryCommand | None = None
 
 
 class LogStreamConnected(StrictModel):
@@ -52,6 +73,7 @@ class LogStreamPodRemoved(StrictModel):
 class LogStreamEnd(StrictModel):
     type: Literal["end"] = "end"
     reason: str = Field(min_length=1, max_length=120)
+    diagnostic: LogStreamDiagnostic | None = None
 
 
 class LogStreamError(StrictModel):
@@ -74,6 +96,46 @@ LogStreamEnvelopeAdapter: TypeAdapter[LogStreamEnvelope] = TypeAdapter(LogStream
 
 class LogStreamSseMessage(RootModel[LogStreamEnvelope]):
     """OpenAPI representation of one default-message SSE data payload."""
+
+
+ScheduledRunPhase = Literal["pending", "running", "succeeded", "failed", "unknown"]
+
+
+class ScheduledWorkloadRun(StrictModel):
+    run_key: str = Field(min_length=1, max_length=255)
+    resource: ResourceRef
+    phase: ScheduledRunPhase
+    active: bool
+    scheduled_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    desired: int | None = Field(default=None, ge=0)
+    succeeded: int | None = Field(default=None, ge=0)
+    failed: int | None = Field(default=None, ge=0)
+    pod_total: int = Field(ge=0)
+    pod_succeeded: int = Field(ge=0)
+    pod_failed: int = Field(ge=0)
+    observed_at: datetime | None = None
+
+
+class ScheduledWorkloadRunCatalog(StrictModel):
+    scope: ClusterScope
+    owner: ResourceRef
+    runs: tuple[ScheduledWorkloadRun, ...]
+    default_run_key: str | None = None
+    complete: bool
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def catalog_is_consistent(self) -> Self:
+        keys = tuple(run.run_key for run in self.runs)
+        if len(keys) != len(set(keys)):
+            raise ValueError("scheduled run keys must be unique")
+        if self.default_run_key is not None and self.default_run_key not in keys:
+            raise ValueError("default scheduled run must belong to the catalog")
+        if not self.complete and not self.reason_codes:
+            raise ValueError("partial scheduled run catalog requires a reason")
+        return self
 
 
 def parse_log_stream_envelope(payload: object) -> LogStreamEnvelope:

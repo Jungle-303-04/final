@@ -124,7 +124,7 @@ describe("ProductShell bottom log dock", () => {
 
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
     const first = stream.latest("checkout");
-    flushEventFrame(() => first.onEvent({ type: "end", reason: "complete" }));
+    flushEventFrame(() => first.onEvent({ type: "end", reason: "complete", diagnostic: null }));
     await waitFor(() => expect(screen.getByText("종료됨")).toBeTruthy());
 
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));

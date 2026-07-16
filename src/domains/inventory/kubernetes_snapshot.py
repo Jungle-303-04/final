@@ -170,16 +170,32 @@ def _workload_resource(item: JsonObject) -> JsonObject:
     desired = int(item.get("desired_replicas") or 0)
     ready = int(item.get("ready_replicas") or 0)
     kind = _text(item.get("kind"), "Workload")
+    failed = int(item.get("failed") or 0)
+    succeeded = int(item.get("succeeded") or 0)
+    active = int(item.get("active") or 0)
+    completions = max(1, int(item.get("completions") or 1))
+    if kind == "Job":
+        status = (
+            "Running"
+            if active > 0
+            else "Failed"
+            if failed > 0
+            else ("Succeeded" if succeeded >= completions else "Pending")
+        )
+        healthy = failed == 0
+    else:
+        status = f"{ready}/{desired}"
+        healthy = desired == 0 or ready >= desired
     return {
         "resource_type": "workload",
-        "api_version": "apps/v1",
+        "api_version": _text(item.get("api_version"), "apps/v1"),
         "kind": kind,
         "namespace": _text(item.get("namespace"), "default"),
         "name": _text(item.get("name"), kind.lower()),
         "uid": item.get("uid"),
         "resource_version": item.get("resource_version"),
-        "status": f"{ready}/{desired}",
-        "health": _health(desired == 0 or ready >= desired),
+        "status": status,
+        "health": _health(healthy),
         "labels": _labels(item),
         "summary": item,
         "raw": item,
