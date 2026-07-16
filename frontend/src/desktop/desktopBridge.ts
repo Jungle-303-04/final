@@ -1,3 +1,6 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
 export const DESKTOP_COMMAND = {
   capabilities: "desktop_capabilities",
   setActiveClusterTitle: "desktop_set_active_cluster_title",
@@ -10,6 +13,7 @@ export const DESKTOP_COMMAND = {
   localTerminalInput: "desktop_local_terminal_input",
   localTerminalResize: "desktop_local_terminal_resize",
   localTerminalClose: "desktop_local_terminal_close",
+  localTerminalAckOutput: "desktop_local_terminal_ack_output",
 } as const;
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "browser";
@@ -62,6 +66,8 @@ export interface StartLocalTerminalRequest {
 export interface DesktopLocalTerminalSession {
   sessionId: string;
   shell: string;
+  outputWindowBytes: number;
+  outputFrameBytes: number;
 }
 
 export interface LocalTerminalInputRequest {
@@ -75,8 +81,13 @@ export interface LocalTerminalResizeRequest {
   rows: number;
 }
 
+export interface LocalTerminalOutputAckRequest {
+  sessionId: string;
+  byteLength: number;
+}
+
 export type DesktopLocalTerminalEvent =
-  | { sessionId: string; kind: "output"; data: string }
+  | { sessionId: string; kind: "output"; data: string; byteLength: number }
   | { sessionId: string; kind: "exit"; exitCode: number; message?: string }
   | { sessionId: string; kind: "error"; message: string };
 
@@ -102,6 +113,7 @@ export interface DesktopBridge {
   sendLocalTerminalInput: (request: LocalTerminalInputRequest) => Promise<void>;
   resizeLocalTerminal: (request: LocalTerminalResizeRequest) => Promise<void>;
   closeLocalTerminal: (sessionId: string) => Promise<void>;
+  acknowledgeLocalTerminalOutput: (request: LocalTerminalOutputAckRequest) => Promise<void>;
   /**
    * Resolves only after the native event listener is installed.  A terminal
    * must wait for this before starting its PTY so the initial shell prompt is
@@ -124,7 +136,7 @@ const BROWSER_CAPABILITIES: DesktopCapabilitySet = {
   updater: unsupported("Application updates are available only in a signed desktop release."),
 };
 
-export function createDesktopBridge(runtime: DesktopRuntime | undefined = readDesktopRuntime()): DesktopBridge {
+export function createDesktopBridge(runtime: DesktopRuntime | undefined = createNativeDesktopRuntime()): DesktopBridge {
   if (!runtime) return browserDesktopBridge();
 
   return {
@@ -167,6 +179,10 @@ export function createDesktopBridge(runtime: DesktopRuntime | undefined = readDe
       DESKTOP_COMMAND.localTerminalClose,
       { request: { sessionId } },
     ),
+    acknowledgeLocalTerminalOutput: (request) => runtime.core.invoke<void>(
+      DESKTOP_COMMAND.localTerminalAckOutput,
+      { request },
+    ),
     onLocalTerminalEvent: (listener) => subscribeLocalTerminal(runtime, listener),
     onMenuAction: (listener) => subscribeDesktopMenu(runtime, listener),
   };
@@ -205,15 +221,20 @@ function browserDesktopBridge(): DesktopBridge {
     closeLocalTerminal: async () => {
       throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
     },
+    acknowledgeLocalTerminalOutput: async () => {
+      throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
+    },
     onLocalTerminalEvent: async () => () => undefined,
     onMenuAction: () => () => undefined,
   };
 }
 
-function readDesktopRuntime(): DesktopRuntime | undefined {
-  if (typeof window === "undefined") return undefined;
-  const candidate = (window as Window & { __TAURI__?: DesktopRuntime }).__TAURI__;
-  return candidate?.core?.invoke ? candidate : undefined;
+function createNativeDesktopRuntime(): DesktopRuntime | undefined {
+  if (typeof window === "undefined" || !isTauri()) return undefined;
+  return {
+    core: { invoke },
+    event: { listen },
+  };
 }
 
 function subscribeDesktopMenu(
@@ -248,8 +269,19 @@ function subscribeLocalTerminal(
 
 function parseLocalTerminalEvent(value: unknown): DesktopLocalTerminalEvent | null {
   if (!isRecord(value) || typeof value.sessionId !== "string" || !value.sessionId) return null;
-  if (value.kind === "output" && typeof value.data === "string") {
-    return { sessionId: value.sessionId, kind: "output", data: value.data };
+  if (
+    value.kind === "output"
+    && typeof value.data === "string"
+    && typeof value.byteLength === "number"
+    && Number.isSafeInteger(value.byteLength)
+    && value.byteLength > 0
+  ) {
+    return {
+      sessionId: value.sessionId,
+      kind: "output",
+      data: value.data,
+      byteLength: value.byteLength,
+    };
   }
   if (value.kind === "exit" && typeof value.exitCode === "number") {
     return {

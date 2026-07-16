@@ -14,5 +14,14 @@ shell, streams through typed Tauri events, accepts bounded input and resize
 requests, and is terminated when its sheet or desktop process closes. It does
 not proxy through Python or receive server-held credentials.
 
+The terminal boundary is defense in depth: the packaged renderer has no broad
+global Tauri API, CSP and navigation restrict it to the bundled app (or the
+exact local development origin), new webviews are denied, capabilities are
+scoped to the main webview, and native sessions verify their owning window.
+The child shell receives only the minimal allowlisted local environment needed
+for terminal usability. These controls reduce the blast radius of renderer
+failures; they do not claim that a compromised trusted main renderer is a
+separate security principal.
+
 `updater` remains unsupported until signed release metadata and platform
 signing keys are configured. It has no Python fallback.

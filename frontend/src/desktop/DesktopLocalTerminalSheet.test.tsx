@@ -11,11 +11,13 @@ const bridge = vi.hoisted(() => ({
   sendLocalTerminalInput: vi.fn(),
   resizeLocalTerminal: vi.fn(),
   closeLocalTerminal: vi.fn(),
+  acknowledgeLocalTerminalOutput: vi.fn(),
   onLocalTerminalEvent: vi.fn(),
   terminalListener: undefined as ((event: {
     sessionId: string;
     kind: "output" | "exit" | "error";
     data?: string;
+    byteLength?: number;
     exitCode?: number;
     message?: string;
   }) => void) | undefined,
@@ -79,10 +81,16 @@ class ResizeObserverStub {
 beforeEach(() => {
   bridge.isDesktop = true;
   bridge.capabilities.mockResolvedValue({ localTerminal: { state: "available" } });
-  bridge.startLocalTerminal.mockResolvedValue({ sessionId: "session-1", shell: "/bin/sh" });
+  bridge.startLocalTerminal.mockResolvedValue({
+    sessionId: "session-1",
+    shell: "/bin/sh",
+    outputWindowBytes: 128 * 1024,
+    outputFrameBytes: 32 * 1024,
+  });
   bridge.sendLocalTerminalInput.mockResolvedValue(undefined);
   bridge.resizeLocalTerminal.mockResolvedValue(undefined);
   bridge.closeLocalTerminal.mockResolvedValue(undefined);
+  bridge.acknowledgeLocalTerminalOutput.mockResolvedValue(undefined);
   bridge.onLocalTerminalEvent.mockImplementation(async (listener) => {
     bridge.terminalListener = listener;
     return vi.fn();
@@ -92,11 +100,12 @@ beforeEach(() => {
   xterm.inputListener = undefined;
   xterm.keyHandler = undefined;
   xterm.write.mockReset();
+  xterm.write.mockImplementation((_data: string, callback?: () => void) => callback?.());
   xterm.focus.mockReset();
   resizeObserver.notify = undefined;
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    callback(0);
+    queueMicrotask(() => callback(0));
     return 1;
   }));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
@@ -162,8 +171,9 @@ describe("DesktopLocalTerminalSheet", () => {
     const rendered = renderTerminal();
     await openTerminal();
 
-    bridge.terminalListener?.({ sessionId: "session-1", kind: "output", data: "ready\r\n" });
-    expect(xterm.write).toHaveBeenCalledWith("ready\r\n");
+    bridge.terminalListener?.({ sessionId: "session-1", kind: "output", data: "ready\r\n", byteLength: 7 });
+    await waitFor(() => expect(xterm.write).toHaveBeenCalledWith("ready\r\n", expect.any(Function)));
+    expect(bridge.acknowledgeLocalTerminalOutput).toHaveBeenCalledWith({ sessionId: "session-1", byteLength: 7 });
 
     bridge.terminalListener?.({
       sessionId: "session-1",
@@ -177,6 +187,38 @@ describe("DesktopLocalTerminalSheet", () => {
 
     rendered.unmount();
     expect(bridge.closeLocalTerminal).not.toHaveBeenCalled();
+  });
+
+  it("closes the owned PTY when the renderer cannot acknowledge a bounded output batch", async () => {
+    renderTerminal();
+    await openTerminal();
+    bridge.acknowledgeLocalTerminalOutput.mockRejectedValue(new Error("native acknowledgement failed"));
+
+    bridge.terminalListener?.({ sessionId: "session-1", kind: "output", data: "ready", byteLength: 5 });
+
+    await waitFor(() => expect(bridge.closeLocalTerminal).toHaveBeenCalledWith("session-1"));
+    expect(screen.getByRole("status").textContent).toContain("Local terminal failed");
+  });
+
+  it("does not flush queued terminal output after the sheet closes", async () => {
+    let queuedFrame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      queuedFrame = callback;
+      return 17;
+    }));
+    renderTerminal();
+    const opener = await openTerminal();
+    xterm.write.mockClear();
+
+    bridge.terminalListener?.({ sessionId: "session-1", kind: "output", data: "late", byteLength: 4 });
+    fireEvent.click(screen.getByRole("button", { name: "Close local terminal" }));
+    queuedFrame?.(0);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(xterm.write).not.toHaveBeenCalled();
+    expect(bridge.acknowledgeLocalTerminalOutput).not.toHaveBeenCalled();
+    expect(bridge.closeLocalTerminal).toHaveBeenCalledWith("session-1");
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
   it("keeps a bridge start error out of the rendered UI", async () => {

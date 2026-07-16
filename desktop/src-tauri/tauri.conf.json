@@ -10,7 +10,12 @@
     "frontendDist": "../../frontend/dist"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
+    "security": {
+      "freezePrototype": true,
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'",
+      "devCsp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:5173 ws://localhost:5173; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline' http://localhost:5173; font-src 'self' data: http://localhost:5173; script-src 'self' http://localhost:5173; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'"
+    },
     "windows": [
       {
         "label": "main",
