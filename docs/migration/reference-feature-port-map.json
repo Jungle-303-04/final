@@ -341,6 +341,86 @@
         }
       }
     },
+    "reference.feature.090": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/api/bootstrap-status.test.ts",
+        "frontend/src/features/runtime-status/createRuntimeStatusAdapter.test.ts",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "src/domains/diagnostics/runtime.py#collect_runtime_diagnostics",
+          "test": "tests/test_bootstrap_diagnostics.py#test_runtime_diagnostics_is_session_scoped_batched_and_bounded"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx#RuntimeDiagnosticsDialog",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "test": "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+        }
+      }
+    },
+    "reference.feature.092": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.VersionCheckResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/api/bootstrap-status.test.ts",
+        "frontend/src/features/runtime-status/createRuntimeStatusAdapter.test.ts",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#version_check",
+          "consumer": "src/domains/diagnostics/version_check.py#VersionCheckService",
+          "test": "tests/test_bootstrap_diagnostics.py#test_version_check_uses_bounded_remote_manifest_and_semver_ordering"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/runtime-status/VersionUpdateNotice.tsx#VersionUpdateNotice",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "test": "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+        }
+      }
+    },
+    "reference.feature.098": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.kubernetes_discovery.ApiResourceDiscoveryObservation",
+      "frontendContract": "frontend/src/features/resources/resourcesContract.ts#ResourceApiDiscovery",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_kubernetes_api_discovery_contract.py",
+        "tests/test_target_kubernetes_evidence.py",
+        "tests/test_inventory_domain.py",
+        "frontend/src/api/api-resource-discovery.test.ts",
+        "frontend/src/features/resources/createResourcesAdapter.mapping.test.ts",
+        "frontend/src/pages/resources/ResourcesCatalog.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_cluster_api_resources",
+          "consumer": "src/services/target/cluster-agent/providers/kubernetes_providers.py#KubernetesSnapshotProvider.normalize_cluster_api_discovery",
+          "test": "tests/test_target_kubernetes_evidence.py#test_cluster_api_discovery_collects_bounded_group_versions_and_crd_identity"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/resources/resourcesCanonical.ts#toResourceCatalog",
+          "consumer": "frontend/src/api/api-resource-discovery.ts#getKubernetesApiResources",
+          "test": "frontend/src/pages/resources/ResourcesCatalog.test.tsx"
+        }
+      }
+    },
     "reference.feature.099": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ClusterListResponse",
@@ -2944,20 +3024,23 @@
       }
     },
     "reference.feature.190": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.sources.HelmChartVersionObservation",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_helm_chart_provider_fetch.py",
+        "tests/test_helm_chart_source_router.py",
         "tests/test_helm_release_projection.py",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "reason": "No repository index or OCI metadata contract supplies an authorized chart version catalog.",
-          "test": "tests/test_helm_release_projection.py"
+          "state": "in_progress",
+          "destination": "src/domains/helm/source_router.py#get_helm_chart_source_versions",
+          "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.fetch_versions",
+          "reason": "Bounded repository and OCI version discovery is implemented, but a release is not yet linked to its authorized chart source for current-versus-latest comparison.",
+          "test": "tests/test_helm_chart_provider_fetch.py"
         },
         "frontend": {
           "state": "blocked",
@@ -2993,26 +3076,26 @@
     },
     "reference.feature.192": {
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/api/catalog.ts",
+      "backendContract": "packages.contracts.helm.sources.HelmChartSourcePage",
+      "frontendContract": "frontend/src/features/helm/helmEndpointContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
-        "frontend/src/api/catalog.test.ts"
+        "tests/test_helm_chart_source_provider.py",
+        "tests/test_helm_chart_source_router.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/catalog/router.py#list_catalog_items",
-          "consumer": "src/domains/catalog/install.py#server_helm_recipe",
-          "reason": "The server exposes curated digest-pinned Helm recipes, not a mutable repository registry.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#list_helm_chart_sources",
+          "consumer": "src/domains/helm/repository.py#HelmReleaseRepository.list_helm_chart_sources",
+          "test": "tests/test_helm_chart_source_router.py#test_source_list_materializes_per_source_workspace_rbac_before_pagination"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/api/catalog.ts#listCatalogItems",
-          "reason": "The strict catalog client exists, but the Helm page has no repository catalog surface.",
-          "test": "frontend/src/api/catalog.test.ts"
+          "state": "blocked",
+          "destination": "frontend/src/features/helm/helmEndpointContract.ts",
+          "reason": "The Helm endpoint port has no chart-source list method and the Helm page has no repository catalog surface.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
     },
@@ -3041,49 +3124,53 @@
       }
     },
     "reference.feature.194": {
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.sources.HelmChartSourcePage",
+      "frontendContract": "frontend/src/features/helm/helmEndpointContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_chart_provider_fetch.py",
+        "tests/test_helm_chart_source_provider.py",
+        "tests/test_helm_chart_source_router.py",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/install.py#server_helm_recipe",
-          "reason": "The server owns fixed OCI references but has no workspace OCI source registry or credential metadata projection.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#list_helm_chart_sources",
+          "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.fetch_versions",
+          "test": "tests/test_helm_chart_provider_fetch.py#test_oci_tag_fetch_uses_registry_api_and_returns_one_source_only"
         },
         "frontend": {
           "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "Fixed server recipes are not presented as user-managed OCI sources.",
+          "destination": "frontend/src/features/helm/helmEndpointContract.ts",
+          "reason": "The browser has no OCI source list adapter or user-managed source surface.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
     },
     "reference.feature.195": {
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.sources.HelmChartSourceRegisterRequest",
+      "frontendContract": "frontend/src/features/helm/helmEndpointContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_chart_source_provider.py",
+        "tests/test_helm_chart_source_router.py",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/install.py#server_helm_recipe",
-          "reason": "No credential vault, write-only secret contract, source mutation audit, or OCI probe exists.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "in_progress",
+          "destination": "src/domains/helm/source_router.py#register_helm_chart_source",
+          "consumer": "src/domains/helm/repository.py#HelmReleaseRepository.register_helm_chart_source",
+          "reason": "Workspace-scoped write-only encrypted credential registration is implemented; deletion, command receipt, and mutation audit contracts remain.",
+          "test": "tests/test_helm_chart_source_router.py#test_admin_source_registration_reuses_encrypted_workspace_credential"
         },
         "frontend": {
           "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The browser cannot own OCI credentials or mutate source configuration.",
+          "destination": "frontend/src/features/helm/helmEndpointContract.ts",
+          "reason": "The browser has no source registration or deletion contract, form, or post-mutation refetch.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
