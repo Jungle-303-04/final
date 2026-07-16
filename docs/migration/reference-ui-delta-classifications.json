@@ -11591,19 +11591,22 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomePage.tsx",
-              "src/domains/inventory_filter/router.py"
+              "frontend/src/pages/home/HomeInsightsBand.tsx",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "src/domains/dashboard/fleet_router.py",
+              "src/domains/inventory_filter/repository.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
-              "domains.inventory_filter.router"
+              "domains.dashboard.fleet_router",
+              "domains.inventory_filter.repository"
             ],
             "plannedTestIds": [
               "home.optional-capabilities.contract-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "The dynamic inventory catalog can discover resource identities, but no bounded top-CRD count response or Home consumer exists.",
-            "rationale": "The browser does not aggregate arbitrary inventory pages into a fake CRD leaderboard."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The authorized Home insights projection reuses the latest exact inventory revision, caps returned custom-resource kinds, exposes total and completeness, and keeps unavailable observations distinct from zero."
           }
         },
         {
@@ -11622,9 +11625,9 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/helm/HelmPage.tsx",
-              "frontend/src/features/helm/createHelmAdapter.ts",
-              "src/domains/helm/release_router.py",
+              "frontend/src/pages/home/HomeInsightsBand.tsx",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "src/domains/dashboard/fleet_router.py",
               "src/domains/helm/release_projection.py"
             ],
             "requiredBackendContracts": [
@@ -11634,9 +11637,9 @@
             "plannedTestIds": [
               "home.optional-capabilities.contract-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "The authorized Helm release projection exists, but no Home summary port consumes it and exposes its restricted or unavailable state.",
-            "rationale": "The existing Helm adapter remains the single release authority; Home will compose it only after a reusable summary contract exists."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Home composes the shared Helm storage projection through one authorized insights contract and preserves restricted, partial, unavailable, and empty states without a duplicate release model."
           }
         },
         {
@@ -12184,6 +12187,52 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product reuses one generic capability and operation-stream handoff while the Python gateway and target agent retain exact kind-specific Kubernetes executors and authorization."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:nodes:scheduling-control:audited-actions:v1",
+          "legacyContractIds": [
+            "reference.feature.173"
+          ],
+          "symbol": "useCordonNode, useUncordonNode, and node scheduling confirmation",
+          "interaction": "the exact observed Node exposes only cordon or uncordon for its current scheduling state, requires one target-impact confirmation, and returns an audited command receipt followed by durable operation progress",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the accepted Node scheduling command from its durable CommandReceipt sequence without repeating the patch",
+            "backpressure": "coalesce progress by command and attempt while retaining authorization denial, cancellation, failure, and completion",
+            "merge": "apply operation state and resource refresh only to the matching cluster, Node name, scheduling capability revision, command receipt, and attempt"
+          },
+          "motion": {
+            "reducedMotion": "cordon and uncordon pending, completion, and failure remain visible through text and semantic status without animation dependence",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/operations/OperationStatusFeedback.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/resource-capability-actions.ts",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/resources/createResourceActionsAdapter.ts",
+              "src/domains/inventory/action_catalog.py",
+              "src/domains/command/router.py",
+              "src/services/target/cluster-agent/agent.py",
+              "src/domains/target/install_manifest.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.requests",
+              "packages.contracts.parity",
+              "domains.command.router",
+              "domains.target.install_manifest"
+            ],
+            "plannedTestIds": [
+              "resources.detail.composition",
+              "api.client.transport",
+              "events.operation.resume"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The browser reuses the generic capability and operation UI while the Python gateway, dedicated agent capability, isolated ClusterRole, and exact core/v1 Node patch keep scheduling authority server-owned."
           }
         },
         {

@@ -3938,7 +3938,7 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
@@ -3949,15 +3949,15 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory_filter/router.py#list_filtered_resources",
-          "reason": "Dynamic resource discovery exists, but no bounded top-CRD count contract with discovery completeness is exposed.",
-          "test": "tests/test_inventory_filter_router.py"
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_home_insights",
+          "consumer": "src/domains/inventory_filter/repository.py#list_home_custom_resource_counts",
+          "test": "tests/test_fleet_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
-          "reason": "No lazy CRD count card or adapter exists.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeInsightsBand.tsx#HomeInsightsBand",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,
@@ -3979,7 +3979,7 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
@@ -3998,9 +3998,9 @@
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
-          "reason": "The shared Helm adapter is not composed into a lazy Home summary card with restricted and unavailable feedback.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeInsightsBand.tsx#HomeInsightsBand",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,
@@ -6476,11 +6476,11 @@
     },
     {
       "contractId": "reference.feature.173",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:nodes:scheduling-control:audited-actions:v1",
       "legacyContractIds": [
         "reference.feature.173"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-173",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -6490,26 +6490,30 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_command_catalog.py",
-        "tests/test_target_agent_commands.py"
+        "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_target_registration.py",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No Node cordon or uncordon action, cluster-scoped RBAC decision, or target-agent patch executor exists.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#cordon_node",
+          "consumer": "src/services/target/cluster-agent/agent.py#set_node_unschedulable",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "No server-projected Node scheduling capability is exposed.",
-          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "test": "tests/test_resource_capabilities_router.py"
         },
         "desktop": null,
         "realtime": "not_required"
