@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 191,
+  "pendingCount": 188,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -1593,8 +1593,42 @@
         "blobId": "263e35ade74923ab4efb8e4cc14e1111f34e555d",
         "sha256": "05c45a4e1ec4eda19f414e2c1d4cf3e65b3585ed49cc3dcbbfa7dffd39e52ffa"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:queue:severity-regression-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "issues severity ordering tests",
+          "interaction": "severity normalization and deterministic queue ordering are verified at the Python contract, browser API, adapter, and presentation boundaries",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/rca-issues.test.ts",
+              "frontend/src/features/issues/createIssuesAdapter.test.ts",
+              "frontend/src/features/issues/issuesCanonical.test.ts",
+              "frontend/src/features/issues/issuePresentation.test.ts",
+              "tests/test_dashboard_projection.py",
+              "tests/test_dashboard_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.rca.timeline"
+            ],
+            "plannedTestIds": [
+              "issues.severity.server-projection",
+              "issues.severity.router-contract",
+              "issues.severity.frontend-contract",
+              "issues.severity.queue-order"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Regression tests prove source-tier normalization, authorization, malformed-response rejection, presentation ordering, and the single 404-only legacy read fallback. Onset timing assertions are intentionally separate and blocked until event-time evidence exists."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -1608,8 +1642,64 @@
         "blobId": "b58a3f1d9e560498b229e468a2b1a38a405e52be",
         "sha256": "c504ee277c7231cd9517003286b3b4f1b14aa5cd351b0f3f8889bf98fb861986"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:queue:verified-severity-order:v1",
+          "legacyContractIds": [],
+          "symbol": "IssuesView / IssueRow severity meta chips",
+          "interaction": "the issue queue presents verified critical rows before warning rows and retains the server order for equal or unavailable tiers without deriving timestamps or detector state in the browser",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/IssuesListPanel.tsx",
+              "frontend/src/features/issues/IssuesSurface.tsx",
+              "frontend/src/features/issues/IssuesSurface.test.tsx",
+              "frontend/src/features/issues/issuePresentation.ts",
+              "frontend/src/features/issues/issuePresentation.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router"
+            ],
+            "plannedTestIds": [
+              "issues.severity.queue-presentation",
+              "issues.severity.queue-order"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product list receives the typed queue tier from the additive authenticated read model, uses shared semantic Badge and StatusMark tokens, and preserves the existing server order within each tier so auto-refresh cannot manufacture an onset time."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:issues:queue:onset-timing-chip:v1",
+          "legacyContractIds": [],
+          "symbol": "IssueRow issueTiming meta chip",
+          "interaction": "an issue row can distinguish a failing signal present at resource creation from one that started after a verified healthy interval",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/issuePresentation.test.ts",
+              "src/domains/dashboard/repository.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router"
+            ],
+            "plannedTestIds": [
+              "issues.timing.evidence"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current immutable RCA timeline has no event-time resource-creation timestamp, verified healthy-window boundary, or detector timing basis. Deriving either from updated_at or current inventory would misstate the incident onset.",
+            "rationale": "The timing chip remains unavailable until Python persists a bounded event-time timing projection with explicit evidence completeness; no browser heuristic is added."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -1653,8 +1743,47 @@
         "blobId": "26c4de72028638264419d890be27600de3aa8b52",
         "sha256": "c15a93f2cf60fc3b278feb8bb4d0772de9552c6d3bb96d49c177d138ad3bb3a8"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:severity:two-tier-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "ISSUE_SEVERITY_* / categoryLabel / groupLabel",
+          "interaction": "an Issues queue receives a server-owned critical or warning presentation tier and renders one semantic badge and rail treatment only when that bounded tier is verified",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/rca-issues.ts",
+              "frontend/src/features/issues/IssuesListPanel.tsx",
+              "frontend/src/features/issues/issuePresentation.ts",
+              "frontend/src/features/issues/issuePresentation.test.ts",
+              "src/domains/dashboard/repository.py",
+              "src/domains/dashboard/router.py",
+              "src/domains/rca/timeline.py",
+              "src/packages/contracts/gateway/responses.py",
+              "tests/test_dashboard_projection.py",
+              "tests/test_dashboard_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.rca.timeline"
+            ],
+            "plannedTestIds": [
+              "issues.severity.server-projection",
+              "issues.severity.router-contract",
+              "issues.severity.frontend-contract",
+              "issues.severity.queue-presentation",
+              "issues.severity.queue-order"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The additive Python projection reuses the typed timeline severity policy: high maps to critical and medium to warning, while low, info, unknown, and incomplete evidence are explicitly unavailable. The old strict timeline endpoint is unchanged; the new UI reads the additive contract and has a bounded one-read rollout fallback only for an absent new route."
+          }
+        }
+      ]
     },
     {
       "status": "M",

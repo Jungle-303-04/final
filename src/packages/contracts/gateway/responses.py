@@ -193,6 +193,32 @@ class RcaTimelineResponse(StrictModel):
     items: list[RcaTimelineItem]
 
 
+class RcaIssueItem(RcaTimelineItem):
+    """Issue queue projection with a conservative source-compatible severity tier.
+
+    The older RCA timeline contract intentionally remains unchanged for rolling
+    web deployments.  This sibling projection exposes only the two visual
+    severity tiers that the queue can render without browser-side inference.
+    """
+
+    issue_severity: Literal["critical", "warning"] | None = None
+    severity_availability: Literal["available", "unavailable"]
+    severity_reason_code: Literal["source_incomplete", "outside_two_tier_scale"] | None = None
+
+    @model_validator(mode="after")
+    def validate_severity_projection(self) -> Self:
+        if self.severity_availability == "available":
+            if self.issue_severity is None or self.severity_reason_code is not None:
+                raise ValueError("available issue severity requires a tier without a reason")
+        elif self.issue_severity is not None or self.severity_reason_code is None:
+            raise ValueError("unavailable issue severity requires a reason without a tier")
+        return self
+
+
+class RcaIssueListResponse(StrictModel):
+    items: list[RcaIssueItem]
+
+
 ChangeTimelineEventKind = Literal[
     "inventory_event",
     "incident",

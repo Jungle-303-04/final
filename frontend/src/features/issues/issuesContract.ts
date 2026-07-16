@@ -37,6 +37,9 @@ export interface IssuesEndpointTimelineItem {
   pr_url: unknown;
   error_reason: unknown;
   updated_at: unknown;
+  issue_severity?: unknown;
+  severity_availability?: unknown;
+  severity_reason_code?: unknown;
 }
 
 export interface IssuesEndpointTimelineResponse {
@@ -65,6 +68,9 @@ export interface IssueSummary {
   symptom: string | null;
   currentSubject: string;
   status: string;
+  /** Server-normalized two-tier queue severity; never inferred by the browser. */
+  severity?: IssuePresentationSeverity | null;
+  severityAvailability?: IssueSeverityAvailability;
   rootCause: string | null;
   confidence: number | null;
   supportingEvidence: readonly string[] | null;
@@ -76,6 +82,9 @@ export interface IssueSummary {
   errorReason: string | null;
   updatedAt: string | null;
 }
+
+export type IssuePresentationSeverity = "critical" | "warning";
+export type IssueSeverityAvailability = "available" | "unavailable";
 
 export interface IssueDetail extends Omit<IssueSummary, "missingEvidence" | "supportingEvidence"> {
   requestedClusterId: string | null;

@@ -207,6 +207,11 @@ function createIssuesCopy(
     refresh: t("common.action.refresh"),
     status: t("issues.surface.status"),
     statusLabel: (status) => translateOperationalValue(status, STATUS_MESSAGE, t),
+    severityLabel: (severity) => t(
+      severity === "critical"
+        ? "issues.severity.critical"
+        : "issues.severity.warning",
+    ),
     causeLabel: (cause) => translateOperationalValue(cause, CAUSE_MESSAGE, t),
     target: t("issues.table.target"),
     updated: t("issues.table.updated"),

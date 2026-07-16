@@ -175,6 +175,40 @@ describe("createIssuesAdapter", () => {
       signal: undefined,
     });
   });
+  it("prefers the additive issue projection and keeps its server-owned severity", async () => {
+    const dependencies = endpoints({
+      listRcaIssues: vi.fn().mockResolvedValue({
+        items: [{
+          ...timelineItem,
+          issue_severity: "critical",
+          severity_availability: "available",
+          severity_reason_code: null,
+        }],
+      }),
+    });
+
+    await expect(createIssuesAdapter(dependencies).listIssues("cluster-1")).resolves.toMatchObject({
+      items: [{ severity: "critical", severityAvailability: "available" }],
+    });
+    expect(dependencies.listRcaIssues).toHaveBeenCalledOnce();
+    expect(dependencies.listRcaTimeline).not.toHaveBeenCalled();
+  });
+  it("uses exactly one legacy read fallback for an in-flight endpoint rollout", async () => {
+    const routeMissing = Object.assign(new Error("missing additive route"), {
+      kind: "not-found",
+      status: 404,
+    });
+    const dependencies = endpoints({
+      listRcaIssues: vi.fn().mockRejectedValue(routeMissing),
+    });
+    const port = createIssuesAdapter(dependencies);
+
+    const first = await port.listIssues("cluster-1");
+    expect(first.items[0]?.severity).toBeUndefined();
+    await expect(port.listIssues("cluster-1")).rejects.toMatchObject({ code: "not-found" });
+    expect(dependencies.listRcaTimeline).toHaveBeenCalledOnce();
+    expect(dependencies.listRcaIssues).toHaveBeenCalledTimes(2);
+  });
   it("refuses a blank correlation before evidence endpoints are called", async () => {
     const dependencies = endpoints();
     const port = createIssuesAdapter(dependencies);

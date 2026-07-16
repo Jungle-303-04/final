@@ -230,6 +230,7 @@ export const COPY: IssuesSurfaceCopy = {
   refresh: "Refresh",
   status: "Status",
   statusLabel: (status) => status,
+  severityLabel: (severity) => severity,
   causeLabel: (cause) => cause,
   target: "Target",
   updated: "Updated",

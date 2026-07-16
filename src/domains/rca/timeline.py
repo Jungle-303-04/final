@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from domains.rca.events import IncidentRecord
 from packages.contracts.parity import ClusterScope
 from packages.contracts.timeline import TimelineEvent, TimelineIncidentSubject
+
+IssuePresentationSeverity = Literal["critical", "warning"]
 
 
 def incident_timeline_event(
@@ -51,6 +54,25 @@ def incident_timeline_severity(severity: str) -> str:
     if normalized in {"info", "low"}:
         return "info"
     return "unknown"
+
+
+def issue_presentation_severity(
+    severity: object,
+    *,
+    source_complete: bool,
+) -> IssuePresentationSeverity | None:
+    """Return only a verified tier supported by the Issues queue visual model.
+
+    Detector labels are normalized once in Python through the shared timeline
+    severity policy.  Values that map to informational or unknown severity are
+    deliberately unavailable instead of being promoted by the browser.
+    """
+    if not source_complete or not isinstance(severity, str) or not severity.strip():
+        return None
+    normalized = incident_timeline_severity(severity)
+    if normalized in {"critical", "warning"}:
+        return normalized
+    return None
 
 
 def incident_occurred_at(source_created_at: str) -> datetime:

@@ -125,6 +125,7 @@ function projectIssue(
   }
 
   const warnings: IssueDataQualityWarning[] = [];
+  const severityProjection = projectIssueSeverity(item, rowIndex, warnings);
   const issue: IssueSummary = {
     id: issueStableId(workspaceId, correlationId),
     incidentId: incidentId(item.incident_id, rowIndex, warnings, options.requireIncidentId),
@@ -152,6 +153,7 @@ function projectIssue(
     symptom: optionalString(item.incident_symptom, "incident_symptom", rowIndex, warnings),
     currentSubject,
     status,
+    ...severityProjection,
     rootCause: optionalString(item.root_cause, "root_cause", rowIndex, warnings),
     confidence: confidence(item.confidence, rowIndex, warnings),
     supportingEvidence: optionalStringList(
@@ -176,6 +178,42 @@ function projectIssue(
 
   if (options.requireIncidentId && issue.incidentId === null) return null;
   return { issue, warnings };
+}
+
+function projectIssueSeverity(
+  item: IssuesEndpointTimelineItem,
+  rowIndex: number,
+  warnings: IssueDataQualityWarning[],
+): Pick<IssueSummary, "severity" | "severityAvailability"> {
+  const availability = item.severity_availability;
+  const severity = item.issue_severity;
+  const reason = item.severity_reason_code;
+  // The legacy timeline intentionally has none of these additive fields. It
+  // remains a read-only rollout fallback rather than a claim that severity is
+  // unavailable in the underlying incident.
+  if (availability === undefined && severity === undefined && reason === undefined) {
+    return {};
+  }
+  if (
+    availability === "available"
+    && (severity === "critical" || severity === "warning")
+    && reason === null
+  ) {
+    return { severity, severityAvailability: "available" };
+  }
+  if (
+    availability === "unavailable"
+    && severity === null
+    && (reason === "source_incomplete" || reason === "outside_two_tier_scale")
+  ) {
+    return { severity: null, severityAvailability: "unavailable" };
+  }
+  warnings.push({
+    code: "optional-field-unavailable",
+    field: "issue_severity",
+    rowIndex,
+  });
+  return {};
 }
 
 function requiredString(value: unknown): string | null {

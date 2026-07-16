@@ -19,6 +19,8 @@ export const issuesKo = {
   "issues.surface.reportsUnavailable": "RCA 보고서를 불러올 수 없습니다.",
   "issues.surface.recoveryUnavailable": "복구 계획을 불러올 수 없습니다.",
   "issues.surface.status": "상태",
+  "issues.severity.critical": "심각",
+  "issues.severity.warning": "경고",
   "issues.status.investigating": "조사 중",
   "issues.status.incidentDetected": "인시던트 감지됨",
   "issues.status.rcaCompleted": "원인 분석 완료",

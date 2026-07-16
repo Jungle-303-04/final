@@ -84,6 +84,37 @@ export const rcaTimelineSchema = z.strictObject({
   items: z.array(rcaTimelineItemSchema),
 });
 
+/**
+ * Additive queue contract.  It intentionally remains separate from the legacy
+ * timeline schema so an older strict frontend can keep consuming timeline
+ * responses while a new frontend rolls out the richer Issue presentation.
+ */
+export const rcaIssueItemSchema = rcaTimelineItemSchema.extend({
+  issue_severity: z.enum(["critical", "warning"]).nullable(),
+  severity_availability: z.enum(["available", "unavailable"]),
+  severity_reason_code: z.enum([
+    "source_incomplete",
+    "outside_two_tier_scale",
+  ]).nullable(),
+}).superRefine((item, context) => {
+  if (
+    item.severity_availability === "available"
+    && (item.issue_severity === null || item.severity_reason_code !== null)
+  ) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "available severity requires a tier" });
+  }
+  if (
+    item.severity_availability === "unavailable"
+    && (item.issue_severity !== null || item.severity_reason_code === null)
+  ) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "unavailable severity requires a reason" });
+  }
+});
+
+export const rcaIssueListSchema = z.strictObject({
+  items: z.array(rcaIssueItemSchema),
+});
+
 export type AuthSession = z.infer<typeof authSessionSchema>;
 export type FleetHealth = z.infer<typeof fleetHealthSchema>;
 export type FleetClusterSummary = z.infer<typeof fleetClusterSummarySchema>;
@@ -91,3 +122,5 @@ export type FleetTotals = z.infer<typeof fleetTotalsSchema>;
 export type FleetSummary = z.infer<typeof fleetSummarySchema>;
 export type RcaTimelineItem = z.infer<typeof rcaTimelineItemSchema>;
 export type RcaTimeline = z.infer<typeof rcaTimelineSchema>;
+export type RcaIssueItem = z.infer<typeof rcaIssueItemSchema>;
+export type RcaIssueList = z.infer<typeof rcaIssueListSchema>;

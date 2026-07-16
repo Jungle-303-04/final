@@ -2851,6 +2851,19 @@ def test_dashboard_timeline_query_omits_payload_from_select_list() -> None:
     assert "rca_timeline.incident_id IS NOT NULL" in sql
 
 
+def test_dashboard_issue_queue_query_reads_only_the_additive_severity_projection() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(DashboardRepository, recorded)
+
+    repository.list_rca_issues("workspace-1", allowed_cluster_ids=None, limit=10)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    select_list = str(compiled).split("\nFROM rca_timeline", maxsplit=1)[0]
+    assert "rca_timeline.severity" in select_list
+    assert "rca_timeline.severity_complete" in select_list
+    assert "rca_timeline.payload" not in select_list
+
+
 def test_disconnect_migration_drops_old_unique_index_before_status_conversion() -> None:
     migration = Path("alembic/versions/20260715_0260_cluster_disconnect_lifecycle.py").read_text()
 

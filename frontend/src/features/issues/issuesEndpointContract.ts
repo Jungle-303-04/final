@@ -250,6 +250,9 @@ export interface IssuesEndpointRecentChangesResponse {
 }
 
 export interface IssuesEndpointDependencies {
+  listRcaIssues?(
+    options?: IssuesEndpointTimelineOptions,
+  ): Promise<IssuesEndpointTimelineResponse>;
   listRcaTimeline(
     options?: IssuesEndpointTimelineOptions,
   ): Promise<IssuesEndpointTimelineResponse>;

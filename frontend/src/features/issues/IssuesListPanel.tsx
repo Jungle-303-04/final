@@ -20,8 +20,10 @@ import {
   isResolvedIssue,
   issueEvidenceCount,
   issueResourceLabel,
+  issueSeverityTone,
   issueStatusTone,
   issueTitle,
+  sortIssuesForQueue,
 } from "./issuePresentation";
 import type { IssuesSurfaceCopy, SectionState } from "./issuesSurfaceContract";
 
@@ -100,7 +102,7 @@ export function IssuesListPanel({
         </p>
       ) : null}
       <ul className="grid gap-2" role="list">
-        {list.data.items.map((issue) => (
+        {sortIssuesForQueue(list.data.items).map((issue) => (
           <IssueQueueRow
             copy={copy}
             detailRegionId={detailRegionId}
@@ -133,7 +135,7 @@ function IssueQueueRow({
   const evidenceCount = issueEvidenceCount(issue);
   const missingCount = issue.missingEvidence?.length ?? null;
   const resolved = isResolvedIssue(issue.status);
-  const tone = issueStatusTone(issue.status);
+  const tone = issueSeverityTone(issue.severity) ?? issueStatusTone(issue.status);
   const confidence = issue.confidence === null
     ? null
     : `${Math.round(issue.confidence * 100)}%`;
@@ -177,6 +179,11 @@ function IssueQueueRow({
               ) : null}
             </span>
             <span className="flex shrink-0 items-center gap-2">
+              {issue.severity ? (
+                <Badge variant={issue.severity === "critical" ? "destructive" : "warning"}>
+                  {copy.severityLabel(issue.severity)}
+                </Badge>
+              ) : null}
               <IssueStatusMark label={copy.statusLabel(issue.status)} tone={tone} />
               <ChevronRight
                 aria-hidden="true"

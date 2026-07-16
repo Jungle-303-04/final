@@ -17,6 +17,7 @@ from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
 )
+from domains.rca.timeline import issue_presentation_severity
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.storage.engine import DatabaseConnection
@@ -141,10 +142,10 @@ def incident_is_live_or_non_ephemeral(timeline: Any) -> Any:
     return or_(~is_ephemeral, live_unhealthy_ephemeral_resource_exists(timeline))
 
 
-def _rca_timeline_response_columns() -> tuple[Any, ...]:
+def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> tuple[Any, ...]:
     """화면 응답에 필요한 컬럼만 읽어 큰 payload 전송을 피한다."""
     table = RcaTimeline.__table__
-    return (
+    columns: tuple[Any, ...] = (
         table.c.id,
         table.c.workspace_id,
         table.c.correlation_id,
@@ -167,6 +168,9 @@ def _rca_timeline_response_columns() -> tuple[Any, ...]:
         table.c.error_reason,
         table.c.updated_at,
     )
+    if include_issue_severity:
+        return (*columns, table.c.severity, table.c.severity_complete)
+    return columns
 
 
 class DashboardRepository(DatabaseConnection):
@@ -409,6 +413,35 @@ class DashboardRepository(DatabaseConnection):
         allowed_cluster_ids: set[str] | None,
         limit: int = 50,
     ) -> list[JsonObject]:
+        return self._list_rca_timeline_projection(
+            workspace_id,
+            allowed_cluster_ids,
+            limit,
+            include_issue_severity=False,
+        )
+
+    def list_rca_issues(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int = 50,
+    ) -> list[JsonObject]:
+        """Return the additive Issues queue projection without altering timeline JSON."""
+        return self._list_rca_timeline_projection(
+            workspace_id,
+            allowed_cluster_ids,
+            limit,
+            include_issue_severity=True,
+        )
+
+    def _list_rca_timeline_projection(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int,
+        *,
+        include_issue_severity: bool,
+    ) -> list[JsonObject]:
         if allowed_cluster_ids == set():
             return []
         bounded_limit = max(1, min(limit, 100))
@@ -417,7 +450,7 @@ class DashboardRepository(DatabaseConnection):
         # without starving other incidents from the operator list.
         scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
         statement: Select[Any] = (
-            select(*_rca_timeline_response_columns())
+            select(*_rca_timeline_response_columns(include_issue_severity=include_issue_severity))
             .where(
                 RcaTimeline.workspace_id == workspace_id,
                 # Command/approval subjects are shared by incident recovery and
@@ -436,6 +469,8 @@ class DashboardRepository(DatabaseConnection):
         items: list[JsonObject] = []
         for row in rows:
             item = serialize_timeline_row(row)
+            if include_issue_severity:
+                item.update(issue_severity_projection(row))
             key = incident_logical_key(item)
             if key in seen:
                 continue
@@ -866,6 +901,29 @@ def serialize_timeline_row(row: Any) -> JsonObject:
     item["supporting_evidence"] = item.get("supporting_evidence") or []
     item["missing_evidence"] = item.get("missing_evidence") or []
     return item
+
+
+def issue_severity_projection(row: Any) -> JsonObject:
+    """Keep source absence distinct from a verified non-queue severity tier."""
+    item = dict(row)
+    source_complete = item.get("severity_complete") is True
+    tier = issue_presentation_severity(
+        item.get("severity"),
+        source_complete=source_complete,
+    )
+    if tier is not None:
+        return {
+            "issue_severity": tier,
+            "severity_availability": "available",
+            "severity_reason_code": None,
+        }
+    return {
+        "issue_severity": None,
+        "severity_availability": "unavailable",
+        "severity_reason_code": (
+            "source_incomplete" if not source_complete else "outside_two_tier_scale"
+        ),
+    }
 
 
 def _incident_projection(

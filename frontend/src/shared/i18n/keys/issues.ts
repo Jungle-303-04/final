@@ -17,6 +17,8 @@ export type IssuesMessageKey =
   | "issues.surface.reportsUnavailable"
   | "issues.surface.recoveryUnavailable"
   | "issues.surface.status"
+  | "issues.severity.critical"
+  | "issues.severity.warning"
   | "issues.status.investigating"
   | "issues.status.incidentDetected"
   | "issues.status.rcaCompleted"

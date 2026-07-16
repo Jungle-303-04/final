@@ -12,8 +12,10 @@ from domains.dashboard.repository import (
     DashboardRepository,
     incident_logical_key,
     incident_logical_key_from_projection,
+    issue_severity_projection,
     timeline_update_from_event,
 )
+from domains.rca.timeline import issue_presentation_severity
 from packages.contracts.event_bus.interfaces import EventEnvelope
 
 
@@ -103,6 +105,44 @@ def test_dashboard_worker_upserts_timeline_row_without_chaining() -> None:
     assert row["confidence"] == 0.92
     assert row["supporting_evidence"] == ["pod waiting reason", "registry 401"]
     assert row["missing_evidence"] == ["trace-span"]
+
+
+def test_issue_severity_projection_reuses_the_shared_typed_timeline_policy() -> None:
+    assert issue_presentation_severity("high", source_complete=True) == "critical"
+    assert issue_presentation_severity("medium", source_complete=True) == "warning"
+    assert issue_presentation_severity("low", source_complete=True) is None
+    assert issue_presentation_severity("critical", source_complete=False) is None
+
+    assert issue_severity_projection(
+        {
+            "severity": "high",
+            "severity_complete": True,
+        }
+    ) == {
+        "issue_severity": "critical",
+        "severity_availability": "available",
+        "severity_reason_code": None,
+    }
+    assert issue_severity_projection(
+        {
+            "severity": "low",
+            "severity_complete": True,
+        }
+    ) == {
+        "issue_severity": None,
+        "severity_availability": "unavailable",
+        "severity_reason_code": "outside_two_tier_scale",
+    }
+    assert issue_severity_projection(
+        {
+            "severity": "critical",
+            "severity_complete": False,
+        }
+    ) == {
+        "issue_severity": None,
+        "severity_availability": "unavailable",
+        "severity_reason_code": "source_incomplete",
+    }
 
 
 def test_dashboard_worker_ignores_unmapped_subjects() -> None:

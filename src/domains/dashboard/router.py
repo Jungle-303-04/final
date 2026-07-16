@@ -34,6 +34,8 @@ from packages.contracts.gateway.responses import (
     MetricWidgetListResponse,
     MetricWidgetResponse,
     RcaIncidentResponse,
+    RcaIssueItem,
+    RcaIssueListResponse,
     RcaTimelineItem,
     RcaTimelineResponse,
 )
@@ -275,6 +277,28 @@ async def rca_timeline(
 
 
 @router.get(
+    gateway_routes.DASHBOARD_RCA_ISSUES_PATH,
+    response_model=RcaIssueListResponse,
+)
+async def rca_issues(
+    cluster_id: str | None = None,
+    limit: int = Query(default=DEFAULT_TIMELINE_LIMIT, ge=1, le=MAX_TIMELINE_LIMIT),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RcaIssueListResponse:
+    """Additive Issues queue contract; preserves the legacy timeline response shape."""
+    workspace_id = _workspace_id(current)
+    allowed_cluster_ids = await _allowed_cluster_ids(db, current, workspace_id, cluster_id)
+    rows = await asyncio.to_thread(
+        db.list_rca_issues,
+        workspace_id,
+        allowed_cluster_ids,
+        limit,
+    )
+    return RcaIssueListResponse(items=[issue_item(row) for row in rows])
+
+
+@router.get(
     gateway_routes.DASHBOARD_RCA_INCIDENT_PATH,
     response_model=RcaIncidentResponse,
 )
@@ -327,6 +351,13 @@ def timeline_item(row: JsonObject) -> RcaTimelineItem:
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaTimelineItem(**data)
+
+
+def issue_item(row: JsonObject) -> RcaIssueItem:
+    data = {key: row.get(key) for key in RcaIssueItem.model_fields}
+    data["supporting_evidence"] = row.get("supporting_evidence") or []
+    data["missing_evidence"] = row.get("missing_evidence") or []
+    return RcaIssueItem(**data)
 
 
 def metric_query_item(row: JsonObject) -> MetricQueryPresetItem:

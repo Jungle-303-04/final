@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
-from domains.dashboard.router import rca_incident, rca_timeline
+from domains.dashboard.router import rca_incident, rca_issues, rca_timeline
 
 
 def _current_session() -> SimpleNamespace:
@@ -77,6 +77,25 @@ class DashboardApiDb:
             return [_timeline_row(sorted(allowed_cluster_ids)[0])]
         return [self.row]
 
+    def list_rca_issues(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        self.calls.append(("issues", workspace_id, allowed_cluster_ids, limit))
+        if allowed_cluster_ids == set():
+            return []
+        row = _timeline_row(sorted(allowed_cluster_ids)[0]) if allowed_cluster_ids else self.row
+        return [
+            {
+                **row,
+                "issue_severity": "critical",
+                "severity_availability": "available",
+                "severity_reason_code": None,
+            }
+        ]
+
     def get_rca_timeline_item(
         self,
         workspace_id: str,
@@ -128,6 +147,50 @@ def test_rca_timeline_with_cluster_query_requires_read_access() -> None:
             "rca.read",
         )
         assert ("list", "workspace-1", {"cluster-2"}, 10) in db.calls
+
+    asyncio.run(run())
+
+
+def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> None:
+    async def run() -> None:
+        db = DashboardApiDb(allowed=set(), has_access=True)
+        response = await rca_issues(
+            cluster_id="cluster-2",
+            limit=10,
+            current=_current_session(),
+            db=db,
+        )
+
+        assert response.items[0].issue_severity == "critical"
+        assert response.items[0].severity_availability == "available"
+        assert ("issues", "workspace-1", {"cluster-2"}, 10) in db.calls
+        assert db.calls[0] == (
+            "has_access",
+            "user-1",
+            "workspace-1",
+            "cluster",
+            "cluster-2",
+            "rca.read",
+        )
+
+    asyncio.run(run())
+
+
+def test_rca_issues_denies_an_unauthorized_cluster_scope() -> None:
+    async def run() -> None:
+        db = DashboardApiDb(allowed=None, has_access=False)
+        try:
+            await rca_issues(
+                cluster_id="cluster-1",
+                limit=10,
+                current=_current_session(),
+                db=db,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail == "resource access denied"
+        else:
+            raise AssertionError("expected HTTPException")
 
     asyncio.run(run())
 

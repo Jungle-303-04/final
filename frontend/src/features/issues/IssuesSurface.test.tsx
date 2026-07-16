@@ -23,6 +23,27 @@ describe("IssuesSurface", () => {
     expect(refresh.querySelector("svg")?.getAttribute("class")).not.toContain(" animate-spin");
   });
 
+  it("renders a verified two-tier severity without inventing one for unavailable data", async () => {
+    const baseline = issuesPort();
+    const initial = await baseline.listIssues("cluster-1");
+    const port = issuesPort({
+      listIssues: vi.fn().mockResolvedValue({
+        ...initial,
+        items: [
+          { ...initial.items[0], severity: "critical" as const, severityAvailability: "available" as const },
+          { ...initial.items[0], id: "issue:unavailable", correlationId: "unavailable", symptom: "No source tier", severity: null, severityAvailability: "unavailable" as const },
+        ],
+        returned: 2,
+      }),
+    });
+    renderSurface(
+      <IssuesSurface clusterId="cluster-1" copy={COPY} port={port} recoverySelection={{ state: "enabled" }} />,
+    );
+
+    expect(await screen.findByText("critical")).toBeTruthy();
+    expect(screen.queryByText("warning")).toBeNull();
+  });
+
   it("keeps recovery selection feedback inside the shared reduced-motion-safe spinner", async () => {
     const pending = deferred<Awaited<ReturnType<IssuesPort["selectRecoveryAction"]>>>();
     const port = issuesPort({ selectRecoveryAction: vi.fn(() => pending.promise) });

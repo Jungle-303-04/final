@@ -1,5 +1,8 @@
 import type { StatusTone } from "../../shared/ui/StatusMark";
-import type { IssueSummary } from "./issuesContract";
+import type {
+  IssuePresentationSeverity,
+  IssueSummary,
+} from "./issuesContract";
 
 const RESOLVED_STATUS = /(^|[._-])(resolved|closed|completed|recovered|healthy)($|[._-])/i;
 const CRITICAL_STATUS = /(^|[._-])(critical|failed|error|crash|blocked)($|[._-])/i;
@@ -15,6 +18,37 @@ export function issueStatusTone(status: string): StatusTone {
   if (CRITICAL_STATUS.test(normalized)) return "critical";
   if (ACTIVE_STATUS.test(normalized)) return "warning";
   return "unknown";
+}
+
+export function issueSeverityTone(
+  severity: IssuePresentationSeverity | null | undefined,
+): StatusTone | null {
+  if (severity === "critical" || severity === "warning") return severity;
+  return null;
+}
+
+/**
+ * Keep the strongest verified issue tier first without reconstructing a
+ * timestamp or a detector classification in the browser. Equal tiers retain
+ * the server's stable order.
+ */
+export function sortIssuesForQueue(
+  issues: readonly IssueSummary[],
+): IssueSummary[] {
+  return issues
+    .map((issue, index) => ({ issue, index }))
+    .sort((left, right) => {
+      const bySeverity = issueSeverityRank(left.issue.severity)
+        - issueSeverityRank(right.issue.severity);
+      return bySeverity || left.index - right.index;
+    })
+    .map(({ issue }) => issue);
+}
+
+function issueSeverityRank(severity: IssuePresentationSeverity | null | undefined): number {
+  if (severity === "critical") return 0;
+  if (severity === "warning") return 1;
+  return 2;
 }
 
 export function issueEvidenceCount(issue: IssueSummary): number | null {

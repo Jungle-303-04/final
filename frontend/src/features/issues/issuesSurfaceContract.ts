@@ -62,6 +62,7 @@ export interface IssuesSurfaceCopy {
   refresh: string;
   status: string;
   statusLabel: (status: string) => string;
+  severityLabel: (severity: "critical" | "warning") => string;
   causeLabel: (cause: string) => string;
   target: string;
   updated: string;

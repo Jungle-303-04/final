@@ -98,6 +98,33 @@ describe("Issues canonical list", () => {
     expect(result).not.toHaveProperty("categoryFacets");
   });
 
+  it("accepts only the server-owned two-tier severity projection", () => {
+    const result = toIssueList(
+      canonicalIssueListRequest("cluster-a", 2),
+      { items: [
+        endpointItem({
+          issue_severity: "critical",
+          severity_availability: "available",
+          severity_reason_code: null,
+        }),
+        endpointItem({
+          correlation_id: "correlation-b",
+          issue_severity: null,
+          severity_availability: "unavailable",
+          severity_reason_code: "outside_two_tier_scale",
+        }),
+      ] },
+    );
+
+    expect(result.items.map((item) => ({
+      severity: item.severity,
+      availability: item.severityAvailability,
+    }))).toEqual([
+      { severity: "critical", availability: "available" },
+      { severity: null, availability: "unavailable" },
+    ]);
+  });
+
   it("isolates invalid identities, duplicates, and mismatched non-null clusters", () => {
     const invalidWorkspace = endpointItem({ workspace_id: " ", correlation_id: "bad-a" });
     const invalidCorrelation = endpointItem({ workspace_id: "workspace-a", correlation_id: 9 });

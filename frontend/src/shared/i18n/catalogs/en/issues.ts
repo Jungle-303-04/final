@@ -19,6 +19,8 @@ export const issuesEn = {
   "issues.surface.reportsUnavailable": "RCA reports are unavailable.",
   "issues.surface.recoveryUnavailable": "The recovery plan is unavailable.",
   "issues.surface.status": "Status",
+  "issues.severity.critical": "Critical",
+  "issues.severity.warning": "Warning",
   "issues.status.investigating": "Investigating",
   "issues.status.incidentDetected": "Incident detected",
   "issues.status.rcaCompleted": "Root cause analysis complete",
