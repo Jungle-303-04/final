@@ -34,7 +34,19 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
         "reference_only",
         "not_applicable",
     }
-    assert all(feature.delivery_status != "implemented" for feature in catalog.features)
+    implemented = [
+        feature for feature in catalog.features if feature.delivery_status == "implemented"
+    ]
+    assert [feature.contract_id for feature in implemented] == ["reference.feature.126"]
+    assert implemented[0].source_key == (
+        "upstream-ui:resources:renderers:public-contract-boundary:v1"
+    )
+    assert all(feature.coverage.backend is not None for feature in implemented)
+    assert all(feature.coverage.frontend is not None for feature in implemented)
+    assert all(
+        feature.coverage.realtime != "not_required" or not feature.streaming
+        for feature in implemented
+    )
     assert all(feature.delivery_status == "not_applicable" for feature in catalog.features[:3])
     assert any(feature.desktop_contract == "desktop" for feature in catalog.features)
     assert any(feature.streaming for feature in catalog.features)

@@ -537,6 +537,58 @@ def test_inventory_resource_detail_redacts_external_secret_payload_after_rbac() 
     assert "raw" not in response.resource.model_dump()
 
 
+def test_inventory_resource_detail_returns_gateway_route_projection_after_rbac() -> None:
+    route = inventory_resource("httproute", "HTTPRoute", "inventory")
+    route["api_version"] = "gateway.networking.k8s.io/v1"
+    route["raw"] = {
+        "metadata": {"namespace": "default"},
+        "spec": {
+            "hostnames": ["api.example.test"],
+            "rules": [
+                {
+                    "matches": [{"path": {"type": "PathPrefix", "value": "/inventory"}}],
+                    "backendRefs": [{"name": "inventory-api", "port": 8080}],
+                    "filters": [
+                        {
+                            "type": "RequestHeaderModifier",
+                            "requestHeaderModifier": {
+                                "set": [
+                                    {
+                                        "name": "authorization",
+                                        "value": "must-not-leak",
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="httproute",
+            kind="HTTPRoute",
+            namespace="default",
+            name="inventory",
+            related_limit=10,
+            event_limit=10,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=StubInventoryDb([route]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "http-route"
+    serialized = response.provider_detail.model_dump_json()
+    assert "api.example.test" in serialized
+    assert "must-not-leak" not in serialized
+    assert "raw" not in response.resource.model_dump()
+
+
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     async def run():
         return await get_inventory_summary(

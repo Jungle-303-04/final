@@ -434,6 +434,138 @@ class GatewayClassProviderDetail(StrictModel):
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
+class GcpAdditionalDiskDetail(StrictModel):
+    device_type: str | None = None
+    size_gb: int | None = None
+
+
+class GcpMachineProviderDetail(StrictModel):
+    type: Literal["gcp-machine"] = "gcp-machine"
+    ready: bool | None = None
+    instance_type: str | None = None
+    zone: str | None = None
+    instance_id: str | None = None
+    image: str | None = None
+    additional_disks: list[GcpAdditionalDiskDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class GcpAuthorizedNetworkDetail(StrictModel):
+    name: str | None = None
+    cidr: str
+
+
+class GcpManagedControlPlaneProviderDetail(StrictModel):
+    type: Literal["gcp-managed-control-plane"] = "gcp-managed-control-plane"
+    ready: bool | None = None
+    cluster_name: str | None = None
+    project: str | None = None
+    location: str | None = None
+    version: str | None = None
+    release_channel: str | None = None
+    autopilot: bool | None = None
+    endpoint: str | None = None
+    pod_cidr: str | None = None
+    service_cidr: str | None = None
+    ip_aliases: bool | None = None
+    logging_service: str | None = None
+    monitoring_service: str | None = None
+    authorized_networks: list[GcpAuthorizedNetworkDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class GcpManagedMachinePoolProviderDetail(StrictModel):
+    type: Literal["gcp-managed-machine-pool"] = "gcp-managed-machine-pool"
+    ready: bool | None = None
+    node_pool_name: str | None = None
+    machine_type: str | None = None
+    disk_type: str | None = None
+    disk_size_gb: int | None = None
+    image_type: str | None = None
+    max_pods_per_node: int | None = None
+    autoscaling_enabled: bool | None = None
+    scaling: ProviderScaling
+    auto_repair: bool | None = None
+    auto_upgrade: bool | None = None
+    node_locations: list[str] = Field(default_factory=list)
+    labels: list[ProviderKeyValue] = Field(default_factory=list)
+    taints: list[ProviderTaint] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class GatewayRouteMatchDetail(StrictModel):
+    method: str | None = None
+    path_type: str | None = None
+    path_value: str | None = None
+    grpc_type: str | None = None
+    grpc_service: str | None = None
+    grpc_method: str | None = None
+    headers: list[ProviderKeyValue] = Field(default_factory=list)
+    query_params: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class GatewayRouteBackendDetail(StrictModel):
+    reference: ProviderNamedReference
+    port: int | None = None
+    weight: int | None = None
+
+
+class GatewayRouteFilterDetail(StrictModel):
+    type: str
+    summary: str | None = None
+
+
+class GatewayRouteRuleDetail(StrictModel):
+    matches: list[GatewayRouteMatchDetail] = Field(default_factory=list)
+    backends: list[GatewayRouteBackendDetail] = Field(default_factory=list)
+    filters: list[GatewayRouteFilterDetail] = Field(default_factory=list)
+
+
+class GatewayRouteParentStatusDetail(StrictModel):
+    reference: ProviderNamedReference | None = None
+    section_name: str | None = None
+    accepted: bool | None = None
+    resolved_refs: bool | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class GrpcRouteProviderDetail(StrictModel):
+    type: Literal["grpc-route"] = "grpc-route"
+    hostnames: list[str] = Field(default_factory=list)
+    parent_refs: list[ProviderNamedReference] = Field(default_factory=list)
+    rules: list[GatewayRouteRuleDetail] = Field(default_factory=list)
+    parent_statuses: list[GatewayRouteParentStatusDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class HttpRouteProviderDetail(StrictModel):
+    type: Literal["http-route"] = "http-route"
+    hostnames: list[str] = Field(default_factory=list)
+    parent_refs: list[ProviderNamedReference] = Field(default_factory=list)
+    rules: list[GatewayRouteRuleDetail] = Field(default_factory=list)
+    parent_statuses: list[GatewayRouteParentStatusDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class JobProviderDetail(StrictModel):
+    type: Literal["job"] = "job"
+    state: Literal["completed", "failed", "suspended", "running", "pending"]
+    succeeded: int | None = None
+    failed: int | None = None
+    active: int | None = None
+    completions: int | None = None
+    parallelism: int | None = None
+    backoff_limit: int | None = None
+    active_deadline_seconds: int | None = None
+    ttl_seconds_after_finished: int | None = None
+    suspended: bool | None = None
+    start_time: str | None = None
+    completion_time: str | None = None
+    terminal_reason: str | None = None
+    terminal_message: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 ResourceProviderDetail = Annotated[
     AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
@@ -455,6 +587,12 @@ ResourceProviderDetail = Annotated[
     | CrossplaneCompositeProviderDetail
     | CronWorkflowProviderDetail
     | ExternalSecretProviderDetail
-    | GatewayClassProviderDetail,
+    | GatewayClassProviderDetail
+    | GcpMachineProviderDetail
+    | GcpManagedControlPlaneProviderDetail
+    | GcpManagedMachinePoolProviderDetail
+    | GrpcRouteProviderDetail
+    | HttpRouteProviderDetail
+    | JobProviderDetail,
     Field(discriminator="type"),
 ]

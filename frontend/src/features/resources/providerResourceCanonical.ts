@@ -1,5 +1,7 @@
 import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointContract";
 import type {
+  GatewayRouteParentStatus,
+  GatewayRouteRule,
   ProviderCondition,
   ProviderKeyValue,
   ProviderNamedReference,
@@ -365,6 +367,88 @@ export function toProviderResourceDetail(
     accepted: optionalBoolean(raw.accepted),
     parametersRef: namedReference(raw.parameters_ref),
   };
+  if (type === "gcp-machine") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    instanceType: optionalString(raw.instance_type),
+    zone: optionalString(raw.zone),
+    instanceId: optionalString(raw.instance_id),
+    image: optionalString(raw.image),
+    additionalDisks: records(raw.additional_disks).map((item) => ({
+      deviceType: optionalString(item.device_type),
+      sizeGb: optionalInteger(item.size_gb),
+    })),
+  };
+  if (type === "gcp-managed-control-plane") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    clusterName: optionalString(raw.cluster_name),
+    project: optionalString(raw.project),
+    location: optionalString(raw.location),
+    version: optionalString(raw.version),
+    releaseChannel: optionalString(raw.release_channel),
+    autopilot: optionalBoolean(raw.autopilot),
+    endpoint: optionalString(raw.endpoint),
+    podCidr: optionalString(raw.pod_cidr),
+    serviceCidr: optionalString(raw.service_cidr),
+    ipAliases: optionalBoolean(raw.ip_aliases),
+    loggingService: optionalString(raw.logging_service),
+    monitoringService: optionalString(raw.monitoring_service),
+    authorizedNetworks: records(raw.authorized_networks).map((item) => ({
+      name: optionalString(item.name),
+      cidr: requiredString(item.cidr),
+    })),
+  };
+  if (type === "gcp-managed-machine-pool") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    nodePoolName: optionalString(raw.node_pool_name),
+    machineType: optionalString(raw.machine_type),
+    diskType: optionalString(raw.disk_type),
+    diskSizeGb: optionalInteger(raw.disk_size_gb),
+    imageType: optionalString(raw.image_type),
+    maxPodsPerNode: optionalInteger(raw.max_pods_per_node),
+    autoscalingEnabled: optionalBoolean(raw.autoscaling_enabled),
+    scaling: scaling(raw.scaling),
+    autoRepair: optionalBoolean(raw.auto_repair),
+    autoUpgrade: optionalBoolean(raw.auto_upgrade),
+    nodeLocations: stringList(raw.node_locations),
+    labels: keyValues(raw.labels),
+    taints: records(raw.taints).map((item) => ({
+      key: requiredString(item.key),
+      value: optionalString(item.value),
+      effect: optionalString(item.effect),
+    })),
+  };
+  if (type === "grpc-route" || type === "http-route") return {
+    type,
+    conditions,
+    hostnames: stringList(raw.hostnames),
+    parentRefs: namedReferences(raw.parent_refs),
+    rules: gatewayRouteRules(raw.rules),
+    parentStatuses: gatewayRouteParentStatuses(raw.parent_statuses),
+  };
+  if (type === "job") return {
+    type,
+    conditions,
+    state: jobState(raw.state),
+    succeeded: optionalInteger(raw.succeeded),
+    failed: optionalInteger(raw.failed),
+    active: optionalInteger(raw.active),
+    completions: optionalInteger(raw.completions),
+    parallelism: optionalInteger(raw.parallelism),
+    backoffLimit: optionalInteger(raw.backoff_limit),
+    activeDeadlineSeconds: optionalInteger(raw.active_deadline_seconds),
+    ttlSecondsAfterFinished: optionalInteger(raw.ttl_seconds_after_finished),
+    suspended: optionalBoolean(raw.suspended),
+    startTime: optionalString(raw.start_time),
+    completionTime: optionalString(raw.completion_time),
+    terminalReason: optionalString(raw.terminal_reason),
+    terminalMessage: optionalString(raw.terminal_message),
+  };
   return invalidResponse();
 }
 
@@ -439,6 +523,58 @@ function externalSecretSourceType(
     normalized !== "find" &&
     normalized !== "source-ref" &&
     normalized !== "unknown"
+  ) return invalidResponse();
+  return normalized;
+}
+
+function gatewayRouteRules(value: unknown): GatewayRouteRule[] {
+  return records(value).map((rule) => ({
+    matches: records(rule.matches).map((match) => ({
+      method: optionalString(match.method),
+      pathType: optionalString(match.path_type),
+      pathValue: optionalString(match.path_value),
+      grpcType: optionalString(match.grpc_type),
+      grpcService: optionalString(match.grpc_service),
+      grpcMethod: optionalString(match.grpc_method),
+      headers: keyValues(match.headers),
+      queryParams: keyValues(match.query_params),
+    })),
+    backends: records(rule.backends).map((backend) => {
+      const backendReference = namedReference(backend.reference);
+      if (backendReference === null) return invalidResponse();
+      return {
+        reference: backendReference,
+        port: optionalInteger(backend.port),
+        weight: optionalInteger(backend.weight),
+      };
+    }),
+    filters: records(rule.filters).map((filter) => ({
+      type: requiredString(filter.type),
+      summary: optionalString(filter.summary),
+    })),
+  }));
+}
+
+function gatewayRouteParentStatuses(value: unknown): GatewayRouteParentStatus[] {
+  return records(value).map((parent) => ({
+    reference: namedReference(parent.reference),
+    sectionName: optionalString(parent.section_name),
+    accepted: optionalBoolean(parent.accepted),
+    resolvedRefs: optionalBoolean(parent.resolved_refs),
+    conditions: conditionList(parent.conditions),
+  }));
+}
+
+function jobState(
+  value: unknown,
+): "completed" | "failed" | "suspended" | "running" | "pending" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "completed" &&
+    normalized !== "failed" &&
+    normalized !== "suspended" &&
+    normalized !== "running" &&
+    normalized !== "pending"
   ) return invalidResponse();
   return normalized;
 }

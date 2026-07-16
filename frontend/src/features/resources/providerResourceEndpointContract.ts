@@ -43,6 +43,42 @@ export interface ProviderReplicasEndpoint {
   up_to_date: number | null;
 }
 
+export interface GatewayRouteMatchEndpoint {
+  method: string | null;
+  path_type: string | null;
+  path_value: string | null;
+  grpc_type: string | null;
+  grpc_service: string | null;
+  grpc_method: string | null;
+  headers: ProviderKeyValueEndpoint[];
+  query_params: ProviderKeyValueEndpoint[];
+}
+
+export interface GatewayRouteBackendEndpoint {
+  reference: ProviderNamedReferenceEndpoint;
+  port: number | null;
+  weight: number | null;
+}
+
+export interface GatewayRouteFilterEndpoint {
+  type: string;
+  summary: string | null;
+}
+
+export interface GatewayRouteRuleEndpoint {
+  matches: GatewayRouteMatchEndpoint[];
+  backends: GatewayRouteBackendEndpoint[];
+  filters: GatewayRouteFilterEndpoint[];
+}
+
+export interface GatewayRouteParentStatusEndpoint {
+  reference: ProviderNamedReferenceEndpoint | null;
+  section_name: string | null;
+  accepted: boolean | null;
+  resolved_refs: boolean | null;
+  conditions: ProviderConditionEndpoint[];
+}
+
 interface ProviderDetailBaseEndpoint {
   conditions: ProviderConditionEndpoint[];
 }
@@ -392,6 +428,89 @@ export interface GatewayClassProviderDetailEndpoint extends ProviderDetailBaseEn
   parameters_ref: ProviderNamedReferenceEndpoint | null;
 }
 
+export interface GcpMachineProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "gcp-machine";
+  ready: boolean | null;
+  instance_type: string | null;
+  zone: string | null;
+  instance_id: string | null;
+  image: string | null;
+  additional_disks: Array<{
+    device_type: string | null;
+    size_gb: number | null;
+  }>;
+}
+
+export interface GcpManagedControlPlaneProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "gcp-managed-control-plane";
+  ready: boolean | null;
+  cluster_name: string | null;
+  project: string | null;
+  location: string | null;
+  version: string | null;
+  release_channel: string | null;
+  autopilot: boolean | null;
+  endpoint: string | null;
+  pod_cidr: string | null;
+  service_cidr: string | null;
+  ip_aliases: boolean | null;
+  logging_service: string | null;
+  monitoring_service: string | null;
+  authorized_networks: Array<{ name: string | null; cidr: string }>;
+}
+
+export interface GcpManagedMachinePoolProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "gcp-managed-machine-pool";
+  ready: boolean | null;
+  node_pool_name: string | null;
+  machine_type: string | null;
+  disk_type: string | null;
+  disk_size_gb: number | null;
+  image_type: string | null;
+  max_pods_per_node: number | null;
+  autoscaling_enabled: boolean | null;
+  scaling: ProviderScalingEndpoint;
+  auto_repair: boolean | null;
+  auto_upgrade: boolean | null;
+  node_locations: string[];
+  labels: ProviderKeyValueEndpoint[];
+  taints: ProviderTaintEndpoint[];
+}
+
+export interface GrpcRouteProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "grpc-route";
+  hostnames: string[];
+  parent_refs: ProviderNamedReferenceEndpoint[];
+  rules: GatewayRouteRuleEndpoint[];
+  parent_statuses: GatewayRouteParentStatusEndpoint[];
+}
+
+export interface HttpRouteProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "http-route";
+  hostnames: string[];
+  parent_refs: ProviderNamedReferenceEndpoint[];
+  rules: GatewayRouteRuleEndpoint[];
+  parent_statuses: GatewayRouteParentStatusEndpoint[];
+}
+
+export interface JobProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "job";
+  state: "completed" | "failed" | "suspended" | "running" | "pending";
+  succeeded: number | null;
+  failed: number | null;
+  active: number | null;
+  completions: number | null;
+  parallelism: number | null;
+  backoff_limit: number | null;
+  active_deadline_seconds: number | null;
+  ttl_seconds_after_finished: number | null;
+  suspended: boolean | null;
+  start_time: string | null;
+  completion_time: string | null;
+  terminal_reason: string | null;
+  terminal_message: string | null;
+}
+
 export type ProviderResourceDetailEndpoint =
   | AwsMachineProviderDetailEndpoint
   | AwsManagedClusterProviderDetailEndpoint
@@ -413,4 +532,10 @@ export type ProviderResourceDetailEndpoint =
   | CrossplaneCompositeProviderDetailEndpoint
   | CronWorkflowProviderDetailEndpoint
   | ExternalSecretProviderDetailEndpoint
-  | GatewayClassProviderDetailEndpoint;
+  | GatewayClassProviderDetailEndpoint
+  | GcpMachineProviderDetailEndpoint
+  | GcpManagedControlPlaneProviderDetailEndpoint
+  | GcpManagedMachinePoolProviderDetailEndpoint
+  | GrpcRouteProviderDetailEndpoint
+  | HttpRouteProviderDetailEndpoint
+  | JobProviderDetailEndpoint;

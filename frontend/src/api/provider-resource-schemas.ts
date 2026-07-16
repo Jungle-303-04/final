@@ -397,6 +397,131 @@ const gatewayClass = z.strictObject({
   conditions,
 });
 
+const gcpMachine = z.strictObject({
+  type: z.literal("gcp-machine"),
+  ready: z.boolean().nullable(),
+  instance_type: nullableString,
+  zone: nullableString,
+  instance_id: nullableString,
+  image: nullableString,
+  additional_disks: z.array(z.strictObject({
+    device_type: nullableString,
+    size_gb: nullableInteger,
+  })).max(100),
+  conditions,
+});
+
+const gcpManagedControlPlane = z.strictObject({
+  type: z.literal("gcp-managed-control-plane"),
+  ready: z.boolean().nullable(),
+  cluster_name: nullableString,
+  project: nullableString,
+  location: nullableString,
+  version: nullableString,
+  release_channel: nullableString,
+  autopilot: z.boolean().nullable(),
+  endpoint: nullableString,
+  pod_cidr: nullableString,
+  service_cidr: nullableString,
+  ip_aliases: z.boolean().nullable(),
+  logging_service: nullableString,
+  monitoring_service: nullableString,
+  authorized_networks: z.array(z.strictObject({
+    name: nullableString,
+    cidr: z.string().min(1),
+  })).max(100),
+  conditions,
+});
+
+const gcpManagedMachinePool = z.strictObject({
+  type: z.literal("gcp-managed-machine-pool"),
+  ready: z.boolean().nullable(),
+  node_pool_name: nullableString,
+  machine_type: nullableString,
+  disk_type: nullableString,
+  disk_size_gb: nullableInteger,
+  image_type: nullableString,
+  max_pods_per_node: nullableInteger,
+  autoscaling_enabled: z.boolean().nullable(),
+  scaling,
+  auto_repair: z.boolean().nullable(),
+  auto_upgrade: z.boolean().nullable(),
+  node_locations: z.array(z.string()).max(100),
+  labels: z.array(keyValue).max(100),
+  taints: z.array(z.strictObject({
+    key: z.string().min(1),
+    value: nullableString,
+    effect: nullableString,
+  })).max(100),
+  conditions,
+});
+
+const gatewayRouteMatch = z.strictObject({
+  method: nullableString,
+  path_type: nullableString,
+  path_value: nullableString,
+  grpc_type: nullableString,
+  grpc_service: nullableString,
+  grpc_method: nullableString,
+  headers: z.array(keyValue).max(50),
+  query_params: z.array(keyValue).max(50),
+});
+const gatewayRouteBackend = z.strictObject({
+  reference: namedReference,
+  port: nullableInteger,
+  weight: nullableInteger,
+});
+const gatewayRouteFilter = z.strictObject({
+  type: z.string().min(1),
+  summary: nullableString,
+});
+const gatewayRouteRule = z.strictObject({
+  matches: z.array(gatewayRouteMatch).max(50),
+  backends: z.array(gatewayRouteBackend).max(50),
+  filters: z.array(gatewayRouteFilter).max(50),
+});
+const gatewayRouteParentStatus = z.strictObject({
+  reference: namedReference.nullable(),
+  section_name: nullableString,
+  accepted: z.boolean().nullable(),
+  resolved_refs: z.boolean().nullable(),
+  conditions,
+});
+const gatewayRouteFields = {
+  hostnames: z.array(z.string()).max(100),
+  parent_refs: z.array(namedReference).max(50),
+  rules: z.array(gatewayRouteRule).max(50),
+  parent_statuses: z.array(gatewayRouteParentStatus).max(50),
+  conditions,
+};
+const grpcRoute = z.strictObject({
+  type: z.literal("grpc-route"),
+  ...gatewayRouteFields,
+});
+const httpRoute = z.strictObject({
+  type: z.literal("http-route"),
+  ...gatewayRouteFields,
+});
+
+const job = z.strictObject({
+  type: z.literal("job"),
+  state: z.enum(["completed", "failed", "suspended", "running", "pending"]),
+  succeeded: nullableInteger,
+  failed: nullableInteger,
+  active: nullableInteger,
+  completions: nullableInteger,
+  parallelism: nullableInteger,
+  backoff_limit: nullableInteger,
+  active_deadline_seconds: nullableInteger,
+  ttl_seconds_after_finished: nullableInteger,
+  suspended: z.boolean().nullable(),
+  start_time: nullableString,
+  completion_time: nullableString,
+  terminal_reason: nullableString,
+  terminal_message: nullableString,
+  conditions,
+});
+
 export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   awsMachine,
   awsManagedCluster,
@@ -419,4 +544,10 @@ export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   cronWorkflow,
   externalSecret,
   gatewayClass,
+  gcpMachine,
+  gcpManagedControlPlane,
+  gcpManagedMachinePool,
+  grpcRoute,
+  httpRoute,
+  job,
 ]);

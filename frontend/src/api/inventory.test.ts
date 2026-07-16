@@ -198,6 +198,62 @@ describe("inventory resource API", () => {
     expect(JSON.stringify(response.provider_detail)).not.toContain("secretValue");
   });
 
+  it("validates the bounded Gateway API route transport contract", async () => {
+    const providerDetail = {
+      type: "http-route" as const,
+      hostnames: ["api.example.test"],
+      parent_refs: [{
+        api_version: null,
+        kind: null,
+        namespace: "default",
+        name: "public",
+      }],
+      rules: [{
+        matches: [{
+          method: "GET",
+          path_type: "PathPrefix",
+          path_value: "/inventory",
+          grpc_type: null,
+          grpc_service: null,
+          grpc_method: null,
+          headers: [],
+          query_params: [],
+        }],
+        backends: [{
+          reference: {
+            api_version: null,
+            kind: null,
+            namespace: "default",
+            name: "inventory-api",
+          },
+          port: 8080,
+          weight: 100,
+        }],
+        filters: [{ type: "RequestHeaderModifier", summary: "set: x-platform" }],
+      }],
+      parent_statuses: [],
+      conditions: [],
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "cluster-1",
+      identity: { resource_type: "httproute", kind: "HTTPRoute", name: "inventory", namespace: "default" },
+      resource: { ...RESOURCE, resource_type: "httproute", kind: "HTTPRoute", name: "inventory" },
+      provider_detail: providerDetail,
+      related: {},
+      events: [],
+    }));
+
+    const response = await getInventoryResourceDetail("cluster-1", {
+      resourceType: "httproute",
+      kind: "HTTPRoute",
+      name: "inventory",
+      namespace: "default",
+    });
+
+    expect(response.provider_detail).toEqual(providerDetail);
+    expect(JSON.stringify(response.provider_detail)).not.toContain("authorization");
+  });
+
   it("rejects raw fields appended to an extension detail", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       cluster_id: "cluster-1",

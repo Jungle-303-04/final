@@ -634,6 +634,14 @@
     "ui.public-api.surface": {
       "destination": "frontend/src/shared/ui/SearchPillInput.test.tsx",
       "rationale": "Reusable UI primitives must retain their tested product-owned contracts without publishing the frozen package surface."
+    },
+    "resources.extension-detail.public-boundary": {
+      "destination": "frontend/src/features/resources/providerResourceCanonical.test.ts",
+      "rationale": "The product exposes typed resource-detail discriminators through its own contract and adapter modules without importing or recreating the isolated source renderer barrel."
+    },
+    "resources.job.runtime-semantics": {
+      "destination": "tests/test_inventory_provider_detail.py",
+      "rationale": "Job retry defaults and live elapsed duration require an explicit server-owned schema-default and request-clock contract before the UI may present them."
     }
   },
   "classifications": {
@@ -1143,6 +1151,201 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The shared bounded replica and exact reference contracts preserve nullable observations without UI defaults."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/GCPMachineRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:gcp-machine:v1",
+          "legacyContractIds": [],
+          "symbol": "GCPMachineRenderer",
+          "interaction": "an authorized GCPMachine detail presents readiness, machine type, zone, instance identity, image, bounded additional-disk metadata, and conditions without exposing disk encryption keys or raw infrastructure payloads",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap additional-disk rows",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact infrastructure.cluster.x-k8s.io GCPMachine projector and strict browser contract are implemented for stored observations. Automatic CAPG CRD discovery and read RBAC remain a collection follow-up."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/GCPManagedControlPlaneRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:gcp-managed-control-plane:v1",
+          "legacyContractIds": [],
+          "symbol": "GCPManagedControlPlaneRenderer",
+          "interaction": "an authorized GCPManagedControlPlane detail presents readiness, cluster and project identity, location, version, channel, Autopilot, endpoint, network ranges, services, authorized networks, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap authorized-network rows",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The official CAPG CRD group is used as the exact projector key; absent Autopilot and network defaults remain unavailable instead of being inferred in the browser. Automatic CAPG collection remains a follow-up."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/GCPManagedMachinePoolRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:gcp-managed-machine-pool:v1",
+          "legacyContractIds": [],
+          "symbol": "GCPManagedMachinePoolRenderer",
+          "interaction": "an authorized GCPManagedMachinePool detail presents readiness, machine and disk observations, autoscaling bounds, current replicas, management flags, locations, labels, taints, and conditions without applying source-side defaults",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap locations, labels, and taints",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product preserves nullable CAPG observations and does not invent e2-medium, pd-standard, 100GB, autoscaling, or zero-replica defaults. Automatic CAPG collection remains a follow-up."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/GRPCRouteRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:grpc-route:v1",
+          "legacyContractIds": [],
+          "symbol": "GRPCRouteRenderer",
+          "interaction": "an authorized GRPCRoute detail presents bounded hostnames, parent references, method and header matches, backend ports and weights, filters, per-parent acceptance and reference resolution, and first-parent conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "cap route rules and every nested match, backend, filter, and parent-status collection before browser delivery",
+            "merge": "replace the complete typed route projection only while the exact route identity remains active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "HTTP and gRPC routes share one typed rule model and one presentation component. Backend and Gateway clicks remain unavailable until Python resolves each reference to an authorized inventory resource type and exact identity."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/HTTPRouteRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:http-route:v1",
+          "legacyContractIds": [],
+          "symbol": "HTTPRouteRenderer",
+          "interaction": "an authorized HTTPRoute detail presents bounded hostnames, parent references, method, path, safe header and query matches, backend ports and weights, redacted filter summaries, parent status, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "cap route rules and every nested match, backend, filter, and parent-status collection before browser delivery",
+            "merge": "replace the complete typed route projection only while the exact route identity remains active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/inventory.test.ts", "frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_domain.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Sensitive header and query match names are removed, modifier values are never projected, and route integration proves raw values do not cross the RBAC gateway. Cross-resource navigation awaits server-resolved references."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:renderers:public-contract-boundary:v1",
+          "legacyContractIds": ["reference.feature.126"],
+          "symbol": "resource renderer export barrel",
+          "interaction": "the product consumes supported resource-detail discriminators through its own typed Python, Zod, canonical adapter, and page modules without importing or recreating the isolated source renderer barrel",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/features/resources/providerResourceContract.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx"],
+            "requiredBackendContracts": ["packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.public-boundary"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "No source-runtime barrel is copied into the product. Direct typed imports keep ownership and tree-shaking boundaries explicit while the source ledger tracks each renderer separately."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/JobRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:job-status-configuration:v1",
+          "legacyContractIds": [],
+          "symbol": "JobRenderer status and configuration",
+          "interaction": "an authorized batch Job detail presents a server-owned lifecycle state, observed success, failure and active counts, completion target, configuration limits, timestamps, terminal evidence, and conditions without browser defaults",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and Job identity and retain only bounded typed condition evidence",
+            "merge": "replace the complete Job projection only while the exact Job identity remains active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact batch/Job projector and localized presentation are implemented. Missing fields remain absent rather than using source defaults for completions, parallelism, or backoff."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:job-live-duration-retry-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "JobRenderer live duration and retry problem banners",
+          "interaction": "a running Job may present live elapsed duration and retry-remaining diagnostics only from a server-owned request clock and explicit Kubernetes schema-default contract",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.job.runtime-semantics"],
+            "state": "blocked",
+            "blockedReason": "The stored observation does not carry resolved CRD/default values or a request-clock elapsed field; applying source defaults such as backoffLimit=6 or computing a browser-local running duration would fabricate state.",
+            "rationale": "Completed and failed terminal timestamps are projected today. Live duration and remaining retries remain explicitly unavailable until the Python contract owns both time and default-resolution evidence."
           }
         }
       ]

@@ -38,6 +38,42 @@ export interface ProviderReplicas {
   upToDate: number | null;
 }
 
+export interface GatewayRouteMatch {
+  method: string | null;
+  pathType: string | null;
+  pathValue: string | null;
+  grpcType: string | null;
+  grpcService: string | null;
+  grpcMethod: string | null;
+  headers: ProviderKeyValue[];
+  queryParams: ProviderKeyValue[];
+}
+
+export interface GatewayRouteBackend {
+  reference: ProviderNamedReference;
+  port: number | null;
+  weight: number | null;
+}
+
+export interface GatewayRouteFilter {
+  type: string;
+  summary: string | null;
+}
+
+export interface GatewayRouteRule {
+  matches: GatewayRouteMatch[];
+  backends: GatewayRouteBackend[];
+  filters: GatewayRouteFilter[];
+}
+
+export interface GatewayRouteParentStatus {
+  reference: ProviderNamedReference | null;
+  sectionName: string | null;
+  accepted: boolean | null;
+  resolvedRefs: boolean | null;
+  conditions: ProviderCondition[];
+}
+
 interface ProviderDetailBase {
   conditions: ProviderCondition[];
 }
@@ -348,4 +384,81 @@ export type ProviderResourceDetail =
       description: string | null;
       accepted: boolean | null;
       parametersRef: ProviderNamedReference | null;
+    })
+  | (ProviderDetailBase & {
+      type: "gcp-machine";
+      ready: boolean | null;
+      instanceType: string | null;
+      zone: string | null;
+      instanceId: string | null;
+      image: string | null;
+      additionalDisks: Array<{
+        deviceType: string | null;
+        sizeGb: number | null;
+      }>;
+    })
+  | (ProviderDetailBase & {
+      type: "gcp-managed-control-plane";
+      ready: boolean | null;
+      clusterName: string | null;
+      project: string | null;
+      location: string | null;
+      version: string | null;
+      releaseChannel: string | null;
+      autopilot: boolean | null;
+      endpoint: string | null;
+      podCidr: string | null;
+      serviceCidr: string | null;
+      ipAliases: boolean | null;
+      loggingService: string | null;
+      monitoringService: string | null;
+      authorizedNetworks: Array<{ name: string | null; cidr: string }>;
+    })
+  | (ProviderDetailBase & {
+      type: "gcp-managed-machine-pool";
+      ready: boolean | null;
+      nodePoolName: string | null;
+      machineType: string | null;
+      diskType: string | null;
+      diskSizeGb: number | null;
+      imageType: string | null;
+      maxPodsPerNode: number | null;
+      autoscalingEnabled: boolean | null;
+      scaling: ProviderScaling;
+      autoRepair: boolean | null;
+      autoUpgrade: boolean | null;
+      nodeLocations: string[];
+      labels: ProviderKeyValue[];
+      taints: Array<{ key: string; value: string | null; effect: string | null }>;
+    })
+  | (ProviderDetailBase & {
+      type: "grpc-route";
+      hostnames: string[];
+      parentRefs: ProviderNamedReference[];
+      rules: GatewayRouteRule[];
+      parentStatuses: GatewayRouteParentStatus[];
+    })
+  | (ProviderDetailBase & {
+      type: "http-route";
+      hostnames: string[];
+      parentRefs: ProviderNamedReference[];
+      rules: GatewayRouteRule[];
+      parentStatuses: GatewayRouteParentStatus[];
+    })
+  | (ProviderDetailBase & {
+      type: "job";
+      state: "completed" | "failed" | "suspended" | "running" | "pending";
+      succeeded: number | null;
+      failed: number | null;
+      active: number | null;
+      completions: number | null;
+      parallelism: number | null;
+      backoffLimit: number | null;
+      activeDeadlineSeconds: number | null;
+      ttlSecondsAfterFinished: number | null;
+      suspended: boolean | null;
+      startTime: string | null;
+      completionTime: string | null;
+      terminalReason: string | null;
+      terminalMessage: string | null;
     });

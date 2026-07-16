@@ -47,12 +47,19 @@ export function ProviderResourceDetailPanel({ detail }: { detail: ProviderResour
       {detail.type === "cluster-compliance-report" ? (
         <ComplianceControlsPanel detail={detail} />
       ) : null}
+      {detail.type === "grpc-route" || detail.type === "http-route" ? (
+        <GatewayRouteRulesPanel detail={detail} />
+      ) : null}
       {detail.conditions.length > 0 ? <ProviderConditions conditions={detail.conditions} /> : null}
     </section>
   );
 }
 
 type ComplianceDetail = Extract<ProviderResourceDetail, { type: "cluster-compliance-report" }>;
+type GatewayRouteDetail = Extract<
+  ProviderResourceDetail,
+  { type: "grpc-route" | "http-route" }
+>;
 
 function ComplianceControlsPanel({ detail }: { detail: ComplianceDetail }) {
   const { t } = useI18n();
@@ -176,6 +183,47 @@ function ComplianceControlsPanel({ detail }: { detail: ComplianceDetail }) {
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+function GatewayRouteRulesPanel({ detail }: { detail: GatewayRouteDetail }) {
+  const { t } = useI18n();
+  if (detail.rules.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-route-rules" className="grid gap-3">
+      <h4 className="text-sm font-medium" id="provider-route-rules">
+        {t("resources.detail.provider.routeRules")}
+      </h4>
+      <ol className="grid gap-3">
+        {detail.rules.map((rule, index) => (
+          <li className="grid min-w-0 gap-3 rounded-lg border bg-background/65 p-3" key={index}>
+            <h5 className="text-sm font-medium">
+              {t("resources.detail.provider.routeRule", { count: index + 1 })}
+            </h5>
+            <DefinitionGrid entries={[
+              [
+                t("resources.detail.provider.routeMatches"),
+                rule.matches.length > 0
+                  ? rule.matches.map((match) => formatGatewayRouteMatch(match, t)).join(" · ")
+                  : t("resources.detail.provider.matchAll"),
+              ],
+              [
+                t("resources.detail.provider.routeBackends"),
+                rule.backends.length > 0
+                  ? rule.backends.map((backend) => formatGatewayRouteBackend(backend, t)).join(" · ")
+                  : t("resources.detail.provider.none"),
+              ],
+              [
+                t("resources.detail.provider.routeFilters"),
+                rule.filters.length > 0
+                  ? rule.filters.map((filter) => join([filter.type, filter.summary]) ?? filter.type).join(" · ")
+                  : t("resources.detail.provider.none"),
+              ],
+            ]} />
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -547,6 +595,107 @@ function providerSections(
       ["resources.detail.provider.parametersReference", namedReferenceLabel(detail.parametersRef)],
     ]),
   ];
+  if (detail.type === "gcp-machine") return [
+    section("instance", "resources.detail.provider.instance", [
+      ["resources.detail.provider.statusReady", yesNo(detail.ready, t)],
+      ["resources.detail.provider.instanceType", detail.instanceType],
+      ["resources.detail.provider.zone", detail.zone],
+      ["resources.detail.provider.instanceId", detail.instanceId],
+      ["resources.detail.provider.image", detail.image],
+    ]),
+    section("disks", "resources.detail.provider.additionalDisks", [
+      [
+        "resources.detail.provider.additionalDisks",
+        join(detail.additionalDisks.map((disk) => diskLabel(disk.deviceType, disk.sizeGb))),
+      ],
+    ]),
+  ];
+  if (detail.type === "gcp-managed-control-plane") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.statusReady", yesNo(detail.ready, t)],
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.project", detail.project],
+      ["resources.detail.provider.location", detail.location],
+      ["resources.detail.provider.version", detail.version],
+      ["resources.detail.provider.releaseChannel", detail.releaseChannel],
+      ["resources.detail.provider.autopilot", yesNo(detail.autopilot, t)],
+      ["resources.detail.provider.endpoint", detail.endpoint],
+    ]),
+    section("network", "resources.detail.provider.network", [
+      ["resources.detail.provider.podCidr", detail.podCidr],
+      ["resources.detail.provider.serviceCidr", detail.serviceCidr],
+      ["resources.detail.provider.ipAliases", yesNo(detail.ipAliases, t)],
+      [
+        "resources.detail.provider.authorizedNetworks",
+        join(detail.authorizedNetworks.map(({ name, cidr }) => join([name, cidr]))),
+      ],
+    ]),
+    section("services", "resources.detail.provider.services", [
+      ["resources.detail.provider.loggingService", detail.loggingService],
+      ["resources.detail.provider.monitoringService", detail.monitoringService],
+    ]),
+  ];
+  if (detail.type === "gcp-managed-machine-pool") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.statusReady", yesNo(detail.ready, t)],
+      ["resources.detail.provider.nodePool", detail.nodePoolName],
+      ["resources.detail.provider.machineType", detail.machineType],
+      ["resources.detail.provider.disk", disk(detail.diskType, detail.diskSizeGb)],
+      ["resources.detail.provider.imageType", detail.imageType],
+      ["resources.detail.provider.maxPodsPerNode", number(detail.maxPodsPerNode)],
+    ]),
+    scalingSection(detail.scaling),
+    section("management", "resources.detail.provider.management", [
+      ["resources.detail.provider.autoscaling", yesNo(detail.autoscalingEnabled, t)],
+      ["resources.detail.provider.autoRepair", yesNo(detail.autoRepair, t)],
+      ["resources.detail.provider.autoUpgrade", yesNo(detail.autoUpgrade, t)],
+    ]),
+    section("configuration", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.nodeLocations", join(detail.nodeLocations)],
+      ["resources.detail.provider.labels", formatKeyValues(detail.labels)],
+      [
+        "resources.detail.provider.taints",
+        join(detail.taints.map((item) => join([item.key, item.value, item.effect]))),
+      ],
+    ]),
+  ];
+  if (detail.type === "grpc-route" || detail.type === "http-route") return [
+    section("route-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.hostnames", join(detail.hostnames)],
+      [
+        "resources.detail.provider.parentGateways",
+        join(detail.parentRefs.map(namedReferenceLabel)),
+      ],
+      ["resources.detail.provider.ruleCount", number(detail.rules.length)],
+    ]),
+    section("parent-status", "resources.detail.provider.parentStatus", [
+      [
+        "resources.detail.provider.parentStatus",
+        join(detail.parentStatuses.map((parent) => formatGatewayParentStatus(parent, t))),
+      ],
+    ]),
+  ];
+  if (detail.type === "job") return [
+    section("job-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.jobState", t(jobStateKey(detail.state))],
+      ["resources.detail.provider.succeeded", number(detail.succeeded)],
+      ["resources.detail.provider.failed", number(detail.failed)],
+      ["resources.detail.provider.active", number(detail.active)],
+      ["resources.detail.provider.completions", number(detail.completions)],
+      ["resources.detail.provider.startTime", detail.startTime],
+      ["resources.detail.provider.completionTime", detail.completionTime],
+      ["resources.detail.provider.terminalReason", detail.terminalReason],
+      ["resources.detail.provider.terminalMessage", detail.terminalMessage],
+    ]),
+    section("job-configuration", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.parallelism", number(detail.parallelism)],
+      ["resources.detail.provider.completions", number(detail.completions)],
+      ["resources.detail.provider.backoffLimit", number(detail.backoffLimit)],
+      ["resources.detail.provider.activeDeadline", seconds(detail.activeDeadlineSeconds)],
+      ["resources.detail.provider.ttlAfterFinish", seconds(detail.ttlSecondsAfterFinished)],
+      ["resources.detail.provider.suspended", yesNo(detail.suspended, t)],
+    ]),
+  ];
   return [
     section("overview", "resources.detail.provider.overview", [
       ["resources.detail.provider.poolName", detail.poolName],
@@ -674,6 +823,83 @@ function formatSecretMapping(value: {
 
 function formatKeyValues(values: Array<{ key: string; value: string }>): string | null {
   return join(values.map(({ key, value }) => `${key}=${value}`));
+}
+
+function diskLabel(type: string | null, size: number | null): string | null {
+  return join([type, numberWithUnit(size, "GB")]);
+}
+
+function formatGatewayRouteMatch(
+  match: GatewayRouteDetail["rules"][number]["matches"][number],
+  t: TranslationFunction,
+): string {
+  const grpcTarget = join([
+    match.grpcService,
+    match.grpcMethod,
+  ]);
+  return join([
+    match.method,
+    join([match.pathType, match.pathValue]),
+    join([match.grpcType, grpcTarget]),
+    match.headers.length > 0
+      ? `${t("resources.detail.provider.headers")}: ${formatKeyValues(match.headers)}`
+      : null,
+    match.queryParams.length > 0
+      ? `${t("resources.detail.provider.queryParams")}: ${formatKeyValues(match.queryParams)}`
+      : null,
+  ]) ?? t("resources.detail.provider.matchAll");
+}
+
+function formatGatewayRouteBackend(
+  backend: GatewayRouteDetail["rules"][number]["backends"][number],
+  t: TranslationFunction,
+): string {
+  return join([
+    namedReferenceLabel(backend.reference),
+    backend.port === null
+      ? null
+      : t("resources.detail.provider.portValue", { count: backend.port }),
+    backend.weight === null
+      ? null
+      : t("resources.detail.provider.weightValue", { count: backend.weight }),
+  ]) ?? backend.reference.name;
+}
+
+function formatGatewayParentStatus(
+  parent: GatewayRouteDetail["parentStatuses"][number],
+  t: TranslationFunction,
+): string | null {
+  return join([
+    namedReferenceLabel(parent.reference),
+    parent.sectionName,
+    parent.accepted === null
+      ? null
+      : t(parent.accepted
+        ? "resources.detail.provider.parentAccepted"
+        : "resources.detail.provider.parentNotAccepted"),
+    parent.resolvedRefs === null
+      ? null
+      : t(parent.resolvedRefs
+        ? "resources.detail.provider.refsResolved"
+        : "resources.detail.provider.refsUnresolved"),
+  ]);
+}
+
+function jobStateKey(
+  state: Extract<ProviderResourceDetail, { type: "job" }>["state"],
+): MessageKey {
+  switch (state) {
+    case "completed":
+      return "resources.detail.provider.jobCompleted";
+    case "failed":
+      return "resources.detail.provider.jobFailed";
+    case "suspended":
+      return "resources.detail.provider.jobSuspended";
+    case "running":
+      return "resources.detail.provider.jobRunning";
+    case "pending":
+      return "resources.detail.provider.jobPending";
+  }
 }
 
 function toggleSet(current: ReadonlySet<string>, value: string): ReadonlySet<string> {

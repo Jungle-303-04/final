@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from packages.contracts.inventory_provider import (
     AwsAddon,
@@ -35,6 +35,19 @@ from packages.contracts.inventory_provider import (
     ExternalSecretProviderDetail,
     ExternalSecretSourceDetail,
     GatewayClassProviderDetail,
+    GatewayRouteBackendDetail,
+    GatewayRouteFilterDetail,
+    GatewayRouteMatchDetail,
+    GatewayRouteParentStatusDetail,
+    GatewayRouteRuleDetail,
+    GcpAdditionalDiskDetail,
+    GcpAuthorizedNetworkDetail,
+    GcpMachineProviderDetail,
+    GcpManagedControlPlaneProviderDetail,
+    GcpManagedMachinePoolProviderDetail,
+    GrpcRouteProviderDetail,
+    HttpRouteProviderDetail,
+    JobProviderDetail,
     ProviderAddress,
     ProviderCondition,
     ProviderKeyValue,
@@ -54,8 +67,11 @@ COMPLIANCE_GROUP = "aquasecurity.github.io"
 ARGO_GROUP = "argoproj.io"
 EXTERNAL_SECRETS_GROUP = "external-secrets.io"
 GATEWAY_GROUP = "gateway.networking.k8s.io"
+BATCH_GROUP = "batch"
 MAX_COLLECTION_ITEMS = 100
 MAX_TEXT_LENGTH = 2_000
+MAX_ROUTE_RULES = 50
+MAX_ROUTE_ITEMS = 50
 COMPLIANCE_SEVERITY_ORDER = {
     "CRITICAL": 0,
     "HIGH": 1,
@@ -63,6 +79,19 @@ COMPLIANCE_SEVERITY_ORDER = {
     "LOW": 3,
     "UNKNOWN": 4,
 }
+SENSITIVE_ROUTE_VALUE_NAMES = frozenset(
+    {
+        "api-key",
+        "authorization",
+        "cookie",
+        "password",
+        "proxy-authorization",
+        "secret",
+        "set-cookie",
+        "token",
+        "x-api-key",
+    }
+)
 
 
 class ProviderDetailProjector(Protocol):
@@ -694,6 +723,325 @@ def _gateway_class(raw: Mapping[str, Any]) -> GatewayClassProviderDetail:
     )
 
 
+def _gcp_machine(raw: Mapping[str, Any]) -> GcpMachineProviderDetail:
+    return GcpMachineProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        instance_type=_text_at(raw, "spec", "instanceType"),
+        zone=_text_at(raw, "spec", "zone") or _text_at(raw, "spec", "failureDomain"),
+        instance_id=_text_at(raw, "status", "instanceID") or _text_at(raw, "spec", "providerID"),
+        image=_text_at(raw, "spec", "image"),
+        additional_disks=[
+            GcpAdditionalDiskDetail(
+                device_type=_text(item.get("deviceType")),
+                size_gb=_int(item.get("size")),
+            )
+            for item in _mapping_items_at(raw, "spec", "additionalDisks")
+        ],
+        conditions=_conditions(raw),
+    )
+
+
+def _gcp_managed_control_plane(
+    raw: Mapping[str, Any],
+) -> GcpManagedControlPlaneProviderDetail:
+    return GcpManagedControlPlaneProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        cluster_name=_text_at(raw, "spec", "clusterName") or _text_at(raw, "metadata", "name"),
+        project=_text_at(raw, "spec", "project"),
+        location=_text_at(raw, "spec", "location"),
+        version=_text_at(raw, "status", "version") or _text_at(raw, "spec", "version"),
+        release_channel=_text_at(raw, "spec", "releaseChannel"),
+        autopilot=_bool_at(raw, "spec", "enableAutopilot"),
+        endpoint=_first_endpoint(
+            _mapping_at(raw, "spec", "endpoint"),
+            _mapping_at(raw, "spec", "controlPlaneEndpoint"),
+        ),
+        pod_cidr=_text_at(raw, "spec", "clusterNetwork", "pod", "cidrBlock"),
+        service_cidr=_text_at(raw, "spec", "clusterNetwork", "service", "cidrBlock"),
+        ip_aliases=_bool_at(raw, "spec", "clusterNetwork", "useIPAliases"),
+        logging_service=_text_at(raw, "spec", "loggingService"),
+        monitoring_service=_text_at(raw, "spec", "monitoringService"),
+        authorized_networks=[
+            GcpAuthorizedNetworkDetail(
+                name=_text(item.get("display_name")),
+                cidr=cidr,
+            )
+            for item in _mapping_items_at(
+                raw,
+                "spec",
+                "master_authorized_networks_config",
+                "cidr_blocks",
+            )
+            if (cidr := _text(item.get("cidr_block"))) is not None
+        ],
+        conditions=_conditions(raw),
+    )
+
+
+def _gcp_managed_machine_pool(
+    raw: Mapping[str, Any],
+) -> GcpManagedMachinePoolProviderDetail:
+    management = _mapping_at(raw, "spec", "management")
+    return GcpManagedMachinePoolProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        node_pool_name=_text_at(raw, "spec", "nodePoolName") or _text_at(raw, "metadata", "name"),
+        machine_type=_text_at(raw, "spec", "machineType") or _text_at(raw, "spec", "instanceType"),
+        disk_type=_text_at(raw, "spec", "diskType"),
+        disk_size_gb=_first_present_int(
+            _int_at(raw, "spec", "diskSizeGb"),
+            _int_at(raw, "spec", "diskSizeGB"),
+        ),
+        image_type=_text_at(raw, "spec", "imageType"),
+        max_pods_per_node=_int_at(raw, "spec", "maxPodsPerNode"),
+        autoscaling_enabled=_bool_at(raw, "spec", "scaling", "enableAutoscaling"),
+        scaling=ProviderScaling(
+            minimum=_int_at(raw, "spec", "scaling", "minCount"),
+            maximum=_int_at(raw, "spec", "scaling", "maxCount"),
+            current=_int_at(raw, "status", "replicas"),
+        ),
+        auto_repair=_bool(management.get("autoRepair")),
+        auto_upgrade=_bool(management.get("autoUpgrade")),
+        node_locations=_text_items_at(raw, "spec", "nodeLocations"),
+        labels=_key_values_at(raw, "spec", "kubernetesLabels"),
+        taints=[
+            ProviderTaint(
+                key=key,
+                value=_text(item.get("value")),
+                effect=_text(item.get("effect")),
+            )
+            for item in _mapping_items_at(raw, "spec", "kubernetesTaints")
+            if (key := _text(item.get("key"))) is not None
+        ],
+        conditions=_conditions(raw),
+    )
+
+
+def _grpc_route(raw: Mapping[str, Any]) -> GrpcRouteProviderDetail:
+    parent_statuses = _gateway_route_parent_statuses(raw)
+    return GrpcRouteProviderDetail(
+        hostnames=_text_items_at(raw, "spec", "hostnames"),
+        parent_refs=_gateway_route_parent_refs(raw),
+        rules=_gateway_route_rules(raw, grpc=True),
+        parent_statuses=parent_statuses,
+        conditions=parent_statuses[0].conditions if parent_statuses else [],
+    )
+
+
+def _http_route(raw: Mapping[str, Any]) -> HttpRouteProviderDetail:
+    parent_statuses = _gateway_route_parent_statuses(raw)
+    return HttpRouteProviderDetail(
+        hostnames=_text_items_at(raw, "spec", "hostnames"),
+        parent_refs=_gateway_route_parent_refs(raw),
+        rules=_gateway_route_rules(raw, grpc=False),
+        parent_statuses=parent_statuses,
+        conditions=parent_statuses[0].conditions if parent_statuses else [],
+    )
+
+
+def _gateway_route_parent_refs(raw: Mapping[str, Any]) -> list[ProviderNamedReference]:
+    namespace = _text_at(raw, "metadata", "namespace")
+    return [
+        reference
+        for item in _mapping_items_at(raw, "spec", "parentRefs")[:MAX_ROUTE_ITEMS]
+        if (
+            reference := _route_reference(
+                item,
+                default_namespace=namespace,
+            )
+        )
+        is not None
+    ]
+
+
+def _gateway_route_rules(raw: Mapping[str, Any], *, grpc: bool) -> list[GatewayRouteRuleDetail]:
+    namespace = _text_at(raw, "metadata", "namespace")
+    return [
+        GatewayRouteRuleDetail(
+            matches=[
+                _gateway_route_match(item, grpc=grpc)
+                for item in _mapping_items(rule.get("matches"))[:MAX_ROUTE_ITEMS]
+            ],
+            backends=[
+                backend
+                for item in _mapping_items(rule.get("backendRefs"))[:MAX_ROUTE_ITEMS]
+                if (
+                    backend := _gateway_route_backend(
+                        item,
+                        default_namespace=namespace,
+                    )
+                )
+                is not None
+            ],
+            filters=[
+                GatewayRouteFilterDetail(
+                    type=filter_type,
+                    summary=_gateway_route_filter_summary(item, filter_type),
+                )
+                for item in _mapping_items(rule.get("filters"))[:MAX_ROUTE_ITEMS]
+                if (filter_type := _text(item.get("type"))) is not None
+            ],
+        )
+        for rule in _mapping_items_at(raw, "spec", "rules")[:MAX_ROUTE_RULES]
+    ]
+
+
+def _gateway_route_match(item: Mapping[str, Any], *, grpc: bool) -> GatewayRouteMatchDetail:
+    method = _mapping(item.get("method"))
+    path = _mapping(item.get("path"))
+    return GatewayRouteMatchDetail(
+        method=None if grpc else _text(item.get("method")),
+        path_type=None if grpc else _text(path.get("type")),
+        path_value=None if grpc else _text(path.get("value")),
+        grpc_type=_text(method.get("type")) if grpc else None,
+        grpc_service=_text(method.get("service")) if grpc else None,
+        grpc_method=_text(method.get("method")) if grpc else None,
+        headers=_named_value_items(item.get("headers")),
+        query_params=[] if grpc else _named_value_items(item.get("queryParams")),
+    )
+
+
+def _gateway_route_backend(
+    item: Mapping[str, Any], *, default_namespace: str | None
+) -> GatewayRouteBackendDetail | None:
+    reference = _route_reference(item, default_namespace=default_namespace)
+    if reference is None:
+        return None
+    return GatewayRouteBackendDetail(
+        reference=reference,
+        port=_int(item.get("port")),
+        weight=_int(item.get("weight")),
+    )
+
+
+def _gateway_route_parent_statuses(
+    raw: Mapping[str, Any],
+) -> list[GatewayRouteParentStatusDetail]:
+    namespace = _text_at(raw, "metadata", "namespace")
+    result: list[GatewayRouteParentStatusDetail] = []
+    for item in _mapping_items_at(raw, "status", "parents")[:MAX_ROUTE_ITEMS]:
+        conditions = _condition_items(item.get("conditions"))
+        result.append(
+            GatewayRouteParentStatusDetail(
+                reference=_route_reference(
+                    _mapping(item.get("parentRef")),
+                    default_namespace=namespace,
+                ),
+                section_name=_text_at(item, "parentRef", "sectionName"),
+                accepted=_condition_truth_from(conditions, "Accepted"),
+                resolved_refs=_condition_truth_from(conditions, "ResolvedRefs"),
+                conditions=conditions,
+            )
+        )
+    return result
+
+
+def _route_reference(
+    item: Mapping[str, Any], *, default_namespace: str | None
+) -> ProviderNamedReference | None:
+    name = _text(item.get("name"))
+    if name is None:
+        return None
+    return ProviderNamedReference(
+        api_version=_text(item.get("group")),
+        kind=_text(item.get("kind")),
+        namespace=_text(item.get("namespace")) or default_namespace,
+        name=name,
+    )
+
+
+def _named_value_items(value: object) -> list[ProviderKeyValue]:
+    return [
+        ProviderKeyValue(key=name, value=item_value)
+        for item in _mapping_items(value)[:MAX_ROUTE_ITEMS]
+        if (name := _text(item.get("name"))) is not None
+        and _normalized_route_value_name(name) not in SENSITIVE_ROUTE_VALUE_NAMES
+        and (item_value := _text(item.get("value"))) is not None
+    ]
+
+
+def _normalized_route_value_name(value: str) -> str:
+    return value.strip().lower().replace("_", "-")
+
+
+def _gateway_route_filter_summary(item: Mapping[str, Any], filter_type: str) -> str | None:
+    if filter_type == "RequestHeaderModifier":
+        return _header_modifier_summary(_mapping(item.get("requestHeaderModifier")))
+    if filter_type == "ResponseHeaderModifier":
+        return _header_modifier_summary(_mapping(item.get("responseHeaderModifier")))
+    if filter_type == "RequestRedirect":
+        redirect = _mapping(item.get("requestRedirect"))
+        return _joined_text(
+            redirect.get("scheme"),
+            redirect.get("hostname"),
+            redirect.get("port"),
+            redirect.get("statusCode"),
+        )
+    if filter_type == "URLRewrite":
+        rewrite = _mapping(item.get("urlRewrite"))
+        return _joined_text(
+            rewrite.get("hostname"),
+            _value_at(rewrite, "path", "replacePrefixMatch"),
+        )
+    if filter_type == "RequestMirror":
+        mirror = _mapping_at(item, "requestMirror", "backendRef")
+        return _joined_text(mirror.get("name"), mirror.get("port"))
+    return None
+
+
+def _header_modifier_summary(modifier: Mapping[str, Any]) -> str | None:
+    parts: list[str] = []
+    for operation in ("set", "add"):
+        names = [
+            name
+            for item in _mapping_items(modifier.get(operation))[:MAX_ROUTE_ITEMS]
+            if (name := _text(item.get("name"))) is not None
+        ]
+        if names:
+            parts.append(f"{operation}: {', '.join(names)}")
+    removed = _text_items(modifier.get("remove"))[:MAX_ROUTE_ITEMS]
+    if removed:
+        parts.append(f"remove: {', '.join(removed)}")
+    return "; ".join(parts) if parts else None
+
+
+def _job(raw: Mapping[str, Any]) -> JobProviderDetail:
+    conditions = _conditions(raw)
+    complete = _condition_by_type(conditions, "Complete")
+    failed = _condition_by_type(conditions, "Failed")
+    suspended = _bool_at(raw, "spec", "suspend")
+    active = _int_at(raw, "status", "active")
+    state: Literal["completed", "failed", "suspended", "running", "pending"] = (
+        "completed"
+        if complete is not None and complete.status == "True"
+        else "failed"
+        if failed is not None and failed.status == "True"
+        else "suspended"
+        if suspended is True
+        else "running"
+        if (active or 0) > 0 or _text_at(raw, "status", "startTime") is not None
+        else "pending"
+    )
+    terminal = failed if state == "failed" else complete if state == "completed" else None
+    return JobProviderDetail(
+        state=state,
+        succeeded=_int_at(raw, "status", "succeeded"),
+        failed=_int_at(raw, "status", "failed"),
+        active=active,
+        completions=_int_at(raw, "spec", "completions"),
+        parallelism=_int_at(raw, "spec", "parallelism"),
+        backoff_limit=_int_at(raw, "spec", "backoffLimit"),
+        active_deadline_seconds=_int_at(raw, "spec", "activeDeadlineSeconds"),
+        ttl_seconds_after_finished=_int_at(raw, "spec", "ttlSecondsAfterFinished"),
+        suspended=suspended,
+        start_time=_text_at(raw, "status", "startTime"),
+        completion_time=_text_at(raw, "status", "completionTime")
+        or (terminal.last_transition_time if terminal is not None else None),
+        terminal_reason=terminal.reason if terminal is not None else None,
+        terminal_message=terminal.message if terminal is not None else None,
+        conditions=conditions,
+    )
+
+
 PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (INFRASTRUCTURE_GROUP, "AWSMachine"): _aws_machine,
     (INFRASTRUCTURE_GROUP, "AWSManagedCluster"): _aws_managed_cluster,
@@ -715,6 +1063,12 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (ARGO_GROUP, "CronWorkflow"): _cron_workflow,
     (EXTERNAL_SECRETS_GROUP, "ExternalSecret"): _external_secret,
     (GATEWAY_GROUP, "GatewayClass"): _gateway_class,
+    (INFRASTRUCTURE_GROUP, "GCPMachine"): _gcp_machine,
+    (INFRASTRUCTURE_GROUP, "GCPManagedControlPlane"): _gcp_managed_control_plane,
+    (INFRASTRUCTURE_GROUP, "GCPManagedMachinePool"): _gcp_managed_machine_pool,
+    (GATEWAY_GROUP, "GRPCRoute"): _grpc_route,
+    (GATEWAY_GROUP, "HTTPRoute"): _http_route,
+    (BATCH_GROUP, "Job"): _job,
 }
 
 PROVIDER_DETAIL_MATCHERS: tuple[ProviderDetailMatcher, ...] = (_crossplane_composite,)
@@ -724,8 +1078,12 @@ def _conditions(raw: Mapping[str, Any]) -> list[ProviderCondition]:
     items = _mapping_items_at(raw, "status", "v1beta2", "conditions")
     if not items:
         items = _mapping_items_at(raw, "status", "conditions")
+    return _condition_items(items)
+
+
+def _condition_items(value: object) -> list[ProviderCondition]:
     result: list[ProviderCondition] = []
-    for item in items:
+    for item in _mapping_items(value):
         condition_type = _text(item.get("type"))
         status = _text(item.get("status"))
         if condition_type is None or status not in {"True", "False", "Unknown"}:
@@ -742,6 +1100,22 @@ def _conditions(raw: Mapping[str, Any]) -> list[ProviderCondition]:
     return result
 
 
+def _condition_truth_from(conditions: list[ProviderCondition], condition_type: str) -> bool | None:
+    condition = _condition_by_type(conditions, condition_type)
+    if condition is None:
+        return None
+    return True if condition.status == "True" else False if condition.status == "False" else None
+
+
+def _condition_by_type(
+    conditions: list[ProviderCondition], condition_type: str
+) -> ProviderCondition | None:
+    return next(
+        (condition for condition in conditions if condition.type == condition_type),
+        None,
+    )
+
+
 def _endpoint_access(
     raw: Mapping[str, Any],
 ) -> str | None:
@@ -753,6 +1127,16 @@ def _endpoint_access(
         return "public"
     if private is True:
         return "private"
+    return None
+
+
+def _first_endpoint(*items: Mapping[str, Any]) -> str | None:
+    for item in items:
+        host = _text(item.get("host"))
+        if host is None:
+            continue
+        port = _int(item.get("port"))
+        return f"{host}:{port}" if port not in (None, 443) else host
     return None
 
 
@@ -868,16 +1252,7 @@ def _cluster_name(raw: Mapping[str, Any]) -> str | None:
 
 
 def _condition_truth(raw: Mapping[str, Any], condition_type: str) -> bool | None:
-    for condition in _conditions(raw):
-        if condition.type == condition_type:
-            return (
-                True
-                if condition.status == "True"
-                else False
-                if condition.status == "False"
-                else None
-            )
-    return None
+    return _condition_truth_from(_conditions(raw), condition_type)
 
 
 def _provider_from_kind(kind: str) -> str | None:
@@ -932,7 +1307,10 @@ def _mapping_items(raw: object) -> list[dict[str, Any]]:
 
 
 def _text_items_at(value: Mapping[str, Any], *path: str) -> list[str]:
-    raw = _value_at(value, *path)
+    return _text_items(_value_at(value, *path))
+
+
+def _text_items(raw: object) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [text for item in raw[:MAX_COLLECTION_ITEMS] if (text := _text(item)) is not None]
@@ -963,5 +1341,9 @@ def _collection_length_at(value: Mapping[str, Any], *path: str) -> int | None:
 
 
 def _joined_text(*values: object) -> str | None:
-    parts = [part for value in values if (part := _text(value)) is not None]
+    parts = [
+        part
+        for value in values
+        if (part := _text(value) or (str(value) if _int(value) is not None else None)) is not None
+    ]
     return "/".join(parts) if parts else None

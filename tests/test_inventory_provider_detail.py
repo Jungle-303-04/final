@@ -450,6 +450,298 @@ def test_provider_detail_projects_operational_extension_resources(
     assert "redacted-pem" not in str(payload)
 
 
+@pytest.mark.parametrize(
+    ("kind", "api_version", "raw", "detail_type", "expected"),
+    [
+        (
+            "GCPMachine",
+            "infrastructure.cluster.x-k8s.io/v1beta1",
+            {
+                "spec": {
+                    "instanceType": "n2-standard-4",
+                    "zone": "asia-northeast3-a",
+                    "image": "projects/cos-cloud/global/images/cos-stable",
+                    "additionalDisks": [
+                        {
+                            "deviceType": "pd-balanced",
+                            "size": 200,
+                            "encryptionKey": {"suppliedKey": {"rawKey": "must-not-leak"}},
+                        }
+                    ],
+                },
+                "status": {
+                    "instanceID": "projects/p/zones/z/instances/node-1",
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "gcp-machine",
+            {
+                "ready": True,
+                "instance_type": "n2-standard-4",
+                "zone": "asia-northeast3-a",
+            },
+        ),
+        (
+            "GCPManagedControlPlane",
+            "infrastructure.cluster.x-k8s.io/v1beta1",
+            {
+                "metadata": {"name": "prod-control-plane"},
+                "spec": {
+                    "clusterName": "prod",
+                    "project": "platform-prod",
+                    "location": "asia-northeast3",
+                    "releaseChannel": "regular",
+                    "enableAutopilot": True,
+                    "endpoint": {"host": "34.64.1.2", "port": 443},
+                    "clusterNetwork": {
+                        "pod": {"cidrBlock": "10.20.0.0/16"},
+                        "service": {"cidrBlock": "10.30.0.0/20"},
+                        "useIPAliases": True,
+                    },
+                    "master_authorized_networks_config": {
+                        "cidr_blocks": [
+                            {
+                                "display_name": "office",
+                                "cidr_block": "203.0.113.0/24",
+                            }
+                        ]
+                    },
+                },
+                "status": {
+                    "version": "1.33.2-gke.100",
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "gcp-managed-control-plane",
+            {
+                "cluster_name": "prod",
+                "version": "1.33.2-gke.100",
+                "endpoint": "34.64.1.2",
+            },
+        ),
+        (
+            "GCPManagedMachinePool",
+            "infrastructure.cluster.x-k8s.io/v1beta1",
+            {
+                "metadata": {"name": "workers"},
+                "spec": {
+                    "nodePoolName": "workers",
+                    "machineType": "n2-standard-8",
+                    "diskType": "pd-balanced",
+                    "diskSizeGb": 150,
+                    "imageType": "COS_CONTAINERD",
+                    "maxPodsPerNode": 64,
+                    "scaling": {
+                        "enableAutoscaling": True,
+                        "minCount": 3,
+                        "maxCount": 20,
+                    },
+                    "management": {"autoRepair": True, "autoUpgrade": False},
+                    "nodeLocations": ["asia-northeast3-a", "asia-northeast3-b"],
+                    "kubernetesLabels": {"pool": "workers"},
+                    "kubernetesTaints": [
+                        {"key": "dedicated", "value": "batch", "effect": "NoSchedule"}
+                    ],
+                },
+                "status": {
+                    "replicas": 5,
+                    "conditions": [{"type": "Ready", "status": "False"}],
+                },
+            },
+            "gcp-managed-machine-pool",
+            {
+                "node_pool_name": "workers",
+                "autoscaling_enabled": True,
+                "scaling": {"minimum": 3, "maximum": 20, "current": 5},
+            },
+        ),
+        (
+            "GRPCRoute",
+            "gateway.networking.k8s.io/v1",
+            {
+                "metadata": {"namespace": "shop"},
+                "spec": {
+                    "hostnames": ["grpc.example.test"],
+                    "parentRefs": [{"name": "public", "sectionName": "grpc"}],
+                    "rules": [
+                        {
+                            "matches": [
+                                {
+                                    "method": {
+                                        "type": "Exact",
+                                        "service": "shop.Inventory",
+                                        "method": "Get",
+                                    },
+                                    "headers": [{"name": "x-tenant", "value": "blue"}],
+                                }
+                            ],
+                            "backendRefs": [{"name": "inventory", "port": 8080, "weight": 100}],
+                            "filters": [{"type": "ExtensionRef"}],
+                        }
+                    ],
+                },
+                "status": {
+                    "parents": [
+                        {
+                            "parentRef": {"name": "public", "sectionName": "grpc"},
+                            "conditions": [
+                                {"type": "Accepted", "status": "True"},
+                                {"type": "ResolvedRefs", "status": "True"},
+                            ],
+                        }
+                    ]
+                },
+            },
+            "grpc-route",
+            {"hostnames": ["grpc.example.test"]},
+        ),
+        (
+            "HTTPRoute",
+            "gateway.networking.k8s.io/v1",
+            {
+                "metadata": {"namespace": "shop"},
+                "spec": {
+                    "hostnames": ["api.example.test"],
+                    "parentRefs": [{"name": "public"}],
+                    "rules": [
+                        {
+                            "matches": [
+                                {
+                                    "method": "GET",
+                                    "path": {
+                                        "type": "PathPrefix",
+                                        "value": "/inventory",
+                                    },
+                                    "queryParams": [{"name": "region", "value": "kr"}],
+                                    "headers": [
+                                        {
+                                            "name": "authorization",
+                                            "value": "must-not-leak-route-token",
+                                        }
+                                    ],
+                                }
+                            ],
+                            "backendRefs": [
+                                {"name": "inventory", "port": 8080, "weight": 80},
+                                {"name": "inventory-canary", "port": 8080, "weight": 20},
+                            ],
+                            "filters": [
+                                {
+                                    "type": "RequestHeaderModifier",
+                                    "requestHeaderModifier": {
+                                        "set": [
+                                            {
+                                                "name": "x-platform",
+                                                "value": "must-not-project",
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                },
+                "status": {
+                    "parents": [
+                        {
+                            "parentRef": {"name": "public"},
+                            "conditions": [
+                                {
+                                    "type": "Accepted",
+                                    "status": "False",
+                                    "reason": "NotAllowedByListeners",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            },
+            "http-route",
+            {"hostnames": ["api.example.test"]},
+        ),
+        (
+            "Job",
+            "batch/v1",
+            {
+                "spec": {
+                    "completions": 4,
+                    "parallelism": 2,
+                    "backoffLimit": 5,
+                    "activeDeadlineSeconds": 600,
+                    "ttlSecondsAfterFinished": 3600,
+                },
+                "status": {
+                    "succeeded": 4,
+                    "failed": 1,
+                    "active": 0,
+                    "startTime": "2026-07-16T00:00:00Z",
+                    "completionTime": "2026-07-16T00:03:00Z",
+                    "conditions": [
+                        {
+                            "type": "Complete",
+                            "status": "True",
+                            "reason": "CompletionsReached",
+                        }
+                    ],
+                },
+            },
+            "job",
+            {"state": "completed", "succeeded": 4, "completions": 4},
+        ),
+    ],
+)
+def test_provider_detail_projects_gcp_gateway_routes_and_jobs(
+    kind: str,
+    api_version: str,
+    raw: dict[str, Any],
+    detail_type: str,
+    expected: dict[str, Any],
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    payload = detail.model_dump()
+    assert payload["type"] == detail_type
+    for key, value in expected.items():
+        assert payload[key] == value
+    assert "raw" not in payload
+    assert "must-not-leak" not in str(payload)
+    assert "must-not-leak-route-token" not in str(payload)
+    assert "must-not-project" not in str(payload)
+
+
+def test_gateway_route_projection_bounds_nested_collections() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "HTTPRoute",
+            {
+                "spec": {
+                    "rules": [
+                        {
+                            "matches": [
+                                {"path": {"value": f"/{item}"}}
+                                for item in range(MAX_COLLECTION_ITEMS + 20)
+                            ],
+                            "backendRefs": [
+                                {"name": f"service-{item}"}
+                                for item in range(MAX_COLLECTION_ITEMS + 20)
+                            ],
+                        }
+                        for _ in range(MAX_COLLECTION_ITEMS + 20)
+                    ]
+                }
+            },
+            api_version="gateway.networking.k8s.io/v1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "http-route"
+    assert len(detail.rules) == 50
+    assert len(detail.rules[0].matches) == 50
+    assert len(detail.rules[0].backends) == 50
+
+
 def test_provider_detail_projects_crossplane_composite_by_bounded_shape() -> None:
     detail = provider_detail_projection(
         resource(
@@ -511,6 +803,12 @@ def test_provider_detail_does_not_misclassify_crossplane_managed_resource() -> N
         ("CronWorkflow", "attacker.test/v1"),
         ("ExternalSecret", "attacker.test/v1"),
         ("GatewayClass", "attacker.test/v1"),
+        ("GCPMachine", "attacker.test/v1"),
+        ("GCPManagedControlPlane", "controlplane.cluster.x-k8s.io/v1beta1"),
+        ("GCPManagedMachinePool", "attacker.test/v1"),
+        ("GRPCRoute", "attacker.test/v1"),
+        ("HTTPRoute", "attacker.test/v1"),
+        ("Job", "attacker.test/v1"),
     ],
 )
 def test_operational_extension_projectors_reject_kind_collisions(

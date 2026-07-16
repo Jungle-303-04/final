@@ -88,4 +88,97 @@ describe("resource detail canonical mapping", () => {
       mappings: [{ remoteKey: "prod/api" }],
     });
   });
+
+  it("maps GCP machine-pool observations without applying browser defaults", () => {
+    expect(toProviderResourceDetail({
+      type: "gcp-managed-machine-pool",
+      ready: false,
+      node_pool_name: "workers",
+      machine_type: "n2-standard-8",
+      disk_type: "pd-balanced",
+      disk_size_gb: 150,
+      image_type: "COS_CONTAINERD",
+      max_pods_per_node: 64,
+      autoscaling_enabled: true,
+      scaling: { minimum: 3, maximum: 20, current: 5 },
+      auto_repair: true,
+      auto_upgrade: false,
+      node_locations: ["asia-northeast3-a"],
+      labels: [{ key: "pool", value: "workers" }],
+      taints: [{ key: "dedicated", value: "batch", effect: "NoSchedule" }],
+      conditions: [],
+    })).toMatchObject({
+      type: "gcp-managed-machine-pool",
+      nodePoolName: "workers",
+      scaling: { minimum: 3, maximum: 20, current: 5 },
+      autoscalingEnabled: true,
+    });
+  });
+
+  it("maps Gateway API rules and parent status from the strict projection", () => {
+    expect(toProviderResourceDetail({
+      type: "http-route",
+      hostnames: ["api.example.test"],
+      parent_refs: [{ api_version: null, kind: null, namespace: "shop", name: "public" }],
+      rules: [{
+        matches: [{
+          method: "GET",
+          path_type: "PathPrefix",
+          path_value: "/inventory",
+          grpc_type: null,
+          grpc_service: null,
+          grpc_method: null,
+          headers: [],
+          query_params: [{ key: "region", value: "kr" }],
+        }],
+        backends: [{
+          reference: { api_version: null, kind: null, namespace: "shop", name: "inventory" },
+          port: 8080,
+          weight: 100,
+        }],
+        filters: [{ type: "RequestHeaderModifier", summary: "set: x-platform" }],
+      }],
+      parent_statuses: [{
+        reference: { api_version: null, kind: null, namespace: "shop", name: "public" },
+        section_name: null,
+        accepted: true,
+        resolved_refs: true,
+        conditions: [],
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "http-route",
+      rules: [{
+        matches: [{ pathValue: "/inventory" }],
+        backends: [{ port: 8080 }],
+      }],
+      parentStatuses: [{ accepted: true, resolvedRefs: true }],
+    });
+  });
+
+  it("maps the server-owned Job state and nullable execution fields", () => {
+    expect(toProviderResourceDetail({
+      type: "job",
+      state: "completed",
+      succeeded: 4,
+      failed: 1,
+      active: 0,
+      completions: 4,
+      parallelism: 2,
+      backoff_limit: 5,
+      active_deadline_seconds: 600,
+      ttl_seconds_after_finished: 3600,
+      suspended: false,
+      start_time: "2026-07-16T00:00:00Z",
+      completion_time: "2026-07-16T00:03:00Z",
+      terminal_reason: "CompletionsReached",
+      terminal_message: null,
+      conditions: [],
+    })).toMatchObject({
+      type: "job",
+      state: "completed",
+      backoffLimit: 5,
+      activeDeadlineSeconds: 600,
+    });
+  });
 });

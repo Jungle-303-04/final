@@ -247,6 +247,148 @@ describe("ProviderResourceDetailPanel", () => {
     expect(screen.getByText("example.test/controller")).toBeTruthy();
     expect(screen.getByText("GatewayConfig · network · prod")).toBeTruthy();
   });
+
+  it("renders GCP machine, control-plane, and node-pool projections without defaults", () => {
+    const { rerender } = renderPanel({
+      type: "gcp-machine",
+      ready: true,
+      instanceType: "n2-standard-4",
+      zone: "asia-northeast3-a",
+      instanceId: "projects/p/zones/z/instances/node-1",
+      image: "cos-stable",
+      additionalDisks: [{ deviceType: "pd-balanced", sizeGb: 200 }],
+      conditions: [],
+    });
+    expect(screen.getByText("n2-standard-4")).toBeTruthy();
+    expect(screen.getByText("pd-balanced · 200 GB")).toBeTruthy();
+
+    rerender(panel({
+      type: "gcp-managed-control-plane",
+      ready: true,
+      clusterName: "prod",
+      project: "platform-prod",
+      location: "asia-northeast3",
+      version: "1.33.2-gke.100",
+      releaseChannel: "regular",
+      autopilot: true,
+      endpoint: "34.64.1.2",
+      podCidr: "10.20.0.0/16",
+      serviceCidr: "10.30.0.0/20",
+      ipAliases: true,
+      loggingService: "logging.googleapis.com/kubernetes",
+      monitoringService: "monitoring.googleapis.com/kubernetes",
+      authorizedNetworks: [{ name: "office", cidr: "203.0.113.0/24" }],
+      conditions: [],
+    }));
+    expect(screen.getByText("platform-prod")).toBeTruthy();
+    expect(screen.getByText("office · 203.0.113.0/24")).toBeTruthy();
+
+    rerender(panel({
+      type: "gcp-managed-machine-pool",
+      ready: false,
+      nodePoolName: "workers",
+      machineType: "n2-standard-8",
+      diskType: "pd-balanced",
+      diskSizeGb: 150,
+      imageType: "COS_CONTAINERD",
+      maxPodsPerNode: 64,
+      autoscalingEnabled: true,
+      scaling: { minimum: 3, maximum: 20, current: 5 },
+      autoRepair: true,
+      autoUpgrade: false,
+      nodeLocations: ["asia-northeast3-a", "asia-northeast3-b"],
+      labels: [{ key: "pool", value: "workers" }],
+      taints: [{ key: "dedicated", value: "batch", effect: "NoSchedule" }],
+      conditions: [],
+    }));
+    expect(screen.getByText("workers")).toBeTruthy();
+    expect(screen.getByText("pool=workers")).toBeTruthy();
+    expect(screen.getByText("dedicated · batch · NoSchedule")).toBeTruthy();
+  });
+
+  it("renders structured Gateway API rules and server-owned Job state", () => {
+    const { rerender } = renderPanel({
+      type: "http-route",
+      hostnames: ["api.example.test"],
+      parentRefs: [{ apiVersion: null, kind: null, namespace: "shop", name: "public" }],
+      rules: [{
+        matches: [{
+          method: "GET",
+          pathType: "PathPrefix",
+          pathValue: "/inventory",
+          grpcType: null,
+          grpcService: null,
+          grpcMethod: null,
+          headers: [],
+          queryParams: [{ key: "region", value: "kr" }],
+        }],
+        backends: [{
+          reference: { apiVersion: null, kind: null, namespace: "shop", name: "inventory" },
+          port: 8080,
+          weight: 100,
+        }],
+        filters: [{ type: "RequestHeaderModifier", summary: "set: x-platform" }],
+      }],
+      parentStatuses: [{
+        reference: { apiVersion: null, kind: null, namespace: "shop", name: "public" },
+        sectionName: null,
+        accepted: true,
+        resolvedRefs: true,
+        conditions: [],
+      }],
+      conditions: [],
+    });
+
+    expect(screen.getByRole("heading", { name: "Rule 1" })).toBeTruthy();
+    expect(screen.getByLabelText("GET · PathPrefix · /inventory · Query parameters: region=kr")).toBeTruthy();
+    expect(screen.getByLabelText("shop · inventory · Port 8080 · Weight 100")).toBeTruthy();
+    expect(screen.getByLabelText("shop · public · Accepted · References resolved")).toBeTruthy();
+
+    rerender(panel({
+      type: "grpc-route",
+      hostnames: ["grpc.example.test"],
+      parentRefs: [],
+      rules: [{
+        matches: [{
+          method: null,
+          pathType: null,
+          pathValue: null,
+          grpcType: "Exact",
+          grpcService: "shop.Inventory",
+          grpcMethod: "Get",
+          headers: [],
+          queryParams: [],
+        }],
+        backends: [],
+        filters: [],
+      }],
+      parentStatuses: [],
+      conditions: [],
+    }));
+    expect(screen.getByLabelText("Exact · shop.Inventory · Get")).toBeTruthy();
+
+    rerender(panel({
+      type: "job",
+      state: "completed",
+      succeeded: 4,
+      failed: 1,
+      active: 0,
+      completions: 4,
+      parallelism: 2,
+      backoffLimit: 5,
+      activeDeadlineSeconds: 600,
+      ttlSecondsAfterFinished: 3600,
+      suspended: false,
+      startTime: "2026-07-16T00:00:00Z",
+      completionTime: "2026-07-16T00:03:00Z",
+      terminalReason: "CompletionsReached",
+      terminalMessage: null,
+      conditions: [],
+    }));
+    expect(screen.getByText("CompletionsReached")).toBeTruthy();
+    expect(screen.getByText("600s")).toBeTruthy();
+    expect(screen.getByText("3600s")).toBeTruthy();
+  });
 });
 
 function renderPanel(detail: ProviderResourceDetail) {

@@ -3514,11 +3514,11 @@
     },
     {
       "contractId": "reference.feature.126",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:renderers:public-contract-boundary:v1",
       "legacyContractIds": [
         "reference.feature.126"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-126",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3526,17 +3526,30 @@
       ],
       "streaming": false,
       "area": "resource-inventory",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.InventoryResourceDetailResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_inventory_domain.py",
+        "tests/test_inventory_provider_detail.py",
+        "frontend/src/api/inventory.test.ts",
+        "frontend/src/features/resources/providerResourceCanonical.test.ts",
+        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
+          "consumer": "src/domains/inventory/provider_detail.py#provider_detail_projection",
+          "test": "tests/test_inventory_domain.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx#ResourceDetailSheet",
+          "consumer": "frontend/src/features/resources/providerResourceCanonical.ts#toProviderResourceDetail",
+          "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
