@@ -50,7 +50,14 @@ export function startHelmArtifactRead(
     clusterId: string;
     namespace: string;
     releaseName: string;
-    artifact: "manifest" | "values" | "manifest_diff" | "values_diff";
+    artifact:
+      | "manifest"
+      | "values"
+      | "manifest_diff"
+      | "values_diff"
+      | "notes_diff"
+      | "hooks_diff"
+      | "resources_diff";
     revision: number;
     comparisonRevision?: number;
     allValues?: boolean;

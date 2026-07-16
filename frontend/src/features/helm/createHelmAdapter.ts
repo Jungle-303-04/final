@@ -54,20 +54,107 @@ export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResul
   const parsed = helmArtifactResultSchema.safeParse(result?.artifact);
   if (!parsed.success) return null;
   const artifact = parsed.data;
-  return {
+  const common = {
     artifact: artifact.artifact,
-    format: artifact.format === "unified_diff" ? "unified-diff" : "yaml",
     namespace: artifact.namespace,
     releaseName: artifact.release_name,
     revision: artifact.revision,
     comparisonRevision: artifact.comparison_revision,
     allValues: artifact.all_values,
-    content: artifact.content,
-    contentSha256: artifact.content_sha256,
-    contentBytes: artifact.content_bytes,
     sourceBytes: artifact.source_bytes,
     redactionApplied: artifact.redaction_applied,
     truncated: artifact.truncated,
+  } as const;
+  if (artifact.artifact === "hooks_diff") {
+    return {
+      ...common,
+      artifact: artifact.artifact,
+      format: artifact.format,
+      projectionSha256: artifact.projection_sha256,
+      projectionBytes: artifact.projection_bytes,
+      hooksDiff: {
+        revision1: artifact.hooks_diff.revision1,
+        revision2: artifact.hooks_diff.revision2,
+        added: artifact.hooks_diff.added.map(toHookDiffItem),
+        removed: artifact.hooks_diff.removed.map(toHookDiffItem),
+        modified: artifact.hooks_diff.modified.map(toHookDiffItem),
+        unchanged: artifact.hooks_diff.unchanged.map(toHookDiffItem),
+        parseErrorCount: artifact.hooks_diff.parse_error_count,
+      },
+    };
+  }
+  if (artifact.artifact === "resources_diff") {
+    return {
+      ...common,
+      artifact: artifact.artifact,
+      format: artifact.format,
+      projectionSha256: artifact.projection_sha256,
+      projectionBytes: artifact.projection_bytes,
+      resourcesDiff: {
+        revision1: artifact.resources_diff.revision1,
+        revision2: artifact.resources_diff.revision2,
+        added: artifact.resources_diff.added.map(toRenderedResourceRef),
+        removed: artifact.resources_diff.removed.map(toRenderedResourceRef),
+        modified: artifact.resources_diff.modified.map((item) => ({
+          ...toRenderedResourceRef(item),
+          summary: item.summary,
+          fieldCount: item.field_count,
+          fields: item.fields.map((field) => ({
+            path: field.path,
+            oldValue: field.old_value,
+            newValue: field.new_value,
+          })),
+        })),
+        unchanged: artifact.resources_diff.unchanged.map(toRenderedResourceRef),
+        parseErrorCount: artifact.resources_diff.parse_error_count,
+      },
+    };
+  }
+  return {
+    ...common,
+    artifact: artifact.artifact,
+    format: artifact.format === "unified_diff" ? "unified-diff" : "yaml",
+    content: artifact.content,
+    contentSha256: artifact.content_sha256,
+    contentBytes: artifact.content_bytes,
+  };
+}
+
+function toHookDiffItem(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  events: string[];
+  weight: number;
+  delete_policies: string[];
+  output_log_policies: string[];
+  manifest_changed: boolean;
+}) {
+  return {
+    apiVersion: value.api_version,
+    kind: value.kind,
+    name: value.name,
+    namespace: value.namespace,
+    events: value.events,
+    weight: value.weight,
+    deletePolicies: value.delete_policies,
+    outputLogPolicies: value.output_log_policies,
+    manifestChanged: value.manifest_changed,
+  };
+}
+
+function toRenderedResourceRef(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+}) {
+  return {
+    apiVersion: value.api_version,
+    kind: value.kind,
+    name: value.name,
+    namespace: value.namespace,
   };
 }
 

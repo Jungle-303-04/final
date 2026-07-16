@@ -15,9 +15,12 @@ import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvid
 import type {
   HelmArtifactKind,
   HelmFailureCode,
+  HelmHookDiffItem,
   HelmOwnedResources,
   HelmPort,
   HelmPortFailure,
+  HelmRenderedResourceChange,
+  HelmRenderedResourceRef,
   HelmRelease,
   HelmReleaseDetail,
   HelmResourceHealth,
@@ -379,6 +382,9 @@ const ARTIFACT_ACTION_COPY: Readonly<Record<HelmArtifactKind, string>> = {
   values: HELM_COPY.valuesAction,
   manifest_diff: HELM_COPY.manifestDiffAction,
   values_diff: HELM_COPY.valuesDiffAction,
+  notes_diff: HELM_COPY.notesDiffAction,
+  hooks_diff: HELM_COPY.hooksDiffAction,
+  resources_diff: HELM_COPY.resourcesDiffAction,
 };
 
 function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port: HelmPort }) {
@@ -523,6 +529,29 @@ function HelmArtifactOperationResult({
   if (snapshot.status !== "completed" || artifact === null) {
     return <p className="text-sm text-destructive" role="alert">{HELM_COPY.artifactFailed}</p>;
   }
+  let result: React.ReactNode;
+  if (artifact.artifact === "hooks_diff") {
+    result = <HelmHooksDiffResult artifact={artifact} />;
+  } else if (artifact.artifact === "resources_diff") {
+    result = <HelmResourcesDiffResult artifact={artifact} />;
+  } else if (artifact.content === "") {
+    result = <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>;
+  } else if (artifact.format === "unified-diff") {
+    result = (
+      <UnifiedDiff
+        aria-label={ARTIFACT_ACTION_COPY[artifact.artifact]}
+        className="max-h-[32rem] rounded-md border bg-background"
+        diff={artifact.content}
+        numbered
+      />
+    );
+  } else {
+    result = (
+      <pre className="max-h-[32rem] min-w-0 overflow-auto rounded-md border bg-background p-3 font-mono text-xs leading-5">
+        <code>{artifact.content}</code>
+      </pre>
+    );
+  }
   return (
     <div className="grid min-w-0 gap-2">
       <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -530,22 +559,229 @@ function HelmArtifactOperationResult({
         <span>{HELM_COPY.artifactRedacted}</span>
         {artifact.truncated ? <span className="text-amber-600">{HELM_COPY.artifactTruncated}</span> : null}
       </div>
-      {artifact.content === "" ? (
-        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>
-      ) : artifact.format === "unified-diff" ? (
-        <UnifiedDiff
-          aria-label={ARTIFACT_ACTION_COPY[artifact.artifact]}
-          className="max-h-[32rem] rounded-md border bg-background"
-          diff={artifact.content}
-          numbered
-        />
-      ) : (
-        <pre className="max-h-[32rem] min-w-0 overflow-auto rounded-md border bg-background p-3 font-mono text-xs leading-5">
-          <code>{artifact.content}</code>
-        </pre>
-      )}
+      {result}
     </div>
   );
+}
+
+function HelmHooksDiffResult({
+  artifact,
+}: {
+  artifact: Extract<
+    NonNullable<ReturnType<typeof toHelmArtifactOperationResult>>,
+    { artifact: "hooks_diff" }
+  >;
+}) {
+  const diff = artifact.hooksDiff;
+  const sections = [
+    { heading: HELM_COPY.hooksAdded, items: diff.added },
+    { heading: HELM_COPY.hooksRemoved, items: diff.removed },
+    { heading: HELM_COPY.hooksModified, items: diff.modified },
+  ] as const;
+  return (
+    <div className="grid min-w-0 gap-3">
+      <StructuredParseNotice
+        count={diff.parseErrorCount}
+        singular={HELM_COPY.hookParseError}
+        plural={HELM_COPY.hookParseErrors}
+      />
+      {sections.map((section) => (
+        section.items.length > 0 ? (
+          <section className="grid min-w-0 gap-2" key={section.heading}>
+            <h3 className="text-sm font-semibold">{section.heading}</h3>
+            <ul className="grid min-w-0 gap-2">
+              {section.items.map((item) => (
+                <HelmHookDiffItemCard
+                  item={item}
+                  key={`${item.apiVersion}:${item.kind}:${item.namespace}:${item.name}`}
+                />
+              ))}
+            </ul>
+          </section>
+        ) : null
+      ))}
+      {diff.added.length + diff.removed.length + diff.modified.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>
+      ) : null}
+      {diff.unchanged.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {HELM_COPY.hooksUnchanged}: {diff.unchanged.length}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function HelmHookDiffItemCard({ item }: { item: HelmHookDiffItem }) {
+  return (
+    <li className="grid min-w-0 gap-2 rounded-md border bg-background p-3 text-xs">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-mono font-medium">{item.kind}/{item.name}</span>
+        {item.manifestChanged ? (
+          <Badge variant="outline">{HELM_COPY.hookManifestChanged}</Badge>
+        ) : null}
+      </div>
+      <dl className="grid min-w-0 gap-1 text-muted-foreground sm:grid-cols-2">
+        <StructuredFact
+          label={HELM_COPY.namespace}
+          value={item.namespace || HELM_COPY.unavailableValue}
+        />
+        <StructuredFact
+          label={HELM_COPY.events}
+          value={item.events.join(", ") || HELM_COPY.unavailableValue}
+        />
+        <StructuredFact label={HELM_COPY.weight} value={String(item.weight)} />
+        <StructuredFact
+          label={HELM_COPY.deletePolicies}
+          value={item.deletePolicies.join(", ") || HELM_COPY.unavailableValue}
+        />
+        <StructuredFact
+          label={HELM_COPY.outputLogPolicies}
+          value={item.outputLogPolicies.join(", ") || HELM_COPY.unavailableValue}
+        />
+      </dl>
+    </li>
+  );
+}
+
+function HelmResourcesDiffResult({
+  artifact,
+}: {
+  artifact: Extract<
+    NonNullable<ReturnType<typeof toHelmArtifactOperationResult>>,
+    { artifact: "resources_diff" }
+  >;
+}) {
+  const diff = artifact.resourcesDiff;
+  return (
+    <div className="grid min-w-0 gap-3">
+      <StructuredParseNotice
+        count={diff.parseErrorCount}
+        singular={HELM_COPY.resourceParseError}
+        plural={HELM_COPY.resourceParseErrors}
+      />
+      <ResourceRefSection heading={HELM_COPY.resourcesAdded} items={diff.added} />
+      <ResourceRefSection heading={HELM_COPY.resourcesRemoved} items={diff.removed} />
+      {diff.modified.length > 0 ? (
+        <section className="grid min-w-0 gap-2">
+          <h3 className="text-sm font-semibold">{HELM_COPY.resourcesModified}</h3>
+          <ul className="grid min-w-0 gap-2">
+            {diff.modified.map((resource) => (
+              <HelmResourceChangeCard
+                key={`${resource.apiVersion}:${resource.kind}:${resource.namespace}:${resource.name}`}
+                resource={resource}
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {diff.added.length + diff.removed.length + diff.modified.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>
+      ) : null}
+      {diff.unchanged.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {HELM_COPY.resourcesUnchanged}: {diff.unchanged.length}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ResourceRefSection({
+  heading,
+  items,
+}: {
+  heading: string;
+  items: readonly HelmRenderedResourceRef[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section className="grid min-w-0 gap-2">
+      <h3 className="text-sm font-semibold">{heading}</h3>
+      <ul className="grid min-w-0 gap-1 rounded-md border bg-background p-3 text-xs">
+        {items.map((item) => (
+          <li
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2"
+            key={`${item.apiVersion}:${item.kind}:${item.namespace}:${item.name}`}
+          >
+            <span className="font-mono font-medium">{item.kind}/{item.name}</span>
+            <span className="text-muted-foreground">
+              {item.namespace || HELM_COPY.unavailableValue}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function HelmResourceChangeCard({ resource }: { resource: HelmRenderedResourceChange }) {
+  return (
+    <li className="grid min-w-0 gap-2 rounded-md border bg-background p-3 text-xs">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <span className="font-mono font-medium">{resource.kind}/{resource.name}</span>
+        <span className="text-muted-foreground">{resource.summary}</span>
+      </div>
+      {resource.fields.length > 0 ? (
+        <Table scrollAreaLabel={`${resource.kind}/${resource.name} ${HELM_COPY.changedFields}`}>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{HELM_COPY.changedFields}</TableHead>
+              <TableHead>{HELM_COPY.previousValue}</TableHead>
+              <TableHead>{HELM_COPY.currentValue}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {resource.fields.map((field) => (
+              <TableRow key={field.path}>
+                <TableCell><code className="break-all">{field.path}</code></TableCell>
+                <TableCell className="break-all">{formatStructuredValue(field.oldValue)}</TableCell>
+                <TableCell className="break-all">{formatStructuredValue(field.newValue)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <p className="text-muted-foreground">
+          {HELM_COPY.changedFields}: {resource.fieldCount}
+        </p>
+      )}
+    </li>
+  );
+}
+
+function StructuredParseNotice({
+  count,
+  plural,
+  singular,
+}: {
+  count: number;
+  plural: string;
+  singular: string;
+}) {
+  if (count === 0) return null;
+  return (
+    <p
+      className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground"
+      role="status"
+    >
+      {count} {count === 1 ? singular : plural}
+    </p>
+  );
+}
+
+function StructuredFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-0.5">
+      <dt className="font-medium text-foreground">{label}</dt>
+      <dd className="m-0 break-words">{value}</dd>
+    </div>
+  );
+}
+
+function formatStructuredValue(value: string | number | boolean | null): string {
+  if (value === null) return HELM_COPY.unavailableValue;
+  return typeof value === "string" ? value : String(value);
 }
 
 function useOptionalOperationSnapshot(

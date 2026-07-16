@@ -1068,6 +1068,199 @@ def test_cluster_wide_event_capture_pages_all_namespaces_without_changing_scoped
     ]
 
 
+def test_cluster_api_discovery_collects_bounded_group_versions_and_crd_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requests: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        responses = {
+            "/api": {"versions": ["v1"]},
+            "/api/v1": {
+                "groupVersion": "v1",
+                "resources": [
+                    {
+                        "name": "pods",
+                        "namespaced": True,
+                        "kind": "Pod",
+                        "verbs": ["get", "list", "watch"],
+                    }
+                ],
+            },
+            "/apis": {
+                "groups": [
+                    {
+                        "name": "apps",
+                        "versions": [{"groupVersion": "apps/v1", "version": "v1"}],
+                    },
+                    {
+                        "name": "stable.example.com",
+                        "versions": [
+                            {
+                                "groupVersion": "stable.example.com/v1",
+                                "version": "v1",
+                            }
+                        ],
+                    },
+                ]
+            },
+            "/apis/apps/v1": {
+                "groupVersion": "apps/v1",
+                "resources": [
+                    {
+                        "name": "deployments",
+                        "namespaced": True,
+                        "kind": "Deployment",
+                        "verbs": ["get", "list", "patch"],
+                    }
+                ],
+            },
+            "/apis/stable.example.com/v1": {
+                "groupVersion": "stable.example.com/v1",
+                "resources": [
+                    {
+                        "name": "crontabs",
+                        "singularName": "crontab",
+                        "namespaced": True,
+                        "kind": "CronTab",
+                        "verbs": ["delete", "get", "list", "patch"],
+                    }
+                ],
+            },
+            "/apis/apiextensions.k8s.io/v1/customresourcedefinitions": {
+                "items": [
+                    {
+                        "spec": {
+                            "group": "stable.example.com",
+                            "names": {"kind": "CronTab", "plural": "crontabs"},
+                            "scope": "Namespaced",
+                            "versions": [{"name": "v1", "served": True}],
+                        }
+                    }
+                ]
+            },
+        }
+        payload = responses.get(request.url.path)
+        return httpx.Response(200, json=payload) if payload is not None else httpx.Response(404)
+
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_api_discovery",
+                "description": "Discover authorized Kubernetes API resources.",
+                "query": "*",
+                "collection_scope": "cluster_discovery",
+            }
+        )
+    )
+
+    response = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert requests == [
+        "/api",
+        "/api/v1",
+        "/apis",
+        "/apis/apps/v1",
+        "/apis/stable.example.com/v1",
+        "/apis/apiextensions.k8s.io/v1/customresourcedefinitions",
+    ]
+    discovery = response["api_resource_discovery"]
+    assert discovery["completeness"] == "exact"
+    assert discovery["reason_codes"] == []
+    assert [
+        (item["api_version"], item["name"], item["is_crd"]) for item in discovery["resources"]
+    ] == [
+        ("v1", "pods", False),
+        ("apps/v1", "deployments", False),
+        ("stable.example.com/v1", "crontabs", True),
+    ]
+    inventory_snapshot = kubernetes_evidence_to_inventory_snapshot(
+        response,
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    assert inventory_snapshot["summary"]["api_resource_discovery"] == discovery
+
+
+def test_cluster_api_discovery_preserves_partial_group_and_crd_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api":
+            return httpx.Response(200, json={"versions": ["v1"]})
+        if request.url.path == "/api/v1":
+            return httpx.Response(
+                200,
+                json={"groupVersion": "v1", "resources": []},
+            )
+        if request.url.path == "/apis":
+            return httpx.Response(
+                200,
+                json={
+                    "groups": [
+                        {
+                            "name": "metrics.k8s.io",
+                            "versions": [
+                                {
+                                    "groupVersion": "metrics.k8s.io/v1beta1",
+                                    "version": "v1beta1",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/apis/metrics.k8s.io/v1beta1":
+            return httpx.Response(503)
+        if request.url.path.endswith("/customresourcedefinitions"):
+            return httpx.Response(403)
+        return httpx.Response(404)
+
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    query = kubernetes_module.KubernetesSnapshotQuery(
+        "cluster_api_discovery",
+        "Discover authorized Kubernetes API resources.",
+        "*",
+        collection_scope="cluster_discovery",
+    )
+
+    async def collect() -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            return provider.normalize_payload(await provider.query(client, query), query)
+
+    discovery = asyncio.run(collect())["api_resource_discovery"]
+    assert discovery["completeness"] == "partial"
+    assert discovery["reason_codes"] == [
+        "crd_discovery_forbidden",
+        "group_version_failed:metrics.k8s.io/v1beta1",
+    ]
+
+
 def test_cluster_wide_event_capture_surfaces_rbac_gap_without_raising(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

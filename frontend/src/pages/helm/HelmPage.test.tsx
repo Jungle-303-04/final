@@ -484,6 +484,13 @@ function unavailable(reasonCode: string) {
 }
 
 function completedOperationStore(artifact: Record<string, unknown>) {
+  const projection = artifact.hooks_diff ?? artifact.resources_diff;
+  const normalizedArtifact = projection && typeof projection === "object"
+    ? {
+      ...artifact,
+      projection_bytes: new TextEncoder().encode(JSON.stringify(projection)).byteLength,
+    }
+    : artifact;
   const snapshot = {
     commandId: "cmd-helm-1",
     event: {
@@ -491,7 +498,7 @@ function completedOperationStore(artifact: Record<string, unknown>) {
       sequence: 2,
       kind: "completed" as const,
       occurredAt: "2026-07-16T09:02:00Z",
-      payload: { result: { artifact } },
+      payload: { result: { artifact: normalizedArtifact } },
     },
     failure: null,
     retry: null,

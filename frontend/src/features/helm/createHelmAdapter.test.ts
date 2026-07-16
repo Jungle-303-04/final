@@ -309,6 +309,7 @@ function artifactResult() {
 function structuredArtifactResult(diff:
   | { artifact: "hooks_diff"; hooks_diff: Record<string, unknown> }
   | { artifact: "resources_diff"; resources_diff: Record<string, unknown> }) {
+  const projection = diff.artifact === "hooks_diff" ? diff.hooks_diff : diff.resources_diff;
   return {
     artifact: diff.artifact,
     format: "structured",
@@ -321,7 +322,7 @@ function structuredArtifactResult(diff:
     redaction_applied: true,
     truncated: false,
     projection_sha256: "0".repeat(64),
-    projection_bytes: 240,
+    projection_bytes: new TextEncoder().encode(JSON.stringify(projection)).byteLength,
     ...(diff.artifact === "hooks_diff"
       ? { hooks_diff: diff.hooks_diff }
       : { resources_diff: diff.resources_diff }),

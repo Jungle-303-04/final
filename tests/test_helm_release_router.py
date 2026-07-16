@@ -5,7 +5,8 @@ import importlib
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from domains.helm.release_router import create_helm_artifact_read
@@ -276,3 +277,29 @@ def test_artifact_read_queues_one_exact_read_only_agent_command(monkeypatch) -> 
         "release_name": "storefront",
     }
     assert command.direct_execution is False
+
+
+def test_structured_artifact_read_hides_an_unauthorized_cluster_scope() -> None:
+    with pytest.raises(HTTPException) as captured:
+        asyncio.run(
+            create_helm_artifact_read(
+                namespace="storefront",
+                release_name="storefront",
+                payload=HelmArtifactReadRequest(
+                    cluster_id="cluster-private",
+                    artifact="resources_diff",
+                    revision=2,
+                    comparison_revision=3,
+                ),
+                current=SimpleNamespace(
+                    user_id="user-a",
+                    workspace_id="workspace-a",
+                    roles=("user",),
+                ),
+                db=HelmReleaseDb(),
+                events=SimpleNamespace(),
+                operation_events=SimpleNamespace(),
+            )
+        )
+
+    assert captured.value.status_code == 404

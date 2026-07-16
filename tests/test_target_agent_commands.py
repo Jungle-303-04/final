@@ -443,7 +443,7 @@ def test_helm_artifact_command_returns_only_the_typed_sanitized_projection(monke
     )
 
     assert result["status"] == "completed"
-    assert result["artifact"] == artifact.model_dump(mode="json")
+    assert result["artifact"] == artifact.model_dump(mode="json", exclude_none=True)
     assert HELM_RELEASE_ARTIFACT_READ_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
 
 

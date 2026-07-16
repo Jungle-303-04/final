@@ -53,7 +53,14 @@ export interface HelmOwnedResourceObservation {
 
 export type HelmOwnedResources = HelmUnavailableFeature | HelmOwnedResourceObservation;
 
-export type HelmArtifactKind = "manifest" | "values" | "manifest_diff" | "values_diff";
+export type HelmArtifactKind =
+  | "manifest"
+  | "values"
+  | "manifest_diff"
+  | "values_diff"
+  | "notes_diff"
+  | "hooks_diff"
+  | "resources_diff";
 
 export interface HelmArtifactReadRequest extends HelmReleaseDetailRequest {
   artifact: HelmArtifactKind;
@@ -71,21 +78,99 @@ export interface HelmArtifactReceipt {
   status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
 }
 
-export interface HelmArtifactResult {
+interface HelmArtifactResultBase {
   artifact: HelmArtifactKind;
-  format: "yaml" | "unified-diff";
   namespace: string;
   releaseName: string;
   revision: number;
   comparisonRevision: number | null;
   allValues: boolean;
-  content: string;
-  contentSha256: string;
-  contentBytes: number;
   sourceBytes: number;
   redactionApplied: true;
   truncated: boolean;
 }
+
+export interface HelmTextArtifactResult extends HelmArtifactResultBase {
+  artifact: "manifest" | "values" | "manifest_diff" | "values_diff" | "notes_diff";
+  format: "yaml" | "unified-diff";
+  content: string;
+  contentSha256: string;
+  contentBytes: number;
+}
+
+export interface HelmHookDiffItem {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  events: readonly string[];
+  weight: number;
+  deletePolicies: readonly string[];
+  outputLogPolicies: readonly string[];
+  manifestChanged: boolean;
+}
+
+export interface HelmHooksDiff {
+  revision1: number;
+  revision2: number;
+  added: readonly HelmHookDiffItem[];
+  removed: readonly HelmHookDiffItem[];
+  modified: readonly HelmHookDiffItem[];
+  unchanged: readonly HelmHookDiffItem[];
+  parseErrorCount: number;
+}
+
+export interface HelmHooksDiffArtifactResult extends HelmArtifactResultBase {
+  artifact: "hooks_diff";
+  format: "structured";
+  projectionSha256: string;
+  projectionBytes: number;
+  hooksDiff: HelmHooksDiff;
+}
+
+export interface HelmRenderedResourceRef {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  namespace: string;
+}
+
+export type HelmResourceFieldValue = string | number | boolean | null;
+
+export interface HelmResourceFieldChange {
+  path: string;
+  oldValue: HelmResourceFieldValue;
+  newValue: HelmResourceFieldValue;
+}
+
+export interface HelmRenderedResourceChange extends HelmRenderedResourceRef {
+  summary: string;
+  fieldCount: number;
+  fields: readonly HelmResourceFieldChange[];
+}
+
+export interface HelmResourcesDiff {
+  revision1: number;
+  revision2: number;
+  added: readonly HelmRenderedResourceRef[];
+  removed: readonly HelmRenderedResourceRef[];
+  modified: readonly HelmRenderedResourceChange[];
+  unchanged: readonly HelmRenderedResourceRef[];
+  parseErrorCount: number;
+}
+
+export interface HelmResourcesDiffArtifactResult extends HelmArtifactResultBase {
+  artifact: "resources_diff";
+  format: "structured";
+  projectionSha256: string;
+  projectionBytes: number;
+  resourcesDiff: HelmResourcesDiff;
+}
+
+export type HelmArtifactResult =
+  | HelmTextArtifactResult
+  | HelmHooksDiffArtifactResult
+  | HelmResourcesDiffArtifactResult;
 
 export interface HelmObservationCoverage {
   availability: HelmAvailability;

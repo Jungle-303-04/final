@@ -1326,7 +1326,7 @@ class TargetClusterAgent:
             )
         return ctx.ok(
             "Helm artifact read completed",
-            artifact=result.artifact.model_dump(mode="json"),
+            artifact=result.artifact.model_dump(mode="json", exclude_none=True),
         )
 
     @command.k8s(
