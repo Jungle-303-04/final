@@ -299,7 +299,7 @@ def _node_resource(item: JsonObject, pods: list[JsonObject]) -> JsonObject:
         "labels": _labels(item),
         "summary": {
             **item,
-            "pod_count": sum(1 for pod in pods if pod.get("node_name") == name),
+            "pod_count": _scheduled_pod_count(pods, name),
         },
         "raw": item,
     }
@@ -399,7 +399,7 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
             {
                 "name": _text(node.get("name"), "node"),
                 "ready": bool(node.get("ready")),
-                "pod_count": sum(1 for pod in pods if pod.get("node_name") == node.get("name")),
+                "pod_count": _scheduled_pod_count(pods, _text(node.get("name"), "node")),
                 "version": _text(_mapping(node.get("node_info")).get("kubeletVersion")),
             }
             for node in nodes
@@ -428,6 +428,15 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     if api_resource_discovery:
         summary["api_resource_discovery"] = api_resource_discovery
     return summary
+
+
+def _scheduled_pod_count(pods: list[JsonObject], node_name: str) -> int:
+    return sum(
+        1
+        for pod in pods
+        if _text(pod.get("node_name")) == node_name
+        and _text(pod.get("phase")) not in {"Succeeded", "Failed"}
+    )
 
 
 def _resources_complete(_kubernetes: JsonObject) -> bool:

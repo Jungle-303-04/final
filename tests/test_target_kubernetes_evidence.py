@@ -178,6 +178,29 @@ def test_pod_requests_and_limits_survive_one_provider_inventory_projection() -> 
     assert persisted["mem_limit_mib"] == 2304.0
 
 
+def test_node_scheduled_pod_count_excludes_completed_pods() -> None:
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {
+            "pods": [
+                {"name": "running", "node_name": "worker-a", "phase": "Running"},
+                {"name": "pending", "node_name": "worker-a", "phase": "Pending"},
+                {"name": "done", "node_name": "worker-a", "phase": "Succeeded"},
+                {"name": "failed", "node_name": "worker-a", "phase": "Failed"},
+                {"name": "other", "node_name": "worker-b", "phase": "Running"},
+            ],
+            "nodes": [{"name": "worker-a", "ready": True}],
+        },
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    node = next(
+        resource for resource in snapshot["resources"] if resource["resource_type"] == "node"
+    )
+    assert node["summary"]["pod_count"] == 2
+    assert snapshot["summary"]["nodes"][0]["pod_count"] == 2
+
+
 def test_pod_summary_preserves_spec_container_ports_and_honest_completeness() -> None:
     _, kubernetes_module = load_evidence_modules()
     summary = kubernetes_module.pod_summary(
