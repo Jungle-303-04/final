@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 59,
+  "pendingCount": 55,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -6490,7 +6490,7 @@
       "classification": "classified",
       "interactions": [
         {
-          "sourceKey": "upstream-ui:shared-ui:input:identifier-mutation-policy:v1",
+          "sourceKey": "upstream-ui:audit-settings:namespace-input:shared-policy:v1",
           "legacyContractIds": [],
           "symbol": "Input",
           "interaction": "a reusable text input defaults browser autocorrection and automatic capitalization off for Kubernetes identifiers while allowing an explicit caller override and typed native focus ownership",
@@ -8311,8 +8311,33 @@
         "blobId": "1f689d431a45c7753f863ed56eb01ccad5811574",
         "sha256": "c85a697394524e2aa6d2e57de41ea8e536a74f6322b2dc25b6804f314071b968"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "AuditSettingsDialog namespace Input",
+          "interaction": "namespace policy input reuses the product-owned identifier-safe field so browser autocorrection cannot mutate a Kubernetes namespace while caller-owned validation, duplicate detection, and owner authorization remain explicit",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.input.identifier-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The latest source delta only replaces the raw namespace field with the common Input. Opsia already applies the same identifier mutation policy once in its shared primitive rather than copying it into an audit-specific form."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11886,8 +11911,50 @@
         "blobId": "9296f0c95c187d5e3a93d3ad2a5beaa69d1dbf12",
         "sha256": "2acf12cfedf1d8a2768439e62008615ec40a42caa4fd11ed606dfb175ef4254b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
+          "legacyContractIds": [],
+          "symbol": "ConnectionProvider status, reconnect, and cache refresh",
+          "interaction": "the authenticated shell observes selected-cluster connection stage and freshness, preserves the last safe projection during a transient refresh, and exposes one bounded refresh action without letting browser state switch kubeconfig or impersonate an agent reconnect",
+          "transport": "poll",
+          "realtime": {
+            "resume": "visible refresh resumes from the current workspace and canonical cluster scope while the agent heartbeat remains server authority",
+            "backpressure": "shared requests deduplicate identical reads, abort the final unused request, and the visible clock limits catalog polling to one request per thirty seconds",
+            "merge": "replace connection state only for the active authority and cluster scope while stale completions from a previous scope are ignored"
+          },
+          "motion": {
+            "reducedMotion": "connecting, stale, offline, retrying, and recovered meaning remains in text and status marks without depending on animated progress.",
+            "evidence": [
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/shared/ui/ProductStateScreen.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/shared/ui/ClusterConnectionStatus.tsx",
+              "frontend/src/shared/ui/ProductStateScreen.tsx",
+              "frontend/src/pages/home/useHomeClusterFrame.ts",
+              "src/domains/target/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.target.router",
+              "domains.identity.dependencies"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-scope.selection",
+              "shell.connection-retry.safety"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia's long-lived target agent owns reconnection; the browser cannot and need not POST a standalone kubeconfig retry. The product already provides authorized connection observation, scope-safe refresh, deduplicated requests, stale-data retention, and sanitized retry feedback through shared ports."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -11898,8 +11965,44 @@
         "blobId": "9f108c9119244d57fba189cda396b502f56c675f",
         "sha256": "4c1e6259c6083a3327a0799028f752ad7da5f74efee898980e1b72d5f89a42fc"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:resource-action:composition-port:v1",
+          "legacyContractIds": [],
+          "symbol": "DiagnoseCustomizationProvider and useDiagnoseCustomization",
+          "interaction": "the resource detail composition exposes one reusable Diagnose action backed by exact ResourceRef identity, disclosure consent, server RBAC revalidation, active-run deduplication, and durable investigation streaming",
+          "transport": "sse",
+          "realtime": {
+            "resume": "the selected investigation resumes from its durable event sequence and never replays the launch mutation",
+            "backpressure": "the server bounds replay and live wake queues while the browser retains one ordered active-run transcript",
+            "merge": "only events for the returned authenticated run identity update the shared investigation panel"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "src/domains/diagnose/router.py",
+              "src/domains/diagnose/service.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router",
+              "domains.diagnose.service"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.router",
+              "diagnose.frontend.adapter",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product composition is stronger than an arbitrary render slot: every resource action consumes the same typed Diagnose port and cannot bypass authenticated workspace, cluster, exact identity, consent, or durable stream boundaries."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -11953,8 +12056,81 @@
         "blobId": "f3472eb731b06859b6172ee6d125b15deef6be02",
         "sha256": "7c4595ca281f42e8387081ba1ccb2470ea57d711716c71077f49da5cf2bbd8d7"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:cluster-load:shared-frame-hook:v1",
+          "legacyContractIds": [],
+          "symbol": "useClusterLoadState server-stage projection",
+          "interaction": "Home and global cluster scope share connection stage, freshness, observed time, partial failures, and refresh state from authorized server projections without mounting an extra dashboard observer off-screen",
+          "transport": "poll",
+          "realtime": {
+            "resume": "explicit or visible refresh restarts the exact cluster frame while retaining the last safe same-scope data until replacement succeeds",
+            "backpressure": "overview, node, and pod reads are shared by stable scope and revision keys and abort after their final consumer releases",
+            "merge": "section results apply only to the current scope epoch, refresh revision, and selected node key"
+          },
+          "motion": {
+            "reducedMotion": "initial loading, background refresh, partial failure, and readiness remain visible through semantic states without relying on animated labels.",
+            "evidence": [
+              "frontend/src/pages/home/useHomeClusterFrame.ts",
+              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomePage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/useHomeClusterFrame.ts",
+              "frontend/src/pages/home/homeRequest.ts",
+              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.dashboard.repository"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-load.disclosure",
+              "shell.cluster-scope.selection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing cluster frame already separates initial load, same-scope refresh, partial section failure, and stale completion rejection while sharing in-flight requests instead of introducing a second query-client observer."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:shell:cluster-load:pending-kinds-hook:v1",
+          "legacyContractIds": [],
+          "symbol": "useClusterLoadState pendingKinds disclosure",
+          "interaction": "an incomplete cluster inventory identifies exact pending Kubernetes kinds only when the server can prove expected-versus-observed coverage",
+          "transport": "poll",
+          "realtime": {
+            "resume": "re-evaluate coverage with the next authorized cluster snapshot",
+            "backpressure": "reuse the owning cluster summary response instead of issuing one request per Kubernetes kind",
+            "merge": "replace coverage only with a newer snapshot for the same cluster scope"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/home/homeContract.ts",
+              "src/packages/contracts/gateway/responses.py",
+              "src/domains/dashboard/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.inventory.repository"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-load.disclosure"
+            ],
+            "state": "blocked",
+            "blockedReason": "The inventory read model exposes snapshot freshness and partial reasons but not a declared expected-kind set, so exact pending kind names cannot be produced without fabricating coverage.",
+            "rationale": "Opsia retains honest partial and unavailable states and will add pendingKinds only through an additive server completeness projection."
+          }
+        }
+      ]
     },
     {
       "status": "M",
