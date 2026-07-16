@@ -4,6 +4,24 @@ import type {
   ResourceActionStatus,
 } from "./resourceCapabilitiesContract";
 
+export interface ResourceDeletionPreviewEndpoint {
+  root: ResourceDeletionRefEndpoint;
+  dependents: ResourceDeletionRefEndpoint[];
+  revision: string;
+  truncated: false;
+  max_dependents: number;
+}
+
+export interface ResourceDeletionRefEndpoint {
+  api_group: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+  resource_version: string;
+}
+
 export interface ResourceCapabilitiesEndpointResponse {
   subject: {
     resource_id: string;
@@ -44,6 +62,10 @@ export interface ResourceCapabilitiesEndpointDependencies {
 }
 
 export interface ResourceActionsEndpointDependencies {
+  getResourceDeletionPreview(
+    actionPath: string,
+    signal?: AbortSignal,
+  ): Promise<ResourceDeletionPreviewEndpoint>;
   executeResourceCapability(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,

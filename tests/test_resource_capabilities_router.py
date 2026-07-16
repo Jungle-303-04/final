@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from domains.identity.dependencies import require_session
+from packages.config.constants import Command
 from packages.contracts.gateway.responses import ResourceCapabilitiesResponse
 from packages.runtime.dependencies import get_db
 
@@ -78,6 +79,7 @@ class ResourceCapabilitiesDb:
         cronjob_supported: bool = True,
         pod_exec_supported: bool = True,
         node_control_supported: bool = True,
+        delete_supported: bool = False,
         management: bool = False,
         resource: dict[str, object] | None = None,
     ) -> None:
@@ -88,6 +90,7 @@ class ResourceCapabilitiesDb:
         self.cronjob_supported = cronjob_supported
         self.pod_exec_supported = pod_exec_supported
         self.node_control_supported = node_control_supported
+        self.delete_supported = delete_supported
         self.management = management
         self.resource = deployment_resource() if resource is None else resource
         self.lookups: list[tuple[str, str]] = []
@@ -138,6 +141,8 @@ class ResourceCapabilitiesDb:
             capabilities.append("pod_exec_stream")
         if self.node_control_supported:
             capabilities.append("node_control.v1")
+        if self.delete_supported:
+            capabilities.append(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
         return [{"status": "connected", "capabilities": capabilities}]
 
     def get_cluster_registration(
@@ -226,6 +231,35 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
     assert len(body["revision"]) == 64
     assert db.lookups == [("workspace-a", "resource-deployment-api")]
     assert [check[-1] for check in db.access_checks] == ["inventory.read", "deploy.run"]
+
+
+def test_capabilities_projects_delete_only_with_exact_cas_and_agent_support() -> None:
+    exact_resource = {
+        **deployment_resource(),
+        "uid": "deployment-uid-1",
+        "resource_version": "42",
+        "deleted_at": None,
+    }
+    response = client(ResourceCapabilitiesDb(resource=exact_resource, delete_supported=True)).get(
+        "/capabilities", params={"resource": exact_resource["inventory_key"]}
+    )
+
+    assert response.status_code == 200
+    delete = next(
+        item
+        for item in response.json()["capabilities"]
+        if item["capability_id"] == "resource.delete"
+    )
+    assert delete["path"] == "/resource-deletions/resource-deployment-api"
+    assert delete["confirmation_required"] is True
+    assert delete["realtime"] is True
+
+    unavailable = client(ResourceCapabilitiesDb(resource=exact_resource)).get(
+        "/capabilities", params={"resource": exact_resource["inventory_key"]}
+    )
+    assert all(
+        item["capability_id"] != "resource.delete" for item in unavailable.json()["capabilities"]
+    )
 
 
 def test_capabilities_are_server_owned_execution_descriptors() -> None:

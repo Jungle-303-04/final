@@ -40,6 +40,46 @@ const EXECUTION = {
 } as const;
 
 describe("resource action adapter", () => {
+  it("maps the exact server cascade only for its projected delete descriptor", async () => {
+    const getResourceDeletionPreview = vi.fn().mockResolvedValue({
+      root: {
+        api_group: "apps",
+        version: "v1",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "checkout-api",
+        uid: "deployment-uid-1",
+        resource_version: "42",
+      },
+      dependents: [],
+      revision: `sha256:${"a".repeat(64)}`,
+      truncated: false,
+      max_dependents: 200,
+    });
+    const port = createResourceActionsAdapter({
+      executeResourceCapability: vi.fn(),
+      getResourceDeletionPreview,
+    });
+    const deleteCapability = {
+      ...CAPABILITY,
+      capabilityId: "resource.delete",
+      inputSchema: [],
+      label: "Delete",
+      path: "/resource-deletions/resource-1",
+    };
+
+    await expect(port.previewDeletion(deleteCapability)).resolves.toMatchObject({
+      root: {
+        apiGroup: "apps",
+        resourceVersion: "42",
+        uid: "deployment-uid-1",
+      },
+      revision: `sha256:${"a".repeat(64)}`,
+      maxDependents: 200,
+    });
+    expect(getResourceDeletionPreview).toHaveBeenCalledWith(deleteCapability.path, undefined);
+  });
+
   it("submits the server-owned descriptor and its validated values without action branching", async () => {
     const executeResourceCapability = vi.fn().mockResolvedValue({
       accepted: true,
@@ -49,7 +89,10 @@ describe("resource action adapter", () => {
       command_id: "command-1",
       status: "queued",
     });
-    const port = createResourceActionsAdapter({ executeResourceCapability });
+    const port = createResourceActionsAdapter({
+      executeResourceCapability,
+      getResourceDeletionPreview: vi.fn(),
+    });
 
     await expect(port.execute(CAPABILITY, { replicas: 4 })).resolves.toEqual({
       accepted: true,
@@ -69,7 +112,10 @@ describe("resource action adapter", () => {
 
   it("rejects a non-command capability before an HTTP request is attempted", async () => {
     const executeResourceCapability = vi.fn();
-    const port = createResourceActionsAdapter({ executeResourceCapability });
+    const port = createResourceActionsAdapter({
+      executeResourceCapability,
+      getResourceDeletionPreview: vi.fn(),
+    });
 
     await expect(port.execute({ ...CAPABILITY, execution: "terminal" }, {}))
       .rejects.toMatchObject({ code: "invalid-request" });

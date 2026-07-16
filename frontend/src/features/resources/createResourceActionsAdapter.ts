@@ -11,6 +11,34 @@ export function createResourceActionsAdapter(
   endpoints: ResourceActionsEndpointDependencies,
 ): ResourceActionsPort {
   return {
+    async previewDeletion(capability, signal) {
+      if (
+        capability.capabilityId !== "resource.delete" ||
+        capability.execution !== "command" ||
+        capability.method !== "POST"
+      ) {
+        throw new ResourcesPortFailure("invalid-request");
+      }
+      return withActionFailure(async () => {
+        const value = await endpoints.getResourceDeletionPreview(capability.path, signal);
+        const mapRef = (item: typeof value.root) => ({
+          apiGroup: item.api_group,
+          version: item.version,
+          kind: item.kind,
+          namespace: item.namespace,
+          name: item.name,
+          uid: item.uid,
+          resourceVersion: item.resource_version,
+        });
+        return {
+          root: mapRef(value.root),
+          dependents: value.dependents.map(mapRef),
+          revision: value.revision,
+          truncated: value.truncated,
+          maxDependents: value.max_dependents,
+        };
+      });
+    },
     async execute(capability, values, context, signal) {
       if (capability.execution !== "command" || capability.method !== "POST") {
         throw new ResourcesPortFailure("invalid-request");

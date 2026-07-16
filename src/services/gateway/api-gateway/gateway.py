@@ -47,6 +47,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
+from domains.inventory.deletion import router as resource_deletion_router
 from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
@@ -369,6 +370,7 @@ class ApiGateway:
         app.include_router(
             inventory_router
         )  # agent inventory snapshot -> multi-cluster read model 투영
+        app.include_router(resource_deletion_router)  # exact cascade preview + audited delete
         app.include_router(inventory_filter_router)  # workspace Resources 필터·facet 서버 집계
         app.include_router(shell_state_router)  # user namespace scope + durable UI preferences
         app.include_router(

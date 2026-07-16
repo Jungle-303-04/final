@@ -13,6 +13,7 @@ import {
   getInventorySummary,
   getResourceIssues,
   getResourceCapabilities,
+  getResourceDeletionPreview,
   getResourceManifestSource,
   getResourceMetricsHistory,
   listFilteredResources,
@@ -75,6 +76,7 @@ export function loadResourcesSurface(
     refreshPolicies,
     createResourceCapabilitiesAdapter({ getResourceCapabilities }),
     createResourceActionsAdapter({
+      getResourceDeletionPreview,
       executeResourceCapability(capability, values, context, signal) {
         return executeResourceCapability(capability.path, values, context, signal);
       },

@@ -1121,6 +1121,104 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_resource(dict(row)) if row else None
 
+    def read_inventory_cascade(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: JsonObject,
+        limit: int = 200,
+    ) -> JsonObject:
+        """Read a bounded, same-snapshot owner-UID cascade without kind/name guesses."""
+
+        effective_limit = max(1, min(limit, 200))
+        snapshot = self.latest_inventory_snapshot(workspace_id, cluster_id)
+        snapshot_id = str((snapshot or {}).get("snapshot_id") or "")
+        snapshot_envelope = (snapshot or {}).get("summary")
+        source_summary = (
+            snapshot_envelope.get("summary") if isinstance(snapshot_envelope, Mapping) else None
+        )
+        resources_complete = bool(
+            isinstance(source_summary, Mapping) and source_summary.get("resources_complete") is True
+        )
+        root_uid = str(resource.get("uid") or "")
+        if not snapshot_id or str(resource.get("snapshot_id") or "") != snapshot_id or not root_uid:
+            return {
+                "snapshot_id": snapshot_id,
+                "resources_complete": False,
+                "truncated": False,
+                "dependents": [],
+            }
+        if not resources_complete:
+            return {
+                "snapshot_id": snapshot_id,
+                "resources_complete": False,
+                "truncated": False,
+                "dependents": [],
+            }
+
+        table = ClusterInventoryResourceRecord.__table__
+        frontier = {root_uid}
+        visited = {root_uid}
+        dependents: list[JsonObject] = []
+        truncated = False
+        with self.connection() as conn:
+            while frontier:
+                remaining = effective_limit - len(dependents)
+                if remaining <= 0:
+                    truncated = True
+                    break
+                rows = (
+                    conn.execute(
+                        select(table)
+                        .where(
+                            table.c.workspace_id == workspace_id,
+                            table.c.cluster_id == cluster_id,
+                            table.c.snapshot_id == snapshot_id,
+                            table.c.deleted_at.is_(None),
+                            table.c.summary["owner_uid"].astext.in_(tuple(sorted(frontier))),
+                        )
+                        .order_by(
+                            table.c.kind,
+                            table.c.namespace.nullsfirst(),
+                            table.c.name,
+                            table.c.inventory_key,
+                        )
+                        .limit(remaining + 1)
+                    )
+                    .mappings()
+                    .all()
+                )
+                if len(rows) > remaining:
+                    rows = rows[:remaining]
+                    truncated = True
+                next_frontier: set[str] = set()
+                for row in rows:
+                    item = self.serialize_inventory_resource(dict(row))
+                    summary = item.get("summary")
+                    if (
+                        not isinstance(summary, Mapping)
+                        or summary.get("owner_references_complete") is not True
+                    ):
+                        resources_complete = False
+                        continue
+                    uid = str(item.get("uid") or "")
+                    if not uid or uid in visited:
+                        resources_complete = False
+                        continue
+                    visited.add(uid)
+                    next_frontier.add(uid)
+                    dependents.append(item)
+                if truncated:
+                    break
+                frontier = next_frontier
+        return {
+            "snapshot_id": snapshot_id,
+            "resources_complete": resources_complete,
+            "truncated": truncated,
+            "dependents": dependents,
+        }
+
     def list_related_inventory_resources(
         self,
         *,

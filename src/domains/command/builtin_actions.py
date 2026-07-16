@@ -168,6 +168,18 @@ class ResumeCronJobCommand:
 
 
 @command.action(
+    Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY,
+)
+class DeleteResourceCommand:
+    """Exact UID/resourceVersion resource delete after a server-owned cascade preview."""
+
+
+@command.action(
     Command.RCA_TEST_SCENARIO_INJECT_ACTION,
     allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=False,

@@ -39,6 +39,20 @@ MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json"
 TARGET_AGENT_ALLOWED_VERBS = {"get", "patch", "apply"}
 
 
+def delete_options(
+    preconditions: JsonObject | None,
+    propagation_policy: str | None,
+) -> JsonObject | None:
+    if preconditions is None and propagation_policy is None:
+        return None
+    body: JsonObject = {"apiVersion": "v1", "kind": "DeleteOptions"}
+    if preconditions is not None:
+        body["preconditions"] = dict(preconditions)
+    if propagation_policy is not None:
+        body["propagationPolicy"] = propagation_policy
+    return body
+
+
 class KubernetesGetPayload(StrictModel):
     namespace: str
     name: str
@@ -317,6 +331,25 @@ class KubernetesApiClient:
         )
         return self.response_body(response)
 
+    async def get_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject:
+        response = await self.request(
+            "GET",
+            self.cluster_resource_path(
+                api_group=api_group,
+                version=version,
+                resource=resource,
+                name=name,
+            ),
+        )
+        return self.response_body(response)
+
     async def patch_namespaced_resource(
         self,
         *,
@@ -394,7 +427,10 @@ class KubernetesApiClient:
         namespace: str,
         resource: str,
         name: str,
+        preconditions: JsonObject | None = None,
+        propagation_policy: str | None = None,
     ) -> JsonObject:
+        body = delete_options(preconditions, propagation_policy)
         response = await self.request(
             "DELETE",
             self.namespaced_resource_path(
@@ -404,6 +440,7 @@ class KubernetesApiClient:
                 resource=resource,
                 name=name,
             ),
+            body=body,
             allow_not_found=True,
         )
         return {"deleted": response.status_code != 404, "status_code": response.status_code}
@@ -415,7 +452,10 @@ class KubernetesApiClient:
         version: str,
         resource: str,
         name: str,
+        preconditions: JsonObject | None = None,
+        propagation_policy: str | None = None,
     ) -> JsonObject:
+        body = delete_options(preconditions, propagation_policy)
         response = await self.request(
             "DELETE",
             self.cluster_resource_path(
@@ -424,6 +464,7 @@ class KubernetesApiClient:
                 resource=resource,
                 name=name,
             ),
+            body=body,
             allow_not_found=True,
         )
         return {"deleted": response.status_code != 404, "status_code": response.status_code}

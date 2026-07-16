@@ -135,6 +135,19 @@ class ResourceManifestDirectApplyRequest(ResourceManifestPreviewRequest):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ResourceDeleteRequest(StrictModel):
+    """One exact, preview-pinned destructive resource command."""
+
+    preview_revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    confirmation: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+    idempotency_key: str = Field(
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$",
+    )
+
+
 class ResourceManifestCreateDryRunRequest(StrictModel):
     cluster_id: str = Field(min_length=1, max_length=200)
     namespace: str = Field(min_length=1, max_length=253)

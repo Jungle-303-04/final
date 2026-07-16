@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import type {
   ResourceActionCapability,
   ResourceActionExecutionContext,
+  ResourceDeletionPreview,
   ResourceActionReceipt,
   ResourceActionsPort,
 } from "../../features/resources/resourceCapabilitiesContract";
@@ -54,6 +55,9 @@ export function ResourceDetailActions({
   const [failed, setFailed] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [executionKey, setExecutionKey] = useState<string | null>(null);
+  const [deletePreview, setDeletePreview] = useState<ResourceDeletionPreview | null>(null);
+  const [deletePreviewPending, setDeletePreviewPending] = useState(false);
+  const [deleteIdempotencyKey, setDeleteIdempotencyKey] = useState("");
   const [diagnoseConsent, setDiagnoseConsent] = useState<{
     capabilities: DiagnoseCapabilities;
     target: DiagnoseResourceTarget;
@@ -78,9 +82,21 @@ export function ResourceDetailActions({
       if (dialog.capabilityId.startsWith("cronjob.") && context === null) {
         throw new Error("CronJob action identity is incomplete");
       }
+      const deleteValues = dialog.capabilityId === "resource.delete"
+        ? {
+            preview_revision: deletePreview?.revision,
+            idempotency_key: deleteIdempotencyKey,
+            reason: dialog.description,
+          }
+        : {};
+      if (dialog.capabilityId === "resource.delete" && deletePreview === null) return;
+      const submittedValues = {
+        ...actionValues(dialog, values),
+        ...deleteValues,
+      };
       const result = context
-        ? await actionsPort.execute(dialog, actionValues(dialog, values), context)
-        : await actionsPort.execute(dialog, actionValues(dialog, values));
+        ? await actionsPort.execute(dialog, submittedValues, context)
+        : await actionsPort.execute(dialog, submittedValues);
       setReceipt(result);
       if (result.commandId) operationStatusStore?.start(result.commandId);
       if (context) onInvalidate?.(context);
@@ -111,7 +127,7 @@ export function ResourceDetailActions({
         {enabled.map((capability) => (
           <Button
             key={capability.capabilityId}
-            onClick={() => open(capability)}
+            onClick={() => void open(capability)}
             size="sm"
             type="button"
             variant="outline"
@@ -163,6 +179,41 @@ export function ResourceDetailActions({
                 />
               </div>
             ))}
+            {dialog?.capabilityId === "resource.delete" ? (
+              <div className="grid gap-2" data-slot="resource-delete-cascade">
+                {deletePreviewPending ? (
+                  <p className="text-sm text-muted-foreground" role="status">
+                    {t("resources.detail.action.cascadeLoading")}
+                  </p>
+                ) : deletePreview ? (
+                  <>
+                    <p className="text-sm font-medium">
+                      {deletePreview.dependents.length > 0
+                        ? t("resources.detail.action.cascadeAffected", {
+                            count: deletePreview.dependents.length,
+                          })
+                        : t("resources.detail.action.cascadeEmpty")}
+                    </p>
+                    {deletePreview.dependents.length > 0 ? (
+                      <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-3 text-sm">
+                        {deletePreview.dependents.map((item) => (
+                          <li key={`${item.uid}:${item.resourceVersion}`}>
+                            {item.kind}/{item.name}
+                            {item.namespace ? ` · ${item.namespace}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </>
+                ) : (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {t("resources.detail.action.cascadeUnavailable")}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : null}
             {failed ? (
               <Alert variant="destructive">
                 <AlertDescription>{t("resources.detail.action.failed")}</AlertDescription>
@@ -178,7 +229,15 @@ export function ResourceDetailActions({
                   <Button onClick={() => setDialog(null)} type="button" variant="outline">
                     {t("common.action.cancel")}
                   </Button>
-                  <Button type="submit">{t("common.action.confirm")}</Button>
+                  <Button
+                    disabled={
+                      dialog?.capabilityId === "resource.delete" &&
+                      (deletePreviewPending || deletePreview === null)
+                    }
+                    type="submit"
+                  >
+                    {t("common.action.confirm")}
+                  </Button>
                 </>
               )}
             </DialogFooter>
@@ -225,13 +284,26 @@ export function ResourceDetailActions({
     </div>
   );
 
-  function open(capability: ResourceActionCapability) {
+  async function open(capability: ResourceActionCapability) {
     setFailed(false);
     setValues(defaultInputValues(capability));
     setExecutionKey(capability.capabilityId.startsWith("cronjob.")
       ? resourceActionIdempotencyKey()
       : null);
+    setDeletePreview(null);
+    setDeletePreviewPending(false);
+    setDeleteIdempotencyKey("");
     setDialog(capability);
+    if (capability.capabilityId !== "resource.delete") return;
+    setDeletePreviewPending(true);
+    setDeleteIdempotencyKey(resourceActionIdempotencyKey("resource-delete"));
+    try {
+      setDeletePreview(await actionsPort.previewDeletion(capability));
+    } catch {
+      setFailed(true);
+    } finally {
+      setDeletePreviewPending(false);
+    }
   }
 
   async function prepareDiagnose(target: DiagnoseResourceTarget) {
@@ -313,13 +385,13 @@ function cronjobExecutionContext(
   };
 }
 
-function resourceActionIdempotencyKey(): string {
+function resourceActionIdempotencyKey(prefix = "resource-action"): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `resource-action-${crypto.randomUUID()}`;
+    return `${prefix}-${crypto.randomUUID()}`;
   }
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
     const bytes = crypto.getRandomValues(new Uint32Array(4));
-    return `resource-action-${Array.from(bytes, (value) => value.toString(16).padStart(8, "0")).join("")}`;
+    return `${prefix}-${Array.from(bytes, (value) => value.toString(16).padStart(8, "0")).join("")}`;
   }
   throw new Error("Secure resource action identity is unavailable");
 }

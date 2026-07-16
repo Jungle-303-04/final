@@ -365,6 +365,12 @@ export {
   RESOURCE_CAPABILITIES_PATH,
 } from "./resource-capabilities";
 export { executeResourceCapability } from "./resource-capability-actions";
+export { getResourceDeletionPreview } from "./resource-deletions";
+export {
+  resourceDeletionPreviewSchema,
+  resourceDeletionRefSchema,
+  type ResourceDeletionPreviewEndpoint,
+} from "./resource-deletions-schemas";
 export {
   resolveServiceAccess,
   startServiceRequest,

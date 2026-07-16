@@ -86,10 +86,32 @@ export interface ResourceActionReceipt {
 }
 
 export interface ResourceActionsPort {
+  previewDeletion(
+    capability: ResourceActionCapability,
+    signal?: AbortSignal,
+  ): Promise<ResourceDeletionPreview>;
   execute(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,
     context?: ResourceActionExecutionContext,
     signal?: AbortSignal,
   ): Promise<ResourceActionReceipt>;
+}
+
+export interface ResourceDeletionRef {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+  resourceVersion: string;
+}
+
+export interface ResourceDeletionPreview {
+  root: ResourceDeletionRef;
+  dependents: ResourceDeletionRef[];
+  revision: string;
+  truncated: false;
+  maxDependents: number;
 }

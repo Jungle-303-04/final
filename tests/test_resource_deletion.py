@@ -4,12 +4,12 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
+
 from domains.inventory.deletion import (
     get_resource_delete_preview,
     request_resource_delete,
 )
-from fastapi import HTTPException
-
 from packages.config.constants import Command
 from packages.contracts.auth import Actor
 from packages.contracts.gateway.requests import ResourceDeleteRequest

@@ -38,6 +38,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        Command.KUBERNETES_RESOURCE_DELETE_ACTION,
         HELM_RELEASE_ARTIFACT_READ_ACTION,
     }
     cronjob_actions = {
@@ -52,6 +53,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_NODE_CORDON_ACTION,
         Command.KUBERNETES_NODE_UNCORDON_ACTION,
         Command.APPLY_MANIFEST_ACTION,
+        Command.KUBERNETES_RESOURCE_DELETE_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:

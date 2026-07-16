@@ -26,10 +26,11 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
-NamespacePolicy = Literal["control", "terminal", "cluster"]
+NamespacePolicy = Literal["control", "terminal", "cluster", "resource"]
 ExecutionTransport = Literal["command", "terminal"]
 ResourceState = Literal[
     "always",
+    "deletable",
     "cronjob-running",
     "cronjob-suspended",
     "node-cordoned",
@@ -45,8 +46,8 @@ class ResourceActionDefinition:
     execution: ExecutionTransport
     method: Literal["POST", "WEBSOCKET"]
     path_template: str
-    resource_type: str
-    kind: str
+    resource_type: str | None
+    kind: str | None
     permission: str
     agent_capability: str
     namespace_policy: NamespacePolicy
@@ -59,16 +60,23 @@ class ResourceActionDefinition:
         subject: ResourceCapabilitySubject,
         resource: Mapping[str, Any],
     ) -> bool:
-        if subject.resource_type.casefold() != self.resource_type:
+        if (
+            self.resource_type is not None
+            and subject.resource_type.casefold() != self.resource_type
+        ):
             return False
-        if subject.kind.casefold() != self.kind:
+        if self.kind is not None and subject.kind.casefold() != self.kind:
             return False
         if self.namespace_policy == "cluster":
             allowed_namespace = subject.namespace is None
+        elif self.namespace_policy == "resource":
+            allowed_namespace = True
         elif subject.namespace is None:
             return False
         elif self.namespace_policy == "control":
             allowed_namespace = control_namespace_allowed(subject.namespace)
+        elif self.namespace_policy == "terminal":
+            allowed_namespace = pod_exec_namespace_allowed(subject.namespace)
         else:
             allowed_namespace = pod_exec_namespace_allowed(subject.namespace)
         if not allowed_namespace:
@@ -88,6 +96,7 @@ class ResourceActionDefinition:
             "kind": quote(subject.kind.casefold(), safe=""),
             "workload": quote(subject.name, safe=""),
             "node": quote(subject.name, safe=""),
+            "resource_id": quote(subject.resource_id, safe=""),
         }
         return ResourceActionCapability(
             capability_id=self.capability_id,
@@ -108,6 +117,21 @@ def _command_action_allows(action: str, namespace: str | None) -> bool:
 
 
 RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
+    ResourceActionDefinition(
+        capability_id="resource.delete",
+        label="Delete",
+        description="Delete this exact resource after reviewing its owner-reference cascade.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_DELETE_PATH,
+        resource_type=None,
+        kind=None,
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY,
+        namespace_policy="resource",
+        command_action=Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        resource_state="deletable",
+    ),
     ResourceActionDefinition(
         capability_id="deployment.restart",
         label="Restart",
@@ -316,6 +340,12 @@ def resource_action_capability_id(command_action: str) -> str | None:
 def _resource_state_matches(state: ResourceState, resource: Mapping[str, Any]) -> bool:
     if state == "always":
         return True
+    if state == "deletable":
+        return bool(
+            str(resource.get("uid") or "").strip()
+            and str(resource.get("resource_version") or "").strip()
+            and resource.get("deleted_at") is None
+        )
     raw = resource.get("raw")
     raw_object = raw if isinstance(raw, Mapping) else {}
     spec = raw_object.get("spec")

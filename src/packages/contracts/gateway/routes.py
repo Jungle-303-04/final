@@ -214,6 +214,8 @@ SCOPED_RESOURCE_METRICS_QUERY_PATH = "/metrics/query"
 # 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
 # disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
 RESOURCE_CAPABILITIES_PATH = "/capabilities"
+RESOURCE_DELETE_PATH = "/resource-deletions/{resource_id}"
+RESOURCE_DELETE_PREVIEW_PATH = "/resource-deletions/{resource_id}/cascade-preview"
 # Exact core/v1 Service capabilities and one bounded, audited in-cluster GET.
 SERVICE_ACCESS_CAPABILITIES_PATH = "/service-access/capabilities"
 SERVICE_REQUESTS_PATH = "/service-access/requests"

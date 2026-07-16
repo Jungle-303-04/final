@@ -51,6 +51,7 @@ from providers import (
     TelemetryProvider,
     TempoTracesProvider,
 )
+from pydantic import Field, model_validator
 from queries import (
     KubernetesSnapshotQuery,
     TelemetryQueryCommandPayload,
@@ -235,6 +236,41 @@ class RcaTestFixtureOwnershipChanged(RuntimeError):
 class ClusterAgentUninstallPayload(StrictModel):
     cluster_id: str
     contract_version: int
+
+
+class ExactResourceDeleteTarget(StrictModel):
+    api_group: str = Field(max_length=253)
+    version: str = Field(min_length=1, max_length=80)
+    kind: str = Field(min_length=1, max_length=120)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+    uid: str = Field(min_length=1, max_length=253)
+    resource_version: str = Field(min_length=1, max_length=253)
+    plural: str = Field(min_length=1, max_length=253, pattern=r"^[a-z0-9.-]+$")
+
+
+class ResourceDeleteCommandPayload(StrictModel):
+    resources: list[ExactResourceDeleteTarget] = Field(min_length=1, max_length=20)
+    propagation_policy: str = Field(pattern=r"^Foreground$")
+    request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    cascade: JsonObject = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_unique_targets(self) -> ResourceDeleteCommandPayload:
+        identities = [
+            (
+                item.api_group,
+                item.version,
+                item.kind.casefold(),
+                item.namespace,
+                item.name,
+                item.uid,
+            )
+            for item in self.resources
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("resource delete targets must be unique")
+        return self
 
 
 class AgentConfig:
@@ -826,6 +862,7 @@ class TargetClusterAgent:
         direct_commands_enabled = getattr(self, "direct_commands_enabled", True)
         if not direct_commands_enabled:
             capabilities.remove(Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY)
+            capabilities.remove(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
         if direct_commands_enabled and getattr(self, "node_control_enabled", False):
             capabilities.append(Command.KUBERNETES_NODE_CONTROL_CAPABILITY)
         return capabilities
@@ -1208,6 +1245,7 @@ class TargetClusterAgent:
             Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
             Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
             Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+            Command.KUBERNETES_RESOURCE_DELETE_ACTION,
             Command.RCA_TEST_SCENARIO_INJECT_ACTION,
             Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
             Command.CLUSTER_AGENT_UNINSTALL_ACTION,
@@ -1805,6 +1843,141 @@ class TargetClusterAgent:
             if isinstance(source, str) and isinstance(name, str):
                 return self.query_registry.get(source, name)
         return TelemetryQueryDefinition.from_mapping(query)
+
+    @command.handler(
+        Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        payload_model=ResourceDeleteCommandPayload,
+    )
+    async def delete_resource_command(
+        self,
+        ctx: CommandContext[ResourceDeleteCommandPayload],
+    ) -> JsonObject:
+        results: list[JsonObject] = []
+        successes = 0
+        cancel_requested = ctx.metadata.get("cooperative_cancel_requested")
+        for target in ctx.payload.resources:
+            if isinstance(cancel_requested, asyncio.Event) and cancel_requested.is_set():
+                return {
+                    Gateway.STATUS: CommandStatus.CANCELLED,
+                    Gateway.CLUSTER_ID: self.cluster_id,
+                    Gateway.APPLIED: successes > 0,
+                    Gateway.MESSAGE: "resource delete cancelled at a safe target boundary",
+                    Gateway.RETRYABLE: False,
+                    Gateway.RESOURCES: results,
+                    Gateway.STDOUT: "",
+                    Gateway.STDERR: "",
+                    "completeness": "partial" if results else "unavailable",
+                    "request_fingerprint": ctx.payload.request_fingerprint,
+                }
+            try:
+                current = await self.get_exact_delete_target(target)
+                self.require_exact_delete_target(current, target)
+                preconditions = {
+                    "uid": target.uid,
+                    "resourceVersion": target.resource_version,
+                }
+                if target.namespace is None:
+                    await ctx.kubernetes.delete_cluster_resource(
+                        api_group=target.api_group,
+                        version=target.version,
+                        resource=target.plural,
+                        name=target.name,
+                        preconditions=preconditions,
+                        propagation_policy=ctx.payload.propagation_policy,
+                    )
+                else:
+                    await ctx.kubernetes.delete_namespaced_resource(
+                        api_group=target.api_group,
+                        version=target.version,
+                        namespace=target.namespace,
+                        resource=target.plural,
+                        name=target.name,
+                        preconditions=preconditions,
+                        propagation_policy=ctx.payload.propagation_policy,
+                    )
+                successes += 1
+                results.append(self.delete_target_result(target, status="deleted"))
+            except Exception as exc:
+                results.append(
+                    self.delete_target_result(
+                        target,
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+        if successes != len(ctx.payload.resources):
+            return ctx.fail(
+                f"resource delete failed for {len(ctx.payload.resources) - successes} target(s)",
+                applied=successes > 0,
+                resources=results,
+                completeness="partial" if successes else "unavailable",
+                request_fingerprint=ctx.payload.request_fingerprint,
+            )
+        return ctx.ok(
+            f"resource delete completed for {successes} target(s)",
+            applied=True,
+            resources=results,
+            completeness="exact",
+            request_fingerprint=ctx.payload.request_fingerprint,
+        )
+
+    async def get_exact_delete_target(
+        self,
+        target: ExactResourceDeleteTarget,
+    ) -> JsonObject:
+        if target.namespace is None:
+            return await self.kubernetes.get_cluster_resource(
+                api_group=target.api_group,
+                version=target.version,
+                resource=target.plural,
+                name=target.name,
+            )
+        return await self.kubernetes.get_namespaced_resource(
+            api_group=target.api_group,
+            version=target.version,
+            namespace=target.namespace,
+            resource=target.plural,
+            name=target.name,
+        )
+
+    @staticmethod
+    def require_exact_delete_target(
+        current: JsonObject,
+        target: ExactResourceDeleteTarget,
+    ) -> None:
+        metadata = current.get("metadata")
+        meta = metadata if isinstance(metadata, dict) else {}
+        expected_api_version = (
+            f"{target.api_group}/{target.version}" if target.api_group else target.version
+        )
+        exact = (
+            str(current.get("apiVersion") or "") == expected_api_version
+            and str(current.get("kind") or "").casefold() == target.kind.casefold()
+            and str(meta.get("namespace") or "") == (target.namespace or "")
+            and str(meta.get("name") or "") == target.name
+            and str(meta.get("uid") or "") == target.uid
+            and str(meta.get("resourceVersion") or "") == target.resource_version
+        )
+        if not exact:
+            raise RuntimeError("resource identity changed before delete")
+
+    @staticmethod
+    def delete_target_result(
+        target: ExactResourceDeleteTarget,
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> JsonObject:
+        result: JsonObject = {
+            "kind": target.kind,
+            "namespace": target.namespace,
+            "name": target.name,
+            "uid": target.uid,
+            "status": status,
+        }
+        if error is not None:
+            result["error"] = error
+        return result
 
     @command.handler(AgentConfig.APPLY_MANIFEST_ACTION)
     async def apply_manifest_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:

@@ -36,6 +36,15 @@ class KubernetesClient(Protocol):
         subresource: str | None = None,
     ) -> JsonObject: ...
 
+    async def get_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject: ...
+
     async def patch_namespaced_resource(
         self,
         *,
@@ -76,6 +85,8 @@ class KubernetesClient(Protocol):
         namespace: str,
         resource: str,
         name: str,
+        preconditions: JsonObject | None = None,
+        propagation_policy: str | None = None,
     ) -> JsonObject: ...
 
     async def delete_cluster_resource(
@@ -85,6 +96,8 @@ class KubernetesClient(Protocol):
         version: str,
         resource: str,
         name: str,
+        preconditions: JsonObject | None = None,
+        propagation_policy: str | None = None,
     ) -> JsonObject: ...
 
 

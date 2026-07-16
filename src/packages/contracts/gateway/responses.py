@@ -854,6 +854,29 @@ class ResourceCapabilitiesResponse(StrictModel):
         return self
 
 
+class ResourceDeletePreviewRef(ResourceRef):
+    """Exact observed identity used by the delete confirmation and CAS."""
+
+    resource_version: str = Field(min_length=1)
+
+
+class ResourceDeletePreviewResponse(StrictModel):
+    """Bounded authoritative owner-reference cascade for one exact root."""
+
+    root: ResourceDeletePreviewRef
+    dependents: list[ResourceDeletePreviewRef] = Field(default_factory=list, max_length=200)
+    revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    truncated: Literal[False] = False
+    max_dependents: int = Field(default=200, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def validate_distinct_resources(self) -> Self:
+        identities = [(item.uid, item.resource_version) for item in [self.root, *self.dependents]]
+        if len(identities) != len(set(identities)):
+            raise ValueError("delete preview resources must be unique")
+        return self
+
+
 class ResourceManifestSourceChoice(StrictModel):
     application_id: str
     application_name: str
