@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 24,
+  "pendingCount": 18,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -7470,8 +7470,146 @@
         "blobId": "7811123d50e56ae3ead4145ccfc32512b192b45b",
         "sha256": "b53c9adbfec3c03a8999a2757cc036b76f0932228e1bd33e0fa99a876fe216d1"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:core-contract:resources:kinds-relations-permissions:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourcePermissions, CoreNodeKind, displayKind, Relationships, and workload-kind helpers",
+          "interaction": "the browser consumes server-authorized resource kinds, exact ResourceRef identities, relationship evidence, and executable CapabilitySet actions through strict product contracts instead of keeping a second hand-maintained permission matrix",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload exact resource and relation projections after scope, snapshot, or explicit refresh changes",
+            "backpressure": "the server caps collection and graph rows while the browser validates one bounded projection",
+            "merge": "replace kinds, relations, and capabilities only for the matching workspace, cluster, snapshot, and resource identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/resourcePresentation.ts",
+              "frontend/src/features/resources/resourcesContract.ts",
+              "frontend/src/features/resources/relationTopologyContract.ts",
+              "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+              "src/packages/contracts/parity.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "packages.contracts.gateway.responses",
+              "domains.inventory.capabilities"
+            ],
+            "plannedTestIds": [
+              "topology.kind-icon.registry",
+              "topology.graph.contract",
+              "resources.provider-detail.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia owns one strict ResourceRef and CapabilitySet boundary plus a centralized icon registry. New CRD kinds remain discoverable server data and do not require editing a browser union or permission boolean table."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:core-contract:timeline:arrival-sequence-range:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineEvent seq and retained TimeRange values",
+          "interaction": "timeline replay orders late-arriving events by durable server sequence, validates retained range bounds, and resumes from an opaque cursor without deriving arrival order from event timestamps",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume after the last durable token and require a new snapshot when retention no longer covers the cursor",
+            "backpressure": "the server policy caps batch events, replay windows, queued frames, and retained range",
+            "merge": "apply only contiguous snapshot and delta frames for the active scope and reject duplicate or gapped sequences"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineContract.ts",
+              "frontend/src/pages/timeline/timelineFrameReducer.ts",
+              "frontend/src/features/filters/filterContract.ts",
+              "src/packages/contracts/timeline/models.py",
+              "src/domains/timeline/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.live.stream",
+              "timeline.source-contract",
+              "timeline.url.history"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Durable sequence and retention policy are Python-owned, and the browser reducer rejects discontinuity. Product range choices remain capability-normalized rather than extending a source enum without server retention proof."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:core-contract:workload:pod-runtime-metadata:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadPodContainerInfo and extended WorkloadPodInfo",
+          "interaction": "scheduled workload runs and log targets expose only authorized pod, container, phase, health, restart, termination, creation, and workflow-step metadata supplied by the server",
+          "transport": "sse",
+          "realtime": {
+            "resume": "re-resolve the selected run and container before reconnecting its bounded redacted log stream",
+            "backpressure": "cap scheduled runs, containers, retained lines, and frame bytes",
+            "merge": "apply runtime metadata and log frames only to the exact workload, run UID, pod, container, and stream generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/log-viewer/logViewerModel.ts",
+              "frontend/src/features/log-stream/logStreamTarget.ts",
+              "frontend/src/pages/resources/PodTerminalDialog.tsx",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.scheduled-run.target",
+              "logs.stream.terminal-state"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product log and terminal ports use exact server identities and capability checks rather than consuming a broad source object with optional health fields."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:core-contract:helm:source-preview-fields:v1",
+          "legacyContractIds": [],
+          "symbol": "UpgradeInfo sourceIssue, ApplyValuesRequest version and repository, and ValuesPreviewResponse",
+          "interaction": "Helm upgrade and values preview may expose source-resolution reason, target version, repository, and desired/live artifacts only when a provider-owned Python contract supplies them with release identity and audit provenance",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload release evidence after explicit refresh and start a new audited command for any apply attempt",
+            "backpressure": "cap release, values, manifest, and diff artifacts and never issue one provider request per rendered field",
+            "merge": "associate preview and operation receipts with the exact release, chart source, target version, and command attempt"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/helm/helmContract.ts",
+              "frontend/src/features/helm/helmEndpointContract.ts",
+              "frontend/src/shared/ui/UnifiedDiff.tsx",
+              "src/packages/contracts/helm/releases.py",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-contract",
+              "helm.values-preview.dialog-safety",
+              "helm.source-tracking.provider-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has release inventory and shared diff presentation but no provider-owned revision values, rendered manifests, notes, hooks, OCI source persistence, or audited values preview/apply contract.",
+            "rationale": "Opsia does not promote optional browser fields into fake availability. The Helm provider boundary must supply these facts before the UI can render or execute them."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -8201,8 +8339,35 @@
         "blobId": "9294a50516614f9f31d29cd073aa2223e0a180d5",
         "sha256": "f2615069307e6fa7861decebd349142ff24bb1c8413e06f17fe938b64b2390c6"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:neighborhood:scenario-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "topology neighborhood traversal and fanout scenarios",
+          "interaction": "server projection tests cover exact workload-root selection, authorized graph construction, completeness, bounded runtime evidence, and refusal to discover workloads from unproved labels or names",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_application_product_projection.py",
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.applications.product_projection",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "applications.detail.topology",
+              "applications.topology.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product verifies the trusted server projection rather than recreating client-only fixtures for raw topology traversal. Unavailable relationship classes remain separately blocked."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -8216,8 +8381,74 @@
         "blobId": "d1916d574d1d64162b6d856ae52c0ff4773926a5",
         "sha256": "19ec041e47569abf25996ff1c8cbd83fe87f14afdd4c2d1a4a78bfaf9a5a176e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:neighborhood:server-evidence-traversal:v1",
+          "legacyContractIds": [],
+          "symbol": "neighborhoodFor, workloadKey, and server-owned workload topology",
+          "interaction": "an application workload detail derives its bounded neighborhood from persisted exact relationship evidence, preserves snapshot completeness, and never joins resources by labels, prefixes, or guessed names in the browser",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact application, workload root, and inventory snapshot after scope or explicit refresh changes",
+            "backpressure": "the Python projection caps runtime rows, graph nodes, graph edges, and partial-reason output",
+            "merge": "include only nodes reachable from the exact manifest-bound root through allowed server relationship kinds and the same snapshot revision"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "src/domains/applications/product_projection.py",
+              "src/domains/inventory_filter/graph.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.applications.product_projection",
+              "domains.inventory_filter.graph",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "applications.detail.topology",
+              "applications.topology.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Workload neighborhood traversal is server-owned and exact. The product renders topology evidence and completeness without copying the source's raw Topology walk into a client utility."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:topology:neighborhood:batch-fanout-and-ownership:v1",
+          "legacyContractIds": [],
+          "symbol": "representativeRuns, batch fanout limits, template runs, secret producers, and workload ownership tags",
+          "interaction": "batch-run fanout, template-run edges, secret-producer context, exclusive workload ownership, shared-resource focus, and truncation warnings require typed server edge kinds and per-node observation evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "recompute from the next authoritative graph snapshot rather than mutating a cached browser traversal",
+            "backpressure": "the server selects bounded representative runs and reports total, active, shown, and truncation evidence",
+            "merge": "ownership and focus tags must match exact node identities and cannot cross a shared resource into unrelated workloads"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx",
+              "src/domains/applications/product_projection.py",
+              "src/domains/inventory_filter/graph.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.applications.product_projection",
+              "domains.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "applications.topology.projection",
+              "applications.topology.generated-runtime"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current product graph proves owns, selects, and runs_on relationships but does not persist source-equivalent template-run, secret-producer, representative-run totals, or exclusive workload ownership tags.",
+            "rationale": "The browser does not infer these relations from raw CRD payloads. Additive Python graph evidence is required before workload coloring or fanout summaries can be enabled."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8228,8 +8459,37 @@
         "blobId": "a3ba35027a6e62fd65474bbfa3938df77b79b354",
         "sha256": "44e297da2f3ece1be802b57dea2ec1cdd6758b9371ccbe5a262e571e723df3c1"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workflow:execution:projection-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "workflow execution graph, phase, template, focus, activity, count, and truncation scenarios",
+          "interaction": "Python and frontend contract tests verify bounded Workflow node projection, cycle-safe depth, phase defaults, template references, redacted failure summaries, truncation, strict wire validation, adapter mapping, and hierarchical presentation",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_inventory_provider_detail.py",
+              "frontend/src/features/resources/providerResourceCanonical.test.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Existing tests cover the trusted bounded projection end to end. Tests for richer focus, activity, and count fields remain blocked with their missing Python contract."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8240,8 +8500,74 @@
         "blobId": "73247fa260d57ecc0507d261ce62434534167a18",
         "sha256": "9948fcc5ee6ec861834b27d056c6c188e28ba7dee6fd84ca83a0ffddde738f5d"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workflow:execution:bounded-server-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "buildWorkflowExecutionModel hierarchy, template references, phase, messages, and resource duration",
+          "interaction": "an authorized Workflow detail presents a bounded server-projected execution hierarchy with node identity, label, type, phase, depth, timing, redacted message, template reference, resource duration, truncation, and problem summaries",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact Workflow detail after resource revision or explicit refresh changes",
+            "backpressure": "Python caps raw and projected execution nodes, messages, duration fields, references, and problem summaries",
+            "merge": "replace execution evidence only while the exact Workflow ResourceRef and provider-detail discriminator remain active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product already projects and renders hierarchical Workflow execution through strict Python, Zod, adapter, and shared panel boundaries without sending the raw status.nodes map to the browser."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workflow:execution:derived-focus-activity-counts:v1",
+          "legacyContractIds": [],
+          "symbol": "focus paths, activity timeline, counts, elision, run labels, and execution flattening",
+          "interaction": "focus paths, activity rows, pod and node counts, StepGroup elision, representative problem paths, and expanded template context may render only when the server supplies deterministic derived evidence with truncation and ordering metadata",
+          "transport": "poll",
+          "realtime": {
+            "resume": "recompute all derived execution summaries from one new authoritative Workflow revision",
+            "backpressure": "cap paths, activity rows, counts, and retained nodes under one server projection budget",
+            "merge": "keep derived summaries revision-bound to the same exact Workflow and node set"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current bounded Workflow projection exposes hierarchy and problem summaries but not source-equivalent focus paths, activity records, phase counts, StepGroup elision metadata, or representative-path selection.",
+            "rationale": "These summaries must be added to the Python contract; the browser will not derive them from an unbounded or partially projected node graph."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -8255,8 +8581,42 @@
         "blobId": "29801fa793b4b743105c80f208acef2ceb97f18d",
         "sha256": "d1a8d3b9fe829a832e71d1fefd30ee5c1e7b41a4e3c5b33deedff027eb84b53c"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:workload-color:ownership-health-separation:v1",
+          "legacyContractIds": [],
+          "symbol": "workload hue ownership wash and separate health border",
+          "interaction": "application topology must keep workload ownership hue distinct from health severity so a shared or unattached resource stays neutral and degraded state remains independently visible",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "ownership and health remain distinguishable by stable color, border, status text, and marks without hover animation dependence.",
+            "evidence": [
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx",
+              "frontend/src/shared/ui/StatusMark.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx",
+              "frontend/src/shared/ui/StatusMark.tsx",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.applications.product_projection",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "applications.detail.topology",
+              "applications.topology.projection"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current topology projection does not provide exclusive workload ownership or shared-resource focus tags, so assigning per-workload hues in the browser would guess ownership.",
+            "rationale": "Health is already represented independently with semantic StatusMark output. Ownership tint remains unavailable until Python supplies exact exclusive and shared ownership evidence."
+          }
+        }
+      ]
     },
     {
       "status": "M",
