@@ -117,6 +117,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     vi.useFakeTimers();
     setVisibility("visible");
     const port = resourcesPort();
+    const filterPort = resourcesFilterPort();
     const topologyPort = resourcesPhysicalTopologyPort();
     const rendered = renderResources(
       port,
@@ -124,11 +125,12 @@ describe("ResourcesPage refresh and generation safety", () => {
       resourcesClusterPort(),
       vi.fn(),
       "ko",
-      resourcesFilterPort(),
+      filterPort,
       topologyPort,
     );
     await flushPromises();
     expect(port.listResources).toHaveBeenCalledOnce();
+    expect(filterPort.listResourcePage).toHaveBeenCalledOnce();
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledOnce();
     expect(screen.getByText("30초마다 확인")).toBeTruthy();
     expect(document.querySelector('[data-slot="freshness-control"]')?.textContent)
@@ -140,6 +142,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     });
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(2);
     expect(port.listResources).toHaveBeenCalledTimes(2);
+    expect(filterPort.listResourcePage).toHaveBeenCalledTimes(2);
     expect(port.loadCatalog).toHaveBeenCalledOnce();
 
     await act(async () => {
@@ -148,6 +151,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     });
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(3);
     expect(port.listResources).toHaveBeenCalledTimes(3);
+    expect(filterPort.listResourcePage).toHaveBeenCalledTimes(3);
     expect(port.loadCatalog).toHaveBeenCalledTimes(2);
 
     await act(async () => {
@@ -160,6 +164,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     });
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(5);
     expect(port.listResources).toHaveBeenCalledTimes(5);
+    expect(filterPort.listResourcePage).toHaveBeenCalledTimes(5);
     expect(port.loadCatalog).toHaveBeenCalledTimes(3);
     expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(5);
 
@@ -170,6 +175,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     });
     await act(async () => Promise.resolve());
     expect(port.listResources).toHaveBeenCalledTimes(5);
+    expect(filterPort.listResourcePage).toHaveBeenCalledTimes(5);
     expect(port.loadCatalog).toHaveBeenCalledTimes(3);
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(5);
 
@@ -179,6 +185,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       await Promise.resolve();
     });
     expect(port.listResources).toHaveBeenCalledTimes(6);
+    expect(filterPort.listResourcePage).toHaveBeenCalledTimes(6);
     expect(port.loadCatalog).toHaveBeenCalledTimes(4);
     expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(6);
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(6);

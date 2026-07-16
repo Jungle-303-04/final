@@ -94,6 +94,9 @@ export function useResourcesPageState(
     namespace ?? "",
     includeDeleted ? "deleted" : "active",
   ].join("\u001f");
+  const listRefreshPolicyKey = selectedResourceType === "pod" || selectedResourceType === "node"
+    ? "metrics_kubernetes"
+    : "resource_list_slow";
   const [listPolicyRecord, setListPolicyRecord] = useState<{
     policy: BrowserRefreshPolicy;
     scope: string;
@@ -112,7 +115,7 @@ export function useResourcesPageState(
     () => setRevision((current) => current + 1),
   );
   const acceptPolicy = useCallback((
-    key: "resource_list" | "resource_list_slow",
+    key: "resource_list" | "resource_list_slow" | "metrics_kubernetes",
     controller: ServerRefreshController,
   ) => {
     const requestedScope = key === "resource_list"
@@ -126,7 +129,7 @@ export function useResourcesPageState(
     void refreshPolicies.getPolicy(key).then(
       (policy) => {
         if (!isCurrentScope()) return;
-        if (key === "resource_list_slow") {
+        if (key !== "resource_list") {
           setListPolicyRecord({ policy, scope: listPolicyScope });
         }
         controller.acceptSuccess(policy);
@@ -159,11 +162,11 @@ export function useResourcesPageState(
     if (target === "catalog") {
       acceptPolicy("resource_list", catalogRefresh);
     } else if (next.list === undefined && next.detail === undefined) {
-      acceptPolicy("resource_list_slow", listRefresh);
+      acceptPolicy(listRefreshPolicyKey, listRefresh);
     } else {
       listRefresh.backgroundFailure();
     }
-  }, [acceptPolicy, catalogRefresh, listRefresh]);
+  }, [acceptPolicy, catalogRefresh, listRefresh, listRefreshPolicyKey]);
   const refresh = useCallback(() => {
     catalogRefresh.requestRefresh();
     listRefresh.requestRefresh();
