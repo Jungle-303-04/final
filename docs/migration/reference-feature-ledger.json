@@ -4766,16 +4766,30 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/features/settings/settingsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/settings-access.test.ts",
+        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "consumer": "src/packages/contracts/shell_state.py#SettingsAccessProfileResponse",
+          "reason": "Product RBAC decisions are exact, but the cluster agent cannot attribute Kubernetes discovery denial to the signed-in product subject.",
+          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
+          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "reason": "The panel renders explicit unavailable evidence instead of claiming per-kind hidden resources until delegated Kubernetes subject identity exists.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4783,11 +4797,11 @@
     {
       "id": "reference-feature-125",
       "contractId": "reference.feature.125",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:view:guarded-count-and-query-identity:v1",
       "legacyContractIds": [
         "reference.feature.125"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 409,
       "cells": [
@@ -4804,16 +4818,29 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "tests/test_inventory_filter_response_contract.py",
+        "frontend/src/api/resource-filters.test.ts",
+        "frontend/src/pages/resources/useResourcesFilterDataFrame.pagination.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_filtered_resources",
+          "consumer": "src/domains/inventory_filter/repository.py#InventoryRepository.list_filtered_resources",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/useResourcesFilterDataFrame.ts#useResourcesFilterDataFrame",
+          "consumer": "frontend/src/features/resources/resourcesFilterContract.ts#ResourcesFilterPort",
+          "test": "frontend/src/pages/resources/useResourcesFilterDataFrame.pagination.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4872,11 +4899,11 @@
     {
       "id": "reference-feature-127",
       "contractId": "reference.feature.127",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
       "legacyContractIds": [
         "reference.feature.127"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 411,
       "cells": [
@@ -4892,16 +4919,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.InventoryResourceDetailResponse",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_inventory_domain.py",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
+          "reason": "The one-hop related-resource projection is not an authoritative Kubernetes garbage-collection cascade and cannot be used as a delete impact preview.",
+          "test": "tests/test_inventory_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "Delete confirmation remains unavailable until the server supplies an exact owner-reference cascade with completeness and current resource generation.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4909,11 +4947,11 @@
     {
       "id": "reference-feature-128",
       "contractId": "reference.feature.128",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:issues:resource:bounded-disclosure:v1",
       "legacyContractIds": [
         "reference.feature.128"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 412,
       "cells": [
@@ -4928,17 +4966,30 @@
       ],
       "streaming": false,
       "area": "resource-inventory",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIssueListResponse",
+      "frontendContract": "frontend/src/features/issues/resourceIssuesContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_dashboard_router.py",
+        "frontend/src/api/resource-issues.test.ts",
+        "frontend/src/features/issues/createResourceIssuesAdapter.test.ts",
+        "frontend/src/features/issues/ResourceIssuesSection.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "consumer": "src/domains/dashboard/repository.py#DashboardRepository.list_resource_issues",
+          "test": "tests/test_dashboard_router.py#test_resource_rca_issues_requires_both_permissions_and_returns_server_onset"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/issues/ResourceIssuesSection.tsx#ResourceIssuesSection",
+          "consumer": "frontend/src/features/issues/createResourceIssuesAdapter.ts#createResourceIssuesAdapter",
+          "test": "frontend/src/features/issues/ResourceIssuesSection.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4946,11 +4997,11 @@
     {
       "id": "reference-feature-129",
       "contractId": "reference.feature.129",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
       "legacyContractIds": [
         "reference.feature.129"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 413,
       "cells": [
@@ -4966,16 +5017,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.audit",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_audit.py",
+        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/audit/router.py",
+          "reason": "The audit log is workspace action history and no collector-backed resource finding repository is keyed by an exact Kubernetes ResourceRef.",
+          "test": "tests/test_audit.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+          "reason": "Provider security reports may render when observed, but they cannot impersonate a generic resource audit finding endpoint.",
+          "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4983,11 +5045,11 @@
     {
       "id": "reference-feature-130",
       "contractId": "reference.feature.130",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
       "legacyContractIds": [
         "reference.feature.130"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 414,
       "cells": [
@@ -5003,16 +5065,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "reason": "No cluster-agent subject index persists ServiceAccount bindings, inherited groups, effective rules, and used-by Pod identities.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+          "reason": "The resource drawer cannot render ServiceAccount effective access without an exact server projection.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5020,11 +5093,11 @@
     {
       "id": "reference-feature-131",
       "contractId": "reference.feature.131",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
       "legacyContractIds": [
         "reference.feature.131"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 415,
       "cells": [
@@ -5040,16 +5113,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "reason": "Signed-in product identity is not delegated as a Kubernetes User or Group and no reverse binding index is collected.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+          "reason": "User and Group rule summaries stay absent rather than deriving Kubernetes access from product roles.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5057,11 +5141,11 @@
     {
       "id": "reference-feature-132",
       "contractId": "reference.feature.132",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
       "legacyContractIds": [
         "reference.feature.132"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 416,
       "cells": [
@@ -5077,16 +5161,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "reason": "No authorized Role or ClusterRole rule, binding, and subject read model is retained by the Python backend.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+          "reason": "Role detail cannot expose inverse bindings until the cluster agent supplies complete RBAC evidence.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5094,11 +5189,11 @@
     {
       "id": "reference-feature-133",
       "contractId": "reference.feature.133",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
       "legacyContractIds": [
         "reference.feature.133"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 417,
       "cells": [
@@ -5114,16 +5209,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "reason": "The namespace catalog is authorization-safe, but it does not include RoleBinding, ClusterRoleBinding, or ServiceAccount permission summaries.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+          "reason": "Namespace detail cannot show an incomplete permission summary as if it were authoritative.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5162,15 +5268,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "blocked",
           "destination": "src/domains/shell_state/router.py#get_settings_access",
           "consumer": "src/domains/identity/repository.py#effective_permissions_for_resource",
+          "reason": "Product RBAC decisions are implemented, but the cluster agent cannot run SelfSubjectRulesReview for the signed-in product subject.",
           "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "blocked",
           "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
           "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "reason": "The access panel shows explicit Kubernetes rule unavailability and never translates product permissions into Kubernetes verbs.",
           "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
         },
         "desktop": null,
@@ -5180,11 +5288,11 @@
     {
       "id": "reference-feature-135",
       "contractId": "reference.feature.135",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:view:guarded-count-and-query-identity:v1",
       "legacyContractIds": [
         "reference.feature.135"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 419,
       "cells": [
@@ -5200,16 +5308,28 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_target_metadata_evidence.py",
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/pages/resources/ResourcesPage.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/services/target/cluster-agent/providers/metadata_resource_quotas.py",
+          "reason": "ResourceQuota summaries are collected only as bounded RCA metadata and are not persisted as exact inventory resources with UID and freshness.",
+          "test": "tests/test_target_metadata_evidence.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+          "reason": "No typed Namespace quota renderer consumes an exact ResourceQuota inventory contract.",
+          "test": "frontend/src/pages/resources/ResourcesPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5217,11 +5337,11 @@
     {
       "id": "reference-feature-136",
       "contractId": "reference.feature.136",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:image-filesystem:search-input:shared-policy:v1",
       "legacyContractIds": [
         "reference.feature.136"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 420,
       "cells": [
@@ -5237,16 +5357,26 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory",
+          "reason": "No authenticated registry metadata provider, pull-secret delegation policy, cache provenance, or image identity repository exists.",
+          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/shared/ui/primitives/input.tsx",
+          "reason": "The shared search input is reusable, but no server image metadata contract exists to open an image filesystem entry.",
+          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5254,11 +5384,11 @@
     {
       "id": "reference-feature-137",
       "contractId": "reference.feature.137",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:image-filesystem:search-input:shared-policy:v1",
       "legacyContractIds": [
         "reference.feature.137"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 421,
       "cells": [
@@ -5274,16 +5404,26 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory",
+          "reason": "No sandboxed image layer inspector, bounded filesystem tree contract, or retained inspection artifact exists.",
+          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/shared/ui/primitives/input.tsx",
+          "reason": "The browser does not construct an image filesystem tree without a typed server artifact.",
+          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5291,11 +5431,11 @@
     {
       "id": "reference-feature-138",
       "contractId": "reference.feature.138",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:image-filesystem:search-input:shared-policy:v1",
       "legacyContractIds": [
         "reference.feature.138"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 422,
       "cells": [
@@ -5311,16 +5451,26 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory",
+          "reason": "No image artifact handle, path allowlist, byte limit, content classification, or audited download response exists.",
+          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/shared/ui/primitives/input.tsx",
+          "reason": "Image file preview and download remain unavailable until the server issues an opaque bounded artifact handle.",
+          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5328,11 +5478,11 @@
     {
       "id": "reference-feature-139",
       "contractId": "reference.feature.139",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:pod-filesystem:search-input:shared-policy:v1",
       "legacyContractIds": [
         "reference.feature.139"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 423,
       "cells": [
@@ -5348,16 +5498,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.terminal",
+      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_pod_terminal.py",
+        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py",
+          "reason": "Pod exec is interactive and audited, but no read-only directory protocol, container path policy, or bounded listing result exists.",
+          "test": "tests/test_pod_terminal.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/shared/ui/primitives/input.tsx",
+          "reason": "The shared filter field cannot substitute for a server-authorized Pod filesystem listing.",
+          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5365,11 +5526,11 @@
     {
       "id": "reference-feature-140",
       "contractId": "reference.feature.140",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:pod-filesystem:search-input:shared-policy:v1",
       "legacyContractIds": [
         "reference.feature.140"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 424,
       "cells": [
@@ -5385,16 +5546,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.terminal",
+      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_pod_terminal.py",
+        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py",
+          "reason": "No read-only file stream, size ceiling, path containment, content disposition, or command audit contract exists for Pod downloads.",
+          "test": "tests/test_pod_terminal.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/shared/ui/primitives/input.tsx",
+          "reason": "The browser never converts an arbitrary container path into a downloadable URL.",
+          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5402,11 +5574,11 @@
     {
       "id": "reference-feature-141",
       "contractId": "reference.feature.141",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:capi-cluster:connect-kubeconfig-actions:v1",
       "legacyContractIds": [
         "reference.feature.141"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 425,
       "cells": [
@@ -5422,16 +5594,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectResponse",
+      "frontendContract": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/target/router.py",
+          "reason": "Cluster registration does not authorize or export a management-cluster CAPI Secret as a one-time kubeconfig artifact.",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
+          "reason": "The connect dialog cannot offer a CAPI kubeconfig download without secret redaction, encrypted delivery, expiry, and audit policy.",
+          "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5439,11 +5622,11 @@
     {
       "id": "reference-feature-142",
       "contractId": "reference.feature.142",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:capi-cluster:connect-kubeconfig-actions:v1",
       "legacyContractIds": [
         "reference.feature.142"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "line": 426,
       "cells": [
@@ -5459,16 +5642,27 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectResponse",
+      "frontendContract": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/target/router.py",
+          "reason": "The existing target registration flow requires an installed agent and cannot treat a CAPI Secret as an authenticated live connection.",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
+          "reason": "No CAPI capability, audited command receipt, connection progress stream, or resulting managed-cluster identity exists.",
+          "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5476,11 +5670,11 @@
     {
       "id": "reference-feature-143",
       "contractId": "reference.feature.143",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.143"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 435,
       "cells": [
@@ -5496,16 +5690,30 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_live_resource_metrics.py",
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
+          "reason": "Real Pod CPU and memory samples are persisted, but the normalized response aggregates containers and does not expose the source timestamp-window container shape.",
+          "test": "tests/test_live_resource_metrics.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "consumer": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.ts#createResourceMetricsHistoryAdapter",
+          "reason": "The detail chart shows current and peak aggregate measurements while a per-container live metric panel remains unavailable.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5513,11 +5721,11 @@
     {
       "id": "reference-feature-144",
       "contractId": "reference.feature.144",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.144"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 436,
       "cells": [
@@ -5533,16 +5741,29 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
+          "reason": "Node history accepts persisted usage samples, but no dedicated current-node timestamp and window response is exposed.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "consumer": "frontend/src/features/resources/resourceMetricsHistoryContract.ts#ResourceMetricsHistoryPort",
+          "reason": "The shared chart renders an observed latest point but not the source current-node summary shape.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5550,11 +5771,11 @@
     {
       "id": "reference-feature-145",
       "contractId": "reference.feature.145",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.145"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 437,
       "cells": [
@@ -5570,16 +5791,32 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_live_resource_metrics.py",
+        "tests/test_inventory_filter_router.py",
+        "tests/test_inventory_filter_response_contract.py",
+        "frontend/src/api/resource-metrics-history.test.ts",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
+          "reason": "The bounded range, exact resource identity, gaps, and completeness are implemented, but container-level Pod history is not retained.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "consumer": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
+          "reason": "The canonical range chart is complete for aggregate Pod evidence; per-container series remain a provider follow-up.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5587,11 +5824,11 @@
     {
       "id": "reference-feature-146",
       "contractId": "reference.feature.146",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.146"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 438,
       "cells": [
@@ -5606,17 +5843,31 @@
       ],
       "streaming": false,
       "area": "observability-sessions",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "tests/test_inventory_filter_response_contract.py",
+        "frontend/src/api/resource-metrics-history.test.ts",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "consumer": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.ts#createResourceMetricsHistoryAdapter",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5624,11 +5875,11 @@
     {
       "id": "reference-feature-147",
       "contractId": "reference.feature.147",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
       "legacyContractIds": [
         "reference.feature.147"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 439,
       "cells": [
@@ -5644,16 +5895,27 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_live_resource_metrics.py",
+        "frontend/src/pages/resources/ResourcesTable.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "reason": "Pod usage, request, and limit evidence is collected, but no bounded authorized top-Pod ranking response joins it to the pinned inventory revision.",
+          "test": "tests/test_live_resource_metrics.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourcesTable.tsx",
+          "reason": "Resource table metric columns stay absent until the server supplies sortable values with completeness and units.",
+          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5661,11 +5923,11 @@
     {
       "id": "reference-feature-148",
       "contractId": "reference.feature.148",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
       "legacyContractIds": [
         "reference.feature.148"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 440,
       "cells": [
@@ -5681,16 +5943,27 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/pages/resources/ResourcesTable.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "reason": "No authorized top-Node projection combines usage, allocatable capacity, and Pod count at one observation boundary.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourcesTable.tsx",
+          "reason": "Node ranking columns cannot be calculated from separate inventory and metric refresh generations in the browser.",
+          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5698,11 +5971,11 @@
     {
       "id": "reference-feature-149",
       "contractId": "reference.feature.149",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:prometheus:live-apply:v1",
       "legacyContractIds": [
         "reference.feature.149"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 441,
       "cells": [
@@ -5718,16 +5991,27 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.telemetry",
+      "frontendContract": "frontend/src/api/metrics.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/metrics.test.ts",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/target/router.py",
+          "reason": "Prometheus configuration can be installed, but no live provider status repository reports address, service, context, freshness, and connection error.",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/api/metrics.ts",
+          "reason": "Metric panels receive typed query outcomes and cannot infer provider connection state from an empty or failed query.",
+          "test": "frontend/src/api/metrics.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5735,11 +6019,11 @@
     {
       "id": "reference-feature-150",
       "contractId": "reference.feature.150",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:prometheus:live-apply:v1",
       "legacyContractIds": [
         "reference.feature.150"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 442,
       "cells": [
@@ -5755,16 +6039,27 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "frontendContract": "frontend/src/api/metrics.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/metrics.test.ts",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/target/router.py",
+          "reason": "No provider discovery and connection command validates a target, persists status, returns an audited receipt, and invalidates metric availability.",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/api/metrics.ts",
+          "reason": "The existing query command cannot be reused as a Prometheus connection mutation.",
+          "test": "frontend/src/api/metrics.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5772,11 +6067,11 @@
     {
       "id": "reference-feature-151",
       "contractId": "reference.feature.151",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:network-filesystem-and-saturation:v1",
       "legacyContractIds": [
         "reference.feature.151"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 443,
       "cells": [
@@ -5798,16 +6093,30 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/api/resource-metrics-history.test.ts",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
+          "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
+          "reason": "CPU and memory history with exact scope and range is implemented; network, filesystem, restart, request, limit, category, and unit series are not persisted.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "consumer": "frontend/src/features/resources/resourceMetricsHistoryContract.ts#ResourceMetricsHistoryPort",
+          "reason": "The grid renders only server-observed CPU and memory panels and does not synthesize missing categories.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5815,11 +6124,11 @@
     {
       "id": "reference-feature-152",
       "contractId": "reference.feature.152",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.152"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 444,
       "cells": [
@@ -5835,16 +6144,29 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.requests.AgentDebugQueryRequest",
+      "frontendContract": "frontend/src/api/metrics.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_command_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/api/metrics-command.test.ts",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/command/debug_queries.py#queue_debug_query",
+          "consumer": "src/services/target/cluster-agent/providers/prometheus_providers.py",
+          "test": "tests/test_command_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/api/metrics.ts#runPrometheusQuery",
+          "consumer": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "reason": "The generic bounded Prometheus command is implemented, but no server-owned HPA query definition and range chart consumer is attached to an exact HPA resource.",
+          "test": "frontend/src/api/metrics-command.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5852,11 +6174,11 @@
     {
       "id": "reference-feature-153",
       "contractId": "reference.feature.153",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:network-filesystem-and-saturation:v1",
       "legacyContractIds": [
         "reference.feature.153"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 445,
       "cells": [
@@ -5872,16 +6194,27 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/providerResourceContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_inventory_provider_detail.py",
+        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory/provider_detail.py",
+          "reason": "PVC identity and storage capacity are projected, but no observed volume-used metric with provider provenance and freshness is persisted.",
+          "test": "tests/test_inventory_provider_detail.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+          "reason": "The PVC panel does not derive used bytes or ratio from capacity-only inventory evidence.",
+          "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5944,11 +6277,11 @@
     {
       "id": "reference-feature-155",
       "contractId": "reference.feature.155",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:logs:stream:clean-end-event:v1",
       "legacyContractIds": [
         "reference.feature.155"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 447,
       "cells": [
@@ -5964,16 +6297,30 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.log_stream.LogStreamEnvelope",
+      "frontendContract": "frontend/src/features/log-stream/logStreamContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_log_stream.py",
+        "frontend/src/api/log-stream.test.ts",
+        "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/log_stream/router.py#stream_pod_logs",
+          "consumer": "src/domains/log_stream/service.py#stream_log_events",
+          "reason": "The authenticated stream sends an initial bounded batch, but no separate snapshot response returns container catalog and logs.",
+          "test": "tests/test_log_stream.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/app/LogStreamTab.tsx#LogStreamTab",
+          "consumer": "frontend/src/features/log-stream/createLogStreamAdapter.ts#createLogStreamAdapter",
+          "reason": "The dock starts directly from the strict SSE stream and has no independent initial-snapshot loading contract.",
+          "test": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5981,11 +6328,11 @@
     {
       "id": "reference-feature-156",
       "contractId": "reference.feature.156",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:logs:stream:clean-end-event:v1",
       "legacyContractIds": [
         "reference.feature.156"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 448,
       "cells": [
@@ -6003,29 +6350,47 @@
       ],
       "streaming": true,
       "area": "observability-sessions",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.log_stream.LogStreamEnvelope",
+      "frontendContract": "frontend/src/features/log-stream/logStreamContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_log_stream.py",
+        "frontend/src/api/log-stream.test.ts",
+        "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+        "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/log_stream/router.py#stream_pod_logs",
+          "consumer": "src/domains/log_stream/service.py#stream_log_events",
+          "test": "tests/test_log_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/LogStreamTab.tsx#LogStreamTab",
+          "consumer": "frontend/src/features/log-stream/createLogStreamAdapter.ts#createLogStreamAdapter",
+          "test": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts"
+        },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/log_stream/router.py#LogSseResponse",
+          "consumer": "frontend/src/api/log-stream.ts#openPodLogStream",
+          "test": "frontend/src/api/log-stream.test.ts"
+        }
       }
     },
     {
       "id": "reference-feature-157",
       "contractId": "reference.feature.157",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:workload-logs:stream:membership-terminal-state:v1",
       "legacyContractIds": [
         "reference.feature.157"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 449,
       "cells": [
@@ -6045,29 +6410,47 @@
       ],
       "streaming": true,
       "area": "observability-sessions",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.log_stream.LogStreamEnvelope",
+      "frontendContract": "frontend/src/features/log-stream/logStreamContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_log_stream.py",
+        "frontend/src/api/log-stream.test.ts",
+        "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+        "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/log_stream/router.py#stream_workload_logs",
+          "consumer": "src/domains/log_stream/service.py#stream_log_events",
+          "test": "tests/test_log_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/LogStreamTab.tsx#LogStreamTab",
+          "consumer": "frontend/src/features/log-stream/createLogStreamAdapter.ts#createLogStreamAdapter",
+          "test": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts"
+        },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/log_stream/router.py#LogSseResponse",
+          "consumer": "frontend/src/api/log-stream.ts#openWorkloadLogStream",
+          "test": "frontend/src/features/bottom-dock/bottomDockState.test.ts"
+        }
       }
     },
     {
       "id": "reference-feature-158",
       "contractId": "reference.feature.158",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
       "legacyContractIds": [
         "reference.feature.158"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 450,
       "cells": [
@@ -6082,19 +6465,37 @@
       ],
       "streaming": true,
       "area": "observability-sessions",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.terminal",
+      "frontendContract": "frontend/src/features/pod-terminal/podTerminalContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_realtime_gateway.py",
+        "tests/test_pod_terminal.py",
+        "frontend/src/api/pod-terminal.test.ts",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py",
+          "consumer": "src/services/target/cluster-agent/terminal_exec.py#PodExecController",
+          "test": "tests/test_realtime_gateway.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/PodTerminalDialog.tsx#PodTerminalDialog",
+          "consumer": "frontend/src/features/pod-terminal/createPodTerminalAdapter.ts#createPodTerminalAdapter",
+          "test": "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
+        },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py",
+          "consumer": "frontend/src/api/pod-terminal.ts#openPodTerminal",
+          "test": "frontend/src/api/pod-terminal.test.ts"
+        }
       }
     },
     {
@@ -6243,15 +6644,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "implemented",
+          "state": "in_progress",
           "destination": "src/domains/service_access/router.py#get_service_access_capabilities",
           "consumer": "src/packages/contracts/service_access.py#ServiceAccessCapabilities",
+          "reason": "Exact Service TCP ports are implemented, but the source type parameter also permits Pod targets and no Pod container-port capability projection exists.",
           "test": "tests/test_service_access_router.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "in_progress",
           "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
           "consumer": "frontend/src/features/service-access/createServiceAccessAdapter.ts#createServiceAccessAdapter",
+          "reason": "The dialog supports Service ports and a manual loopback command; Pod port discovery remains unavailable.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
@@ -7415,11 +7818,11 @@
     {
       "id": "reference-feature-185",
       "contractId": "reference.feature.185",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
       "legacyContractIds": [
         "reference.feature.185"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 508,
       "cells": [
@@ -7435,16 +7838,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_projection.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
+          "reason": "The inventory projection observes Helm storage labels but never reads Secret payloads and has no provider-backed, revision-bound manifest reader.",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmReleaseDetailPage",
+          "reason": "The release detail renders the explicit manifest-unavailable reason and does not fabricate revision content.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7452,11 +7865,11 @@
     {
       "id": "reference-feature-186",
       "contractId": "reference.feature.186",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
       "legacyContractIds": [
         "reference.feature.186"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 509,
       "cells": [
@@ -7472,16 +7885,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_projection.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
+          "reason": "No authorized provider decodes revision values or defines redaction for Secret-derived Helm values.",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmReleaseDetailPage",
+          "reason": "Values remain unavailable until the server supplies a redacted revision-bound artifact.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7509,17 +7932,29 @@
       ],
       "streaming": false,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/shared/ui/UnifiedDiff.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_projection.py",
+        "frontend/src/shared/ui/UnifiedDiff.test.tsx",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
+          "reason": "No provider returns two redacted manifest or values revisions for comparison.",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/ui/UnifiedDiff.tsx#UnifiedDiff",
+          "consumer": "frontend/src/pages/resources/ResourceManifestEditor.tsx#ResourceManifestEditor",
+          "reason": "The shared semantic diff classifier and renderer are implemented once and ready for Helm artifacts without a duplicate viewer.",
+          "test": "frontend/src/shared/ui/UnifiedDiff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7549,16 +7984,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/shared/ui/UnifiedDiff.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_projection.py",
+        "frontend/src/shared/ui/UnifiedDiff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
+          "reason": "Revision labels are observed, but notes, hooks, resources, and their revision artifacts are not available.",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The reusable diff renderer cannot open a comparison route without typed provider artifacts.",
+          "test": "frontend/src/shared/ui/UnifiedDiff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7566,11 +8011,11 @@
     {
       "id": "reference-feature-189",
       "contractId": "reference.feature.189",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
       "legacyContractIds": [
         "reference.feature.189"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 512,
       "cells": [
@@ -7586,16 +8031,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_projection.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "reason": "The read-only release projection has no repository metadata provider that can compare current and latest chart versions.",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "Upgrade availability remains hidden rather than inferred from chart labels.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7603,11 +8058,11 @@
     {
       "id": "reference-feature-190",
       "contractId": "reference.feature.190",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
       "legacyContractIds": [
         "reference.feature.190"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 513,
       "cells": [
@@ -7623,16 +8078,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_projection.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "reason": "No repository index or OCI metadata contract supplies an authorized chart version catalog.",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The browser does not construct version options from release history.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7640,11 +8105,11 @@
     {
       "id": "reference-feature-191",
       "contractId": "reference.feature.191",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
       "legacyContractIds": [
         "reference.feature.191"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 514,
       "cells": [
@@ -7660,16 +8125,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "reason": "Batch upgrade decoration requires the same missing repository and version observation provider.",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The list remains evidence-only and does not advertise guessed upgrades.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7696,17 +8171,28 @@
       ],
       "streaming": false,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/api/catalog.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/api/catalog.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/catalog/router.py#list_catalog_items",
+          "consumer": "src/domains/catalog/install.py#server_helm_recipe",
+          "reason": "The server exposes curated digest-pinned Helm recipes, not a mutable repository registry.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/api/catalog.ts#listCatalogItems",
+          "reason": "The strict catalog client exists, but the Helm page has no repository catalog surface.",
+          "test": "frontend/src/api/catalog.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7734,16 +8220,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/catalog/router.py",
+          "reason": "Curated server recipes have no browser-mutable repository cache or refresh operation.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "No repository update control is exposed without an owner-authorized provider.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7771,16 +8267,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/catalog/install.py#server_helm_recipe",
+          "reason": "The server owns fixed OCI references but has no workspace OCI source registry or credential metadata projection.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "Fixed server recipes are not presented as user-managed OCI sources.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7809,16 +8315,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/catalog/install.py#server_helm_recipe",
+          "reason": "No credential vault, write-only secret contract, source mutation audit, or OCI probe exists.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The browser cannot own OCI credentials or mutate source configuration.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7845,17 +8361,28 @@
       ],
       "streaming": false,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/api/catalog.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/api/catalog.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/catalog/router.py#list_catalog_items",
+          "consumer": "src/domains/catalog/repository.py#BOOTSTRAP_CATALOG_ITEMS",
+          "reason": "Curated Helm items are available, but repository, search, and filter semantics are not yet a typed server contract.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/api/catalog.ts#listCatalogItems",
+          "reason": "The browser consumes the strict catalog envelope but has no Helm chart browser route.",
+          "test": "frontend/src/api/catalog.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7883,17 +8410,29 @@
       ],
       "streaming": false,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/api/catalog.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "tests/test_catalog_agent_runner.py",
+        "frontend/src/api/catalog.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/catalog/router.py#get_catalog_item",
+          "consumer": "src/domains/catalog/install.py#server_helm_recipe",
+          "reason": "Curated item detail includes server-owned versions and a validated values schema for executable recipes.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/api/catalog.ts#getCatalogItem",
+          "reason": "The strict detail client is implemented, but no Helm install wizard consumes it yet.",
+          "test": "frontend/src/api/catalog.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7921,16 +8460,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/catalog/router.py",
+          "reason": "No external catalog provider, pagination contract, trust metadata, timeout, or cache policy exists.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "External search results are not hardcoded into the browser.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7959,16 +8508,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/catalog/router.py",
+          "reason": "The product has no external chart detail provider or verified mapping from external identity to an executable server recipe.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The curated catalog detail cannot be relabeled as arbitrary external chart detail.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7995,19 +8554,40 @@
       ],
       "streaming": true,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "tests/test_catalog_agent_runner.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/catalog/router.py#install_catalog_item",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
+          "reason": "The idempotent Agent executor is complete for digest-pinned server recipes in the sandbox namespace, not arbitrary chart, repository, namespace, or credential input.",
+          "test": "tests/test_catalog_agent_runner.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The durable operation reader exists, but no Helm wizard accepts the bounded catalog install receipt.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#command_events",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
+          "reason": "Accepted catalog commands can reuse the single durable, resumable OperationEvent stream without a Helm-specific progress protocol.",
+          "test": "tests/test_operation_event_hub.py"
+        }
       }
     },
     {
@@ -8044,7 +8624,8 @@
         "backend": {
           "state": "blocked",
           "destination": "src/domains/helm/release_router.py",
-          "reason": "The Python Helm boundary is read-only and has no provider-backed values validation, upgrade executor, CommandReceipt, or durable progress stream.",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
+          "reason": "The existing Agent executor is recipe-bound installation only; it cannot safely upgrade an observed release and no provider-backed values validation, upgrade payload, capability, or CommandReceipt exists.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
@@ -8054,17 +8635,22 @@
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "blocked",
+          "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The durable stream is reusable, but no upgrade command can issue an accepted receipt or first event.",
+          "test": "tests/test_operation_event_hub.py"
+        }
       }
     },
     {
       "id": "reference-feature-202",
       "contractId": "reference.feature.202",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:mutation-client:operation-gate:v1",
       "legacyContractIds": [
         "reference.feature.202"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 525,
       "cells": [
@@ -8080,18 +8666,35 @@
       "streaming": true,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "tests/test_operation_event_hub.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
+          "reason": "The catalog installer has no observed-release identity, target revision payload, rollback capability, or Agent handler.",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "No rollback control is rendered without an authorized action descriptor and receipt.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "blocked",
+          "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The shared stream is ready, but no rollback command can issue the first durable event.",
+          "test": "tests/test_operation_event_hub.py"
+        }
       }
     },
     {
@@ -8117,16 +8720,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_catalog_domain.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/catalog/install.py#validate_catalog_values",
+          "reason": "Catalog values schema validation exists, but no provider renders a revision-bound preview artifact or redacted manifest diff.",
+          "test": "tests/test_catalog_domain.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The browser has no typed preview response to confirm.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8154,16 +8767,26 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "reason": "Applying release values is an upgrade and requires the missing provider validation, executor, audit receipt, and operation stream handoff.",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "No values editor or Apply action is exposed against the read-only release projection.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8171,11 +8794,11 @@
     {
       "id": "reference-feature-205",
       "contractId": "reference.feature.205",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:mutation-client:operation-gate:v1",
       "legacyContractIds": [
         "reference.feature.205"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 528,
       "cells": [
@@ -8191,16 +8814,28 @@
       "streaming": false,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "tests/test_operation_event_hub.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
+          "reason": "The Agent has no uninstall action, observed-release ownership proof, capability, or command payload.",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "The release detail never exposes a destructive action without an exact server capability and one-time confirmation.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8230,16 +8865,30 @@
       "streaming": false,
       "area": "gitops-workspace",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_application_product_router.py",
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+        "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/applications/router.py#list_applications",
+          "consumer": "src/domains/gitops/detail_router.py#get_gitops_application_detail",
+          "reason": "Authorized applications and deployment bindings replace raw controller CR discovery, but external GitOps kind, labels, health, and managed-resource inventory are not projected.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "The fleet table uses canonical application and binding identity without browser CR normalization; provider-specific facets remain unavailable.",
+          "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8247,11 +8896,11 @@
     {
       "id": "reference-feature-207",
       "contractId": "reference.feature.207",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:topology:root-not-recursive-portal:v1",
       "legacyContractIds": [
         "reference.feature.207"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 541,
       "cells": [
@@ -8268,17 +8917,27 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/gitops/detail_router.py",
+          "reason": "No provider-neutral managed-resource tree preserves owns, source, and dependsOn edges for an external GitOps resource.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+          "reason": "Release-plan workflow edges are not relabeled as a live controller resource tree.",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8306,16 +8965,30 @@
       "streaming": false,
       "area": "gitops-workspace",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_projection.py",
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/gitops/detail_router.py#get_gitops_application_detail",
+          "consumer": "src/domains/gitops/detail_projection.py#gitops_application_detail",
+          "reason": "Source revision, authorized scope, current workflow operation, and capability reasons are projected; desired/live resource evidence and provider history remain unavailable.",
+          "test": "tests/test_gitops_application_detail_projection.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx#GitOpsApplicationDetailPage",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "The detail renders observed evidence and explicit unavailable reasons without source-shaped unknown objects.",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8323,11 +8996,11 @@
     {
       "id": "reference-feature-209",
       "contractId": "reference.feature.209",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:client-contract:provider-detail-actions:v1",
       "legacyContractIds": [
         "reference.feature.209"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 543,
       "cells": [
@@ -8342,17 +9015,27 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/gitops/detail_router.py",
+          "reason": "No external controller executor can reconcile an exact provider ResourceRef and issue a CommandReceipt.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+          "reason": "Provider reconcile remains an explicit unavailable capability.",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8360,11 +9043,11 @@
     {
       "id": "reference-feature-210",
       "contractId": "reference.feature.210",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:client-contract:provider-detail-actions:v1",
       "legacyContractIds": [
         "reference.feature.210"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 544,
       "cells": [
@@ -8379,17 +9062,27 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/gitops/detail_router.py",
+          "reason": "Webhook and release-plan workflows do not provide a direct provider sync-with-source command for an arbitrary external controller resource.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+          "reason": "The product does not expose an unrelated release command as provider sync.",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8397,11 +9090,11 @@
     {
       "id": "reference-feature-211",
       "contractId": "reference.feature.211",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:client-contract:provider-detail-actions:v1",
       "legacyContractIds": [
         "reference.feature.211"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 545,
       "cells": [
@@ -8417,17 +9110,27 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/gitops/detail_router.py",
+          "reason": "No provider capability can suspend or resume an external GitOps custom resource.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+          "reason": "Release-run pause is scoped to product workflow execution and cannot mutate controller lifecycle.",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8454,17 +9157,27 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/gitops/detail_router.py",
+          "reason": "No selective managed-resource identity, eligibility projection, dry-run, provider executor, or CommandReceipt contract exists.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/features/gitops/gitOpsContract.ts",
+          "reason": "Release plans operate on application steps, not source-shaped selective controller resources.",
+          "test": "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8472,11 +9185,11 @@
     {
       "id": "reference-feature-213",
       "contractId": "reference.feature.213",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:client-contract:provider-detail-actions:v1",
       "legacyContractIds": [
         "reference.feature.213"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 547,
       "cells": [
@@ -8491,17 +9204,27 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.gitops.detail",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_gitops_application_detail_router.py",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/gitops/detail_router.py",
+          "reason": "A browser data refresh exists, but no provider hard-refresh action or audited executor exists.",
+          "test": "tests/test_gitops_application_detail_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+          "reason": "The refresh capability remains disabled with its server reason instead of conflating refetch with provider refresh.",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8509,11 +9232,11 @@
     {
       "id": "reference-feature-214",
       "contractId": "reference.feature.214",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:release-run-control:audited-workflow:v1",
       "legacyContractIds": [
         "reference.feature.214"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 548,
       "cells": [
@@ -8528,17 +9251,30 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "domains.release_flow",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_release_flow_diagnostics.py",
+        "frontend/src/api/release-flow.test.ts",
+        "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/release_flow/router.py#rollback_release_run",
+          "consumer": "src/domains/release_flow/repository.py#request_release_run_rollback",
+          "reason": "The product-owned rollback acts on the exact authorized release run and application steps with policy checks, persisted state, and audit evidence.",
+          "test": "tests/test_release_flow_diagnostics.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "consumer": "frontend/src/api/release-flow.ts#runReleaseAction",
+          "reason": "GitOps run controls reuse the canonical rollback action rather than adding a provider-specific adapter.",
+          "test": "frontend/src/api/release-flow.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8546,11 +9282,11 @@
     {
       "id": "reference-feature-215",
       "contractId": "reference.feature.215",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:release-run-control:audited-workflow:v1",
       "legacyContractIds": [
         "reference.feature.215"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 549,
       "cells": [
@@ -8565,17 +9301,30 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "domains.release_flow",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_release_flow_diagnostics.py",
+        "frontend/src/api/release-flow.test.ts",
+        "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/release_flow/router.py#cancel_release_run",
+          "consumer": "src/domains/release_flow/router.py#release_run_status_action",
+          "reason": "Cancellation is RBAC checked, transition validated, persisted, and audit recorded for the product release run.",
+          "test": "tests/test_release_flow_diagnostics.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "consumer": "frontend/src/api/release-flow.ts#runReleaseAction",
+          "reason": "The existing terminate user intent maps to the canonical cancel transition at the product workflow boundary.",
+          "test": "frontend/src/api/release-flow.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8583,11 +9332,11 @@
     {
       "id": "reference-feature-216",
       "contractId": "reference.feature.216",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:release-run-control:audited-workflow:v1",
       "legacyContractIds": [
         "reference.feature.216"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.9 GitOps",
       "line": 550,
       "cells": [
@@ -8603,17 +9352,30 @@
       ],
       "streaming": false,
       "area": "gitops-workspace",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.gitops",
-      "frontendContract": "frontend/src/pages/gitops",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "domains.release_flow",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_release_flow_diagnostics.py",
+        "frontend/src/api/release-flow.test.ts",
+        "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/release_flow/router.py#pause_release_run",
+          "consumer": "src/domains/release_flow/router.py#resume_release_run",
+          "reason": "Pause and resume are state-validated, workspace-scoped, persisted release-run transitions with audit events.",
+          "test": "tests/test_release_flow_diagnostics.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "consumer": "frontend/src/api/release-flow.ts#runReleaseAction",
+          "reason": "The GitOps workspace already consumes the shared pause and resume action union.",
+          "test": "frontend/src/api/release-flow.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8835,17 +9597,31 @@
       ],
       "streaming": false,
       "area": "cost-settings",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.shell_state",
+      "frontendContract": "frontend/src/features/shell-state",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
+        "frontend/src/pages/settings/SettingsPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/shell_state/router.py#get_settings",
+          "consumer": "src/domains/shell_state/repository.py#get_ui_preferences",
+          "reason": "User-scoped theme and locale preferences are revisioned server state; host kubeconfig, listener, browser, MCP, timeline, and secret integration configuration remain deployment-owned and unavailable to browser reads.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/settings/SettingsPage.tsx#SettingsPage",
+          "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
+          "reason": "The route consumes only the safe user preference and access profile contracts and exposes no fake host configuration.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8872,17 +9648,30 @@
       ],
       "streaming": false,
       "area": "cost-settings",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.shell_state",
+      "frontendContract": "frontend/src/features/shell-state",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/shell_state/router.py#update_settings",
+          "consumer": "src/domains/shell_state/repository.py#put_ui_preferences",
+          "reason": "User preferences use optimistic revision checks and an atomic audit event; browser mutation of process-level host configuration remains intentionally blocked.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
+          "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
+          "reason": "One shared synchronizer persists validated preferences and reloads server authority on revision conflict.",
+          "test": "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8910,16 +9699,26 @@
       "streaming": false,
       "area": "cost-settings",
       "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state",
+      "frontendContract": "frontend/src/pages/settings",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/pages/settings/SettingsPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/shell_state/router.py",
+          "reason": "No workspace integration repository owns Prometheus URL metadata, write-only headers, owner authorization, live client replacement, bounded probe, or audit evidence.",
+          "test": "tests/test_shell_state_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/settings/SettingsPage.tsx",
+          "reason": "The settings route does not store provider credentials in browser state or claim that a metrics reader can reconfigure its provider.",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8927,11 +9726,11 @@
     {
       "id": "reference-feature-224",
       "contractId": "reference.feature.224",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:events:scoped:durable-streams:v1",
       "legacyContractIds": [
         "reference.feature.224"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.11 실시간 event 계약",
       "line": 576,
       "cells": [
@@ -8949,16 +9748,38 @@
       "deliveryStatus": "in_progress",
       "backendContract": "packages.runtime.operation_events",
       "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
         "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_command_router.py",
+        "tests/test_timeline_sse_router.py",
+        "frontend/src/api/operation-events.test.ts",
+        "frontend/src/api/timeline.test.ts",
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/command/router.py#command_events",
+          "consumer": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
+          "reason": "Durable command events, retained timeline SSE, and typed topology resync are implemented as scoped streams; namespace context changes remain transactional responses rather than a separate progress stream.",
+          "test": "tests/test_operation_event_hub.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
+          "reason": "The browser resumes exact operation and timeline cursors and resynchronizes topology without a mixed global event store; context-switch progress is not yet streamed.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        },
         "desktop": null,
-        "realtime": null
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/streaming/sse.ts#parseSseFrames",
+          "consumer": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
+          "reason": "All implemented streams share bounded parsing, durable ordering or typed resync, reconnect policy, and render coalescing instead of per-feature ad hoc loops.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {

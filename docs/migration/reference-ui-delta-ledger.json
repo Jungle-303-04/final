@@ -1640,7 +1640,9 @@
         },
         {
           "sourceKey": "upstream-ui:gitops:topology:root-not-recursive-portal:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.207"
+          ],
           "symbol": "gitopsToolForNode",
           "interaction": "a GitOps-managed child node may offer a detail portal, but the root node is explicitly excluded so the current detail page cannot recursively navigate to itself",
           "transport": "none",
@@ -1927,7 +1929,9 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:issues:resource:bounded-disclosure:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.128"
+          ],
           "symbol": "ResourceIssuesSection",
           "interaction": "an exact resource detail polls a bounded authorized issue projection, displays server severity and freshness, and opens each issue through an accessible collapsed disclosure",
           "transport": "poll",
@@ -2109,7 +2113,10 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:logs:stream:clean-end-event:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.155",
+            "reference.feature.156"
+          ],
           "symbol": "LogStreamHandlers.onEnd and end event listener",
           "interaction": "an authenticated log SSE clean-end envelope stops only its current stream generation and carries the typed terminal reason to the matching log tab",
           "transport": "sse",
@@ -2160,7 +2167,9 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:workload-logs:stream:membership-terminal-state:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.157"
+          ],
           "symbol": "WorkloadLogsViewer pod-added, pod-removed, and onEnd handlers",
           "interaction": "a workload log stream updates the current typed pod membership and preserves it when the matching server stream ends cleanly",
           "transport": "sse",
@@ -2695,7 +2704,10 @@
         },
         {
           "sourceKey": "upstream-ui:resources:capi-cluster:connect-kubeconfig-actions:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.141",
+            "reference.feature.142"
+          ],
           "symbol": "handleConnectToCluster / handleDownloadKubeconfig",
           "interaction": "an operator connects to a CAPI workload cluster or exports its kubeconfig through a capability-scoped audited command",
           "transport": "none",
@@ -5471,7 +5483,9 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.158"
+          ],
           "symbol": "ResourceActionsBar workload logs and imperative operations",
           "interaction": "the resource command bar renders only exact CapabilitySet actions, confirms typed inputs once, returns a durable command receipt, follows OperationEvent progress, and opens logs through the shared authenticated dock",
           "transport": "sse",
@@ -9517,7 +9531,12 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.127",
+            "reference.feature.129",
+            "reference.feature.147",
+            "reference.feature.148"
+          ],
           "symbol": "apiFetch, fetchJSON, query enablement, refresh intervals, and mutation invalidation",
           "interaction": "browser requests share one authenticated cancellation-aware transport, domain hooks can be disabled or refreshed without spawning duplicate clients, and mutations invalidate only their owned projections",
           "transport": "poll",
@@ -9723,7 +9742,12 @@
         },
         {
           "sourceKey": "upstream-ui:gitops:client-contract:provider-detail-actions:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.209",
+            "reference.feature.210",
+            "reference.feature.211",
+            "reference.feature.213"
+          ],
           "symbol": "Argo resource diff, revision metadata, status, selective validation, refresh, and terminate clients",
           "interaction": "GitOps detail requires revision-bound desired/live artifacts, commit provenance, controller connection evidence, selective-resource eligibility, validation, and command outcomes tied to the exact application and managed resource",
           "transport": "sse",
@@ -9756,6 +9780,121 @@
             "state": "blocked",
             "blockedReason": "Provider-backed desired/live artifacts, revision metadata, controller status, selective validation, executor capability, CommandReceipt, and application-resource operation stream are not integrated.",
             "rationale": "The current strict detail projection exposes source revision, operation gating, and explicit unavailable reasons, but it does not manufacture provider observations or reuse an unrelated release command."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:release-run-control:audited-workflow:v1",
+          "legacyContractIds": [
+            "reference.feature.214",
+            "reference.feature.215",
+            "reference.feature.216"
+          ],
+          "symbol": "rollback, terminate, suspend, and resume operation clients",
+          "interaction": "rollback, cancellation, pause, and resume are applied to the product-owned release run that holds the exact application steps instead of mutating an external controller object directly",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the audited release run after the accepted control event and continue observing its workflow state",
+            "backpressure": "the server serializes run controls through workspace-scoped run state and rejects invalid or conflicting transitions",
+            "merge": "replace control state only for the exact release run, application steps, workspace, and accepted audit event"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/release-flow.ts",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "frontend/src/pages/gitops/RunWorkspace.tsx",
+              "src/domains/release_flow/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway",
+              "domains.release_flow.router",
+              "packages.contracts.gitops"
+            ],
+            "plannedTestIds": [
+              "gitops.release-run.rollback",
+              "gitops.release-run.cancel",
+              "gitops.release-run.pause-resume"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical product action boundary already provides RBAC-checked rollback, cancel, pause, and resume transitions with persisted release-run state and audit events; no provider-specific duplicate executor is introduced."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:helm:mutation-client:operation-gate:v1",
+          "legacyContractIds": [
+            "reference.feature.202",
+            "reference.feature.205"
+          ],
+          "symbol": "Helm rollback and uninstall clients",
+          "interaction": "release rollback and uninstall remain unavailable until an exact Helm release capability can issue an audited command receipt and reuse the durable operation event stream",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume only an accepted Helm command from its durable sequence cursor",
+            "backpressure": "coalesce progress by command attempt while retaining validation, failure, cancellation, and terminal events",
+            "merge": "refresh release state only when cluster, namespace, release, revision, receipt, and attempt identities match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "src/domains/helm/release_router.py",
+              "src/domains/command/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "packages.contracts.parity",
+              "domains.helm.release_router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "helm.rollback.provider-gate",
+              "helm.uninstall.provider-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The catalog Agent can install only server-owned recipes; it cannot identify or mutate an arbitrary observed release, and no rollback or uninstall command payload, capability projection, or executor exists.",
+            "rationale": "The generic command stream is reusable after acceptance, but it is not evidence of Helm mutation authority and is therefore not exposed without an action-specific Python and Agent contract."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:events:scoped:durable-streams:v1",
+          "legacyContractIds": [
+            "reference.feature.224"
+          ],
+          "symbol": "global events stream and reconnect policy",
+          "interaction": "browser live updates are decomposed into authenticated topology, retained timeline, and command-operation streams with explicit scope, replay, reconnect, and render-coalescing contracts",
+          "transport": "sse",
+          "realtime": {
+            "resume": "timeline and command streams resume from durable cursors while topology performs a typed resync after sequence loss",
+            "backpressure": "bounded queues, negotiated frame rates, server replay limits, and animation-frame notification coalescing prevent unbounded paint work",
+            "merge": "each stream applies only records whose workspace, cluster, resource, query, and command identities match its active subscription"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.ts",
+              "frontend/src/api/operation-events.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "src/domains/timeline/router.py",
+              "src/domains/command/router.py",
+              "src/services/realtime/realtime-gateway/app.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "packages.contracts.parity",
+              "packages.contracts.realtime",
+              "packages.runtime.operation_events"
+            ],
+            "plannedTestIds": [
+              "events.timeline.resume",
+              "events.operation.resume",
+              "events.topology.resync"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses stronger domain-scoped streams instead of one mixed global EventSource. Timeline, topology, and audited operation delivery are implemented; a context-switch progress stream is still represented by transactional shell-state completion rather than a separate live channel."
           }
         },
         {
@@ -12787,7 +12926,12 @@
         {
           "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
           "legacyContractIds": [
-            "reference.feature.184"
+            "reference.feature.184",
+            "reference.feature.185",
+            "reference.feature.186",
+            "reference.feature.189",
+            "reference.feature.190",
+            "reference.feature.191"
           ],
           "symbol": "HelmReleaseDrawer",
           "interaction": "selecting a release exposes its scoped identity and revision history while manifest, values, owned resources, and mutation availability remain explicit",
@@ -13634,7 +13778,13 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.143",
+            "reference.feature.144",
+            "reference.feature.145",
+            "reference.feature.146",
+            "reference.feature.152"
+          ],
           "symbol": "PrometheusChartsGrid time range, CPU and memory panels, and rightsizing separation",
           "interaction": "an authorized resource metrics surface selects a canonical 15-minute to 24-hour range, requests one bounded server history frame, preserves partial coverage, renders accessible CPU and memory measurements, and keeps recommendation health in the separate rightsizing contract",
           "transport": "poll",
@@ -13673,7 +13823,10 @@
         },
         {
           "sourceKey": "upstream-ui:resources:metrics-grid:network-filesystem-and-saturation:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.151",
+            "reference.feature.153"
+          ],
           "symbol": "network, filesystem, request, limit, saturation, and restart panels",
           "interaction": "resource history may show network receive and transmit, filesystem usage, request and limit reference lines, saturation, and restart markers only when the server supplies typed series with exact unit, source, coverage, and resource identity",
           "transport": "poll",
@@ -13824,7 +13977,11 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:image-filesystem:search-input:shared-policy:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.136",
+            "reference.feature.137",
+            "reference.feature.138"
+          ],
           "symbol": "ImageFilesystemModal search Input",
           "interaction": "the latest image-filesystem search field reuses the product-owned identifier-safe Input boundary instead of copying raw browser text mutation behavior into the modal",
           "transport": "none",
@@ -13864,7 +14021,10 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:pod-filesystem:search-input:shared-policy:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.139",
+            "reference.feature.140"
+          ],
           "symbol": "PodFilesystemModal search Input",
           "interaction": "the latest pod-filesystem filter field reuses the product-owned identifier-safe Input boundary while directory identity, authorization, and file data remain server responsibilities",
           "transport": "none",
@@ -14043,7 +14203,10 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:view:guarded-count-and-query-identity:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.125",
+            "reference.feature.135"
+          ],
           "symbol": "web ResourcesView count guard and selected query identity",
           "interaction": "the product requests one server-bounded resource page for the canonical selected type, treats unavailable totals separately from zero, and discards results from superseded cluster, type, namespace, filter, cursor, or snapshot generations",
           "transport": "poll",
@@ -14383,6 +14546,10 @@
         {
           "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
           "legacyContractIds": [
+            "reference.feature.130",
+            "reference.feature.131",
+            "reference.feature.132",
+            "reference.feature.133",
             "reference.feature.134"
           ],
           "symbol": "PermissionsTable and SelfSubjectRulesReview states",
@@ -14572,6 +14739,8 @@
         {
           "sourceKey": "upstream-ui:settings:prometheus:live-apply:v1",
           "legacyContractIds": [
+            "reference.feature.149",
+            "reference.feature.150",
             "reference.feature.223"
           ],
           "symbol": "PrometheusConfigField live URL and write-only headers",
