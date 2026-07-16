@@ -29,6 +29,10 @@ import {
   type ComparePort,
 } from "../features/compare/compareContract";
 import {
+  EMPTY_DIAGNOSE_PORT,
+  type DiagnosePort,
+} from "../features/diagnose/diagnoseContract";
+import {
   createOperationStatusStore,
   type OperationStatusStore,
 } from "../features/operations/OperationStatusStore";
@@ -49,6 +53,7 @@ export interface ProductComposition {
   alertEvents: AlertEventsPort;
   workloadDetail: WorkloadDetailPort;
   compare: ComparePort;
+  diagnose: DiagnosePort;
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -67,6 +72,7 @@ export function createProductComposition(
   dispose: () => void = () => undefined,
   workloadDetail: WorkloadDetailPort = EMPTY_WORKLOAD_DETAIL_PORT,
   compare: ComparePort = EMPTY_COMPARE_PORT,
+  diagnose: DiagnosePort = EMPTY_DIAGNOSE_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -97,6 +103,7 @@ export function createProductComposition(
     alertEvents,
     workloadDetail,
     compare,
+    diagnose,
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),

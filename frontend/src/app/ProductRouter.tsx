@@ -12,6 +12,7 @@ import type { ProductComposition } from "./productComposition";
 import { RouteSurface } from "./RouteSurface";
 import { WorkloadDetailRoute } from "../pages/workload-detail/WorkloadDetailRoute";
 import { CompareRoute } from "../pages/compare/CompareRoute";
+import { DiagnoseSessionProvider } from "../features/diagnose/DiagnoseSessionContext";
 import {
   landingProductRouteForReleasedSurfaces,
   PRODUCT_ROUTE_CATALOG,
@@ -43,13 +44,14 @@ export function ProductRouter({
 
   return (
     <OperationStatusStoreProvider store={composition.operationStatusStore}>
-      <UnifiedFilterProvider>
-        <ClusterScopeProvider
-          authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
-          port={composition.clusterScope}
-        >
-          <DesktopRuntimeSync />
-          <Routes>
+      <DiagnoseSessionProvider port={composition.diagnose}>
+        <UnifiedFilterProvider>
+          <ClusterScopeProvider
+            authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
+            port={composition.clusterScope}
+          >
+            <DesktopRuntimeSync />
+            <Routes>
           <Route element={(
             <ProductShell
               auth={auth}
@@ -95,9 +97,10 @@ export function ProductRouter({
             <Route element={<CompareRoute port={composition.compare} />} path="/compare" />
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
-          </Routes>
-        </ClusterScopeProvider>
-      </UnifiedFilterProvider>
+            </Routes>
+          </ClusterScopeProvider>
+        </UnifiedFilterProvider>
+      </DiagnoseSessionProvider>
     </OperationStatusStoreProvider>
   );
 }

@@ -62,6 +62,7 @@ import {
 } from "../features/alerts/alertEventsContract";
 import type { ProductRouteDefinition } from "./productRoutes";
 import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
+import { useOptionalDiagnoseSession } from "../features/diagnose/DiagnoseSessionContext";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -123,6 +124,7 @@ function ProductShellFrame({
   const { t } = useI18n();
   const themeController = useProductTheme();
   const alertEvents = useAlertEvents();
+  const diagnose = useOptionalDiagnoseSession();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
   const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
@@ -191,6 +193,7 @@ function ProductShellFrame({
       }), "detail-close");
       toast.info(t("shell.ai.narrowDetailClosed"));
     }
+    if (!next) diagnose?.closeRun();
     setAiOpen(next);
   };
 
@@ -333,7 +336,7 @@ function ProductShellFrame({
             <AiAssistantPanel
               context={aiContext}
               onOpenChange={changeAiOpen}
-              open={isAiOpen}
+              open={isAiOpen || Boolean(diagnose?.activeRunId)}
               port={aiAssistantPort}
             />
           </div>

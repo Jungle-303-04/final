@@ -41,6 +41,16 @@ AI_CHAT_PATH = "/ai/chat"
 AI_SUGGESTIONS_PATH = "/ai/suggestions"
 AI_RESOURCES_PATH = "/ai/resources/{kind}"
 AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
+# Durable, resource-scoped AI investigations. The browser supplies an exact
+# Kubernetes identity, while the gateway re-resolves it before creating a run.
+DIAGNOSE_CAPABILITIES_PATH = "/diagnose/capabilities"
+DIAGNOSE_CONSENTS_PATH = "/diagnose/consents"
+DIAGNOSE_RUNS_PATH = "/diagnose/runs"
+DIAGNOSE_RUN_PATH = "/diagnose/runs/{run_id}"
+DIAGNOSE_RUN_TURNS_PATH = "/diagnose/runs/{run_id}/turns"
+DIAGNOSE_RUN_STOP_PATH = "/diagnose/runs/{run_id}/stop"
+DIAGNOSE_RUN_EVENTS_PATH = "/diagnose/runs/{run_id}/events"
+DIAGNOSE_HISTORY_PATH = "/diagnose/history"
 # Browser log SSE. Multi-cluster identity is a required query parameter; these
 # path constants own only the target identity portion.
 POD_LOG_STREAM_PATH = "/pods/{namespace}/{name}/logs/stream"

@@ -1,3 +1,4 @@
+import { Sparkles } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 import type {
@@ -8,6 +9,12 @@ import type {
 import {
   useOptionalOperationStatusStore,
 } from "../../features/operations/OperationStatusStore";
+import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import { useOptionalDiagnoseSession } from "../../features/diagnose/DiagnoseSessionContext";
+import type {
+  DiagnoseCapabilities,
+  DiagnoseResourceTarget,
+} from "../../features/diagnose/diagnoseContract";
 import { OperationStatusFeedback } from "../../features/operations/OperationStatusFeedback";
 import type { ResourceDetail } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
@@ -35,15 +42,22 @@ export function ResourceDetailActions({
   detail: ResourceDetail;
 }) {
   const { t } = useI18n();
+  const session = useOptionalProductSession();
+  const diagnose = useOptionalDiagnoseSession();
   const operationStatusStore = useOptionalOperationStatusStore();
   const [dialog, setDialog] = useState<ResourceActionCapability | null>(null);
   const [pending, setPending] = useState(false);
   const [receipt, setReceipt] = useState<ResourceActionReceipt | null>(null);
   const [failed, setFailed] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [diagnoseConsent, setDiagnoseConsent] = useState<{
+    capabilities: DiagnoseCapabilities;
+    target: DiagnoseResourceTarget;
+  } | null>(null);
   const enabled = useMemo(() => enabledActions(capabilities, detail), [capabilities, detail]);
+  const diagnoseTarget = diagnoseTargetFrom(detail);
 
-  if (enabled.length === 0) return null;
+  if (enabled.length === 0 && (!diagnose || !diagnoseTarget || !session)) return null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -65,6 +79,18 @@ export function ResourceDetailActions({
   return (
     <div className="grid gap-2" data-slot="resource-detail-actions">
       <div className="flex flex-wrap items-center gap-2">
+        {diagnose && diagnoseTarget && session ? (
+          <Button
+            disabled={pending}
+            onClick={() => void prepareDiagnose(diagnoseTarget)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Sparkles aria-hidden="true" />
+            {t("shell.ai.title")}
+          </Button>
+        ) : null}
         {enabled.map((capability) => (
           <Button
             key={capability.capabilityId}
@@ -88,6 +114,11 @@ export function ResourceDetailActions({
             {t("resources.detail.action.accepted", { id: receipt.correlationId })}
           </output>
         )
+      ) : null}
+      {failed && dialog === null && diagnoseConsent === null ? (
+        <Alert variant="destructive">
+          <AlertDescription>{t("shell.ai.failed")}</AlertDescription>
+        </Alert>
       ) : null}
       <Dialog onOpenChange={(open) => !open && !pending && setDialog(null)} open={dialog !== null}>
         <DialogContent showCloseButton={!pending}>
@@ -137,6 +168,43 @@ export function ResourceDetailActions({
           </form>
         </DialogContent>
       </Dialog>
+      <Dialog
+        onOpenChange={(open) => !open && !pending && setDiagnoseConsent(null)}
+        open={diagnoseConsent !== null}
+      >
+        <DialogContent showCloseButton={!pending}>
+          <DialogHeader>
+            <DialogTitle>
+              {t("shell.ai.title")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("shell.ai.description")} {detail.identity.kind}/{detail.identity.name}
+            </DialogDescription>
+          </DialogHeader>
+          {failed ? (
+            <Alert variant="destructive">
+              <AlertDescription>{t("shell.ai.failed")}</AlertDescription>
+            </Alert>
+          ) : null}
+          <DialogFooter>
+            <Button
+              disabled={pending}
+              onClick={() => setDiagnoseConsent(null)}
+              type="button"
+              variant="outline"
+            >
+              {t("common.action.cancel")}
+            </Button>
+            <Button
+              disabled={pending}
+              onClick={() => void grantAndLaunchDiagnose()}
+              type="button"
+            >
+              {t("common.action.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -145,6 +213,84 @@ export function ResourceDetailActions({
     setValues(defaultInputValues(capability));
     setDialog(capability);
   }
+
+  async function prepareDiagnose(target: DiagnoseResourceTarget) {
+    if (!diagnose) return;
+    setPending(true);
+    setFailed(false);
+    try {
+      const agentCapabilities = await diagnose.port.getCapabilities();
+      if (!agentCapabilities.enabled) throw new Error("Diagnose is unavailable");
+      if (!agentCapabilities.consented) {
+        setDiagnoseConsent({ capabilities: agentCapabilities, target });
+        return;
+      }
+      await launchDiagnose(target, agentCapabilities);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function grantAndLaunchDiagnose() {
+    if (!diagnose || !diagnoseConsent || !session) return;
+    setPending(true);
+    setFailed(false);
+    try {
+      await diagnose.port.grantBrowserConsent(
+        session.workspaceId,
+        diagnoseConsent.target.clusterId,
+        diagnoseConsent.capabilities,
+      );
+      await launchDiagnose(diagnoseConsent.target, {
+        ...diagnoseConsent.capabilities,
+        consented: true,
+      });
+      setDiagnoseConsent(null);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function launchDiagnose(
+    target: DiagnoseResourceTarget,
+    agentCapabilities: DiagnoseCapabilities,
+  ) {
+    if (!diagnose) return;
+    const result = await diagnose.port.startResourceRun(target, agentCapabilities);
+    diagnose.openRun(result.run.runId);
+  }
+}
+
+function diagnoseTargetFrom(detail: ResourceDetail): DiagnoseResourceTarget | null {
+  const uid = detail.resource.uid;
+  if (!uid) return null;
+  const apiIdentity = splitApiVersion(detail.resource.apiVersion);
+  if (apiIdentity === null) return null;
+  return {
+    clusterId: detail.clusterId,
+    resourceType: detail.resource.resourceType,
+    apiGroup: apiIdentity.apiGroup,
+    apiVersion: apiIdentity.apiVersion,
+    kind: detail.identity.kind,
+    namespace: detail.identity.namespace,
+    name: detail.identity.name,
+    uid,
+  };
+}
+
+function splitApiVersion(value: string): { apiGroup: string; apiVersion: string } | null {
+  const normalized = value.trim().replace(/^\/+|\/+$/gu, "");
+  if (!normalized) return null;
+  const segments = normalized.split("/");
+  if (segments.length === 1) return { apiGroup: "", apiVersion: segments[0] ?? "" };
+  if (segments.length === 2 && segments[0] && segments[1]) {
+    return { apiGroup: segments[0], apiVersion: segments[1] };
+  }
+  return null;
 }
 
 function enabledActions(

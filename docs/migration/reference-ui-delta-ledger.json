@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 90,
+  "pendingCount": 82,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -8381,8 +8381,40 @@
         "blobId": "695cab5c6a92b61234afb0b20472d9428bc93fae",
         "sha256": "68abb58b9cbacba0ea7200e9e3b0686ab06d517bc5850a2ff7e33dbe75946c25"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:agent-settings:server-capabilities:v1",
+          "legacyContractIds": [],
+          "symbol": "AISettings",
+          "interaction": "agent identity, isolation, model, effort, consent revision, and history controls are read from a typed server capability instead of browser constants",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the capability and consent record when the authenticated workspace or user changes",
+            "backpressure": "one bounded capability request is shared by the active resource launch and panel session",
+            "merge": "replace settings only with a response for the active authenticated session"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/diagnose/models.py",
+              "src/domains/diagnose/router.py",
+              "frontend/src/features/diagnose/createDiagnoseAdapter.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.router",
+              "diagnose.frontend.adapter"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product currently exposes the configured Python investigation agent but does not yet offer a multi-agent or model catalog, so editable agent, model, effort, and isolation controls would falsely imply unsupported runtime choices.",
+            "rationale": "The adapter uses the server-described settings for every launch and does not copy local CLI configuration or history paths into the browser."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8393,8 +8425,45 @@
         "blobId": "2c3265621ef06e327dc6c9813cc3c25455b8f3e6",
         "sha256": "4ce29866936264c5250b0c52a1d53c7e709f40f559ea8ef316ca887e42a097d8"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:resource-investigation:durable-stream:v1",
+          "legacyContractIds": [
+            "reference.feature.237"
+          ],
+          "symbol": "DiagnoseProvider and useDiagnose",
+          "interaction": "one actor-scoped resource investigation deduplicates active launches, persists ordered lifecycle events, restores recent runs, and separates panel layout state from server business state",
+          "transport": "sse",
+          "realtime": {
+            "resume": "subscribe before replay, resume by durable sequence, and require an explicit resync when retention no longer covers the cursor",
+            "backpressure": "PostgreSQL bounds replay to 500 events and each low-latency subscriber queue to 128 wake events",
+            "merge": "merge only contiguous events for the active run and ignore duplicate wake events already covered by durable replay"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/diagnose/service.py",
+              "src/domains/diagnose/repository.py",
+              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.repository",
+              "domains.diagnose.service"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.contract",
+              "diagnose.backend.engine",
+              "diagnose.backend.service",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Actor-bound deduplication, durable history, consent, ordered replay, and panel session state are implemented. Process-crash recovery for an already accepted background inference remains a later durable worker lease rather than a browser retry heuristic."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8405,8 +8474,46 @@
         "blobId": "a3fc35efb8ae75148156c73dc969747c5d1bd042",
         "sha256": "a45542352b46e4b1fd78b51a82472941b6f8dec2729cfbda6400e77e6bef9d1e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:panel-surface:history-investigation:v1",
+          "legacyContractIds": [],
+          "symbol": "DiagnoseSurface",
+          "interaction": "the shared AI panel switches between recent durable investigations and an active replaying transcript with keyboard-safe close and reduced-motion feedback",
+          "transport": "sse",
+          "realtime": {
+            "resume": "reopen a selected run from sequence zero or reconnect from the last accepted sequence",
+            "backpressure": "render one ordered transcript while the adapter reconnects with a capped exponential delay",
+            "merge": "deduplicate by run sequence and refresh durable history only after terminal events"
+          },
+          "motion": {
+            "reducedMotion": "status feedback remains semantic while pulse and entry motion are disabled by motion-reduce classes.",
+            "evidence": [
+              "[data-slot=\"diagnose-home\"]",
+              "[data-slot=\"diagnose-investigation\"]"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/AiAssistantPanel.tsx",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "diagnose.frontend.surface",
+              "diagnose.frontend.transport"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing resizable AI panel now owns recent and active investigation surfaces. Source-specific maximize mode and local CLI session menus are not presented as equivalent browser functionality."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8417,8 +8524,42 @@
         "blobId": "000a85c5cbb7a68b364a4eafd2668ef7a21d26fc",
         "sha256": "5130e27e528523090b0e65e28bf0186965d789ff09e58befc851a8feff4b6f60"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:recent-history:actor-durable-list:v1",
+          "legacyContractIds": [],
+          "symbol": "DiagnoseHome",
+          "interaction": "recent investigations list actor-owned durable runs, current lifecycle status, exact resource scope, bounded completeness, and finished-history clearing",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the bounded list after reconnect, terminal stream events, or a four-second active-run interval",
+            "backpressure": "the server caps each history page at 100 rows and the panel requests 40",
+            "merge": "replace the actor-owned list by updated-at order without retaining missing rows locally"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/diagnose/repository.py",
+              "src/domains/diagnose/router.py",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.repository",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.engine",
+              "diagnose.backend.router",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "History is stored per workspace and actor, active runs poll only while needed, and clearing deletes only terminal runs. A degraded persistence banner remains unnecessary until a secondary persistence mode exists."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8429,8 +8570,46 @@
         "blobId": "c4165e8575bc07fec96040f7e57b7891d6f2d0c9",
         "sha256": "919418c541ad152cbb1be7af423716bb451acbd729c64b46c1c47c607aab29df"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:investigation-view:replay-followup-stop:v1",
+          "legacyContractIds": [],
+          "symbol": "InvestigationView",
+          "interaction": "an investigation replays evidence-backed verdicts, follows live ordered events, accepts a follow-up only after completion, and records user stop as a durable terminal transition",
+          "transport": "sse",
+          "realtime": {
+            "resume": "send Last-Event-ID, replay from PostgreSQL, and reconnect transient closures with bounded exponential delay",
+            "backpressure": "replay and subscriber queues are bounded while the UI retains only one selected transcript",
+            "merge": "require contiguous sequence numbers and terminate only after a durable closed or error event"
+          },
+          "motion": {
+            "reducedMotion": "running state remains visible through text and badges when pulse animation is reduced.",
+            "evidence": [
+              "[data-slot=\"diagnose-investigation\"]"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/diagnose/router.py",
+              "frontend/src/api/diagnose.ts",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.router",
+              "diagnose.frontend.transport",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Replay, follow-up, stop, evidence links, failure, and reconnect behavior are wired to durable Python contracts. Arbitrary tool payloads and remediation apply remain absent until the engine emits a typed CommandRequest proposal."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8441,8 +8620,36 @@
         "blobId": "2f800a83172d670dd1b2db23b55b5a3574451351",
         "sha256": "a554cd6e2998cfdcb764faf847b1256f7ef9d749842c8ec2aa63e02ca10dd7ba"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:local-handoff:desktop-pty-resume:v1",
+          "legacyContractIds": [],
+          "symbol": "buildLocalResumeCommand and openLocalTerminal",
+          "interaction": "a completed investigation can be handed to a local desktop terminal only through a capability-scoped native PTY and an opaque server-issued resume descriptor",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "tests/test_diagnose_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.router",
+              "diagnose.frontend.surface"
+            ],
+            "state": "blocked",
+            "blockedReason": "No signed local PTY resume protocol or opaque investigation resume descriptor exists; constructing shell commands from browser data would reintroduce credential, quoting, and local-path authority risks.",
+            "rationale": "The product keeps local terminal authority in the existing Tauri bridge and does not copy source CLI command construction into the browser or Python gateway."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8453,8 +8660,41 @@
         "blobId": "9fd2338263aa44032b9cf3ef4048deefa2776c66",
         "sha256": "cf085225ba28b013b399c2b0a419f302065ecb2e52b7a0f4139a4c108b551586"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:resource-action:exact-rbac-launch:v1",
+          "legacyContractIds": [],
+          "symbol": "LocalDiagnoseAction",
+          "interaction": "a resource detail action requests disclosure consent, sends exact group/version/kind/namespace/name/UID identity, and opens the deduplicated durable investigation only after server RBAC revalidation",
+          "transport": "poll",
+          "realtime": {
+            "resume": "retry capability, consent, or launch independently while the resulting run resumes through its SSE sequence",
+            "backpressure": "disable duplicate launch clicks and rely on the server active-run unique key for concurrent requests",
+            "merge": "open only the run identity returned by the authenticated create-or-deduplicate response"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/diagnose/router.py",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.router",
+              "diagnose.frontend.adapter",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Resource detail launch is exact, consented, RBAC-checked, deduplicated, and immediately opens the shared panel. Issue-row and global launch entry points remain later consumers of the same port rather than duplicated request logic."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8465,8 +8705,47 @@
         "blobId": "553779f39d0e222fcb831e87e83757f17b6344a7",
         "sha256": "cce9d437dcfaecc68a739eb59657874d49501949fc84409c0c8a4ab0adf70b89"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:transcript-parts:evidence-status-controls:v1",
+          "legacyContractIds": [],
+          "symbol": "Diagnose transcript parts",
+          "interaction": "shared transcript parts render semantic run status, evidence links, consent confirmation, empty and failure states, stop controls, and completion-gated follow-up without deriving server state",
+          "transport": "sse",
+          "realtime": {
+            "resume": "reconstruct transcript parts from durable ordered events after every reconnect",
+            "backpressure": "render one bounded selected transcript and one bounded history list",
+            "merge": "map event kinds and payload fields only after strict schema validation"
+          },
+          "motion": {
+            "reducedMotion": "status and progress meaning remains in text, badges, and controls when decorative pulse is disabled.",
+            "evidence": [
+              "[data-slot=\"diagnose-investigation\"]",
+              "[data-slot=\"diagnose-home\"]"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "frontend/src/api/diagnose-schemas.ts",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "diagnose.frontend.adapter",
+              "diagnose.frontend.transport",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product uses strict event payloads and shared UI primitives for the implemented verdict, evidence, status, consent, stop, and follow-up flows. Tool viewers, confidence meters, markdown choreography, and apply controls remain unclaimed until their backend evidence exists."
+          }
+        }
+      ]
     },
     {
       "status": "M",

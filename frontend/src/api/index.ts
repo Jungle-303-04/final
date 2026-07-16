@@ -5,6 +5,25 @@ export * from "./barrels/gitops";
 export * from "./barrels/metrics";
 export * from "./barrels/rca";
 export * from "./barrels/workloads";
+export {
+  addDiagnoseTurn,
+  clearDiagnoseHistory,
+  createDiagnoseRun,
+  getDiagnoseCapabilities,
+  grantDiagnoseConsent,
+  listDiagnoseRuns,
+  stopDiagnoseRun,
+  subscribeDiagnoseEvents,
+} from "./diagnose";
+export {
+  diagnoseCapabilitiesSchema,
+  diagnoseConsentGrantSchema,
+  diagnoseEventSchema,
+  diagnoseHistoryClearSchema,
+  diagnoseLaunchResultSchema,
+  diagnoseRunListSchema,
+  diagnoseRunSchema,
+} from "./diagnose-schemas";
 
 export {
   ApiError,

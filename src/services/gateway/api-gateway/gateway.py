@@ -29,6 +29,8 @@ from domains.compare.router import router as compare_router
 from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
+from domains.diagnose.router import router as diagnose_router
+from domains.diagnose.stream import InMemoryDiagnoseEventStream
 from domains.diagnostics.router import router as diagnostics_router
 from domains.gitops.detail_router import router as gitops_detail_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
@@ -147,6 +149,7 @@ class ApiGateway:
             self.db,
         )
         self.timeline_fanout = InMemoryTimelineEventFanout()
+        self.diagnose_events = InMemoryDiagnoseEventStream()
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
@@ -163,6 +166,7 @@ class ApiGateway:
         self.app.state.events = self.events
         self.app.state.operation_events = self.operation_events
         self.app.state.timeline_fanout = self.timeline_fanout
+        self.app.state.diagnose_events = self.diagnose_events
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
@@ -330,6 +334,7 @@ class ApiGateway:
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
+        app.include_router(diagnose_router)  # durable resource investigation + replayable SSE
         app.include_router(identity_admin_router)  # 관리 콘솔: 조직/그룹/멤버/권한(admin 세션)
         app.include_router(repository_discovery_router)  # repo 연결 전 branch/manifest 탐색
         # 정적 filter 경로는 /applications/{application_id}보다 먼저 등록해야 한다.

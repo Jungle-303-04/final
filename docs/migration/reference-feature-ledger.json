@@ -8580,35 +8580,59 @@
     {
       "id": "reference-feature-237",
       "contractId": "reference.feature.237",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:diagnose:resource-investigation:durable-stream:v1",
       "legacyContractIds": [
         "reference.feature.237"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "9. RCA 후속 삽입 후보",
       "line": 621,
       "cells": [
         "Resource drawer의 issue/audit 다음 section",
         "단일 resource 진단 context가 완성됨",
         "resource UID/ref, events, metrics, relations",
-        "위치만 예약"
+        "`POST /diagnose/runs`, `GET /diagnose/runs`, `SSE /diagnose/runs/{run_id}/stream`; exact identity와 durable replay"
       ],
-      "endpoints": [],
-      "streaming": false,
+      "endpoints": [
+        "POST /diagnose/runs",
+        "GET /diagnose/runs",
+        "SSE /diagnose/runs/{run_id}/stream"
+      ],
+      "streaming": true,
       "area": "rca-extension",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.rca",
-      "frontendContract": "frontend/src/features/rca",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.diagnose",
+      "frontendContract": "frontend/src/features/diagnose/diagnoseContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_diagnose_router.py",
+        "tests/test_diagnose_service.py",
+        "tests/test_diagnose_engine.py",
+        "tests/test_diagnose_migration.py",
+        "frontend/src/api/diagnose.test.ts",
+        "frontend/src/features/diagnose/createDiagnoseAdapter.test.ts",
+        "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/diagnose/router.py#create_diagnose_run",
+          "consumer": "src/domains/diagnose/engine.py#ContextDiagnoseEngine",
+          "test": "tests/test_diagnose_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/diagnose/createDiagnoseAdapter.ts#createDiagnoseAdapter",
+          "test": "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+        },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/diagnose/router.py#stream_diagnose_events",
+          "consumer": "frontend/src/api/diagnose.ts#subscribeDiagnoseEvents",
+          "test": "frontend/src/api/diagnose.test.ts"
+        }
       }
     },
     {

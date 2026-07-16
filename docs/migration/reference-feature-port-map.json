@@ -302,6 +302,41 @@
           "reason": "Rightsizing is an explicit bounded observation scan with server provenance and freshness, not a continuous event stream."
         }
       }
+    },
+    "reference.feature.237": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.diagnose",
+      "frontendContract": "frontend/src/features/diagnose/diagnoseContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_diagnose_router.py",
+        "tests/test_diagnose_service.py",
+        "tests/test_diagnose_engine.py",
+        "tests/test_diagnose_migration.py",
+        "frontend/src/api/diagnose.test.ts",
+        "frontend/src/features/diagnose/createDiagnoseAdapter.test.ts",
+        "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/diagnose/router.py#create_diagnose_run",
+          "consumer": "src/domains/diagnose/engine.py#ContextDiagnoseEngine",
+          "test": "tests/test_diagnose_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/diagnose/createDiagnoseAdapter.ts#createDiagnoseAdapter",
+          "test": "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/diagnose/router.py#stream_diagnose_events",
+          "consumer": "frontend/src/api/diagnose.ts#subscribeDiagnoseEvents",
+          "test": "frontend/src/api/diagnose.test.ts"
+        }
+      }
     }
   },
   "sections": {

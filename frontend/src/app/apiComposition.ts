@@ -2,24 +2,32 @@ import {
   acknowledgeAlertEvent,
   createAlertRule,
   deleteAlertRule,
+  addDiagnoseTurn,
+  clearDiagnoseHistory,
+  createDiagnoseRun,
   getAiSuggestions,
   getClusterNodesSummary,
   getClusterSummary,
   getCompareCandidates,
   getCompareResourcePair,
   getWorkloadDetail,
+  getDiagnoseCapabilities,
+  grantDiagnoseConsent,
   getScheduledWorkloadRuns,
   getNodePodsSummary,
   listAlertEvents,
   listAlertRules,
   listClusters,
   listGlobalFilterFacets,
+  listDiagnoseRuns,
   openPodLogStream,
   openScheduledWorkloadRunLogStream,
   openWorkloadLogStream,
   postAiChat,
   promoteAlertEvent,
   subscribeCommandOperationEvents,
+  stopDiagnoseRun,
+  subscribeDiagnoseEvents,
   updateAlertRule,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -27,6 +35,7 @@ import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAd
 import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
 import type { AuthPort } from "../features/auth/authContract";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
+import { createDiagnoseAdapter } from "../features/diagnose/createDiagnoseAdapter";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createWorkloadDetailAdapter } from "../features/workload-detail/createWorkloadDetailAdapter";
@@ -79,6 +88,16 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getWorkloadDetail,
   });
   const comparePort = createCompareAdapter({ getCompareCandidates, getCompareResourcePair });
+  const diagnosePort = createDiagnoseAdapter({
+    addDiagnoseTurn,
+    clearDiagnoseHistory,
+    createDiagnoseRun,
+    getDiagnoseCapabilities,
+    grantDiagnoseConsent,
+    listDiagnoseRuns,
+    stopDiagnoseRun,
+    subscribeDiagnoseEvents,
+  });
 
   return createProductComposition([
     {
@@ -167,5 +186,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort);
+  }, workloadDetailPort, comparePort, diagnosePort);
 }

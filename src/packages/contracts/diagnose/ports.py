@@ -12,6 +12,7 @@ from packages.contracts.diagnose.models import (
     DiagnoseEventReplay,
     DiagnoseRun,
     DiagnoseRunCreation,
+    DiagnoseRunList,
     DiagnoseRunStatus,
     DiagnoseRunTransition,
     DiagnoseTarget,
@@ -30,6 +31,22 @@ class DiagnoseRunRepository(Protocol):
 
     async def get_run(self, *, scope: ClusterScope, run_id: str) -> DiagnoseRun | None: ...
 
+    async def get_user_run(
+        self,
+        *,
+        workspace_id: str,
+        requested_by: str,
+        run_id: str,
+    ) -> DiagnoseRun | None: ...
+
+    async def list_runs(
+        self,
+        *,
+        workspace_id: str,
+        requested_by: str,
+        limit: int,
+    ) -> DiagnoseRunList: ...
+
     async def transition(
         self,
         run: DiagnoseRun,
@@ -47,6 +64,39 @@ class DiagnoseRunRepository(Protocol):
         run_id: str,
         after_sequence: int,
     ) -> DiagnoseEventReplay: ...
+
+    async def append_event(
+        self,
+        run: DiagnoseRun,
+        event: DiagnoseEventDraft,
+    ) -> DiagnoseEvent: ...
+
+    async def clear_finished(
+        self,
+        *,
+        workspace_id: str,
+        requested_by: str,
+    ) -> int: ...
+
+    async def has_consent(
+        self,
+        *,
+        workspace_id: str,
+        requested_by: str,
+        agent_id: str,
+        disclosure_revision: str,
+        surface: str,
+    ) -> bool: ...
+
+    async def record_consent(
+        self,
+        *,
+        workspace_id: str,
+        requested_by: str,
+        agent_id: str,
+        disclosure_revision: str,
+        surface: str,
+    ) -> None: ...
 
 
 class DiagnoseEventSubscription(Protocol):
@@ -79,3 +129,5 @@ class DiagnoseEngine(Protocol):
     ) -> DiagnoseAgentAvailability: ...
 
     async def start(self, run: DiagnoseRun) -> None: ...
+
+    async def continue_run(self, run: DiagnoseRun, question: str) -> None: ...
