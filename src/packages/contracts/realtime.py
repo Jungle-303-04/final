@@ -9,10 +9,13 @@
 
 from __future__ import annotations
 
+import json
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, TypeAdapter
+from pydantic import Field, TypeAdapter, field_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -37,6 +40,33 @@ BROWSER_STREAM_MAX_FRAMES_PER_SECOND = 60
 
 # resource.delta key 형식: "<cluster>/<namespace>/<kind>/<name>"
 DELTA_KEY_SEGMENTS = 4
+DELTA_KEY_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+@dataclass(frozen=True)
+class RealtimeIngressLimits:
+    """Explicit ingress/cache budgets shared by contract validation, hub, and gateway."""
+
+    delta_key_max_length: int = 1_024
+    delta_value_max_bytes: int = 16 * 1_024
+    delta_value_max_fields: int = 256
+    delta_value_max_depth: int = 8
+    agent_message_max_bytes: int = 32 * 1_024
+    agent_ingress_window_seconds: float = 60.0
+    agent_messages_per_window: int = 6_000
+    agent_bytes_per_window: int = 32 * 1_024 * 1_024
+    cluster_retained_resources: int = 5_000
+    snapshot_max_resources: int = 5_000
+    snapshot_max_bytes: int = 16 * 1_024 * 1_024
+
+
+class RealtimeLimitError(ValueError):
+    """A producer or retained state exceeded a declared realtime budget."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
 
 RolloutPhase = Literal["idle", "progressing", "degraded"]
 DeltaOp = Literal["replace", "remove"]
@@ -115,6 +145,14 @@ class SnapshotMessage(StrictModel):
     state: dict[str, Any] = Field(default_factory=dict)
 
 
+class ResyncRequiredMessage(StrictModel):
+    """The gateway deliberately refused an oversized complete state cut."""
+
+    type: Literal["resync.required"] = "resync.required"
+    code: Literal["snapshot_limit_exceeded"] = "snapshot_limit_exceeded"
+    retryable: bool = True
+
+
 class LiveSummaryMessage(StrictModel):
     """agent → gateway ingest, gateway → browser fan-out 공용. seq 는 gateway 가 부여."""
 
@@ -130,9 +168,15 @@ class ResourceDelta(StrictModel):
     type: Literal["resource.delta"] = "resource.delta"
     seq: int = Field(default=0, ge=0)
     op: DeltaOp = "replace"
-    key: str = Field(min_length=1)
+    key: str = Field(min_length=1, max_length=1_024)
     value: dict[str, Any] | None = None
     observed_at: datetime | None = None
+
+    @field_validator("key")
+    @classmethod
+    def _validate_key_format(cls, key: str) -> str:
+        validate_delta_key(key)
+        return key
 
 
 class PingMessage(StrictModel):
@@ -141,7 +185,12 @@ class PingMessage(StrictModel):
 
 
 RealtimeMessage = Annotated[
-    HelloMessage | SnapshotMessage | LiveSummaryMessage | ResourceDelta | PingMessage,
+    HelloMessage
+    | SnapshotMessage
+    | ResyncRequiredMessage
+    | LiveSummaryMessage
+    | ResourceDelta
+    | PingMessage,
     Field(discriminator="type"),
 ]
 
@@ -149,8 +198,79 @@ RealtimeMessage = Annotated[
 RealtimeEnvelope: TypeAdapter[RealtimeMessage] = TypeAdapter(RealtimeMessage)
 
 
-def parse_realtime_message(payload: Any) -> RealtimeMessage:
-    return RealtimeEnvelope.validate_python(payload)
+def parse_realtime_message(
+    payload: Any, *, limits: RealtimeIngressLimits | None = None
+) -> RealtimeMessage:
+    message = RealtimeEnvelope.validate_python(payload)
+    if isinstance(message, ResourceDelta):
+        validate_resource_delta(message, limits or RealtimeIngressLimits())
+    return message
+
+
+def validate_delta_key(key: str, *, max_length: int = 1_024) -> None:
+    if len(key) > max_length:
+        raise RealtimeLimitError("delta_key_too_large")
+    parts = key.split("/")
+    if len(parts) != DELTA_KEY_SEGMENTS or any(
+        not part or DELTA_KEY_SEGMENT_PATTERN.fullmatch(part) is None for part in parts
+    ):
+        raise ValueError("resource delta key must have four safe non-empty segments")
+
+
+def validate_resource_delta(delta: ResourceDelta, limits: RealtimeIngressLimits) -> None:
+    validate_delta_key(delta.key, max_length=limits.delta_key_max_length)
+    if delta.op == "replace" and delta.value is None:
+        raise ValueError("resource delta replace requires a value")
+    if delta.value is None:
+        return
+    try:
+        encoded = json.dumps(delta.value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("resource delta value must be JSON-compatible") from exc
+    if len(encoded) > limits.delta_value_max_bytes:
+        raise RealtimeLimitError("delta_value_too_large")
+    _validate_json_shape(
+        delta.value,
+        max_fields=limits.delta_value_max_fields,
+        max_depth=limits.delta_value_max_depth,
+    )
+
+
+def serialized_json_bytes(value: object) -> int:
+    try:
+        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("realtime payload must be JSON-compatible") from exc
+
+
+def _validate_json_shape(value: object, *, max_fields: int, max_depth: int) -> None:
+    fields = 0
+
+    def visit(item: object, depth: int) -> None:
+        nonlocal fields
+        if depth > max_depth:
+            raise RealtimeLimitError("delta_value_too_deep")
+        if item is None or isinstance(item, str | int | float | bool):
+            return
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if not isinstance(key, str):
+                    raise ValueError("resource delta value keys must be strings")
+                fields += 1
+                if fields > max_fields:
+                    raise RealtimeLimitError("delta_value_too_many_fields")
+                visit(child, depth + 1)
+            return
+        if isinstance(item, list):
+            for child in item:
+                fields += 1
+                if fields > max_fields:
+                    raise RealtimeLimitError("delta_value_too_many_fields")
+                visit(child, depth + 1)
+            return
+        raise ValueError("resource delta value must contain JSON values")
+
+    visit(value, 1)
 
 
 def delta_key_parts(key: str) -> tuple[str, str, str, str]:

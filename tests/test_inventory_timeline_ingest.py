@@ -339,6 +339,19 @@ def _mutation_with_add() -> InventorySnapshotMutation:
     )
 
 
+def _stale_mutation() -> InventorySnapshotMutation:
+    return InventorySnapshotMutation(
+        result={
+            "accepted": False,
+            "snapshot_id": "snapshot-stale",
+            "cluster_id": "cluster-1",
+            "resource_count": 0,
+            "marked_deleted": 0,
+            "resource_types": [],
+        }
+    )
+
+
 def test_ingest_announces_only_after_the_unit_of_work_commits() -> None:
     async def run() -> None:
         db = _TransactionDb(_mutation_with_add())
@@ -423,6 +436,27 @@ def test_agent_snapshot_route_keeps_outbox_staging_inside_the_timeline_transacti
         assert response.snapshot_id == "snapshot-1"
         assert len(events.recorded) == 1
         assert db.steps == ["begin", "mutation", "append", "outbox", "commit", "fanout"]
+
+    asyncio.run(run())
+
+
+def test_agent_stale_snapshot_does_not_stage_a_recorded_outbox_event() -> None:
+    async def run() -> None:
+        db = _TransactionDb(_stale_mutation())
+        events = _InventoryEvents(db.steps)
+        fanout = _Fanout(db.steps)
+
+        response = await record_inventory_snapshot(
+            InventorySnapshotRequest(cluster_id="cluster-1", agent_id="agent-1"),
+            identity=ClusterAgentIdentity(workspace_id="workspace-1", cluster_id="cluster-1"),
+            db=db,
+            events=events,
+            timeline_fanout=fanout,
+        )
+
+        assert response.accepted is False
+        assert events.recorded == []
+        assert db.steps == ["begin", "mutation", "commit"]
 
     asyncio.run(run())
 

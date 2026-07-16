@@ -11,6 +11,8 @@ from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from packages.contracts.realtime import RealtimeIngressLimits
+
 CLUSTER = "target-cluster-01"
 WORKSPACE = "ws-1"
 GOOD_TOKEN = "good-token"
@@ -306,6 +308,97 @@ def test_agent_raw_payload_violates_contract_and_closes() -> None:
         with pytest.raises(WebSocketDisconnect) as excinfo:
             agent.receive_json()
     assert excinfo.value.code == 1008
+
+
+def test_agent_over_budget_delta_closes_before_cache_growth() -> None:
+    module = load_gateway_module()
+    limits = RealtimeIngressLimits(delta_value_max_bytes=32)
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        realtime_limits=limits,
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+    ) as agent:
+        agent.receive_json()
+        agent.send_json(
+            {
+                "type": "resource.delta",
+                "op": "replace",
+                "key": f"{CLUSTER}/sandbox/pod/checkout",
+                "value": {"payload": "x" * 64},
+            }
+        )
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            agent.receive_json()
+    assert excinfo.value.code == 1008
+    assert (
+        app.state.hub.snapshot_for(
+            module.Subscription(workspace_id=WORKSPACE, cluster_id=CLUSTER)
+        ).state["resources"]
+        == {}
+    )
+
+
+def test_agent_rate_budget_closes_the_producer_connection() -> None:
+    module = load_gateway_module()
+    limits = RealtimeIngressLimits(agent_messages_per_window=1)
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        realtime_limits=limits,
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+    ) as agent:
+        agent.receive_json()
+        agent.send_json(summary_payload())
+        agent.send_json(summary_payload())
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            agent.receive_json()
+    assert excinfo.value.code == 1008
+
+
+def test_browser_gets_explicit_resync_before_oversized_snapshot_disconnect() -> None:
+    module = load_gateway_module()
+    limits = RealtimeIngressLimits(cluster_retained_resources=2, snapshot_max_resources=1)
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        realtime_limits=limits,
+    )
+    app.state.hub.publish_delta(
+        module.ResourceDelta(
+            op="replace", key=f"{CLUSTER}/sandbox/pod/checkout", value={"ready": True}
+        )
+    )
+    app.state.hub.publish_delta(
+        module.ResourceDelta(
+            op="replace", key=f"{CLUSTER}/sandbox/pod/payments", value={"ready": True}
+        )
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}", headers=browser_headers()
+    ) as browser:
+        assert browser.receive_json()["type"] == "hello"
+        assert browser.receive_json() == {
+            "type": "resync.required",
+            "code": "snapshot_limit_exceeded",
+            "retryable": True,
+        }
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 1013
 
 
 def test_browser_requires_workspace_id() -> None:

@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from conftest import ROOT, load_file
 
 from packages.contracts.realtime import (
     BROWSER_QUEUE_MAX,
     LiveSummary,
+    RealtimeIngressLimits,
     ResourceDelta,
     SnapshotMessage,
     Subscription,
@@ -18,12 +20,12 @@ from packages.contracts.realtime import (
 CLUSTER = "target-cluster-01"
 
 
-def make_hub() -> Any:
+def make_hub(*, limits: RealtimeIngressLimits | None = None) -> Any:
     module = load_file(
         ROOT / "src" / "services" / "realtime" / "realtime-gateway" / "hub.py",
         "test_realtime_hub_module",
     )
-    return module.RealtimeHub()
+    return module.RealtimeHub(limits=limits)
 
 
 def summary(cluster_id: str = CLUSTER, **overrides: Any) -> LiveSummary:
@@ -146,3 +148,42 @@ def test_unregister_stops_fanout() -> None:
     hub.publish_summary(summary())
     assert client.queue.empty()
     assert hub.browser_count == 0
+
+
+def test_hub_refuses_new_retained_resource_after_cluster_budget_without_eviction() -> None:
+    hub = make_hub(limits=RealtimeIngressLimits(cluster_retained_resources=1))
+    first_key = f"{CLUSTER}/sandbox/pod/checkout"
+    second_key = f"{CLUSTER}/sandbox/pod/payments"
+
+    hub.publish_delta(delta(first_key, value={"ready": True}))
+    with pytest.raises(ValueError, match="cluster_resource_limit_exceeded"):
+        hub.publish_delta(delta(second_key, value={"ready": True}))
+
+    snapshot = hub.snapshot_for(Subscription(workspace_id="ws-1", cluster_id=CLUSTER))
+    assert snapshot.state["resources"] == {first_key: {"ready": True}}
+
+
+def test_retained_resource_budget_is_isolated_per_cluster() -> None:
+    hub = make_hub(limits=RealtimeIngressLimits(cluster_retained_resources=1))
+    other_cluster = "target-cluster-02"
+    first_key = f"{CLUSTER}/sandbox/pod/checkout"
+    second_key = f"{other_cluster}/sandbox/pod/payments"
+
+    hub.publish_delta(delta(first_key, value={"ready": True}))
+    hub.publish_delta(delta(second_key, value={"ready": True}))
+
+    first_snapshot = hub.snapshot_for(Subscription(workspace_id="ws-1", cluster_id=CLUSTER))
+    second_snapshot = hub.snapshot_for(Subscription(workspace_id="ws-1", cluster_id=other_cluster))
+    assert first_snapshot.state["resources"] == {first_key: {"ready": True}}
+    assert second_snapshot.state["resources"] == {second_key: {"ready": True}}
+
+
+def test_snapshot_limit_fails_explicitly_instead_of_truncating() -> None:
+    hub = make_hub(
+        limits=RealtimeIngressLimits(cluster_retained_resources=2, snapshot_max_resources=1)
+    )
+    hub.publish_delta(delta(f"{CLUSTER}/sandbox/pod/checkout", value={"ready": True}))
+    hub.publish_delta(delta(f"{CLUSTER}/sandbox/pod/payments", value={"ready": True}))
+
+    with pytest.raises(ValueError, match="snapshot_limit_exceeded"):
+        hub.snapshot_for(Subscription(workspace_id="ws-1", cluster_id=CLUSTER))
