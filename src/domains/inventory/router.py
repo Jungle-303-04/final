@@ -26,9 +26,11 @@ from packages.contracts.gateway.responses import (
     InventoryResourceResponse,
     InventorySnapshotResponse,
     InventorySummaryResponse,
+    KubernetesApiResourcesResponse,
     ResourceCapabilitiesResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
+from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.runtime.dependencies import get_db, get_events, get_timeline_fanout
 
 router = APIRouter()
@@ -339,4 +341,44 @@ async def get_inventory_summary(
         cluster_id=cluster_id,
         latest_snapshot=db.latest_inventory_snapshot(workspace_id, cluster_id),
         counts=db.inventory_resource_counts(workspace_id, cluster_id),
+    )
+
+
+@router.get(
+    gateway_routes.CLUSTER_API_RESOURCES_PATH,
+    response_model=KubernetesApiResourcesResponse,
+)
+async def get_cluster_api_resources(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> KubernetesApiResourcesResponse:
+    """Return only the bounded API catalog observed by the authorized cluster agent."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_inventory_access(db, current, workspace_id, cluster_id)
+    snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
+    snapshot_id = str(snapshot.get("snapshot_id")) if isinstance(snapshot, dict) else None
+    snapshot_summary = snapshot.get("summary") if isinstance(snapshot, dict) else None
+    source_summary = snapshot_summary.get("summary") if isinstance(snapshot_summary, dict) else None
+    raw_discovery = (
+        source_summary.get("api_resource_discovery") if isinstance(source_summary, dict) else None
+    )
+    if not isinstance(raw_discovery, dict):
+        return KubernetesApiResourcesResponse(
+            cluster_id=cluster_id,
+            snapshot_id=snapshot_id,
+            unavailable_reason="api_resource_discovery_not_observed",
+        )
+    try:
+        discovery = ApiResourceDiscoveryObservation.model_validate(raw_discovery)
+    except ValueError:
+        return KubernetesApiResourcesResponse(
+            cluster_id=cluster_id,
+            snapshot_id=snapshot_id,
+            unavailable_reason="api_resource_discovery_invalid",
+        )
+    return KubernetesApiResourcesResponse(
+        cluster_id=cluster_id,
+        snapshot_id=snapshot_id,
+        discovery=discovery,
     )

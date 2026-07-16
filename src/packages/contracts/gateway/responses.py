@@ -15,6 +15,7 @@ from packages.contracts.cost.observations import (
 )
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
+from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.contracts.parity import ClusterScope, ResourceRef
 
 JsonMap = dict[str, Any]
@@ -1724,6 +1725,21 @@ class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None
     counts: list[JsonMap] = Field(default_factory=list)
+
+
+class KubernetesApiResourcesResponse(StrictModel):
+    cluster_id: str
+    snapshot_id: str | None = None
+    discovery: ApiResourceDiscoveryObservation | None = None
+    unavailable_reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> Self:
+        if self.discovery is None and not self.unavailable_reason:
+            raise ValueError("unavailable API resources require a reason")
+        if self.discovery is not None and self.unavailable_reason is not None:
+            raise ValueError("available API resources cannot include an unavailable reason")
+        return self
 
 
 class FleetClusterSummaryItem(StrictModel):

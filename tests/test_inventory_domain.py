@@ -21,6 +21,7 @@ from domains.inventory.repository import (
     snapshot_resources,
 )
 from domains.inventory.router import (
+    get_cluster_api_resources,
     get_inventory_resource_detail,
     get_inventory_summary,
     list_inventory_workloads,
@@ -709,6 +710,80 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
 
     assert response.latest_snapshot == {"snapshot_id": "snapshot-1", "resource_count": 1}
     assert response.counts == [{"resource_type": "workload", "health": "healthy", "count": 1}]
+
+
+def test_cluster_api_resources_returns_latest_dynamic_catalog() -> None:
+    class DiscoveryInventoryDb(StubInventoryDb):
+        def latest_inventory_snapshot(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+        ) -> dict[str, object]:
+            assert workspace_id == "ws-1"
+            assert cluster_id == "cluster-1"
+            return {
+                "snapshot_id": "snapshot-api-1",
+                "summary": {
+                    "summary": {
+                        "api_resource_discovery": {
+                            "observed_at": "2026-07-16T12:00:00Z",
+                            "completeness": "exact",
+                            "reason_codes": [],
+                            "resources": [
+                                {
+                                    "group": "stable.example.com",
+                                    "version": "v1",
+                                    "api_version": "stable.example.com/v1",
+                                    "name": "crontabs",
+                                    "singular_name": "crontab",
+                                    "kind": "CronTab",
+                                    "namespaced": True,
+                                    "is_crd": True,
+                                    "verbs": ["delete", "get", "list"],
+                                }
+                            ],
+                        }
+                    }
+                },
+            }
+
+    async def run():
+        return await get_cluster_api_resources(
+            "cluster-1",
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=DiscoveryInventoryDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.snapshot_id == "snapshot-api-1"
+    assert response.unavailable_reason is None
+    assert response.discovery is not None
+    assert response.discovery.resources[0].kind == "CronTab"
+    assert response.discovery.resources[0].is_crd is True
+
+
+def test_cluster_api_resources_fails_closed_without_observation() -> None:
+    async def run():
+        return await get_cluster_api_resources(
+            "cluster-1",
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=StubInventoryDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.snapshot_id == "snapshot-1"
+    assert response.discovery is None
+    assert response.unavailable_reason == "api_resource_discovery_not_observed"
 
 
 def test_management_cluster_inventory_read_remains_available() -> None:

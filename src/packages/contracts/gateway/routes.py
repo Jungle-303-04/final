@@ -171,6 +171,7 @@ CLUSTER_NODE_PODS_SUMMARY_PATH = "/clusters/{cluster_id}/nodes/{node_name}/pods/
 CLUSTER_INVENTORY_RESOURCES_PATH = "/clusters/{cluster_id}/inventory/resources"
 CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH = "/clusters/{cluster_id}/inventory/resource-detail"
 CLUSTER_INVENTORY_SUMMARY_PATH = "/clusters/{cluster_id}/inventory/summary"
+CLUSTER_API_RESOURCES_PATH = "/clusters/{cluster_id}/api-resources"
 CLUSTER_INVENTORY_WORKLOADS_PATH = "/clusters/{cluster_id}/inventory/workloads"
 CLUSTER_INVENTORY_SERVICES_PATH = "/clusters/{cluster_id}/inventory/services"
 CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
