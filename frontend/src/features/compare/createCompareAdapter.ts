@@ -1,7 +1,3 @@
-import type {
-  CompareCandidateListEndpoint,
-  CompareResourcePairEndpoint,
-} from "../../api/compare-schemas";
 import { compareTargetParam } from "./compareTarget";
 import {
   ComparePortFailure,
@@ -15,6 +11,10 @@ import {
   type CompareResult,
 } from "./compareContract";
 import type { CompareEndpointDependencies } from "./compareEndpointContract";
+import type {
+  CompareCandidateListEndpoint,
+  CompareResourcePairEndpoint,
+} from "./compareWireContract";
 
 export function createCompareAdapter(endpoints: CompareEndpointDependencies): ComparePort {
   return {

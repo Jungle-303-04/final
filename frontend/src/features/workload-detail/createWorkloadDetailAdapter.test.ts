@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { WorkloadDetailEndpoint } from "../../api/workload-detail-schemas";
 import { createWorkloadDetailAdapter } from "./createWorkloadDetailAdapter";
+import type { WorkloadDetailEndpoint } from "./workloadDetailWireContract";
 
 const request = {
   clusterId: "cluster-a",

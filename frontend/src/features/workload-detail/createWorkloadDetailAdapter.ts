@@ -1,4 +1,3 @@
-import type { WorkloadDetailEndpoint } from "../../api/workload-detail-schemas";
 import {
   WorkloadDetailPortFailure,
   type WorkloadDetail,
@@ -8,6 +7,7 @@ import {
   type WorkloadDetailRequest,
 } from "./workloadDetailContract";
 import type { WorkloadDetailEndpointDependencies } from "./workloadDetailEndpointContract";
+import type { WorkloadDetailEndpoint } from "./workloadDetailWireContract";
 
 export function createWorkloadDetailAdapter(
   endpoints: WorkloadDetailEndpointDependencies,
