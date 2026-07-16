@@ -4,21 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { HomePort } from "../../../features/home/homeContract";
 
 const surfaceMocks = vi.hoisted(() => ({
-  createPhysicalTopologyAdapter: vi.fn(),
-  createRelationTopologyAdapter: vi.fn(),
+  createTopologyPorts: vi.fn(),
   createTopologySurface: vi.fn(),
 }));
 
-vi.mock("../../../api", () => ({
-  createRealtimeClient: vi.fn(),
-  getPhysicalTopology: vi.fn(),
-  getRelationTopology: vi.fn(),
-}));
-vi.mock("../../../features/resources/createPhysicalTopologyAdapter", () => ({
-  createPhysicalTopologyAdapter: surfaceMocks.createPhysicalTopologyAdapter,
-}));
-vi.mock("../../../features/resources/createRelationTopologyAdapter", () => ({
-  createRelationTopologyAdapter: surfaceMocks.createRelationTopologyAdapter,
+vi.mock("../topologyPorts", () => ({
+  createTopologyPorts: surfaceMocks.createTopologyPorts,
 }));
 vi.mock("../../../pages/topology/createTopologySurface", () => ({
   createTopologySurface: surfaceMocks.createTopologySurface,
@@ -32,14 +23,18 @@ describe("topology composition surface", () => {
     const homePort = {} as HomePort;
     const physicalPort = { kind: "physical" };
     const relationPort = { kind: "relations" };
-    surfaceMocks.createPhysicalTopologyAdapter.mockReturnValueOnce(physicalPort);
-    surfaceMocks.createRelationTopologyAdapter.mockReturnValueOnce(relationPort);
+    const realtimePort = { connect: vi.fn() };
+    surfaceMocks.createTopologyPorts.mockReturnValueOnce({
+      physical: physicalPort,
+      realtime: realtimePort,
+      relation: relationPort,
+    });
     surfaceMocks.createTopologySurface.mockReturnValueOnce(Surface);
 
     expect(loadTopologySurface(homePort)).toBe(Surface);
     expect(surfaceMocks.createTopologySurface).toHaveBeenCalledWith(
       physicalPort,
-      expect.objectContaining({ connect: expect.any(Function) }),
+      realtimePort,
       relationPort,
       homePort,
     );
