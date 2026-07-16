@@ -1,6 +1,6 @@
 import { ArrowLeftRight, Check, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import type {
   ComparableManifest,
@@ -9,6 +9,7 @@ import type {
   CompareResult,
   CompareTarget,
 } from "../../features/compare/compareContract";
+import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -21,7 +22,7 @@ import { useCompareCandidates } from "./useCompareCandidates";
 type CompareSide = "a" | "b";
 
 export function CompareRoute({ port }: { port: ComparePort }) {
-  const [search] = useSearchParams();
+  const search = useFilterSearchParams();
   const navigate = useNavigate();
   const identity = useMemo(() => parseCompareRoute(search), [search]);
   const { frame, refresh } = useCompare(port, identity);
@@ -120,7 +121,7 @@ function ComparePage({
           <Badge variant="outline">{data.scope.freshness}</Badge>
           <Badge variant="outline">{data.coverage.availability}</Badge>
           <Button disabled={refreshing} onClick={onRefresh} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" className={cn(refreshing && "animate-spin")} />Refresh
+            <RefreshCw aria-hidden="true" className={cn(refreshing && "motion-safe:animate-spin motion-reduce:animate-none")} />Refresh
           </Button>
         </div>
       </header>
