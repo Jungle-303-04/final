@@ -29,16 +29,32 @@ from packages.contracts.helm.releases import (
     HelmResourceHealthAvailability,
     HelmResourceHealthObservation,
 )
+from packages.contracts.helm.sources import (
+    HELM_CHART_SOURCE_PAGE_MAX,
+    HELM_CHART_VERSION_PAGE_MAX,
+    HelmChartSource,
+    HelmChartSourcePage,
+    HelmChartVersion,
+    HelmChartVersionObservation,
+    HelmChartVersionResolution,
+)
 
 __all__ = [
     "HELM_ARTIFACT_CONTENT_MAX_BYTES",
     "HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER",
+    "HELM_CHART_SOURCE_PAGE_MAX",
+    "HELM_CHART_VERSION_PAGE_MAX",
     "HELM_RELEASE_ARTIFACT_READ_ACTION",
     "HELM_RELEASE_ARTIFACT_READ_CAPABILITY",
     "HelmAvailability",
     "HelmArtifactCommandPayload",
     "HelmArtifactReadRequest",
     "HelmArtifactResult",
+    "HelmChartSource",
+    "HelmChartSourcePage",
+    "HelmChartVersion",
+    "HelmChartVersionObservation",
+    "HelmChartVersionResolution",
     "HelmHookDiffItem",
     "HelmHooksDiff",
     "HelmFeatureAvailability",

@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import and_, func, or_, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.helm.models import HelmChartSourceRecord
+from domains.helm.source_provider import (
+    helm_chart_source_from_row,
+    normalize_helm_chart_source_reference,
+)
 from domains.inventory.models import ClusterInventoryResourceRecord
 from domains.inventory_filter.models import InventoryFilterRevision
+from packages.contracts.helm.sources import (
+    HELM_CHART_SOURCE_PAGE_MAX,
+    HelmChartSource,
+    HelmChartSourcePage,
+)
+from packages.runtime.keyset_cursor import decode_keyset_cursor, encode_keyset_cursor
+from packages.security.credentials import CredentialEncryptionError, parse_credential_ref
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 HELM_STORAGE_OWNER_LABEL = "owner"
@@ -19,6 +33,14 @@ HELM_MANAGED_BY_LABEL = "app.kubernetes.io/managed-by"
 HELM_MANAGED_BY_VALUE = "Helm"
 HELM_RELEASE_NAME_ANNOTATION = "meta.helm.sh/release-name"
 HELM_RELEASE_NAMESPACE_ANNOTATION = "meta.helm.sh/release-namespace"
+HELM_CHART_CREDENTIAL_PROVIDERS = {
+    "repository": "helm_repository",
+    "oci": "helm_oci",
+}
+
+
+class HelmChartSourceConflict(RuntimeError):
+    """A workspace already has the same source identity or display name."""
 
 
 @dataclass(frozen=True)
@@ -31,6 +53,119 @@ class HelmOwnedResourceObservationBatch:
 
 class HelmReleaseRepository(DatabaseConnection):
     """Read current Helm storage labels without reading Secret data."""
+
+    def register_helm_chart_source(
+        self,
+        *,
+        workspace_id: str,
+        provider: str,
+        name: str,
+        reference: str,
+        credential_ref: str | None = None,
+        access_policy: dict[str, Any] | None = None,
+    ) -> HelmChartSource:
+        """Atomically register one canonical source without persisting raw credentials."""
+
+        normalized_workspace = workspace_id.strip()
+        normalized_name = name.strip()
+        if not normalized_workspace or not normalized_name:
+            raise ValueError("workspace_id and source name are required")
+        canonical_ref = normalize_helm_chart_source_reference(provider, reference)
+        if credential_ref is not None:
+            try:
+                credential_provider, _scope = parse_credential_ref(credential_ref)
+            except CredentialEncryptionError as exc:
+                raise ValueError("invalid Helm chart source credential reference") from exc
+            if credential_provider != HELM_CHART_CREDENTIAL_PROVIDERS[provider]:
+                raise ValueError("invalid Helm chart source credential reference")
+        source_id = _helm_chart_source_id(
+            normalized_workspace,
+            provider,
+            canonical_ref,
+        )
+        table = HelmChartSourceRecord.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                source_id=source_id,
+                workspace_id=normalized_workspace,
+                provider=provider,
+                name=normalized_name,
+                canonical_ref=canonical_ref,
+                credential_ref=credential_ref,
+                status="active",
+                access_policy=dict(access_policy or {}),
+                updated_at=func.now(),
+            )
+            .on_conflict_do_nothing()
+            .returning(table)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one_or_none()
+        if row is None:
+            raise HelmChartSourceConflict("Helm chart source already exists")
+        return helm_chart_source_from_row(dict(row))
+
+    def list_helm_chart_sources(
+        self,
+        *,
+        workspace_id: str,
+        limit: int,
+        cursor: str | None = None,
+    ) -> HelmChartSourcePage:
+        """List one workspace's safe source projections with bounded keyset pagination."""
+
+        effective_limit = min(max(int(limit), 1), HELM_CHART_SOURCE_PAGE_MAX)
+        if not workspace_id:
+            return HelmChartSourcePage(
+                items=(),
+                limit=effective_limit,
+                has_more=False,
+                next_cursor=None,
+            )
+        table = HelmChartSourceRecord.__table__
+        scope = f"helm-chart-sources:{workspace_id}"
+        statement = select(
+            table.c.source_id,
+            table.c.workspace_id,
+            table.c.provider,
+            table.c.name,
+            table.c.canonical_ref,
+            table.c.credential_ref,
+            table.c.status,
+            table.c.updated_at,
+        ).where(table.c.workspace_id == workspace_id)
+        if cursor is not None:
+            position = decode_keyset_cursor(cursor, expected_scope=scope)
+            statement = statement.where(
+                or_(
+                    table.c.updated_at < position.ordered_at,
+                    and_(
+                        table.c.updated_at == position.ordered_at,
+                        table.c.source_id > position.tie_breaker,
+                    ),
+                )
+            )
+        statement = statement.order_by(table.c.updated_at.desc(), table.c.source_id).limit(
+            effective_limit + 1
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+        has_more = len(rows) > effective_limit
+        page = rows[:effective_limit]
+        next_cursor = None
+        if has_more and page:
+            next_cursor = encode_keyset_cursor(
+                scope=scope,
+                ordered_at=page[-1]["updated_at"],
+                tie_breaker=str(page[-1]["source_id"]),
+            )
+        return HelmChartSourcePage(
+            items=tuple(helm_chart_source_from_row(row) for row in page),
+            limit=effective_limit,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     def list_helm_storage_observations(
         self,
@@ -178,6 +313,11 @@ class HelmReleaseRepository(DatabaseConnection):
 
 def _ids(values: Collection[str]) -> tuple[str, ...]:
     return tuple(sorted({str(value).strip() for value in values if str(value).strip()}))
+
+
+def _helm_chart_source_id(workspace_id: str, provider: str, canonical_ref: str) -> str:
+    digest = hashlib.sha256(f"{workspace_id}|{provider}|{canonical_ref}".encode()).hexdigest()
+    return f"helm-source-{digest[:32]}"
 
 
 def _release_scopes(
