@@ -2812,6 +2812,7 @@
       "verification": [
         "tests/test_shell_state_router.py",
         "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
         "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx"
       ],
       "coverage": {
@@ -2824,8 +2825,8 @@
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx#NamespaceScopeSync",
-          "consumer": "frontend/src/api/shell-state.ts#getNamespaceScope",
-          "test": "tests/test_shell_state_router.py#test_namespace_scope_is_authoritative_and_mutation_is_audited"
+          "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
+          "test": "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -2851,6 +2852,7 @@
       "desktopContract": null,
       "verification": [
         "tests/test_shell_state_router.py",
+        "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
         "frontend/src/features/bottom-dock/BottomDockProvider.test.tsx",
         "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
       ],
@@ -2931,7 +2933,8 @@
       "desktopContract": null,
       "verification": [
         "tests/test_shell_state_router.py",
-        "frontend/src/api/shell-state.test.ts"
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
       ],
       "coverage": {
         "backend": {
@@ -2943,8 +2946,8 @@
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/features/preferences/UiPreferencesSync.tsx#UiPreferencesSync",
-          "consumer": "frontend/src/api/shell-state.ts#getUiPreferences",
-          "test": "tests/test_shell_state_router.py#test_ui_preferences_round_trip_with_revision_and_audit_event"
+          "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
+          "test": "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -2970,7 +2973,8 @@
       "desktopContract": null,
       "verification": [
         "tests/test_shell_state_router.py",
-        "frontend/src/api/shell-state.test.ts"
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
       ],
       "coverage": {
         "backend": {
@@ -2982,8 +2986,8 @@
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/features/preferences/UiPreferencesSync.tsx#UiPreferencesSync",
-          "consumer": "frontend/src/api/shell-state.ts#updateUiPreferences",
-          "test": "tests/test_shell_state_router.py#test_ui_preferences_round_trip_with_revision_and_audit_event"
+          "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
+          "test": "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"

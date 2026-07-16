@@ -51,7 +51,7 @@ export function ProductRouter({
             authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
             port={composition.clusterScope}
           >
-            <UiPreferencesSync />
+            <UiPreferencesSync port={composition.shellState} />
             <DesktopRuntimeSync />
             <Routes>
           <Route element={(
@@ -61,6 +61,7 @@ export function ProductRouter({
               aiAssistantPort={composition.aiAssistant}
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
+              shellStatePort={composition.shellState}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>

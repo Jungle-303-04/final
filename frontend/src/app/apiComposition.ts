@@ -15,6 +15,8 @@ import {
   grantDiagnoseConsent,
   getScheduledWorkloadRuns,
   getNodePodsSummary,
+  getNamespaceScope,
+  getUiPreferences,
   listAlertEvents,
   listAlertRules,
   listClusters,
@@ -30,6 +32,8 @@ import {
   stopDiagnoseRun,
   subscribeDiagnoseEvents,
   updateAlertRule,
+  updateNamespaceScope,
+  updateUiPreferences,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
@@ -43,6 +47,7 @@ import { createWorkloadDetailAdapter } from "../features/workload-detail/createW
 import { createCompareAdapter } from "../features/compare/createCompareAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
+import { createShellStateAdapter } from "../features/shell-state/createShellStateAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
 
@@ -92,6 +97,12 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getWorkloadDetail,
   });
   const comparePort = createCompareAdapter({ getCompareCandidates, getCompareResourcePair });
+  const shellStatePort = createShellStateAdapter({
+    getNamespaceScope,
+    getUiPreferences,
+    updateNamespaceScope,
+    updateUiPreferences,
+  });
   const diagnosePort = createDiagnoseAdapter({
     addDiagnoseTurn,
     clearDiagnoseHistory,
@@ -190,5 +201,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort, diagnosePort);
+  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort);
 }

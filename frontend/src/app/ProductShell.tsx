@@ -64,6 +64,10 @@ import type { ProductRouteDefinition } from "./productRoutes";
 import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
 import { useOptionalDiagnoseSession } from "../features/diagnose/DiagnoseSessionContext";
 import { NamespaceScopeSync } from "../features/namespace-scope/NamespaceScopeSync";
+import {
+  EMPTY_SHELL_STATE_PORT,
+  type ShellStatePort,
+} from "../features/shell-state/shellStateContract";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -77,6 +81,7 @@ interface ProductShellProps {
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
   alertEventsPort?: AlertEventsPort;
+  shellStatePort?: ShellStatePort;
 }
 
 export function ProductShell({
@@ -87,6 +92,7 @@ export function ProductShell({
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  shellStatePort = EMPTY_SHELL_STATE_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
@@ -99,6 +105,7 @@ export function ProductShell({
                 aiAssistantPort={aiAssistantPort}
                 globalFilterPort={globalFilterPort}
                 releasedSurfaceIds={releasedSurfaceIds}
+                shellStatePort={shellStatePort}
               />
             </AlertEventsProvider>
           </BottomDockProvider>
@@ -113,7 +120,8 @@ function ProductShellFrame({
   auth,
   releasedSurfaceIds,
   globalFilterPort,
-}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
+  shellStatePort = EMPTY_SHELL_STATE_PORT,
+}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "shellStatePort">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
@@ -200,7 +208,7 @@ function ProductShellFrame({
 
   return (
     <>
-      <NamespaceScopeSync />
+      <NamespaceScopeSync port={shellStatePort} />
       <a
         className="fixed left-3 top-3 z-50 -translate-y-20 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-transform focus:translate-y-0 motion-reduce:transition-none"
         href="#product-main"

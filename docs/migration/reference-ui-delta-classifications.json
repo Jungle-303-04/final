@@ -2209,6 +2209,9 @@
             "destinations": [
               "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx",
               "frontend/src/features/namespace-scope/namespaceScopeInvalidation.ts",
+              "frontend/src/features/shell-state/shellStateContract.ts",
+              "frontend/src/features/shell-state/createShellStateAdapter.ts",
+              "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
               "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
               "frontend/src/pages/resources/PodTerminalDialog.tsx",
               "frontend/src/api/shell-state.ts",
@@ -2226,7 +2229,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The Python gateway now owns the RBAC-filtered catalog and durable replacement scope; the browser applies canonical URL state and closes incompatible live log subscriptions after the audited transaction commits."
+            "rationale": "The Python gateway now owns the RBAC-filtered catalog and durable replacement scope; one authenticated composition adapter feeds the browser port, which applies canonical URL state and closes incompatible live log subscriptions after the audited transaction commits."
           }
         }
       ]
@@ -8552,6 +8555,9 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/preferences/UiPreferencesSync.tsx",
+              "frontend/src/features/shell-state/shellStateContract.ts",
+              "frontend/src/features/shell-state/createShellStateAdapter.ts",
+              "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
               "frontend/src/api/shell-state.ts",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py",
@@ -8567,7 +8573,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "Preferences are scoped by workspace and user in PostgreSQL, validated at both Python and Zod boundaries, and coupled to an immutable audit event in one transaction."
+            "rationale": "Preferences are scoped by workspace and user in PostgreSQL, validated at Python, Zod, and the authenticated feature adapter boundary, and coupled to an immutable audit event in one transaction."
           }
         }
       ]
