@@ -3,6 +3,7 @@ import type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointDependencies,
+  HomeEndpointInsights,
   HomeEndpointNodeCollection,
   HomeEndpointPodCollection,
 } from "./createHomeAdapter";
@@ -137,6 +138,36 @@ export const NODE_COLLECTION: HomeEndpointNodeCollection = {
   ],
 };
 
+export const HOME_INSIGHTS: HomeEndpointInsights = {
+  cluster_id: "cluster-1",
+  custom_resources: {
+    coverage: {
+      availability: "available",
+      observed_at: "2026-07-12T10:00:00Z",
+      reason_codes: [],
+    },
+    items: [{
+      api_group: "argoproj.io",
+      version: "v1alpha1",
+      kind: "Application",
+      count: 7,
+    }],
+    total_kinds: 1,
+    total_resources: 7,
+    has_more: false,
+  },
+  helm: {
+    coverage: {
+      availability: "partial",
+      observed_at: "2026-07-12T10:00:00Z",
+      reason_codes: ["source_resources_incomplete"],
+    },
+    release_count: 2,
+    status_counts: { deployed: 1, failed: 1 },
+  },
+  refresh_after_seconds: 30,
+};
+
 export const POD_COLLECTION: HomeEndpointPodCollection = {
   cluster_id: "cluster-1",
   node_name: "worker-b",
@@ -162,6 +193,9 @@ export function endpoints(overrides: Partial<HomeEndpointDependencies> = {}) {
     ),
     getClusterSummary: vi.fn(
       overrides.getClusterSummary ?? (() => Promise.resolve(CLUSTER_OVERVIEW)),
+    ),
+    getHomeInsights: vi.fn(
+      overrides.getHomeInsights ?? (() => Promise.resolve(HOME_INSIGHTS)),
     ),
     getClusterNodesSummary: vi.fn(
       overrides.getClusterNodesSummary ?? (() => Promise.resolve(NODE_COLLECTION)),

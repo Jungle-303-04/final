@@ -2,6 +2,7 @@ import { HomePortFailure, type HomeFailureCode, type HomePort } from "./homeCont
 import {
   toClusterChoices,
   toClusterOverview,
+  toHomeInsights,
   toNodeCollection,
   toPodCollection,
 } from "./homeCanonical";
@@ -12,6 +13,7 @@ export type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointDependencies,
+  HomeEndpointInsights,
   HomeEndpointNodeCollection,
   HomeEndpointPodCollection,
 } from "./homeEndpointContract";
@@ -30,6 +32,12 @@ export function createHomeAdapter(endpoints: HomeEndpointDependencies): HomePort
           clusterId,
           await endpoints.getClusterSummary(clusterId, signal),
         )
+      );
+    },
+
+    async loadInsights(clusterId, signal) {
+      return withCanonicalFailure(async () =>
+        toHomeInsights(clusterId, await endpoints.getHomeInsights(clusterId, signal))
       );
     },
 

@@ -9,6 +9,7 @@ import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeIssuesRail } from "./HomeIssuesRail";
+import { HomeInsightsBand } from "./HomeInsightsBand";
 import { HomeLiveBand } from "./HomeLiveBand";
 import { useHomePageState } from "./useHomePageState";
 
@@ -31,7 +32,7 @@ export function HomePage({ port }: { port: HomePort }) {
   if (state.clusterAccess.kind === "forbidden") {
     return <HomeFailureScreen failure={state.clusterAccess.failure} onRetry={state.refresh} />;
   }
-  const refreshing = [state.choices, state.overview, state.nodes, state.pods].some(
+  const refreshing = [state.choices, state.overview, state.insights, state.nodes, state.pods].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
 
@@ -64,6 +65,7 @@ export function HomePage({ port }: { port: HomePort }) {
                 onRefresh={state.refresh}
                 overview={state.overview}
               />
+              <HomeInsightsBand insights={state.insights} onRefresh={state.refresh} />
               <HomeLiveBand state={state} />
             </div>
             <HomeIssuesRail
@@ -79,7 +81,7 @@ export function HomePage({ port }: { port: HomePort }) {
 }
 
 function homeConnectionState(state: ReturnType<typeof useHomePageState>) {
-  const resources = [state.choices, state.overview, state.nodes, state.pods];
+  const resources = [state.choices, state.overview, state.insights, state.nodes, state.pods];
   return resources.some((resource) =>
     resource.phase === "failed" ||
     (resource.phase === "ready" && resource.refreshFailure !== null)
@@ -129,7 +131,7 @@ function UnknownCluster({ clusterId }: { clusterId: string | null }) {
 
 function PartialFailureBanner({ state }: { state: ReturnType<typeof useHomePageState> }) {
   const { t } = useI18n();
-  const failures = [state.overview, state.nodes].filter(
+  const failures = [state.overview, state.insights, state.nodes].filter(
     (section) => section.phase === "failed" ||
       (section.phase === "ready" && section.refreshFailure !== null),
   );

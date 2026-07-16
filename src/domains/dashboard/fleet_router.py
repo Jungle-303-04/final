@@ -24,12 +24,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.helm.release_projection import helm_release_list
 from domains.identity.dependencies import require_cluster_access, require_session
 from domains.target.router import (
     BLOCKED_TEST_CLUSTER_IDS,
     BLOCKED_TEST_CLUSTER_NAME_PARTS,
     cluster_connection_status,
 )
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -42,6 +44,11 @@ from packages.contracts.gateway.responses import (
     FleetClusterSummaryItem,
     FleetSummaryResponse,
     FleetTotals,
+    HomeCustomResourceCount,
+    HomeCustomResourceSummary,
+    HomeHelmSummary,
+    HomeInsightCoverage,
+    HomeInsightsResponse,
     NodePodsSummaryResponse,
     NodeSummaryItem,
     PodSummaryItem,
@@ -65,6 +72,7 @@ WARNING_EVENT_SCAN_LIMIT = 100
 OPEN_INCIDENT_LIMIT = 20
 NODE_LIMIT = 1000
 POD_LIMIT = 1000
+HOME_CUSTOM_RESOURCE_LIMIT = 8
 NOT_FOUND_CODE = 404
 OBSERVABILITY_SYSTEM_NAMESPACES = {
     "cert-manager",
@@ -125,6 +133,30 @@ async def cluster_summary_detail(
     if detail is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
     return detail
+
+
+@router.get(
+    gateway_routes.CLUSTER_HOME_INSIGHTS_PATH,
+    response_model=HomeInsightsResponse,
+)
+async def cluster_home_insights(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> HomeInsightsResponse:
+    """Return bounded Home discovery summaries from one authorized inventory scope."""
+
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.INVENTORY_READ.value,
+    )
+    if await asyncio.to_thread(db.get_cluster_registration, workspace_id, cluster_id) is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
+    return await asyncio.to_thread(build_home_insights, db, workspace_id, cluster_id)
 
 
 @router.get(
@@ -309,6 +341,117 @@ def build_cluster_summary_detail(
         warning_events=warning_events,
         open_incidents=open_incidents,
         usage=usage_snapshot(samples[-1] if samples else None),
+    )
+
+
+def build_home_insights(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> HomeInsightsResponse:
+    contexts = db.filter_snapshot_contexts(workspace_id, (cluster_id,))
+    context = contexts.get(cluster_id)
+    custom_resources = _home_custom_resource_summary(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        context=context,
+    )
+    helm_contexts = db.helm_release_observation_contexts(
+        workspace_id=workspace_id,
+        cluster_ids=(cluster_id,),
+    )
+    helm_response = helm_release_list(
+        db.list_helm_storage_observations(
+            workspace_id=workspace_id,
+            cluster_ids=(cluster_id,),
+            namespaces=(),
+        ),
+        contexts=helm_contexts,
+        agent_statuses=db.latest_cluster_agent_statuses(workspace_id, {cluster_id}),
+        selected_cluster_ids=(cluster_id,),
+    )
+    helm_coverage = HomeInsightCoverage(
+        availability=helm_response.coverage.availability,
+        observed_at=helm_response.coverage.observed_at,
+        reason_codes=helm_response.coverage.reason_codes,
+    )
+    status_counts: dict[str, int] = {}
+    if helm_coverage.availability != "unavailable":
+        for release in helm_response.releases:
+            if release.status:
+                status_counts[release.status] = status_counts.get(release.status, 0) + 1
+    return HomeInsightsResponse(
+        cluster_id=cluster_id,
+        custom_resources=custom_resources,
+        helm=HomeHelmSummary(
+            coverage=helm_coverage,
+            release_count=(
+                None if helm_coverage.availability == "unavailable" else len(helm_response.releases)
+            ),
+            status_counts=status_counts,
+        ),
+        refresh_after_seconds=integral_refresh_after_seconds("dashboard"),
+    )
+
+
+def _home_custom_resource_summary(
+    db: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    context: JsonObject | None,
+) -> HomeCustomResourceSummary:
+    revision = int((context or {}).get("snapshot_revision") or 0)
+    if revision <= 0:
+        return HomeCustomResourceSummary(
+            coverage=HomeInsightCoverage(
+                availability="unavailable",
+                observed_at=_optional_text((context or {}).get("observed_at")),
+                reason_codes=(f"inventory_snapshot_unavailable:{cluster_id}",),
+            )
+        )
+    reasons = {
+        str(reason)
+        for reason in (context or {}).get("partial_reason_codes", ())
+        if str(reason).strip()
+    }
+    if not bool((context or {}).get("resources_complete")):
+        reasons.add("source_resources_incomplete")
+    counts = db.list_home_custom_resource_counts(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        snapshot_revision=revision,
+        limit=HOME_CUSTOM_RESOURCE_LIMIT,
+    )
+    items = tuple(_home_custom_resource_count(item) for item in counts.get("items", ()))
+    return HomeCustomResourceSummary(
+        coverage=HomeInsightCoverage(
+            availability="partial" if reasons else "available",
+            observed_at=_optional_text((context or {}).get("observed_at")),
+            reason_codes=tuple(sorted(reasons)),
+        ),
+        items=items,
+        total_kinds=int(counts.get("total_kinds") or 0),
+        total_resources=int(counts.get("total_resources") or 0),
+        has_more=int(counts.get("total_kinds") or 0) > len(items),
+    )
+
+
+def _split_api_version(value: str) -> tuple[str, str]:
+    group, separator, version = value.partition("/")
+    if not separator:
+        return ("core", group or "unknown")
+    return (group or "unknown", version or "unknown")
+
+
+def _home_custom_resource_count(item: JsonObject) -> HomeCustomResourceCount:
+    api_group, version = _split_api_version(str(item["api_version"]))
+    return HomeCustomResourceCount(
+        api_group=api_group,
+        version=version,
+        kind=str(item["kind"]),
+        count=int(item["count"]),
     )
 
 

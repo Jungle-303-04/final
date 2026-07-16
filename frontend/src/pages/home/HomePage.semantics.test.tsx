@@ -201,6 +201,18 @@ describe("HomePage data semantics", () => {
     expect(screen.queryByRole("button", { name: /worker-a/u })).toBeNull();
     expect(screen.queryByRole("region", { name: "Node와 Pod" })).toBeNull();
   });
+
+  it("keeps an inventory-only insights denial inside the Home insights section", async () => {
+    renderHome(homePort({
+      loadInsights: vi.fn().mockRejectedValue(new HomePortFailure("forbidden")),
+    }), ["/?clusters=cluster-1"]);
+
+    const insights = await screen.findByRole("region", { name: "클러스터 인사이트" });
+    expect(await within(insights).findByText("조회 권한이 없습니다")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /worker-a/u })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
+      .toBeNull();
+  });
 });
 
 function resetDocumentTestClock() {

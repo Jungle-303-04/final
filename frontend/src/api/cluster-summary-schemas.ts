@@ -56,6 +56,99 @@ export const clusterSummaryDetailSchema = z.strictObject({
   usage: clusterUsageSnapshotSchema.nullable(),
 });
 
+const homeInsightCoverageSchema = z.strictObject({
+  availability: z.enum(["available", "partial", "unavailable"]),
+  observed_at: nullableStringSchema,
+  reason_codes: z.array(z.string().min(1)),
+}).superRefine((value, context) => {
+  if (value.availability !== "available" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "incomplete Home insight coverage requires reasons" });
+  }
+});
+
+export const homeInsightsSchema = z.strictObject({
+  cluster_id: z.string().min(1),
+  custom_resources: z.strictObject({
+    coverage: homeInsightCoverageSchema,
+    items: z.array(z.strictObject({
+      api_group: z.string().min(1),
+      version: z.string().min(1),
+      kind: z.string().min(1),
+      count: z.number().int().positive(),
+    })).max(20),
+    total_kinds: z.number().int().nonnegative().nullable(),
+    total_resources: z.number().int().nonnegative().nullable(),
+    has_more: z.boolean(),
+  }),
+  helm: z.strictObject({
+    coverage: homeInsightCoverageSchema,
+    release_count: z.number().int().nonnegative().nullable(),
+    status_counts: z.record(z.string().min(1), z.number().int().positive()),
+  }),
+  refresh_after_seconds: z.number().int().min(1).max(3600),
+}).superRefine((value, context) => {
+  const customUnavailable = value.custom_resources.coverage.availability === "unavailable";
+  if (customUnavailable !== (value.custom_resources.total_kinds === null)) {
+    context.addIssue({ code: "custom", message: "custom resource totals must match coverage" });
+  }
+  if (customUnavailable !== (value.custom_resources.total_resources === null)) {
+    context.addIssue({ code: "custom", message: "custom resource totals must match coverage" });
+  }
+  const visibleCustomTotal = value.custom_resources.items.reduce(
+    (total, item) => total + item.count,
+    0,
+  );
+  if (
+    customUnavailable && (
+      value.custom_resources.items.length > 0 || value.custom_resources.has_more
+    )
+  ) {
+    context.addIssue({ code: "custom", message: "unavailable custom resources cannot expose rows" });
+  }
+  if (
+    value.custom_resources.total_kinds !== null &&
+    value.custom_resources.total_kinds < value.custom_resources.items.length
+  ) {
+    context.addIssue({ code: "custom", message: "custom resource total kinds is too small" });
+  }
+  if (
+    value.custom_resources.total_resources !== null &&
+    value.custom_resources.total_resources < visibleCustomTotal
+  ) {
+    context.addIssue({ code: "custom", message: "custom resource total is too small" });
+  }
+  if (
+    value.custom_resources.has_more !== (
+      value.custom_resources.total_kinds !== null &&
+      value.custom_resources.total_kinds > value.custom_resources.items.length
+    )
+  ) {
+    context.addIssue({ code: "custom", message: "custom resource has_more is inconsistent" });
+  }
+  const helmUnavailable = value.helm.coverage.availability === "unavailable";
+  if (helmUnavailable !== (value.helm.release_count === null)) {
+    context.addIssue({ code: "custom", message: "Helm release count must match coverage" });
+  }
+  const statusTotal = Object.values(value.helm.status_counts).reduce(
+    (total, count) => total + count,
+    0,
+  );
+  if (helmUnavailable && Object.keys(value.helm.status_counts).length > 0) {
+    context.addIssue({ code: "custom", message: "unavailable Helm coverage cannot expose statuses" });
+  }
+  if (
+    Object.keys(value.helm.status_counts).length > 20 ||
+    Object.keys(value.helm.status_counts).some(
+      (status) => status.trim() === "" || status.length > 120,
+    )
+  ) {
+    context.addIssue({ code: "custom", message: "Helm status counts are not bounded" });
+  }
+  if (value.helm.release_count !== null && statusTotal > value.helm.release_count) {
+    context.addIssue({ code: "custom", message: "Helm status counts exceed release count" });
+  }
+});
+
 export const nodeSummaryItemSchema = z.strictObject({
   name: z.string(),
   ready: z.boolean(),
@@ -94,6 +187,7 @@ export const nodePodsSummarySchema = z.strictObject({
 });
 
 export type ClusterSummaryDetail = z.infer<typeof clusterSummaryDetailSchema>;
+export type HomeInsightsEndpoint = z.infer<typeof homeInsightsSchema>;
 export type ClusterNodesSummary = z.infer<typeof clusterNodesSummarySchema>;
 export type NodePodsSummary = z.infer<typeof nodePodsSummarySchema>;
 export type ClusterWorkloadHealthItem = z.infer<typeof clusterWorkloadHealthItemSchema>;

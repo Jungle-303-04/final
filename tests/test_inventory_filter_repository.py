@@ -110,6 +110,71 @@ def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> N
     )
 
 
+def test_home_custom_resource_counts_are_revision_scoped_and_bounded() -> None:
+    rows = [
+        {
+            "api_version": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "count": 7,
+            "total_kinds": 2,
+            "total_resources": 10,
+        },
+        {
+            "api_version": "monitoring.coreos.com/v1",
+            "kind": "ServiceMonitor",
+            "count": 3,
+            "total_kinds": 2,
+            "total_resources": 10,
+        },
+    ]
+
+    class Connection:
+        def __init__(self) -> None:
+            self.statement: Any | None = None
+
+        def execute(self, statement: Any) -> _MappedResult:
+            self.statement = statement
+            return _MappedResult(rows)
+
+    connection_instance = Connection()
+
+    @contextmanager
+    def connection() -> Iterator[Connection]:
+        yield connection_instance
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+
+    result = repository.list_home_custom_resource_counts(
+        workspace_id="workspace-a",
+        cluster_id="cluster-a",
+        snapshot_revision=42,
+        limit=8,
+    )
+
+    assert result == {
+        "items": [
+            {
+                "api_version": "argoproj.io/v1alpha1",
+                "kind": "Application",
+                "count": 7,
+            },
+            {
+                "api_version": "monitoring.coreos.com/v1",
+                "kind": "ServiceMonitor",
+                "count": 3,
+            },
+        ],
+        "total_kinds": 2,
+        "total_resources": 10,
+    }
+    sql = _sql(connection_instance.statement)
+    assert "inventory_resource_versions.workspace_id = 'workspace-a'" in sql
+    assert "inventory_filter_revisions.revision_id <= 42" in sql
+    assert "resource_type = 'custom_resource'" in sql
+    assert "limit 8" in sql
+
+
 def test_resolve_filter_clusters_returns_complete_response_identity() -> None:
     class Connection:
         def execute(self, _statement: Any) -> _MappedResult:

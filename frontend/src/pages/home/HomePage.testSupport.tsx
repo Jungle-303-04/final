@@ -7,6 +7,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeInsights,
   HomeNodeCollection,
   HomePodCollection,
   HomePort,
@@ -124,6 +125,36 @@ export const NODES: HomeNodeCollection = {
   ],
 };
 
+export const INSIGHTS: HomeInsights = {
+  clusterId: "cluster-1",
+  customResources: {
+    coverage: {
+      availability: "available",
+      observedAt: "2026-07-12T10:00:00.000Z",
+      reasonCodes: [],
+    },
+    items: [{
+      apiGroup: "argoproj.io",
+      version: "v1alpha1",
+      kind: "Application",
+      count: 7,
+    }],
+    totalKinds: 1,
+    totalResources: 7,
+    hasMore: false,
+  },
+  helm: {
+    coverage: {
+      availability: "available",
+      observedAt: "2026-07-12T10:00:00.000Z",
+      reasonCodes: [],
+    },
+    releaseCount: 2,
+    statusCounts: { deployed: 2 },
+  },
+  refreshAfterSeconds: 30,
+};
+
 export const PODS: HomePodCollection = {
   clusterId: "cluster-1",
   nodeName: "worker-b",
@@ -173,6 +204,7 @@ export function homePort(overrides: Partial<HomePort> = {}): HomePort {
   return {
     listClusterChoices: vi.fn().mockResolvedValue(CLUSTERS),
     loadClusterOverview: vi.fn().mockResolvedValue(OVERVIEW),
+    loadInsights: vi.fn().mockResolvedValue(INSIGHTS),
     loadNodes: vi.fn().mockResolvedValue(NODES),
     loadNodePods: vi.fn().mockResolvedValue(PODS),
     ...overrides,

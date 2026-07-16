@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { HomePort } from "../../features/home/homeContract";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import { acquireHomeRequest } from "./homeRequest";
 import {
   EMPTY_HOME_FRAME,
@@ -41,6 +42,10 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
     selectedNodeName,
   } = input;
   const [frame, setFrame] = useState<HomeClusterFrame>(EMPTY_HOME_FRAME);
+  const [insightsRevision, setInsightsRevision] = useState(0);
+  const insightsRefresh = useServerRefreshScheduler(
+    () => setInsightsRevision((current) => current + 1),
+  );
 
   useEffect(() => {
     if (!clusterId || !scopeKey) return;
@@ -82,6 +87,53 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
       nodesRequest.release();
     };
   }, [clusterId, port, refreshRevision, reportUnauthorized, scopeKey]);
+
+  useEffect(() => {
+    insightsRefresh.backgroundFailure();
+  }, [insightsRefresh, scopeKey]);
+
+  useEffect(() => {
+    if (!clusterId || !scopeKey) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setFrame((current) => current.scopeKey === scopeKey
+        ? { ...current, insights: startResource(current.insights) }
+        : current);
+    });
+    const request = acquireHomeRequest(
+      port,
+      `insights:${scopeKey}:r${insightsRevision}`,
+      (signal) => port.loadInsights(clusterId, signal),
+    );
+    void request.promise.then(
+      (data) => {
+        if (!active) return;
+        setFrame((current) => current.scopeKey === scopeKey
+          ? { ...current, insights: resourceSuccess(data) }
+          : current);
+        insightsRefresh.acceptSuccess(data);
+      },
+      (error: unknown) => {
+        if (!active || isAbortError(error)) return;
+        insightsRefresh.backgroundFailure();
+        const failure = toHomeFailure(error);
+        if (failure.code === "unauthorized") {
+          reportUnauthorized();
+          return;
+        }
+        setFrame((current) => current.scopeKey === scopeKey
+          ? { ...current, insights: resourceFailure(current.insights, failure) }
+          : current);
+      },
+    );
+    return () => {
+      active = false;
+      request.release();
+    };
+  }, [
+    clusterId, insightsRefresh, insightsRevision, port, reportUnauthorized, scopeKey,
+  ]);
 
   const currentFrame = frame.scopeKey === scopeKey ? frame : null;
   const nodes = currentFrame?.nodes ?? (scopeKey ? HOME_LOADING : HOME_IDLE);
@@ -149,9 +201,11 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
 
   return {
     clusterAccess: currentFrame?.clusterAccess ?? HOME_ALLOWED,
+    insights: currentFrame?.insights ?? (scopeKey ? HOME_LOADING : HOME_IDLE),
     nodes,
     overview,
     pods,
+    refreshInsights: insightsRefresh.requestRefresh,
     selectedNodeResolution,
   };
 }

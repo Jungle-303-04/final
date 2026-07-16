@@ -166,6 +166,42 @@ export interface HomePodCollection {
   pods: HomePodSummary[];
 }
 
+export type HomeInsightAvailability = "available" | "partial" | "unavailable";
+
+export interface HomeInsightCoverage {
+  availability: HomeInsightAvailability;
+  observedAt: string | null;
+  reasonCodes: readonly string[];
+}
+
+export interface HomeCustomResourceCount {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  count: number;
+}
+
+export interface HomeCustomResourceSummary {
+  coverage: HomeInsightCoverage;
+  items: readonly HomeCustomResourceCount[];
+  totalKinds: number | null;
+  totalResources: number | null;
+  hasMore: boolean;
+}
+
+export interface HomeHelmSummary {
+  coverage: HomeInsightCoverage;
+  releaseCount: number | null;
+  statusCounts: Readonly<Record<string, number>>;
+}
+
+export interface HomeInsights {
+  clusterId: string;
+  customResources: HomeCustomResourceSummary;
+  helm: HomeHelmSummary;
+  refreshAfterSeconds: number;
+}
+
 export type HomeFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -190,6 +226,7 @@ export class HomePortFailure extends Error {
 export interface HomePort {
   listClusterChoices(signal?: AbortSignal): Promise<HomeClusterChoices>;
   loadClusterOverview(clusterId: string, signal?: AbortSignal): Promise<HomeClusterOverview>;
+  loadInsights(clusterId: string, signal?: AbortSignal): Promise<HomeInsights>;
   loadNodes(clusterId: string, signal?: AbortSignal): Promise<HomeNodeCollection>;
   loadNodePods(
     clusterId: string,

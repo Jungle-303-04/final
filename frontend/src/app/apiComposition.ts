@@ -8,6 +8,7 @@ import {
   getAiSuggestions,
   getClusterNodesSummary,
   getClusterSummary,
+  getHomeInsights,
   getCompareCandidates,
   getCompareResourcePair,
   getWorkloadDetail,
@@ -62,6 +63,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
+    getHomeInsights,
     getNodePodsSummary,
     listClusters,
   });

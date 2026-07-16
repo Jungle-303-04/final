@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomePortFailure } from "../../features/home/homeContract";
@@ -77,6 +77,19 @@ describe("HomePage", () => {
     expect(screen.queryByText("MCP Server")).toBeNull();
     expect(screen.queryByText("Connect your AI tool")).toBeNull();
   }, 15_000);
+
+  it("renders revisioned custom resource and Helm summaries with scoped navigation", async () => {
+    renderHome(homePort(), ["/?clusters=cluster-1&applications=checkout"]);
+
+    const insights = await screen.findByRole("region", { name: "클러스터 인사이트" });
+    expect(await within(insights).findByText("Application")).toBeTruthy();
+    expect(within(insights).getByText("argoproj.io/v1alpha1")).toBeTruthy();
+    expect(within(insights).getByText("deployed 2")).toBeTruthy();
+    expect(within(insights).getByRole("link", { name: "리소스 열기" }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&applications=checkout");
+    expect(within(insights).getByRole("link", { name: "Helm 열기" }).getAttribute("href"))
+      .toBe("/helm?clusters=cluster-1&applications=checkout");
+  });
 
   it("keeps an internal Node hostname on one identifiable label while preserving its full identity", async () => {
     const port = homePort({

@@ -8,6 +8,7 @@ const EmptySurface = () => null;
 const homePort: HomePort = {
   listClusterChoices: async () => ({ clusters: [], completeness: "unknown" }),
   loadClusterOverview: async () => { throw new Error("not used"); },
+  loadInsights: async () => { throw new Error("not used"); },
   loadNodes: async () => { throw new Error("not used"); },
   loadNodePods: async () => { throw new Error("not used"); },
 };

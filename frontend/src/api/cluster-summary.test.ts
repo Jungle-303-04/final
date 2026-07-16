@@ -5,6 +5,7 @@ import { ApiError } from "./client";
 import {
   getClusterNodesSummary,
   getClusterSummary,
+  getHomeInsights,
   getNodePodsSummary,
 } from "./cluster-summary";
 
@@ -119,6 +120,7 @@ describe("cluster summary API", () => {
     const adapter = createHomeAdapter({
       listClusters: async () => ({ clusters: [] }),
       getClusterSummary,
+      getHomeInsights,
       getClusterNodesSummary,
       getNodePodsSummary,
     });
@@ -135,6 +137,45 @@ describe("cluster summary API", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/clusters/cluster-1/summary",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("loads strict bounded Home insights for one encoded cluster", async () => {
+    const payload = {
+      cluster_id: "cluster/one",
+      custom_resources: {
+        coverage: {
+          availability: "available",
+          observed_at: "2026-07-16T09:00:00Z",
+          reason_codes: [],
+        },
+        items: [{
+          api_group: "argoproj.io",
+          version: "v1alpha1",
+          kind: "Application",
+          count: 7,
+        }],
+        total_kinds: 1,
+        total_resources: 7,
+        has_more: false,
+      },
+      helm: {
+        coverage: {
+          availability: "available",
+          observed_at: "2026-07-16T09:00:00Z",
+          reason_codes: [],
+        },
+        release_count: 2,
+        status_counts: { deployed: 2 },
+      },
+      refresh_after_seconds: 30,
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
+
+    await expect(getHomeInsights("cluster/one")).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/clusters/cluster%2Fone/home/insights",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });

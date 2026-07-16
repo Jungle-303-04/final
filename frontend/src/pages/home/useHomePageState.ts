@@ -6,6 +6,7 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import {
   type HomeClusterChoices,
   type HomeClusterOverview,
+  type HomeInsights,
   type HomeNodeCollection,
   type HomePodCollection,
   type HomePort,
@@ -25,6 +26,7 @@ export interface HomePageState {
   choices: HomeResourceState<HomeClusterChoices>;
   clusterAccess: HomeClusterAccess;
   overview: HomeResourceState<HomeClusterOverview>;
+  insights: HomeResourceState<HomeInsights>;
   nodes: HomeResourceState<HomeNodeCollection>;
   pods: HomeResourceState<HomePodCollection>;
   selectedClusterId: string | null;
@@ -33,6 +35,7 @@ export interface HomePageState {
   selectedClusterExists: boolean;
   dataUpdatedAt: number;
   refresh: () => void;
+  refreshInsights: () => void;
   selectCluster: (clusterId: string) => void;
   selectNode: (nodeName: string) => void;
   closeNode: () => void;
@@ -69,12 +72,16 @@ export function useHomePageState(port: HomePort): HomePageState {
     scopeKey,
     selectedNodeName,
   });
+  const refreshInsights = clusterFrame.refreshInsights;
   const choicesData = choices.phase === "ready" ? choices.data : null;
   const overviewData = clusterFrame.overview.phase === "ready"
     ? clusterFrame.overview.data
     : null;
   const nodesData = clusterFrame.nodes.phase === "ready"
     ? clusterFrame.nodes.data
+    : null;
+  const insightsData = clusterFrame.insights.phase === "ready"
+    ? clusterFrame.insights.data
     : null;
   const podsData = clusterFrame.pods.phase === "ready"
     ? clusterFrame.pods.data
@@ -99,7 +106,7 @@ export function useHomePageState(port: HomePort): HomePageState {
   }, []);
 
   useEffect(() => {
-    const successfulData = [choicesData, overviewData, nodesData, podsData];
+    const successfulData = [choicesData, overviewData, insightsData, nodesData, podsData];
     if (successfulData.every((value) => value === null)) return;
     let active = true;
     queueMicrotask(() => {
@@ -108,7 +115,7 @@ export function useHomePageState(port: HomePort): HomePageState {
     return () => {
       active = false;
     };
-  }, [choicesData, nodesData, overviewData, podsData]);
+  }, [choicesData, insightsData, nodesData, overviewData, podsData]);
 
   useEffect(() => {
     if (!focusPodHeading.current || !selectedNodeName || clusterFrame.pods.phase === "idle") return;
@@ -144,7 +151,8 @@ export function useHomePageState(port: HomePort): HomePageState {
 
   const refresh = useCallback(() => {
     refreshFrame();
-  }, [refreshFrame]);
+    refreshInsights();
+  }, [refreshFrame, refreshInsights]);
 
   return useMemo(() => ({
     choices,

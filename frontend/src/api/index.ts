@@ -388,6 +388,7 @@ export {
 export {
   getClusterSummary,
   getClusterNodesSummary,
+  getHomeInsights,
   getNodePodsSummary,
 } from "./cluster-summary";
 export {
@@ -492,9 +493,11 @@ export {
 export {
   clusterSummaryDetailSchema,
   clusterNodesSummarySchema,
+  homeInsightsSchema,
   nodePodsSummarySchema,
   type ClusterSummaryDetail,
   type ClusterNodesSummary,
+  type HomeInsightsEndpoint,
   type NodePodsSummary,
   type ClusterWorkloadHealthItem,
   type NodeSummaryItem,

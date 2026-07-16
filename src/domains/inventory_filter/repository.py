@@ -1067,6 +1067,64 @@ class InventoryFilterRepository(DatabaseConnection):
             "resources": _serialize_global_facets(resources),
         }
 
+    def list_home_custom_resource_counts(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        snapshot_revision: int,
+        limit: int,
+    ) -> JsonObject:
+        """Count observed custom resource kinds at one exact inventory revision."""
+
+        if not workspace_id or not cluster_id or snapshot_revision <= 0:
+            return {"items": [], "total_kinds": 0, "total_resources": 0}
+        effective_limit = max(1, min(limit, 20))
+        current = _current_versions(
+            workspace_id,
+            (cluster_id,),
+            snapshot_revision,
+            include_deleted=False,
+        )
+        grouped = (
+            select(
+                current.c.api_version,
+                current.c.kind,
+                func.count(func.distinct(current.c.version_id)).label("count"),
+            )
+            .where(
+                current.c.rank == 1,
+                current.c.resource_type == "custom_resource",
+            )
+            .group_by(current.c.api_version, current.c.kind)
+            .cte("home_custom_resource_counts")
+        )
+        statement = (
+            select(
+                grouped.c.api_version,
+                grouped.c.kind,
+                grouped.c.count,
+                func.count().over().label("total_kinds"),
+                func.sum(grouped.c.count).over().label("total_resources"),
+            )
+            .order_by(grouped.c.count.desc(), grouped.c.api_version, grouped.c.kind)
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+        return {
+            "items": [
+                {
+                    "api_version": str(row["api_version"]),
+                    "kind": str(row["kind"]),
+                    "count": int(row["count"]),
+                }
+                for row in rows
+            ],
+            "total_kinds": int(rows[0]["total_kinds"]) if rows else 0,
+            "total_resources": int(rows[0]["total_resources"]) if rows else 0,
+        }
+
     def search_resource_identities(
         self,
         *,

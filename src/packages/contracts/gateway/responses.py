@@ -1818,6 +1818,85 @@ class ClusterSummaryDetailResponse(StrictModel):
     usage: ClusterUsageSnapshot | None = None
 
 
+HomeInsightAvailability = Literal["available", "partial", "unavailable"]
+
+
+class HomeInsightCoverage(StrictModel):
+    availability: HomeInsightAvailability
+    observed_at: str | None = None
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def incomplete_coverage_has_a_reason(self) -> Self:
+        if self.availability != "available" and not self.reason_codes:
+            raise ValueError("incomplete Home insight coverage requires a reason")
+        return self
+
+
+class HomeCustomResourceCount(StrictModel):
+    api_group: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    count: int = Field(ge=1)
+
+
+class HomeCustomResourceSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    items: tuple[HomeCustomResourceCount, ...] = Field(default=(), max_length=20)
+    total_kinds: int | None = Field(default=None, ge=0)
+    total_resources: int | None = Field(default=None, ge=0)
+    has_more: bool = False
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable and (
+            self.items or self.total_kinds is not None or self.total_resources is not None
+        ):
+            raise ValueError("unavailable custom resource coverage cannot expose counts")
+        if not unavailable and (self.total_kinds is None or self.total_resources is None):
+            raise ValueError("observed custom resource coverage requires totals")
+        if self.total_kinds is not None and self.total_kinds < len(self.items):
+            raise ValueError("custom resource total kinds cannot be smaller than items")
+        if self.total_resources is not None and self.total_resources < sum(
+            item.count for item in self.items
+        ):
+            raise ValueError("custom resource total cannot be smaller than visible counts")
+        if self.has_more != (self.total_kinds is not None and self.total_kinds > len(self.items)):
+            raise ValueError("custom resource has_more must match the bounded result")
+        return self
+
+
+class HomeHelmSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    release_count: int | None = Field(default=None, ge=0)
+    status_counts: dict[str, int] = Field(default_factory=dict, max_length=20)
+
+    @model_validator(mode="after")
+    def release_counts_match_coverage(self) -> Self:
+        if self.coverage.availability == "unavailable":
+            if self.release_count is not None or self.status_counts:
+                raise ValueError("unavailable Helm coverage cannot expose release counts")
+            return self
+        if self.release_count is None:
+            raise ValueError("observed Helm coverage requires a release count")
+        if any(
+            not status.strip() or len(status) > 120 or count < 1
+            for status, count in self.status_counts.items()
+        ):
+            raise ValueError("Helm status counts must be positive and named")
+        if sum(self.status_counts.values()) > self.release_count:
+            raise ValueError("Helm status counts cannot exceed the release count")
+        return self
+
+
+class HomeInsightsResponse(StrictModel):
+    cluster_id: str = Field(min_length=1)
+    custom_resources: HomeCustomResourceSummary
+    helm: HomeHelmSummary
+    refresh_after_seconds: int = Field(ge=1, le=3600)
+
+
 class NodeSummaryItem(StrictModel):
     name: str
     ready: bool

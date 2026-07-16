@@ -136,6 +136,38 @@ describe("canonical Home adapter mapping", () => {
     } satisfies HomeClusterOverview);
   });
 
+  it("maps bounded custom resource counts and Helm coverage without browser inference", async () => {
+    await expect(createHomeAdapter(endpoints()).loadInsights("cluster-1")).resolves.toEqual({
+      clusterId: "cluster-1",
+      customResources: {
+        coverage: {
+          availability: "available",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: [],
+        },
+        items: [{
+          apiGroup: "argoproj.io",
+          version: "v1alpha1",
+          kind: "Application",
+          count: 7,
+        }],
+        totalKinds: 1,
+        totalResources: 7,
+        hasMore: false,
+      },
+      helm: {
+        coverage: {
+          availability: "partial",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: ["source_resources_incomplete"],
+        },
+        releaseCount: 2,
+        statusCounts: { deployed: 1, failed: 1 },
+      },
+      refreshAfterSeconds: 30,
+    });
+  });
+
   it("maps nodes without claiming endpoint completeness or stable identity", async () => {
     await expect(createHomeAdapter(endpoints()).loadNodes("cluster-1")).resolves.toEqual({
       clusterId: "cluster-1",

@@ -5,6 +5,7 @@ import type {
   HomeDataQualityWarning,
   HomeNodeCollection,
   HomeNodeSummary,
+  HomeInsights,
   HomePodCollection,
   HomePodOwner,
   HomePodReadiness,
@@ -15,6 +16,8 @@ import type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointClusterSummary,
+  HomeEndpointInsightCoverage,
+  HomeEndpointInsights,
   HomeEndpointNode,
   HomeEndpointNodeCollection,
   HomeEndpointPod,
@@ -126,6 +129,94 @@ export function toClusterOverview(
     warnings,
     incidents,
     dataQualityWarnings,
+  };
+}
+
+export function toHomeInsights(
+  requestedClusterId: string,
+  wire: HomeEndpointInsights,
+): HomeInsights {
+  const clusterId = canonicalIdentity(requestedClusterId);
+  assertSameIdentity(wire.cluster_id, clusterId);
+  const customCoverage = toInsightCoverage(wire.custom_resources.coverage);
+  const customItems = wire.custom_resources.items.map((item) => {
+    const count = nonNegativeInteger(item.count);
+    if (count === 0) invalidResponse();
+    return {
+      apiGroup: canonicalIdentity(item.api_group),
+      version: canonicalIdentity(item.version),
+      kind: canonicalIdentity(item.kind),
+      count,
+    };
+  });
+  assertUnique(customItems.map((item) =>
+    `${item.apiGroup}/${item.version}/${item.kind}`
+  ));
+  const totalKinds = nullableNonNegativeInteger(wire.custom_resources.total_kinds);
+  const totalResources = nullableNonNegativeInteger(wire.custom_resources.total_resources);
+  const customUnavailable = customCoverage.availability === "unavailable";
+  if (
+    customUnavailable !== (totalKinds === null) ||
+    customUnavailable !== (totalResources === null) ||
+    (customUnavailable && (customItems.length > 0 || wire.custom_resources.has_more)) ||
+    (totalKinds !== null && totalKinds < customItems.length) ||
+    (totalResources !== null &&
+      totalResources < customItems.reduce((total, item) => total + item.count, 0)) ||
+    wire.custom_resources.has_more !== (
+      totalKinds !== null && totalKinds > customItems.length
+    )
+  ) {
+    invalidResponse();
+  }
+  const helmCoverage = toInsightCoverage(wire.helm.coverage);
+  const releaseCount = nullableNonNegativeInteger(wire.helm.release_count);
+  if (Object.keys(wire.helm.status_counts).length > 20) invalidResponse();
+  const statusCounts = Object.fromEntries(
+    Object.entries(wire.helm.status_counts).map(([status, count]) => {
+      const normalized = canonicalIdentity(status);
+      if (normalized.length > 120) invalidResponse();
+      const normalizedCount = nonNegativeInteger(count);
+      if (normalizedCount === 0) invalidResponse();
+      return [normalized, normalizedCount];
+    }),
+  );
+  const helmUnavailable = helmCoverage.availability === "unavailable";
+  if (
+    helmUnavailable !== (releaseCount === null) ||
+    (helmUnavailable && Object.keys(statusCounts).length > 0) ||
+    (releaseCount !== null &&
+      Object.values(statusCounts).reduce((total, count) => total + count, 0) > releaseCount)
+  ) {
+    invalidResponse();
+  }
+  const refreshAfterSeconds = nonNegativeInteger(wire.refresh_after_seconds);
+  if (refreshAfterSeconds < 1 || refreshAfterSeconds > 3600) invalidResponse();
+  return {
+    clusterId,
+    customResources: {
+      coverage: customCoverage,
+      items: customItems,
+      totalKinds,
+      totalResources,
+      hasMore: wire.custom_resources.has_more,
+    },
+    helm: {
+      coverage: helmCoverage,
+      releaseCount,
+      statusCounts,
+    },
+    refreshAfterSeconds,
+  };
+}
+
+function toInsightCoverage(wire: HomeEndpointInsightCoverage) {
+  if (wire.availability !== "available" && wire.reason_codes.length === 0) invalidResponse();
+  const reasonCodes = wire.reason_codes.map(canonicalIdentity);
+  assertUnique(reasonCodes);
+  return {
+    availability: wire.availability,
+    observedAt: canonicalTimestamp(wire.observed_at),
+    reasonCodes,
   };
 }
 

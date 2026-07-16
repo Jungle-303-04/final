@@ -97,6 +97,34 @@ export interface HomeEndpointNodeCollection {
   nodes: HomeEndpointNode[];
 }
 
+export interface HomeEndpointInsightCoverage {
+  availability: "available" | "partial" | "unavailable";
+  observed_at: string | null;
+  reason_codes: string[];
+}
+
+export interface HomeEndpointInsights {
+  cluster_id: string;
+  custom_resources: {
+    coverage: HomeEndpointInsightCoverage;
+    items: Array<{
+      api_group: string;
+      version: string;
+      kind: string;
+      count: number;
+    }>;
+    total_kinds: number | null;
+    total_resources: number | null;
+    has_more: boolean;
+  };
+  helm: {
+    coverage: HomeEndpointInsightCoverage;
+    release_count: number | null;
+    status_counts: Record<string, number>;
+  };
+  refresh_after_seconds: number;
+}
+
 export interface HomeEndpointPod {
   name: string;
   namespace: string;
@@ -126,6 +154,10 @@ export interface HomeEndpointDependencies {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointClusterOverview>;
+  getHomeInsights(
+    clusterId: string,
+    signal?: AbortSignal,
+  ): Promise<HomeEndpointInsights>;
   getClusterNodesSummary(
     clusterId: string,
     signal?: AbortSignal,

@@ -82,6 +82,10 @@ class FleetApiDb:
         open_incidents: list[dict[str, Any]] | None = None,
         incident_lookup: dict[tuple[str, str], str] | None = None,
         latest_snapshot: dict[str, Any] | None = None,
+        filter_contexts: dict[str, dict[str, Any]] | None = None,
+        custom_resource_counts: dict[str, Any] | None = None,
+        helm_contexts: dict[str, dict[str, Any]] | None = None,
+        helm_storage: list[dict[str, Any]] | None = None,
         pending_approvals: int = 0,
         running_workflows: int = 0,
         dead_letters: int = 0,
@@ -103,6 +107,14 @@ class FleetApiDb:
             "snapshot_id": "snapshot-current",
             "collected_at": "2026-07-07T10:00:00+00:00",
         }
+        self.filter_contexts = filter_contexts or {}
+        self.custom_resource_counts = custom_resource_counts or {
+            "items": [],
+            "total_kinds": 0,
+            "total_resources": 0,
+        }
+        self.helm_contexts = helm_contexts or {}
+        self.helm_storage = helm_storage or []
         self.pending_approvals = pending_approvals
         self.running_workflows = running_workflows
         self.dead_letters = dead_letters
@@ -218,6 +230,50 @@ class FleetApiDb:
         self.calls.append(("incident_lookup", workspace_id, cluster_id, resource_kind, resources))
         return {key: value for key, value in self.incident_lookup.items() if key in resources}
 
+    def filter_snapshot_contexts(
+        self,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+    ) -> dict[str, dict[str, Any]]:
+        self.calls.append(("filter_contexts", workspace_id, cluster_ids))
+        return {
+            cluster_id: self.filter_contexts[cluster_id]
+            for cluster_id in cluster_ids
+            if cluster_id in self.filter_contexts
+        }
+
+    def list_home_custom_resource_counts(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("custom_resource_counts", kwargs))
+        return self.custom_resource_counts
+
+    def helm_release_observation_contexts(
+        self,
+        *,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+    ) -> dict[str, dict[str, Any]]:
+        self.calls.append(("helm_contexts", workspace_id, cluster_ids))
+        return {
+            cluster_id: self.helm_contexts[cluster_id]
+            for cluster_id in cluster_ids
+            if cluster_id in self.helm_contexts
+        }
+
+    def list_helm_storage_observations(
+        self,
+        *,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+        namespaces: tuple[str, ...],
+    ) -> list[dict[str, Any]]:
+        self.calls.append(("helm_storage", workspace_id, cluster_ids, namespaces))
+        return [
+            row
+            for row in self.helm_storage
+            if row.get("cluster_id") in cluster_ids
+            and (not namespaces or row.get("namespace") in namespaces)
+        ]
+
 
 def make_client(db: FleetApiDb, *, session: Any | None = None) -> TestClient:
     app = FastAPI()
@@ -231,6 +287,141 @@ def test_fleet_endpoints_require_session() -> None:
     client = make_client(FleetApiDb(), session=None)
     assert client.get("/fleet/summary").status_code == 401
     assert client.get(f"/clusters/{CLUSTER_ID}/summary").status_code == 401
+    assert client.get(f"/clusters/{CLUSTER_ID}/home/insights").status_code == 401
+
+
+def test_home_insights_composes_revisioned_custom_resources_and_helm_summary() -> None:
+    observed_at = "2026-07-16T09:00:00+00:00"
+    db = FleetApiDb(
+        registrations=[_registration()],
+        agents={CLUSTER_ID: {"last_seen_at": datetime.now(UTC).isoformat()}},
+        filter_contexts={
+            CLUSTER_ID: {
+                "snapshot_revision": 41,
+                "observed_at": observed_at,
+                "labels_complete": True,
+                "resources_complete": True,
+                "partial_reason_codes": [],
+            }
+        },
+        custom_resource_counts={
+            "items": [
+                {
+                    "api_version": "argoproj.io/v1alpha1",
+                    "kind": "Application",
+                    "count": 7,
+                },
+                {
+                    "api_version": "monitoring.coreos.com/v1",
+                    "kind": "ServiceMonitor",
+                    "count": 3,
+                },
+            ],
+            "total_kinds": 3,
+            "total_resources": 12,
+        },
+        helm_contexts={
+            CLUSTER_ID: {
+                "snapshot_revision": 41,
+                "observed_at": observed_at,
+                "labels_complete": True,
+                "resources_complete": True,
+                "partial_reason_codes": [],
+            }
+        },
+        helm_storage=[
+            {
+                "workspace_id": WORKSPACE_ID,
+                "cluster_id": CLUSTER_ID,
+                "inventory_key": "helm-checkout-v2",
+                "api_version": "v1",
+                "kind": "Secret",
+                "namespace": "shop",
+                "name": "sh.helm.release.v1.checkout.v2",
+                "uid": "uid-checkout-v2",
+                "labels": {
+                    "owner": "helm",
+                    "name": "checkout",
+                    "version": "2",
+                    "status": "deployed",
+                },
+                "observed_at": datetime(2026, 7, 16, 9, 0, tzinfo=UTC),
+            }
+        ],
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/home/insights")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "cluster_id": CLUSTER_ID,
+        "custom_resources": {
+            "coverage": {
+                "availability": "available",
+                "observed_at": observed_at,
+                "reason_codes": [],
+            },
+            "items": [
+                {
+                    "api_group": "argoproj.io",
+                    "version": "v1alpha1",
+                    "kind": "Application",
+                    "count": 7,
+                },
+                {
+                    "api_group": "monitoring.coreos.com",
+                    "version": "v1",
+                    "kind": "ServiceMonitor",
+                    "count": 3,
+                },
+            ],
+            "total_kinds": 3,
+            "total_resources": 12,
+            "has_more": True,
+        },
+        "helm": {
+            "coverage": {
+                "availability": "available",
+                "observed_at": observed_at,
+                "reason_codes": [],
+            },
+            "release_count": 1,
+            "status_counts": {"deployed": 1},
+        },
+        "refresh_after_seconds": 30,
+    }
+    assert (
+        "has_access",
+        "user-1",
+        WORKSPACE_ID,
+        "cluster",
+        CLUSTER_ID,
+        "inventory.read",
+    ) in db.calls
+
+
+def test_home_insights_never_turns_missing_inventory_into_zero_counts() -> None:
+    db = FleetApiDb(registrations=[_registration()])
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/home/insights")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["custom_resources"] == {
+        "coverage": {
+            "availability": "unavailable",
+            "observed_at": None,
+            "reason_codes": [f"inventory_snapshot_unavailable:{CLUSTER_ID}"],
+        },
+        "items": [],
+        "total_kinds": None,
+        "total_resources": None,
+        "has_more": False,
+    }
+    assert body["helm"]["coverage"]["availability"] == "unavailable"
+    assert body["helm"]["release_count"] is None
+    assert body["helm"]["status_counts"] == {}
+    assert not any(call[0] == "custom_resource_counts" for call in db.calls)
 
 
 def test_fleet_summary_scopes_to_accessible_clusters() -> None:

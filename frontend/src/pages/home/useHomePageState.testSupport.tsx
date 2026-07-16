@@ -7,6 +7,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeInsights,
   HomeNodeCollection,
   HomePodCollection,
   HomePort,
@@ -38,7 +39,10 @@ export function homeApi() {
     .mockImplementation((clusterId) => Promise.resolve(nodes(clusterId, ["worker-a"])));
   const podsMock = vi.fn<(...args: [string, string, AbortSignal?]) => Promise<HomePodCollection>>()
     .mockImplementation((clusterId, nodeName) => Promise.resolve(pods(clusterId, nodeName)));
+  const insightsMock = vi.fn<(...args: [string, AbortSignal?]) => Promise<HomeInsights>>()
+    .mockImplementation((clusterId) => Promise.resolve(insights(clusterId)));
   return {
+    insights: insightsMock,
     list,
     overview: overviewMock,
     nodes: nodesMock,
@@ -46,6 +50,7 @@ export function homeApi() {
     port: {
       listClusterChoices: list,
       loadClusterOverview: overviewMock,
+      loadInsights: insightsMock,
       loadNodes: nodesMock,
       loadNodePods: podsMock,
     } satisfies HomePort,
@@ -102,6 +107,25 @@ export function nodes(clusterId: string, names: string[]): HomeNodeCollection {
       restartCount: 0,
       conditions: [],
     })),
+  };
+}
+
+export function insights(clusterId: string): HomeInsights {
+  return {
+    clusterId,
+    customResources: {
+      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
+      items: [],
+      totalKinds: 0,
+      totalResources: 0,
+      hasMore: false,
+    },
+    helm: {
+      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
+      releaseCount: 0,
+      statusCounts: {},
+    },
+    refreshAfterSeconds: 30,
   };
 }
 

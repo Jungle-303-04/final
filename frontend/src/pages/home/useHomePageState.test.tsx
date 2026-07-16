@@ -128,6 +128,27 @@ describe("useHomePageState refresh authority", () => {
     expect(api.nodes).toHaveBeenCalledOnce();
   });
 
+  it("uses the server-declared Home insights cadence instead of the summary poll", async () => {
+    vi.useFakeTimers();
+    setVisibility("visible");
+    const api = homeApi();
+    renderHomeState(api.port, "/?clusters=cluster-a");
+    await flushEffects();
+    expect(api.insights).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      vi.advanceTimersByTime(29_999);
+      await flushPromises();
+    });
+    expect(api.insights).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await flushPromises();
+    });
+    expect(api.insights).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the last success and exposes a background refresh failure", async () => {
     const api = homeApi();
     const nextOverview = deferred<HomeClusterOverview>();
