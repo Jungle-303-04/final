@@ -6,6 +6,17 @@ export * from "./barrels/metrics";
 export * from "./barrels/rca";
 export * from "./barrels/workloads";
 export {
+  getKubernetesApiResources,
+} from "./api-resource-discovery";
+export {
+  apiResourceDescriptorSchema,
+  apiResourceDiscoveryObservationSchema,
+  kubernetesApiResourcesSchema,
+  type ApiResourceDescriptorEndpoint,
+  type ApiResourceDiscoveryObservationEndpoint,
+  type KubernetesApiResourcesEndpoint,
+} from "./api-resource-discovery-schemas";
+export {
   addDiagnoseTurn,
   clearDiagnoseHistory,
   createDiagnoseRun,

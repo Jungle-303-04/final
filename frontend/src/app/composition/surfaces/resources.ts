@@ -5,6 +5,7 @@ import {
   createRealtimeClient,
   executeResourceCapability,
   getChangeTimeline,
+  getKubernetesApiResources,
   getInventoryResourceDetail,
   getInventorySummary,
   getPhysicalTopology,
@@ -63,6 +64,7 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
   };
   return createResourcesSurface(
     createResourcesAdapter({
+      getKubernetesApiResources,
       getInventoryResourceDetail,
       getInventorySummary,
       listInventoryResourcesByType,

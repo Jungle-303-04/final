@@ -185,6 +185,7 @@ export function ResourcesListSurface({
       <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="sticky top-4 hidden min-w-0 lg:block" data-slot="resources-catalog-rail">
           <ResourcesCatalog
+            discovery={state.catalog.phase === "ready" ? state.catalog.data.apiDiscovery : undefined}
             items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
             onSelect={state.selectResourceType}
             selectedResourceType={state.selectedResourceType}
@@ -192,6 +193,7 @@ export function ResourcesListSurface({
         </aside>
         <div className="grid min-w-0 gap-4 overflow-x-hidden">
           <ResourcesCatalogMobile
+            discovery={state.catalog.phase === "ready" ? state.catalog.data.apiDiscovery : undefined}
             items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
             onSelect={state.selectResourceType}
             selectedResourceType={state.selectedResourceType}

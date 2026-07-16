@@ -44,11 +44,31 @@ export interface ResourceCatalogItem {
   healthCounts: ResourceHealthCounts;
 }
 
+export interface DiscoveredApiResource {
+  apiVersion: string;
+  group: string;
+  version: string;
+  pluralName: string;
+  singularName: string;
+  kind: string;
+  namespaced: boolean;
+  isCrd: boolean | null;
+  verbs: string[];
+}
+
+export interface ResourceApiDiscovery {
+  completeness: "exact" | "partial" | "unavailable";
+  observedAt: string | null;
+  reasonCodes: string[];
+  resources: DiscoveredApiResource[];
+}
+
 export interface ResourceCatalog {
   clusterId: string;
   completeness: ResourcesCollectionCompleteness;
   observedAt: string | null;
   items: ResourceCatalogItem[];
+  apiDiscovery: ResourceApiDiscovery;
 }
 
 export interface ResourceMetadataEntry {

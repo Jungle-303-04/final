@@ -1,3 +1,4 @@
+import type { KubernetesApiResourcesEndpoint } from "../../api/api-resource-discovery-schemas";
 import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointContract";
 
 export type ResourcesEndpointJsonMap = Record<string, unknown>;
@@ -68,6 +69,10 @@ export interface ResourcesEndpointDetailOptions {
 }
 
 export interface ResourcesEndpointDependencies {
+  getKubernetesApiResources(
+    clusterId: string,
+    signal?: AbortSignal,
+  ): Promise<KubernetesApiResourcesEndpoint>;
   getInventorySummary(
     clusterId: string,
     signal?: AbortSignal,

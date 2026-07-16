@@ -1,4 +1,7 @@
-import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
+import type {
+  ResourceApiDiscovery,
+  ResourceCatalogItem,
+} from "../../features/resources/resourcesContract";
 import { Pin, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
@@ -20,15 +23,33 @@ import {
 } from "./resourcesCatalogModel";
 
 export function ResourcesCatalog({
+  discovery,
   items,
   onSelect,
   selectedResourceType,
 }: {
+  discovery?: ResourceApiDiscovery;
   items: ResourceCatalogItem[];
   onSelect: (resourceType: string) => void;
   selectedResourceType: string | null;
 }) {
   const { formatNumber, t } = useI18n();
+  const discoveryCompleteness = discovery?.completeness ?? null;
+  const discoveryCount = discovery?.resources.length ?? null;
+  const crdCount = discovery?.resources.filter((resource) => resource.isCrd === true).length ?? 0;
+  const discoveryTitle = discovery
+    ? discovery.completeness === "unavailable"
+      ? t("resources.catalog.discoveryUnavailable")
+      : discovery.completeness === "partial"
+        ? t("resources.catalog.discoveryPartial", {
+            count: formatNumber(discovery.resources.length),
+            crdCount: formatNumber(crdCount),
+          })
+        : t("resources.catalog.discoveryStatus", {
+            count: formatNumber(discovery.resources.length),
+            crdCount: formatNumber(crdCount),
+          })
+    : null;
   const groups = useMemo(() => groupCatalog(items), [items]);
   const selectedCategory = groups.find((group) => group.items.some(
     (item) => item.resourceType === selectedResourceType,
@@ -148,9 +169,24 @@ export function ResourcesCatalog({
             <h3 className="truncate text-sm font-semibold" id="resource-catalog-title">
               {t("resources.catalog.title")}
             </h3>
-            <Badge className="shrink-0 font-mono tabular-nums" variant="secondary">
-              {formatNumber(items.reduce((sum, item) => sum + item.count, 0))}
-            </Badge>
+            <span className="flex shrink-0 items-center gap-1">
+              {discoveryTitle ? (
+                <Badge
+                  className="max-w-28 truncate font-mono tabular-nums"
+                  title={discoveryTitle}
+                  variant={discoveryCompleteness === "partial" ? "outline" : "secondary"}
+                >
+                  {discoveryCompleteness === "unavailable"
+                    ? t("resources.catalog.discoveryUnavailableShort")
+                    : t("resources.catalog.discoveryCountShort", {
+                        count: formatNumber(discoveryCount ?? 0),
+                      })}
+                </Badge>
+              ) : null}
+              <Badge className="font-mono tabular-nums" variant="secondary">
+                {formatNumber(items.reduce((sum, item) => sum + item.count, 0))}
+              </Badge>
+            </span>
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground" title={t("resources.catalog.description")}>
             {t("resources.catalog.description")}

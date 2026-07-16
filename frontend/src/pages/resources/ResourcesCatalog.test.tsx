@@ -3,7 +3,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
+import type {
+  ResourceApiDiscovery,
+  ResourceCatalogItem,
+} from "../../features/resources/resourcesContract";
 import { I18nProvider } from "../../shared/i18n";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 
@@ -24,7 +27,40 @@ const ITEMS: ResourceCatalogItem[] = [
   { resourceType: "service", count: 3, healthCounts: HEALTH_COUNTS },
 ];
 
+const API_DISCOVERY: ResourceApiDiscovery = {
+  completeness: "partial",
+  observedAt: "2026-07-16T12:00:00.000Z",
+  reasonCodes: ["group_version_failed:metrics.k8s.io/v1beta1"],
+  resources: [{
+    apiVersion: "stable.example.com/v1",
+    group: "stable.example.com",
+    version: "v1",
+    pluralName: "crontabs",
+    singularName: "crontab",
+    kind: "CronTab",
+    namespaced: true,
+    isCrd: true,
+    verbs: ["get", "list"],
+  }],
+};
+
 describe("ResourcesCatalog responsive disclosure", () => {
+  it("shows actual API and CRD discovery without inventing selectable inventory rows", () => {
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourcesCatalog
+          discovery={API_DISCOVERY}
+          items={ITEMS}
+          onSelect={vi.fn()}
+          selectedResourceType="pod"
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByTitle("부분 관측된 API 종류 1개, CRD 1개").textContent).toBe("API 1개");
+    expect(screen.queryByRole("button", { name: /CronTab/ })).toBeNull();
+  });
+
   it("uses distinct landmark names and initially expands only the selected category", () => {
     const { rerender } = render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
