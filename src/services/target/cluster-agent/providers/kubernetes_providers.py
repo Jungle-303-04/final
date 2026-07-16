@@ -24,6 +24,10 @@ from config import (
 )
 from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.kubernetes_discovery import (
+    MAX_API_DISCOVERY_DOCUMENTS,
+    normalize_api_resource_discovery,
+)
 from packages.contracts.target import TARGET_NAMESPACE
 from packages.kubernetes_provider import detect_kubernetes_provider
 from providers.base import ConfigReader
@@ -58,6 +62,8 @@ K8S_STATEFULSETS_KEY = "statefulsets"
 K8S_DAEMONSETS_KEY = "daemonsets"
 K8S_JOBS_KEY = "jobs"
 K8S_CRONJOBS_KEY = "cronjobs"
+K8S_API_RESOURCE_DISCOVERY_KEY = "api_resource_discovery"
+K8S_CRD_DISCOVERY_PATH = "/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
 
 MAX_KUBERNETES_PODS = 500
 MAX_KUBERNETES_EVENTS = 200
@@ -175,6 +181,13 @@ class KubernetesSnapshotProvider:
         """
         base_url = kubernetes_api_base_url()
         token = service_account_token()
+        if telemetry_query.is_cluster_api_discovery:
+            async with kubernetes_client(self.transport) as client:
+                return await self.query_cluster_api_discovery(
+                    base_url=base_url,
+                    token=token,
+                    client=client,
+                )
         if telemetry_query.is_cluster_wide_event_capture:
             async with kubernetes_client(self.transport) as client:
                 return await self.query_cluster_wide_event_capture(
@@ -287,6 +300,187 @@ class KubernetesSnapshotProvider:
                     allow_not_found=True,
                 ),
             }
+
+    async def query_cluster_api_discovery(
+        self,
+        *,
+        base_url: str | None,
+        token: str | None,
+        client: httpx.AsyncClient,
+    ) -> JsonObject:
+        """Collect the authorized API catalog while preserving partial RBAC evidence."""
+        collected_at = datetime.now(UTC).isoformat()
+        if not base_url or not token:
+            return {
+                "status": "unavailable",
+                "cluster_id": self.cluster_id,
+                "collected_at": collected_at,
+                "documents": [],
+                "custom_resource_definitions": None,
+                "reason_codes": ["kubernetes_api_not_configured"],
+                "truncated": False,
+            }
+
+        headers = kubernetes_headers(token)
+        documents: list[JsonObject] = []
+        reason_codes: list[str] = []
+        core_versions = await self._discovery_versions(
+            client=client,
+            base_url=base_url,
+            headers=headers,
+            path="/api",
+            collection_key="versions",
+            failure_reason="core_versions_failed",
+            reason_codes=reason_codes,
+        )
+        for group_version in core_versions[:MAX_API_DISCOVERY_DOCUMENTS]:
+            document = await self._discovery_document(
+                client=client,
+                base_url=base_url,
+                headers=headers,
+                path=f"/api/{group_version}",
+            )
+            if document is None:
+                reason_codes.append(f"group_version_failed:{group_version}")
+                continue
+            documents.append(document)
+        group_versions = await self._discovery_group_versions(
+            client=client,
+            base_url=base_url,
+            headers=headers,
+            reason_codes=reason_codes,
+        )
+        version_count = len(core_versions) + len(group_versions)
+        truncated = version_count > MAX_API_DISCOVERY_DOCUMENTS
+        remaining = max(MAX_API_DISCOVERY_DOCUMENTS - len(core_versions), 0)
+        for group_version in group_versions[:remaining]:
+            document = await self._discovery_document(
+                client=client,
+                base_url=base_url,
+                headers=headers,
+                path=f"/apis/{group_version}",
+            )
+            if document is None:
+                reason_codes.append(f"group_version_failed:{group_version}")
+                continue
+            documents.append(document)
+
+        custom_resource_definitions = await self._custom_resource_definitions(
+            client=client,
+            base_url=base_url,
+            headers=headers,
+            reason_codes=reason_codes,
+        )
+        return {
+            "status": "success" if not reason_codes and not truncated else "partial",
+            "cluster_id": self.cluster_id,
+            "collected_at": collected_at,
+            "documents": documents,
+            "custom_resource_definitions": custom_resource_definitions,
+            "reason_codes": sorted(set(reason_codes)),
+            "truncated": truncated,
+        }
+
+    async def _discovery_versions(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        path: str,
+        collection_key: str,
+        failure_reason: str,
+        reason_codes: list[str],
+    ) -> list[str]:
+        try:
+            response = await client.get(f"{base_url}{path}", headers=headers)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            reason_codes.append(failure_reason)
+            return []
+        values = payload.get(collection_key) if isinstance(payload, dict) else None
+        if not isinstance(values, list):
+            reason_codes.append(f"{failure_reason}:invalid")
+            return []
+        return sorted(
+            {value.strip() for value in values if isinstance(value, str) and value.strip()}
+        )
+
+    async def _discovery_group_versions(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        reason_codes: list[str],
+    ) -> list[str]:
+        try:
+            response = await client.get(f"{base_url}/apis", headers=headers)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            reason_codes.append("api_groups_failed")
+            return []
+        groups = payload.get("groups") if isinstance(payload, dict) else None
+        if not isinstance(groups, list):
+            reason_codes.append("api_groups_invalid")
+            return []
+        versions: set[str] = set()
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            raw_versions = group.get("versions")
+            if not isinstance(raw_versions, list):
+                continue
+            versions.update(
+                str(version.get("groupVersion")).strip()
+                for version in raw_versions
+                if isinstance(version, dict) and str(version.get("groupVersion") or "").strip()
+            )
+        return sorted(versions)
+
+    async def _discovery_document(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        path: str,
+    ) -> JsonObject | None:
+        try:
+            response = await client.get(f"{base_url}{path}", headers=headers)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    async def _custom_resource_definitions(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        reason_codes: list[str],
+    ) -> list[JsonObject] | None:
+        try:
+            response = await client.get(f"{base_url}{K8S_CRD_DISCOVERY_PATH}", headers=headers)
+        except httpx.HTTPError:
+            reason_codes.append("crd_discovery_failed")
+            return None
+        if response.status_code in {401, 403}:
+            reason_codes.append("crd_discovery_forbidden")
+            return None
+        if response.is_error:
+            reason_codes.append(f"crd_discovery_http_{response.status_code}")
+            return None
+        try:
+            payload = response.json()
+        except ValueError:
+            reason_codes.append("crd_discovery_invalid")
+            return None
+        return items(payload)
 
     async def query_cluster_wide_event_capture(
         self,
@@ -487,6 +681,8 @@ class KubernetesSnapshotProvider:
         telemetry_query: KubernetesSnapshotQuery,
     ) -> JsonObject:
         """Turn raw Kubernetes API lists into small evidence summaries."""
+        if telemetry_query.is_cluster_api_discovery:
+            return self.normalize_cluster_api_discovery(payload, telemetry_query)
         if telemetry_query.is_cluster_wide_event_capture:
             return self.normalize_cluster_wide_event_capture(payload, telemetry_query)
         snapshot = empty_snapshot(self.cluster_id)
@@ -600,6 +796,39 @@ class KubernetesSnapshotProvider:
         }
         return snapshot
 
+    def normalize_cluster_api_discovery(
+        self,
+        payload: JsonObject,
+        telemetry_query: KubernetesSnapshotQuery,
+    ) -> JsonObject:
+        """Normalize dynamic resources into a bounded, reusable cluster catalog."""
+        snapshot = empty_snapshot(self.cluster_id)
+        collected_at = str(payload.get("collected_at") or datetime.now(UTC).isoformat())
+        documents = payload.get("documents")
+        definitions = payload.get("custom_resource_definitions")
+        observation = normalize_api_resource_discovery(
+            documents=documents if isinstance(documents, list) else [],
+            custom_resource_definitions=definitions if isinstance(definitions, list) else None,
+            observed_at=collected_at,
+            reason_codes=(
+                payload.get("reason_codes") if isinstance(payload.get("reason_codes"), list) else ()
+            ),
+            truncated=payload.get("truncated") is True,
+        ).model_dump(mode="json")
+        snapshot["cluster"] = {
+            "cluster_id": str(payload.get("cluster_id") or self.cluster_id),
+            "collected_at": collected_at,
+        }
+        snapshot[K8S_API_RESOURCE_DISCOVERY_KEY] = observation
+        snapshot["provider_status"] = {
+            telemetry_query.query_name: {
+                "status": str(payload.get("status") or observation["completeness"]),
+                "reason_codes": observation["reason_codes"],
+                "resource_count": len(observation["resources"]),
+            }
+        }
+        return snapshot
+
     def normalize_cluster_wide_event_capture(
         self,
         payload: JsonObject,
@@ -649,6 +878,8 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     target["collection_scopes"].extend(source.get("collection_scopes", []))
     if "detected_provider" not in target and source.get("detected_provider"):
         target["detected_provider"] = source["detected_provider"]
+    if isinstance(source.get(K8S_API_RESOURCE_DISCOVERY_KEY), dict):
+        target[K8S_API_RESOURCE_DISCOVERY_KEY] = dict(source[K8S_API_RESOURCE_DISCOVERY_KEY])
     source_event_capture = source.get(K8S_EVENT_CAPTURE_KEY)
     if isinstance(source_event_capture, dict) and source_event_capture.get("reason") != (
         EVENT_CAPTURE_REASON_NOT_REQUESTED

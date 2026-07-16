@@ -376,6 +376,9 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     detected_provider = normalized_detected_provider(kubernetes.get("detected_provider"))
     if detected_provider is not None:
         summary["detected_provider"] = detected_provider
+    api_resource_discovery = _mapping(kubernetes.get("api_resource_discovery"))
+    if api_resource_discovery:
+        summary["api_resource_discovery"] = api_resource_discovery
     return summary
 
 

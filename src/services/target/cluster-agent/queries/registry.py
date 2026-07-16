@@ -7,6 +7,7 @@ from telemetry_registry import ensure_sources_loaded, telemetry
 
 from packages.contracts.target import (
     KUBERNETES_ALL_NAMESPACES_QUERY,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
     KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
     KUBERNETES_QUERY_SCOPE_NAMESPACE,
 )
@@ -201,7 +202,7 @@ class OpenTelemetrySpanQuery:
 
 @dataclass(frozen=True)
 class KubernetesSnapshotQuery:
-    """Describe one Kubernetes namespace or all-namespace Event capture query."""
+    """Describe one bounded Kubernetes evidence query."""
 
     query_name: str
     description: str
@@ -213,19 +214,29 @@ class KubernetesSnapshotQuery:
         if self.collection_scope not in {
             KUBERNETES_QUERY_SCOPE_NAMESPACE,
             KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
         }:
             raise ValueError(f"unsupported Kubernetes collection scope: {self.collection_scope}")
-        if (
-            self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
-            and self.namespace != KUBERNETES_ALL_NAMESPACES_QUERY
-        ):
-            raise ValueError("cluster_events collection scope requires the all-namespaces query")
-        if self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS and self.label_selector:
-            raise ValueError("cluster_events collection scope does not allow a label selector")
+        if self.collection_scope in {
+            KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+        }:
+            if self.namespace != KUBERNETES_ALL_NAMESPACES_QUERY:
+                raise ValueError(
+                    f"{self.collection_scope} collection scope requires the all-namespaces query"
+                )
+            if self.label_selector:
+                raise ValueError(
+                    f"{self.collection_scope} collection scope does not allow a label selector"
+                )
 
     @property
     def is_cluster_wide_event_capture(self) -> bool:
         return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
+
+    @property
+    def is_cluster_api_discovery(self) -> bool:
+        return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY
 
 
 @dataclass(frozen=True)

@@ -10,6 +10,7 @@ from packages.contracts.gateway.requests import (
 )
 from packages.contracts.target import (
     KUBERNETES_ALL_NAMESPACES_QUERY,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
     KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
 )
 
@@ -20,6 +21,12 @@ DEFAULT_CLUSTER_ROLE = "target"
 MANAGEMENT_CLUSTER_ROLE = "management"
 DEFAULT_BOOTSTRAP_MODE = "target"
 MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS = {"kubernetes"}
+CLUSTER_API_DISCOVERY_QUERY = {
+    "name": "cluster_api_discovery",
+    "description": "Discover authorized Kubernetes API resources and CRD identities.",
+    "query": KUBERNETES_ALL_NAMESPACES_QUERY,
+    "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+}
 MANAGEMENT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
     "kubernetes": [
         {
@@ -36,6 +43,7 @@ MANAGEMENT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "query": KUBERNETES_ALL_NAMESPACES_QUERY,
             "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
         },
+        {**CLUSTER_API_DISCOVERY_QUERY},
     ]
 }
 
@@ -69,6 +77,7 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "query": KUBERNETES_ALL_NAMESPACES_QUERY,
             "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
         },
+        {**CLUSTER_API_DISCOVERY_QUERY},
     ],
     "metrics": [
         {

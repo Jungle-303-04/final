@@ -31,4 +31,5 @@ FAST_LANE_NODE_LABEL_VALUE = "fast-lane"
 # Event collection and must never be inferred from a namespace query.
 KUBERNETES_QUERY_SCOPE_NAMESPACE = "namespace"
 KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS = "cluster_events"
+KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY = "cluster_discovery"
 KUBERNETES_ALL_NAMESPACES_QUERY = "*"
