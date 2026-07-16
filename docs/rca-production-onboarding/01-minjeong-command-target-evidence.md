@@ -161,14 +161,14 @@ src/services/target/cluster-agent/evidence/jobs.py
 찾을 것은 `EvidenceJobScheduler.schedule_once`, `work_once`, `collect_job`다.
 
 evidence는 provider별 job으로 나뉜다.
-Kubernetes, metrics, logs, traces는 같은 수준으로 schedule, poll, result 되어야 한다.
+Kubernetes, metrics, logs, traces, metadata는 같은 수준으로 schedule, poll, result 되어야 한다.
 
 흐름은 아래다.
 
 ```text
 schedule_once()
   -> POST /agent/evidence/jobs
-  -> evidence_jobs: kubernetes, metrics, logs, traces
+  -> evidence_jobs: kubernetes, metrics, logs, traces, metadata
 
 work_once("metrics")
   -> GET /agent/evidence/jobs/poll?provider_key=metrics

@@ -64,7 +64,7 @@ src/services/ai/agent/pipeline/evidence.py
 찾을 함수는 `EvidenceBuilder.build_evidence`다.
 
 provider bucket을 공통 RCA 입력으로 고정한다.
-Kubernetes, metrics, logs, traces 중 일부가 비어 있어도 부족한 근거가 무엇인지 남겨야 한다.
+Kubernetes, metrics, logs, traces, metadata 중 일부가 비어 있어도 부족한 근거가 무엇인지 남겨야 한다.
 
 바로 확인할 테스트:
 

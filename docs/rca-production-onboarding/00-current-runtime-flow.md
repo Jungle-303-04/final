@@ -71,7 +71,7 @@ Management plane
 
 왜 provider별 job으로 나누는가:
 
-- Kubernetes, metrics, logs, traces의 수집 속도와 실패 원인이 다르다.
+- Kubernetes, metrics, logs, traces, metadata의 수집 속도와 실패 원인이 다르다.
 - 한 provider가 실패해도 정책에 따라 다른 provider 결과를 먼저 모을 수 있다.
 - provider worker 수를 `AgentPolicy`로 조절할 수 있다.
 - 최종 `cluster.evidence.received`는 같은 `evidence_key`의 결과를 합쳐 한 window로 보낸다.

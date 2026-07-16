@@ -124,7 +124,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 
 | 값 | 왜 필요한가 |
 | --- | --- |
-| `cluster.evidence.received` | RCA 시작 입력이다. Kubernetes/metrics/logs/traces bucket이 들어간다. |
+| `cluster.evidence.received` | RCA 시작 입력이다. Kubernetes/metrics/logs/traces/metadata bucket이 들어간다. |
 | `command.completed` | agent가 실제로 command를 실행한 결과다. RCA와 dashboard가 결과를 읽는다. |
 
 바로 돌릴 테스트:

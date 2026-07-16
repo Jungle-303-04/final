@@ -27,7 +27,7 @@
 
 | 팀원 | 위키에서 잡은 목표 | 이 문서에서 보는 역할 |
 | --- | --- | --- |
-| 민정 | 실제 target cluster에서 Kubernetes, Prometheus, Loki, Tempo/OpenTelemetry evidence를 만든다 | command 흐름, target agent, evidence job, provider 수집 |
+| 민정 | 실제 target cluster에서 Kubernetes, Prometheus, Loki, Tempo/OpenTelemetry, metadata evidence를 만든다 | command 흐름, target agent, evidence job, provider 수집 |
 | 가인 | evidence를 event/DB에 보존하고 RCA, recovery, command, Safe PR 분기로 이어준다 | evidence ingest, RCA rule/pipeline, action route, Safe PR 요청 |
 | 찬빈 | RCA 부산물을 dashboard read model, API, frontend 화면으로 연결한다 | frontend가 읽을 계약, dashboard 목표, realtime/read model 소비 |
 
@@ -93,7 +93,7 @@ flowchart LR
 | debug query flow | `POST /agent/debug/query`가 `telemetry.query.run` command를 agent queue에 넣는다 |
 | evidence job flow | `/agent/evidence/jobs`, `/agent/evidence/jobs/poll`, `/agent/evidence/jobs/{job_id}/result`가 있다 |
 | evidence aggregate | provider job이 terminal 상태가 되면 `cluster.evidence.received`로 묶는다 |
-| provider registry | `@telemetry.source(...)`로 Kubernetes, Prometheus, Loki, Tempo provider를 등록한다 |
+| provider registry | `@telemetry.source(...)`로 Kubernetes, Prometheus, Loki, Tempo, Metadata provider를 등록한다 |
 | Prometheus range query | `PrometheusRangeQuery`가 `/api/v1/query_range`를 호출한다 |
 | Kubernetes snapshot provider | `KubernetesSnapshotProvider`가 `kubernetes` bucket을 채운다 |
 | RCA split workers | evidence, incident, plan, analyze, rca, recovery, select, dispatch worker로 나뉘어 있다 |
@@ -267,7 +267,7 @@ RCA 결론을 내리거나 PR 본문을 쓰는 일은 민정 책임이 아니다
 | command | 요청된 command를 target agent가 가져가고, 실행하고, 결과를 돌려주는 흐름 |
 | target agent | management로 outbound 연결만 맺는 agent 실행 루프 |
 | evidence job | provider별 수집 job을 schedule, poll, complete하는 흐름 |
-| telemetry provider | Kubernetes, Prometheus, Loki, Tempo 결과를 evidence payload로 정규화 |
+| telemetry provider | Kubernetes, Prometheus, Loki, Tempo, Metadata 결과를 evidence payload로 정규화 |
 | policy | 어떤 provider를 켜고, 몇 초마다 수집하고, worker를 몇 개 둘지 반영 |
 | target safety | secret, kubeconfig, token, 너무 큰 raw payload를 evidence에 넣지 않기 |
 
@@ -282,7 +282,7 @@ RCA 결론을 내리거나 PR 본문을 쓰는 일은 민정 책임이 아니다
 | 3 | `src/domains/target/router.py` | `/agent/evidence/jobs/*`, `/agent/commands/*` Gateway route를 본다 |
 | 4 | `src/domains/target/evidence_jobs.py` | `evidence_key`, aggregate, failure policy를 본다 |
 | 5 | `src/services/target/cluster-agent/telemetry_registry.py` | provider 등록 방식이 registry 기준인지 본다 |
-| 6 | `src/services/target/cluster-agent/providers/*.py` | Kubernetes, Prometheus, Loki, Tempo provider 구현을 본다 |
+| 6 | `src/services/target/cluster-agent/providers/*.py` | Kubernetes, Prometheus, Loki, Tempo, Metadata provider 구현을 본다 |
 | 7 | `src/domains/target/evidence_policy.py` | default provider query와 policy를 본다 |
 | 8 | `src/services/command/command-worker/app.py` | command event가 agent queue로 가는 입구를 본다 |
 
@@ -330,8 +330,9 @@ Target Agent policy sync
 | `metrics` | `prometheus` | `metrics` | `PrometheusMetricsProvider` |
 | `logs` | `loki` | `logs` | `LokiLogsProvider` |
 | `traces` | `tempo` | `traces` | `TempoTracesProvider` |
+| `metadata` | `metadata` | `metadata` | `MetadataProvider` |
 
-`kubernetes` bucket은 `KubernetesSnapshotProvider`가 채운다. 같은 evidence window 안에서 `kubernetes`, `metrics`, `logs`, `traces` provider job이 각각 terminal 상태가 되면 Management가 `cluster.evidence.received`를 한 번 만든다.
+`kubernetes` bucket은 `KubernetesSnapshotProvider`가 채운다. 같은 evidence window 안에서 `kubernetes`, `metrics`, `logs`, `traces`, `metadata` provider job이 각각 terminal 상태가 되면 Management가 `cluster.evidence.received`를 한 번 만든다.
 
 ### 민정이 가인에게 넘기는 것
 
@@ -347,7 +348,7 @@ Target Agent policy sync
 - 어떤 provider가 실패했는지
 - `failure_policy`가 `allow_partial`인지 `strict`인지
 - logs에 redaction이 적용됐는지
-- kubernetes/metrics/logs/traces가 실제 provider 결과인지
+- kubernetes/metrics/logs/traces/metadata가 실제 provider 결과인지
 
 특히 `correlation_id`는 `ClusterEvidenceReceivedBody` 필드가 아니라 event envelope 쪽이다.
 body에 새 필드로 억지로 넣지 않는다.
@@ -611,7 +612,7 @@ Frontend
 - cluster id가 화면에서 어떤 filter가 되는지
 - evidence window를 구분하는 `evidence_key`가 무엇인지
 - provider가 partial failure일 때 어떻게 표시해야 하는지
-- metrics/logs/traces payload가 어느 정도까지 bounded인지
+- metrics/logs/traces/metadata payload가 어느 정도까지 bounded인지
 - Kubernetes bucket이 비어 있을 수 있는지
 
 ### 찬빈이 가인에게 알아야 하는 것

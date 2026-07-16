@@ -140,7 +140,7 @@ range query에서 비교 가능한 series가 있으면 `baseline_comparison`을 
 
 파일: `src/services/target/cluster-agent/providers/kubernetes_providers.py`
 
-`KubernetesSnapshotProvider`는 metrics/logs/traces provider와 같은 evidence job 흐름으로 실행된다.
+`KubernetesSnapshotProvider`는 metrics/logs/traces/metadata provider와 같은 evidence job 흐름으로 실행된다.
 
 | bucket | 내용 | 왜 필요한가 |
 | --- | --- | --- |

@@ -67,7 +67,7 @@ REST Gateway, typed event, target agent, read model 구조로 옮긴다.
 8. Kubernetes snapshot provider는 `KubernetesSnapshotProvider`와 `KubernetesSnapshotQuery`를 기준으로 한다.
    확인 테스트는 `tests/test_target_kubernetes_evidence.py`다.
 
-9. metrics, logs, traces, evidence 결합은 `EvidenceCollector.collect()`를 기준으로 한다.
+9. metrics, logs, traces, metadata evidence 결합은 `EvidenceCollector.collect()`를 기준으로 한다.
    확인 테스트는 `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`, `tests/test_target_telemetry_evidence.py`다.
 
 10. RCA chain은 `src/services/ai/agent/pipeline/*`와 `src/services/**/rca*`를 기준으로 한다.
@@ -1235,7 +1235,7 @@ API operation은 아래 규칙으로 옮긴다.
 완료 테스트는 `tests/test_target_registration.py`다.
 
 민정 두 번째 PR은 evidence provider policy다.
-`src/domains/target/evidence_policy.py`, `src/services/target/cluster-agent/evidence/jobs.py`, provider 폴더를 열고 Kubernetes, metrics, logs, traces가 같은 수준으로 schedule/poll/result 되는지 확인한다.
+`src/domains/target/evidence_policy.py`, `src/services/target/cluster-agent/evidence/jobs.py`, provider 폴더를 열고 Kubernetes, metrics, logs, traces, metadata가 같은 수준으로 schedule/poll/result 되는지 확인한다.
 완료 테스트는 `tests/test_target_evidence_jobs.py`와 provider별 evidence test다.
 
 민정 세 번째 PR은 GitOps repository/artifact다.

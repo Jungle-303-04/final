@@ -55,7 +55,7 @@
 8. [Bruno API 테스트](api/README.md)
 
 민정은 먼저 `/agent/commands/*`, `/agent/evidence/jobs/*`, `@telemetry.source(...)`를 익힌다.
-그다음 Kubernetes, metrics, logs, traces provider를 같은 수준으로 다룬다.
+그다음 Kubernetes, metrics, logs, traces, metadata provider를 같은 수준으로 다룬다.
 
 ## 가인이 먼저 볼 문서
 

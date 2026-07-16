@@ -156,7 +156,7 @@ work_once(provider_key)
   -> POST /agent/evidence/jobs/{job_id}/result
 ```
 
-provider job은 `kubernetes`, `metrics`, `logs`, `traces`가 같은 수준으로 돌아야 한다.
+provider job은 `kubernetes`, `metrics`, `logs`, `traces`, `metadata`가 같은 수준으로 돌아야 한다.
 어떤 provider만 특별 취급하면 나중에 RCA 입력이 깨진다.
 
 바로 확인할 테스트:
@@ -340,7 +340,7 @@ Bruno는 [Bruno API 테스트](../api/README.md)를 따라 `docs/api`를 collect
 1. command poll/start/heartbeat/result가 agent token identity 기준으로 동작한다.
 2. write command가 `approval_ref`와 `policy_decision_ref` 없이 실행되지 않는다.
 3. evidence job schedule/poll/result가 provider별로 같은 수준에서 동작한다.
-4. Kubernetes, metrics, logs, traces provider가 모두 실제 provider로 등록되어 있다.
+4. Kubernetes, metrics, logs, traces, metadata provider가 모두 실제 provider로 등록되어 있다.
 5. Prometheus instant/range query가 값 객체와 provider 경계로 처리된다.
 6. Kubernetes snapshot이 RCA 입력 bucket에 들어간다.
 7. repository, install, lock, artifact digest가 command source와 연결된다.
