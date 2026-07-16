@@ -534,7 +534,42 @@ jobs:
       - name: Run authenticated browser route smoke
         env:
           AUTH_COOKIE_JAR: ${{ runner.temp }}/browser-auth-cookie.jar
-        run: npm --prefix frontend run smoke:routes
+          ROUTE_SMOKE_BASE_URL: http://127.0.0.1:18080
+        shell: bash
+        run: |
+          set -euo pipefail
+          forward_log="${RUNNER_TEMP}/console-route-smoke-port-forward.log"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            port-forward service/console-dev 18080:80 \
+            --address=127.0.0.1 >"${forward_log}" 2>&1 &
+          forward_pid=$!
+          cleanup_route_smoke_forward() {
+            kill "${forward_pid}" 2>/dev/null || true
+            wait "${forward_pid}" 2>/dev/null || true
+            rm -f -- "${forward_log}"
+          }
+          trap cleanup_route_smoke_forward EXIT
+
+          ready=0
+          for _attempt in $(seq 1 40); do
+            if curl --fail --silent --show-error --output /dev/null \
+              "${ROUTE_SMOKE_BASE_URL}/"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "${forward_pid}" 2>/dev/null; then
+              cat "${forward_log}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if [[ "${ready}" != "1" ]]; then
+            cat "${forward_log}" >&2
+            echo "console route-smoke port-forward did not become ready" >&2
+            exit 1
+          fi
+
+          BASE_URL="${ROUTE_SMOKE_BASE_URL}" npm --prefix frontend run smoke:routes
 
       - name: Remove browser authentication handoff
         if: always()

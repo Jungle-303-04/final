@@ -184,9 +184,17 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
         "npm ci --prefix frontend\n"
         "npm --prefix frontend exec -- playwright install --with-deps chromium\n"
     )
-    assert smoke["run"] == "npm --prefix frontend run smoke:routes"
     handoff = "${{ runner.temp }}/browser-auth-cookie.jar"
-    assert smoke["env"] == {"AUTH_COOKIE_JAR": handoff}
+    assert smoke["env"] == {
+        "AUTH_COOKIE_JAR": handoff,
+        "ROUTE_SMOKE_BASE_URL": "http://127.0.0.1:18080",
+    }
+    assert "port-forward service/console-dev 18080:80" in smoke["run"]
+    assert "trap cleanup_route_smoke_forward EXIT" in smoke["run"]
+    assert '"${ROUTE_SMOKE_BASE_URL}/"' in smoke["run"]
+    assert (
+        'BASE_URL="${ROUTE_SMOKE_BASE_URL}" npm --prefix frontend run smoke:routes' in smoke["run"]
+    )
     assert post_smoke["env"]["AUTH_COOKIE_JAR_OUT"] == handoff
     assert cleanup["if"] == "always()"
     assert cleanup["run"] == 'rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"'
