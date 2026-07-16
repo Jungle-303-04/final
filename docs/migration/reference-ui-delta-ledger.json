@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 55,
+  "pendingCount": 53,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -8178,8 +8178,57 @@
         "blobId": "80f356fee6785706e8b587446ec3069b5c75697d",
         "sha256": "f55b700169a3fbe264f2fd09db4ec4501004c73fe6ca527659c45cf26d767fee"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:client:typed-durable-transport:v1",
+          "legacyContractIds": [],
+          "symbol": "diagnose capabilities, runs, consent, turns, stop, history, and event transport",
+          "interaction": "the authenticated browser loads server-owned agent capability and consent, creates or deduplicates an exact resource investigation, lists actor-scoped durable history, appends follow-up turns, stops active work, clears finished runs, and resumes an ordered event stream without parsing arbitrary response shapes",
+          "transport": "sse",
+          "realtime": {
+            "resume": "subscribe before durable replay and resume strictly after the last accepted sequence; an expired retention cursor requires an explicit resync instead of silently skipping transcript events",
+            "backpressure": "the repository caps replay at 500 records, each subscriber queue at 128 wake events, and the browser validates and retains only the selected run transcript",
+            "merge": "accept only contiguous events for the authenticated run identity and ignore duplicate wake notifications already covered by durable replay"
+          },
+          "motion": {
+            "reducedMotion": "queued, running, consent, stopped, failed, stale, and completed states remain visible in labels and status marks without relying on animated progress.",
+            "evidence": [
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "frontend/src/features/operations/OperationStatusFeedback.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/diagnose.ts",
+              "frontend/src/api/diagnose-schemas.ts",
+              "frontend/src/features/diagnose/diagnoseEndpointContract.ts",
+              "frontend/src/features/diagnose/createDiagnoseAdapter.ts",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "src/domains/diagnose/router.py",
+              "src/domains/diagnose/repository.py",
+              "src/domains/diagnose/stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router",
+              "domains.diagnose.repository",
+              "domains.diagnose.stream"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.contract",
+              "diagnose.backend.router",
+              "diagnose.backend.service",
+              "diagnose.frontend.transport",
+              "diagnose.frontend.adapter",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia replaces source-local machine paths and untyped EventSource payloads with authenticated FastAPI contracts, strict Zod parsing, actor-bound PostgreSQL history, explicit consent, ordered durable SSE, and one reusable feature adapter. Background inference process-crash recovery remains a later worker lease concern, not browser retry state."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -8281,8 +8330,213 @@
         "blobId": "0b8d5829af608713244cc6b08162a62f62bfd0f5",
         "sha256": "12aa5fa90416fa418ceb419e0a8e4acade25252375e4940cf84def36c9134bd2"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:app-shell:connection-and-load:shared-state:v1",
+          "legacyContractIds": [],
+          "symbol": "header connection state, reconnect action, cluster warmup, and shared pane loaders",
+          "interaction": "the global shell renders authenticated cluster connection, freshness, background refresh, partial failure, reconnect, and opening states from shared server-owned resources while keeping one scope-safe retry control and stable loading geometry",
+          "transport": "poll",
+          "realtime": {
+            "resume": "visible and explicit refreshes restart the active authority and cluster scope while preserving last safe same-scope data",
+            "backpressure": "the cluster catalog and Home frame share keyed requests, abort unused readers, and bound visible polling cadence",
+            "merge": "only the current authority, scope epoch, refresh revision, and selected resource frame may replace visible state"
+          },
+          "motion": {
+            "reducedMotion": "loading, connecting, retrying, partial, and ready states retain semantic labels and stable geometry when decorative spin, pulse, and transitions are disabled.",
+            "evidence": [
+              "frontend/src/shared/ui/ProductStateScreen.tsx",
+              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/ClusterConnectionStatus.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/pages/home/useHomeClusterFrame.ts",
+              "frontend/src/shared/ui/ProductStateScreen.tsx",
+              "frontend/src/shared/ui/primitives/pane-loader.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.target.router"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-load.disclosure",
+              "shell.cluster-scope.selection",
+              "shell.connection-retry.safety",
+              "shared-ui.pane-loader.geometry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product shell composes one authenticated cluster-scope provider, shared resource frames, and common state screens. It does not duplicate query-client state or allow the browser to impersonate a target-agent reconnect."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:app-shell:diagnose-panel:durable-composition:v1",
+          "legacyContractIds": [],
+          "symbol": "global diagnose entry, resource launch, investigation panel, and content inset",
+          "interaction": "global and resource-scoped Diagnose entry points open one actor-bound durable investigation surface, preserve the current run across route changes, and share docked or expanded layout state without changing the owning resource or shell route",
+          "transport": "sse",
+          "realtime": {
+            "resume": "the selected run resumes from its last durable sequence and panel reopen never replays the launch mutation",
+            "backpressure": "the server bounds replay and subscriber queues while the browser keeps one active ordered transcript",
+            "merge": "only events for the authenticated active run identity update the investigation surface"
+          },
+          "motion": {
+            "reducedMotion": "panel open, close, resize, running, stopped, and terminal states remain operable without transform or transition dependence.",
+            "evidence": [
+              "frontend/src/app/AiAssistantPanel.tsx",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/app/AiAssistantPanel.tsx",
+              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "src/domains/diagnose/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router",
+              "domains.diagnose.service"
+            ],
+            "plannedTestIds": [
+              "diagnose.backend.router",
+              "diagnose.frontend.adapter",
+              "diagnose.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia uses a typed Diagnose port and one shell-owned panel instead of DOM custom events or host-injected render functions, preserving authentication, exact identity, consent, durable replay, and layout ownership."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:app-shell:topology-overlay:scoped-composition:v1",
+          "legacyContractIds": [],
+          "symbol": "topology breadcrumb, search overlay container, controls, and live reconnect",
+          "interaction": "the physical topology canvas composes canonical namespace breadcrumb, bounded search, view and grouping controls, freshness feedback, and reconnect state inside the topology surface so overlays never dim or capture the surrounding application",
+          "transport": "ws",
+          "realtime": {
+            "resume": "visibility or integrity reconnect requests a fresh authorized snapshot before applying later deltas",
+            "backpressure": "the gateway bounds pending messages and the browser coalesces accepted records at the negotiated frame rate",
+            "merge": "ordered snapshot and delta records apply only to the active workspace and cluster scope; any sequence gap requests resynchronization"
+          },
+          "motion": {
+            "reducedMotion": "search, breadcrumb, control, connecting, and reconnect states remain usable without canvas-entry or overlay transitions.",
+            "evidence": [
+              "frontend/src/pages/resources/PhysicalTopologyView.tsx",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourcesGraphShell.tsx",
+              "frontend/src/pages/resources/ResourcesGraphControls.tsx",
+              "frontend/src/pages/resources/ResourcesGraphChrome.tsx",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
+              "src/domains/inventory_filter/physical_topology.py",
+              "src/services/realtime/realtime-gateway/app.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.realtime",
+              "packages.contracts.gateway.responses",
+              "domains.inventory_filter.physical_topology"
+            ],
+            "plannedTestIds": [
+              "topology.overlay.composition",
+              "topology.breadcrumb.keyboard",
+              "topology.search.scope",
+              "topology.controls.scope",
+              "resources.physical-topology.stream-lifecycle"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product physical-topology surface owns its overlays and consumes a workspace- and cluster-bound realtime port. It does not depend on document-level portals, source runtime state, or unscoped EventSource messages."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
+          "legacyContractIds": [],
+          "symbol": "related resource, workflow run, Cost workload, and settings navigation",
+          "interaction": "related resources, workflow runs, Cost workloads, settings, and drawer close actions use the shared canonical URL codec so exact identity and unrelated filters survive browser history and no component constructs product query strings independently",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "route and drawer state remains correct when camera morph and transition effects are disabled.",
+            "evidence": [
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "frontend/src/features/filters/filterUrl.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductRouter.tsx",
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "frontend/src/features/filters/filterUrl.ts",
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "packages.contracts.gateway.routes"
+            ],
+            "plannedTestIds": [
+              "shell.resource-navigation.contract",
+              "cost.tabs.url",
+              "cost.workload.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing filter engine and detail URL codec are the sole browser query owners. Cost and resource surfaces consume typed route state and server projections instead of duplicating navigation helpers."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:app-shell:local-terminal:typed-native-handoff:v1",
+          "legacyContractIds": [],
+          "symbol": "AI and shell local terminal handoff",
+          "interaction": "a user-approved command opens only in a device-local Tauri PTY whose session, input, resize, output acknowledgement, exit, and close lifecycle are window-scoped and never routed through the Python gateway",
+          "transport": "ws",
+          "realtime": {
+            "resume": "closed or failed PTYs are never replayed; explicit reopen creates a new native session identity",
+            "backpressure": "the native registry caps sessions, input frames, pending output bytes, and the browser acknowledges consumed output",
+            "merge": "output and terminal events apply only to the current validated window-owned session generation"
+          },
+          "motion": {
+            "reducedMotion": "terminal opening, connecting, exit, and failure states retain text and status feedback without sheet transition dependence.",
+            "evidence": [
+              "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+              "desktop/src-tauri/src/local_terminal.rs"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/desktop/localTerminalOutputBuffer.ts",
+              "desktop/src-tauri/src/local_terminal.rs",
+              "desktop/src-tauri/tests/reference_parity.rs"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "desktop.local-terminal.protocol"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product already replaces source DOM-event handoff with a typed capability-gated Tauri bridge and keeps workstation shell authority out of Python. Cross-OS packaging remains deferred to the final OS stage, not this runtime contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
