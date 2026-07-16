@@ -13,17 +13,23 @@ import {
 } from "../../shared/ui/primitives/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primitives/popover";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
+import { ResourcesInfraMapTopologyView } from "./ResourcesInfraMapTopologyView";
 import { InfraMapNodeCard } from "./ResourcesInfraMapNodeCard";
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import type { InfraMapModel } from "./resourcesInfraMapModel";
 import type { InfraMapFocusItem } from "./useInfraMapFocusDetails";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 
+type InfraMapViewerMode = "card" | "topology";
+
+const INFRA_MAP_VIEWER_MODES: InfraMapViewerMode[] = ["card", "topology"];
+
 export function ResourcesInfraMapView({
   focusOptions,
   model,
   onFocusRemove,
   onFocusSelect,
+  onOpenPod,
   onRetry,
   onShowMorePods,
   phase,
@@ -33,6 +39,7 @@ export function ResourcesInfraMapView({
   model: InfraMapModel | null;
   onFocusRemove: (key: string) => void;
   onFocusSelect: (item: InfraMapFocusItem) => void;
+  onOpenPod: (pod: InfraMapModel["nodes"][number]["visiblePods"][number]) => void;
   onRetry: () => void;
   onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
   phase: PhysicalTopologyFrame["phase"];
@@ -40,6 +47,7 @@ export function ResourcesInfraMapView({
 }) {
   const { t } = useI18n();
   const [metricMode, setMetricMode] = useState<InfraMapMetricMode>("cpu");
+  const [viewerMode, setViewerMode] = useState<InfraMapViewerMode>("card");
   const availableFocusOptions = focusOptions.filter(
     (option) => !selectedFocus.some((item) => item.key === option.key),
   );
@@ -61,6 +69,7 @@ export function ResourcesInfraMapView({
             {t("resources.infraMap.description")}
           </p>
         </div>
+        <InfraMapViewerTabs onChange={setViewerMode} value={viewerMode} />
       </div>
       <div className="mt-4 flex min-w-0 items-center gap-2">
         <InfraMapMetricTabs onChange={setMetricMode} value={metricMode} />
@@ -74,20 +83,102 @@ export function ResourcesInfraMapView({
         />
       </div>
 
+      <InfraMapViewerContent
+        metricMode={metricMode}
+        model={model}
+        onOpenPod={onOpenPod}
+        onRetry={onRetry}
+        onShowMorePods={onShowMorePods}
+        phase={phase}
+        viewerMode={viewerMode}
+      />
+    </div>
+  );
+}
+
+function InfraMapViewerTabs({
+  onChange,
+  value,
+}: {
+  onChange: (value: InfraMapViewerMode) => void;
+  value: InfraMapViewerMode;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground"
+      data-slot="infra-map-viewer-tabs"
+    >
+      <span className="shrink-0">{t("resources.infraMap.viewer.label")}</span>
+      <div
+        aria-label={t("resources.infraMap.viewerTabs.aria")}
+        className="flex h-8 items-center gap-0.5 rounded-lg border bg-background/70 p-0.5"
+        role="group"
+      >
+        {INFRA_MAP_VIEWER_MODES.map((option) => {
+          const active = option === value;
+          return (
+            <Button
+              aria-pressed={active}
+              className="h-7 rounded-md px-2 data-[active=true]:bg-muted"
+              data-active={active || undefined}
+              key={option}
+              onClick={() => onChange(option)}
+              size="sm"
+              type="button"
+              variant={active ? "secondary" : "ghost"}
+            >
+              {infraMapViewerLabel(option, t)}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function InfraMapViewerContent({
+  metricMode,
+  model,
+  onOpenPod,
+  onRetry,
+  onShowMorePods,
+  phase,
+  viewerMode,
+}: {
+  metricMode: InfraMapMetricMode;
+  model: InfraMapModel | null;
+  onOpenPod: (pod: InfraMapModel["nodes"][number]["visiblePods"][number]) => void;
+  onRetry: () => void;
+  onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
+  phase: PhysicalTopologyFrame["phase"];
+  viewerMode: InfraMapViewerMode;
+}) {
+  return (
+    <>
       {phase === "loading" || phase === "idle" ? (
         <InfraMapLoading />
       ) : phase === "failed" ? (
         <InfraMapFailure onRetry={onRetry} />
       ) : model && model.nodes.length > 0 ? (
-        <InfraMapNodeGrid
+        viewerMode === "topology" ? (
+        <ResourcesInfraMapTopologyView
           metricMode={metricMode}
           model={model}
-          onShowMorePods={onShowMorePods}
+          onOpenPod={onOpenPod}
         />
+      ) : (
+          <InfraMapNodeGrid
+            metricMode={metricMode}
+            model={model}
+            onOpenPod={onOpenPod}
+            onShowMorePods={onShowMorePods}
+          />
+        )
       ) : (
         <InfraMapEmpty />
       )}
-    </div>
+    </>
   );
 }
 
@@ -220,6 +311,14 @@ function infraMapMetricLabel(
   return t("resources.infraMap.metric.memory");
 }
 
+function infraMapViewerLabel(
+  option: InfraMapViewerMode,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (option === "card") return t("resources.infraMap.viewer.card");
+  return t("resources.infraMap.viewer.topology");
+}
+
 function focusTitle(item: InfraMapFocusItem): string {
   return item.identity.namespace
     ? `${item.label} · ${item.identity.namespace}`
@@ -229,10 +328,12 @@ function focusTitle(item: InfraMapFocusItem): string {
 function InfraMapNodeGrid({
   metricMode,
   model,
+  onOpenPod,
   onShowMorePods,
 }: {
   metricMode: InfraMapMetricMode;
   model: InfraMapModel;
+  onOpenPod: (pod: InfraMapModel["nodes"][number]["visiblePods"][number]) => void;
   onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
 }) {
   const layout = infraMapNodeGridLayout(model.nodes.length);
@@ -247,6 +348,7 @@ function InfraMapNodeGrid({
           key={node.id}
           metricMode={metricMode}
           node={node}
+          onOpenPod={onOpenPod}
           onShowMorePods={onShowMorePods}
           selectionActive={model.selection.active}
         />

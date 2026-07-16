@@ -3,13 +3,27 @@ import type {
   PhysicalTopologyServer,
   PhysicalTopologySnapshot,
 } from "../../features/resources/physicalTopologyContract";
+import {
+  podAbnormalBadge,
+  podProblemPriority as sharedPodProblemPriority,
+  podResourcePressureToneFromPercent,
+  podShortLabel,
+  podUsageLabel,
+  type PodResourcePressureTone,
+} from "./podVisualState";
+
+export {
+  podAbnormalBadge,
+  podShortLabel,
+  podUsageLabel,
+};
+export type { PodAbnormalBadge } from "./podVisualState";
 
 export const PHYSICAL_SERVER_WIDTH = 264;
 export const PHYSICAL_SERVER_HEIGHT = 208;
 export const MAX_VISIBLE_PODS_PER_SERVER = 12;
 
-export type PodUsageTone = "neutral" | "amber" | "red" | "unknown";
-export type PodAbnormalBadge = "crash-loop" | "pending" | "restarting" | null;
+export type PodUsageTone = PodResourcePressureTone;
 export type PodUsageEvidence =
   | { kind: "cpu"; actual: number; request: number }
   | { kind: "memory"; actual: number; request: number };
@@ -139,43 +153,11 @@ function comparePhysicalPods(left: PhysicalTopologyPod, right: PhysicalTopologyP
 }
 
 function podProblemPriority(pod: PhysicalTopologyPod): number {
-  const badge = podAbnormalBadge(pod);
-  if (badge === "crash-loop") return 0;
-  if (badge === "pending") return 1;
-  if (badge === "restarting") return 2;
-  if (!["healthy", "ready", "ok"].includes(pod.health.toLocaleLowerCase())) return 3;
-  if ((pod.usagePercent ?? 0) >= 80) return 4;
-  if ((pod.usagePercent ?? 0) >= 60) return 5;
-  return 6;
+  return sharedPodProblemPriority(pod);
 }
 
 export function podUsageTone(usagePercent: number | null): PodUsageTone {
-  if (usagePercent === null) return "unknown";
-  if (usagePercent >= 80) return "red";
-  if (usagePercent >= 60) return "amber";
-  return "neutral";
-}
-
-export function podAbnormalBadge(pod: PhysicalTopologyPod): PodAbnormalBadge {
-  const phase = pod.phase.toLocaleLowerCase();
-  if (phase.includes("crashloop") || phase.includes("backoff")) return "crash-loop";
-  if (phase === "pending") return "pending";
-  if (pod.restartCount > 0) return "restarting";
-  return null;
-}
-
-export function podUsageLabel(usagePercent: number | null): string {
-  if (usagePercent === null) return "—";
-  const measured = Math.round(usagePercent * 10) / 10;
-  return `${measured}%`;
-}
-
-export function podShortLabel(name: string): string {
-  return Array.from(name.normalize("NFKC"))
-    .filter((character) => /[\p{L}\p{N}]/u.test(character))
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return podResourcePressureToneFromPercent(usagePercent);
 }
 
 export function podUsageEvidence(pod: PhysicalTopologyPod): PodUsageEvidence | null {

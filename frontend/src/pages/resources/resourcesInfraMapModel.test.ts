@@ -109,6 +109,47 @@ describe("resources infra map model", () => {
     expect(apiPod?.memory.ratio).toBeCloseTo(0.5);
   });
 
+  it("keeps cluster and replica grouping evidence from the physical topology API", () => {
+    const model = buildInfraMapModel({
+      selectionActive: false,
+      topology: snapshot({
+        clusterName: "Production",
+        clusterProvider: "eks",
+        pods: [
+          pod({
+            id: "pod:shop/checkout-abc",
+            name: "checkout-abc",
+            ownerKind: "ReplicaSet",
+            ownerName: "checkout-7dbf5b",
+            ownerReferencesComplete: true,
+            ownerUid: "rs-uid",
+            replicaGroupKey: "shop/Deployment/checkout",
+            replicaGroupKind: "Deployment",
+            replicaGroupName: "checkout",
+            replicaGroupUid: "deploy-uid",
+            workloadKey: "shop/ReplicaSet/checkout-7dbf5b",
+          }),
+        ],
+      }),
+    });
+
+    expect(model.clusters[0]).toMatchObject({
+      id: "cluster-a",
+      name: "Production",
+      nodeCount: 1,
+      podCount: 1,
+      provider: "eks",
+    });
+    expect(model.nodes[0]?.visiblePods[0]).toMatchObject({
+      clusterId: "cluster-a",
+      ownerKind: "ReplicaSet",
+      replicaGroupKey: "shop/Deployment/checkout",
+      replicaGroupKind: "Deployment",
+      replicaGroupName: "checkout",
+      workloadKey: "shop/ReplicaSet/checkout-7dbf5b",
+    });
+  });
+
   it("prefers pods with calculable capacity ratios for the compact overview", () => {
     const model = buildInfraMapModel({
       maxPodsPerNode: 1,
@@ -139,12 +180,18 @@ describe("resources infra map model", () => {
 });
 
 function snapshot({
+  clusterName,
+  clusterProvider,
   pods,
 }: {
+  clusterName?: string | null;
+  clusterProvider?: string | null;
   pods: PhysicalTopologySnapshot["pods"];
 }): PhysicalTopologySnapshot {
   return {
     clusterId: "cluster-a",
+    clusterName,
+    clusterProvider,
     clusterProjectionRevision: 1,
     counts: {
       filteredCount: pods.filter((pod) => pod.matchesFilter).length,

@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
+import { podUsageColorFromPercent } from "./podVisualState";
 
 export const USAGE_SMOOTHING_TAU_MS = 250;
 export const MAX_ALWAYS_ANIMATED_USAGE_MARKS = 200;
@@ -120,13 +121,5 @@ export function exponentialUsageStep(
 }
 
 export function usageColor(value: number): string {
-  const usage = Math.max(0, Math.min(value, 100));
-  const neutral = "color-mix(in oklch, var(--muted-foreground) 38%, var(--muted))";
-  if (usage <= 60) return neutral;
-  if (usage <= 80) {
-    const warningWeight = (usage - 60) * 5;
-    return `color-mix(in oklch, ${neutral} ${100 - warningWeight}%, var(--status-warning) ${warningWeight}%)`;
-  }
-  const dangerWeight = (usage - 80) * 5;
-  return `color-mix(in oklch, var(--status-warning) ${100 - dangerWeight}%, var(--destructive) ${dangerWeight}%)`;
+  return podUsageColorFromPercent(value);
 }

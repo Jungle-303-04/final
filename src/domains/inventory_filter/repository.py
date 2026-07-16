@@ -1519,13 +1519,48 @@ def _physical_topology_statements(
         .where(base.c.resource_type == "pod")
         .cte("physical_topology_pods")
     )
-    pod_node_name = func.coalesce(pods.c.summary["node_name"].astext, "")
+    owner = base.alias("physical_topology_pod_owner")
+    owner_uid = pods.c.summary["owner_uid"].astext
+    owner_join = and_(
+        owner_uid.is_not(None),
+        owner_uid != "",
+        owner.c.cluster_id == pods.c.cluster_id,
+        owner.c.namespace == pods.c.namespace,
+        owner.c.uid == owner_uid,
+        func.lower(owner.c.kind) == func.lower(pods.c.summary["owner_kind"].astext),
+        owner.c.name == pods.c.summary["owner_name"].astext,
+    )
+    controller = base.alias("physical_topology_pod_controller")
+    controller_uid = owner.c.summary["owner_uid"].astext
+    controller_join = and_(
+        controller_uid.is_not(None),
+        controller_uid != "",
+        controller.c.cluster_id == owner.c.cluster_id,
+        controller.c.namespace == owner.c.namespace,
+        controller.c.uid == controller_uid,
+        func.lower(controller.c.kind) == func.lower(owner.c.summary["owner_kind"].astext),
+        controller.c.name == owner.c.summary["owner_name"].astext,
+    )
+    pods_with_owner = (
+        select(
+            pods,
+            owner.c.kind.label("owner_resource_kind"),
+            owner.c.name.label("owner_resource_name"),
+            owner.c.uid.label("owner_resource_uid"),
+            controller.c.kind.label("controller_resource_kind"),
+            controller.c.name.label("controller_resource_name"),
+            controller.c.uid.label("controller_resource_uid"),
+        )
+        .select_from(pods.outerjoin(owner, owner_join).outerjoin(controller, controller_join))
+        .cte("physical_topology_pods_with_owner")
+    )
+    pod_node_name = func.coalesce(pods_with_owner.c.summary["node_name"].astext, "")
     known_server_names = select(base.c.name).where(base.c.resource_type == "node")
     placement_node_name = case(
         (pod_node_name.in_(known_server_names), pod_node_name),
         else_="",
     )
-    restart_text = func.coalesce(pods.c.summary["restart_total"].astext, "0")
+    restart_text = func.coalesce(pods_with_owner.c.summary["restart_total"].astext, "0")
     restart_count = case(
         (restart_text.op("~")(r"^[0-9]+$"), cast(restart_text, Integer)),
         else_=0,
@@ -1533,8 +1568,8 @@ def _physical_topology_statements(
     healthy_last = case(
         (
             and_(
-                func.lower(pods.c.status) == "running",
-                func.lower(pods.c.health) == "healthy",
+                func.lower(pods_with_owner.c.status) == "running",
+                func.lower(pods_with_owner.c.health) == "healthy",
                 restart_count == 0,
             ),
             1,
@@ -1542,7 +1577,7 @@ def _physical_topology_statements(
         else_=0,
     )
     ranked_pods = select(
-        pods,
+        pods_with_owner,
         placement_node_name.label("placement_node_name"),
         func.row_number()
         .over(
@@ -1550,14 +1585,14 @@ def _physical_topology_statements(
             order_by=(
                 healthy_last,
                 restart_count.desc(),
-                pods.c.namespace,
-                pods.c.name,
-                pods.c.inventory_key,
+                pods_with_owner.c.namespace,
+                pods_with_owner.c.name,
+                pods_with_owner.c.inventory_key,
             ),
         )
         .label("placement_rank"),
         func.count().over(partition_by=placement_node_name).label("placement_pod_count"),
-        func.sum(case((pods.c.matches_filter.is_(True), 1), else_=0))
+        func.sum(case((pods_with_owner.c.matches_filter.is_(True), 1), else_=0))
         .over(partition_by=placement_node_name)
         .label("matched_pod_count"),
     ).cte("ranked_physical_topology_pods")

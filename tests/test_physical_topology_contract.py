@@ -246,6 +246,102 @@ def test_physical_topology_builder_preserves_actual_usage_and_request_denominato
     assert built["pods"][0]["server_id"] is None
 
 
+def test_physical_topology_builder_promotes_replica_group_from_owner_controller() -> None:
+    result = {
+        "servers": [{"inventory_key": "node-key-a", "name": "node-a", "status": "Ready"}],
+        "pods": [
+            {
+                "inventory_key": "pod-key-a",
+                "name": "checkout-a",
+                "namespace": "shop",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {
+                    "node_name": "node-a",
+                    "owner_kind": "ReplicaSet",
+                    "owner_name": "checkout-7dbf5b",
+                    "owner_uid": "rs-uid",
+                    "owner_references_complete": True,
+                    "workload_key": "shop/ReplicaSet/checkout-7dbf5b",
+                    "restart_total": 0,
+                },
+                "owner_resource_kind": "ReplicaSet",
+                "owner_resource_name": "checkout-7dbf5b",
+                "owner_resource_uid": "rs-uid",
+                "controller_resource_kind": "Deployment",
+                "controller_resource_name": "checkout",
+                "controller_resource_uid": "deploy-uid",
+                "placement_node_name": "node-a",
+                "matches_filter": True,
+            }
+        ],
+        "pod_counts_by_node_name": {"node-a": {"matched": 1, "total": 1}},
+        "truncated_by_node_name": {},
+        "unassigned_truncated_count": 0,
+    }
+
+    built = build_physical_topology(
+        result,
+        latest_usage_sample=None,
+        matched_count_completeness="exact",
+        total_count_completeness="exact",
+    )
+
+    pod = built["pods"][0]
+    assert pod["owner_kind"] == "ReplicaSet"
+    assert pod["owner_name"] == "checkout-7dbf5b"
+    assert pod["owner_uid"] == "rs-uid"
+    assert pod["owner_references_complete"] is True
+    assert pod["workload_key"] == "shop/ReplicaSet/checkout-7dbf5b"
+    assert pod["replica_group_key"] == "shop/Deployment/checkout"
+    assert pod["replica_group_kind"] == "Deployment"
+    assert pod["replica_group_name"] == "checkout"
+    assert pod["replica_group_uid"] == "deploy-uid"
+
+
+def test_physical_topology_builder_does_not_group_incomplete_owner_references() -> None:
+    result = {
+        "servers": [],
+        "pods": [
+            {
+                "inventory_key": "pod-key-a",
+                "name": "checkout-a",
+                "namespace": "shop",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {
+                    "owner_kind": "ReplicaSet",
+                    "owner_name": "checkout-7dbf5b",
+                    "owner_uid": "rs-uid",
+                    "owner_references_complete": False,
+                    "workload_key": "shop/ReplicaSet/checkout-7dbf5b",
+                    "restart_total": 0,
+                },
+                "controller_resource_kind": "Deployment",
+                "controller_resource_name": "checkout",
+                "controller_resource_uid": "deploy-uid",
+                "placement_node_name": "",
+                "matches_filter": True,
+            }
+        ],
+    }
+
+    built = build_physical_topology(
+        result,
+        latest_usage_sample=None,
+        matched_count_completeness="exact",
+        total_count_completeness="exact",
+    )
+
+    pod = built["pods"][0]
+    assert pod["owner_kind"] == "ReplicaSet"
+    assert pod["owner_name"] == "checkout-7dbf5b"
+    assert pod["owner_references_complete"] is False
+    assert pod["workload_key"] is None
+    assert pod["replica_group_key"] is None
+    assert pod["replica_group_kind"] is None
+
+
 def test_physical_topology_builder_nulls_usage_when_any_request_is_missing() -> None:
     result = {
         "servers": [],

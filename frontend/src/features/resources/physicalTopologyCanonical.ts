@@ -11,6 +11,8 @@ export function toPhysicalTopology(
   }
   return {
     clusterId: value.cluster.cluster_id,
+    clusterName: value.cluster.name,
+    clusterProvider: value.cluster.provider,
     clusterProjectionRevision: value.cluster_projection_revision,
     servers: value.servers.map((server) => ({
       id: server.id,
@@ -33,6 +35,15 @@ export function toPhysicalTopology(
       name: pod.name,
       namespace: pod.namespace,
       serverId: pod.server_id,
+      ownerKind: pod.owner_kind ?? null,
+      ownerName: pod.owner_name ?? null,
+      ownerUid: pod.owner_uid ?? null,
+      ownerReferencesComplete: pod.owner_references_complete ?? null,
+      workloadKey: pod.workload_key ?? null,
+      replicaGroupKey: pod.replica_group_key ?? null,
+      replicaGroupKind: pod.replica_group_kind ?? null,
+      replicaGroupName: pod.replica_group_name ?? null,
+      replicaGroupUid: pod.replica_group_uid ?? null,
       usagePercent: pod.usage_pct,
       cpuMillicores: pod.cpu_mcores,
       cpuRequestMillicores: pod.cpu_request_mcores,

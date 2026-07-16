@@ -18,14 +18,14 @@ describe("physical topology view model", () => {
     expect(PHYSICAL_SERVER_WIDTH).toBe(264);
     expect(PHYSICAL_SERVER_HEIGHT).toBe(208);
     expect(MAX_VISIBLE_PODS_PER_SERVER).toBe(12);
-    expect([null, 0, 59.99, 60, 79.99, 80, 140].map(podUsageTone)).toEqual([
+    expect([null, 0, 79.99, 80, 94.99, 95, 140].map(podUsageTone)).toEqual([
       "unknown",
-      "neutral",
-      "neutral",
-      "amber",
-      "amber",
-      "red",
-      "red",
+      "healthy",
+      "healthy",
+      "warning",
+      "warning",
+      "danger",
+      "danger",
     ]);
   });
 

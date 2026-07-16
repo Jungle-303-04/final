@@ -251,6 +251,9 @@ def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matc
     assert "resource_type = 'node'" in server_sql
     assert "resource_type = 'pod'" in pod_sql
     assert "physical_topology_filter_matches.version_id" in pod_sql
+    assert "physical_topology_pod_owner" in pod_sql
+    assert "physical_topology_pod_controller" in pod_sql
+    assert "owner_uid" in pod_sql
     assert "matches_filter" in pod_sql
     assert "row_number() over (partition by" in pod_sql
     assert "placement_rank <= 12" in pod_sql

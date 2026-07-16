@@ -30,6 +30,15 @@ export interface PhysicalTopologyEndpointPod {
   name: string;
   namespace: string;
   server_id: string | null;
+  owner_kind?: string | null;
+  owner_name?: string | null;
+  owner_uid?: string | null;
+  owner_references_complete?: boolean | null;
+  workload_key?: string | null;
+  replica_group_key?: string | null;
+  replica_group_kind?: string | null;
+  replica_group_name?: string | null;
+  replica_group_uid?: string | null;
   usage_pct: number | null;
   cpu_mcores: number | null;
   cpu_request_mcores: number | null;

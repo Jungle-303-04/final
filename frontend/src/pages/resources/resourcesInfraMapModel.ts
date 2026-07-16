@@ -3,27 +3,42 @@ import type {
   PhysicalTopologySnapshot,
 } from "../../features/resources/physicalTopologyContract";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
+import { podHealthTone, type PodHealthTone } from "./podVisualState";
 
-const DEFAULT_MAX_PODS_PER_NODE = 4;
+export const INFRA_MAP_DEFAULT_VISIBLE_PODS_PER_NODE = 4;
 
 export interface InfraMapPodMetric {
+  request: number | null;
   ratio: number | null;
   value: number | null;
 }
 
 export interface InfraMapPod {
+  clusterId: string;
   cpu: InfraMapPodMetric;
   health: string;
   id: string;
   memory: InfraMapPodMetric;
   name: string;
   namespace: string | null;
+  ownerKind: string | null;
+  ownerName: string | null;
+  ownerReferencesComplete: boolean | null;
+  ownerUid: string | null;
   phase: string;
+  replicaGroupKey: string | null;
+  replicaGroupKind: string | null;
+  replicaGroupName: string | null;
+  replicaGroupUid: string | null;
+  restartCount: number;
   selected: boolean;
+  usagePercent: number | null;
+  workloadKey: string | null;
 }
 
 export interface InfraMapNode {
   assignedPodCount: number;
+  clusterId: string;
   cpuMillicores: number | null;
   cpuRatio: number | null;
   health: string;
@@ -40,11 +55,25 @@ export interface InfraMapNode {
 }
 
 export interface InfraMapModel {
+  clusters: InfraMapClusterSummary[];
   nodes: InfraMapNode[];
   selection: {
     active: boolean;
     matchedPodCount: number;
   };
+}
+
+export type InfraMapClusterHealth = PodHealthTone;
+
+export interface InfraMapClusterSummary {
+  criticalCount: number;
+  health: InfraMapClusterHealth;
+  id: string;
+  name: string;
+  nodeCount: number;
+  podCount: number;
+  provider: string | null;
+  warningCount: number;
 }
 
 export interface BuildInfraMapModelInput {
@@ -55,7 +84,7 @@ export interface BuildInfraMapModelInput {
 }
 
 export function buildInfraMapModel({
-  maxPodsPerNode = DEFAULT_MAX_PODS_PER_NODE,
+  maxPodsPerNode = INFRA_MAP_DEFAULT_VISIBLE_PODS_PER_NODE,
   selectionActive,
   selectedPodIds,
   topology,
@@ -73,9 +102,11 @@ export function buildInfraMapModel({
   });
   const nodes = placements.map((placement) => {
     const { server } = placement;
-    const toPod = (pod: PhysicalTopologyPod) => toInfraMapPod(pod, selectionActive);
+    const toPod = (pod: PhysicalTopologyPod) =>
+      toInfraMapPod(pod, topology.clusterId, selectionActive);
     return {
       assignedPodCount: server.totalPodCount ?? placement.visibleTotalCount + placement.omittedCount,
+      clusterId: topology.clusterId,
       cpuMillicores: server.cpuMillicores,
       cpuRatio: ratioFromPercentOrValues(
         server.cpuPercent,
@@ -105,6 +136,7 @@ export function buildInfraMapModel({
   });
 
   return {
+    clusters: [infraMapClusterSummary(topology, nodes)],
     nodes: nodes.sort(compareNodes),
     selection: {
       active: selectionActive,
@@ -115,9 +147,15 @@ export function buildInfraMapModel({
   };
 }
 
-function toInfraMapPod(pod: PhysicalTopologyPod, selected: boolean): InfraMapPod {
+function toInfraMapPod(
+  pod: PhysicalTopologyPod,
+  clusterId: string,
+  selected: boolean,
+): InfraMapPod {
   return {
+    clusterId,
     cpu: {
+      request: pod.cpuRequestMillicores,
       ratio: ratioFromValues(
         pod.cpuMillicores,
         pod.cpuRequestMillicores,
@@ -127,6 +165,7 @@ function toInfraMapPod(pod: PhysicalTopologyPod, selected: boolean): InfraMapPod
     health: pod.health,
     id: pod.id,
     memory: {
+      request: pod.memoryRequestMebibytes,
       ratio: ratioFromValues(
         pod.memoryMebibytes,
         pod.memoryRequestMebibytes,
@@ -135,8 +174,68 @@ function toInfraMapPod(pod: PhysicalTopologyPod, selected: boolean): InfraMapPod
     },
     name: pod.name,
     namespace: pod.namespace,
+    ownerKind: pod.ownerKind ?? null,
+    ownerName: pod.ownerName ?? null,
+    ownerReferencesComplete: pod.ownerReferencesComplete ?? null,
+    ownerUid: pod.ownerUid ?? null,
     phase: pod.phase,
+    replicaGroupKey: pod.replicaGroupKey ?? null,
+    replicaGroupKind: pod.replicaGroupKind ?? null,
+    replicaGroupName: pod.replicaGroupName ?? null,
+    replicaGroupUid: pod.replicaGroupUid ?? null,
+    restartCount: pod.restartCount,
     selected,
+    usagePercent: pod.usagePercent,
+    workloadKey: pod.workloadKey ?? null,
+  };
+}
+
+function infraMapClusterSummary(
+  topology: PhysicalTopologySnapshot,
+  nodes: readonly InfraMapNode[],
+): InfraMapClusterSummary {
+  const podCountsFromServers = topology.servers.map((server) => server.totalPodCount);
+  const serverPodCount = podCountsFromServers.every((value) => value !== null)
+    ? podCountsFromServers.reduce((total, value) => total + (value ?? 0), 0)
+    : null;
+  const observedPodCount = topology.pods.length +
+    Object.values(topology.truncatedByServer).reduce((total, count) => total + count, 0) +
+    topology.unassignedTruncatedCount;
+  const podCount = serverPodCount ?? observedPodCount;
+  const podHealthCounts = topology.pods.reduce(
+    (counts, pod) => {
+      const tone = podHealthTone(pod);
+      if (tone === "critical") counts.critical += 1;
+      if (tone === "warning") counts.warning += 1;
+      return counts;
+    },
+    { critical: 0, warning: 0 },
+  );
+  const nodeHealthCounts = nodes.reduce(
+    (counts, node) => {
+      if (node.health === "critical") counts.critical += 1;
+      if (node.health === "warning") counts.warning += 1;
+      return counts;
+    },
+    { critical: 0, warning: 0 },
+  );
+  const criticalCount = podHealthCounts.critical + nodeHealthCounts.critical;
+  const warningCount = podHealthCounts.warning + nodeHealthCounts.warning;
+  return {
+    criticalCount,
+    health: criticalCount > 0
+      ? "critical"
+      : warningCount > 0
+      ? "warning"
+      : topology.servers.length === 0 && topology.pods.length === 0
+      ? "unknown"
+      : "healthy",
+    id: topology.clusterId,
+    name: topology.clusterName ?? topology.clusterId,
+    nodeCount: topology.servers.length,
+    podCount,
+    provider: topology.clusterProvider ?? null,
+    warningCount,
   };
 }
 

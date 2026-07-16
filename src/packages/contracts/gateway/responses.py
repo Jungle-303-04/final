@@ -1207,6 +1207,15 @@ class PhysicalTopologyPod(StrictModel):
     name: str = Field(min_length=1)
     namespace: str = Field(min_length=1)
     server_id: str | None = None
+    owner_kind: str | None = None
+    owner_name: str | None = None
+    owner_uid: str | None = None
+    owner_references_complete: bool | None = None
+    workload_key: str | None = None
+    replica_group_key: str | None = None
+    replica_group_kind: str | None = None
+    replica_group_name: str | None = None
+    replica_group_uid: str | None = None
     # requests 대비 사용률이다. requests 근거가 projection에 없으면 0이 아니라 null이다.
     usage_pct: float | None = Field(default=None, ge=0)
     cpu_mcores: float | None = Field(default=None, ge=0)

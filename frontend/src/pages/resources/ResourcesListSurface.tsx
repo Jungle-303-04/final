@@ -50,6 +50,11 @@ import {
 } from "./useInfraMapFocusDetails";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 
+type ReadyPhysicalTopologyFrame = Extract<
+  ReturnType<typeof usePhysicalTopologyDataFrame>,
+  { phase: "ready" }
+>;
+
 export function ResourcesListSurface({
   filterList,
   listFallback,
@@ -93,6 +98,10 @@ export function ResourcesListSurface({
   const [infraMapFocusItems, setInfraMapFocusItems] = useState<InfraMapFocusItem[]>([]);
   const [infraMapListDrilldown, setInfraMapListDrilldown] =
     useState<InfraMapListDrilldown | null>(null);
+  const [retainedInfraMapTopology, setRetainedInfraMapTopology] =
+    useState<ReadyPhysicalTopologyFrame | null>(
+      physicalTopology.phase === "ready" ? physicalTopology : null,
+    );
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
@@ -170,14 +179,44 @@ export function ResourcesListSurface({
     })),
   ];
   useEffect(() => {
-    setInfraMapFocusItems([]);
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setInfraMapFocusItems([]);
+    });
+    return () => {
+      active = false;
+    };
   }, [state.selectedClusterId, state.selectedResourceType]);
   useEffect(() => {
-    setInfraMapListDrilldown(null);
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setInfraMapListDrilldown(null);
+    });
+    return () => {
+      active = false;
+    };
   }, [state.selectedClusterId]);
   useEffect(() => {
-    if (state.selectedResourceType !== "pod") setInfraMapListDrilldown(null);
+    if (state.selectedResourceType === "pod") return undefined;
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setInfraMapListDrilldown(null);
+    });
+    return () => {
+      active = false;
+    };
   }, [state.selectedResourceType]);
+  useEffect(() => {
+    if (physicalTopology.phase !== "ready") return undefined;
+    const animationFrame = requestAnimationFrame(() => {
+      setRetainedInfraMapTopology(physicalTopology);
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [physicalTopology]);
+  const infraMapTopology = physicalTopology.phase === "loading" &&
+      retainedInfraMapTopology?.data.clusterId === state.selectedClusterId
+    ? retainedInfraMapTopology
+    : physicalTopology;
   const infraMapFocusOptions = useMemo(
     () => filterList.phase === "ready" && filterList.data !== null
       ? filterList.data.items.map((item) => infraMapFocusItemFromResource(item.resource))
@@ -209,14 +248,14 @@ export function ResourcesListSurface({
     return selectedPodIdsFromFocusDetails(focusDetails.data, infraMapFocusItems);
   }, [focusDetails, infraMapFocusItems]);
   const infraMapModel = useMemo(
-    () => physicalTopology.phase === "ready"
+    () => infraMapTopology.phase === "ready"
       ? buildInfraMapModel({
           selectedPodIds: infraMapSelectedPodIds,
           selectionActive: infraMapFocusItems.length > 0,
-          topology: physicalTopology.data,
+          topology: infraMapTopology.data,
         })
       : null,
-    [infraMapFocusItems.length, infraMapSelectedPodIds, physicalTopology],
+    [infraMapFocusItems.length, infraMapSelectedPodIds, infraMapTopology],
   );
   const showInfraMapNodePods = useCallback((node: InfraMapNode) => {
     const knownPods = [...node.visiblePods, ...node.hiddenPods];
@@ -291,9 +330,10 @@ export function ResourcesListSurface({
               model={infraMapModel}
               onFocusRemove={removeInfraMapFocusItem}
               onFocusSelect={selectInfraMapFocusItem}
+              onOpenPod={openPod}
               onRetry={state.refresh}
               onShowMorePods={showInfraMapNodePods}
-              phase={physicalTopology.phase}
+              phase={infraMapTopology.phase}
               selectedFocus={infraMapFocusItems}
             />
           </Surface>

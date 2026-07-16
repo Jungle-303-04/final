@@ -106,6 +106,7 @@ def build_physical_topology(
         cpu_mcores = _number(measured.get("cpu_mcores"))
         mem_mib = _number(_first(measured, "mem_mib", "memory_mib"))
         cpu_request_mcores, mem_request_mib = _request_denominators(summary)
+        ownership = _pod_ownership(row, summary, namespace=namespace)
         usage_pct = _requests_usage_pct(
             cpu_mcores=cpu_mcores,
             cpu_request_mcores=cpu_request_mcores,
@@ -120,6 +121,7 @@ def build_physical_topology(
                 "name": name,
                 "namespace": namespace,
                 "server_id": server_id,
+                **ownership,
                 "usage_pct": usage_pct,
                 "cpu_mcores": cpu_mcores,
                 "cpu_request_mcores": cpu_request_mcores,
@@ -164,6 +166,59 @@ def build_physical_topology(
         "metrics_observed_at": _optional_text(usage_sample.get("sampled_at")),
         "partial_reason_codes": sorted(reasons),
     }
+
+
+def _pod_ownership(
+    row: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    *,
+    namespace: str,
+) -> JsonObject:
+    owner_kind = _optional_text(summary.get("owner_kind"))
+    owner_name = _optional_text(summary.get("owner_name"))
+    owner_uid = _optional_text(summary.get("owner_uid"))
+    owner_references_complete = _optional_bool(summary.get("owner_references_complete"))
+    if owner_references_complete is False:
+        return {
+            "owner_kind": owner_kind,
+            "owner_name": owner_name,
+            "owner_uid": owner_uid,
+            "owner_references_complete": owner_references_complete,
+            "workload_key": None,
+            "replica_group_key": None,
+            "replica_group_kind": None,
+            "replica_group_name": None,
+            "replica_group_uid": None,
+        }
+    workload_key = _optional_text(summary.get("workload_key")) or _workload_key(
+        namespace,
+        owner_kind,
+        owner_name,
+    )
+    replica_group_kind = _optional_text(row.get("controller_resource_kind"))
+    replica_group_name = _optional_text(row.get("controller_resource_name"))
+    replica_group_uid = _optional_text(row.get("controller_resource_uid"))
+    if not replica_group_kind or not replica_group_name:
+        replica_group_kind = _optional_text(row.get("owner_resource_kind")) or owner_kind
+        replica_group_name = _optional_text(row.get("owner_resource_name")) or owner_name
+        replica_group_uid = _optional_text(row.get("owner_resource_uid")) or owner_uid
+    return {
+        "owner_kind": owner_kind,
+        "owner_name": owner_name,
+        "owner_uid": owner_uid,
+        "owner_references_complete": owner_references_complete,
+        "workload_key": workload_key,
+        "replica_group_key": _workload_key(namespace, replica_group_kind, replica_group_name),
+        "replica_group_kind": replica_group_kind,
+        "replica_group_name": replica_group_name,
+        "replica_group_uid": replica_group_uid,
+    }
+
+
+def _workload_key(namespace: str, kind: str | None, name: str | None) -> str | None:
+    if not namespace or not kind or not name:
+        return None
+    return f"{namespace}/{kind}/{name}"
 
 
 def _requests_usage_pct(
@@ -272,3 +327,7 @@ def _text(value: object, default: str = "") -> str:
 
 def _optional_text(value: object) -> str | None:
     return str(value) if value not in (None, "") else None
+
+
+def _optional_bool(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None

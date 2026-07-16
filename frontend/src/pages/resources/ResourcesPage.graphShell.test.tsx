@@ -54,18 +54,18 @@ describe("ResourcesPage S4 physical topology", () => {
     const highLoadNonMatch = screen.getByRole("button", {
       name: "Pod orders-api-0, Running, usage 91%",
     });
-    expect(crashLoop.getAttribute("data-usage-tone")).toBe("neutral");
+    expect(crashLoop.getAttribute("data-usage-tone")).toBe("healthy");
     expect(within(crashLoop).getByRole("img", { name: "CrashLoop" })).toBeTruthy();
-    expect(highLoadNonMatch.getAttribute("data-usage-tone")).toBe("red");
+    expect(highLoadNonMatch.getAttribute("data-usage-tone")).toBe("warning");
     expect(highLoadNonMatch.getAttribute("data-matches-filter")).toBe("false");
     expect(highLoadNonMatch.getAttribute("disabled")).toBeNull();
     expect(highLoadNonMatch.className).toContain("opacity-45");
     expect(document.querySelectorAll('[data-slot="physical-topology-pod"]')).toHaveLength(3);
     expect(crashLoop.textContent).toContain("CH");
     expect(highLoadNonMatch.textContent).toContain("OR");
-    expect(document.querySelectorAll('[data-pod-badge="crash-loop"]')).toHaveLength(1);
-    expect(document.querySelectorAll('[data-pod-badge="pending"]')).toHaveLength(1);
-    expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-slot="physical-topology-pod"] [data-pod-badge="crash-loop"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-slot="physical-topology-pod"] [data-pod-badge="pending"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-slot="physical-topology-pod"] [data-pod-badge="restarting"]')).toHaveLength(0);
 
     const timeline = document.querySelector('[data-slot="resources-time-scrubber"]');
     expect(timeline?.getAttribute("data-state")).toBe("live");

@@ -81,11 +81,12 @@ describe("PhysicalTopologyPod", () => {
     const lowButton = screen.getByRole("button", { name: /low-restarting/u });
     const highButton = screen.getByRole("button", { name: /high-running/u });
     const unknownButton = screen.getByRole("button", { name: /no-requests/u });
-    expect(lowButton.dataset.usageTone).toBe("neutral");
-    expect(lowButton.style.getPropertyValue("--usage-color")).toContain("var(--muted-foreground)");
-    expect(within(lowButton).getByRole("img", { name: /재시작/u })).toBeTruthy();
-    expect(highButton.dataset.usageTone).toBe("red");
-    expect(highButton.style.getPropertyValue("--usage-color")).toContain("var(--destructive)");
+    expect(lowButton.dataset.usageTone).toBe("healthy");
+    expect(lowButton.dataset.healthTone).toBe("critical");
+    expect(lowButton.style.getPropertyValue("--usage-color")).toContain("var(--color-emerald-500)");
+    expect(within(lowButton).getByRole("img", { name: /오류/u })).toBeTruthy();
+    expect(highButton.dataset.usageTone).toBe("warning");
+    expect(highButton.style.getPropertyValue("--usage-color")).toContain("var(--color-orange-500)");
     expect(highButton.querySelector("[data-pod-badge]")).toBeNull();
     expect(unknownButton.dataset.usageTone).toBe("unknown");
     expect(unknownButton.className).toContain("border-dashed");
@@ -96,7 +97,7 @@ describe("PhysicalTopologyPod", () => {
     const { container } = renderPod(pod({ name: "checkout-api-0", usagePercent: 72 }));
     const button = screen.getByRole("button");
 
-    expect(button.dataset.usageTone).toBe("amber");
+    expect(button.dataset.usageTone).toBe("healthy");
     expect(button.className).toContain("size-9");
     expect(button.textContent).toBe("CH");
     expect(container.querySelector("svg")).toBeNull();
@@ -108,7 +109,7 @@ describe("PhysicalTopologyPod", () => {
   it("shows state only as an abnormal badge", () => {
     const { container } = renderPod(pod({ phase: "Pending", usagePercent: 92 }));
 
-    expect(screen.getByRole("button").dataset.usageTone).toBe("red");
+    expect(screen.getByRole("button").dataset.usageTone).toBe("warning");
     expect(container.querySelector("[data-pod-badge='pending']")).not.toBeNull();
   });
 
@@ -126,7 +127,7 @@ describe("PhysicalTopologyPod", () => {
     act(() => frames.advance(250));
     expect(Number(button.dataset.usageValue)).toBeCloseTo(75.285, 2);
     expect(button.style.getPropertyValue("--usage-color")).toContain(
-      "color-mix(in oklch",
+      "var(--color-emerald-500)",
     );
 
     rendered.rerender(podTree(pod({ usagePercent: null })));
@@ -191,9 +192,9 @@ describe("PhysicalTopologyPod", () => {
 
   it("uses the confirmed exponential step and existing palette tokens", () => {
     expect(exponentialUsageStep(0, 100, 250)).toBeCloseTo(63.212, 3);
-    expect(usageColor(75)).toContain("color-mix(in oklch");
-    expect(usageColor(75)).toContain("var(--status-warning)");
-    expect(usageColor(90)).toContain("var(--destructive)");
+    expect(usageColor(75)).toContain("var(--color-emerald-500)");
+    expect(usageColor(85)).toContain("color-mix(in oklch");
+    expect(usageColor(90)).toContain("var(--color-orange-500)");
     expect(usageColor(106.2)).toBe(usageColor(100));
   });
 

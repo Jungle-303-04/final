@@ -27,6 +27,15 @@ export interface PhysicalTopologyPod {
   name: string;
   namespace: string | null;
   serverId: string | null;
+  ownerKind?: string | null;
+  ownerName?: string | null;
+  ownerUid?: string | null;
+  ownerReferencesComplete?: boolean | null;
+  workloadKey?: string | null;
+  replicaGroupKey?: string | null;
+  replicaGroupKind?: string | null;
+  replicaGroupName?: string | null;
+  replicaGroupUid?: string | null;
   usagePercent: number | null;
   cpuMillicores: number | null;
   cpuRequestMillicores: number | null;
@@ -40,6 +49,8 @@ export interface PhysicalTopologyPod {
 
 export interface PhysicalTopologySnapshot {
   clusterId: string;
+  clusterName?: string | null;
+  clusterProvider?: string | null;
   clusterProjectionRevision: number;
   servers: PhysicalTopologyServer[];
   pods: PhysicalTopologyPod[];
