@@ -1,5 +1,10 @@
 # Reference migration ledger
 
+병렬 UI 브랜치를 현재 제품으로 하나씩 흡수하는 판정과 순서는
+[`frontend-branch-merge-plan.md`](frontend-branch-merge-plan.md)가 정본이다. 해당
+문서는 동일 트리의 보관 브랜치, UI가 없는 데모 브랜치, 독립 router/API/theme와
+실제 이식할 UX·motion·순수 모델을 분리한다.
+
 `reference-source-ledger.json` is the machine-generated, complete manifest of
 the pinned upstream source snapshot. It records the isolated provenance pointer
 and immutable revision; every source file has a SHA-256 digest, size, detected language,
