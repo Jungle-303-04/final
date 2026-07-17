@@ -278,6 +278,7 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 마이그레이션 기준 문서는 아래에 있다.
 
 - [migration/README](migration/README.md)
+- [migration/frontend-branch-merge-plan](migration/frontend-branch-merge-plan.md)
 - [migration/latest-reference-rebaseline](migration/latest-reference-rebaseline.md)
 - [migration/parity-supervision-plan](migration/parity-supervision-plan.md)
 - [migration/timeline-p0-url-state-mapping](migration/timeline-p0-url-state-mapping.md)
