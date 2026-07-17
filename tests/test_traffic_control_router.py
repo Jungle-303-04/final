@@ -320,6 +320,31 @@ def test_sources_report_no_data_and_rbac_denial_without_sample_fallback(monkeypa
     assert denied.get("/traffic/sources?clusters=cluster-a").status_code == 404
 
 
+def test_source_probe_errors_are_partial_instead_of_available(monkeypatch) -> None:
+    db = TrafficControlDb()
+    original = db.latest_cluster_agent_statuses
+
+    def error_statuses(workspace_id: str, cluster_ids: set[str]):
+        statuses = original(workspace_id, cluster_ids)
+        for status in statuses.values():
+            observation = status["details"]["traffic_sources"]
+            observation["active_source"] = None
+            for source in observation["sources"]:
+                source["status"] = "error"
+                source["message"] = "source observation is forbidden by cluster RBAC"
+        return statuses
+
+    db.latest_cluster_agent_statuses = error_statuses  # type: ignore[method-assign]
+    client, _commands = _client(monkeypatch, db=db)
+
+    response = client.get("/traffic/sources?clusters=cluster-a")
+
+    assert response.status_code == 200
+    assert response.json()["availability"] == "partial"
+    assert response.json()["reason_codes"] == ["traffic_source_detection_error"]
+    assert response.json()["clusters"][0]["reason_codes"] == ["traffic_source_detection_error"]
+
+
 def test_source_selection_and_connect_queue_idempotent_audited_agent_commands(monkeypatch) -> None:
     client, commands = _client(monkeypatch)
     catalog = client.get("/traffic/sources?clusters=cluster-a").json()["clusters"][0]
