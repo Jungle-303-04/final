@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2, ScrollText, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type {
@@ -83,6 +83,10 @@ export function ResourceDetailWorkspace({
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
+  const [preferredTerminalContainer, setPreferredTerminalContainer] = useState<string | null>(null);
+  const clearPreferredTerminalContainer = useCallback(() => {
+    setPreferredTerminalContainer(null);
+  }, []);
   const title = identity
     ? t("resources.detail.title", { name: identity.name })
     : t("resources.detail.errorTitle");
@@ -213,6 +217,8 @@ export function ResourceDetailWorkspace({
               capabilities={capabilities}
               detail={detail.data}
               port={terminalPort}
+              preferredContainer={preferredTerminalContainer}
+              onPreferredContainerHandled={clearPreferredTerminalContainer}
             />
             {serviceAccessPort ? (
               <ServiceAccessActions
@@ -226,6 +232,7 @@ export function ResourceDetailWorkspace({
               capabilities={capabilities}
               detail={detail.data}
               onInvalidate={onResourceActionInvalidation}
+              onPodDebugReady={setPreferredTerminalContainer}
             />
             {manifestPort ? (
               <ResourceManifestEditor

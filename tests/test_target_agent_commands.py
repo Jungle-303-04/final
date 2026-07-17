@@ -2657,6 +2657,10 @@ def test_node_control_capability_is_advertised_only_when_enabled() -> None:
     agent.direct_commands_enabled = True
     agent.node_control_enabled = False
     assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
+    agent.node_control_enabled = True
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY in agent.advertised_capabilities()
+    agent.direct_commands_enabled = False
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
 
 
 class ResourceMaintenanceKubernetesClient(StubKubernetesClient):
@@ -2728,6 +2732,35 @@ class ResourceMaintenanceKubernetesClient(StubKubernetesClient):
         return {"accepted": True}
 
 
+class PartialDrainKubernetesClient(ResourceMaintenanceKubernetesClient):
+    async def list_cluster_resources(self, **_kwargs: object) -> dict[str, object]:
+        first = (await super().list_cluster_resources())["items"][0]
+        second = {
+            **first,
+            "metadata": {
+                **first["metadata"],
+                "name": "checkout-2",
+                "uid": "pod-uid-2",
+                "resourceVersion": "12",
+            },
+        }
+        return {"items": [first, second]}
+
+    async def create_namespaced_subresource(self, **kwargs: object) -> dict[str, object]:
+        self.evictions.append(kwargs)
+        if kwargs["name"] == "checkout-2":
+            raise RuntimeError("PodDisruptionBudget blocked eviction")
+        return {"accepted": True}
+
+
+class TimeoutDrainKubernetesClient(PartialDrainKubernetesClient):
+    async def create_namespaced_subresource(self, **kwargs: object) -> dict[str, object]:
+        self.evictions.append(kwargs)
+        if kwargs["name"] == "checkout-2":
+            await asyncio.sleep(60)
+        return {"accepted": True}
+
+
 def exact_node_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "name": "worker-a",
@@ -2777,6 +2810,71 @@ def test_node_drain_revalidates_identity_and_reports_bounded_eviction_results() 
     assert client.evictions[0]["subresource"] == "eviction"
 
 
+def test_node_drain_preserves_partial_failure_without_dropping_pod_identity() -> None:
+    module = load_agent_module()
+    client = PartialDrainKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_NODE_DRAIN_ACTION,
+                "direct_execution": True,
+                "payload": exact_node_payload(timeout_seconds=30, max_parallel=2),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["evicted"] == 1
+    assert result["failed"] == 1
+    assert result["partial_failure"] is True
+    assert {item["name"] for item in result["resources"]} == {"checkout-1", "checkout-2"}
+
+
+def test_node_drain_timeout_preserves_completed_evictions_and_marks_only_pending_pods(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_agent_module()
+    real_wait_for = asyncio.wait_for
+
+    async def expire_quickly(awaitable: object, timeout: float) -> object:
+        assert timeout == 10
+        return await real_wait_for(awaitable, timeout=0.01)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(module.asyncio, "wait_for", expire_quickly)
+    client = TimeoutDrainKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_NODE_DRAIN_ACTION,
+                "direct_execution": True,
+                "payload": exact_node_payload(timeout_seconds=10, max_parallel=2),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["evicted"] == 1
+    assert result["failed"] == 1
+    statuses = {item["name"]: item["status"] for item in result["resources"]}
+    assert statuses == {"checkout-1": "evicted", "checkout-2": "failed"}
+
+
 def test_pod_debug_rejects_stale_target_before_ephemeral_container_patch() -> None:
     module = load_agent_module()
     client = ResourceMaintenanceKubernetesClient()
@@ -2819,6 +2917,86 @@ def test_pod_debug_rejects_stale_target_before_ephemeral_container_patch() -> No
     assert client.patches == []
 
 
+def test_pod_debug_attaches_to_exact_target_container_with_digest_image() -> None:
+    module = load_agent_module()
+    client = ResourceMaintenanceKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+    payload = {
+        "namespace": "sandbox",
+        "name": "checkout-1",
+        "pod_ref": {
+            "api_group": "",
+            "version": "v1",
+            "kind": "Pod",
+            "namespace": "sandbox",
+            "name": "checkout-1",
+            "uid": "pod-uid-1",
+        },
+        "pod_resource_version": "11",
+        "target_container": "app",
+        "container_name": "opsia-debug-abc123",
+        "image": "registry.example/debug@sha256:" + "a" * 64,
+    }
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_POD_DEBUG_ACTION,
+                "direct_execution": True,
+                "payload": payload,
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    patch = client.patches[0]
+    assert patch["subresource"] == "ephemeralcontainers"
+    container = patch["body"]["spec"]["ephemeralContainers"][0]
+    assert container["targetContainerName"] == "app"
+    assert container["image"].endswith("a" * 64)
+
+
+def test_node_debug_create_binds_pod_to_exact_node_and_session_owner() -> None:
+    module = load_agent_module()
+    client = ResourceMaintenanceKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_NODE_DEBUG_ACTION,
+                "direct_execution": True,
+                "payload": exact_node_payload(
+                    namespace="sandbox",
+                    session_id="debug-session-1",
+                    debug_pod_name="opsia-node-debug-abc123",
+                    image="registry.example/debug@sha256:" + "b" * 64,
+                ),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    manifest = client.creates[0]["body"]
+    assert manifest["spec"]["nodeName"] == "worker-a"
+    assert manifest["metadata"]["labels"] == {
+        "opsia.io/debug-session": "debug-session-1",
+        "opsia.io/node-uid": "node-uid-1",
+    }
+
+
 def test_node_debug_cleanup_deletes_only_owned_exact_debug_pod() -> None:
     module = load_agent_module()
     client = ResourceMaintenanceKubernetesClient()
@@ -2856,11 +3034,6 @@ def test_node_debug_cleanup_deletes_only_owned_exact_debug_pod() -> None:
             "propagation_policy": "Background",
         }
     ]
-
-    agent.node_control_enabled = True
-    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY in agent.advertised_capabilities()
-    agent.direct_commands_enabled = False
-    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
 
 
 def test_cronjob_trigger_uses_observed_template_and_advertised_capability(

@@ -403,9 +403,37 @@ def test_node_capability_is_derived_from_observed_scheduling_state(
 
     assert response.status_code == 200
     capabilities = response.json()["capabilities"]
-    assert [item["capability_id"] for item in capabilities] == [capability_id]
-    assert capabilities[0]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
-    assert capabilities[0]["realtime"] is True
+    by_id = {item["capability_id"]: item for item in capabilities}
+    assert set(by_id) == {
+        capability_id,
+        "node.drain",
+        "node.debug",
+        "node.debug.cleanup",
+    }
+    assert by_id[capability_id]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
+    assert by_id["node.drain"]["path"].endswith("/nodes/worker-a/drain")
+    assert by_id["node.drain"]["input_schema"][0]["key"] == "timeout_seconds"
+    assert by_id["node.drain"]["input_schema"][-2:] == [
+        {
+            "key": "force",
+            "label": "Evict unmanaged Pods",
+            "type": "boolean",
+            "required": True,
+            "minimum": None,
+            "maximum": None,
+            "default": False,
+        },
+        {
+            "key": "delete_empty_dir_data",
+            "label": "Evict Pods using emptyDir",
+            "type": "boolean",
+            "required": True,
+            "minimum": None,
+            "maximum": None,
+            "default": False,
+        },
+    ]
+    assert all(item["realtime"] is True for item in capabilities)
 
 
 def test_node_capability_is_hidden_without_agent_node_control_capability() -> None:

@@ -3,7 +3,10 @@ import {
   resourceActionAcceptedSchema,
   type ResourceActionAccepted,
 } from "./resource-capability-actions-schemas";
-import type { ResourceActionExecutionContext } from "../features/resources/resourceCapabilitiesContract";
+import {
+  isResourceMaintenanceCapability,
+  type ResourceActionExecutionContext,
+} from "../features/resources/resourceCapabilitiesContract";
 
 /** Submit one server-discovered resource command after the UI confirmation. */
 export function executeResourceCapability(
@@ -14,6 +17,8 @@ export function executeResourceCapability(
 ): Promise<ResourceActionAccepted> {
   const cronjob = /\/cronjobs\//u.test(path);
   const rollback = /\/resource-rollbacks\//u.test(path);
+  const maintenance = context !== undefined
+    && isResourceMaintenanceCapability(context.capabilityId);
   if (cronjob && (
     context === undefined
     || !context.capabilityId.startsWith("cronjob.")
@@ -31,12 +36,15 @@ export function executeResourceCapability(
   )) {
     throw new TypeError("workload rollback requires an exact idempotent execution context");
   }
+  if (maintenance && context.idempotencyKey.trim().length < 8) {
+    throw new TypeError("resource maintenance requires an exact idempotent execution context");
+  }
   return apiRequest(toApiPath(path), resourceActionAcceptedSchema, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(cronjobContext || rollbackContext
-        ? { "Idempotency-Key": (cronjobContext ?? rollbackContext)?.idempotencyKey ?? "" }
+      ...(cronjobContext || rollbackContext || maintenance
+        ? { "Idempotency-Key": (cronjobContext ?? rollbackContext ?? context)?.idempotencyKey ?? "" }
         : {}),
     },
     body: JSON.stringify(
@@ -44,10 +52,33 @@ export function executeResourceCapability(
         ? cronjobPayload(cronjobContext)
         : rollbackContext
         ? workloadRollbackPayload(rollbackContext)
+        : maintenance && context
+        ? exactActionPayload(values, context)
         : { ...values, confirmation: true },
     ),
     signal,
   });
+}
+
+function exactActionPayload(
+  values: Readonly<Record<string, unknown>>,
+  context: ResourceActionExecutionContext,
+) {
+  return {
+    ...values,
+    resource_id: context.resourceId,
+    snapshot_id: context.snapshotId,
+    capability_revision: context.revision,
+    resource: {
+      api_group: context.resource.apiGroup,
+      version: context.resource.version,
+      kind: context.resource.kind,
+      namespace: context.resource.namespace,
+      name: context.resource.name,
+      uid: context.resource.uid,
+    },
+    confirmation: true,
+  };
 }
 
 function workloadRollbackPayload(context: ResourceActionExecutionContext) {

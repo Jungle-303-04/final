@@ -156,9 +156,35 @@ describe("PodTerminalDialog", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog", { name: "터미널 · checkout-api-0" })).toBeNull();
   });
+
+  it("opens the terminal on the completed debug container handoff", () => {
+    const debugContainer = "opsia-debug-session-42";
+    const facts = DETAIL.resource.facts;
+    if (facts.type !== "pod") throw new Error("Pod terminal fixture must contain Pod facts");
+    const detail: ResourceDetail = {
+      ...DETAIL,
+      resource: {
+        ...DETAIL.resource,
+        facts: {
+          ...facts,
+          containerNames: ["app", "sidecar", debugContainer],
+        },
+      },
+    };
+
+    renderTerminal(CAPABILITIES, { open: vi.fn() }, debugContainer, detail);
+
+    expect(screen.getByRole("dialog", { name: "터미널 · checkout-api-0" })).toBeTruthy();
+    expect(screen.getByLabelText("컨테이너")).toHaveProperty("value", debugContainer);
+  });
 });
 
-function renderTerminal(capabilities: ResourceCapabilitiesFrame, port: PodTerminalPort) {
+function renderTerminal(
+  capabilities: ResourceCapabilitiesFrame,
+  port: PodTerminalPort,
+  preferredContainer: string | null = null,
+  detail: ResourceDetail = DETAIL,
+) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <ProductSessionProvider session={{
@@ -166,7 +192,12 @@ function renderTerminal(capabilities: ResourceCapabilitiesFrame, port: PodTermin
         roles: ["cluster_steward"],
         workspaceId: "workspace-main",
       }}>
-        <PodTerminalDialog capabilities={capabilities} detail={DETAIL} port={port} />
+        <PodTerminalDialog
+          capabilities={capabilities}
+          detail={detail}
+          port={port}
+          preferredContainer={preferredContainer}
+        />
       </ProductSessionProvider>
     </I18nProvider>,
   );

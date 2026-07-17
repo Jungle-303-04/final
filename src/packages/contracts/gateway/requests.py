@@ -420,6 +420,46 @@ class ConfirmedResourceActionRequest(StrictModel):
     direct_execution_confirmed: bool = False
 
 
+class ExactResourceActionRequest(ConfirmedResourceActionRequest):
+    """Capability-bound mutation against one exact inventory observation."""
+
+    resource_id: str = Field(min_length=1, max_length=255)
+    snapshot_id: str = Field(min_length=1, max_length=255)
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resource: ResourceRef
+
+
+class NodeDrainRequest(ExactResourceActionRequest):
+    timeout_seconds: int = Field(default=60, ge=10, le=600)
+    max_parallel: int = Field(default=8, ge=1, le=32)
+    max_pods: int = Field(default=1000, ge=1, le=5000)
+    force: bool = False
+    delete_empty_dir_data: bool = False
+
+
+class PodDebugRequest(ExactResourceActionRequest):
+    target_container: str = Field(min_length=1, max_length=253)
+    image: str = Field(
+        min_length=1,
+        max_length=1024,
+        pattern=r"^\S+@sha256:[0-9a-f]{64}$",
+    )
+
+
+class NodeDebugRequest(ExactResourceActionRequest):
+    namespace: str = Field(min_length=1, max_length=253)
+    image: str = Field(
+        min_length=1,
+        max_length=1024,
+        pattern=r"^\S+@sha256:[0-9a-f]{64}$",
+    )
+
+
+class NodeDebugCleanupRequest(ExactResourceActionRequest):
+    namespace: str = Field(min_length=1, max_length=253)
+    session_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-z0-9-]+$")
+
+
 class CronJobControlRequest(ConfirmedResourceActionRequest):
     """One capability-bound CronJob mutation against an exact observed UID."""
 

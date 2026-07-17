@@ -331,6 +331,190 @@ describe("ResourceDetailActions operation handoff", () => {
       }),
     ));
   });
+
+  it("submits node drain with one exact snapshot context and bounded defaults", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn().mockResolvedValue({
+      accepted: true,
+      auditEventId: "event-drain",
+      commandId: "command-drain",
+      correlationId: "correlation-drain",
+      eventId: "event-drain",
+      status: "queued",
+    });
+    const nodeDetail: ResourceDetail = {
+      ...detail,
+      identity: { kind: "Node", name: "worker-a", namespace: null, resourceType: "node" },
+      resource: {
+        ...detail.resource,
+        apiVersion: "v1",
+        inventoryKey: "resource-node-worker-a",
+        kind: "Node",
+        name: "worker-a",
+        namespace: null,
+        resourceType: "node",
+        uid: "node-uid-1",
+      },
+    };
+    const drainCapability: ResourceActionCapability = {
+      ...capability,
+      capabilityId: "node.drain",
+      description: "Drain this exact node.",
+      inputSchema: [
+        { key: "timeout_seconds", label: "Timeout", type: "integer", required: true, minimum: 10, maximum: 600, default: 60 },
+        { key: "max_parallel", label: "Parallel", type: "integer", required: true, minimum: 1, maximum: 32, default: 8 },
+        { key: "force", label: "Evict unmanaged Pods", type: "boolean", required: true, minimum: null, maximum: null, default: false },
+      ],
+      label: "Drain",
+      path: "/clusters/cluster-1/nodes/worker-a/drain",
+    };
+    const frame: ResourceCapabilitiesFrame = {
+      data: {
+        capabilities: [drainCapability],
+        revision: "d".repeat(64),
+        subject: {
+          clusterId: "cluster-1",
+          kind: "Node",
+          name: "worker-a",
+          namespace: null,
+          resourceId: "resource-node-worker-a",
+          resourceType: "node",
+          snapshotId: "snapshot-node-42",
+        },
+      },
+      failure: null,
+      phase: "ready",
+    };
+
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceDetailActions
+          actionsPort={{ execute, previewDeletion: vi.fn(), previewRollback: vi.fn() }}
+          capabilities={frame}
+          detail={nodeDetail}
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Drain" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledWith(
+      drainCapability,
+      { timeout_seconds: 60, max_parallel: 8, force: false },
+      {
+        capabilityId: "node.drain",
+        idempotencyKey: expect.stringMatching(/^resource-action-/u),
+        resourceId: "resource-node-worker-a",
+        snapshotId: "snapshot-node-42",
+        revision: "d".repeat(64),
+        resource: {
+          apiGroup: "",
+          version: "v1",
+          kind: "Node",
+          namespace: null,
+          name: "worker-a",
+          uid: "node-uid-1",
+        },
+      },
+    ));
+  });
+
+  it("hands a completed Pod debug container to the existing terminal", async () => {
+    const user = userEvent.setup();
+    const digestImage = `registry.example/debug@sha256:${"a".repeat(64)}`;
+    const execute = vi.fn().mockResolvedValue({
+      accepted: true,
+      auditEventId: "event-debug",
+      commandId: "command-debug",
+      correlationId: "correlation-debug",
+      eventId: "event-debug",
+      status: "queued",
+    });
+    const onPodDebugReady = vi.fn();
+    const podDetail: ResourceDetail = {
+      ...detail,
+      identity: { kind: "Pod", name: "checkout-0", namespace: "shop", resourceType: "pod" },
+      resource: {
+        ...detail.resource,
+        apiVersion: "v1",
+        inventoryKey: "resource-pod-checkout-0",
+        kind: "Pod",
+        name: "checkout-0",
+        namespace: "shop",
+        resourceType: "pod",
+        uid: "pod-uid-1",
+      },
+    };
+    const debugCapability: ResourceActionCapability = {
+      ...capability,
+      capabilityId: "pod.debug",
+      description: "Attach an ephemeral debug container.",
+      inputSchema: [
+        { key: "target_container", label: "Target container", type: "string", required: true, minimum: null, maximum: null, default: "" },
+        { key: "image", label: "Image", type: "string", required: true, minimum: null, maximum: null, default: "" },
+      ],
+      label: "Debug container",
+      path: "/clusters/cluster-1/namespaces/shop/pods/checkout-0/debug",
+    };
+    const frame: ResourceCapabilitiesFrame = {
+      data: {
+        capabilities: [debugCapability],
+        revision: "e".repeat(64),
+        subject: {
+          clusterId: "cluster-1",
+          kind: "Pod",
+          name: "checkout-0",
+          namespace: "shop",
+          resourceId: "resource-pod-checkout-0",
+          resourceType: "pod",
+          snapshotId: "snapshot-pod-42",
+        },
+      },
+      failure: null,
+      phase: "ready",
+    };
+    const store = createOperationStatusStore({
+      async *subscribeOperationEvents(commandId) {
+        yield {
+          commandId,
+          sequence: 1,
+          kind: "completed",
+          occurredAt: "2026-07-17T00:00:00Z",
+          payload: {
+            result: {
+              namespace: "shop",
+              pod: "checkout-0",
+              container_name: "opsia-debug-session-42",
+            },
+          },
+        };
+      },
+    });
+
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <OperationStatusStoreProvider store={store}>
+          <ResourceDetailActions
+            actionsPort={{ execute, previewDeletion: vi.fn(), previewRollback: vi.fn() }}
+            capabilities={frame}
+            detail={podDetail}
+            onPodDebugReady={onPodDebugReady}
+          />
+        </OperationStatusStoreProvider>
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Debug container" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Target container"), "app");
+    await user.type(within(dialog).getByLabelText("Image"), digestImage);
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(onPodDebugReady).toHaveBeenCalledWith("opsia-debug-session-42"));
+    store.dispose();
+  });
 });
 
 async function submitRestart(user: ReturnType<typeof userEvent.setup>) {

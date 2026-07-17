@@ -1,13 +1,24 @@
 export type ResourceActionCapabilityId = string;
 
+export const RESOURCE_MAINTENANCE_CAPABILITY_IDS = [
+  "node.drain",
+  "node.debug",
+  "node.debug.cleanup",
+  "pod.debug",
+] as const;
+
+export function isResourceMaintenanceCapability(capabilityId: string): boolean {
+  return (RESOURCE_MAINTENANCE_CAPABILITY_IDS as readonly string[]).includes(capabilityId);
+}
+
 export interface ResourceCapabilityInput {
   key: string;
   label: string;
-  type: "integer" | "string";
+  type: "boolean" | "integer" | "string";
   required: boolean;
   minimum: number | null;
   maximum: number | null;
-  default: number | string | null;
+  default: boolean | number | string | null;
 }
 
 export interface ResourceCapabilitySubject {

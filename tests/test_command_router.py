@@ -14,6 +14,7 @@ from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     agent_debug_query,
     cancel_command,
+    cleanup_node_debug,
     command_events,
     command_heartbeat,
     command_result,
@@ -21,6 +22,9 @@ from domains.command.router import (
     command_status,
     commands,
     cordon_node,
+    debug_node,
+    debug_pod,
+    drain_node,
     lease_next_command,
     restart_deployment,
     restart_workload,
@@ -48,6 +52,10 @@ from packages.contracts.gateway.requests import (
     CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
+    NodeDebugCleanupRequest,
+    NodeDebugRequest,
+    NodeDrainRequest,
+    PodDebugRequest,
     WorkloadRollbackRequest,
 )
 from packages.contracts.gateway.responses import AcceptedResponse
@@ -122,6 +130,8 @@ class SpyAccessDb:
                     "command_receiver",
                     Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
                     Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+                    Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+                    Command.KUBERNETES_DEBUG_CAPABILITY,
                 ],
             }
         ]
@@ -398,6 +408,62 @@ def workload_rollback_request(db: SpyAccessDb) -> WorkloadRollbackRequest:
         preview_revision=selected.preview_revision,
         confirmation=True,
         reason="operator selected the exact observed revision",
+    )
+
+
+def exact_maintenance_request(
+    db: SpyAccessDb,
+    request_type: type[
+        NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest
+    ],
+    *,
+    kind: str,
+    resource_namespace: str | None,
+    capability_id: str,
+    **values: object,
+) -> NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest:
+    name = "worker-a" if kind == "Node" else "checkout-1"
+    resource_type = "node" if kind == "Node" else "pod"
+    db.inventory_resource = {
+        "inventory_key": f"resource-{resource_type}-{name}",
+        "snapshot_id": "snapshot-maintenance-42",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "resource_type": resource_type,
+        "api_version": "v1",
+        "kind": kind,
+        "namespace": resource_namespace,
+        "name": name,
+        "uid": f"{resource_type}-uid-1",
+        "resource_version": "17",
+        "raw": {
+            "spec": {
+                "unschedulable": False,
+                "containers": [{"name": "app"}],
+            }
+        },
+    }
+    decision = resource_capabilities_response(
+        db,
+        workspace_id="workspace-1",
+        current=current_session(),
+        resource=db.inventory_resource,
+    )
+    assert capability_id in {item.capability_id for item in decision.capabilities}
+    return request_type(
+        confirmation=True,
+        resource_id=str(db.inventory_resource["inventory_key"]),
+        snapshot_id="snapshot-maintenance-42",
+        capability_revision=decision.revision,
+        resource=ResourceRef(
+            api_group="",
+            version="v1",
+            kind=kind,
+            namespace=resource_namespace,
+            name=name,
+            uid=f"{resource_type}-uid-1",
+        ),
+        **values,
     )
 
 
@@ -1137,6 +1203,141 @@ def test_node_scheduling_control_uses_cluster_scoped_audited_receipt(
             "unschedulable": unschedulable,
         }
         assert events.body.direct_execution is True
+
+    asyncio.run(run())
+
+
+def test_node_drain_queues_exact_capability_bound_bounded_plan() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = exact_maintenance_request(
+            db,
+            NodeDrainRequest,
+            kind="Node",
+            resource_namespace=None,
+            capability_id="node.drain",
+            timeout_seconds=90,
+            max_parallel=6,
+            max_pods=800,
+        )
+        events = SpyEvents()
+
+        response = await drain_node(
+            "cluster-1",
+            "worker-a",
+            payload,
+            "node-drain-key-1",
+            current_session(),
+            db,
+            events,
+            SpyOperationEvents(),
+        )
+
+        assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == Command.KUBERNETES_NODE_DRAIN_ACTION
+        assert events.body.payload == {
+            "name": "worker-a",
+            "node_ref": payload.resource.model_dump(),
+            "node_resource_version": "17",
+            "timeout_seconds": 90,
+            "max_parallel": 6,
+            "max_pods": 800,
+            "force": False,
+            "delete_empty_dir_data": False,
+        }
+        assert events.body.diff.basis["capability_id"] == "node.drain"
+        assert events.body.diff.basis["inventory_resource_version"] == "17"
+
+    asyncio.run(run())
+
+
+def test_pod_debug_queues_server_owned_container_identity() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = exact_maintenance_request(
+            db,
+            PodDebugRequest,
+            kind="Pod",
+            resource_namespace="sandbox",
+            capability_id="pod.debug",
+            target_container="app",
+            image="registry.example/debug@sha256:" + "a" * 64,
+        )
+        events = SpyEvents()
+
+        await debug_pod(
+            "cluster-1",
+            "sandbox",
+            "checkout-1",
+            payload,
+            "pod-debug-key-1",
+            current_session(),
+            db,
+            events,
+            SpyOperationEvents(),
+        )
+
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == Command.KUBERNETES_POD_DEBUG_ACTION
+        assert events.body.payload["pod_ref"] == payload.resource.model_dump()
+        assert events.body.payload["pod_resource_version"] == "17"
+        assert events.body.payload["target_container"] == "app"
+        assert str(events.body.payload["container_name"]).startswith("opsia-debug-")
+
+    asyncio.run(run())
+
+
+def test_node_debug_create_and_cleanup_derive_owned_session_coordinates() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        create_payload = exact_maintenance_request(
+            db,
+            NodeDebugRequest,
+            kind="Node",
+            resource_namespace=None,
+            capability_id="node.debug",
+            namespace="sandbox",
+            image="registry.example/debug@sha256:" + "b" * 64,
+        )
+        create_events = SpyEvents()
+        await debug_node(
+            "cluster-1",
+            "worker-a",
+            create_payload,
+            "node-debug-key-1",
+            current_session(),
+            db,
+            create_events,
+            SpyOperationEvents(),
+        )
+        assert isinstance(create_events.body, CommandRequestedBody)
+        session_id = str(create_events.body.payload["session_id"])
+        pod_name = str(create_events.body.payload["debug_pod_name"])
+
+        cleanup_payload = exact_maintenance_request(
+            db,
+            NodeDebugCleanupRequest,
+            kind="Node",
+            resource_namespace=None,
+            capability_id="node.debug.cleanup",
+            namespace="sandbox",
+            session_id=session_id,
+        )
+        cleanup_events = SpyEvents()
+        await cleanup_node_debug(
+            "cluster-1",
+            "worker-a",
+            cleanup_payload,
+            "node-debug-cleanup-key-1",
+            current_session(),
+            db,
+            cleanup_events,
+            SpyOperationEvents(),
+        )
+        assert isinstance(cleanup_events.body, CommandRequestedBody)
+        assert cleanup_events.body.payload["session_id"] == session_id
+        assert cleanup_events.body.payload["debug_pod_name"] == pod_name
 
     asyncio.run(run())
 

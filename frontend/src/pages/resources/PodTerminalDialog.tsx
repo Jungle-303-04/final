@@ -31,10 +31,14 @@ export function PodTerminalDialog({
   capabilities,
   detail,
   port = EMPTY_POD_TERMINAL_PORT,
+  preferredContainer = null,
+  onPreferredContainerHandled,
 }: {
   capabilities: ResourceCapabilitiesFrame;
   detail: ResourceDetail;
   port?: PodTerminalPort;
+  preferredContainer?: string | null;
+  onPreferredContainerHandled?: () => void;
 }) {
   const { t } = useI18n();
   const session = useOptionalProductSession();
@@ -57,17 +61,22 @@ export function PodTerminalDialog({
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [failure, setFailure] = useState("");
   const connectionRef = useRef<PodTerminalConnection | null>(null);
+  const readyPreferredContainer = preferredContainer && containers.includes(preferredContainer)
+    ? preferredContainer
+    : null;
+  const selectedContainer = readyPreferredContainer
+    ?? (containers.includes(container) ? container : containers[0] ?? "");
   const target = useMemo(() => {
     const namespace = detail.identity.namespace;
-    if (!session || !namespace || !container) return null;
+    if (!session || !namespace || !selectedContainer) return null;
     return {
       workspaceId: session.workspaceId,
       clusterId: detail.clusterId,
       namespace,
       pod: detail.identity.name,
-      container,
+      container: selectedContainer,
     };
-  }, [container, detail, session]);
+  }, [detail, selectedContainer, session]);
 
   useEffect(() => () => connectionRef.current?.close(), []);
   useEffect(() => subscribeNamespaceScopeInvalidation((invalidation) => {
@@ -82,7 +91,8 @@ export function PodTerminalDialog({
     connectionRef.current = null;
     setStatus("ended");
     setOpen(false);
-  }), [detail.clusterId, detail.identity.namespace]);
+    onPreferredContainerHandled?.();
+  }), [detail.clusterId, detail.identity.namespace, onPreferredContainerHandled]);
 
   if (!authorized || !session || containers.length === 0 || detail.identity.namespace === null) {
     return null;
@@ -164,10 +174,13 @@ export function PodTerminalDialog({
       </Button>
       <Dialog
         onOpenChange={(next) => {
-          if (!next) stop();
+          if (!next) {
+            stop();
+            onPreferredContainerHandled?.();
+          }
           setOpen(next);
         }}
-        open={open}
+        open={open || readyPreferredContainer !== null}
       >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -184,8 +197,11 @@ export function PodTerminalDialog({
                   className="h-9 rounded-md border bg-background px-3 text-sm"
                   disabled={status === "connecting" || status === "connected"}
                   id="pod-terminal-container"
-                  onChange={(event) => setContainer(event.currentTarget.value)}
-                  value={container}
+                  onChange={(event) => {
+                    onPreferredContainerHandled?.();
+                    setContainer(event.currentTarget.value);
+                  }}
+                  value={selectedContainer}
                 >
                   {containers.map((name) => <option key={name}>{name}</option>)}
                 </select>
@@ -244,7 +260,15 @@ export function PodTerminalDialog({
             <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>
           ) : null}
           <DialogFooter>
-            <Button onClick={() => setOpen(false)} type="button" variant="outline">
+            <Button
+              onClick={() => {
+                stop();
+                setOpen(false);
+                onPreferredContainerHandled?.();
+              }}
+              type="button"
+              variant="outline"
+            >
               {t("common.action.close")}
             </Button>
           </DialogFooter>

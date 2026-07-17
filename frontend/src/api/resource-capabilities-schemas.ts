@@ -7,19 +7,22 @@ export const resourceActionCapabilityIdSchema = z.string()
 export const resourceCapabilityInputSchema = z.strictObject({
   key: z.string().regex(/^[a-z][a-z0-9_]*$/u).max(120),
   label: z.string().min(1).max(120),
-  type: z.enum(["integer", "string"]),
+  type: z.enum(["boolean", "integer", "string"]),
   required: z.boolean(),
   minimum: z.number().int().nullable(),
   maximum: z.number().int().nullable(),
-  default: z.union([z.number().int(), z.string(), z.null()]),
+  default: z.union([z.boolean(), z.number().int(), z.string(), z.null()]),
 }).superRefine((input, context) => {
   if (input.minimum !== null && input.maximum !== null && input.minimum > input.maximum) {
     context.addIssue({ code: "custom", message: "minimum must not exceed maximum" });
   }
-  if (input.type === "integer" && typeof input.default === "string") {
+  if (input.type === "boolean" && input.default !== null && typeof input.default !== "boolean") {
+    context.addIssue({ code: "custom", message: "boolean default must be a boolean" });
+  }
+  if (input.type === "integer" && input.default !== null && typeof input.default !== "number") {
     context.addIssue({ code: "custom", message: "integer default must be an integer" });
   }
-  if (input.type === "string" && typeof input.default === "number") {
+  if (input.type === "string" && input.default !== null && typeof input.default !== "string") {
     context.addIssue({ code: "custom", message: "string default must be a string" });
   }
 });

@@ -2964,74 +2964,95 @@
       }
     },
     "reference.feature.174": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.NodeDrainRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_command_catalog.py",
+        "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/features/operations/OperationStatusStore.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/resource-capability-actions.test.ts",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No cancellable drain action, eviction option contract, PodDisruptionBudget handling, or progress-producing executor is registered.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#drain_node",
+          "consumer": "src/services/target/cluster-agent/agent.py#drain_node_command",
+          "reason": "The exact observed Node UID/resourceVersion is revalidated immediately before one bounded cordon-and-evict run; DaemonSet/static/unmanaged/emptyDir policy, PDB failures, cancellation boundaries, timeout, and per-Pod partial results are preserved in the durable operation stream.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "The common operation dock can stream progress, but no Node drain capability or option form is available.",
-          "test": "frontend/src/features/operations/OperationStatusStore.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "reason": "The server-owned capability descriptor supplies bounded drain inputs, one target-impact confirmation, exact snapshot context, idempotency, and reconnectable operation progress without a duplicated action list.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         }
       }
     },
     "reference.feature.175": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/PodTerminalDialog.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.PodDebugRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_pod_terminal.py",
-        "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
+        "tests/test_command_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_target_kubernetes_evidence.py",
+      "tests/test_target_registration.py",
+      "frontend/src/api/resource-capability-actions.test.ts",
+      "frontend/src/features/resources/resourceFacts.debug.test.ts",
+      "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+      "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/services/target/cluster-agent/terminal_exec.py#PodExecController",
-          "reason": "The current terminal opens an existing container; no ephemeral-container debug mutation or resulting debug session receipt exists.",
-          "test": "tests/test_pod_terminal.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#debug_pod",
+          "consumer": "src/services/target/cluster-agent/agent.py#debug_pod_command",
+          "reason": "A digest-pinned ephemeral container is attached only after exact Pod UID/resourceVersion and target-container revalidation; the server owns the collision-free container identity and streams its receipt and result.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/PodTerminalDialog.tsx",
-          "reason": "Existing Pod exec cannot be treated as an ephemeral debug container action.",
-          "test": "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/pages/resources/PodTerminalDialog.tsx#PodTerminalDialog",
+          "reason": "The debug mutation uses the shared exact action context; terminal completion invalidates inventory, and the observed ephemeral container identity is then merged into the existing audited Pod terminal selector.",
+          "test": "frontend/src/features/resources/resourceFacts.debug.test.ts"
         }
       }
     },
     "reference.feature.176": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.NodeDebugRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_command_catalog.py",
-        "tests/test_target_agent_commands.py"
+        "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_target_registration.py",
+        "frontend/src/api/resource-capability-actions.test.ts",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No Node debug Pod lifecycle, cleanup action, session ownership, or target-agent executor is registered.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#debug_node",
+          "consumer": "src/services/target/cluster-agent/agent.py#cleanup_node_debug_command",
+          "reason": "Create and cleanup use server-derived session/Pod names, exact Node UID/resourceVersion revalidation, namespace policy, digest-pinned images, owned labels, and UID/resourceVersion delete preconditions; cleanup cannot delete an unrelated same-name Pod.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "No Node debug session capability is exposed to the browser.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "reason": "Server-owned create and owned-cleanup capabilities share the resource action form, exact snapshot context, one confirmation, idempotency, and reconnectable operation events.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         }
       }

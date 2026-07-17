@@ -148,6 +148,53 @@ class UncordonNodeCommand:
 
 
 @command.action(
+    Command.KUBERNETES_NODE_DRAIN_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class DrainNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_POD_DEBUG_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_DEBUG_CAPABILITY,
+)
+class DebugPodCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DEBUG_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class DebugNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class CleanupNodeDebugCommand:
+    pass
+
+
+@command.action(
     Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
     requires_approval=False,
     supports_manual_retry=True,

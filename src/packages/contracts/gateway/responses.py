@@ -852,7 +852,7 @@ class InventoryResourceDetailResponse(StrictModel):
 
 
 ResourceCapabilityExecution = Literal["command", "terminal"]
-ResourceCapabilityInputType = Literal["integer", "string"]
+ResourceCapabilityInputType = Literal["boolean", "integer", "string"]
 
 
 class ResourceCapabilitySubject(StrictModel):
@@ -876,17 +876,19 @@ class ResourceCapabilityInput(StrictModel):
     required: bool = True
     minimum: int | None = None
     maximum: int | None = None
-    default: int | str | None = None
+    default: bool | int | str | None = None
 
     @model_validator(mode="after")
     def validate_bounds(self) -> Self:
         if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
             raise ValueError("capability input minimum must not exceed maximum")
-        if self.type == "integer" and isinstance(self.default, str):
+        if self.type == "boolean" and self.default is not None and type(self.default) is not bool:
+            raise ValueError("boolean capability input default must be a boolean")
+        if self.type == "integer" and self.default is not None and type(self.default) is not int:
             raise ValueError("integer capability input default must be an integer")
-        if self.type == "string" and isinstance(self.default, int):
+        if self.type == "string" and self.default is not None and type(self.default) is not str:
             raise ValueError("string capability input default must be a string")
-        if isinstance(self.default, int):
+        if type(self.default) is int:
             if self.minimum is not None and self.default < self.minimum:
                 raise ValueError("capability input default is below minimum")
             if self.maximum is not None and self.default > self.maximum:

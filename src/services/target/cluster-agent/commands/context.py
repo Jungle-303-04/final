@@ -21,6 +21,7 @@ KubernetesScope = Literal[
     "user-workload",
     "cluster-workload",
     "service-access",
+    "resource-maintenance",
 ]
 
 
@@ -75,6 +76,27 @@ class KubernetesClient(Protocol):
         namespace: str,
         resource: str,
         body: JsonObject,
+    ) -> JsonObject: ...
+
+    async def create_namespaced_subresource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+        name: str,
+        subresource: str,
+        body: JsonObject,
+    ) -> JsonObject: ...
+
+    async def list_cluster_resources(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        query: Mapping[str, str] | None = None,
     ) -> JsonObject: ...
 
     async def delete_namespaced_resource(

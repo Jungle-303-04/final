@@ -276,6 +276,10 @@ CLUSTER_WORKLOAD_RESTART_PATH = (
 RESOURCE_WORKLOAD_ROLLBACK_PATH = "/resource-rollbacks/{resource_id}"
 CLUSTER_NODE_CORDON_PATH = "/clusters/{cluster_id}/nodes/{node}/cordon"
 CLUSTER_NODE_UNCORDON_PATH = "/clusters/{cluster_id}/nodes/{node}/uncordon"
+CLUSTER_NODE_DRAIN_PATH = "/clusters/{cluster_id}/nodes/{node}/drain"
+CLUSTER_POD_DEBUG_PATH = "/clusters/{cluster_id}/namespaces/{namespace}/pods/{pod}/debug"
+CLUSTER_NODE_DEBUG_PATH = "/clusters/{cluster_id}/nodes/{node}/debug"
+CLUSTER_NODE_DEBUG_CLEANUP_PATH = "/clusters/{cluster_id}/nodes/{node}/debug/cleanup"
 CLUSTER_CRONJOB_TRIGGER_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/trigger"
 )

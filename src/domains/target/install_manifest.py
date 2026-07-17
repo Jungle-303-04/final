@@ -67,6 +67,9 @@ def target_rbac_manifest(payload: TargetRegisterRequest) -> str:
             cluster_read_rbac_manifest(namespace),
             gitops_control_rbac_manifest(namespace),
             node_control_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            resource_debug_rbac_manifest(payload, namespace)
+            if role != MANAGEMENT_CLUSTER_ROLE
+            else "",
             cronjob_control_rbac_manifest(payload, namespace)
             if role != MANAGEMENT_CLUSTER_ROLE
             else "",
@@ -308,6 +311,12 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -322,6 +331,52 @@ subjects:
     name: cluster-agent
     namespace: {namespace}
 """
+
+
+def resource_debug_rbac_manifest(
+    payload: TargetRegisterRequest,
+    agent_namespace: str,
+) -> str:
+    """Debug mutations are isolated to configured control namespaces."""
+
+    control_namespaces = tuple(
+        dict.fromkeys(
+            item.strip()
+            for item in (payload.control_namespaces.strip() or SANDBOX_NAMESPACE).split(",")
+            if item.strip()
+        )
+    )
+    return "\n---\n".join(
+        f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-resource-debug
+  namespace: {control_namespace}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/ephemeralcontainers"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-resource-debug
+  namespace: {control_namespace}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-resource-debug
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {agent_namespace}
+""".strip()
+        for control_namespace in control_namespaces
+    )
 
 
 def cronjob_control_rbac_manifest(payload: TargetRegisterRequest, agent_namespace: str) -> str:
