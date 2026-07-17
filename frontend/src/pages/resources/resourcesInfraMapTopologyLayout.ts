@@ -51,7 +51,6 @@ export interface TopologyRadialGroupPlacement {
 
 export interface HoneycombOffsetOptions {
   columnGap: number;
-  columns?: number;
   rowGap: number;
   rowOffset: number;
 }
@@ -72,20 +71,15 @@ export function honeycombOffsets(
   count: number,
   {
     columnGap,
-    columns = INFRA_MAP_TOPOLOGY_HONEYCOMB_COLUMNS,
     rowGap,
     rowOffset,
   }: HoneycombOffsetOptions,
 ): TopologyPoint[] {
   if (count <= 0) return [];
-  const rawOffsets = Array.from({ length: count }, (_, podIndex) => {
-    const rowIndex = Math.floor(podIndex / columns);
-    const columnIndex = podIndex % columns;
-    return {
-      x: columnIndex * columnGap + (rowIndex % 2 === 1 ? rowOffset : 0),
-      y: rowIndex * rowGap,
-    };
-  });
+  const rawOffsets = axialHoneycombCoordinates(count).map(({ q, r }) => ({
+    x: q * columnGap + r * rowOffset,
+    y: r * rowGap,
+  }));
   const bounds = rawOffsets.reduce(
     (current, offset) => ({
       maxX: Math.max(current.maxX, offset.x),
@@ -109,6 +103,38 @@ export function honeycombOffsets(
     y: offset.y - center.y,
   }));
 }
+
+interface AxialHoneycombCoordinate {
+  q: number;
+  r: number;
+}
+
+function axialHoneycombCoordinates(count: number): AxialHoneycombCoordinate[] {
+  const coordinates: AxialHoneycombCoordinate[] = [{ q: 0, r: 0 }];
+  if (count === 1) return coordinates;
+
+  for (let radius = 1; coordinates.length < count; radius += 1) {
+    let q = radius;
+    let r = 0;
+    for (const direction of AXIAL_HONEYCOMB_DIRECTIONS) {
+      for (let step = 0; step < radius && coordinates.length < count; step += 1) {
+        coordinates.push({ q, r });
+        q += direction.q;
+        r += direction.r;
+      }
+    }
+  }
+  return coordinates;
+}
+
+const AXIAL_HONEYCOMB_DIRECTIONS: readonly AxialHoneycombCoordinate[] = [
+  { q: 0, r: 1 },
+  { q: -1, r: 1 },
+  { q: -1, r: 0 },
+  { q: 0, r: -1 },
+  { q: 1, r: -1 },
+  { q: 1, r: 0 },
+] as const;
 
 export function radialAngles(count: number): number[] {
   if (count <= 0) return [];

@@ -68,6 +68,7 @@ import type { ServiceAccessPort } from "../../features/service-access/serviceAcc
 import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
+import type { TrafficPort } from "../../features/traffic/trafficContract";
 
 export function ResourcesPage({
   filterPort,
@@ -87,6 +88,7 @@ export function ResourcesPage({
   resourceManifestPort,
   resourceIssuesPort,
   port,
+  trafficPort = INACTIVE_TRAFFIC_PORT,
 }: {
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
@@ -105,6 +107,7 @@ export function ResourcesPage({
   resourceManifestPort?: ResourceManifestPort;
   resourceIssuesPort?: ResourceIssuesPort;
   port: ResourcesPort;
+  trafficPort?: TrafficPort;
 }) {
   const { t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
@@ -389,6 +392,7 @@ export function ResourcesPage({
                 timelineFrame={changeTimeline}
                 topologyPinned={topology.pinned}
                 topologyView={topology.view}
+                trafficPort={trafficPort}
               />
             </>
           )}
@@ -431,6 +435,10 @@ export function ResourcesPage({
 
 const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
   loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
+};
+
+const INACTIVE_TRAFFIC_PORT: TrafficPort = {
+  getOverview: () => Promise.reject(new Error("traffic port is inactive")),
 };
 
 function isResourceManifestCreatePort(

@@ -13,14 +13,15 @@ import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock
 import {
   TrafficPortFailure,
   type TrafficOverview,
+  type TrafficOverviewRequest,
   type TrafficPort,
-} from "../../features/traffic/trafficContract";
+} from "./trafficContract";
 
 const TRAFFIC_SCOPE_REFRESH_INTERVAL_MS = 30_000;
 
 export function useTrafficOverview(
   port: TrafficPort,
-  request: { clusterIds: readonly string[]; namespaces: readonly string[] },
+  request: TrafficOverviewRequest,
 ): {
   frame: AsyncResourceState<TrafficOverview, TrafficPortFailure>;
   refresh: () => void;

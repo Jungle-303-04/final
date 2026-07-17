@@ -25,6 +25,7 @@ import type { ServiceAccessPort } from "../../features/service-access/serviceAcc
 import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
+import type { TrafficPort } from "../../features/traffic/trafficContract";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -44,6 +45,7 @@ export function createResourcesSurface(
   resourceIssuesPort?: ResourceIssuesPort,
   serviceAccessPort?: ServiceAccessPort,
   portForwardSessions?: PortForwardSessionPort,
+  trafficPort?: TrafficPort,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -65,6 +67,7 @@ export function createResourcesSurface(
         serviceAccessPort={serviceAccessPort}
         portForwardSessions={portForwardSessions}
         port={port}
+        trafficPort={trafficPort}
       />
     );
   }

@@ -17,7 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
-import { useTrafficOverview } from "./useTrafficOverviewData";
+import { useTrafficOverview } from "../../features/traffic/useTrafficOverview";
 
 export function TrafficPage({ port }: { port: TrafficPort }) {
   const clusterScope = useClusterScope();

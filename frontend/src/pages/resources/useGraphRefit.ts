@@ -3,7 +3,7 @@ import type {
   Node,
   ReactFlowInstance,
 } from "@xyflow/react";
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 const DEFAULT_GRAPH_FIT_VIEW_OPTIONS = { padding: 0.12, minZoom: 0.4 } as const;
 
@@ -25,6 +25,7 @@ export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
   viewportRef: RefObject<HTMLDivElement | null>;
 }) {
   const [viewportRevision, setViewportRevision] = useState(0);
+  const viewportSizeRef = useRef<{ height: number; width: number } | null>(null);
 
   useEffect(() => {
     if (!instance || nodeCount === 0) return undefined;
@@ -45,6 +46,19 @@ export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
     if (!viewport || typeof ResizeObserver === "undefined") return undefined;
     let frame = 0;
     const observer = new ResizeObserver(() => {
+      const rect = viewport.getBoundingClientRect();
+      const nextSize = {
+        height: Math.round(rect.height),
+        width: Math.round(rect.width),
+      };
+      const currentSize = viewportSizeRef.current;
+      if (
+        currentSize?.height === nextSize.height &&
+        currentSize.width === nextSize.width
+      ) {
+        return;
+      }
+      viewportSizeRef.current = nextSize;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => setViewportRevision((revision) => revision + 1));
     });

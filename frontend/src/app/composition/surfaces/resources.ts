@@ -17,6 +17,7 @@ import {
   getWorkloadRollbackPreview,
   getResourceManifestSource,
   getResourceMetricsHistory,
+  getTrafficOverview,
   listFilteredResources,
   listInventoryResourcesByType,
   listResourceFilterFacets,
@@ -39,6 +40,7 @@ import { createResourcesFilterAdapter } from "../../../features/resources/create
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
 import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
 import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
+import { createTrafficAdapter } from "../../../features/traffic/createTrafficAdapter";
 import { createTopologyPorts } from "../topologyPorts";
 import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
 import type { ResourcesRefreshPolicyKey } from "../../../features/resources/resourceMetricsHistoryContract";
@@ -102,5 +104,6 @@ export function loadResourcesSurface(
       },
     }),
     portForwardSessions,
+    createTrafficAdapter({ getTrafficOverview }),
   );
 }

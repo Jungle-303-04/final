@@ -25,10 +25,6 @@ import {
   type InfraMapTopologyNode,
   type InfraMapTopologyPodGroup,
 } from "./resourcesInfraMapTopologyModel";
-import {
-  podHealthTone,
-  podResourcePressureTone,
-} from "./podVisualState";
 
 export type InfraTopologyNode =
   | Node<ClusterNodeData, "infra-map-cluster">
@@ -68,24 +64,7 @@ export const HANDLE_POSITIONS = [
 const TOPOLOGY_EDGE_STROKE = "color-mix(in oklch, var(--muted-foreground) 58%, transparent)";
 const TOPOLOGY_EDGE_STROKE_WEAK = "color-mix(in oklch, var(--muted-foreground) 38%, transparent)";
 const TOPOLOGY_METRIC_INFERRED_EDGE_DASH = "5 7";
-
-type TopologyDistanceTone = "critical" | "danger" | "healthy" | "unknown" | "warning";
-
-const TOPOLOGY_POD_DISTANCE_BY_TONE: Record<TopologyDistanceTone, number> = {
-  critical: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceCritical,
-  danger: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceDanger,
-  healthy: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceHealthy,
-  unknown: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceUnknown,
-  warning: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceWarning,
-};
-
-const TOPOLOGY_DISTANCE_TONE_RANK: Record<TopologyDistanceTone, number> = {
-  critical: 4,
-  danger: 3,
-  warning: 2,
-  unknown: 1,
-  healthy: 0,
-};
+const TOPOLOGY_POD_GROUP_DISTANCE = INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceHealthy;
 
 export function buildInfraTopologyFlowGraph(
   cluster: InfraMapTopologyCluster,
@@ -101,12 +80,12 @@ export function buildInfraTopologyFlowGraph(
   const edges: Edge[] = [];
   const clusterId = `cluster:${cluster.id}`;
   const clusterCenter = { x: 0, y: 0 };
-  const nodeAngles = topologyNodeAngles(cluster.nodes.length);
-  const nodePlans = cluster.nodes.map((node) =>
-    topologyNodeLayoutPlan(node, metricMode, 0)
-  );
+  const stableNodes = stableTopologyNodes(cluster.nodes);
+  const stableCluster = { ...cluster, nodes: stableNodes };
+  const nodeAngles = topologyNodeAngles(stableNodes.length);
+  const nodePlans = stableNodes.map((node) => topologyNodeLayoutPlan(node, 0));
   const nodeRingRadius = topologyNodeRingRadius(
-    cluster.nodes.length,
+    stableNodes.length,
     nodePlans.map((plan) => plan.localRadius),
   );
 
@@ -114,13 +93,13 @@ export function buildInfraTopologyFlowGraph(
     id: clusterId,
     position: positionFromCenter(clusterCenter, INFRA_MAP_TOPOLOGY_NODE_SIZE.cluster),
     type: "infra-map-cluster",
-    data: { cluster },
+    data: { cluster: stableCluster },
   });
 
-  cluster.nodes.forEach((node, nodeIndex) => {
+  stableNodes.forEach((node, nodeIndex) => {
     const nodeId = `node:${node.id}`;
     const nodeAngle = nodeAngles[nodeIndex]!;
-    const nodePlan = topologyNodeLayoutPlan(node, metricMode, nodeAngle);
+    const nodePlan = topologyNodeLayoutPlan(node, nodeAngle);
     const nodeCenter = polarPoint(clusterCenter, nodeAngle, nodeRingRadius);
     nodes.push({
       id: nodeId,
@@ -143,7 +122,7 @@ export function buildInfraTopologyFlowGraph(
         center: polarPoint(
           { x: 0, y: 0 },
           nodeAngle,
-          TOPOLOGY_POD_DISTANCE_BY_TONE.healthy,
+          TOPOLOGY_POD_GROUP_DISTANCE,
         ),
       };
       const podOffsets = honeycombOffsets(group.pods.length, {
@@ -179,9 +158,53 @@ export function buildInfraTopologyFlowGraph(
   return {
     bounds: topologyBounds(nodes),
     edges,
-    layoutSignature: topologyLayoutSignature(cluster, metricMode),
+    layoutSignature: topologyLayoutSignature(stableCluster, metricMode),
     nodes,
   };
+}
+
+function stableTopologyNodes(
+  nodes: readonly InfraMapTopologyNode[],
+): InfraMapTopologyNode[] {
+  return nodes
+    .map((node) => ({
+      ...node,
+      groups: stableTopologyPodGroups(node.groups),
+    }))
+    .sort(compareTopologyNodes);
+}
+
+function stableTopologyPodGroups(
+  groups: readonly InfraMapTopologyPodGroup[],
+): InfraMapTopologyPodGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      pods: stableTopologyPods(group.pods),
+    }))
+    .sort(compareTopologyPodGroups);
+}
+
+function stableTopologyPods(pods: readonly InfraMapPod[]): InfraMapPod[] {
+  return [...pods].sort(compareTopologyPods);
+}
+
+function compareTopologyNodes(
+  left: InfraMapTopologyNode,
+  right: InfraMapTopologyNode,
+): number {
+  return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+}
+
+function compareTopologyPodGroups(
+  left: InfraMapTopologyPodGroup,
+  right: InfraMapTopologyPodGroup,
+): number {
+  return left.label.localeCompare(right.label) || left.key.localeCompare(right.key);
+}
+
+function compareTopologyPods(left: InfraMapPod, right: InfraMapPod): number {
+  return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
 }
 
 interface TopologyNodeLayoutPlan {
@@ -197,7 +220,6 @@ interface TopologyPodGroupPlacement {
 
 function topologyNodeLayoutPlan(
   node: InfraMapTopologyNode,
-  metricMode: InfraMapMetricMode,
   nodeAngle: number,
 ): TopologyNodeLayoutPlan {
   const groupPlacements: TopologyPodGroupPlacement[] = [];
@@ -219,7 +241,7 @@ function topologyNodeLayoutPlan(
       const group = node.groups[placedCount + indexInRing];
       if (!group) continue;
       const angle = ringAngleOffset + (Math.PI * 2 * indexInRing) / countInRing;
-      const groupRadius = topologyPodGroupDistance(group, metricMode) +
+      const groupRadius = TOPOLOGY_POD_GROUP_DISTANCE +
         ringIndex * INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podGroupRadiusGap;
       const footprintRadius = topologyPodGroupFootprintRadius(group);
       const groupLocalRadius = groupRadius + footprintRadius;
@@ -233,42 +255,6 @@ function topologyNodeLayoutPlan(
     placedCount += countInRing;
   }
   return { groupPlacements, localRadius };
-}
-
-function topologyPodGroupDistance(
-  group: InfraMapTopologyPodGroup,
-  metricMode: InfraMapMetricMode,
-): number {
-  const tone = group.pods.reduce<TopologyDistanceTone>(
-    (current, pod) => maxDistanceTone(current, topologyPodDistanceTone(pod, metricMode)),
-    "healthy",
-  );
-  return TOPOLOGY_POD_DISTANCE_BY_TONE[tone];
-}
-
-function topologyPodDistanceTone(
-  pod: InfraMapPod,
-  metricMode: InfraMapMetricMode,
-): TopologyDistanceTone {
-  const healthTone = podHealthTone(pod);
-  if (healthTone === "critical") return "critical";
-  const pressureTone = podResourcePressureTone(infraMapPodMetricRatio(pod, metricMode));
-  if (
-    healthTone === "warning" &&
-    (pressureTone === "healthy" || pressureTone === "unknown")
-  ) {
-    return "warning";
-  }
-  return pressureTone;
-}
-
-function maxDistanceTone(
-  left: TopologyDistanceTone,
-  right: TopologyDistanceTone,
-): TopologyDistanceTone {
-  return TOPOLOGY_DISTANCE_TONE_RANK[right] > TOPOLOGY_DISTANCE_TONE_RANK[left]
-    ? right
-    : left;
 }
 
 function topologyPodGroupFootprintRadius(group: InfraMapTopologyPodGroup): number {
@@ -433,10 +419,18 @@ function topologyLayoutSignature(
   return [
     cluster.id,
     metricMode,
-    cluster.nodes.map((node) =>
-      `${node.id}:${node.groups.map((group) =>
-        `${group.key}[${group.pods.map((pod) => pod.id).join(",")}]`
-      ).join(",")}`
-    ).join("|"),
+    stableTopologyNodeSignature(cluster.nodes),
   ].join(":");
+}
+
+function stableTopologyNodeSignature(nodes: readonly InfraMapTopologyNode[]): string {
+  return nodes
+    .map((node) =>
+      `${node.id}:${node.groups
+        .map((group) => `${group.key}[${group.pods.map((pod) => pod.id).sort().join(",")}]`)
+        .sort()
+        .join(",")}`
+    )
+    .sort()
+    .join("|");
 }

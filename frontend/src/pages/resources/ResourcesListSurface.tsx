@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
 import type { HomePort } from "../../features/home/homeContract";
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { TimelineRange } from "../../features/filters/filterContract";
@@ -49,6 +50,7 @@ import {
   type InfraMapFocusItem,
 } from "./useInfraMapFocusDetails";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
+import type { TrafficPort } from "../../features/traffic/trafficContract";
 
 type ReadyPhysicalTopologyFrame = Extract<
   ReturnType<typeof usePhysicalTopologyDataFrame>,
@@ -142,6 +144,7 @@ export function ResourcesListSurface({
   topologyView,
   onTopologyViewChange,
   timelineFrame,
+  trafficPort,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
@@ -160,6 +163,7 @@ export function ResourcesListSurface({
   topologyView: ResourceTopologyView;
   onTopologyViewChange: (view: ResourceTopologyView) => void;
   timelineFrame: ChangeTimelineFrame;
+  trafficPort: TrafficPort;
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
@@ -324,6 +328,10 @@ export function ResourcesListSurface({
       : null,
     [infraMapFocusItems.length, infraMapSelectedPodIds, infraMapTopology],
   );
+  const infraMapTrafficRequest = useMemo(() => ({
+    clusterIds: state.selectedClusterId ? [state.selectedClusterId] : [],
+    namespaces: normalizeNamespaceRefs(filter.state.common.namespaces).map(namespaceSelector),
+  }), [filter.state.common.namespaces, state.selectedClusterId]);
   const showInfraMapNodePods = useCallback((node: InfraMapNode) => {
     const knownPods = [...node.visiblePods, ...node.hiddenPods];
     setInfraMapListDrilldown({
@@ -402,6 +410,8 @@ export function ResourcesListSurface({
               onShowMorePods={showInfraMapNodePods}
               phase={infraMapTopology.phase}
               selectedFocus={infraMapFocusItems}
+              trafficPort={trafficPort}
+              trafficRequest={infraMapTrafficRequest}
             />
           </Surface>
           <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">

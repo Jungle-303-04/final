@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
 import { TooltipProvider } from "../../shared/ui/primitives/tooltip";
 import { ResourcesInfraMapView } from "./ResourcesInfraMapView";
 import type { InfraMapModel, InfraMapPod } from "./resourcesInfraMapModel";
+import type { TrafficPort } from "../../features/traffic/trafficContract";
 
 afterEach(cleanup);
 
@@ -25,6 +26,8 @@ describe("ResourcesInfraMapView", () => {
             onShowMorePods={vi.fn()}
             phase="ready"
             selectedFocus={[]}
+            trafficPort={trafficPort()}
+            trafficRequest={{ clusterIds: ["cluster-a"], namespaces: [] }}
           />
         </TooltipProvider>
       </I18nProvider>,
@@ -38,28 +41,71 @@ describe("ResourcesInfraMapView", () => {
       "Summarizes each node as a server card, highlighting key Pods, Pod distribution, and node capacity at a glance.",
     )).toBeTruthy();
     expect(legend.getAttribute("data-slot")).toBe("infra-map-legend");
-    expect(within(legend).getByText("Green · normal")).toBeTruthy();
-    expect(within(legend).getByText("Card fill · CPU request usage")).toBeTruthy();
-    expect(within(legend).getByText("Red · abnormal state")).toBeTruthy();
-    expect(within(legend).getByText("Dashed card · metric or request unavailable")).toBeTruthy();
+    expect(legend.textContent).toContain("Healthy");
+    expect(legend.textContent).toContain("CPU request usage");
+    expect(legend.textContent).toContain("Abnormal state");
+    expect(legend.textContent).toContain("Unknown");
 
     fireEvent.click(screen.getByRole("button", { name: "Topology" }));
     expect(screen.getByText(
       "Shows Cluster, Node, and Pod relationships as a graph, with hover details for status, usage, restarts, and placement.",
     )).toBeTruthy();
-    expect(within(legend).getByText("Solid line · placement relationship")).toBeTruthy();
-    expect(within(legend).getByText("Icon color · health and pressure")).toBeTruthy();
-    expect(within(legend).getByText("Dashed line · metric or request unavailable")).toBeTruthy();
+    expect(legend.textContent).toContain("Placement relationship");
+    expect(legend.textContent).toContain("Resource pressure");
+    expect(legend.textContent).toContain("Unknown");
 
     fireEvent.click(screen.getByRole("button", { name: "Navigator" }));
     expect(screen.getByText(
-      "Shows the cluster as a radial navigator so you can scan node placement, Pod density, and requested capacity visually.",
+      "Shows each node as a rack row with attached Pod hexagons, so Pod density, health, and requested capacity can be scanned by node.",
     )).toBeTruthy();
-    expect(within(legend).getByText("Line · cluster, node, and pod placement")).toBeTruthy();
-    expect(within(legend).getByText("Rack · node")).toBeTruthy();
-    expect(within(legend).getByText("Dot size · requested capacity")).toBeTruthy();
+    expect(legend.textContent).toContain("Node");
+    expect(legend.textContent).toContain("CPU pressure");
+    expect(legend.textContent).toContain("Requested capacity");
+
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    expect(screen.getByText(
+      "Checks collector-backed network-flow evidence for the selected cluster and namespace scope without inventing missing traffic.",
+    )).toBeTruthy();
+    expect(legend.textContent).toContain("Traffic volume");
+    expect(legend.textContent).toContain("Source/target resource");
+    expect(legend.textContent).toContain("Traffic evidence unavailable");
   });
 });
+
+function trafficPort(): TrafficPort {
+  return {
+    getOverview: vi.fn().mockResolvedValue({
+      scopeCoverage: {
+        availability: "available",
+        scopes: [{
+          clusterId: "cluster-a",
+          freshness: "live",
+          namespaces: [],
+          workspaceId: "workspace-a",
+        }],
+        observedAt: "2026-07-16T09:00:00Z",
+        reasonCodes: [],
+      },
+      observation: {
+        availability: "unavailable",
+        observedAt: null,
+        reasonCodes: ["traffic_observation_not_integrated"],
+      },
+      relationships: {
+        availability: "unavailable",
+        edges: null,
+        reasonCodes: ["traffic_observation_not_integrated"],
+      },
+      summary: {
+        availability: "unavailable",
+        deniedFlowCount: null,
+        externalFlowCount: null,
+        reasonCodes: ["traffic_observation_not_integrated"],
+        totalFlowCount: null,
+      },
+    }),
+  };
+}
 
 function infraMapModel(): InfraMapModel {
   const visiblePods = [pod()];
@@ -103,9 +149,9 @@ function pod(): InfraMapPod {
     clusterId: "cluster-a",
     cpu: { request: 100, ratio: 0.1, value: 10 },
     health: "healthy",
-    id: "pod:api",
+    id: "pod:default",
     memory: { request: 100, ratio: 0.1, value: 10 },
-    name: "api",
+    name: "default",
     namespace: "default",
     ownerKind: null,
     ownerName: null,

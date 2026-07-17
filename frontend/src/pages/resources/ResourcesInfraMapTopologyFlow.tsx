@@ -1,10 +1,8 @@
 import {
   Background,
   Handle,
-  Position,
   ReactFlow,
   type Edge,
-  type Node,
   type NodeProps,
   type NodeTypes,
   type ReactFlowInstance,
@@ -36,23 +34,21 @@ import { TopologyPodHex } from "./ResourcesInfraMapTopologyPodHex";
 import type { InfraMapPod } from "./resourcesInfraMapModel";
 import { infraMapPodMetricRatio } from "./resourcesInfraMapPodOrdering";
 import {
+  HANDLE_POSITIONS,
+  buildInfraTopologyFlowGraph,
+  handleId,
+  hexagonPoints,
+  topologyNodeCenter,
+  topologyNodeSize,
+  type InfraTopologyNode,
+  type TopologyBounds,
+} from "./resourcesInfraMapTopologyFlowGraph";
+import type { TopologySize } from "./resourcesInfraMapTopologyLayout";
+import {
   type InfraMapTopologyCluster,
   type InfraMapTopologyNode,
   type InfraMapTopologyPodGroup,
 } from "./resourcesInfraMapTopologyModel";
-import {
-  INFRA_MAP_TOPOLOGY_HONEYCOMB_LAYOUT,
-  INFRA_MAP_TOPOLOGY_NODE_SIZE,
-  INFRA_MAP_TOPOLOGY_POD_SIZE,
-  INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT,
-  type TopologyPoint,
-  type TopologySize,
-  honeycombOffsets,
-  polarPoint,
-  positionFromCenter,
-  topologyNodeAngles,
-  topologyNodeRingRadius,
-} from "./resourcesInfraMapTopologyLayout";
 import {
   INFRA_MAP_TOPOLOGY_ZOOM,
   nextTopologyZoomPercent,
@@ -65,27 +61,6 @@ import {
 } from "./podVisualState";
 import { useGraphRefit } from "./useGraphRefit";
 
-type InfraTopologyNode =
-  | Node<ClusterNodeData, "infra-map-cluster">
-  | Node<NodeNodeData, "infra-map-node">
-  | Node<PodNodeData, "infra-map-pod">;
-
-interface ClusterNodeData extends Record<string, unknown> {
-  cluster: InfraMapTopologyCluster;
-}
-
-interface NodeNodeData extends Record<string, unknown> {
-  node: InfraMapTopologyNode;
-}
-
-interface PodNodeData extends Record<string, unknown> {
-  group: InfraMapTopologyPodGroup;
-  metricMode: InfraMapMetricMode;
-  onOpenPod: (pod: InfraMapPod) => void;
-  pod: InfraMapPod;
-  size: number;
-}
-
 const nodeTypes: NodeTypes = {
   "infra-map-cluster": ClusterGraphNode,
   "infra-map-node": ServerGraphNode,
@@ -97,8 +72,6 @@ const TOPOLOGY_FIT_VIEW_OPTIONS = {
   minZoom: INFRA_MAP_TOPOLOGY_ZOOM.min,
   padding: 0.18,
 } as const;
-const TOPOLOGY_EDGE_STROKE = "color-mix(in oklch, var(--muted-foreground) 58%, transparent)";
-const TOPOLOGY_EDGE_STROKE_WEAK = "color-mix(in oklch, var(--muted-foreground) 38%, transparent)";
 const TOPOLOGY_BACKGROUND_DOT = "color-mix(in oklch, var(--muted-foreground) 22%, transparent)";
 const TOPOLOGY_MINIMAP_BACKGROUND = "var(--background)";
 const TOPOLOGY_MINIMAP_EDGE_STROKE = "var(--foreground)";
@@ -111,32 +84,7 @@ const TOPOLOGY_MINIMAP_UNKNOWN = "var(--muted-foreground)";
 const TOPOLOGY_MINIMAP_HEIGHT = 120;
 const TOPOLOGY_MINIMAP_WIDTH = 168;
 const TOPOLOGY_MINIMAP_PADDING = 28;
-const TOPOLOGY_METRIC_INFERRED_EDGE_DASH = "5 7";
-
-type TopologyDistanceTone = "critical" | "danger" | "healthy" | "unknown" | "warning";
-
-const TOPOLOGY_POD_DISTANCE_BY_TONE: Record<TopologyDistanceTone, number> = {
-  critical: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceCritical,
-  danger: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceDanger,
-  healthy: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceHealthy,
-  unknown: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceUnknown,
-  warning: INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podDistanceWarning,
-};
-
-const TOPOLOGY_DISTANCE_TONE_RANK: Record<TopologyDistanceTone, number> = {
-  critical: 4,
-  danger: 3,
-  warning: 2,
-  unknown: 1,
-  healthy: 0,
-};
-
-const HANDLE_POSITIONS = [
-  Position.Top,
-  Position.Right,
-  Position.Bottom,
-  Position.Left,
-] as const;
+const TOPOLOGY_HOVER_MOVE_THRESHOLD_PX = 4;
 
 interface TopologyViewport {
   x: number;
@@ -147,13 +95,6 @@ interface TopologyViewport {
 interface HoveredTopologyNode {
   height: number;
   node: InfraTopologyNode;
-  width: number;
-  x: number;
-  y: number;
-}
-
-interface TopologyBounds {
-  height: number;
   width: number;
   x: number;
   y: number;
@@ -199,12 +140,25 @@ export function ResourcesInfraMapTopologyFlow({
     node: InfraTopologyNode,
   ) => {
     const rect = viewportRef.current?.getBoundingClientRect();
-    setHoveredNode({
+    const nextHover = {
       height: rect?.height ?? 0,
       node,
       width: rect?.width ?? 0,
       x: rect ? event.clientX - rect.left : event.clientX,
       y: rect ? event.clientY - rect.top : event.clientY,
+    };
+    setHoveredNode((current) => {
+      if (
+        current?.node.id === nextHover.node.id &&
+        current.node.type === nextHover.node.type &&
+        current.height === nextHover.height &&
+        current.width === nextHover.width &&
+        Math.abs(current.x - nextHover.x) < TOPOLOGY_HOVER_MOVE_THRESHOLD_PX &&
+        Math.abs(current.y - nextHover.y) < TOPOLOGY_HOVER_MOVE_THRESHOLD_PX
+      ) {
+        return current;
+      }
+      return nextHover;
     });
   }, []);
   const handleNodeMouseEnter = useCallback((
@@ -228,7 +182,12 @@ export function ResourcesInfraMapTopologyFlow({
     if (!element) return undefined;
     const updateSize = () => {
       const rect = element.getBoundingClientRect();
-      setViewportSize({ height: rect.height, width: rect.width });
+      setViewportSize((current) => {
+        const next = { height: rect.height, width: rect.width };
+        return current?.height === next.height && current.width === next.width
+          ? current
+          : next;
+      });
     };
     updateSize();
     if (typeof ResizeObserver === "undefined") return undefined;
@@ -692,296 +651,6 @@ function topologyMiniMapNodeStrokeColor(node: InfraTopologyNode): string {
   return TOPOLOGY_MINIMAP_NODE_STROKE;
 }
 
-function buildInfraTopologyFlowGraph(
-  cluster: InfraMapTopologyCluster,
-  metricMode: InfraMapMetricMode,
-  onOpenPod: (pod: InfraMapPod) => void,
-): { bounds: TopologyBounds; edges: Edge[]; layoutSignature: string; nodes: InfraTopologyNode[] } {
-  const nodes: InfraTopologyNode[] = [];
-  const edges: Edge[] = [];
-  const clusterId = `cluster:${cluster.id}`;
-  const clusterCenter = { x: 0, y: 0 };
-  const nodeAngles = topologyNodeAngles(cluster.nodes.length);
-  const nodePlans = cluster.nodes.map((node) =>
-    topologyNodeLayoutPlan(node, metricMode, 0)
-  );
-  const nodeRingRadius = topologyNodeRingRadius(
-    cluster.nodes.length,
-    nodePlans.map((plan) => plan.localRadius),
-  );
-
-  nodes.push({
-    id: clusterId,
-    position: positionFromCenter(clusterCenter, INFRA_MAP_TOPOLOGY_NODE_SIZE.cluster),
-    type: "infra-map-cluster",
-    data: { cluster },
-  });
-
-  cluster.nodes.forEach((node, nodeIndex) => {
-    const nodeId = `node:${node.id}`;
-    const nodeAngle = nodeAngles[nodeIndex]!;
-    const nodePlan = topologyNodeLayoutPlan(node, metricMode, nodeAngle);
-    const nodeCenter = polarPoint(clusterCenter, nodeAngle, nodeRingRadius);
-    nodes.push({
-      id: nodeId,
-      position: positionFromCenter(nodeCenter, INFRA_MAP_TOPOLOGY_NODE_SIZE.server),
-      type: "infra-map-node",
-      data: { node },
-    });
-    edges.push(topologyEdge({
-      id: `edge:${clusterId}:${nodeId}`,
-      source: clusterId,
-      sourceAngle: nodeAngle,
-      target: nodeId,
-      targetAngle: nodeAngle + Math.PI,
-    }));
-
-    const requestRange = podMetricRequestRange(node.groups, metricMode);
-    node.groups.forEach((group, groupIndex) => {
-      const groupPlacement = nodePlan.groupPlacements[groupIndex] ?? {
-        angle: nodeAngle,
-        center: polarPoint(
-          { x: 0, y: 0 },
-          nodeAngle,
-          TOPOLOGY_POD_DISTANCE_BY_TONE.healthy,
-        ),
-      };
-      const podOffsets = honeycombOffsets(group.pods.length, {
-        ...INFRA_MAP_TOPOLOGY_HONEYCOMB_LAYOUT,
-      });
-      group.pods.forEach((pod, podIndex) => {
-        const podOffset = podOffsets[podIndex] ?? { x: 0, y: 0 };
-        const podSize = topologyPodVisualSize(pod, metricMode, requestRange);
-        const podNodeSize = { height: podSize, width: podSize };
-        const podCenter = {
-          x: nodeCenter.x + groupPlacement.center.x + podOffset.x,
-          y: nodeCenter.y + groupPlacement.center.y + podOffset.y,
-        };
-        const podId = `pod:${pod.id}`;
-        nodes.push({
-          id: podId,
-          position: positionFromCenter(podCenter, podNodeSize),
-          type: "infra-map-pod",
-          data: { group, metricMode, onOpenPod, pod, size: podSize },
-        });
-        edges.push(topologyEdge({
-          dashed: !hasMetricDistanceEvidence(pod, metricMode),
-          id: `edge:${nodeId}:${podId}`,
-          source: nodeId,
-          sourceAngle: groupPlacement.angle,
-          target: podId,
-          targetAngle: groupPlacement.angle + Math.PI,
-        }));
-      });
-    });
-  });
-
-  return {
-    bounds: topologyBounds(nodes),
-    edges,
-    layoutSignature: topologyLayoutSignature(cluster, metricMode),
-    nodes,
-  };
-}
-
-function topologyLayoutSignature(
-  cluster: InfraMapTopologyCluster,
-  metricMode: InfraMapMetricMode,
-): string {
-  return [
-    cluster.id,
-    metricMode,
-    cluster.nodes.map((node) =>
-      `${node.id}:${node.groups.map((group) =>
-        `${group.key}[${group.pods.map((pod) => pod.id).join(",")}]`
-      ).join(",")}`
-    ).join("|"),
-  ].join(":");
-}
-
-interface TopologyNodeLayoutPlan {
-  groupPlacements: TopologyPodGroupPlacement[];
-  localRadius: number;
-}
-
-interface TopologyPodGroupPlacement {
-  angle: number;
-  center: TopologyPoint;
-  localRadius: number;
-}
-
-function topologyNodeLayoutPlan(
-  node: InfraMapTopologyNode,
-  metricMode: InfraMapMetricMode,
-  nodeAngle: number,
-): TopologyNodeLayoutPlan {
-  const groupPlacements: TopologyPodGroupPlacement[] = [];
-  let localRadius = INFRA_MAP_TOPOLOGY_NODE_SIZE.server.width / 2;
-  let placedCount = 0;
-  for (
-    let ringIndex = 0;
-    placedCount < node.groups.length;
-    ringIndex += 1
-  ) {
-    const countInRing = Math.min(
-      INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podGroupsPerRing + ringIndex * 2,
-      node.groups.length - placedCount,
-    );
-    const ringAngleOffset = countInRing === 1
-      ? nodeAngle
-      : nodeAngle + (ringIndex % 2 === 1 ? Math.PI / countInRing : 0);
-    for (let indexInRing = 0; indexInRing < countInRing; indexInRing += 1) {
-      const group = node.groups[placedCount + indexInRing];
-      if (!group) continue;
-      const angle = ringAngleOffset + (Math.PI * 2 * indexInRing) / countInRing;
-      const groupRadius = topologyPodGroupDistance(group, metricMode) +
-        ringIndex * INFRA_MAP_TOPOLOGY_RADIAL_LAYOUT.podGroupRadiusGap;
-      const footprintRadius = topologyPodGroupFootprintRadius(group);
-      const groupLocalRadius = groupRadius + footprintRadius;
-      groupPlacements.push({
-        angle,
-        center: polarPoint({ x: 0, y: 0 }, angle, groupRadius),
-        localRadius: groupLocalRadius,
-      });
-      localRadius = Math.max(localRadius, groupLocalRadius);
-    }
-    placedCount += countInRing;
-  }
-  return { groupPlacements, localRadius };
-}
-
-function topologyPodGroupDistance(
-  group: InfraMapTopologyPodGroup,
-  metricMode: InfraMapMetricMode,
-): number {
-  const tone = group.pods.reduce<TopologyDistanceTone>(
-    (current, pod) => maxDistanceTone(current, topologyPodDistanceTone(pod, metricMode)),
-    "healthy",
-  );
-  return TOPOLOGY_POD_DISTANCE_BY_TONE[tone];
-}
-
-function topologyPodDistanceTone(
-  pod: InfraMapPod,
-  metricMode: InfraMapMetricMode,
-): TopologyDistanceTone {
-  const healthTone = podHealthTone(pod);
-  if (healthTone === "critical") return "critical";
-  const pressureTone = podResourcePressureTone(infraMapPodMetricRatio(pod, metricMode));
-  if (
-    healthTone === "warning" &&
-    (pressureTone === "healthy" || pressureTone === "unknown")
-  ) {
-    return "warning";
-  }
-  return pressureTone;
-}
-
-function maxDistanceTone(
-  left: TopologyDistanceTone,
-  right: TopologyDistanceTone,
-): TopologyDistanceTone {
-  return TOPOLOGY_DISTANCE_TONE_RANK[right] > TOPOLOGY_DISTANCE_TONE_RANK[left]
-    ? right
-    : left;
-}
-
-function topologyPodGroupFootprintRadius(group: InfraMapTopologyPodGroup): number {
-  const offsets = honeycombOffsets(group.pods.length, {
-    ...INFRA_MAP_TOPOLOGY_HONEYCOMB_LAYOUT,
-  });
-  if (offsets.length === 0) return 0;
-  return Math.max(
-    ...offsets.map((offset) => Math.hypot(offset.x, offset.y)),
-  ) + INFRA_MAP_TOPOLOGY_POD_SIZE.max / 2;
-}
-
-function topologyBounds(nodes: readonly InfraTopologyNode[]): TopologyBounds {
-  if (nodes.length === 0) return { height: 1, width: 1, x: 0, y: 0 };
-  const bounds = nodes.reduce(
-    (current, node) => {
-      const size = topologyNodeSize(node);
-      return {
-        maxX: Math.max(current.maxX, node.position.x + size.width),
-        maxY: Math.max(current.maxY, node.position.y + size.height),
-        minX: Math.min(current.minX, node.position.x),
-        minY: Math.min(current.minY, node.position.y),
-      };
-    },
-    {
-      maxX: Number.NEGATIVE_INFINITY,
-      maxY: Number.NEGATIVE_INFINITY,
-      minX: Number.POSITIVE_INFINITY,
-      minY: Number.POSITIVE_INFINITY,
-    },
-  );
-  return {
-    height: Math.max(1, bounds.maxY - bounds.minY),
-    width: Math.max(1, bounds.maxX - bounds.minX),
-    x: bounds.minX,
-    y: bounds.minY,
-  };
-}
-
-function topologyNodeSize(node: InfraTopologyNode): TopologySize {
-  if (node.type === "infra-map-cluster") return INFRA_MAP_TOPOLOGY_NODE_SIZE.cluster;
-  if (node.type === "infra-map-node") return INFRA_MAP_TOPOLOGY_NODE_SIZE.server;
-  return { height: node.data.size, width: node.data.size };
-}
-
-interface MetricRequestRange {
-  max: number;
-  min: number;
-}
-
-function podMetricRequestRange(
-  groups: readonly InfraMapTopologyPodGroup[],
-  metricMode: InfraMapMetricMode,
-): MetricRequestRange | null {
-  const requests = groups
-    .flatMap((group) => group.pods.map((pod) => podMetricRequest(pod, metricMode)))
-    .filter(isPositiveMetric);
-  if (requests.length === 0) return null;
-  return {
-    max: Math.max(...requests),
-    min: Math.min(...requests),
-  };
-}
-
-function topologyPodVisualSize(
-  pod: InfraMapPod,
-  metricMode: InfraMapMetricMode,
-  requestRange: MetricRequestRange | null,
-): number {
-  const request = podMetricRequest(pod, metricMode);
-  if (!requestRange || !isPositiveMetric(request) || requestRange.max <= requestRange.min) {
-    return INFRA_MAP_TOPOLOGY_POD_SIZE.base;
-  }
-  const normalized = Math.sqrt((request - requestRange.min) / (requestRange.max - requestRange.min));
-  const size = INFRA_MAP_TOPOLOGY_POD_SIZE.min +
-    normalized * (INFRA_MAP_TOPOLOGY_POD_SIZE.max - INFRA_MAP_TOPOLOGY_POD_SIZE.min);
-  return Math.round(size);
-}
-
-function podMetricRequest(
-  pod: InfraMapPod,
-  metricMode: InfraMapMetricMode,
-): number | null {
-  return metricMode === "cpu" ? pod.cpu.request : pod.memory.request;
-}
-
-function isPositiveMetric(value: number | null): value is number {
-  return value !== null && Number.isFinite(value) && value > 0;
-}
-
-function topologyNodeCenter(node: InfraTopologyNode): TopologyPoint {
-  const size = topologyNodeSize(node);
-  return {
-    x: node.position.x + size.width / 2,
-    y: node.position.y + size.height / 2,
-  };
-}
-
 function padBounds(bounds: TopologyBounds, padding: number): TopologyBounds {
   return {
     height: bounds.height + padding * 2,
@@ -1016,62 +685,6 @@ function intersectBounds(left: TopologyBounds, right: TopologyBounds): TopologyB
     x,
     y,
   };
-}
-
-function hexagonPoints(center: TopologyPoint, radius: number): string {
-  return Array.from({ length: 6 }, (_, index) => {
-    const angle = -Math.PI / 2 + index * (Math.PI / 3);
-    return `${center.x + Math.cos(angle) * radius},${center.y + Math.sin(angle) * radius}`;
-  }).join(" ");
-}
-
-function hasMetricDistanceEvidence(
-  pod: InfraMapPod,
-  metricMode: InfraMapMetricMode,
-): boolean {
-  return infraMapPodMetricRatio(pod, metricMode) !== null;
-}
-
-function topologyEdge({
-  dashed = false,
-  id,
-  source,
-  sourceAngle,
-  target,
-  targetAngle,
-}: {
-  dashed?: boolean;
-  id: string;
-  source: string;
-  sourceAngle: number;
-  target: string;
-  targetAngle: number;
-}): Edge {
-  return {
-    id,
-    source,
-    sourceHandle: handleId("source", positionForAngle(sourceAngle)),
-    style: {
-      stroke: dashed ? TOPOLOGY_EDGE_STROKE_WEAK : TOPOLOGY_EDGE_STROKE,
-      strokeDasharray: dashed ? TOPOLOGY_METRIC_INFERRED_EDGE_DASH : undefined,
-      strokeWidth: dashed ? 1.2 : 1.6,
-    },
-    target,
-    targetHandle: handleId("target", positionForAngle(targetAngle)),
-    type: "straight",
-  };
-}
-
-function positionForAngle(angle: number): typeof HANDLE_POSITIONS[number] {
-  const normalized = Math.atan2(Math.sin(angle), Math.cos(angle));
-  if (normalized >= -Math.PI / 4 && normalized < Math.PI / 4) return Position.Right;
-  if (normalized >= Math.PI / 4 && normalized < (Math.PI * 3) / 4) return Position.Bottom;
-  if (normalized < -Math.PI / 4 && normalized >= (-Math.PI * 3) / 4) return Position.Top;
-  return Position.Left;
-}
-
-function handleId(type: "source" | "target", position: typeof HANDLE_POSITIONS[number]): string {
-  return `${type}-${position}`;
 }
 
 function InvisibleHandles({
@@ -1115,26 +728,34 @@ function ClusterGraphNode({ data }: NodeProps<Extract<InfraTopologyNode, { type:
   return (
     <>
       <InvisibleHandles source />
-      <ClusterStaticCard cluster={data.cluster} />
+      <ClusterStaticCard cluster={data.cluster} showTooltip={false} />
     </>
   );
 }
 
-function ClusterStaticCard({ cluster }: { cluster: InfraMapTopologyCluster }) {
+function ClusterStaticCard({
+  cluster,
+  showTooltip = true,
+}: {
+  cluster: InfraMapTopologyCluster;
+  showTooltip?: boolean;
+}) {
   const { formatNumber, t } = useI18n();
+  const trigger = (
+    <article
+      aria-label={cluster.name}
+      className="grid size-16 place-items-center rounded-full border border-primary/25 bg-primary/8 text-primary shadow-sm transition-[border-color,transform] hover:-translate-y-0.5 hover:border-primary/50 motion-reduce:transform-none motion-reduce:transition-none"
+      data-slot="infra-map-topology-cluster-node"
+    >
+      <ShipWheel aria-hidden="true" className="size-8" />
+    </article>
+  );
+  if (!showTooltip) {
+    return trigger;
+  }
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={(
-          <article
-            aria-label={cluster.name}
-            className="grid size-16 place-items-center rounded-full border border-primary/25 bg-primary/8 text-primary shadow-sm transition-[border-color,transform] hover:-translate-y-0.5 hover:border-primary/50 motion-reduce:transform-none motion-reduce:transition-none"
-            data-slot="infra-map-topology-cluster-node"
-          />
-        )}
-      >
-        <ShipWheel aria-hidden="true" className="size-8" />
-      </TooltipTrigger>
+      <TooltipTrigger render={trigger} />
       <TooltipContent
         className="w-64 max-w-[calc(100vw-1rem)] p-0"
         role="tooltip"
@@ -1171,12 +792,18 @@ function ServerGraphNode({ data }: NodeProps<Extract<InfraTopologyNode, { type: 
   return (
     <>
       <InvisibleHandles source target />
-      <ServerStaticCard node={data.node} />
+      <ServerStaticCard node={data.node} showTooltip={false} />
     </>
   );
 }
 
-function ServerStaticCard({ node }: { node: InfraMapTopologyNode }) {
+function ServerStaticCard({
+  node,
+  showTooltip = true,
+}: {
+  node: InfraMapTopologyNode;
+  showTooltip?: boolean;
+}) {
   const { formatNumber, t } = useI18n();
   const nodeName = node.unassigned ? t("resources.infraMap.nodeUnassigned") : node.name;
   const cpuText = node.cpuRatio === null
@@ -1191,19 +818,21 @@ function ServerStaticCard({ node }: { node: InfraMapTopologyNode }) {
         capacity: formatNumber(node.podCapacity),
         count: formatNumber(node.podCount),
       });
+  const trigger = (
+    <article
+      aria-label={nodeName}
+      className="grid size-14 place-items-center rounded-xl border border-foreground/20 bg-card/95 text-foreground shadow-sm transition-[border-color,transform] hover:-translate-y-0.5 hover:border-foreground/45 motion-reduce:transform-none motion-reduce:transition-none"
+      data-slot="infra-map-topology-server-node"
+    >
+      <Server aria-hidden="true" className="size-7" />
+    </article>
+  );
+  if (!showTooltip) {
+    return trigger;
+  }
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={(
-          <article
-            aria-label={nodeName}
-            className="grid size-14 place-items-center rounded-xl border border-foreground/20 bg-card/95 text-foreground shadow-sm transition-[border-color,transform] hover:-translate-y-0.5 hover:border-foreground/45 motion-reduce:transform-none motion-reduce:transition-none"
-            data-slot="infra-map-topology-server-node"
-          />
-        )}
-      >
-        <Server aria-hidden="true" className="size-7" />
-      </TooltipTrigger>
+      <TooltipTrigger render={trigger} />
       <TooltipContent
         className="w-64 max-w-[calc(100vw-1rem)] p-0"
         role="tooltip"
@@ -1254,6 +883,7 @@ function PodGraphNode({ data }: NodeProps<Extract<InfraTopologyNode, { type: "in
           metricMode={data.metricMode}
           onOpenPod={data.onOpenPod}
           pod={data.pod}
+          showTooltip={false}
           size={data.size}
         />
       </div>

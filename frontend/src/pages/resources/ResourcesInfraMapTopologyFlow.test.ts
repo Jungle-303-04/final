@@ -141,7 +141,7 @@ describe("ResourcesInfraMapTopologyFlow", () => {
     expect(podCenters.some((center) => center.y < serverCenter.y)).toBe(true);
   });
 
-  it("pushes high-pressure and unhealthy pods farther from their node", () => {
+  it("keeps pod distance stable across health and pressure tones", () => {
     const graph = buildInfraTopologyFlowGraph(
       cluster({
         nodes: [
@@ -198,10 +198,15 @@ describe("ResourcesInfraMapTopologyFlow", () => {
       return pointDistance(serverCenter, nodeCenter(podNode!));
     };
 
-    expect(distance("warning-health")).toBeGreaterThan(distance("unknown"));
-    expect(distance("warning")).toBeGreaterThan(distance("healthy"));
-    expect(distance("danger")).toBeGreaterThan(distance("warning"));
-    expect(distance("critical")).toBeGreaterThan(distance("danger"));
+    const distances = [
+      "healthy",
+      "unknown",
+      "warning-health",
+      "warning",
+      "danger",
+      "critical",
+    ].map((podId) => Math.round(distance(podId)));
+    expect(new Set(distances).size).toBe(1);
   });
 
   it("uses dashed neutral edges when the selected metric cannot justify distance", () => {
@@ -305,8 +310,10 @@ describe("ResourcesInfraMapTopologyFlow", () => {
               podGroup("api", [
                 pod({
                   cpu: { request: 100, ratio: 0.9, value: 90 },
+                  health: "critical",
                   id: "pod:api",
                   name: "api",
+                  phase: "CrashLoopBackOff",
                 }),
               ]),
             ],
@@ -319,6 +326,69 @@ describe("ResourcesInfraMapTopologyFlow", () => {
     );
 
     expect(refreshed.layoutSignature).toBe(baseline.layoutSignature);
+    expect(positionsById(refreshed)).toEqual(positionsById(baseline));
+  });
+
+  it("keeps refit layout stable when refresh only reorders groups or pods", () => {
+    const baseline = buildInfraTopologyFlowGraph(
+      cluster({
+        nodes: [
+          topologyNode({
+            groups: [
+              podGroup("api", [
+                pod({ id: "pod:api-a", name: "api-a" }),
+                pod({ id: "pod:api-b", name: "api-b" }),
+              ]),
+              podGroup("worker", [
+                pod({ id: "pod:worker-a", name: "worker-a" }),
+              ]),
+            ],
+            id: "node-a",
+          }),
+          topologyNode({
+            groups: [
+              podGroup("gateway", [
+                pod({ id: "pod:gateway-a", name: "gateway-a" }),
+              ]),
+            ],
+            id: "node-b",
+          }),
+        ],
+      }),
+      "memory",
+      vi.fn(),
+    );
+    const reordered = buildInfraTopologyFlowGraph(
+      cluster({
+        nodes: [
+          topologyNode({
+            groups: [
+              podGroup("gateway", [
+                pod({ id: "pod:gateway-a", name: "gateway-a" }),
+              ]),
+            ],
+            id: "node-b",
+          }),
+          topologyNode({
+            groups: [
+              podGroup("worker", [
+                pod({ id: "pod:worker-a", name: "worker-a" }),
+              ]),
+              podGroup("api", [
+                pod({ id: "pod:api-b", name: "api-b" }),
+                pod({ id: "pod:api-a", name: "api-a" }),
+              ]),
+            ],
+            id: "node-a",
+          }),
+        ],
+      }),
+      "memory",
+      vi.fn(),
+    );
+
+    expect(reordered.layoutSignature).toBe(baseline.layoutSignature);
+    expect(positionsById(reordered)).toEqual(positionsById(baseline));
   });
 
   it("does not invent pod icon scale when request data is missing", () => {
@@ -446,6 +516,20 @@ function nodeCenter(
     x: node.position.x + size / 2,
     y: node.position.y + size / 2,
   };
+}
+
+function positionsById(
+  graph: ReturnType<typeof buildInfraTopologyFlowGraph>,
+): Record<string, { x: number; y: number }> {
+  return Object.fromEntries(
+    graph.nodes.map((node) => [
+      node.id,
+      {
+        x: Math.round(node.position.x * 1000) / 1000,
+        y: Math.round(node.position.y * 1000) / 1000,
+      },
+    ]),
+  );
 }
 
 function pointDistance(

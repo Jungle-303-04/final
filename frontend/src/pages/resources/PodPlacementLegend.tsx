@@ -2,7 +2,12 @@ import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 
-type PodPlacementLegendVariant = "infra-card" | "infra-navigator" | "infra-topology" | "physical";
+type PodPlacementLegendVariant =
+  | "infra-card"
+  | "infra-navigator"
+  | "infra-topology"
+  | "infra-traffic"
+  | "physical";
 
 export function PodPlacementLegend({
   ariaLabel,
@@ -42,12 +47,18 @@ type LegendMarkKind =
   | "abnormal-card"
   | "dashed-card"
   | "dashed-line"
+  | "healthy-dot"
   | "healthy-card"
   | "node-bar"
   | "pod-dot"
+  | "pod-hex"
+  | "pod-hex-size"
   | "pod-size"
+  | "pressure-dot"
   | "pressure-card"
-  | "solid-line";
+  | "solid-line"
+  | "traffic-flow"
+  | "traffic-node";
 
 interface LegendItem {
   labelKey:
@@ -58,15 +69,19 @@ interface LegendItem {
     | "resources.infraMap.legend.card.unknown"
     | "resources.infraMap.legend.card.usage.cpu"
     | "resources.infraMap.legend.card.usage.memory"
+    | "resources.infraMap.legend.status.critical"
+    | "resources.infraMap.legend.status.healthy"
+    | "resources.infraMap.legend.status.pressure"
     | "resources.infraMap.legend.navigator.edge"
     | "resources.infraMap.legend.navigator.node"
     | "resources.infraMap.legend.navigator.podSize"
     | "resources.infraMap.legend.navigator.podTone.cpu"
     | "resources.infraMap.legend.navigator.podTone.memory"
     | "resources.infraMap.legend.topology.edge"
-    | "resources.infraMap.legend.topology.health"
-    | "resources.infraMap.legend.topology.issue"
-    | "resources.infraMap.legend.topology.metricUnknown";
+    | "resources.infraMap.legend.topology.metricUnknown"
+    | "resources.infraMap.legend.traffic.flow"
+    | "resources.infraMap.legend.traffic.node"
+    | "resources.infraMap.legend.traffic.unavailable";
   mark: LegendMarkKind;
 }
 
@@ -77,34 +92,41 @@ function legendItems(
   if (variant === "infra-topology") {
     return [
       { labelKey: "resources.infraMap.legend.topology.edge", mark: "solid-line" },
-      { labelKey: "resources.infraMap.legend.topology.health", mark: "pod-dot" },
-      { labelKey: "resources.infraMap.legend.topology.issue", mark: "abnormal-card" },
+      { labelKey: "resources.infraMap.legend.status.healthy", mark: "healthy-dot" },
+      { labelKey: "resources.infraMap.legend.status.pressure", mark: "pressure-dot" },
+      { labelKey: "resources.infraMap.legend.status.critical", mark: "abnormal-card" },
       { labelKey: "resources.infraMap.legend.topology.metricUnknown", mark: "dashed-line" },
     ];
   }
   if (variant === "infra-navigator") {
     return [
-      { labelKey: "resources.infraMap.legend.navigator.edge", mark: "solid-line" },
       { labelKey: "resources.infraMap.legend.navigator.node", mark: "node-bar" },
       {
         labelKey: metricMode === "cpu"
           ? "resources.infraMap.legend.navigator.podTone.cpu"
           : "resources.infraMap.legend.navigator.podTone.memory",
-        mark: "pod-dot",
+        mark: "pod-hex",
       },
-      { labelKey: "resources.infraMap.legend.navigator.podSize", mark: "pod-size" },
+      { labelKey: "resources.infraMap.legend.navigator.podSize", mark: "pod-hex-size" },
+    ];
+  }
+  if (variant === "infra-traffic") {
+    return [
+      { labelKey: "resources.infraMap.legend.traffic.flow", mark: "traffic-flow" },
+      { labelKey: "resources.infraMap.legend.traffic.node", mark: "traffic-node" },
+      { labelKey: "resources.infraMap.legend.traffic.unavailable", mark: "dashed-line" },
     ];
   }
   if (variant === "infra-card") {
     return [
-      { labelKey: "resources.graph.physical.legend.healthy", mark: "healthy-card" },
+      { labelKey: "resources.infraMap.legend.status.healthy", mark: "healthy-card" },
       {
         labelKey: metricMode === "cpu"
           ? "resources.infraMap.legend.card.usage.cpu"
           : "resources.infraMap.legend.card.usage.memory",
         mark: "pressure-card",
       },
-      { labelKey: "resources.graph.physical.legend.abnormal", mark: "abnormal-card" },
+      { labelKey: "resources.infraMap.legend.status.critical", mark: "abnormal-card" },
       { labelKey: "resources.infraMap.legend.card.unknown", mark: "dashed-card" },
     ];
   }
@@ -139,9 +161,76 @@ function LegendMark({ kind }: { kind: LegendMarkKind }) {
           <span className="h-0.5 w-3 rounded-full bg-muted-foreground/70" />
         </span>
       );
+    case "traffic-flow":
+      return (
+        <svg aria-hidden="true" className="h-3.5 w-7 text-sky-500" viewBox="0 0 28 14">
+          <path
+            d="M2 10 C8 2 18 2 26 8"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="3"
+          />
+        </svg>
+      );
+    case "traffic-node":
+      return (
+        <span
+          aria-hidden="true"
+          className="grid size-3.5 place-items-center rounded border border-sky-500/70 bg-sky-500/20"
+        >
+          <span className="size-1.5 rounded-full bg-sky-500" />
+        </span>
+      );
     case "pod-dot":
       return (
         <span aria-hidden="true" className="size-3.5 rounded-full border border-emerald-500/70 bg-emerald-500/60" />
+      );
+    case "healthy-dot":
+      return (
+        <span aria-hidden="true" className="size-3.5 rounded-full border border-emerald-500/75 bg-emerald-500/80" />
+      );
+    case "pressure-dot":
+      return (
+        <span aria-hidden="true" className="size-3.5 rounded-full border border-orange-500/75 bg-orange-500/80" />
+      );
+    case "pod-hex":
+      return (
+        <svg aria-hidden="true" className="size-4 text-emerald-500" viewBox="0 0 16 16">
+          <polygon
+            fill="currentColor"
+            fillOpacity="0.38"
+            points="8,1.5 13.6,4.75 13.6,11.25 8,14.5 2.4,11.25 2.4,4.75"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+          />
+        </svg>
+      );
+    case "pod-hex-size":
+      return (
+        <span aria-hidden="true" className="flex h-4 w-8 items-center gap-1">
+          <svg className="size-3 text-emerald-500" viewBox="0 0 16 16">
+            <polygon
+              fill="currentColor"
+              fillOpacity="0.32"
+              points="8,1.5 13.6,4.75 13.6,11.25 8,14.5 2.4,11.25 2.4,4.75"
+              stroke="currentColor"
+              strokeLinejoin="round"
+              strokeWidth="1.4"
+            />
+          </svg>
+          <svg className="size-4 text-orange-500" viewBox="0 0 16 16">
+            <polygon
+              fill="currentColor"
+              fillOpacity="0.28"
+              points="8,1.5 13.6,4.75 13.6,11.25 8,14.5 2.4,11.25 2.4,4.75"
+              stroke="currentColor"
+              strokeLinejoin="round"
+              strokeWidth="1.4"
+            />
+          </svg>
+        </span>
       );
     case "pod-size":
       return (

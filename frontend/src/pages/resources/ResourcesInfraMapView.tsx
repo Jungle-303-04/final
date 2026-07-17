@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primiti
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { ResourcesInfraMapTopologyView } from "./ResourcesInfraMapTopologyView";
 import { ResourcesInfraMapNavigatorView } from "./ResourcesInfraMapNavigatorView";
+import { ResourcesInfraMapTrafficView } from "./ResourcesInfraMapTrafficView";
 import { InfraMapNodeCard } from "./ResourcesInfraMapNodeCard";
 import { PodPlacementLegend } from "./PodPlacementLegend";
 import {
@@ -24,10 +25,11 @@ import {
 import type { InfraMapModel } from "./resourcesInfraMapModel";
 import type { InfraMapFocusItem } from "./useInfraMapFocusDetails";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
+import type { TrafficOverviewRequest, TrafficPort } from "../../features/traffic/trafficContract";
 
-type InfraMapViewerMode = "card" | "navigator" | "topology";
+type InfraMapViewerMode = "card" | "navigator" | "topology" | "traffic";
 
-const INFRA_MAP_VIEWER_MODES: InfraMapViewerMode[] = ["card", "topology", "navigator"];
+const INFRA_MAP_VIEWER_MODES: InfraMapViewerMode[] = ["card", "topology", "navigator", "traffic"];
 const INFRA_MAP_LOADING_NODE_SKELETON_COUNT = 2;
 
 export function ResourcesInfraMapView({
@@ -40,6 +42,8 @@ export function ResourcesInfraMapView({
   onShowMorePods,
   phase,
   selectedFocus,
+  trafficPort,
+  trafficRequest,
 }: {
   focusOptions: readonly InfraMapFocusItem[];
   model: InfraMapModel | null;
@@ -50,6 +54,8 @@ export function ResourcesInfraMapView({
   onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
   phase: PhysicalTopologyFrame["phase"];
   selectedFocus: readonly InfraMapFocusItem[];
+  trafficPort: TrafficPort;
+  trafficRequest: TrafficOverviewRequest;
 }) {
   const { t } = useI18n();
   const [metricMode, setMetricMode] = useState<InfraMapMetricMode>("cpu");
@@ -77,17 +83,19 @@ export function ResourcesInfraMapView({
         </div>
         <InfraMapViewerTabs onChange={setViewerMode} value={viewerMode} />
       </div>
-      <div className="mt-4 flex min-w-0 items-center gap-2">
-        <InfraMapMetricTabs onChange={setMetricMode} value={metricMode} />
-        <InfraMapFocusChips
-          items={selectedFocus}
-          onRemove={onFocusRemove}
-        />
-        <InfraMapFocusPicker
-          options={availableFocusOptions}
-          onSelect={onFocusSelect}
-        />
-      </div>
+      {viewerMode === "traffic" ? null : (
+        <div className="mt-4 flex min-w-0 items-center gap-2">
+          <InfraMapMetricTabs onChange={setMetricMode} value={metricMode} />
+          <InfraMapFocusChips
+            items={selectedFocus}
+            onRemove={onFocusRemove}
+          />
+          <InfraMapFocusPicker
+            options={availableFocusOptions}
+            onSelect={onFocusSelect}
+          />
+        </div>
+      )}
       <PodPlacementLegend
         ariaLabel={`${t("resources.infraMap.title")} ${t("resources.graph.physical.legend")}`}
         className="mt-3 rounded-lg border bg-background/45 px-3 py-2"
@@ -103,6 +111,8 @@ export function ResourcesInfraMapView({
         onRetry={onRetry}
         onShowMorePods={onShowMorePods}
         phase={phase}
+        trafficPort={trafficPort}
+        trafficRequest={trafficRequest}
         viewerMode={viewerMode}
       />
     </div>
@@ -157,6 +167,8 @@ function InfraMapViewerContent({
   onRetry,
   onShowMorePods,
   phase,
+  trafficPort,
+  trafficRequest,
   viewerMode,
 }: {
   metricMode: InfraMapMetricMode;
@@ -165,6 +177,8 @@ function InfraMapViewerContent({
   onRetry: () => void;
   onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
   phase: PhysicalTopologyFrame["phase"];
+  trafficPort: TrafficPort;
+  trafficRequest: TrafficOverviewRequest;
   viewerMode: InfraMapViewerMode;
 }) {
   return (
@@ -179,6 +193,11 @@ function InfraMapViewerContent({
             metricMode={metricMode}
             model={model}
             onOpenPod={onOpenPod}
+          />
+        ) : viewerMode === "traffic" ? (
+          <ResourcesInfraMapTrafficView
+            port={trafficPort}
+            request={trafficRequest}
           />
         ) : viewerMode === "navigator" ? (
           <ResourcesInfraMapNavigatorView
@@ -335,18 +354,21 @@ function infraMapViewerLabel(
 ): string {
   if (option === "card") return t("resources.infraMap.viewer.card");
   if (option === "topology") return t("resources.infraMap.viewer.topology");
+  if (option === "traffic") return t("resources.infraMap.viewer.traffic");
   return t("resources.infraMap.viewer.navigator");
 }
 
 function infraMapLegendVariant(mode: InfraMapViewerMode) {
   if (mode === "topology") return "infra-topology";
   if (mode === "navigator") return "infra-navigator";
+  if (mode === "traffic") return "infra-traffic";
   return "infra-card";
 }
 
 function infraMapDescriptionKey(mode: InfraMapViewerMode) {
   if (mode === "topology") return "resources.infraMap.description.topology";
   if (mode === "navigator") return "resources.infraMap.description.navigator";
+  if (mode === "traffic") return "resources.infraMap.description.traffic";
   return "resources.infraMap.description.card";
 }
 
