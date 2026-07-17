@@ -1,14 +1,34 @@
 from __future__ import annotations
 
+import importlib.util
 import subprocess
+import sys
+from pathlib import Path
+from types import ModuleType
 
 from packages.contracts.helm.operations import (
     HelmReleaseGuard,
     HelmReleaseOperationCommandPayload,
 )
-from services.target.cluster_agent.commands.helm import run_helm_release_operation
-
 from packages.contracts.parity import ResourceRef
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+RUNNER_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "commands" / "helm.py"
+
+
+def load_runner_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "test_helm_release_operations_runner", RUNNER_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load module: {RUNNER_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(spec.name, None)
+    return module
 
 
 def _guard() -> HelmReleaseGuard:
@@ -47,7 +67,7 @@ def test_release_rollback_revalidates_status_then_runs_bounded_exact_revision() 
             stderr="",
         )
 
-    result = run_helm_release_operation(
+    result = load_runner_module().run_helm_release_operation(
         HelmReleaseOperationCommandPayload(
             operation="rollback",
             namespace="sandbox",
@@ -89,7 +109,7 @@ def test_release_uninstall_fails_closed_when_agent_status_evidence_is_stale() ->
         stale = _status().replace('"version":3', '"version":4')
         return subprocess.CompletedProcess(args, 0, stdout=stale, stderr="")
 
-    result = run_helm_release_operation(
+    result = load_runner_module().run_helm_release_operation(
         HelmReleaseOperationCommandPayload(
             operation="uninstall",
             namespace="sandbox",

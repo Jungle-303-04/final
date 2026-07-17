@@ -15,6 +15,12 @@ from packages.contracts.helm.artifacts import (
     HelmResourceFieldChange,
     HelmResourcesDiff,
 )
+from packages.contracts.helm.operations import (
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
+    HelmReleaseGuard,
+    HelmReleaseOperationCommandPayload,
+)
 from packages.contracts.helm.releases import (
     HELM_UPGRADE_BATCH_MAX_RELEASES,
     HelmAvailability,
@@ -87,6 +93,10 @@ __all__ = [
     "HelmReleaseUpgradeInfo",
     "HelmReleaseUpgradeBatch",
     "HelmReleaseUpgradeRequest",
+    "HELM_RELEASE_OPERATION_ACTION",
+    "HELM_RELEASE_OPERATION_CAPABILITY",
+    "HelmReleaseGuard",
+    "HelmReleaseOperationCommandPayload",
     "HelmReleaseVersionList",
     "HelmResourceFieldChange",
     "HelmResourceHealthAvailability",

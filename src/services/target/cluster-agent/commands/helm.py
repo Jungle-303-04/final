@@ -37,6 +37,8 @@ from packages.contracts.helm import (
     HelmArtifactResult,
     HelmHookDiffItem,
     HelmHooksDiff,
+    HelmReleaseGuard,
+    HelmReleaseOperationCommandPayload,
     HelmRenderedResourceChange,
     HelmRenderedResourceRef,
     HelmResourceFieldChange,
@@ -255,6 +257,33 @@ def validate_catalog_helm_upgrade_secret(
     guard = payload.upgrade_guard
     if guard is None:
         return
+    validate_helm_release_secret(
+        observed,
+        namespace=payload.namespace,
+        release_name=payload.release_name,
+        guard=HelmReleaseGuard.model_validate(guard.model_dump(mode="json")),
+    )
+
+
+def validate_helm_release_operation_secret(
+    observed: Mapping[str, Any],
+    payload: HelmReleaseOperationCommandPayload,
+) -> None:
+    validate_helm_release_secret(
+        observed,
+        namespace=payload.namespace,
+        release_name=payload.release_name,
+        guard=payload.guard,
+    )
+
+
+def validate_helm_release_secret(
+    observed: Mapping[str, Any],
+    *,
+    namespace: str,
+    release_name: str,
+    guard: HelmReleaseGuard,
+) -> None:
     metadata_value = observed.get("metadata")
     metadata = metadata_value if isinstance(metadata_value, Mapping) else {}
     labels_value = metadata.get("labels")
@@ -262,15 +291,97 @@ def validate_catalog_helm_upgrade_secret(
     if (
         str(observed.get("apiVersion") or "") != "v1"
         or str(observed.get("kind") or "").casefold() != "secret"
-        or str(metadata.get("namespace") or "") != payload.namespace
+        or str(metadata.get("namespace") or "") != namespace
         or str(metadata.get("name") or "") != guard.storage.name
         or str(metadata.get("uid") or "") != guard.storage.uid
         or str(metadata.get("resourceVersion") or "") != guard.storage_resource_version
         or str(labels.get("owner") or "").casefold() != "helm"
-        or str(labels.get("name") or "") != payload.release_name
+        or str(labels.get("name") or "") != release_name
         or str(labels.get("version") or "") != str(guard.expected_revision)
     ):
         raise ValueError("Helm release storage identity is stale")
+
+
+def run_helm_release_operation(
+    payload: HelmReleaseOperationCommandPayload,
+    *,
+    helm_binary: str | None = None,
+    run: RunCommand = subprocess.run,
+) -> HelmRunResult:
+    """Run one guarded Helm mutation with an absolute subprocess deadline."""
+
+    executable = helm_binary or shutil.which("helm")
+    if not executable:
+        return HelmRunResult(False, "helm_not_available")
+    try:
+        payload.guard.validate_target(
+            namespace=payload.namespace,
+            release_name=payload.release_name,
+        )
+        if payload.namespace != Sandbox.NAMESPACE or not control_namespace_allowed(
+            payload.namespace
+        ):
+            raise ValueError("Helm release operation namespace is not allowed")
+    except ValueError:
+        return HelmRunResult(False, "helm_release_operation_validation_error")
+
+    with tempfile.TemporaryDirectory(prefix="helm-release-operation-") as tmp:
+        runtime_dir = Path(tmp)
+        runtime_dir.chmod(0o700)
+        env = helm_subprocess_env(runtime_dir)
+        guard_result = _validate_release_status(
+            executable,
+            release_name=payload.release_name,
+            namespace=payload.namespace,
+            guard=payload.guard,
+            run=run,
+            env=env,
+        )
+        if guard_result is not None:
+            return guard_result
+        if payload.operation == "rollback":
+            args = [
+                executable,
+                "rollback",
+                payload.release_name,
+                str(payload.rollback_revision),
+                "--namespace",
+                payload.namespace,
+                "--wait",
+                "--cleanup-on-fail",
+                "--timeout",
+                f"{HELM_OPERATION_TIMEOUT_SECONDS}s",
+            ]
+        else:
+            args = [
+                executable,
+                "uninstall",
+                payload.release_name,
+                "--namespace",
+                payload.namespace,
+                "--wait",
+                "--timeout",
+                f"{HELM_OPERATION_TIMEOUT_SECONDS}s",
+            ]
+        try:
+            completed = run(
+                args,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=HELM_SUBPROCESS_TIMEOUT_SECONDS,
+                shell=False,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return HelmRunResult(False, "helm_timeout")
+        except (FileNotFoundError, PermissionError):
+            return HelmRunResult(False, "helm_not_available")
+        except OSError:
+            return HelmRunResult(False, "helm_execution_error")
+    if completed.returncode != 0:
+        return HelmRunResult(False, "helm_exit_nonzero", completed.returncode)
+    return HelmRunResult(True, returncode=completed.returncode)
 
 
 def _validate_live_helm_status(
@@ -283,12 +394,31 @@ def _validate_live_helm_status(
     guard = payload.upgrade_guard
     if guard is None:
         return None
+    return _validate_release_status(
+        executable,
+        release_name=payload.release_name,
+        namespace=payload.namespace,
+        guard=HelmReleaseGuard.model_validate(guard.model_dump(mode="json")),
+        run=run,
+        env=env,
+    )
+
+
+def _validate_release_status(
+    executable: str,
+    *,
+    release_name: str,
+    namespace: str,
+    guard: HelmReleaseGuard,
+    run: RunCommand,
+    env: dict[str, str],
+) -> HelmRunResult | None:
     args = [
         executable,
         "status",
-        payload.release_name,
+        release_name,
         "--namespace",
-        payload.namespace,
+        namespace,
         "--output",
         "json",
     ]
@@ -322,8 +452,8 @@ def _validate_live_helm_status(
     metadata_value = chart.get("metadata")
     chart_metadata = metadata_value if isinstance(metadata_value, Mapping) else {}
     if (
-        str(status.get("name") or "") != payload.release_name
-        or str(status.get("namespace") or "") != payload.namespace
+        str(status.get("name") or "") != release_name
+        or str(status.get("namespace") or "") != namespace
         or str(status.get("version") or "") != str(guard.expected_revision)
         or str(chart_metadata.get("name") or "") != guard.chart_name
         or not str(chart_metadata.get("version") or "")
