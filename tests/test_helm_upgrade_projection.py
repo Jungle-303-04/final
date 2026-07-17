@@ -74,6 +74,18 @@ def test_release_version_resolution_never_guesses_between_same_named_sources() -
     assert resolution.reason_codes == ("helm_chart_source_ambiguous",)
 
 
+def test_release_version_resolution_rejects_a_single_source_without_current_version() -> None:
+    resolution = resolve_helm_release_versions(
+        "1.2.3",
+        (_observation("source-a", "2.0.0", "1.9.0"),),
+    )
+
+    assert resolution.availability == "unavailable"
+    assert resolution.source is None
+    assert resolution.versions == ()
+    assert resolution.reason_codes == ("helm_chart_source_current_version_not_found",)
+
+
 def test_upgrade_projection_preserves_partial_provider_evidence_and_exact_versions() -> None:
     resolution = resolve_helm_release_versions(
         "1.2.3",

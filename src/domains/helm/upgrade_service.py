@@ -21,7 +21,7 @@ from packages.contracts.helm.sources import (
     HelmChartVersionObservation,
     HelmChartVersionResolution,
 )
-from packages.contracts.identity import Permission
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.security.credentials import CredentialEncryptionError
 
 HELM_UPGRADE_MAX_SOURCES = 20
@@ -40,7 +40,9 @@ async def resolve_helm_release_catalogs(
     keyed = {helm_release_upgrade_key(release): release for release in releases}
     if not keyed:
         return {}
-    workspace_id = str(getattr(current, "workspace_id", "") or "")
+    workspace_id = str(
+        getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID) or DEFAULT_WORKSPACE_ID
+    )
     source_ids = await accessible_helm_chart_source_ids(
         db,
         current,

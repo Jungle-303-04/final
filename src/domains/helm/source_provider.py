@@ -587,13 +587,16 @@ def resolve_helm_release_versions(
     selected: HelmChartVersionObservation | None = None
     if len(current_matches) == 1:
         selected = current_matches[0]
-    elif len(current_matches) > 1 or len(candidates) > 1:
+    elif len(current_matches) > 1:
         return HelmChartVersionResolution(
             availability="unavailable",
             reason_codes=("helm_chart_source_ambiguous",),
         )
-    elif len(candidates) == 1:
-        selected = candidates[0]
+    elif candidates:
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=("helm_chart_source_current_version_not_found",),
+        )
     if selected is None:
         reasons = tuple(
             sorted(
