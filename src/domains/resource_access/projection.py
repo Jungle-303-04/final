@@ -7,14 +7,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.contracts.resource_access import (
     KubernetesBindingRef,
     KubernetesBindingRules,
     KubernetesBindingWithSubjects,
+    KubernetesExecutionAccessResponse,
     KubernetesInheritedGroup,
     KubernetesNamespaceAccessResponse,
     KubernetesPodRef,
     KubernetesPolicyRule,
+    KubernetesRestrictedResourceType,
     KubernetesRoleAccessResponse,
     KubernetesRoleRef,
     KubernetesSubject,
@@ -253,6 +256,123 @@ def access_snapshot_from_inventory(snapshot: Mapping[str, object] | None) -> Map
     if not isinstance(access, Mapping):
         raise ResourceAccessUnavailable("Kubernetes RBAC observation is unavailable")
     return access
+
+
+def agent_execution_access_projection(
+    inventory_snapshot: Mapping[str, object],
+    *,
+    namespace: str,
+) -> KubernetesExecutionAccessResponse:
+    """Project the cluster-agent ServiceAccount without impersonating the product user.
+
+    The management server consumes only the retained inventory cut. Kubernetes API
+    discovery and RBAC collection stay inside the existing agent telemetry registry.
+    """
+
+    if not namespace:
+        raise ValueError("namespace is required")
+    envelope = inventory_snapshot.get("summary")
+    source = envelope.get("summary") if isinstance(envelope, Mapping) else None
+    access = source.get("resource_access") if isinstance(source, Mapping) else None
+    discovery = source.get("api_resource_discovery") if isinstance(source, Mapping) else None
+    if not isinstance(access, Mapping):
+        raise ResourceAccessUnavailable("agent RBAC observation is unavailable")
+    if not isinstance(discovery, Mapping):
+        raise ResourceAccessUnavailable("agent discovery observation is unavailable")
+
+    index = _Index(access)
+    subject = _agent_execution_subject(index, inventory_snapshot.get("agent_id"))
+    bindings = _subject_bindings(index, subject)
+    applicable = tuple(
+        index.expanded(binding)
+        for binding in bindings
+        if binding.ref.kind == "ClusterRoleBinding" or binding.ref.namespace == namespace
+    )
+    cluster_wide = tuple(
+        index.expanded(binding) for binding in bindings if binding.ref.kind == "ClusterRoleBinding"
+    )
+    visible_rules, truncated = _flatten_rules(applicable)
+    resource_rules = tuple(rule for rule in visible_rules if rule.resources)
+    non_resource_rules = tuple(rule for rule in visible_rules if rule.non_resource_urls)
+
+    try:
+        catalog = ApiResourceDiscoveryObservation.model_validate(discovery)
+    except ValueError as exc:
+        raise ResourceAccessUnavailable("agent discovery observation is invalid") from exc
+    if catalog.completeness == "unavailable":
+        raise ResourceAccessUnavailable("agent discovery observation is unavailable")
+
+    all_applicable_rules = tuple(rule for binding in applicable for rule in binding.rules)
+    cluster_rules = tuple(rule for binding in cluster_wide for rule in binding.rules)
+    restricted = tuple(
+        KubernetesRestrictedResourceType(
+            api_group=resource.group,
+            version=resource.version,
+            resource=resource.name,
+            kind=resource.kind,
+            namespaced=resource.namespaced,
+        )
+        for resource in catalog.resources
+        if not _rules_allow_list(
+            all_applicable_rules if resource.namespaced else cluster_rules,
+            api_group=resource.group,
+            resource=resource.name,
+        )
+    )
+    return KubernetesExecutionAccessResponse(
+        observed_at=index.observed_at,
+        namespace=namespace,
+        subject=subject,
+        resource_rules=resource_rules,
+        non_resource_rules=non_resource_rules,
+        restricted_resource_types=restricted,
+        completeness=catalog.completeness,
+        reason_codes=tuple(catalog.reason_codes),
+        truncated=truncated,
+    )
+
+
+def _agent_execution_subject(index: _Index, agent_id: object) -> KubernetesSubject:
+    pod_name = str(agent_id or "")
+    candidates = {
+        (pod_namespace, service_account_name)
+        for _uid, pod_namespace, observed_pod_name, service_account_name in index.pod_subjects
+        if observed_pod_name == pod_name
+    }
+    if len(candidates) != 1:
+        raise ResourceAccessUnavailable("agent execution subject is unavailable")
+    subject_namespace, subject_name = next(iter(candidates))
+    return _subject("ServiceAccount", subject_namespace, subject_name)
+
+
+def _subject_bindings(index: _Index, subject: KubernetesSubject) -> tuple[_Binding, ...]:
+    bindings = list(
+        index.bindings_by_subject.get((subject.kind, subject.namespace, subject.name), ())
+    )
+    if subject.kind == "ServiceAccount":
+        for group_name in (
+            *IMPLICIT_SERVICE_ACCOUNT_GROUPS,
+            f"system:serviceaccounts:{subject.namespace}",
+        ):
+            bindings.extend(index.bindings_by_subject.get(("Group", "", group_name), ()))
+    unique = {
+        (binding.ref.kind, binding.ref.namespace, binding.ref.name): binding for binding in bindings
+    }
+    return _sorted_bindings(unique.values())
+
+
+def _rules_allow_list(
+    rules: tuple[KubernetesPolicyRule, ...],
+    *,
+    api_group: str,
+    resource: str,
+) -> bool:
+    return any(
+        ("list" in rule.verbs or "*" in rule.verbs)
+        and (api_group in rule.api_groups or "*" in rule.api_groups)
+        and (resource in rule.resources or "*" in rule.resources)
+        for rule in rules
+    )
 
 
 def _roles(

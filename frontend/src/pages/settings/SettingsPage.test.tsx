@@ -67,7 +67,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("pod.exec")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "네임스페이스 범위" }).textContent)
       .toContain("shop");
-    expect(screen.getByText("Kubernetes 사용자 규칙")).toBeTruthy();
+    expect(screen.getByText("Kubernetes 실행 권한")).toBeTruthy();
     expect(screen.getByText("cluster-agent")).toBeTruthy();
     expect(screen.getByText("get, list")).toBeTruthy();
     expect(screen.getByText("Deployment")).toBeTruthy();

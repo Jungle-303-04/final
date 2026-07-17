@@ -14,8 +14,8 @@ export function createSettingsAdapter(
   endpoints: SettingsEndpointDependencies,
 ): SettingsPort {
   return {
-    getAccessProfile: (clusterId, signal) => withPortFailure(async () => {
-      const value = await endpoints.getSettingsAccessProfile(clusterId, signal);
+    getAccessProfile: (clusterId, namespace, signal) => withPortFailure(async () => {
+      const value = await endpoints.getSettingsAccessProfile(clusterId, namespace, signal);
       return {
         workspaceId: value.workspace_id,
         userId: value.user_id,
@@ -23,8 +23,10 @@ export function createSettingsAdapter(
         roles: [...value.roles],
         authority: value.authority,
         permissions: value.permissions.map((permission) => ({ ...permission })),
-        kubernetesRules: unavailableEvidence(value.kubernetes_rules),
-        restrictedResourceTypes: unavailableEvidence(value.restricted_resource_types),
+        kubernetesRules: kubernetesRulesEvidence(value.kubernetes_rules),
+        restrictedResourceTypes: restrictedResourceTypesEvidence(
+          value.restricted_resource_types,
+        ),
         revision: value.revision,
       } satisfies SettingsAccessProfile;
     }),
@@ -88,6 +90,56 @@ function unavailableEvidence(value: {
     status: value.status,
     reasonCode: value.reason_code,
     detail: value.detail,
+  };
+}
+
+function kubernetesRulesEvidence(
+  value: import("./settingsEndpointContract").SettingsAccessProfileEndpoint["kubernetes_rules"],
+): import("./settingsContract").SettingsAccessProfile["kubernetesRules"] {
+  if (value.status === "unavailable") return unavailableEvidence(value);
+  return {
+    status: value.status,
+    authority: value.authority,
+    namespace: value.namespace,
+    observedAt: value.observed_at,
+    subject: { ...value.subject },
+    resourceRules: value.resource_rules.map(policyRule),
+    nonResourceRules: value.non_resource_rules.map(policyRule),
+    truncated: value.truncated,
+  };
+}
+
+function restrictedResourceTypesEvidence(
+  value: import("./settingsEndpointContract").SettingsAccessProfileEndpoint["restricted_resource_types"],
+): import("./settingsContract").SettingsAccessProfile["restrictedResourceTypes"] {
+  if (value.status === "unavailable") return unavailableEvidence(value);
+  return {
+    status: value.status,
+    authority: value.authority,
+    namespace: value.namespace,
+    observedAt: value.observed_at,
+    completeness: value.completeness,
+    reasonCodes: [...value.reason_codes],
+    items: value.items.map((item) => ({
+      apiGroup: item.api_group,
+      version: item.version,
+      resource: item.resource,
+      kind: item.kind,
+      namespaced: item.namespaced,
+      reasonCode: item.reason_code,
+    })),
+  };
+}
+
+function policyRule(
+  value: import("./settingsEndpointContract").SettingsKubernetesPolicyRuleEndpoint,
+): import("./settingsContract").SettingsKubernetesPolicyRule {
+  return {
+    verbs: [...value.verbs],
+    apiGroups: [...value.api_groups],
+    resources: [...value.resources],
+    resourceNames: [...value.resource_names],
+    nonResourceUrls: [...value.non_resource_urls],
   };
 }
 

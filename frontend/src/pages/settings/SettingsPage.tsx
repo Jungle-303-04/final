@@ -228,17 +228,9 @@ function AccessPanel({
     queueMicrotask(() => {
       if (!active) return;
       setSelectedNamespace(null);
-      setAccess({ phase: "loading" });
+      setAccess({ phase: "idle" });
       setNamespaces({ phase: "loading" });
     });
-    void settingsPort.getAccessProfile(clusterId, controller.signal).then(
-      (data) => {
-        if (active) setAccess({ phase: "ready", data });
-      },
-      (error: unknown) => {
-        if (active && !isAbortError(error)) setAccess({ phase: "failed", error });
-      },
-    );
     void shellStatePort.getNamespaceScope(clusterId, controller.signal).then(
       (data) => {
         if (!active) return;
@@ -258,7 +250,32 @@ function AccessPanel({
       active = false;
       controller.abort();
     };
-  }, [clusterId, revision, settingsPort, shellStatePort]);
+  }, [clusterId, revision, shellStatePort]);
+
+  useEffect(() => {
+    if (clusterId === null || selectedNamespace === null) return;
+    const controller = new AbortController();
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setAccess({ phase: "loading" });
+    });
+    void settingsPort.getAccessProfile(
+      clusterId,
+      selectedNamespace,
+      controller.signal,
+    ).then(
+      (data) => {
+        if (active) setAccess({ phase: "ready", data });
+      },
+      (error: unknown) => {
+        if (active && !isAbortError(error)) setAccess({ phase: "failed", error });
+      },
+    );
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [clusterId, revision, selectedNamespace, settingsPort]);
 
   if (scope.selection.kind !== "selected" || clusterId === null) {
     return (
@@ -337,6 +354,7 @@ function AccessPanel({
                 onValueChange={(value) => {
                   if (typeof value !== "string") return;
                   userPickedNamespace.current = true;
+                  setAccess({ phase: "loading" });
                   setSelectedNamespace(value);
                 }}
                 value={selectedNamespace}
@@ -380,12 +398,12 @@ function AccessPanel({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <UnavailableEvidenceCard
-          description={access.data.kubernetesRules.detail}
+        <KubernetesRulesCard
+          evidence={access.data.kubernetesRules}
           title={t("settings.access.kubernetes.title")}
         />
-        <UnavailableEvidenceCard
-          description={access.data.restrictedResourceTypes.detail}
+        <RestrictedResourceTypesCard
+          evidence={access.data.restrictedResourceTypes}
           title={t("settings.access.restricted.title")}
         />
       </div>
@@ -633,6 +651,102 @@ function UnavailableEvidenceCard({
         </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
+    </Card>
+  );
+}
+
+function KubernetesRulesCard({
+  evidence,
+  title,
+}: {
+  evidence: SettingsAccessProfile["kubernetesRules"];
+  title: string;
+}) {
+  const { t } = useI18n();
+  if (evidence.status === "unavailable") {
+    return <UnavailableEvidenceCard description={evidence.detail} title={title} />;
+  }
+  const rules = [...evidence.resourceRules, ...evidence.nonResourceRules];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center gap-2">
+          <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-success" />
+          <span className="truncate">{title}</span>
+          <Badge className="ml-auto max-w-40 truncate" title={evidence.subject.name} variant="outline">
+            {evidence.subject.name}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          {t("settings.access.kubernetes.agentDescription", {
+            namespace: evidence.namespace,
+            subject: evidence.subject.name,
+          })}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid max-h-80 gap-2 overflow-y-auto">
+        {rules.length === 0 ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : rules.map((rule, index) => (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5" key={`${index}-${rule.verbs.join("-")}`}>
+            <Badge variant="outline">{rule.verbs.join(", ") || "—"}</Badge>
+            <span className="break-all text-xs text-muted-foreground">
+              {(rule.resources.length > 0 ? rule.resources : rule.nonResourceUrls).join(", ") || "—"}
+            </span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RestrictedResourceTypesCard({
+  evidence,
+  title,
+}: {
+  evidence: SettingsAccessProfile["restrictedResourceTypes"];
+  title: string;
+}) {
+  const { t } = useI18n();
+  if (evidence.status === "unavailable") {
+    return <UnavailableEvidenceCard description={evidence.detail} title={title} />;
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center gap-2">
+          <CircleOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{title}</span>
+          <Badge className="ml-auto" variant="outline">{evidence.items.length}</Badge>
+        </CardTitle>
+        <CardDescription>
+          {t("settings.access.restricted.agentDescription", {
+            namespace: evidence.namespace,
+          })}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {evidence.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {evidence.items.map((item) => (
+              <Badge
+                key={`${item.apiGroup}/${item.version}/${item.resource}`}
+                title={`${item.apiGroup || "core"}/${item.version}/${item.resource}`}
+                variant="outline"
+              >
+                {item.kind}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {evidence.completeness === "partial" ? (
+          <p className="break-words text-xs text-muted-foreground">
+            {evidence.reasonCodes.join(", ")}
+          </p>
+        ) : null}
+      </CardContent>
     </Card>
   );
 }

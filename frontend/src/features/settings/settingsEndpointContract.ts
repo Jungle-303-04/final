@@ -13,18 +13,59 @@ export interface SettingsAccessProfileEndpoint {
     status: "unavailable";
     reason_code: string;
     detail: string;
+  } | {
+    status: "observed";
+    authority: "cluster_agent_service_account";
+    namespace: string;
+    observed_at: string;
+    subject: SettingsKubernetesSubjectEndpoint;
+    resource_rules: SettingsKubernetesPolicyRuleEndpoint[];
+    non_resource_rules: SettingsKubernetesPolicyRuleEndpoint[];
+    truncated: boolean;
   };
   restricted_resource_types: {
     status: "unavailable";
     reason_code: string;
     detail: string;
+  } | {
+    status: "observed";
+    authority: "cluster_agent_service_account";
+    namespace: string;
+    observed_at: string;
+    completeness: "exact" | "partial";
+    reason_codes: string[];
+    items: SettingsRestrictedResourceTypeEndpoint[];
   };
   revision: string;
+}
+
+export interface SettingsKubernetesSubjectEndpoint {
+  kind: "ServiceAccount" | "User" | "Group";
+  namespace: string;
+  name: string;
+}
+
+export interface SettingsKubernetesPolicyRuleEndpoint {
+  verbs: string[];
+  api_groups: string[];
+  resources: string[];
+  resource_names: string[];
+  non_resource_urls: string[];
+}
+
+export interface SettingsRestrictedResourceTypeEndpoint {
+  api_group: string;
+  version: string;
+  resource: string;
+  kind: string;
+  namespaced: boolean;
+  reason_code: "list_permission_not_observed";
 }
 
 export interface SettingsEndpointDependencies {
   getSettingsAccessProfile(
     clusterId: string,
+    namespace: string,
     signal?: AbortSignal,
   ): Promise<SettingsAccessProfileEndpoint>;
   getPrometheusIntegration(

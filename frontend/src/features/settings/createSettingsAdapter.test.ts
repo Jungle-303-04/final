@@ -50,7 +50,7 @@ describe("createSettingsAdapter", () => {
       updatePrometheusIntegration: vi.fn(),
     });
 
-    await expect(adapter.getAccessProfile("cluster-a")).resolves.toEqual({
+    await expect(adapter.getAccessProfile("cluster-a", "shop")).resolves.toEqual({
       workspaceId: "workspace-a",
       userId: "user-a",
       clusterId: "cluster-a",
@@ -100,7 +100,7 @@ describe("createSettingsAdapter", () => {
       updatePrometheusIntegration: vi.fn(),
     });
 
-    await expect(adapter.getAccessProfile("cluster-a")).rejects.toMatchObject({
+    await expect(adapter.getAccessProfile("cluster-a", "shop")).rejects.toMatchObject({
       code: "forbidden",
     });
   });

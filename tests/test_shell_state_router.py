@@ -335,6 +335,25 @@ def test_settings_access_merges_product_rbac_with_agent_execution_authority() ->
     assert len(body["revision"]) == 64
 
 
+def test_settings_access_fails_closed_when_agent_observation_is_missing() -> None:
+    db = ShellStateDb()
+    db.latest_inventory_snapshot = lambda *_args: None  # type: ignore[method-assign]
+
+    response = _client(db, ShellStateEvents()).get(
+        "/settings/access",
+        params={"cluster_id": "cluster-a", "namespace": "shop"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kubernetes_rules"]["status"] == "unavailable"
+    assert body["kubernetes_rules"]["reason_code"] == "agent_access_evidence_unavailable"
+    assert body["restricted_resource_types"]["status"] == "unavailable"
+    assert (
+        body["restricted_resource_types"]["reason_code"] == "agent_discovery_evidence_unavailable"
+    )
+
+
 def _client(db: ShellStateDb, events: ShellStateEvents) -> TestClient:
     app = FastAPI()
     app.state.auth = SessionAuth()

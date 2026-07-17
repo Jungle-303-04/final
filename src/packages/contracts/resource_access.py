@@ -36,6 +36,29 @@ class KubernetesPolicyRule(StrictModel):
     non_resource_urls: tuple[str, ...] = ()
 
 
+class KubernetesRestrictedResourceType(StrictModel):
+    api_group: str = ""
+    version: str = Field(min_length=1)
+    resource: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespaced: bool
+    reason_code: Literal["list_permission_not_observed"] = "list_permission_not_observed"
+
+
+class KubernetesExecutionAccessResponse(StrictModel):
+    """Namespace-scoped execution authority derived from one agent observation."""
+
+    observed_at: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    subject: KubernetesSubject
+    resource_rules: tuple[KubernetesPolicyRule, ...] = ()
+    non_resource_rules: tuple[KubernetesPolicyRule, ...] = ()
+    restricted_resource_types: tuple[KubernetesRestrictedResourceType, ...] = ()
+    completeness: Literal["exact", "partial"]
+    reason_codes: tuple[str, ...] = ()
+    truncated: bool = False
+
+
 class KubernetesBindingRules(StrictModel):
     binding: KubernetesBindingRef
     role: KubernetesRoleRef
