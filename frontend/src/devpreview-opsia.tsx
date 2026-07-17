@@ -6,6 +6,7 @@ import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, X, Layers3, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network } from "lucide-react";
+import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -51,15 +52,15 @@ const NODES = [
   { id: "ip-10-1-0-42", cluster: "dev-eks", zone: "apne2-b", instance: "t3.large", cap: 10 },
 ];
 const SERVICES = [
-  { id: "shop-api", color: "#0A84FF", repo: "Jungle-303-04/final" },
-  { id: "shop-web", color: "#28A745", repo: "Jungle-303-04/final" },
-  { id: "checkout", color: "#E8930C", repo: "Jungle-303-04/final" },
-  { id: "payments", color: "#E5484D", repo: "Jungle-303-04/final" },
-  { id: "search", color: "#0FA3B1", repo: "Jungle-303-04/final" },
-  { id: "auth", color: "#8250DF", repo: "opsia/platform" },
-  { id: "redis", color: "#DC382C", repo: "opsia/platform" },
-  { id: "gateway", color: "#4C6EF5", repo: "opsia/platform" },
-  { id: "worker", color: "#12B5A5", repo: "opsia/platform" },
+  { id: "shop-api", color: "#0A84FF", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "shop-web", color: "#28A745", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "checkout", color: "#E8930C", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "payments", color: "#E5484D", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "search", color: "#0FA3B1", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "auth", color: "#8250DF", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
+  { id: "redis", color: "#DC382C", repo: "opsia/platform", ns: "platform", kind: "StatefulSet" },
+  { id: "gateway", color: "#4C6EF5", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
+  { id: "worker", color: "#12B5A5", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
 ];
 const SVC = Object.fromEntries(SERVICES.map((s) => [s.id, s])) as Record<string, (typeof SERVICES)[number]>;
 type SvcIconT = React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
@@ -208,7 +209,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
   const span = spanOf(node.cap);
   const cols = expanded ? 10 : span * 5;
   return (
-    <motion.div layoutId={`node-${node.id}`} transition={SPRING} onClick={expanded ? undefined : onOpen}
+    <motion.div transition={SPRING} onClick={expanded ? undefined : onOpen}
       style={{
         background: UI.card, borderRadius: 16, padding: expanded ? 24 : 16, border: `1px solid ${UI.line}`,
         boxShadow: "none", cursor: expanded ? "default" : "pointer", display: "flex", flexDirection: "column", gap: expanded ? 16 : 12, minWidth: 0, height: "100%", boxSizing: "border-box",
@@ -247,12 +248,45 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
           <Spark id={node.id} base={avgC} tick={tick} h={36} color={avgC >= 75 ? HP.warn : HP.ok} />
         </div>
       )}
-      <motion.div layout style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: expanded ? 8 : 4 }}>
-        {np.map((p) => <PodTile key={p.id} p={p} big={expanded} dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
-        {Array.from({ length: node.cap - np.length }).map((_, i) => (
-          <div key={`g${i}`} style={{ aspectRatio: "1", borderRadius: expanded ? 11 : 6.5, border: "1px dashed #E2E4E9", boxSizing: "border-box" }} />
-        ))}
-      </motion.div>
+      {expanded ? (
+        // 파드뷰: 워크로드(Deployment/StatefulSet) 그룹핑 + 네임스페이스 표기
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {(() => {
+            const bySvc = new Map<string, Pod[]>();
+            np.forEach((p) => { const arr = bySvc.get(p.svc) ?? []; arr.push(p); bySvc.set(p.svc, arr); });
+            const groups = [...bySvc.entries()].sort((a, b) => (b[1].some(isCrit) ? 1 : 0) - (a[1].some(isCrit) ? 1 : 0) || a[0].localeCompare(b[0]));
+            return groups.map(([svc, list]) => {
+              const meta = SVC[svc];
+              const worst = list.some(isCrit) ? HP.crit : list.some((p) => p.status === "Running" && health(p) >= 75) ? HP.warn : HP.ok;
+              return (
+                <div key={svc}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7, minWidth: 0 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: worst, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{svc}</span>
+                    <span style={{ fontSize: 10, color: UI.ink3 }}>{meta.kind} · ×{list.length}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 9.5, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 7px", fontFamily: MONO }}>{meta.ns}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+                    {list.map((p) => <PodTile key={p.id} p={p} big dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+          {node.cap - np.length > 0 && (
+            <div style={{ fontSize: 10, color: UI.ink3, display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 4, border: "1px dashed #E2E4E9", boxSizing: "border-box" }} />빈 슬롯 {node.cap - np.length}
+            </div>
+          )}
+        </div>
+      ) : (
+        <motion.div layout style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4 }}>
+          {np.map((p) => <PodTile key={p.id} p={p} big={false} dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
+          {Array.from({ length: node.cap - np.length }).map((_, i) => (
+            <div key={`g${i}`} style={{ aspectRatio: "1", borderRadius: 6.5, border: "1px dashed #E2E4E9", boxSizing: "border-box" }} />
+          ))}
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -269,7 +303,7 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
   const nodes = NODES.filter((n) => n.cluster === cl.id);
   const rel = cp.filter((p) => related.has(p.id)).length;
   return (
-    <motion.button layoutId={`cl-${cl.id}`} transition={SPRING} onClick={onOpen}
+    <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
       style={{
         display: "grid", gridTemplateColumns: "270px 1fr 140px 96px 56px", alignItems: "center", columnGap: 24,
@@ -331,7 +365,7 @@ function App() {
   };
   const [focusPod, setFocusPod] = useState<Pod | null>(null);
   const [lens, setLens] = useState<Lens>(null);
-  const [pin, setPin] = useState<Lens>(null);
+  const [pin, setPin] = useState<Lens>(() => readDevpreviewOpsiaPin(Object.keys(SVC)));
   const [tip, setTip] = useState<{ x: number; y: number; list: Pod[] } | null>(null);
   const onTip = (x: number, y: number, list: Pod[] | null) => setTip(list && list.length ? { x, y, list } : null);
 
@@ -367,6 +401,12 @@ function App() {
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />
               실시간 · {CLUSTERS.length} 클러스터 · {NODES.length} 노드 · {pods.length} 파드 · 임계 <b style={{ color: crit ? HP.crit : UI.ink, fontFamily: MONO }}>{crit}</b>
             </div>
+            {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
+            <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: 8, paddingLeft: 14, borderLeft: `1px solid ${UI.line}` }}>
+              {([["맵", "devpreview-opsia.html", true], ["토폴로지", "devpreview-topology.html", false], ["연결", "devpreview-connect.html", false], ["AI", "devpreview-ai.html", false]] as const).map(([l, href, act]) => (
+                <a key={l} href={`/${href}`} style={{ fontSize: 11.5, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? "rgba(17,19,24,0.05)" : "transparent" }}>{l}</a>
+              ))}
+            </nav>
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 11, fontWeight: 500, color: UI.ink2 }}>
             {([["정상", HP.ok], ["경고", HP.warn], ["임계", HP.crit], ["대기", HP.pending]] as const).map(([k, c]) => (
@@ -440,9 +480,9 @@ function App() {
             <AnimatePresence mode="popLayout" custom={{ dir, mode }} initial={false}>
               <motion.div key={viewKey} custom={{ dir, mode }}
                 variants={{
-                  initial: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0 } : { opacity: 0, x: 46 * c.dir, scale: 0.985, filter: "blur(7px)" }),
-                  animate: { opacity: 1, x: 0, scale: 1, filter: "blur(0px)" },
-                  exit: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, transition: { duration: 0.22 } } : { opacity: 0, x: -42 * c.dir, scale: 0.99, filter: "blur(7px)" }),
+                  initial: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, scale: c.dir === 1 ? 0.96 : 1.02, y: c.dir === 1 ? 10 : -6 } : { opacity: 0, x: 46 * c.dir, scale: 0.985, filter: "blur(7px)" }),
+                  animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
+                  exit: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, scale: c.dir === 1 ? 1.02 : 0.97, transition: { duration: 0.18 } } : { opacity: 0, x: -42 * c.dir, scale: 0.99, filter: "blur(7px)" }),
                 }}
                 initial="initial" animate="animate" exit="exit" transition={PAGE}>
 

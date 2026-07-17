@@ -1,13 +1,17 @@
-// ⚠ 데모 · 통합 서비스 토폴로지 — 트래픽 + 설정 의존성 + 소유(파드)를 한 화면에. 라이트모드. motion. 더미.
+// ⚠ 데모 · 서비스 토폴로지 v4 — 호출(트래픽) 전용 그래프.
+// 분업: 맵 = 물리 · 토폴로지 = 호출 · 렌즈 = 의존 · 상세 = 전체 스펙. 설정 의존성은 통합 맵 렌즈가 주인.
+// 드래그 재배치 + 방향 화살표 + 선 호버 = 수치 + 선 클릭 = 오류 상세 고정.
 import ReactDOM from "react-dom/client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
+import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
-const BLUE = "#2F5BFF";
-const PURPLE = "#A855F7";
-const ST = { ok: "#22C55E", warn: "#F59E0B", crit: "#EF4444" } as const;
+const UI = { bg: "#FAFAFC", card: "#FFFFFF", line: "#E9EAEE", ink: "#111318", ink2: "#5F6570", ink3: "#9AA0AA" } as const;
+const BLUE = "#0A84FF";
+const ST = { ok: "#2EBD5B", warn: "#FF9F0A", crit: "#FF453A" } as const;
+const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 
 type Status = "ok" | "warn" | "crit";
 type Svc = { id: string; name: string; kind: string; layer: number; replicas: number; status: Status };
@@ -35,148 +39,202 @@ const EDGES: TEdge[] = [
   { from: "checkout", to: "payments", rps: 210 }, { from: "checkout", to: "postgres", rps: 190 }, { from: "checkout", to: "notifier", rps: 90 },
   { from: "payments", to: "postgres", rps: 180 }, { from: "auth", to: "postgres", rps: 150 }, { from: "search", to: "redis", rps: 240 },
 ];
-type Cfg = { id: string; kind: "ConfigMap" | "Secret" };
-const CONFIGS: Cfg[] = [
-  { id: "app-config", kind: "ConfigMap" }, { id: "redis-config", kind: "ConfigMap" },
-  { id: "feature-flags", kind: "ConfigMap" }, { id: "db-credentials", kind: "Secret" }, { id: "tls-cert", kind: "Secret" },
-];
-const CFG_EDGES: Record<string, string[]> = {
-  "app-config": ["shop-web", "shop-api", "checkout", "search"],
-  "redis-config": ["shop-api", "search", "redis"],
-  "feature-flags": ["shop-web", "checkout"],
-  "db-credentials": ["checkout", "payments", "auth", "postgres"],
-  "tls-cert": ["ingress", "gateway"],
-};
-const CFG = (id: string) => CONFIGS.find((c) => c.id === id)!;
 
-// ── 좌표 ─────────────────────────────
-const VW = 940, VH = 540;
-const NW = 120, NH = 56;
-const LX = [16, 168, 320, 472, 624, 792];
+// ── 좌표 (초기 배치 — 드래그로 자유 이동) ─────────────────────────────
+const VW = 940, VH = 420;
+const NW = 124, NH = 58;
+const LX = [14, 168, 322, 476, 630, 792];
 const NY: Record<string, number> = {
   ingress: 176, gateway: 176,
   "shop-web": 92, "shop-api": 250,
   checkout: 54, search: 176, auth: 298,
   payments: 104, notifier: 250, redis: 104, postgres: 250,
 };
-const spos = (id: string) => ({ x: LX[SVC(id).layer], y: NY[id] });
-const CW = 126, CH = 40, CY = 470;
-const cx0 = (i: number) => 24 + i * 182;
-const cpos = (id: string) => ({ x: cx0(CONFIGS.findIndex((c) => c.id === id)), y: CY });
+const INIT: Record<string, { x: number; y: number }> = (() => {
+  const m: Record<string, { x: number; y: number }> = {};
+  SERVICES.forEach((s) => { m[s.id] = { x: LX[s.layer], y: NY[s.id] }; });
+  return m;
+})();
 
 const curve = (x1: number, y1: number, x2: number, y2: number, horiz = true) => {
   if (horiz) { const mx = (x1 + x2) / 2; return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`; }
   const my = (y1 + y2) / 2; return `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
 };
 
-// 선택 문맥: 서비스면 트래픽 이웃+쓰는 설정, 설정이면 소비 서비스
+// 상대 위치에 따라 좌/우/상/하 접점 자동 선택
+function anchors(a: { x: number; y: number }, b: { x: number; y: number }) {
+  if (b.x >= a.x + NW + 10) return { x1: a.x + NW, y1: a.y + NH / 2, x2: b.x, y2: b.y + NH / 2, dirX: 1, horiz: true };
+  if (b.x + NW <= a.x - 10) return { x1: a.x, y1: a.y + NH / 2, x2: b.x + NW, y2: b.y + NH / 2, dirX: -1, horiz: true };
+  if (b.y >= a.y + NH) return { x1: a.x + NW / 2, y1: a.y + NH, x2: b.x + NW / 2, y2: b.y, dirY: 1, horiz: false };
+  return { x1: a.x + NW / 2, y1: a.y, x2: b.x + NW / 2, y2: b.y + NH, dirY: -1, horiz: false };
+}
+const arrowAt = (an: ReturnType<typeof anchors>) => {
+  const { x2, y2 } = an;
+  if (an.horiz) return an.dirX === 1 ? `M ${x2 - 7} ${y2 - 3.6} L ${x2 - 0.5} ${y2} L ${x2 - 7} ${y2 + 3.6} Z` : `M ${x2 + 7} ${y2 - 3.6} L ${x2 + 0.5} ${y2} L ${x2 + 7} ${y2 + 3.6} Z`;
+  return an.dirY === 1 ? `M ${x2 - 3.6} ${y2 - 7} L ${x2} ${y2 - 0.5} L ${x2 + 3.6} ${y2 - 7} Z` : `M ${x2 - 3.6} ${y2 + 7} L ${x2} ${y2 + 0.5} L ${x2 + 3.6} ${y2 + 7} Z`;
+};
+
+// 선택 문맥: 트래픽 이웃
 function context(sel: string | null) {
   if (!sel) return null;
-  if (CFG_EDGES[sel]) return { svcs: new Set(CFG_EDGES[sel]), cfgs: new Set([sel]), center: sel };
   const svcs = new Set<string>([sel]);
   EDGES.forEach((e) => { if (e.from === sel) svcs.add(e.to); if (e.to === sel) svcs.add(e.from); });
-  const cfgs = new Set<string>();
-  Object.entries(CFG_EDGES).forEach(([c, list]) => { if (list.includes(sel)) cfgs.add(c); });
-  return { svcs, cfgs, center: sel };
+  return { svcs, center: sel };
 }
 
+// 엣지 메트릭 (더미)
+const edgeMetrics = (e: TEdge) => {
+  const st = SVC(e.to).status;
+  const err = st === "crit" ? 8.4 : st === "warn" ? 1.2 : 0.08;
+  const p99 = Math.round(38 + e.rps / 9 + (st === "crit" ? 220 : st === "warn" ? 60 : 0));
+  return { err, p99, st };
+};
 function App() {
-  const [sel, setSel] = useState<string | null>(null);
-  const [mode, setMode] = useState<"all" | "traffic" | "config">("all");
+  const [pos, setPos] = useState(INIT);
+  const [sel, setSel] = useState<string | null>(() => readDevpreviewTopologyFocus(SERVICES.map((s) => s.id)));
+  const [etip, setEtip] = useState<{ x: number; y: number; e: TEdge } | null>(null);
+  const [pinEdge, setPinEdge] = useState<TEdge | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
+
   const ctx = context(sel);
-  const svcLit = (id: string) => !ctx || ctx.svcs.has(id) || ctx.center === id;
-  const cfgLit = (id: string) => !ctx || ctx.cfgs.has(id);
+  const ekey = (e: TEdge) => `${e.from}-${e.to}`;
+
+  const svcLit = (id: string) => (pinEdge ? pinEdge.from === id || pinEdge.to === id : !ctx || ctx.svcs.has(id));
+  const P = (id: string) => pos[id];
+
+  const toVB = (cx: number, cy: number) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    return { x: ((cx - r.left) * VW) / r.width, y: ((cy - r.top) * VH) / r.height };
+  };
+  const startDrag = (id: string) => (e: React.PointerEvent) => {
+    const v = toVB(e.clientX, e.clientY);
+    dragRef.current = { id, dx: v.x - P(id).x, dy: v.y - P(id).y };
+    setDragId(id); setEtip(null);
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const d = dragRef.current; if (!d) return;
+    const v = toVB(e.clientX, e.clientY);
+    const x = Math.max(4, Math.min(VW - NW - 4, v.x - d.dx));
+    const y = Math.max(4, Math.min(VH - NH - 4, v.y - d.dy));
+    setPos((p) => ({ ...p, [d.id]: { x, y } }));
+  };
+  const endDrag = () => { dragRef.current = null; setDragId(null); };
 
   return (
     <div className="tp" style={{ minHeight: "100vh", padding: "44px 24px", display: "flex", justifyContent: "center" }}>
       <div style={{ width: 992, maxWidth: "100%" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", color: "#111318" }}>서비스 토폴로지</div>
-            <div style={{ fontSize: 12.5, color: "#8A93A0", marginTop: 3 }}>cluster-2 · shop · 트래픽 · 설정 의존성 · 소유를 한 화면에</div>
-          </div>
-          {/* 관계 강조 필터 */}
-          <div style={{ display: "flex", gap: 4, background: "#F2F3F7", borderRadius: 12, padding: 4 }}>
-            {([["all", "전체"], ["traffic", "트래픽"], ["config", "설정"]] as const).map(([id, label]) => {
-              const on = mode === id;
-              return (
-                <button key={id} onClick={() => setMode(id)} style={{ position: "relative", padding: "8px 14px", borderRadius: 9, border: "none", background: "transparent", cursor: "pointer" }}>
-                  {on && <motion.span layoutId="msw" style={{ position: "absolute", inset: 0, borderRadius: 9, background: BLUE, boxShadow: "0 4px 12px -3px rgba(47,91,255,0.5)" }} transition={{ type: "spring", visualDuration: 0.26, bounce: 0.18 }} />}
-                  <span style={{ position: "relative", fontSize: 12.5, fontWeight: 600, color: on ? "#fff" : "#565E6B" }}>{label}</span>
-                </button>
-              );
-            })}
-          </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
+          <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>
+          <div style={{ fontSize: 12, color: UI.ink3 }}>prod-eks · shop · 호출 흐름 — 드래그 재배치 · 더블클릭 = 맵에서 보기</div>
+          {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
+          <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
+            {([["맵", "devpreview-opsia.html", false], ["토폴로지", "devpreview-topology.html", true], ["연결", "devpreview-connect.html", false], ["AI", "devpreview-ai.html", false]] as const).map(([l, href, act]) => (
+              <a key={l} href={`/${href}`} style={{ fontSize: 11.5, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? "rgba(17,19,24,0.05)" : "transparent" }}>{l}</a>
+            ))}
+          </nav>
         </div>
 
-        <div style={{ background: "#fff", border: "1px solid rgba(17,19,24,0.06)", borderRadius: 22, padding: 18, boxShadow: "0 24px 60px -28px rgba(17,19,24,0.22), 0 2px 6px rgba(17,19,24,0.04)" }}>
-          <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display: "block" }} onMouseLeave={() => setSel(null)}>
+        <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, position: "relative" }}>
+          {/* 고정된 엣지 상세 — 오류를 머물러서 볼 수 있는 패널 */}
+          {pinEdge && (() => {
+            const m = edgeMetrics(pinEdge);
+            const bad = m.st !== "ok";
+            const seed = (pinEdge.from + pinEdge.to).split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
+            const errs = bad ? [
+              { t: `14:0${seed % 10}:${10 + (seed * 7) % 49}`, msg: m.st === "crit" ? "POST /pay → 502 · upstream timeout" : "GET /v1 → 429 · rate limited" },
+              { t: `14:0${(seed + 1) % 10}:${10 + (seed * 7 + 13) % 49}`, msg: m.st === "crit" ? "POST /pay → 503 · connection refused" : "GET /v1 → 504 · slow upstream" },
+              { t: `14:0${(seed + 2) % 10}:${10 + (seed * 7 + 26) % 49}`, msg: m.st === "crit" ? "GET /health → 500 · OOMKilled 직후" : "GET /v1 → 200 · 1.9s (p99 초과)" },
+            ] : [];
+            return (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0.12, visualDuration: 0.3 }}
+                style={{ position: "absolute", top: 14, right: 14, width: 268, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(10px)", border: `1px solid ${bad ? "#F0B8B4" : UI.line}`, borderRadius: 13, padding: 14, boxShadow: "0 16px 40px -18px rgba(17,19,24,0.25)", zIndex: 5 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {pinEdge.from} <span style={{ color: UI.ink3, fontWeight: 500 }}>→</span> {pinEdge.to}
+                  </span>
+                  <button onClick={() => setPinEdge(null)} style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 10, lineHeight: 1 }}>✕</button>
+                </div>
+                <div style={{ display: "flex", gap: 12, marginTop: 9, fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ color: UI.ink2 }}>rps <b style={{ color: UI.ink }}>{pinEdge.rps.toLocaleString()}</b></span>
+                  <span style={{ color: UI.ink2 }}>p99 <b style={{ color: m.p99 > 200 ? ST.crit : UI.ink }}>{m.p99}ms</b></span>
+                  <span style={{ color: UI.ink2 }}>5xx <b style={{ color: m.err >= 1 ? ST.crit : UI.ink }}>{m.err}%</b></span>
+                </div>
+                {bad ? (
+                  <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10 }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", color: ST[m.st], marginBottom: 7 }}>최근 오류</div>
+                    {errs.map((er, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "3px 0", fontSize: 10, fontFamily: MONO }}>
+                        <span style={{ color: UI.ink3, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{er.t}</span>
+                        <span style={{ color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{er.msg}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 11, display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: ST.ok, fontWeight: 600 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: ST.ok }} />오류 없음 · 정상 흐름
+                  </div>
+                )}
+              </motion.div>
+            );
+          })()}
+
+          <svg ref={svgRef} viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display: "block", touchAction: "none" }}
+            onPointerMove={onMove} onPointerUp={endDrag} onPointerLeave={() => { if (!dragRef.current) { setSel(null); setEtip(null); } }}>
             <defs>
-              <linearGradient id="tgloss" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#fff" stopOpacity="0.5" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
-              </linearGradient>
+              {SERVICES.map((s) => {
+                const p = P(s.id);
+                return <clipPath key={s.id} id={`clip-${s.id}`}><rect x={p.x} y={p.y} width={NW} height={NH} rx={12} /></clipPath>;
+              })}
             </defs>
 
             {/* 데이터 계층 배경 밴드 */}
-            <rect x={LX[5] - 12} y={20} width={NW + 24} height={VH - 120} rx={16} fill="rgba(17,19,24,0.02)" />
-            <text x={LX[5] + NW / 2} y={14} textAnchor="middle" fontSize="10.5" fill="#B4BBC6" fontWeight="600">DATA</text>
+            <rect x={LX[5] - 12} y={20} width={NW + 24} height={VH - 60} rx={14} fill="rgba(17,19,24,0.025)" />
+            <text x={LX[5] + NW / 2} y={14} textAnchor="middle" fontSize="9.5" fill={UI.ink3} fontWeight="600" letterSpacing="0.08em">DATA</text>
 
-            {/* 설정 의존성 엣지 (평소 옅게, 호버 강조) */}
-            {mode !== "traffic" && Object.entries(CFG_EDGES).map(([c, list]) => list.map((sid) => {
-              const a = cpos(c), b = spos(sid);
-              const lit = !ctx ? false : (ctx.center === c || ctx.center === sid);
-              const base = mode === "config" ? 0.22 : 0.09;
-              return <path key={`${c}-${sid}`} d={curve(a.x + CW / 2, a.y, b.x + NW / 2, b.y + NH, false)} fill="none"
-                stroke={CFG(c).kind === "Secret" ? PURPLE : BLUE} strokeWidth={lit ? 2 : 1.2} strokeDasharray="3 4"
-                style={{ opacity: ctx ? (lit ? 0.85 : 0.04) : base, transition: "opacity .18s" }} />;
-            }))}
-
-            {/* 트래픽 엣지 (항상 애니메이션) */}
-            {mode !== "config" && EDGES.map((e) => {
-              const a = spos(e.from), b = spos(e.to);
-              const on = !ctx || ctx.center === e.from || ctx.center === e.to;
-              const w = Math.max(1.4, Math.min(7, e.rps / 170));
-              const col = SVC(e.to).status === "crit" ? ST.crit : SVC(e.to).status === "warn" ? ST.warn : "#AEB9D4";
-              const dur = Math.max(0.6, 1.7 - e.rps / 1000);
-              const d = curve(a.x + NW, a.y + NH / 2, b.x, b.y + NH / 2);
+            {/* 트래픽 엣지 — 두께 균일 + 방향 화살표 + 호버 수치 + 클릭 고정 */}
+            {EDGES.map((e) => {
+              const a = P(e.from), b = P(e.to);
+              const an = anchors(a, b);
+              const pinned = pinEdge && ekey(pinEdge) === ekey(e);
+              const hovered = (etip && ekey(etip.e) === ekey(e)) || pinned;
+              const on = pinEdge ? pinned : hovered || (!etip && (!ctx || ctx.center === e.from || ctx.center === e.to));
+              const toSt = SVC(e.to).status;
+              const col = toSt === "crit" ? ST.crit : toSt === "warn" ? ST.warn : hovered ? BLUE : "#C3CAD6";
+              const dur = Math.max(0.55, 1.9 - e.rps / 800);
+              const d = curve(an.x1, an.y1, an.x2, an.y2, an.horiz);
               return (
-                <g key={`${e.from}-${e.to}`} style={{ opacity: on ? 1 : 0.1, transition: "opacity .18s" }}>
-                  <path d={d} fill="none" stroke={col} strokeWidth={w} strokeOpacity={0.45} strokeLinecap="round" />
-                  <path d={d} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" strokeDasharray="2 9" className="flow" style={{ animationDuration: `${dur}s` }} />
+                <g key={ekey(e)} style={{ opacity: on ? 1 : 0.08, transition: "opacity .18s" }}>
+                  <path d={d} fill="none" stroke={col} strokeWidth={3} strokeOpacity={hovered ? 0.5 : 0.35} strokeLinecap="round" />
+                  <path d={d} fill="none" stroke={col} strokeWidth={3} strokeLinecap="round" strokeDasharray="3 11" className="flow" style={{ animationDuration: `${dur}s` }} />
+                  <path d={arrowAt(an)} fill={col} opacity={hovered ? 0.9 : 0.55} />
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={16} strokeLinecap="round" style={{ cursor: "pointer" }}
+                    onClick={() => { setPinEdge(pinned ? null : e); setEtip(null); }}
+                    onMouseEnter={(ev) => { if (dragRef.current) return; setEtip({ x: ev.clientX, y: ev.clientY, e }); setSel(null); }}
+                    onMouseMove={(ev) => { if (dragRef.current) return; setEtip({ x: ev.clientX, y: ev.clientY, e }); }}
+                    onMouseLeave={() => setEtip(null)} />
                 </g>
               );
             })}
 
-            {/* 설정 노드 */}
-            {CONFIGS.map((c) => {
-              const p = cpos(c.id); const secret = c.kind === "Secret"; const lit = cfgLit(c.id); const on = ctx?.center === c.id;
-              return (
-                <g key={c.id} onMouseEnter={() => setSel(c.id)} style={{ cursor: "pointer", opacity: lit ? 1 : 0.28, transition: "opacity .18s" }}>
-                  <rect x={p.x} y={p.y} width={CW} height={CH} rx={11} fill={on ? (secret ? "#F7F0FE" : "#EEF2FF") : "#fff"}
-                    stroke={on ? (secret ? PURPLE : BLUE) : "rgba(17,19,24,0.1)"} strokeWidth={on ? 2 : 1} style={{ filter: "drop-shadow(0 2px 5px rgba(17,19,24,0.07))" }} />
-                  <rect x={p.x + 10} y={p.y + 12} width={16} height={16} rx={4} fill={secret ? PURPLE : BLUE} opacity={0.16} />
-                  <text x={p.x + 34} y={p.y + 18} fontSize="11" fontWeight="600" fill="#111318" fontFamily="ui-monospace,monospace">{c.id}</text>
-                  <text x={p.x + 34} y={p.y + 31} fontSize="9.5" fill={secret ? PURPLE : "#9AA1AC"}>{c.kind}{on ? ` · ${CFG_EDGES[c.id].length}개 영향` : ""}</text>
-                </g>
-              );
-            })}
-
-            {/* 서비스 노드 (소유 파드 점 포함) */}
+            {/* 서비스 노드 — 드래그 가능 카드 */}
             {SERVICES.map((s) => {
-              const p = spos(s.id); const lit = svcLit(s.id); const on = ctx?.center === s.id;
+              const p = P(s.id); const lit = svcLit(s.id); const on = ctx?.center === s.id;
               const rps = EDGES.filter((e) => e.from === s.id).reduce((t, e) => t + e.rps, 0);
               return (
-                <g key={s.id} onMouseEnter={() => setSel(s.id)} style={{ cursor: "pointer", opacity: lit ? 1 : 0.26, transition: "opacity .18s" }}>
-                  <rect x={p.x} y={p.y} width={NW} height={NH} rx={13} fill="#fff" stroke={on ? BLUE : "rgba(17,19,24,0.1)"} strokeWidth={on ? 2 : 1}
-                    style={{ filter: on ? "drop-shadow(0 6px 16px rgba(47,91,255,0.22))" : "drop-shadow(0 2px 5px rgba(17,19,24,0.08))" }} />
-                  <rect x={p.x} y={p.y} width={NW} height={NH} rx={13} fill="url(#tgloss)" style={{ pointerEvents: "none" }} />
-                  <circle cx={p.x + 14} cy={p.y + 17} r={4.5} fill={ST[s.status]} />
-                  <text x={p.x + 25} y={p.y + 21} fontSize="11.5" fontWeight="600" fill="#111318" fontFamily="ui-monospace,monospace">{s.name}</text>
-                  <text x={p.x + 12} y={p.y + 35} fontSize="9" fill="#9AA1AC">{on ? `${rps} req/s ↗` : s.kind}</text>
-                  {/* 소유 파드 점 */}
-                  <g>
+                <g key={s.id} onMouseEnter={() => { if (!dragRef.current) setSel(s.id); }} onPointerDown={startDrag(s.id)}
+                  onDoubleClick={() => { window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
+                  style={{ cursor: dragId === s.id ? "grabbing" : "grab", opacity: lit ? 1 : 0.22, transition: "opacity .18s" }}>
+                  <rect x={p.x} y={p.y} width={NW} height={NH} rx={12} fill={UI.card} stroke={dragId === s.id || on ? BLUE : UI.line} strokeWidth={on || dragId === s.id ? 1.5 : 1}
+                    style={{ filter: dragId === s.id ? "drop-shadow(0 16px 30px rgba(10,132,255,0.22))" : on ? "drop-shadow(0 8px 18px rgba(10,132,255,0.16))" : "drop-shadow(0 1px 2px rgba(17,19,24,0.05))" }} />
+                  <g clipPath={`url(#clip-${s.id})`} style={{ pointerEvents: "none" }}>
+                    <circle cx={p.x + 15} cy={p.y + 17} r={4} fill={ST[s.status]} />
+                    <text x={p.x + 26} y={p.y + 20.5} fontSize="11" fontWeight="600" fill={UI.ink} fontFamily={MONO} letterSpacing="-0.01em">{s.name}</text>
+                    <text x={p.x + 13} y={p.y + 34} fontSize="8.5" fill={UI.ink3}>{on ? `${rps.toLocaleString()} req/s` : `${s.kind} · ×${s.replicas}`}</text>
                     {Array.from({ length: Math.min(s.replicas, 8) }).map((_, k) => (
-                      <circle key={k} cx={p.x + 14 + k * 11} cy={p.y + 46} r={3.2} fill={s.status === "crit" && k === 0 ? ST.crit : "rgba(47,91,255,0.55)"} />
+                      <circle key={k} cx={p.x + 16 + k * 11} cy={p.y + 46} r={3} fill={s.status === "crit" && k === 0 ? ST.crit : "rgba(10,132,255,0.4)"} />
                     ))}
                   </g>
                 </g>
@@ -185,21 +243,49 @@ function App() {
           </svg>
 
           {/* 레전드 */}
-          <div style={{ marginTop: 6, paddingTop: 14, borderTop: "1px solid rgba(17,19,24,0.06)", display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11.5, color: "#8A93A0", alignItems: "center" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#AEB9D4" strokeWidth="3" strokeLinecap="round" /></svg>트래픽(두께=req/s)</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke={BLUE} strokeWidth="1.6" strokeDasharray="3 3" /></svg>ConfigMap</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke={PURPLE} strokeWidth="1.6" strokeDasharray="3 3" /></svg>Secret</span>
+          <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11, color: UI.ink2, alignItems: "center" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#C3CAD6" strokeWidth="3" strokeLinecap="round" /><path d="M22 0.5 L29 4 L22 7.5 Z" fill="#C3CAD6" /></svg>호출(속도 = req/s)</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: ST.ok }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.warn, marginLeft: 6 }} />경고<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.crit, marginLeft: 6 }} />임계</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: "rgba(47,91,255,0.55)" }} />파드(소유)</span>
-            <span style={{ marginLeft: "auto", color: "#B4BBC6" }}>노드에 마우스를 올리면 그 서비스의 모든 관계가 강조됩니다</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: "rgba(10,132,255,0.4)" }} />파드(소유)</span>
+            <span style={{ marginLeft: "auto", color: UI.ink3 }}>드래그 = 재배치 · 노드 호버 = 관계 · 선 호버 = 수치 · 선 클릭 = 오류 상세</span>
           </div>
         </div>
       </div>
 
+      {/* 엣지 툴팁 */}
+      {etip && (() => {
+        const m = edgeMetrics(etip.e);
+        const bad = m.st !== "ok";
+        return (
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.12 }}
+            style={{
+              position: "fixed", left: Math.min(etip.x + 14, window.innerWidth - 210), top: Math.min(etip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
+              background: "rgba(255,255,255,0.96)", backdropFilter: "blur(10px)", border: `1px solid ${bad ? "#F0B8B4" : UI.line}`, borderRadius: 11, padding: "10px 12px",
+              boxShadow: "0 10px 30px -12px rgba(17,19,24,0.22)", minWidth: 176,
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>
+              {etip.e.from}<span style={{ color: UI.ink3, fontWeight: 500 }}>→</span>{etip.e.to}
+            </div>
+            <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ color: UI.ink2 }}>rps <b style={{ color: UI.ink }}>{etip.e.rps.toLocaleString()}</b></span>
+              <span style={{ color: UI.ink2 }}>p99 <b style={{ color: m.p99 > 200 ? ST.crit : UI.ink }}>{m.p99}ms</b></span>
+              <span style={{ color: UI.ink2 }}>5xx <b style={{ color: m.err >= 1 ? ST.crit : UI.ink }}>{m.err}%</b></span>
+            </div>
+            {bad && (
+              <div style={{ marginTop: 7, fontSize: 10, fontWeight: 600, color: ST[m.st], display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: ST[m.st] }} />
+                {m.st === "crit" ? `${etip.e.to} 임계 — 오류율 상승` : `${etip.e.to} 경고 — 지연 증가`}
+              </div>
+            )}
+          </motion.div>
+        );
+      })()}
+
       <style>{`
-        .tp { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; }
+        .tp { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .tp .flow { animation: flowmove linear infinite; }
-        @keyframes flowmove { to { stroke-dashoffset: -22; } }
+        @keyframes flowmove { to { stroke-dashoffset: -28; } }
+        .tp svg text { user-select: none; }
         @media (prefers-reduced-motion: reduce) { .tp .flow { animation: none !important; } }
       `}</style>
     </div>
@@ -207,5 +293,5 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <div style={{ minHeight: "100vh", background: "#EDF0F5" }}><App /></div>,
+  <div style={{ minHeight: "100vh", background: "#FAFAFC" }}><App /></div>,
 );

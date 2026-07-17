@@ -19,6 +19,7 @@ const proxy = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  optimizeDeps: { include: ["tailwind-merge", "@tabler/icons-react", "lucide-react", "motion/react"] },
   resolve: { alias: { "@": sourceRoot } },
   server: { proxy },
   preview: { proxy },

@@ -5,91 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Opsia · 데모 인덱스</title>
     <style>
-      :root { --ink:#111318; --ink2:#6B7280; --ink3:#9AA1AC; --blue:#2F5BFF; --line:rgba(17,19,24,0.08); }
+      :root { --ink:#111318; --ink2:#5F6570; --ink3:#9AA0AA; --blue:#0A84FF; --line:#E9EAEE; }
       * { box-sizing: border-box; }
-      body { margin:0; background:#EDF0F5; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Pretendard","Apple SD Gothic Neo","Helvetica Neue",sans-serif; }
+      body { margin:0; background:#FAFAFC; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Pretendard","Apple SD Gothic Neo","Helvetica Neue",sans-serif; -webkit-font-smoothing:antialiased; }
       .wrap { max-width: 1000px; margin: 0 auto; padding: 56px 24px 80px; }
-      h1 { font-size: 26px; font-weight: 800; letter-spacing:-0.02em; margin:0; }
-      .sub { color: var(--ink2); font-size: 14px; margin-top: 8px; }
-      .grid { display:grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 28px; }
-      .card { display:block; text-decoration:none; color:inherit; background:#fff; border:1px solid var(--line); border-radius:18px; padding:20px; box-shadow:0 1px 3px rgba(17,19,24,0.05); transition: transform .16s, box-shadow .16s, border-color .16s; }
-      .card:hover { transform: translateY(-3px); box-shadow:0 16px 36px -16px rgba(47,91,255,0.28); border-color: rgba(47,91,255,0.3); }
-      .card.feat { grid-column: 1 / -1; background: linear-gradient(120deg, #fff, #F4F7FF); }
+      h1 { font-size: 24px; font-weight: 800; letter-spacing:-0.02em; margin:0; }
+      .sub { color: var(--ink2); font-size: 13.5px; margin-top: 8px; }
+      .grid { display:grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 28px; }
+      .card { display:block; text-decoration:none; color:inherit; background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px; transition: box-shadow .18s, border-color .18s; }
+      .card:hover { box-shadow:0 14px 36px -20px rgba(17,19,24,0.18); border-color:#DCDFE5; }
+      .card.feat { grid-column: 1 / -1; }
       .tag { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; }
-      .tag.new { color:var(--blue); background:rgba(47,91,255,0.1); }
-      .tag.star { color:#B45309; background:rgba(245,158,11,0.14); }
-      .icon { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; font-size:20px; margin-bottom:14px; }
-      .t { font-size:16px; font-weight:700; letter-spacing:-0.01em; }
+      .tag.new { color:var(--blue); background:rgba(10,132,255,0.09); }
+      .tag.star { color:#B25A00; background:#FFF8EF; border:1px solid #F3D8B7; }
+      .icon { width:38px; height:38px; border-radius:11px; display:grid; place-items:center; font-size:19px; margin:14px 0 12px; background:rgba(17,19,24,0.045); }
+      .t { font-size:15.5px; font-weight:700; letter-spacing:-0.01em; }
       .d { font-size:13px; color:var(--ink2); margin-top:6px; line-height:1.55; }
-      .arrow { margin-top:14px; font-size:13px; font-weight:600; color:var(--blue); }
-      .note { margin-top:36px; font-size:12px; color:var(--ink3); }
+      .arrow { margin-top:12px; font-size:12.5px; font-weight:600; color:var(--blue); }
+      .note { margin-top:32px; font-size:12px; color:var(--ink3); }
     </style>
   </head>
   <body>
     <div class="wrap">
       <h1>Opsia · 시각화 데모</h1>
-      <div class="sub">모션·인터랙션 프로토타입 모음 (전부 더미 데이터). 카드를 눌러 각 데모를 엽니다.</div>
+      <div class="sub">모션·인터랙션 프로토타입 (전부 더미 데이터) · 분업: 맵 = 물리 · 토폴로지 = 호출 · 렌즈 = 의존 · 상세 = 전체 스펙</div>
 
       <div class="grid">
         <a class="card feat" href="/devpreview-opsia.html">
-          <span class="tag star">⭐ 플래그십 · 최신</span>
-          <div class="icon" style="background:rgba(47,91,255,0.12);">🗺️</div>
+          <span class="tag star">⭐ 플래그십</span>
+          <div class="icon">🗺️</div>
           <div class="t">통합 맵 (드릴뷰 대시보드)</div>
-          <div class="d"><b>클러스터 → 노드 → 파드</b> 페이지 드릴 + 색 강도 램프 타일 + 라이브 게이지·스파크라인 + 서비스/설정/배포/장애 렌즈 + 커서 툴팁. 현재 메인 안.</div>
-          <div class="arrow">열기 →</div>
-        </a>
-
-        <a class="card" href="/devpreview-live.html">
-          <span class="tag new">시맨틱 줌</span>
-          <div class="icon" style="background:rgba(47,91,255,0.12);">🛰️</div>
-          <div class="t">라이브 클러스터 맵</div>
-          <div class="d">하나의 캔버스에서 클러스터 → 노드 → 파드로 시맨틱 줌인. 트래픽 흐름 오버레이 + 파드 상세 패널.</div>
-          <div class="arrow">열기 →</div>
-        </a>
-
-        <a class="card" href="/devpreview-heatmap.html">
-          <span class="tag new">다크 대시보드</span>
-          <div class="icon" style="background:rgba(17,19,24,0.85);">🌒</div>
-          <div class="t">클러스터 히트맵 대시보드</div>
-          <div class="d">다크 테마 + 육각 블롭 히트맵 + 블루 강도 스케일. 레퍼런스 스타일 재현.</div>
-          <div class="arrow">열기 →</div>
-        </a>
-
-        <a class="card" href="/devpreview-drill.html">
-          <span class="tag new">드릴다운</span>
-          <div class="icon" style="background:rgba(34,197,94,0.12);">🔎</div>
-          <div class="t">클러스터→노드→파드 드릴다운</div>
-          <div class="d">클릭으로 단계별 줌인, 브레드크럼 이동. 파드는 상태·컨테이너·설정·이벤트·로그까지 상세.</div>
-          <div class="arrow">열기 →</div>
-        </a>
-
-        <a class="card" href="/devpreview-cluster.html">
-          <span class="tag new">물리 계층</span>
-          <div class="icon" style="background:rgba(6,182,212,0.12);">🧩</div>
-          <div class="t">클러스터 ⊃ 노드 ⊃ 파드</div>
-          <div class="d">상자 안 상자로 물리 계층을 명확히. 파드 색 = 서비스, 호버 시 같은 서비스 강조. 서비스/부하 색 토글.</div>
+          <div class="d"><b>클러스터 → 노드 → 파드</b> 페이지 드릴. 색 강도 램프 타일 + 라이브 게이지·스파크라인 + 서비스/설정/배포/장애 렌즈 + 커서 툴팁. 물리 배치와 건강, 의존 렌즈의 주인 뷰.</div>
           <div class="arrow">열기 →</div>
         </a>
 
         <a class="card" href="/devpreview-topology.html">
-          <span class="tag new">관계 그래프</span>
-          <div class="icon" style="background:rgba(168,85,247,0.12);">🕸️</div>
+          <span class="tag new">호출 그래프</span>
+          <div class="icon">🕸️</div>
           <div class="t">서비스 토폴로지</div>
-          <div class="d">트래픽(애니메이션 엣지) + 설정 의존성(blast radius) + 소유를 한 화면에. 노드 호버로 관계 강조.</div>
-          <div class="arrow">열기 →</div>
-        </a>
-
-        <a class="card" href="/devpreview-nodeview.html">
-          <span class="tag new">비교 뷰</span>
-          <div class="icon" style="background:rgba(245,158,11,0.14);">🐝</div>
-          <div class="t">노드→파드 3종</div>
-          <div class="d">노드 벌집 / 히트맵 / 트리맵을 스위처로 비교. 사용률 열지도 + 그라데이션.</div>
+          <div class="d">트래픽 흐름 전용 그래프 — 드래그 재배치, 방향 화살표, 선 호버 = 수치(rps·p99·5xx), 선 클릭 = 오류 상세 고정.</div>
           <div class="arrow">열기 →</div>
         </a>
 
         <a class="card" href="/devpreview-connect.html">
           <span class="tag new">위저드</span>
-          <div class="icon" style="background:rgba(47,91,255,0.12);">🔌</div>
+          <div class="icon">🔌</div>
           <div class="t">환경 연결 위저드</div>
           <div class="d">Git 저장소 등록(자동 인식·토큰) + 클러스터 연결(플랫폼별 에이전트 설치). 모션·머티리얼 UI.</div>
           <div class="arrow">열기 →</div>
@@ -97,14 +57,14 @@
 
         <a class="card" href="/devpreview-ai.html">
           <span class="tag new">AI 패널</span>
-          <div class="icon" style="background:rgba(17,19,24,0.08);">🤖</div>
+          <div class="icon">🤖</div>
           <div class="t">AI 어시스턴트 패널</div>
           <div class="d">장애 분석 대화 프리뷰 — 스텝 진행 → 결과 카드 → 액션 제안. 카드 접힘/펼침 모션.</div>
           <div class="arrow">열기 →</div>
         </a>
       </div>
 
-      <div class="note">⚠ 전부 비주얼 데모(더미 데이터)입니다. 실제 배선 전 UX·모션 검토용. · demo/motion-animations 브랜치</div>
+      <div class="note">⚠ 전부 비주얼 데모(더미 데이터)입니다. 실제 배선 전 UX·모션 검토용 · demo/motion-animations 브랜치</div>
     </div>
   </body>
 </html>
