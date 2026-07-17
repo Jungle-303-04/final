@@ -324,11 +324,19 @@ export function createRouteNetworkObserver(page, baseUrl) {
     pendingRequests.set(request, {
       path: safeUrl(request.url()),
       sequence,
+      status: null,
       startedAt: Date.now(),
     });
   };
   const onResponse = (response) => {
-    completeRequest(response.request(), response.status());
+    const pending = pendingRequests.get(response.request());
+    if (pending === undefined) return;
+    pending.status = response.status();
+    sequence += 1;
+  };
+  const onRequestFinished = (request) => {
+    const pending = pendingRequests.get(request);
+    completeRequest(request, pending?.status ?? null);
   };
   const onRequestFailed = (request) => {
     completeRequest(request, null);
@@ -348,6 +356,7 @@ export function createRouteNetworkObserver(page, baseUrl) {
 
   page.on("request", onRequest);
   page.on("response", onResponse);
+  page.on("requestfinished", onRequestFinished);
   page.on("requestfailed", onRequestFailed);
 
   return {
@@ -361,6 +370,7 @@ export function createRouteNetworkObserver(page, baseUrl) {
     dispose() {
       page.off("request", onRequest);
       page.off("response", onResponse);
+      page.off("requestfinished", onRequestFinished);
       page.off("requestfailed", onRequestFailed);
     },
     summarize(phase, durationMs) {

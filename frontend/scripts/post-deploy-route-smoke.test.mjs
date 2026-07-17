@@ -154,7 +154,7 @@ describe("post-deploy route smoke helpers", () => {
     })).toBe(false);
   });
 
-  it("settles on API response completion and reports bounded request timing", async () => {
+  it("waits for the API response body before settling and reports its full duration", async () => {
     let now = 1_000;
     const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
     const listeners = new Map();
@@ -186,11 +186,17 @@ describe("post-deploy route smoke helpers", () => {
       now += 125;
       emit("response", { request: () => request, status: () => 200 });
 
+      await expect(observer.waitForSettled(phase, 300)).rejects.toThrow(
+        "route API requests did not settle",
+      );
+      expect(observer.summarize(phase, now - phase.startedAt).apiRequestCount).toBe(0);
+
+      emit("requestfinished", request);
       await observer.waitForSettled(phase, 1_000);
       expect(observer.summarize(phase, now - phase.startedAt)).toEqual({
         apiRequestCount: 1,
-        durationMs: 650,
-        slowApi: [{ durationMs: 125, path: "/api/checks", status: 200 }],
+        durationMs: 950,
+        slowApi: [{ durationMs: 425, path: "/api/checks", status: 200 }],
       });
 
       observer.dispose();
