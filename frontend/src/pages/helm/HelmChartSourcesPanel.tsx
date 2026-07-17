@@ -162,7 +162,9 @@ function ChartSourceTable({
                       type="button"
                       variant="ghost"
                     >
-                      <RefreshCw aria-hidden="true" className={refreshingId === source.id ? "animate-spin motion-reduce:animate-none" : undefined} />
+                      {refreshingId === source.id
+                        ? <Spinner decorative />
+                        : <RefreshCw aria-hidden="true" />}
                     </Button>
                   ) : null}
                   {source.actions.includes("delete") ? (
