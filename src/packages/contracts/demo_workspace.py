@@ -9,13 +9,13 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from packages.contracts.cost.observations import MAX_SAFE_JSON_INTEGER
+from packages.contracts.demo_seed import DEMO_SEED_MARKER_KEY
 from packages.contracts.gateway.requests import InventoryResource
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.modeling import StrictModel
 from packages.contracts.traffic.observations import MAX_TRAFFIC_TOTAL_COUNT
 
 DEMO_WORKSPACE_DESCRIPTOR_VERSION = 1
-DEMO_SEED_MARKER_KEY = "opsia_demo_seed"
 
 
 class DemoWorkspaceIdentity(StrictModel):

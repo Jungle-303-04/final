@@ -32,6 +32,7 @@ from controller.demo_workspace import (
     DEFAULT_DESCRIPTOR,
     DEMO_EVENT_SOURCE,
     OutboxRequiredPublisher,
+    derive_demo_seed_application_id,
     ensure_demo_gitops_application,
     load_descriptor,
     reset_demo_workspace,
@@ -63,6 +64,7 @@ from domains.demo_workspace.policy import (
 )
 from domains.demo_workspace.repository import DemoWorkspaceRepository
 from domains.gitops.detail_router import router as gitops_detail_router
+from domains.gitops.repository import derive_application_id
 from domains.gitops.repository_discovery import (
     RepositoryDiscoveryError,
     RepositoryManifestValidationBatch,
@@ -1799,6 +1801,152 @@ def test_demo_application_collision_uses_marker_scoped_reconciliation() -> None:
     ]
 
 
+def test_demo_application_reconciles_exact_persisted_marker_owned_id() -> None:
+    old_marker = {
+        "descriptor_id": "opsia-ui-demo.v1",
+        "schema_version": 1,
+        "digest": "a" * 64,
+    }
+    marker = {**old_marker, "digest": "b" * 64}
+    calls: list[dict[str, Any]] = []
+    existing = {
+        "workspace_id": "opsia-ui-demo-v1",
+        "application_id": "app-persisted-legacy",
+        "repository_id": "repo-demo",
+        "name": "yaml-demo-raw",
+        "manifest_path": "legacy/path.yaml",
+        "status": "inactive",
+        "metadata": {DEMO_SEED_MARKER_KEY: old_marker},
+    }
+
+    class ExistingLegacyDatabase:
+        def get_application_by_identity(self, *_args: Any) -> dict[str, Any]:
+            return deepcopy(existing)
+
+        def upsert_application(self, _payload: dict[str, Any]) -> dict[str, Any]:
+            raise AssertionError("marker reconciliation must precede the product upsert")
+
+        def reconcile_seed_owned_application(self, **kwargs: Any) -> dict[str, Any]:
+            calls.append(deepcopy(kwargs))
+            return {
+                **existing,
+                "repository_id": kwargs["repository_id"],
+                "name": kwargs["name"],
+                "manifest_path": kwargs["manifest_path"],
+                "status": kwargs["status"],
+                "metadata": deepcopy(kwargs["metadata_"]),
+            }
+
+    payload = {
+        "workspace_id": "opsia-ui-demo-v1",
+        "user_id": "user-demo",
+        "repository_id": "repo-demo",
+        "name": "yaml-demo-raw",
+        "manifest_path": "manifests/base/workloads.yaml",
+        "status": "active",
+        "metadata": {DEMO_SEED_MARKER_KEY: marker},
+    }
+
+    application = ensure_demo_gitops_application(
+        ExistingLegacyDatabase(),
+        payload,
+        marker=marker,
+    )
+
+    assert application["application_id"] == "app-persisted-legacy"
+    assert calls[0]["application_id"] == "app-persisted-legacy"
+    assert calls[0]["expected_marker"] == marker
+
+
+def test_demo_application_primary_collision_uses_stable_seed_fallback() -> None:
+    marker = {"descriptor_id": "opsia-ui-demo.v1", "schema_version": 1, "digest": "b" * 64}
+    upsert_calls: list[dict[str, Any]] = []
+    reconcile_calls: list[dict[str, Any]] = []
+
+    class ForeignPrimaryCollisionDatabase:
+        def get_application_by_identity(self, *_args: Any) -> None:
+            return None
+
+        def upsert_application(self, payload: dict[str, Any]) -> dict[str, Any]:
+            upsert_calls.append(deepcopy(payload))
+            if "application_id" not in payload:
+                raise LookupError("application not found in workspace")
+            return {**payload}
+
+        def reconcile_seed_owned_application(self, **kwargs: Any) -> None:
+            reconcile_calls.append(deepcopy(kwargs))
+            return None
+
+    payload = {
+        "workspace_id": "opsia-ui-demo-v1",
+        "user_id": "user-demo",
+        "repository_id": "repo-demo",
+        "repo_ref": "jungle-303-04/yaml-demo",
+        "name": "yaml-demo-raw",
+        "manifest_path": "manifests/base/workloads.yaml",
+        "status": "active",
+        "metadata": {DEMO_SEED_MARKER_KEY: marker},
+    }
+
+    application = ensure_demo_gitops_application(
+        ForeignPrimaryCollisionDatabase(),
+        payload,
+        marker=marker,
+    )
+
+    fallback_id = derive_demo_seed_application_id(payload, marker)
+    assert application["application_id"] == fallback_id
+    assert len(upsert_calls) == 2
+    assert "application_id" not in upsert_calls[0]
+    assert upsert_calls[1]["application_id"] == fallback_id
+    assert reconcile_calls[0]["application_id"] != fallback_id
+    assert fallback_id != derive_application_id(payload)
+    assert (
+        derive_demo_seed_application_id(
+            payload,
+            {**marker, "digest": "c" * 64},
+        )
+        == fallback_id
+    )
+    revised_payload = deepcopy(payload)
+    revised_payload["metadata"] = {
+        **dict(payload["metadata"]),
+        "repository_revision": "f" * 40,
+    }
+    assert derive_demo_seed_application_id(revised_payload, marker) == fallback_id
+
+
+def test_demo_application_fallback_collision_remains_fail_closed() -> None:
+    marker = {"descriptor_id": "opsia-ui-demo.v1", "schema_version": 1, "digest": "b" * 64}
+
+    class DoubleCollisionDatabase:
+        def get_application_by_identity(self, *_args: Any) -> None:
+            return None
+
+        def upsert_application(self, _payload: dict[str, Any]) -> dict[str, Any]:
+            raise LookupError("application not found in workspace")
+
+        def reconcile_seed_owned_application(self, **_kwargs: Any) -> None:
+            return None
+
+    payload = {
+        "workspace_id": "opsia-ui-demo-v1",
+        "user_id": "user-demo",
+        "repository_id": "repo-demo",
+        "name": "yaml-demo-raw",
+        "manifest_path": "manifests/base/workloads.yaml",
+        "status": "active",
+        "metadata": {DEMO_SEED_MARKER_KEY: marker},
+    }
+
+    with pytest.raises(LookupError, match="application not found in workspace"):
+        ensure_demo_gitops_application(
+            DoubleCollisionDatabase(),
+            payload,
+            marker=marker,
+        )
+
+
 def test_sqlite_reconcile_updates_only_same_authority_demo_application(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1869,6 +2017,14 @@ def test_sqlite_reconcile_updates_only_same_authority_demo_application(
 
     repository.unit_of_work = unit_of_work  # type: ignore[method-assign]
     monkeypatch.setattr(demo_repository_module, "metadata", schema)
+    with engine.connect() as connection:
+        foreign_before = dict(
+            connection.execute(
+                select(applications).where(applications.c.application_id == "app-foreign")
+            )
+            .mappings()
+            .one()
+        )
 
     updated = repository.reconcile_seed_owned_application(
         workspace_id="demo-workspace",
@@ -1904,8 +2060,7 @@ def test_sqlite_reconcile_updates_only_same_authority_demo_application(
             .mappings()
             .one()
         )
-    assert foreign_row["workspace_id"] == "other-workspace"
-    assert foreign_row["name"] == "foreign-name"
+    assert dict(foreign_row) == foreign_before
 
 
 def test_sqlite_reconcile_rejects_other_marker_and_target_identity_conflict(

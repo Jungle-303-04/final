@@ -293,6 +293,33 @@ def persist_demo_gitops_sources(
     return len(evidence)
 
 
+def derive_demo_seed_application_id(
+    payload: Mapping[str, object],
+    marker: Mapping[str, object],
+) -> str:
+    """Derive the collision fallback identity for one descriptor-owned app."""
+
+    descriptor_id = marker.get("descriptor_id")
+    schema_version = marker.get("schema_version")
+    identity = (
+        descriptor_id,
+        schema_version,
+        payload.get("workspace_id"),
+        payload.get("repository_id"),
+        payload.get("manifest_path"),
+        payload.get("name"),
+    )
+    if (
+        not isinstance(descriptor_id, str)
+        or not descriptor_id
+        or not isinstance(schema_version, int)
+        or any(not str(value or "") for value in identity[2:])
+    ):
+        raise RuntimeError("demo GitOps application fallback identity is incomplete")
+    raw = "\0".join(("demo-seed-application-v1", *(str(value) for value in identity)))
+    return f"app-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
 def ensure_demo_gitops_application(
     db: Any,
     payload: Mapping[str, object],
@@ -324,14 +351,18 @@ def ensure_demo_gitops_application(
             raise RuntimeError("demo GitOps application identity is not seed-owned")
         return application
 
-    def reconcile_legacy_identity() -> Mapping[str, object]:
+    def reconcile_legacy_identity(
+        persisted_application_id: object | None = None,
+    ) -> Mapping[str, object] | None:
         reconcile = getattr(db, "reconcile_seed_owned_application", None)
         if not callable(reconcile):
-            return require_demo_owned(None)
+            return None
         derived_payload = dict(payload)
         derived_payload.pop("application_id", None)
-        application_id = derive_application_id(derived_payload)
-        application = reconcile(
+        application_id = str(persisted_application_id or "") or derive_application_id(
+            derived_payload
+        )
+        return reconcile(
             workspace_id=workspace_id,
             application_id=application_id,
             repository_id=repository_id,
@@ -341,7 +372,11 @@ def ensure_demo_gitops_application(
             metadata_=dict(payload.get("metadata") or {}),
             expected_marker=marker,
         )
-        return require_demo_owned(application)
+
+    def create_collision_fallback() -> Mapping[str, object]:
+        fallback_payload = dict(payload)
+        fallback_payload["application_id"] = derive_demo_seed_application_id(payload, marker)
+        return require_demo_owned(db.upsert_application(fallback_payload))
 
     existing = lookup(workspace_id, repository_id, name)
     if existing is None:
@@ -353,16 +388,31 @@ def ensure_demo_gitops_application(
             concurrent = lookup(workspace_id, repository_id, name)
             if concurrent is None:
                 application = reconcile_legacy_identity()
+                if application is None:
+                    # The canonical id is occupied outside this exact demo
+                    # identity. Preserve that row and create a stable,
+                    # descriptor-scoped application id instead.
+                    application = create_collision_fallback()
+                else:
+                    application = require_demo_owned(application)
             else:
-                require_demo_owned(concurrent)
-                update_payload = dict(payload)
-                update_payload.pop("user_id", None)
-                application = db.upsert_application(update_payload)
+                try:
+                    require_demo_owned(concurrent)
+                except RuntimeError:
+                    application = require_demo_owned(
+                        reconcile_legacy_identity(concurrent.get("application_id"))
+                    )
+                else:
+                    update_payload = dict(payload)
+                    update_payload.pop("user_id", None)
+                    application = db.upsert_application(update_payload)
     else:
         try:
             require_demo_owned(existing)
         except RuntimeError:
-            application = reconcile_legacy_identity()
+            application = require_demo_owned(
+                reconcile_legacy_identity(existing.get("application_id"))
+            )
         else:
             update_payload = dict(payload)
             update_payload.pop("user_id", None)
