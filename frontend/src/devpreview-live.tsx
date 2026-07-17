@@ -3,7 +3,7 @@
 import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Server, Box, Cpu, FileCog, Activity, ScrollText, ChevronRight, Maximize2, Radio } from "lucide-react";
+import { Box, Cpu, FileCog, Activity, ScrollText, ChevronRight, Maximize2, Radio } from "lucide-react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -23,8 +23,10 @@ const SVC_CFG: Record<string, string[]> = { "shop-api": ["app-config", "redis-co
 const TRAFFIC: [string, string, number][] = [["gateway", "shop-web", 700], ["gateway", "shop-api", 950], ["shop-web", "shop-api", 420], ["shop-api", "checkout", 380], ["shop-api", "search", 260], ["shop-api", "auth", 300], ["shop-api", "redis", 640], ["checkout", "payments", 210], ["checkout", "notifier", 90], ["search", "redis", 240]];
 
 type Status = "Running" | "OOMKilled" | "CrashLoopBackOff" | "Pending";
-type Pod = { id: string; name: string; node: string; svc: string; cpu: number; mem: number; status: Status; restarts: number; ageMin: number; image: string };
+// cpu/mem = 한도(limit) 대비 사용률(%) — 건강도의 기준
+type Pod = { id: string; name: string; node: string; svc: string; cpu: number; mem: number; cpuLimM: number; memLimMi: number; status: Status; restarts: number; ageMin: number; image: string };
 const STCOLOR: Record<Status, string> = { Running: "#22C55E", OOMKilled: "#EF4444", CrashLoopBackOff: "#EF4444", Pending: "#9AA1AC" };
+const CPU_LIMS = [250, 500, 1000], MEM_LIMS = [256, 512, 1024];
 function makeRng(seed: number) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 function genPods(): Pod[] {
   const r = makeRng(11); const pods: Pod[] = []; let k = 0;
@@ -34,13 +36,36 @@ function genPods(): Pod[] {
       const svc = SERVICES[Math.floor(r() * SERVICES.length)].id; const pending = r() < 0.03; const hot = r() < 0.08;
       let cpu = Math.floor(r() * 55) + 14, mem = Math.floor(r() * 52) + 20; if (hot) { cpu = 88 + Math.floor(r() * 11); mem = 90 + Math.floor(r() * 9); }
       const status: Status = pending ? "Pending" : hot ? (r() < 0.5 ? "OOMKilled" : "CrashLoopBackOff") : "Running";
-      pods.push({ id: `p${k++}`, name: `${svc}-${Math.floor(r() * 900) + 100}-${["x7f", "q2d", "m9k", "b4t", "z1p"][Math.floor(r() * 5)]}`, node: node.id, svc, cpu: pending ? 0 : cpu, mem: pending ? 0 : mem, status, restarts: status === "Running" ? 0 : 3 + Math.floor(r() * 8), ageMin: 8 + Math.floor(r() * 5000), image: `registry.opsia.io/${svc}:1.${Math.floor(r() * 18)}.${Math.floor(r() * 9)}` });
+      pods.push({ id: `p${k++}`, name: `${svc}-${Math.floor(r() * 900) + 100}-${["x7f", "q2d", "m9k", "b4t", "z1p"][Math.floor(r() * 5)]}`, node: node.id, svc, cpu: pending ? 0 : cpu, mem: pending ? 0 : mem, cpuLimM: CPU_LIMS[Math.floor(r() * 3)], memLimMi: MEM_LIMS[Math.floor(r() * 3)], status, restarts: status === "Running" ? 0 : 3 + Math.floor(r() * 8), ageMin: 8 + Math.floor(r() * 5000), image: `registry.opsia.io/${svc}:1.${Math.floor(r() * 18)}.${Math.floor(r() * 9)}` });
     }
   });
   return pods;
 }
-const util = (p: Pod) => Math.max(p.cpu, p.mem);
+// 건강도 = 한도 대비 사용률(여유→임박) + 상태 오버라이드
+const health = (p: Pod) => Math.max(p.cpu, p.mem);
 const isCrit = (p: Pod) => p.status === "OOMKilled" || p.status === "CrashLoopBackOff";
+const healthColor = (p: Pod) => (p.status === "Pending" ? "#C7CBD3" : isCrit(p) ? "#EF4444" : heat(health(p)));
+
+// ── 영역(convex hull) 유틸 ─────────────────────────────
+type Pt = { x: number; y: number };
+function convexHull(pts: Pt[]): Pt[] {
+  if (pts.length < 3) return pts;
+  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo: Pt[] = []; for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  const up: Pt[] = []; for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  lo.pop(); up.pop(); return lo.concat(up);
+}
+function territoryPath(pts: Pt[], grow: number): string {
+  if (pts.length < 3) { const c = pts[0] || { x: 0, y: 0 }; const rr = grow + 20; return `M ${c.x - rr} ${c.y} a ${rr} ${rr} 0 1 0 ${rr * 2} 0 a ${rr} ${rr} 0 1 0 ${-rr * 2} 0 Z`; }
+  const h = convexHull(pts);
+  const cx = h.reduce((s, q) => s + q.x, 0) / h.length, cy = h.reduce((s, q) => s + q.y, 0) / h.length;
+  const e = h.map((q) => { const dx = q.x - cx, dy = q.y - cy, L = Math.hypot(dx, dy) || 1; return { x: q.x + (dx / L) * grow, y: q.y + (dy / L) * grow }; });
+  const n = e.length; let d = `M ${(e[0].x + e[n - 1].x) / 2} ${(e[0].y + e[n - 1].y) / 2}`;
+  for (let i = 0; i < n; i++) { const p0 = e[i], p1 = e[(i + 1) % n]; d += ` Q ${p0.x.toFixed(1)} ${p0.y.toFixed(1)}, ${((p0.x + p1.x) / 2).toFixed(1)} ${((p0.y + p1.y) / 2).toFixed(1)}`; }
+  return d + " Z";
+}
+const NODE_TINT = ["rgba(47,91,255,0.05)", "rgba(6,182,212,0.055)", "rgba(245,158,11,0.06)"];
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 function heat(u: number): string {
   const st: [number, number[]][] = [[0, [96, 165, 250]], [30, [59, 130, 246]], [55, [45, 212, 191]], [72, [250, 204, 21]], [86, [249, 115, 22]], [100, [239, 68, 68]]];
@@ -64,24 +89,31 @@ function App() {
   const [focus, setFocus] = useState<Focus>({ t: "cluster" });
   const [colorBy, setColorBy] = useState<"load" | "svc">("load");
   const [showTraffic, setShowTraffic] = useState(true);
-  const [beat, setBeat] = useState(0);
+  const [, setBeat] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null);
 
   // 레이아웃 (파드 개수 고정 → 위치 고정)
   const layout = useMemo(() => {
-    let cx = 0; const regions = NODES.map((node) => {
+    const nodeLayouts = NODES.map((node) => {
       const np = pods.filter((p) => p.node === node.id);
       const cells = hexSpiral(np.length);
       const rel = cells.map((c) => ({ x: hpx(c.q, c.r, S), y: hpy(c.q, c.r, S) }));
       const minX = Math.min(...rel.map((r) => r.x)) - S, maxX = Math.max(...rel.map((r) => r.x)) + S, minY = Math.min(...rel.map((r) => r.y)) - S, maxY = Math.max(...rel.map((r) => r.y)) + S;
       const hw = maxX - minX, hh = maxY - minY, rw = hw + PAD * 2, rh = hh + PAD + HEADER;
-      const ox = cx, oy = 0, hcx = ox + rw / 2, hcy = oy + HEADER + PAD + hh / 2;
+      return { node, np, rel, minX, maxX, minY, maxY, rw, rh, hh };
+    });
+    const offsets = nodeLayouts.map((_, index) =>
+      nodeLayouts.slice(0, index).reduce((sum, region) => sum + region.rw + GAP, 0),
+    );
+    const regions = nodeLayouts.map(({ node, np, rel, minX, maxX, minY, maxY, rw, rh, hh }, index) => {
+      const ox = offsets[index];
+      const oy = 0, hcx = ox + rw / 2, hcy = oy + HEADER + PAD + hh / 2;
       const pp: Record<string, { x: number; y: number }> = {};
       np.forEach((p, i) => { pp[p.id] = { x: hcx + (rel[i].x - (minX + maxX) / 2), y: hcy + (rel[i].y - (minY + maxY) / 2) }; });
-      cx += rw + GAP;
       return { node, x: ox, y: oy, w: rw, h: rh, ids: np.map((p) => p.id), pp };
     });
-    const worldW = cx - GAP, worldH = Math.max(...regions.map((r) => r.h));
+    const lastRegion = regions[regions.length - 1];
+    const worldW = lastRegion ? lastRegion.x + lastRegion.w : 0, worldH = Math.max(...regions.map((r) => r.h));
     return { regions, worldW, worldH };
   }, [pods.length]);
 
@@ -95,23 +127,31 @@ function App() {
     if (focus.t === "node") { const r = layout.regions.find((r) => r.node.id === focus.id)!; return fit({ x: r.x - 24, y: r.y - 30, w: r.w + 48, h: r.h + 48 }); }
     const q = posOf(focus.id); return fit({ x: q.x - 150, y: q.y - 90, w: 300, h: 220 });
   }, [focus, layout]);
-  const targetRef = useRef(target); targetRef.current = target;
+  const targetRef = useRef(target);
   const camRef = useRef(target);
+  useEffect(() => { targetRef.current = target; }, [target]);
   useEffect(() => {
     let raf = 0; const tick = () => { const c = camRef.current, t = targetRef.current; const k = 0.14; const n = { x: c.x + (t.x - c.x) * k, y: c.y + (t.y - c.y) * k, w: c.w + (t.w - c.w) * k, h: c.h + (t.h - c.h) * k }; camRef.current = n; svgRef.current?.setAttribute("viewBox", `${n.x.toFixed(1)} ${n.y.toFixed(1)} ${n.w.toFixed(1)} ${n.h.toFixed(1)}`); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf);
   }, []);
 
-  // 실시간 갱신
+  // 실시간 갱신 + 이벤트 티커
+  const [feed, setFeed] = useState<{ id: number; kind: "crit" | "ok"; msg: string }[]>([]);
+  const feedId = useRef(0);
   useEffect(() => {
     const iv = setInterval(() => {
+      const news: { kind: "crit" | "ok"; msg: string }[] = [];
       setPods((prev) => prev.map((p) => {
         if (p.status === "Pending") return p;
         const j = () => Math.random() * 16 - 8;
         let cpu = Math.max(6, Math.min(99, Math.round(p.cpu + j()))), mem = Math.max(8, Math.min(99, Math.round(p.mem + j())));
         let status = p.status, restarts = p.restarts;
-        if (Math.random() < 0.03) { if (isCrit(p)) { status = "Running"; cpu = 40 + Math.floor(Math.random() * 20); mem = 45 + Math.floor(Math.random() * 20); } else { status = Math.random() < 0.5 ? "OOMKilled" : "CrashLoopBackOff"; cpu = 90 + Math.floor(Math.random() * 9); mem = 92 + Math.floor(Math.random() * 7); restarts = p.restarts + 1; } }
+        if (Math.random() < 0.03) {
+          if (isCrit(p)) { status = "Running"; cpu = 40 + Math.floor(Math.random() * 20); mem = 45 + Math.floor(Math.random() * 20); news.push({ kind: "ok", msg: `${p.name} 복구됨 → Running` }); }
+          else { status = Math.random() < 0.5 ? "OOMKilled" : "CrashLoopBackOff"; cpu = 90 + Math.floor(Math.random() * 9); mem = 92 + Math.floor(Math.random() * 7); restarts = p.restarts + 1; news.push({ kind: "crit", msg: `${p.name} ${status}` }); }
+        }
         return { ...p, cpu, mem, status, restarts };
       }));
+      if (news.length) setFeed((f) => [...news.map((n) => ({ ...n, id: feedId.current++ })), ...f].slice(0, 3));
       setBeat((b) => b + 1);
     }, 1400);
     return () => clearInterval(iv);
@@ -120,7 +160,7 @@ function App() {
   const crit = pods.filter(isCrit).length;
   const focusPod = focus.t === "pod" ? podById(focus.id) : null;
   const focusNode = focus.t === "node" ? focus.id : null;
-  const fillOf = (p: Pod) => (p.status === "Pending" ? "#C7CBD3" : colorBy === "load" ? heat(util(p)) : SCOLOR[p.svc]);
+  const fillOf = (p: Pod) => (colorBy === "load" ? healthColor(p) : p.status === "Pending" ? "#C7CBD3" : SCOLOR[p.svc]);
 
   const crumbs: { label: string; f: Focus }[] = [{ label: "cluster-2", f: { t: "cluster" } }];
   if (focus.t === "node") crumbs.push({ label: focus.id, f: focus });
@@ -148,7 +188,7 @@ function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button onClick={() => setShowTraffic((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: showTraffic ? "#EEF2FF" : "#F2F3F7", border: "none", borderRadius: 10, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showTraffic ? BLUE : "#8A93A0" }}><Radio size={14} />트래픽</button>
             <div style={{ display: "flex", gap: 4, background: "#F2F3F7", borderRadius: 11, padding: 4 }}>
-              {([["load", "부하"], ["svc", "서비스"]] as const).map(([id, l]) => { const on = colorBy === id; return <button key={id} onClick={() => setColorBy(id)} style={{ position: "relative", padding: "7px 13px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer" }}>{on && <motion.span layoutId="lsw" style={{ position: "absolute", inset: 0, borderRadius: 8, background: BLUE }} transition={{ type: "spring", visualDuration: 0.25, bounce: 0.18 }} />}<span style={{ position: "relative", fontSize: 12, fontWeight: 600, color: on ? "#fff" : "#565E6B" }}>{l}</span></button>; })}
+              {([["load", "건강도"], ["svc", "서비스"]] as const).map(([id, l]) => { const on = colorBy === id; return <button key={id} onClick={() => setColorBy(id)} style={{ position: "relative", padding: "7px 13px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer" }}>{on && <motion.span layoutId="lsw" style={{ position: "absolute", inset: 0, borderRadius: 8, background: BLUE }} transition={{ type: "spring", visualDuration: 0.25, bounce: 0.18 }} />}<span style={{ position: "relative", fontSize: 12, fontWeight: 600, color: on ? "#fff" : "#565E6B" }}>{l}</span></button>; })}
             </div>
             <button onClick={() => setFocus({ t: "cluster" })} style={{ display: "flex", alignItems: "center", gap: 6, background: "#F2F3F7", border: "none", borderRadius: 10, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#565E6B" }}><Maximize2 size={14} />전체</button>
           </div>
@@ -158,20 +198,20 @@ function App() {
           <svg ref={svgRef} width="100%" height={CANVAS_H} viewBox={`${target.x} ${target.y} ${target.w} ${target.h}`} style={{ display: "block", background: "radial-gradient(circle at 30% 20%, rgba(47,91,255,0.04), transparent 60%)" }} onClick={() => setFocus({ t: "cluster" })}>
             <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" stopOpacity="0.42" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.08" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient></defs>
 
-            {/* 노드 영역 */}
+            {/* 노드 = 영역(territory) */}
             {layout.regions.map((r) => {
               const np = pods.filter((p) => p.node === r.node.id); const act = np.filter((p) => p.status !== "Pending");
-              const avg = Math.round(act.reduce((s, p) => s + util(p), 0) / (act.length || 1)); const hot = np.filter(isCrit).length;
+              const avg = Math.round(act.reduce((s, p) => s + health(p), 0) / (act.length || 1)); const hot = np.filter(isCrit).length;
               const on = focusNode === r.node.id || (focus.t === "pod" && focusPod!.node === r.node.id);
+              const idx = NODES.findIndex((n) => n.id === r.node.id);
+              const hullPts = r.ids.map((id) => posOf(id));
+              const cxx = hullPts.reduce((s, p) => s + p.x, 0) / hullPts.length;
+              const labelY = Math.min(...hullPts.map((p) => p.y)) - S - 28;
               return (
                 <g key={r.node.id} onClick={(e) => { e.stopPropagation(); setFocus({ t: "node", id: r.node.id }); }} style={{ cursor: "pointer" }}>
-                  <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={20} fill={on ? "#F7F9FF" : "#F6F8FC"} stroke={on ? BLUE : "rgba(17,19,24,0.1)"} strokeWidth={on ? 2.5 : 1.5} />
-                  <g transform={`translate(${r.x + 18}, ${r.y + 20})`}>
-                    <rect x={-2} y={-13} width={16} height={16} rx={4} fill="rgba(47,91,255,0.12)" />
-                    <path d="M0 -9 h12 M0 -3 h12" stroke={BLUE} strokeWidth={2} strokeLinecap="round" transform="translate(0,-1)" />
-                    <text x={20} y={0} fontSize="14" fontWeight="700" fill="#111318" fontFamily="ui-monospace,monospace">{r.node.id}</text>
-                    <text x={20} y={17} fontSize="11" fill="#9AA1AC">{r.node.instance} · {r.node.zone} · {np.length} pods · 평균 {avg}%{hot ? ` · 핫스팟 ${hot}` : ""}</text>
-                  </g>
+                  <path d={territoryPath(hullPts, S + 16)} fill={on ? "rgba(47,91,255,0.08)" : NODE_TINT[idx % 3]} stroke={on ? BLUE : "rgba(17,19,24,0.13)"} strokeWidth={on ? 2.5 : 1.5} />
+                  <text x={cxx} y={labelY} textAnchor="middle" fontSize="14" fontWeight="700" fill="#111318" fontFamily="ui-monospace,monospace">{r.node.id}</text>
+                  <text x={cxx} y={labelY + 16} textAnchor="middle" fontSize="11" fill="#9AA1AC">{r.node.instance} · {r.node.zone} · {np.length} pods · 평균 {avg}%{hot ? ` · 핫스팟 ${hot}` : ""}</text>
                 </g>
               );
             })}
@@ -190,11 +230,15 @@ function App() {
               const q = posOf(p.id); const pts = hpts(q.x, q.y, S - 1);
               const dim = (focus.t === "node" && p.node !== focus.id) || (focus.t === "pod" && p.id !== focus.id);
               const foc = focus.t === "pod" && p.id === focus.id;
+              // 시맨틱 줌: 노드로 들어가면 각 파드에 서비스 라벨이 나타남
+              const showLabel = (focus.t === "node" && p.node === focus.id) || foc;
               return (
                 <g key={p.id} onClick={(e) => { e.stopPropagation(); setFocus({ t: "pod", id: p.id }); }} style={{ cursor: "pointer", opacity: dim ? 0.22 : 1, transition: "opacity .3s" }} className="hx">
                   <polygon points={pts} fill={fillOf(p)} stroke={foc ? BLUE : "#fff"} strokeWidth={foc ? 3 : 1.7} strokeLinejoin="round" />
                   <polygon points={pts} fill="url(#lg)" strokeLinejoin="round" style={{ pointerEvents: "none" }} />
                   {isCrit(p) && <polygon points={pts} fill="none" stroke="#EF4444" strokeWidth={2.6} strokeLinejoin="round" className="critpulse" style={{ pointerEvents: "none" }} />}
+                  {showLabel && <text x={q.x} y={q.y + 2.5} textAnchor="middle" fontSize="6.2" fontWeight="700" fill="rgba(255,255,255,0.95)" style={{ pointerEvents: "none", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>{p.svc}</text>}
+                  {showLabel && <text x={q.x} y={q.y + 9.5} textAnchor="middle" fontSize="4.6" fontWeight="500" fill="rgba(255,255,255,0.8)" style={{ pointerEvents: "none" }}>{p.status === "Running" ? `${health(p)}%` : p.status}</text>}
                 </g>
               );
             })}
@@ -202,12 +246,27 @@ function App() {
 
           {/* 하단 상태바 */}
           <div style={{ position: "absolute", left: 16, bottom: 14, display: "flex", gap: 14, alignItems: "center", fontSize: 11.5, color: "#8A93A0", background: "rgba(255,255,255,0.85)", backdropFilter: "blur(6px)", padding: "7px 12px", borderRadius: 11, border: "1px solid rgba(17,19,24,0.06)" }}>
-            {colorBy === "load" ? <span style={{ display: "flex", alignItems: "center", gap: 7 }}>낮음<span style={{ width: 90, height: 7, borderRadius: 999, background: "linear-gradient(90deg,#60A5FA,#3B82F6,#2DD4BF,#FACC15,#F97316,#EF4444)" }} />높음</span>
+            {colorBy === "load" ? <span style={{ display: "flex", alignItems: "center", gap: 7 }}>여유<span style={{ width: 90, height: 7, borderRadius: 999, background: "linear-gradient(90deg,#60A5FA,#3B82F6,#2DD4BF,#FACC15,#F97316,#EF4444)" }} />한도 임박</span>
               : <span>색 = 서비스</span>}
             <span style={{ color: "#C3CAD5" }}>|</span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span className="pulse" style={{ width: 7, height: 7, borderRadius: 999, background: "#22C55E" }} />실시간 · {NODES.length}노드 {pods.length}파드 · 임계 <b style={{ color: crit ? "#EF4444" : "#111318" }}>{crit}</b></span>
           </div>
           {focus.t === "cluster" && <div style={{ position: "absolute", right: 16, bottom: 14, fontSize: 11.5, color: "#B4BBC6" }}>노드/파드를 클릭하면 그 안으로 줌인합니다</div>}
+
+          {/* 실시간 이벤트 티커 */}
+          {focus.t !== "pod" && (
+            <div style={{ position: "absolute", top: 14, right: 16, display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", pointerEvents: "none" }}>
+              <AnimatePresence>
+                {feed.map((e) => (
+                  <motion.div key={e.id} initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, y: -8 }} transition={{ type: "spring", visualDuration: 0.32, bounce: 0.2 }}
+                    style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(8px)", border: `1px solid ${e.kind === "crit" ? "rgba(239,68,68,0.25)" : "rgba(34,197,94,0.25)"}`, borderRadius: 10, padding: "6px 11px", boxShadow: "0 6px 16px -6px rgba(17,19,24,0.15)" }}>
+                    <span className={e.kind === "crit" ? "pulse" : ""} style={{ width: 7, height: 7, borderRadius: 999, background: e.kind === "crit" ? "#EF4444" : "#22C55E", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, fontFamily: "ui-monospace,monospace", color: e.kind === "crit" ? "#B91C1C" : "#15803D" }}>{e.msg}</span>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
 
           {/* 상세 패널 */}
           <AnimatePresence>
@@ -231,8 +290,8 @@ function App() {
   );
 }
 
-function Bar({ label, v, sub }: { label: string; v: number; sub?: string }) {
-  return <div><div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}><span style={{ color: "#8A93A0" }}>{label}</span><span style={{ fontWeight: 700, color: "#111318" }}>{v}%{sub && <span style={{ color: "#EF4444", fontWeight: 600 }}> {sub}</span>}</span></div><div style={{ height: 8, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}><motion.div animate={{ width: `${v}%` }} transition={{ duration: 0.6 }} style={{ height: "100%", borderRadius: 999, background: heat(v) }} /></div></div>;
+function Bar({ label, v, sub, detail }: { label: string; v: number; sub?: string; detail?: string }) {
+  return <div><div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}><span style={{ color: "#8A93A0" }}>{label} <span style={{ color: "#B4BBC6" }}>(한도 대비)</span></span><span style={{ fontWeight: 700, color: "#111318" }}>{v}%{detail && <span style={{ color: "#9AA1AC", fontWeight: 500 }}> · {detail}</span>}{sub && <span style={{ color: "#EF4444", fontWeight: 600 }}> {sub}</span>}</span></div><div style={{ height: 8, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}><motion.div animate={{ width: `${v}%` }} transition={{ duration: 0.6 }} style={{ height: "100%", borderRadius: 999, background: heat(v) }} /></div></div>;
 }
 function DetailPanel({ pod, onClose }: { pod: Pod; onClose: () => void }) {
   const crit = isCrit(pod);
@@ -249,7 +308,7 @@ function DetailPanel({ pod, onClose }: { pod: Pod; onClose: () => void }) {
       </div>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${STCOLOR[pod.status]}18`, color: STCOLOR[pod.status], fontWeight: 700, fontSize: 12, padding: "5px 11px", borderRadius: 999, marginBottom: 14 }}><span className={crit ? "pulse" : ""} style={{ width: 7, height: 7, borderRadius: 999, background: STCOLOR[pod.status] }} />{pod.status}<span style={{ color: "#9AA1AC", fontWeight: 500 }}>· 재시작 {pod.restarts}</span></span>
       <div style={{ display: "grid", gap: 14 }}>
-        <Section icon={Cpu} title="리소스 · 실시간"><div style={{ display: "grid", gap: 11 }}><Bar label="CPU" v={pod.cpu} sub={crit ? "· 한도 근접" : undefined} /><Bar label="메모리" v={pod.mem} sub={pod.status === "OOMKilled" ? "· 초과" : undefined} /></div></Section>
+        <Section icon={Cpu} title="리소스 · 실시간"><div style={{ display: "grid", gap: 11 }}><Bar label="CPU" v={pod.cpu} detail={`${Math.round(pod.cpu / 100 * pod.cpuLimM)}m / ${pod.cpuLimM}m`} sub={crit ? "· 임박" : undefined} /><Bar label="메모리" v={pod.mem} detail={`${Math.round(pod.mem / 100 * pod.memLimMi)}Mi / ${pod.memLimMi}Mi`} sub={pod.status === "OOMKilled" ? "· 초과" : undefined} /></div></Section>
         <Section icon={FileCog} title="설정"><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{(SVC_CFG[pod.svc] || []).map((c) => { const secret = c.includes("cred") || c.includes("cert"); return <span key={c} style={{ fontSize: 11, fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#111318", background: secret ? "#F7F0FE" : "#EEF2FF", border: `1px solid ${secret ? "#A855F7" : BLUE}30`, borderRadius: 8, padding: "4px 8px" }}>{c}</span>; })}</div><div style={{ fontSize: 11, color: "#9AA1AC", marginTop: 8, fontFamily: "ui-monospace,monospace" }}>{pod.image}</div></Section>
         <Section icon={Activity} title="이벤트"><div style={{ display: "grid", gap: 8 }}>{events.map(([k, m, t, c], i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "start" }}><span style={{ width: 6, height: 6, borderRadius: 999, background: c as string, marginTop: 5, flexShrink: 0 }} /><div><span style={{ fontSize: 11.5, fontWeight: 700, color: "#111318" }}>{k}</span> <span style={{ fontSize: 11, color: "#565E6B" }}>{m}</span><div style={{ fontSize: 10, color: "#B4BBC6" }}>{t}</div></div></div>)}</div></Section>
         <Section icon={ScrollText} title="로그"><pre style={{ margin: 0, background: "#F4F6FA", borderRadius: 10, padding: "10px 12px", fontFamily: "ui-monospace,monospace", fontSize: 10.5, lineHeight: 1.7, color: crit ? "#7F1D1D" : "#3A4658", overflowX: "auto", whiteSpace: "pre" }}>{(crit ? ["level=error msg=\"out of memory\"", "signal: killed (OOM)", "restarting container..."] : ["level=info path=/health 200 3ms", `level=info connected svc=${pod.svc}`, "level=info heartbeat ok"]).join("\n")}</pre></Section>
