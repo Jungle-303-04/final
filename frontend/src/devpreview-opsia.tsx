@@ -106,19 +106,15 @@ const spanOf = (cap: number) => Math.min(3, Math.max(1, Math.ceil(cap / 10)));
 type Lens = { kind: "svc" | "cfg" | "git"; id: string } | null;
 type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { level: "pods"; cluster: string; node: string };
 
-// ── 파드 타일: CPU 물 채움 (뉴트럴 용기 + 크리스프한 물) ─────────────────────────────
+// ── 파드 타일: 강도 램프 (Datadog Host Map / GitHub 잔디 방식)
+// 상태 = 색상(그린/오렌지/레드), 사용률 = 같은 색의 진하기. 형태는 고정, 색만 부드럽게 변한다.
 function PodTile({ p, big, dim, lit, live, onClick }: { p: Pod; big: boolean; dim: boolean; lit: boolean; live: number; onClick: () => void }) {
   const cpuV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.cpu + live));
   const c = healthColor(p);
-  const seed = p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
-  const t = Math.min(1, p.cpu / 100);
-  const vary = 0.88 + (seed % 9) / 34;
-  const dur = (6.6 - 4.8 * t) * vary;
-  const dur2 = dur * 1.45;
-  const delay = -((seed % 37) / 7);
-  const bobDur = (3.6 - 2.3 * t) * vary;
-  const bobAmp = 0.9 + 1.8 * t;
-  const fillH = p.status === "Pending" ? 0 : Math.max(9, cpuV);
+  // 강도: 20% ~ 92% (저부하도 식별 가능, 고부하는 깊은 색)
+  const mix = p.status === "Pending" ? 0 : isCrit(p) ? 100 : Math.round(20 + (cpuV / 100) * 72);
+  const bg = p.status === "Pending" ? "#F0F1F4" : `color-mix(in srgb, ${c} ${mix}%, #fff)`;
+  const deep = mix > 55; // 진한 타일 위 텍스트는 밝게
   return (
     <motion.button layout data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
       initial={false}
@@ -127,24 +123,14 @@ function PodTile({ p, big, dim, lit, live, onClick }: { p: Pod; big: boolean; di
       className={isCrit(p) ? "tile crit" : "tile"}
       style={{
         aspectRatio: "1", border: "none", borderRadius: big ? 11 : 6.5, cursor: "pointer", position: "relative", overflow: "hidden",
-        background: "#F3F4F6",
-        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : "inset 0 0 0 1px rgba(17,19,24,0.05)",
+        background: bg, transition: "background 1.2s ease",
+        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : `inset 0 0 0 1px color-mix(in srgb, ${c} ${Math.min(mix + 12, 100)}%, rgba(17,19,24,0.06))`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: big ? 2 : 0, padding: 0, minWidth: 0,
       }}>
-      {fillH > 0 && (
-        <div className="waveWrap" style={{ animationDuration: `${bobDur}s`, animationDelay: `${delay}s`, ["--bob" as string]: `${bobAmp}px` } as React.CSSProperties}>
-          <div className="wave" style={{ top: `calc(${100 - fillH}% - 2.5px)`, background: c, opacity: 0.3, borderRadius: "48.5%", animationDuration: `${dur2}s`, animationDelay: `${delay * 1.7}s`, animationDirection: "reverse" }} />
-          <div className="wave" style={{ top: `${100 - fillH}%`, background: c, animationDuration: `${dur}s`, animationDelay: `${delay}s` }} />
-        </div>
-      )}
-      {/* 깊이: 아래로 갈수록 미세하게 어둡게 */}
-      {fillH > 8 && (
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${Math.max(fillH - 10, 0)}%`, background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(9,20,34,0.16))", pointerEvents: "none" }} />
-      )}
       {big && (
         <>
-          <span style={{ position: "relative", zIndex: 1, fontSize: 11, fontWeight: 600, color: "rgba(17,19,24,0.82)", letterSpacing: "-0.01em", maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: MONO }}>{p.svc}</span>
-          {p.status !== "Running" && <span style={{ position: "relative", zIndex: 1, fontSize: 9, fontWeight: 600, color: "rgba(17,19,24,0.55)" }}>{p.status}</span>}
+          <span style={{ position: "relative", zIndex: 1, fontSize: 11, fontWeight: 600, color: deep ? "rgba(255,255,255,0.95)" : "rgba(17,19,24,0.8)", letterSpacing: "-0.01em", maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: MONO }}>{p.svc}</span>
+          <span style={{ position: "relative", zIndex: 1, fontSize: 9, fontWeight: 600, color: deep ? "rgba(255,255,255,0.75)" : "rgba(17,19,24,0.5)", fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>{p.status === "Running" ? `${cpuV}%` : p.status}</span>
         </>
       )}
     </motion.button>
@@ -424,15 +410,11 @@ function App() {
         html, body { background: ${UI.bg}; }
         .op { min-height: 100vh; background: ${UI.bg}; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .op .tile.crit { animation: critp 1.3s ease-in-out infinite; }
-        .op .waveWrap { position: absolute; inset: 0; animation-name: bob; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
-        @keyframes bob { from { transform: translateY(calc(var(--bob, 1.5px) * -0.4)); } to { transform: translateY(var(--bob, 1.5px)); } }
-        .op .wave { position: absolute; left: -140%; width: 380%; aspect-ratio: 1; border-radius: 49%; transition: top .9s cubic-bezier(.4,0,.2,1); animation-name: slosh; animation-timing-function: linear; animation-iteration-count: infinite; }
-        @keyframes slosh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.12) saturate(1.15); } }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
         .op ::-webkit-scrollbar { width: 8px; } .op ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }
-        @media (prefers-reduced-motion: reduce) { .tile.crit, .pulsedot, .wave, .waveWrap { animation: none !important; } }
+        @media (prefers-reduced-motion: reduce) { .tile.crit, .pulsedot { animation: none !important; } }
       `}</style>
     </div>
   );
