@@ -11801,7 +11801,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product preserves explicit provider absence and does not substitute generic audit-log rows for security findings."
+            "rationale": "The shared Checks projection now reads only validated findings persisted in outbound Agent snapshots, enforces workspace, cluster, namespace, and user policy scope, preserves explicit provider absence, and does not substitute generic audit-log rows for security findings."
           }
         },
         {

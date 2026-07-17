@@ -5323,27 +5323,30 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.checks.observations",
       "frontendContract": "frontend/src/features/checks/checksContract.ts",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
         "tests/test_checks_router.py",
         "tests/test_checks_observation_projection.py",
         "frontend/src/api/checks.test.ts",
-        "frontend/src/pages/checks/ChecksPage.test.tsx"
+        "frontend/src/pages/checks/ChecksPage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/checks/router.py#get_checks_overview",
           "consumer": "src/domains/checks/observation_projection.py#checks_overview",
+          "reason": "The normalized Checks overview replaces the source workspace audit endpoint with one RBAC-scoped projection of persisted outbound Agent findings, definitions, visibility, observation time, and partial/unavailable reasons; generic workspace action history is never substituted and the gateway never evaluates a cluster directly.",
           "test": "tests/test_checks_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
           "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "reason": "Checks and resource links consume the strict shared finding contract, preserve exact ResourceRef identity and provider availability, and refresh the same authorized scope without a duplicate browser audit model.",
           "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
         },
         "desktop": null,
