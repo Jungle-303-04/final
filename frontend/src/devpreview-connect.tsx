@@ -1,12 +1,14 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // ⚠ 데모 · 환경 연결 마법사. 런처 → (A)Git 저장소 등록 / (B)클러스터 연결(에이전트 설치). motion. 전부 더미·하드코딩(비주얼 데모).
 import ReactDOM from "react-dom/client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, Cloud, Container, Copy, Folder, GitBranch, Globe,
-  LoaderCircle, Lock, Search, Server, Sparkles, X,
+  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Folder, GitBranch, Globe,
+  Lock, Search, Server, Sparkles, X,
 } from "lucide-react";
+import { IconBrandAws, IconBrandAzure, IconBrandDocker, IconBrandGoogle } from "@tabler/icons-react";
+import { Spinner } from "./shared/ui/primitives/spinner";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -42,10 +44,10 @@ const CLUSTER_ENVS = ["prod", "staging", "dev"];
 // 설치 플랫폼 · 플랫폼마다 자격증명 획득 방식과 명령이 다름 (토큰은 항상 마스킹)
 // ⚠ 브랜드 로고는 상표라 브랜드 컬러+대표 아이콘으로 표현. 실제 로고 SVG로 교체 가능.
 const PLATFORMS = [
-  { id: "aws", name: "Amazon EKS", sub: "AWS", color: "#FF9900", icon: Cloud },
-  { id: "gcp", name: "Google GKE", sub: "GCP", color: "#4285F4", icon: Cloud },
-  { id: "azure", name: "Azure AKS", sub: "Azure", color: "#0078D4", icon: Cloud },
-  { id: "docker", name: "Docker", sub: "로컬", color: "#2496ED", icon: Container },
+  { id: "aws", name: "Amazon EKS", sub: "AWS", color: "#FF9900", icon: IconBrandAws },
+  { id: "gcp", name: "Google GKE", sub: "GCP", color: "#4285F4", icon: IconBrandGoogle },
+  { id: "azure", name: "Azure AKS", sub: "Azure", color: "#0078D4", icon: IconBrandAzure },
+  { id: "docker", name: "Docker", sub: "로컬", color: "#2496ED", icon: IconBrandDocker },
 ] as const;
 type PlatformId = (typeof PLATFORMS)[number]["id"];
 const TOK = "••••••••••••••••••••••••";
@@ -88,7 +90,7 @@ function parseRepo(v: string): Repo | null {
 }
 
 // ── 공용 프리미티브 ─────────────────────────────
-const Spin = ({ c = "size-4" }: { c?: string }) => <LoaderCircle className={`${c} animate-spin`} />;
+const Spin = ({ c = "size-4" }: { c?: string }) => <Spinner className={c} decorative />;
 
 function Checkbox({ on }: { on: boolean }) {
   return (
@@ -176,10 +178,16 @@ function RepoStep({ onNext }: { onNext: (v: string) => void }) {
   const [token, setToken] = useState("");
   const [tok, setTok] = useState<"idle" | "verifying" | "ok">("idle");
 
+  const handleInputChange = (v: string) => {
+    setInput(v);
+    setRepo(null);
+    setToken("");
+    setTok("idle");
+    setStatus(v.trim() ? "detecting" : "idle");
+  };
+
   useEffect(() => {
-    setStatus("idle"); setRepo(null); setToken(""); setTok("idle");
     const v = input.trim(); if (!v) return;
-    setStatus("detecting");
     const id = window.setTimeout(() => {
       const parsed = parseRepo(v);
       if (!parsed) { setStatus("error"); return; }
@@ -188,9 +196,13 @@ function RepoStep({ onNext }: { onNext: (v: string) => void }) {
     return () => window.clearTimeout(id);
   }, [input]);
 
+  const handleTokenChange = (v: string) => {
+    setToken(v);
+    setTok(repo?.visibility === "private" && v.trim() ? "verifying" : "idle");
+  };
+
   useEffect(() => {
-    if (repo?.visibility !== "private" || !token.trim()) { setTok("idle"); return; }
-    setTok("verifying");
+    if (repo?.visibility !== "private" || !token.trim()) return;
     const id = window.setTimeout(() => setTok("ok"), T.tokenMs);
     return () => window.clearTimeout(id);
   }, [token, repo]);
@@ -203,7 +215,7 @@ function RepoStep({ onNext }: { onNext: (v: string) => void }) {
 
       <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
         {status === "detecting" ? <Spin c="size-[18px] c-accent" /> : <Search className="size-[18px] c-3" />}
-        <input autoFocus value={input} onChange={(e) => setInput(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+        <input autoFocus value={input} onChange={(e) => handleInputChange(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
       </div>
 
       <AnimatePresence mode="popLayout">
@@ -245,7 +257,7 @@ function RepoStep({ onNext }: { onNext: (v: string) => void }) {
                     <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소예요 · 액세스 토큰이 필요합니다</span>
                     <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
                       <Lock className="size-[18px] c-3" />
-                      <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="ghp_••••••••••••••••" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
+                      <input value={token} onChange={(e) => handleTokenChange(e.currentTarget.value)} placeholder="ghp_••••••••••••••••" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
                       <AnimatePresence mode="wait">
                         {tok === "verifying" && <motion.span key="v" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Spin c="size-[18px] c-accent" /></motion.span>}
                         {tok === "ok" && <motion.span key="ok" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={SPRING}><Check className="size-[18px] c-green" strokeWidth={3} /></motion.span>}
@@ -384,7 +396,7 @@ function ClusterInfoStep({ name, setName, platform, setPlatform, env, setEnv, on
             const on = platform === p.id; const Icon = p.icon;
             return (
               <button key={p.id} onClick={() => setPlatform(p.id)} className={`card flex items-center gap-3 ${on ? "card-on" : ""}`} style={{ borderRadius: 14, padding: "12px 13px" }}>
-                <span className="grid shrink-0 place-items-center" style={{ width: 34, height: 34, borderRadius: 10, background: `${p.color}1A` }}><Icon className="size-[19px]" style={{ color: p.color }} /></span>
+                <span className="grid shrink-0 place-items-center" style={{ width: 34, height: 34, borderRadius: 10, background: `${p.color}1A` }}><Icon size={21} stroke={2} style={{ color: p.color }} /></span>
                 <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold tracking-[-0.01em] c-ink">{p.name}</div><div className="text-[11px] c-3">{p.sub}</div></div>
                 {on && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={SPRING}><Check className="size-[17px] c-accent" strokeWidth={3} /></motion.span>}
               </button>
@@ -401,11 +413,11 @@ function ClusterInfoStep({ name, setName, platform, setPlatform, env, setEnv, on
       </div>
       <div className="grid gap-2.5">
         <div className="flex items-center gap-2 px-0.5"><span className="text-[12.5px] font-semibold c-2">환경</span><span className="text-[11.5px] c-3">이 클러스터의 용도 라벨</span></div>
-        <div className="seg flex" style={{ borderRadius: 13, padding: 3 }}>
+        <div className="seg flex" style={{ borderRadius: 14, padding: 4 }}>
           {CLUSTER_ENVS.map((e) => (
-            <button key={e} onClick={() => setEnv(e)} className="relative flex-1 text-[13px] font-medium" style={{ borderRadius: 10, padding: "9px 0" }}>
-              {env === e && <motion.span layoutId="cenv" className="absolute inset-0 bg-surface" style={{ borderRadius: 10, boxShadow: "0 1px 2px rgba(0,0,0,0.14), 0 0 0 0.5px rgba(0,0,0,0.04)" }} transition={{ type: "spring", visualDuration: 0.25, bounce: 0.2 }} />}
-              <span className={`relative ${env === e ? "c-ink" : "c-3"}`}>{e}</span>
+            <button key={e} onClick={() => setEnv(e)} className="relative flex-1 text-[13px] font-semibold" style={{ borderRadius: 10, padding: "9px 0" }}>
+              {env === e && <motion.span layoutId="cenv" className="absolute inset-0 bg-surface" style={{ borderRadius: 10, boxShadow: "0 2px 6px -1px rgba(17,19,24,0.12)" }} transition={{ type: "spring", visualDuration: 0.28, bounce: 0.18 }} />}
+              <span className="relative" style={{ color: env === e ? "var(--ink)" : "var(--ink-3)" }}>{e}</span>
             </button>
           ))}
         </div>
@@ -433,7 +445,7 @@ function ClusterInstallStep({ platform, name, env, onBack, onConnected }: { plat
 
       <div className="cmd overflow-hidden" style={{ borderRadius: 16 }}>
         <div className="flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
-          <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon className="size-3.5" style={{ color: pf.color }} />opsia-agent · {pf.name}</span>
+          <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />opsia-agent · {pf.name}</span>
           <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? "rgba(34,197,94,0.12)" : "rgba(17,19,24,0.05)" }}>
             {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
           </button>
@@ -523,7 +535,7 @@ function Toast({ data, onClose }: { data: ToastData; onClose: () => void }) {
       <div className="flex items-center gap-3.5" style={{ padding: "14px 16px" }}>
         <span className="grid size-10 shrink-0 place-items-center text-white" style={{ borderRadius: 13, background: done ? "var(--lime)" : "var(--blue)" }}>
           <AnimatePresence mode="wait">
-            {done ? <motion.span key="c" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={SPRING}><Check className="size-[19px] c-ink" strokeWidth={3} /></motion.span> : <motion.span key="s"><LoaderCircle className="size-[19px] animate-spin" /></motion.span>}
+            {done ? <motion.span key="c" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={SPRING}><Check className="size-[19px] c-ink" strokeWidth={3} /></motion.span> : <motion.span key="s"><Spinner className="size-[19px]" decorative /></motion.span>}
           </AnimatePresence>
         </span>
         <div className="min-w-0 flex-1">
