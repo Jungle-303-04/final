@@ -1,37 +1,39 @@
 import { relative, sep } from "node:path";
 import ts from "typescript";
 
-export function containsIdentifier(source: string, identifier: string): boolean {
+export function identifierNames(source: string): Set<string> {
   const sourceFile = ts.createSourceFile("contract.test.ts", source, ts.ScriptTarget.Latest, true);
-  let found = false;
+  const names = new Set<string>();
   function visit(node: ts.Node) {
-    if (ts.isIdentifier(node) && node.text === identifier) found = true;
-    if (!found) ts.forEachChild(node, visit);
+    if (ts.isIdentifier(node)) names.add(node.text);
+    ts.forEachChild(node, visit);
   }
   visit(sourceFile);
-  return found;
+  return names;
 }
 
-export function hasNamedExport(source: string, exportedName: string): boolean {
+export function namedExportNames(source: string): Set<string> {
   const sourceFile = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
-  let found = false;
+  const names = new Set<string>();
 
   sourceFile.forEachChild((node) => {
     if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
-      if (node.exportClause.elements.some((element) => element.name.text === exportedName)) found = true;
+      for (const element of node.exportClause.elements) names.add(element.name.text);
     }
     if (
       (ts.isFunctionDeclaration(node) || ts.isVariableStatement(node)) &&
       ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
     ) {
-      if (ts.isFunctionDeclaration(node) && node.name?.text === exportedName) found = true;
-      if (ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => (
-        ts.isIdentifier(declaration.name) && declaration.name.text === exportedName
-      ))) found = true;
+      if (ts.isFunctionDeclaration(node) && node.name) names.add(node.name.text);
+      if (ts.isVariableStatement(node)) {
+        for (const declaration of node.declarationList.declarations) {
+          if (ts.isIdentifier(declaration.name)) names.add(declaration.name.text);
+        }
+      }
     }
   });
 
-  return found;
+  return names;
 }
 
 export function isWithin(candidate: string, directory: string): boolean {

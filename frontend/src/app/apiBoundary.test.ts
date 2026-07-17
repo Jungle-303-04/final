@@ -3,7 +3,7 @@ import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { containsIdentifier, hasNamedExport, isWithin } from "./apiBoundary.testSupport";
+import { identifierNames, isWithin, namedExportNames } from "./apiBoundary.testSupport";
 import { collectApiSources, collectScripts, type ApiSource } from "./apiBoundaryFileSupport";
 import { moduleProvidesZodSchema } from "./apiBoundarySchemaSupport";
 
@@ -20,6 +20,14 @@ const scriptExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts",
 interface ApiReference {
   kind: "dynamic" | "export" | "import";
   specifier: string;
+}
+
+interface EndpointContractIndex {
+  contractIdentifiers: Set<string>;
+  implementationSchemaModules: Map<string, string[]>;
+  implementationsByName: Map<string, ApiSource[]>;
+  publicExports: Set<string>;
+  sourcesByPath: Map<string, string>;
 }
 
 const API_BOUNDARY_TIMEOUT_MS = 30_000;
@@ -68,8 +76,9 @@ describe("product API consumption boundary", () => {
     }
 
     expect(issues, "composition boundaries must use named API barrel imports with one owner per endpoint").toEqual([]);
+    const contractIndex = buildEndpointContractIndex(apiSources);
     expect(
-      [...new Set(names)].sort().flatMap((name) => endpointContractIssues(name, apiSources)),
+      [...new Set(names)].sort().flatMap((name) => endpointContractIssues(name, contractIndex)),
       "composed endpoints must have a local contract test, public barrel export, and imported Zod schema",
     ).toEqual([]);
   }, API_BOUNDARY_TIMEOUT_MS);
@@ -94,10 +103,11 @@ describe("product API consumption boundary", () => {
 
   it("reports each missing piece of current-tree endpoint evidence", () => {
     const endpointPath = resolve(apiRoot, "fixture-endpoint.ts");
-    expect(endpointContractIssues("fixtureEndpoint", [{
+    const fixtureIndex = buildEndpointContractIndex([{
       filePath: endpointPath,
       source: "export function fixtureEndpoint() { return null; }",
-    }])).toEqual([
+    }]);
+    expect(endpointContractIssues("fixtureEndpoint", fixtureIndex)).toEqual([
       "fixtureEndpoint: contract test missing endpoint identifier",
       "fixtureEndpoint: named export missing from public barrel",
       "fixtureEndpoint: implementation does not import a Zod schema",
@@ -206,26 +216,58 @@ function compositionImports(filePath: string, source: string): { names: string[]
   return { names: [...new Set(names)].sort(), issues: issues.sort() };
 }
 
-function endpointContractIssues(name: string, sources: ApiSource[]): string[] {
-  const issues: string[] = [];
-  const contractTests = sources.filter(({ filePath }) => /\.test\.[cm]?[jt]sx?$/u.test(filePath));
-  const publicBarrels = sources.filter(({ filePath }) => isPublicBarrel(filePath));
-  const implementations = sources.filter(({ filePath, source }) => (
-    !isPublicBarrel(filePath) &&
-    !/\.test\.[cm]?[jt]sx?$/u.test(filePath) &&
-    hasNamedExport(source, name)
-  ));
+function buildEndpointContractIndex(sources: ApiSource[]): EndpointContractIndex {
+  const contractIdentifiers = new Set<string>();
+  const implementationsByName = new Map<string, ApiSource[]>();
+  const publicExports = new Set<string>();
+  const sourcesByPath = new Map(sources.map((item) => [item.filePath, item.source]));
 
-  if (!contractTests.some(({ source }) => containsIdentifier(source, name))) {
+  for (const source of sources) {
+    if (/\.test\.[cm]?[jt]sx?$/u.test(source.filePath)) {
+      for (const name of identifierNames(source.source)) contractIdentifiers.add(name);
+      continue;
+    }
+    const exports = namedExportNames(source.source);
+    if (isPublicBarrel(source.filePath)) {
+      for (const name of exports) publicExports.add(name);
+      continue;
+    }
+    for (const name of exports) {
+      const implementations = implementationsByName.get(name) ?? [];
+      implementations.push(source);
+      implementationsByName.set(name, implementations);
+    }
+  }
+
+  return {
+    contractIdentifiers,
+    implementationSchemaModules: new Map(),
+    implementationsByName,
+    publicExports,
+    sourcesByPath,
+  };
+}
+
+function endpointContractIssues(name: string, index: EndpointContractIndex): string[] {
+  const issues: string[] = [];
+  const implementations = index.implementationsByName.get(name) ?? [];
+
+  if (!index.contractIdentifiers.has(name)) {
     issues.push("contract test missing endpoint identifier");
   }
-  if (!publicBarrels.some(({ source }) => hasNamedExport(source, name))) {
+  if (!index.publicExports.has(name)) {
     issues.push("named export missing from public barrel");
   }
   if (implementations.length !== 1) {
     issues.push(`expected one implementation module, found ${implementations.length}`);
-  } else if (importedZodSchemaModules(implementations[0], sources).length === 0) {
-    issues.push("implementation does not import a Zod schema");
+  } else {
+    const implementation = implementations[0];
+    let schemaModules = index.implementationSchemaModules.get(implementation.filePath);
+    if (!schemaModules) {
+      schemaModules = importedZodSchemaModules(implementation, index.sourcesByPath);
+      index.implementationSchemaModules.set(implementation.filePath, schemaModules);
+    }
+    if (schemaModules.length === 0) issues.push("implementation does not import a Zod schema");
   }
   return issues.map((issue) => `${name}: ${issue}`);
 }
@@ -235,8 +277,10 @@ function isPublicBarrel(filePath: string): boolean {
   return apiPath === "index.ts" || apiPath.startsWith(`barrels${sep}`);
 }
 
-function importedZodSchemaModules(implementation: ApiSource, sources: ApiSource[]): string[] {
-  const sourcesByPath = new Map(sources.map((item) => [item.filePath, item.source]));
+function importedZodSchemaModules(
+  implementation: ApiSource,
+  sourcesByPath: Map<string, string>,
+): string[] {
   const sourceFile = ts.createSourceFile(
     implementation.filePath,
     implementation.source,
