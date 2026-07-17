@@ -13,6 +13,11 @@ export interface KubernetesLabelFilter {
 export type ResourceView = "graph" | "table";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
 export type CostRange = "6h" | "24h" | "7d";
+export type TrafficSince = "1m" | "5m" | "15m" | "1h";
+export type TrafficProtocol = "tcp" | "udp" | "http" | "grpc" | "dns" | "unknown";
+export type TrafficVerdict = "forwarded" | "dropped" | "error" | "unknown";
+export type TrafficSort = "connections" | "last_seen" | "source" | "destination";
+export type TrafficSortOrder = "asc" | "desc";
 export type RightsizingClassFilter =
   | "increase"
   | "reduction"
@@ -89,6 +94,13 @@ export interface ProductDetailQuery {
   rightsizingQuery?: string | null;
   timeAt?: number;
   graphCollapsed?: true;
+  trafficSince?: TrafficSince;
+  trafficProtocols?: readonly TrafficProtocol[];
+  trafficVerdicts?: readonly TrafficVerdict[];
+  trafficSort?: TrafficSort;
+  trafficOrder?: TrafficSortOrder;
+  trafficFlow?: string | null;
+  trafficCursor?: string | null;
 }
 
 export interface InvalidFilterValues {
@@ -153,6 +165,10 @@ export type DetailMutationIntent =
   | "time-range"
   | "time-at"
   | "graph-visibility"
+  | "traffic-filter"
+  | "traffic-sort"
+  | "traffic-flow"
+  | "traffic-page"
   | "drill-in";
 
 export type UnifiedFilterUpdater =

@@ -34,15 +34,25 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import { useTrafficOverview } from "./useTrafficOverviewData";
+import { TrafficFlowSurface, type TrafficFlowUrlState } from "./TrafficFlowSurface";
 
 export function TrafficPage({ port }: { port: TrafficPort }) {
   const clusterScope = useClusterScope();
   const filters = useUnifiedFilter();
+  const detail = filters.detail ?? {};
   const selection = scopeSelection(clusterScope);
   const namespaces = useMemo(
     () => normalizeNamespaceRefs(filters.state.common.namespaces).map(namespaceSelector),
     [filters.state.common.namespaces],
   );
+  const trafficState: TrafficFlowUrlState = {
+    since: detail.trafficSince ?? "5m",
+    protocols: detail.trafficProtocols ?? [],
+    verdicts: detail.trafficVerdicts ?? [],
+    sort: detail.trafficSort ?? "connections",
+    order: detail.trafficOrder ?? "desc",
+    selectedFlowId: detail.trafficFlow ?? null,
+  };
 
   if (selection.kind === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (selection.kind === "empty") return <ProductStateScreen kind="empty" placement="content" />;
@@ -50,19 +60,87 @@ export function TrafficPage({ port }: { port: TrafficPort }) {
     return <ProductStateScreen kind="error" issue={{ code: "unknown", safeDetail: selection.detail }} placement="content" />;
   }
 
-  return <TrafficReadyPage clusterIds={selection.clusterIds} namespaces={namespaces} port={port} />;
+  return (
+    <TrafficReadyPage
+      clusterIds={selection.clusterIds}
+      cursor={detail.trafficCursor ?? null}
+      namespaces={namespaces}
+      onChangeFilters={(update) => filters.updateDetail((current) => ({
+        ...current,
+        trafficSince: update.since ?? current.trafficSince,
+        trafficProtocols: update.protocols ?? current.trafficProtocols,
+        trafficVerdicts: update.verdicts ?? current.trafficVerdicts,
+        trafficSort: update.sort ?? current.trafficSort,
+        trafficOrder: update.order ?? current.trafficOrder,
+        trafficCursor: null,
+        trafficFlow: null,
+      }), "traffic-filter")}
+      onNextPage={(cursor) => filters.updateDetail((current) => ({
+        ...current,
+        trafficCursor: cursor,
+        trafficFlow: null,
+      }), "traffic-page")}
+      onResetCursor={() => filters.updateDetail((current) => ({
+        ...current,
+        trafficCursor: null,
+        trafficFlow: null,
+      }), "traffic-page")}
+      onSelectFlow={(flowId) => filters.updateDetail((current) => ({
+        ...current,
+        trafficFlow: flowId,
+      }), "traffic-flow")}
+      port={port}
+      scopeInvalidationRevision={clusterScope.scopeInvalidationRevision ?? 0}
+      trafficState={trafficState}
+    />
+  );
 }
 
 function TrafficReadyPage({
   clusterIds,
+  cursor,
   namespaces,
+  onChangeFilters,
+  onNextPage,
+  onResetCursor,
+  onSelectFlow,
   port,
+  scopeInvalidationRevision,
+  trafficState,
 }: {
   clusterIds: readonly string[];
+  cursor: string | null;
   namespaces: readonly string[];
+  onChangeFilters: (update: Partial<Omit<TrafficFlowUrlState, "selectedFlowId">>) => void;
+  onNextPage: (cursor: string) => void;
+  onResetCursor: () => void;
+  onSelectFlow: (flowId: string | null) => void;
   port: TrafficPort;
+  scopeInvalidationRevision: number;
+  trafficState: TrafficFlowUrlState;
 }) {
-  const data = useTrafficOverview(port, { clusterIds, namespaces });
+  const data = useTrafficOverview(port, {
+    clusterIds,
+    namespaces,
+    since: trafficState.since,
+    protocols: trafficState.protocols,
+    verdicts: trafficState.verdicts,
+    sort: trafficState.sort,
+    order: trafficState.order,
+    cursor: cursor ?? undefined,
+  });
+  const refreshTraffic = data.refresh;
+  const invalidationRevision = useRef(scopeInvalidationRevision);
+  useEffect(() => {
+    if (scopeInvalidationRevision <= invalidationRevision.current) return;
+    invalidationRevision.current = scopeInvalidationRevision;
+    if (cursor !== null) onResetCursor();
+    else refreshTraffic();
+  }, [cursor, onResetCursor, refreshTraffic, scopeInvalidationRevision]);
+  const refresh = () => {
+    if (cursor !== null) onResetCursor();
+    else refreshTraffic();
+  };
 
   return (
     <ProductPageFrame className="gap-4">
@@ -72,10 +150,17 @@ function TrafficReadyPage({
       </header>
       <TrafficSourcesSection
         frame={data.sourcesFrame}
-        onRefresh={data.refresh}
+        onRefresh={refresh}
         port={port}
       />
-      <TrafficContent frame={data.frame} onRefresh={data.refresh} />
+      <TrafficContent
+        frame={data.frame}
+        onChangeFilters={onChangeFilters}
+        onNextPage={onNextPage}
+        onRefresh={refresh}
+        onSelectFlow={onSelectFlow}
+        trafficState={trafficState}
+      />
     </ProductPageFrame>
   );
 }
@@ -332,10 +417,18 @@ function isAbortError(error: unknown): boolean {
 
 function TrafficContent({
   frame,
+  onChangeFilters,
+  onNextPage,
   onRefresh,
+  onSelectFlow,
+  trafficState,
 }: {
   frame: ReturnType<typeof useTrafficOverview>["frame"];
+  onChangeFilters: (update: Partial<Omit<TrafficFlowUrlState, "selectedFlowId">>) => void;
+  onNextPage: (cursor: string) => void;
   onRefresh: () => void;
+  onSelectFlow: (flowId: string | null) => void;
+  trafficState: TrafficFlowUrlState;
 }) {
   if (frame.phase === "idle" || frame.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -359,30 +452,42 @@ function TrafficContent({
         <SummaryCard label={TRAFFIC_COPY.externalFlows} value={overview.summary.externalFlowCount} />
       </section>
       <ScopeCard overview={overview} />
-      <RelationshipsCard overview={overview} />
+      <TrafficFlowSurface
+        onChangeFilters={onChangeFilters}
+        onNextPage={onNextPage}
+        onSelectFlow={onSelectFlow}
+        overview={overview}
+        state={trafficState}
+      />
       {frame.refreshFailure ? <p className="text-sm text-destructive">{TRAFFIC_COPY.refreshFailed}</p> : null}
     </section>
   );
 }
 
 function ObservationNotice({ overview }: { overview: TrafficOverview }) {
+  const observation = overview.observation;
   return (
     <Alert>
       <Activity aria-hidden="true" />
       <AlertTitle>{TRAFFIC_COPY.status}</AlertTitle>
       <AlertDescription>
-        <p>{TRAFFIC_COPY.statusUnavailable}</p>
-        <ReasonCodes reasons={overview.observation.reasonCodes} />
+        <p>{observation.availability !== "unavailable"
+          ? TRAFFIC_COPY.statusObserved.replace(
+              "{sources}",
+              observation.sourceKeys.join(", "),
+            )
+          : TRAFFIC_COPY.statusUnavailable}</p>
+        <ReasonCodes reasons={observation.reasonCodes} />
       </AlertDescription>
     </Alert>
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: null }) {
+function SummaryCard({ label, value }: { label: string; value: number | null }) {
   return (
     <Card size="sm">
       <CardHeader><CardTitle>{label}</CardTitle></CardHeader>
-      <CardContent><p className="text-lg font-semibold">{value ?? TRAFFIC_COPY.notObserved}</p></CardContent>
+      <CardContent><p className="text-lg font-semibold tabular-nums">{value === null ? TRAFFIC_COPY.notObserved : value.toLocaleString()}</p></CardContent>
     </Card>
   );
 }
@@ -419,18 +524,6 @@ function ScopeRow({ scope }: { scope: TrafficClusterScope }) {
       </div>
       <Badge variant={scope.freshness === "live" ? "secondary" : "outline"}>{scope.freshness}</Badge>
     </li>
-  );
-}
-
-function RelationshipsCard({ overview }: { overview: TrafficOverview }) {
-  return (
-    <Card>
-      <CardHeader className="border-b"><CardTitle>{TRAFFIC_COPY.relationships}</CardTitle></CardHeader>
-      <CardContent className="grid gap-2">
-        <p className="text-sm text-muted-foreground">{TRAFFIC_COPY.relationshipsUnavailable}</p>
-        <ReasonCodes reasons={overview.relationships.reasonCodes} />
-      </CardContent>
-    </Card>
   );
 }
 
@@ -479,7 +572,7 @@ function stateIssueCode(failure: TrafficPortFailure): "unknown" | "invalid-respo
 }
 
 function scopeDescription(overview: TrafficOverview): string {
-  const observedAt = overview.scopeCoverage.observedAt;
+  const observedAt = overview.observation.observedAt ?? overview.scopeCoverage.observedAt;
   return observedAt === null ? TRAFFIC_COPY.notObserved : observedAt;
 }
 

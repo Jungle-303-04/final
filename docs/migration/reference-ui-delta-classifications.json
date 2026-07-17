@@ -333,15 +333,15 @@
     },
     "traffic.overview.unavailable": {
       "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
-      "rationale": "The route must show authorized scope freshness and explicit collector absence; it must never turn unavailable traffic evidence into zero counts or an empty graph."
+      "rationale": "The route shows authorized scope freshness and explicit collector absence; unavailable traffic evidence never becomes zero counts or an empty graph."
     },
     "traffic.overview.contract": {
       "destination": "tests/test_traffic_router.py",
-      "rationale": "The Python boundary must apply workspace and inventory-read scope to the normalized overview and keep unavailable flow fields null."
+      "rationale": "The Python boundary applies workspace, cluster, namespace, and inventory-read scope to outbound-Agent evidence and keeps unavailable flow fields null."
     },
     "traffic.filters.collector-gate": {
       "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
-      "rationale": "Namespace, protocol, and status flow filters remain unavailable until collector-backed flow records and filter facets are specified by the server."
+      "rationale": "Namespace, time, protocol, verdict, sort, page, and drawer state consume collector-backed records and server-owned facets through the shared URL contract."
     },
     "cost.overview.unavailable": {
       "destination": "frontend/src/pages/cost/CostPage.test.tsx",
@@ -6287,9 +6287,9 @@
             "plannedTestIds": [
               "traffic.filters.collector-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "The product has no collector-backed flow records or authoritative filter facets; rendering upstream controls would require browser-derived data.",
-            "rationale": "The initial port preserves the selected namespace scope but intentionally does not render inert protocol or status controls."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared URL contract now carries namespace, time, protocol, verdict, sort, page, and selected-flow state while the Python response owns typed facets and counts; the browser does not derive provider facts."
           }
         }
       ]
@@ -6306,9 +6306,9 @@
           "interaction": "the scoped read presents actual collector availability, selected namespace scope, and freshness before any graph, flow list, or aggregate is rendered",
           "transport": "poll",
           "realtime": {
-            "resume": "restart a bounded 30-second typed scope read when the visible selection changes",
+            "resume": "restart a bounded server-policy typed scope read when the visible selection changes or the existing cluster-agent invalidation revision advances",
             "backpressure": "share one request per normalized scope and abort only after the final consumer releases it",
-            "merge": "replace the overview only when the response belongs to the current authorized scope; unavailable evidence remains null"
+            "merge": "replace the overview only when the response belongs to the current authorized scope; reset a paged cursor before an event refresh and keep unavailable evidence null"
           },
           "motion": null,
           "opsiaPort": {
@@ -6327,7 +6327,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The collector is not integrated, so the vertical truthfully returns unavailable status and null counts/edges instead of inferred connections or synthetic zero values."
+            "rationale": "Persisted outbound cluster-agent evidence now supplies scoped Caretta, Hubble, or Istio flow pages with signed pagination, strict unavailable/partial unions, server facets, URL-backed filters and drawer selection, keyboard navigation, and the shared Agent invalidation boundary."
           }
         }
       ]

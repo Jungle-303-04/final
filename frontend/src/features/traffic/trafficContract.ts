@@ -2,6 +2,11 @@ import type { CommandReceipt } from "../../shared/parity/referenceParity";
 
 export type TrafficAvailability = "available" | "partial" | "unavailable";
 export type TrafficFreshness = "live" | "stale" | "partial" | "disconnected";
+export type TrafficSince = "1m" | "5m" | "15m" | "1h";
+export type TrafficSort = "connections" | "last_seen" | "source" | "destination";
+export type TrafficSortOrder = "asc" | "desc";
+export type TrafficProtocol = "tcp" | "udp" | "http" | "grpc" | "dns" | "unknown";
+export type TrafficVerdict = "forwarded" | "dropped" | "error" | "unknown";
 
 export interface TrafficClusterScope {
   workspaceId: string;
@@ -23,6 +28,14 @@ export interface TrafficUnavailableObservation {
   reasonCodes: readonly string[];
 }
 
+export interface TrafficObservedObservation {
+  availability: "available" | "partial";
+  observedAt: string;
+  since: TrafficSince;
+  sourceKeys: readonly string[];
+  reasonCodes: readonly string[];
+}
+
 export interface TrafficUnavailableSummary {
   availability: "unavailable";
   totalFlowCount: null;
@@ -31,22 +44,76 @@ export interface TrafficUnavailableSummary {
   reasonCodes: readonly string[];
 }
 
+export interface TrafficObservedSummary {
+  availability: "available" | "partial";
+  totalFlowCount: number;
+  deniedFlowCount: number;
+  externalFlowCount: number;
+  reasonCodes: readonly string[];
+}
+
+export interface TrafficEndpoint {
+  clusterId: string;
+  name: string;
+  namespace: string | null;
+  kind: string;
+  workload: string | null;
+  service: string | null;
+  ip: string | null;
+  identityStability: "provider_observed";
+}
+
+export interface TrafficRelationship {
+  flowId: string;
+  sourceKey: string;
+  source: TrafficEndpoint;
+  target: TrafficEndpoint;
+  protocol: TrafficProtocol;
+  port: number | null;
+  verdict: TrafficVerdict;
+  connections: number;
+  bytesSent: number | null;
+  bytesReceived: number | null;
+  observedAt: string;
+}
+
 export interface TrafficUnavailableRelationships {
   availability: "unavailable";
   edges: null;
   reasonCodes: readonly string[];
 }
 
+export interface TrafficObservedRelationships {
+  availability: "available" | "partial";
+  edges: readonly TrafficRelationship[];
+  totalCount: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  facets: {
+    protocols: readonly { value: TrafficProtocol; count: number }[];
+    verdicts: readonly { value: TrafficVerdict; count: number }[];
+  };
+  reasonCodes: readonly string[];
+}
+
 export interface TrafficOverview {
   scopeCoverage: TrafficScopeCoverage;
-  observation: TrafficUnavailableObservation;
-  summary: TrafficUnavailableSummary;
-  relationships: TrafficUnavailableRelationships;
+  observation: TrafficObservedObservation | TrafficUnavailableObservation;
+  summary: TrafficObservedSummary | TrafficUnavailableSummary;
+  relationships: TrafficObservedRelationships | TrafficUnavailableRelationships;
+  refreshAfterSeconds: number;
 }
 
 export interface TrafficOverviewRequest {
   clusterIds: readonly string[];
   namespaces: readonly string[];
+  since?: TrafficSince;
+  protocols?: readonly TrafficProtocol[];
+  verdicts?: readonly TrafficVerdict[];
+  sort?: TrafficSort;
+  order?: TrafficSortOrder;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface TrafficSourceActionDescriptor {

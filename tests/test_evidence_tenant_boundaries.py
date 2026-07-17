@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from importlib import import_module
 from inspect import Parameter, signature
 from types import SimpleNamespace
@@ -71,7 +72,12 @@ def _repository(connection: Any) -> Any:
 def test_evidence_repository_requires_explicit_allowed_cluster_ids() -> None:
     repository_type = _repository_type()
 
-    for method_name in ("list_evidence", "list_evidence_windows", "get_evidence"):
+    for method_name in (
+        "list_evidence",
+        "list_evidence_windows",
+        "list_latest_traffic_evidence_windows",
+        "get_evidence",
+    ):
         parameters = signature(getattr(repository_type, method_name)).parameters
         assert parameters["allowed_cluster_ids"].default is Parameter.empty
 
@@ -87,6 +93,9 @@ def test_empty_or_none_cluster_access_returns_no_evidence_without_query() -> Non
     assert repository.list_evidence("workspace-a", set()) == []
     assert repository.list_evidence_windows("workspace-a", None, limit=20) == []
     assert repository.list_evidence_windows("workspace-a", set(), limit=20) == []
+    since = datetime(2026, 7, 18, tzinfo=UTC)
+    assert repository.list_latest_traffic_evidence_windows("workspace-a", None, since=since) == []
+    assert repository.list_latest_traffic_evidence_windows("workspace-a", set(), since=since) == []
     assert repository.get_evidence("workspace-a", "evidence-b", None) is None
     assert repository.get_evidence("workspace-a", "evidence-b", set()) is None
 
@@ -102,11 +111,17 @@ def test_evidence_queries_enforce_workspace_and_cluster_in_sql() -> None:
     repository = _repository(CaptureConnection())
     repository.list_evidence("workspace-a", {"cluster-1"})
     repository.list_evidence_windows("workspace-a", {"cluster-1"}, limit=20)
+    repository.list_latest_traffic_evidence_windows(
+        "workspace-a",
+        {"cluster-1"},
+        since=datetime(2026, 7, 18, tzinfo=UTC),
+    )
     repository.get_evidence("workspace-a", "evidence-1", {"cluster-1"})
 
     evidence_sql, evidence_params = _postgres_sql(statements[0])
     windows_sql, windows_params = _postgres_sql(statements[1])
-    get_sql, get_params = _postgres_sql(statements[2])
+    traffic_sql, traffic_params = _postgres_sql(statements[2])
+    get_sql, get_params = _postgres_sql(statements[3])
 
     assert "evidence.workspace_id =" in evidence_sql
     assert "evidence.payload ->>" in evidence_sql
@@ -117,6 +132,11 @@ def test_evidence_queries_enforce_workspace_and_cluster_in_sql() -> None:
         assert "evidence_windows.workspace_id =" in sql
         assert "evidence_windows.cluster_id IN (" in sql
         assert {"workspace-a", "cluster-1"}.issubset(set(params.values()))
+
+    assert "row_number() OVER (PARTITION BY evidence_windows.cluster_id" in traffic_sql
+    assert "traffic_window_rank =" in traffic_sql
+    assert "evidence_windows.source_id =" in traffic_sql
+    assert {"workspace-a", "cluster-1", "cluster-snapshot"}.issubset(set(traffic_params.values()))
 
     assert "evidence_windows.evidence_key =" in get_sql
     assert "evidence-1" in get_params.values()

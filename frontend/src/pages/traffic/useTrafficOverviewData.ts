@@ -9,30 +9,49 @@ import {
   type AsyncResourceState,
 } from "../../shared/data/asyncResourceState";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
-import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import {
   TrafficPortFailure,
   type TrafficOverview,
+  type TrafficOverviewRequest,
   type TrafficPort,
   type TrafficSources,
 } from "../../features/traffic/trafficContract";
 
-const TRAFFIC_SCOPE_REFRESH_INTERVAL_MS = 30_000;
-
 export function useTrafficOverview(
   port: TrafficPort,
-  request: { clusterIds: readonly string[]; namespaces: readonly string[] },
+  request: TrafficOverviewRequest,
 ): {
   frame: AsyncResourceState<TrafficOverview, TrafficPortFailure>;
   sourcesFrame: AsyncResourceState<TrafficSources, TrafficPortFailure>;
   refresh: () => void;
 } {
-  const { refresh, revision } = useVisibleRefreshClock(true, TRAFFIC_SCOPE_REFRESH_INTERVAL_MS);
+  const [revision, setRevision] = useState(0);
+  const refreshController = useServerRefreshScheduler(
+    () => setRevision((current) => current + 1),
+  );
   const canonicalRequest = useMemo(() => ({
     clusterIds: [...new Set(request.clusterIds)].sort(),
     namespaces: [...new Set(request.namespaces)].sort(),
-  }), [request.clusterIds, request.namespaces]);
-  const scopeKey = `${canonicalRequest.clusterIds.join("\u001f")}|${canonicalRequest.namespaces.join("\u001f")}`;
+    since: request.since,
+    protocols: [...new Set(request.protocols ?? [])].sort(),
+    verdicts: [...new Set(request.verdicts ?? [])].sort(),
+    sort: request.sort,
+    order: request.order,
+    cursor: request.cursor,
+    limit: request.limit,
+  }), [
+    request.clusterIds,
+    request.cursor,
+    request.limit,
+    request.namespaces,
+    request.order,
+    request.protocols,
+    request.since,
+    request.sort,
+    request.verdicts,
+  ]);
+  const scopeKey = JSON.stringify(canonicalRequest);
   const [frame, setFrame] = useState<AsyncResourceState<TrafficOverview, TrafficPortFailure>>(ASYNC_LOADING);
   const [sourcesFrame, setSourcesFrame] = useState<
     AsyncResourceState<TrafficSources, TrafficPortFailure>
@@ -58,10 +77,14 @@ export function useTrafficOverview(
     );
     void overviewRequest.promise.then(
       (data) => {
-        if (active) setFrame(asyncResourceSuccess(data));
+        if (active) {
+          setFrame(asyncResourceSuccess(data));
+          refreshController.acceptSuccess({ refreshAfterSeconds: data.refreshAfterSeconds });
+        }
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
+        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -79,9 +102,9 @@ export function useTrafficOverview(
       overviewRequest.release();
       sourcesRequest.release();
     };
-  }, [canonicalRequest, port, revision, scopeKey]);
+  }, [canonicalRequest, port, refreshController, revision, scopeKey]);
 
-  return { frame, sourcesFrame, refresh };
+  return { frame, sourcesFrame, refresh: refreshController.requestRefresh };
 }
 
 function toPortFailure(error: unknown): TrafficPortFailure {

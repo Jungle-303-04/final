@@ -157,7 +157,7 @@ wire 계약 사이에 view-neutral adapter가 필요하다.
 | `REF-API-090` | `GET /traffic/sources` | 없음 | `BE-Gap` | `BE-Gap-060`: traffic source discovery 계약 없음 | backend 선행 |
 | `REF-API-091` | `POST /traffic/source` | 없음 | `BE-Gap` | `BE-Gap-061`: traffic source selection 계약 없음 | backend 선행 |
 | `REF-API-092` | `POST /traffic/connect` | 없음 | `BE-Gap` | `BE-Gap-062`: traffic source connection 계약 없음 | backend 선행 |
-| `REF-API-093` | `GET /traffic/flows` | 없음; `CLUSTER_INVENTORY_SERVICES_PATH`는 service inventory | `BE-Gap` | `BE-Gap-063`: traffic flow·유속·edge 계약 없음 | backend 선행 |
+| `REF-API-093` | `GET /traffic/flows` | `TRAFFIC_FLOWS_PATH` `GET /api/traffic/flows` → `TrafficOverviewResponse` | `어댑터` | outbound cluster-agent가 보존한 Caretta/Hubble/Istio evidence만 workspace·cluster·namespace·권한 범위로 투영하고 signed cursor, server facets, unavailable/partial, refresh policy를 제공 | `createTrafficAdapter` → `TrafficFlowSurface` |
 | `REF-API-094` | `GET /network-policies/evaluate` | 없음 | `BE-Gap` | `BE-Gap-064`: network policy evaluation 계약 없음 | backend 선행 |
 | `REF-API-095` | `GET /helm/releases` | 없음 | `BE-Gap` | `BE-Gap-065`: installed release list 계약 없음 | backend 선행 |
 | `REF-API-096` | `GET /helm/releases/{ns}/{name}` | 없음 | `BE-Gap` | `BE-Gap-066`: release detail·history·health 계약 없음 | backend 선행 |
@@ -275,7 +275,7 @@ interaction만 구현한다.
 | `UI-055` | Timeline event/change list | Port `Item`, `Collapsible`, `Badge`, `Separator` | 조합 | lazy child diff | chronological list, expanded state |
 | `UI-056` | Timeline swimlane | `TimelineSwimlane` | Custom | category lane, absolute time, zoom/range, event selection | keyboard event list, range text |
 | `UI-057` | Traffic setup | Port `Card`, `RadioGroup`, `Field`, `Dialog`, `Progress`, `Alert` | Custom wizard | discovery→connect state machine | FieldSet, progress announce |
-| `UI-058` | Traffic flow list | Port `Table`, `Badge` | 직접 | 없음 | protocol/status text |
+| `UI-058` | Traffic flow list | Port `Table`, `Badge`, `Sheet`, native `select` | 조합 | Agent evidence edge·server facet adapter, shared URL filter/page/drawer state | protocol/verdict text, row arrow navigation, Escape close, opener focus restore |
 | `UI-059` | Traffic graph | `TopologyCanvas` flow preset 또는 domain SVG | Custom | directed width/arrow/selection | accessible flow table 필수 |
 | `UI-060` | Helm releases·drawer | Port `Table` + `UI-010`, `Tabs`, `Badge` | 조합 | 없음 | revision/action label |
 | `UI-061` | Helm install/upgrade wizard | Port `Dialog`, `Field`, `Command`, `Select`, `Textarea`, `Progress` + `OperationWizard` | Custom | discovery, step validation, review, stream lifecycle | step title/current/total, previous/next |

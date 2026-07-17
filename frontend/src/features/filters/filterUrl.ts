@@ -75,6 +75,10 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "topology-view":
     case "time-range":
     case "graph-visibility":
+    case "traffic-filter":
+    case "traffic-sort":
+    case "traffic-flow":
+    case "traffic-page":
       return "push";
     case "time-at":
       return "replace";

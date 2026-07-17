@@ -7,8 +7,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrafficPort } from "../../features/traffic/trafficContract";
 import { TrafficPage } from "./TrafficPage";
 
-const scopeState = vi.hoisted(() => ({ value: null as unknown }));
-const filterState = vi.hoisted(() => ({ value: null as unknown }));
+interface TestScopeState {
+  selection: unknown;
+  scopeInvalidationRevision?: number;
+}
+
+interface TestFilterState {
+  detail: Record<string, unknown>;
+  state: { common: { namespaces: { clusterId: string; namespace: string }[] } };
+  updateDetail: ReturnType<typeof vi.fn>;
+}
+
+const scopeState = vi.hoisted(() => ({ value: null as unknown as TestScopeState }));
+const filterState = vi.hoisted(() => ({ value: null as unknown as TestFilterState }));
 
 vi.mock("../../features/cluster-scope/ClusterScopeProvider", () => ({
   useClusterScope: () => scopeState.value,
@@ -20,8 +31,15 @@ vi.mock("../../features/filters/UnifiedFilterProvider", () => ({
 afterEach(() => cleanup());
 
 beforeEach(() => {
-  scopeState.value = { selection: { kind: "selected", cluster: { id: "cluster-a" } } };
-  filterState.value = { state: { common: { namespaces: [{ clusterId: "cluster-a", namespace: "storefront" }] } } };
+  scopeState.value = {
+    selection: { kind: "selected", cluster: { id: "cluster-a" } },
+    scopeInvalidationRevision: 0,
+  };
+  filterState.value = {
+    detail: {},
+    state: { common: { namespaces: [{ clusterId: "cluster-a", namespace: "storefront" }] } },
+    updateDetail: vi.fn(),
+  };
 });
 
 describe("TrafficPage", () => {
@@ -48,6 +66,12 @@ describe("TrafficPage", () => {
     await waitFor(() => expect(port.getOverview).toHaveBeenCalledWith({
       clusterIds: ["cluster-a"],
       namespaces: ["cluster-a/storefront"],
+      since: "5m",
+      protocols: [],
+      verdicts: [],
+      sort: "connections",
+      order: "desc",
+      cursor: undefined,
     }, expect.any(AbortSignal)));
   });
 
@@ -76,6 +100,42 @@ describe("TrafficPage", () => {
       reason: "Connect the observed relay",
     }, expect.any(AbortSignal)));
     expect(await screen.findByText(/corr-traffic-1/)).toBeTruthy();
+  });
+
+  it("renders observed Agent flows and keeps filter and drawer state in the shared URL contract", async () => {
+    const port = trafficPort();
+    port.getOverview.mockResolvedValueOnce(observedOverview());
+
+    render(<MemoryRouter><TrafficPage port={port} /></MemoryRouter>);
+
+    expect(await screen.findByText("Observed traffic from caretta through the outbound cluster agent.")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Flow map" })).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /web/ })[0]);
+    expect(filterState.value.updateDetail).toHaveBeenCalledWith(expect.any(Function), "traffic-flow");
+    const selectFlowCalls = filterState.value.updateDetail.mock.calls;
+    const selectFlow = selectFlowCalls[selectFlowCalls.length - 1]?.[0];
+    expect(selectFlow({})).toMatchObject({ trafficFlow: "a".repeat(64) });
+
+    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "15m" } });
+    expect(filterState.value.updateDetail).toHaveBeenCalledWith(expect.any(Function), "traffic-filter");
+    const updateFilterCalls = filterState.value.updateDetail.mock.calls;
+    const updateFilter = updateFilterCalls[updateFilterCalls.length - 1]?.[0];
+    expect(updateFilter({ trafficCursor: "old", trafficFlow: "old" })).toMatchObject({
+      trafficSince: "15m",
+      trafficCursor: null,
+      trafficFlow: null,
+    });
+  });
+
+  it("refreshes through the existing cluster Agent invalidation revision", async () => {
+    const port = trafficPort();
+    const view = render(<MemoryRouter><TrafficPage port={port} /></MemoryRouter>);
+    await waitFor(() => expect(port.getOverview).toHaveBeenCalledTimes(1));
+
+    scopeState.value = { ...scopeState.value, scopeInvalidationRevision: 1 };
+    view.rerender(<MemoryRouter><TrafficPage port={port} /></MemoryRouter>);
+
+    await waitFor(() => expect(port.getOverview).toHaveBeenCalledTimes(2));
   });
 });
 
@@ -110,6 +170,7 @@ function trafficPort(): TrafficPort & {
         edges: null,
         reasonCodes: ["traffic_observation_not_integrated"],
       },
+      refreshAfterSeconds: 60,
     }),
     getSources: vi.fn().mockResolvedValue({
       availability: "available",
@@ -176,5 +237,70 @@ function commandReceipt() {
     auditEventId: "evt-traffic-1",
     correlationId: "corr-traffic-1",
     status: "queued" as const,
+  };
+}
+
+function observedOverview() {
+  const source = {
+    clusterId: "cluster-a",
+    name: "web",
+    namespace: "storefront",
+    kind: "Workload",
+    workload: "web",
+    service: null,
+    ip: null,
+    identityStability: "provider_observed" as const,
+  };
+  return {
+    scopeCoverage: {
+      availability: "available" as const,
+      scopes: [{
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: ["storefront"],
+        freshness: "live" as const,
+      }],
+      observedAt: "2026-07-18T01:00:00Z",
+      reasonCodes: [],
+    },
+    observation: {
+      availability: "available" as const,
+      observedAt: "2026-07-18T01:00:00Z",
+      since: "5m" as const,
+      sourceKeys: ["caretta"],
+      reasonCodes: [],
+    },
+    summary: {
+      availability: "available" as const,
+      totalFlowCount: 1,
+      deniedFlowCount: 0,
+      externalFlowCount: 0,
+      reasonCodes: [],
+    },
+    relationships: {
+      availability: "available" as const,
+      edges: [{
+        flowId: "a".repeat(64),
+        sourceKey: "caretta",
+        source,
+        target: { ...source, name: "api", workload: "api" },
+        protocol: "tcp" as const,
+        port: 8080,
+        verdict: "forwarded" as const,
+        connections: 42,
+        bytesSent: null,
+        bytesReceived: null,
+        observedAt: "2026-07-18T01:00:00Z",
+      }],
+      totalCount: 1,
+      hasMore: false,
+      nextCursor: null,
+      facets: {
+        protocols: [{ value: "tcp" as const, count: 1 }],
+        verdicts: [{ value: "forwarded" as const, count: 1 }],
+      },
+      reasonCodes: [],
+    },
+    refreshAfterSeconds: 60,
   };
 }

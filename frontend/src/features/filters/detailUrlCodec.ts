@@ -8,11 +8,13 @@ import {
 import { parseBooleanQuery } from "./filterUrlScalars";
 import {
   appendBoolean,
+  appendList,
   appendNullableStableText,
   appendText,
   hasQueryKey,
   isKubernetesNamespace,
   readMultiValues,
+  readQueryValue,
   readStableText,
   type StrictQuery,
 } from "./filterUrlSyntax";
@@ -23,6 +25,11 @@ const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 const COST_RANGES = ["6h", "24h", "7d"] as const;
 const RIGHTSIZING_CLASSES = ["increase", "reduction", "review", "in_range", "need_data"] as const;
+const TRAFFIC_SINCE = ["1m", "5m", "15m", "1h"] as const;
+const TRAFFIC_PROTOCOLS = ["tcp", "udp", "http", "grpc", "dns", "unknown"] as const;
+const TRAFFIC_VERDICTS = ["forwarded", "dropped", "error", "unknown"] as const;
+const TRAFFIC_SORT = ["connections", "last_seen", "source", "destination"] as const;
+const TRAFFIC_ORDER = ["asc", "desc"] as const;
 
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
   appendNullableStableText(pairs, "detail", detail.detail);
@@ -57,6 +64,19 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   appendNullableStableText(pairs, "rfQ", detail.rightsizingQuery ?? null);
   if (detail.timeAt !== undefined) appendText(pairs, "t.at", String(detail.timeAt));
   if (detail.graphCollapsed) appendText(pairs, "graph", "0");
+  if (detail.trafficSince && detail.trafficSince !== "5m") {
+    appendText(pairs, "traffic.since", detail.trafficSince);
+  }
+  appendList(pairs, "traffic.protocols", detail.trafficProtocols ?? []);
+  appendList(pairs, "traffic.verdicts", detail.trafficVerdicts ?? []);
+  if (detail.trafficSort && detail.trafficSort !== "connections") {
+    appendText(pairs, "traffic.sort", detail.trafficSort);
+  }
+  if (detail.trafficOrder && detail.trafficOrder !== "desc") {
+    appendText(pairs, "traffic.order", detail.trafficOrder);
+  }
+  appendNullableStableText(pairs, "traffic.flow", detail.trafficFlow ?? null);
+  if (detail.trafficCursor) appendText(pairs, "traffic.cursor", detail.trafficCursor);
 }
 
 export function parseProductDetailQuery(
@@ -115,7 +135,41 @@ export function parseProductDetailQuery(
   const graph = readScalar(params, "graph", invalidGraph);
   if (graph === "0") detail.graphCollapsed = true;
   else if (graph !== null) invalidGraph.push(graph);
+  const trafficSince = readScalar(params, "traffic.since", []);
+  if (isMember(TRAFFIC_SINCE, trafficSince)) detail.trafficSince = trafficSince;
+  const trafficProtocols = readEnumList(params, "traffic.protocols", TRAFFIC_PROTOCOLS);
+  if (trafficProtocols.length > 0) detail.trafficProtocols = trafficProtocols;
+  const trafficVerdicts = readEnumList(params, "traffic.verdicts", TRAFFIC_VERDICTS);
+  if (trafficVerdicts.length > 0) detail.trafficVerdicts = trafficVerdicts;
+  const trafficSort = readScalar(params, "traffic.sort", []);
+  if (isMember(TRAFFIC_SORT, trafficSort)) detail.trafficSort = trafficSort;
+  const trafficOrder = readScalar(params, "traffic.order", []);
+  if (isMember(TRAFFIC_ORDER, trafficOrder)) detail.trafficOrder = trafficOrder;
+  const trafficFlow = readStableText(params, "traffic.flow");
+  if (trafficFlow !== null && /^[0-9a-f]{64}$/.test(trafficFlow)) {
+    detail.trafficFlow = trafficFlow;
+  }
+  const trafficCursor = readQueryValue(params, "traffic.cursor");
+  if (
+    trafficCursor !== null && trafficCursor.length <= 8192 &&
+    /^[A-Za-z0-9_.-]+$/.test(trafficCursor)
+  ) {
+    detail.trafficCursor = trafficCursor;
+  }
   return detail;
+}
+
+function readEnumList<T extends string>(
+  params: StrictQuery,
+  key: string,
+  allowed: readonly T[],
+): readonly T[] {
+  const values = readMultiValues(params, key, []);
+  return [...new Set(values.filter((value): value is T => isMember(allowed, value)))].sort();
+}
+
+function isMember<T extends string>(values: readonly T[], value: string | null): value is T {
+  return value !== null && values.some((candidate) => candidate === value);
 }
 
 function readScalar(params: StrictQuery, key: string, invalid: string[]): string | null {

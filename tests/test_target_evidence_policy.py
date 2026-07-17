@@ -4,11 +4,17 @@ from domains.target.evidence_policy import (
     COST_NAMESPACE_HOURLY_QUERY,
     COST_NAMESPACE_STORAGE_QUERY,
     DEMO_EVIDENCE_PROFILE,
+    STANDARD_EVIDENCE_PROFILE,
     default_agent_policy,
 )
 from packages.contracts.cost.observations import (
     COST_NAMESPACE_HOURLY_METRIC,
     COST_NAMESPACE_STORAGE_METRIC,
+)
+from packages.contracts.traffic.observations import (
+    TRAFFIC_CARETTA_FLOW_METRIC,
+    TRAFFIC_HUBBLE_FLOW_METRIC,
+    TRAFFIC_ISTIO_FLOW_METRIC,
 )
 
 
@@ -54,3 +60,34 @@ def test_standard_agent_policy_collects_server_owned_opencost_observations() -> 
             "namespaces": [],
             "required_matchers": expected_matchers[name],
         }
+
+
+def test_standard_policy_collects_bounded_traffic_metrics_inside_the_agent() -> None:
+    policy = default_agent_policy(
+        cluster_id="cluster-a",
+        evidence_profile=STANDARD_EVIDENCE_PROFILE,
+    )
+    queries = {query["name"]: query for query in policy.evidence.providers["metrics"].queries}
+
+    assert set(queries) >= {
+        TRAFFIC_CARETTA_FLOW_METRIC,
+        TRAFFIC_HUBBLE_FLOW_METRIC,
+        TRAFFIC_ISTIO_FLOW_METRIC,
+    }
+    for name in (
+        TRAFFIC_CARETTA_FLOW_METRIC,
+        TRAFFIC_HUBBLE_FLOW_METRIC,
+        TRAFFIC_ISTIO_FLOW_METRIC,
+    ):
+        assert queries[name]["source"] == "prometheus"
+        assert queries[name]["provenance"] == {
+            "cluster_id": "cluster-a",
+            "evidence_profile": "standard",
+            "backend_scope": "cluster_local",
+            "query_scope": "cluster",
+            "namespaces": [],
+            "required_matchers": [],
+        }
+    assert (
+        "increase(hubble_flows_processed_total[5m])" in queries[TRAFFIC_HUBBLE_FLOW_METRIC]["query"]
+    )

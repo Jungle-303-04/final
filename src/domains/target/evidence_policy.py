@@ -26,6 +26,11 @@ from packages.contracts.target import (
     KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
     KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
 )
+from packages.contracts.traffic.observations import (
+    TRAFFIC_CARETTA_FLOW_METRIC,
+    TRAFFIC_HUBBLE_FLOW_METRIC,
+    TRAFFIC_ISTIO_FLOW_METRIC,
+)
 
 DEFAULT_EVIDENCE_FAILURE_POLICY = "allow_partial"
 DEFAULT_EVIDENCE_PROVIDER_WORKERS = 1
@@ -222,6 +227,11 @@ def evidence_provider_queries(
             query_scope="cluster",
             required_matchers=('namespace!=""',),
         )
+        cluster_provenance = _provenance(
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+            query_scope="cluster",
+        )
         queries = [
             _namespace_query(
                 source="prometheus",
@@ -263,6 +273,48 @@ def evidence_provider_queries(
                     required_matchers=('claim_namespace!=""',),
                 ),
                 collection_scope="cluster_cost_observation",
+            ),
+            _query(
+                source="prometheus",
+                name=TRAFFIC_CARETTA_FLOW_METRIC,
+                description=(
+                    "Caretta flow links collected by the outbound cluster Agent from its "
+                    "configured in-cluster Prometheus provider."
+                ),
+                query=(
+                    "max by (client_name, client_namespace, client_kind, server_name, "
+                    "server_namespace, server_kind, server_port) (caretta_links_observed)"
+                ),
+                provenance=cluster_provenance,
+            ),
+            _query(
+                source="prometheus",
+                name=TRAFFIC_HUBBLE_FLOW_METRIC,
+                description=(
+                    "Hubble exported flow counts collected by the outbound cluster Agent "
+                    "without a management-plane relay connection."
+                ),
+                query=(
+                    "sum by (source, source_namespace, destination, "
+                    "destination_namespace, protocol, verdict) "
+                    "(increase(hubble_flows_processed_total[5m]))"
+                ),
+                provenance=cluster_provenance,
+            ),
+            _query(
+                source="prometheus",
+                name=TRAFFIC_ISTIO_FLOW_METRIC,
+                description=(
+                    "Istio request flows collected by the outbound cluster Agent from its "
+                    "configured in-cluster Prometheus provider."
+                ),
+                query=(
+                    "sum by (source_workload, source_workload_namespace, "
+                    "destination_workload, destination_workload_namespace, "
+                    "destination_service_name, request_protocol, response_code) "
+                    '(increase(istio_requests_total{reporter="destination"}[5m]))'
+                ),
+                provenance=cluster_provenance,
             ),
         ]
         if evidence_profile == DEMO_EVIDENCE_PROFILE:

@@ -7444,27 +7444,32 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.traffic.observations",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
         "tests/test_traffic_router.py",
         "tests/test_traffic_observation_projection.py",
+        "tests/test_target_evidence_policy.py",
+        "tests/test_evidence_tenant_boundaries.py",
         "frontend/src/api/traffic-overview.test.ts",
+        "frontend/src/features/filters/filterUrl.traffic.test.ts",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/traffic/router.py#get_traffic_overview",
           "consumer": "src/domains/traffic/observation_projection.py#traffic_overview",
+          "reason": "The Python contract projects Caretta, Hubble, or Istio flow samples only from persisted outbound cluster-agent evidence, validates workspace, cluster, namespace, and permission scope, selects at most one bounded evidence window per cluster, and binds signed pagination to the authorization and filter revision. Missing, stale, or invalid evidence remains explicitly unavailable or partial; the server never opens a direct Kubernetes, Prometheus, or port-forward path.",
           "test": "tests/test_traffic_router.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficPage",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficFlowSurface.tsx#TrafficFlowSurface",
           "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "reason": "The existing Traffic route consumes the strict Python union, keeps cluster, namespace, time, protocol, verdict, sort, page, and drawer state in the shared URL contract, renders only observed edges and server facets, supports row and drawer keyboard navigation, and reuses the shared server refresh scheduler plus cluster-agent SSE invalidation revision without adding a traffic-specific stream.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,

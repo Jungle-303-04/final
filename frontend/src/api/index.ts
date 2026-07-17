@@ -205,7 +205,7 @@ export {
 } from "./helm-chart-sources-schemas";
 export {
   getTrafficOverview,
-  TRAFFIC_OVERVIEW_PATH,
+  TRAFFIC_FLOWS_PATH,
   type TrafficOverviewQuery,
 } from "./traffic-overview";
 export {

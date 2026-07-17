@@ -15,6 +15,13 @@ export function createTrafficAdapter(endpoints: TrafficEndpointDependencies): Tr
       return withPortFailure(async () => toOverview(await endpoints.getTrafficOverview({
         clusterIds: request.clusterIds,
         namespaces: request.namespaces,
+        since: request.since,
+        protocols: request.protocols,
+        verdicts: request.verdicts,
+        sort: request.sort,
+        order: request.order,
+        cursor: request.cursor,
+        limit: request.limit,
       }, signal)));
     },
     async getSources(request, signal) {
@@ -113,23 +120,81 @@ function toOverview(value: Awaited<ReturnType<TrafficEndpointDependencies["getTr
       observedAt: value.scope_coverage.observed_at,
       reasonCodes: value.scope_coverage.reason_codes,
     },
-    observation: {
+    observation: value.observation.availability === "unavailable" ? {
+      availability: "unavailable",
+      observedAt: null,
+      reasonCodes: value.observation.reason_codes,
+    } : {
       availability: value.observation.availability,
       observedAt: value.observation.observed_at,
+      since: value.observation.since,
+      sourceKeys: value.observation.source_keys,
       reasonCodes: value.observation.reason_codes,
     },
-    summary: {
+    summary: value.summary.availability === "unavailable" ? {
+      availability: "unavailable",
+      totalFlowCount: null,
+      deniedFlowCount: null,
+      externalFlowCount: null,
+      reasonCodes: value.summary.reason_codes,
+    } : {
       availability: value.summary.availability,
       totalFlowCount: value.summary.total_flow_count,
       deniedFlowCount: value.summary.denied_flow_count,
       externalFlowCount: value.summary.external_flow_count,
       reasonCodes: value.summary.reason_codes,
     },
-    relationships: {
+    relationships: value.relationships.availability === "unavailable" ? {
+      availability: "unavailable",
+      edges: null,
+      reasonCodes: value.relationships.reason_codes,
+    } : {
       availability: value.relationships.availability,
-      edges: value.relationships.edges,
+      edges: value.relationships.edges.map((edge) => ({
+        flowId: edge.flow_id,
+        sourceKey: edge.source_key,
+        source: toEndpoint(edge.source),
+        target: toEndpoint(edge.target),
+        protocol: edge.protocol,
+        port: edge.port,
+        verdict: edge.verdict,
+        connections: edge.connections,
+        bytesSent: edge.bytes_sent,
+        bytesReceived: edge.bytes_received,
+        observedAt: edge.observed_at,
+      })),
+      totalCount: value.relationships.total_count,
+      hasMore: value.relationships.has_more,
+      nextCursor: value.relationships.next_cursor,
+      facets: {
+        protocols: value.relationships.facets.protocols,
+        verdicts: value.relationships.facets.verdicts,
+      },
       reasonCodes: value.relationships.reason_codes,
     },
+    refreshAfterSeconds: value.refresh_after_seconds,
+  };
+}
+
+function toEndpoint(endpoint: {
+  cluster_id: string;
+  name: string;
+  namespace: string | null;
+  kind: string;
+  workload: string | null;
+  service: string | null;
+  ip: string | null;
+  identity_stability: "provider_observed";
+}) {
+  return {
+    clusterId: endpoint.cluster_id,
+    name: endpoint.name,
+    namespace: endpoint.namespace,
+    kind: endpoint.kind,
+    workload: endpoint.workload,
+    service: endpoint.service,
+    ip: endpoint.ip,
+    identityStability: endpoint.identity_stability,
   };
 }
 
