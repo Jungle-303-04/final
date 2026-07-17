@@ -610,7 +610,7 @@ def test_release_detail_exposes_only_the_real_agent_upgrade_with_server_inputs()
     assert response.status_code == 200
     commands = response.json()["detail"]["commands"]
     assert commands["availability"] == "available"
-    assert commands["actions"] == ["upgrade"]
+    assert commands["actions"] == ["upgrade", "rollback", "uninstall"]
     assert commands["confirmation_required"] is True
     assert commands["realtime"] is True
     assert [target["item_id"] for target in commands["upgrade_targets"]] == ["catalog-redis"]

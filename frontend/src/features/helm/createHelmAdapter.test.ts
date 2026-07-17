@@ -215,7 +215,7 @@ describe("createHelmAdapter", () => {
         ...currentDetail.detail,
         commands: {
           availability: "available" as const,
-          actions: ["upgrade" as const] as ["upgrade"],
+          actions: ["upgrade", "rollback", "uninstall"] as const,
           confirmation_required: true as const,
           realtime: true as const,
           upgrade_targets: [{
@@ -252,7 +252,7 @@ describe("createHelmAdapter", () => {
     });
     expect(release.commands).toMatchObject({
       availability: "available",
-      actions: ["upgrade"],
+      actions: ["upgrade", "rollback", "uninstall"],
       upgradeTargets: [{ itemId: "catalog-redis", inputs: [{ required: true }] }],
     });
 

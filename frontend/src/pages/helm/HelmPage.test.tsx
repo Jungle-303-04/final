@@ -749,7 +749,7 @@ function unavailable(reasonCode: string) {
 function availableUpgradeCommands() {
   return {
     availability: "available" as const,
-    actions: ["upgrade" as const],
+    actions: ["upgrade", "rollback", "uninstall"] as const,
     confirmationRequired: true as const,
     realtime: true as const,
     upgradeTargets: [{
