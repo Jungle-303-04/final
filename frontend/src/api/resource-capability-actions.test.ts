@@ -81,6 +81,58 @@ describe("server-discovered resource action API", () => {
     }));
   });
 
+  it("binds maintenance actions to the exact capability snapshot and dynamic inputs", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      accepted: true,
+      event_id: "event-drain-1",
+      audit_event_id: "event-drain-1",
+      correlation_id: "correlation-drain-1",
+      command_id: "command-drain-1",
+      status: "queued",
+    }), { status: 202 }));
+    const context = {
+      capabilityId: "node.drain",
+      idempotencyKey: "resource-action-node-drain-1",
+      resourceId: "resource-node-worker-a",
+      snapshotId: "snapshot-42",
+      revision: "b".repeat(64),
+      resource: {
+        apiGroup: "",
+        version: "v1",
+        kind: "Node",
+        namespace: null,
+        name: "worker-a",
+        uid: "node-uid-1",
+      },
+    };
+
+    await executeResourceCapability(
+      "/clusters/cluster-1/nodes/worker-a/drain",
+      { timeout_seconds: 120, max_parallel: 8 },
+      context,
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(request.headers).get("Idempotency-Key"))
+      .toBe("resource-action-node-drain-1");
+    expect(request.body).toBe(JSON.stringify({
+      timeout_seconds: 120,
+      max_parallel: 8,
+      resource_id: "resource-node-worker-a",
+      snapshot_id: "snapshot-42",
+      capability_revision: "b".repeat(64),
+      resource: {
+        api_group: "",
+        version: "v1",
+        kind: "Node",
+        namespace: null,
+        name: "worker-a",
+        uid: "node-uid-1",
+      },
+      confirmation: true,
+    }));
+  });
+
   it("rejects paths that cannot be a same-origin API capability", () => {
     expect(() => executeResourceCapability("https://invalid.example/action", {})).toThrow(TypeError);
     expect(() => executeResourceCapability("//invalid.example/action", {})).toThrow(TypeError);

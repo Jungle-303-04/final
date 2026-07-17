@@ -2658,6 +2658,205 @@ def test_node_control_capability_is_advertised_only_when_enabled() -> None:
     agent.node_control_enabled = False
     assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
 
+
+class ResourceMaintenanceKubernetesClient(StubKubernetesClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.nodes = {
+            "worker-a": {
+                "apiVersion": "v1",
+                "kind": "Node",
+                "metadata": {"name": "worker-a", "uid": "node-uid-1", "resourceVersion": "7"},
+                "spec": {"unschedulable": False},
+            }
+        }
+        self.pod = {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "namespace": "sandbox",
+                "name": "checkout-1",
+                "uid": "pod-uid-1",
+                "resourceVersion": "11",
+            },
+            "spec": {"containers": [{"name": "app"}], "ephemeralContainers": []},
+        }
+        self.evictions: list[dict[str, object]] = []
+
+    async def get_cluster_resource(self, **kwargs: object) -> dict[str, object]:
+        return self.nodes[str(kwargs["name"])]
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        if kwargs.get("name") == "checkout-1":
+            return self.pod
+        return {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "namespace": "sandbox",
+                "name": kwargs["name"],
+                "uid": "debug-pod-uid-1",
+                "resourceVersion": "3",
+                "labels": {
+                    "opsia.io/debug-session": "debug-session-1",
+                    "opsia.io/node-uid": "node-uid-1",
+                },
+            },
+            "spec": {"nodeName": "worker-a"},
+        }
+
+    async def list_cluster_resources(self, **_kwargs: object) -> dict[str, object]:
+        return {
+            "items": [
+                {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "metadata": {
+                        "namespace": "sandbox",
+                        "name": "checkout-1",
+                        "uid": "pod-uid-1",
+                        "resourceVersion": "11",
+                        "ownerReferences": [{"kind": "ReplicaSet"}],
+                    },
+                    "spec": {"nodeName": "worker-a", "volumes": []},
+                }
+            ]
+        }
+
+    async def create_namespaced_subresource(self, **kwargs: object) -> dict[str, object]:
+        self.evictions.append(kwargs)
+        return {"accepted": True}
+
+
+def exact_node_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "name": "worker-a",
+        "node_ref": {
+            "api_group": "",
+            "version": "v1",
+            "kind": "Node",
+            "namespace": None,
+            "name": "worker-a",
+            "uid": "node-uid-1",
+        },
+        "node_resource_version": "7",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_node_drain_revalidates_identity_and_reports_bounded_eviction_results() -> None:
+    module = load_agent_module()
+    client = ResourceMaintenanceKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_NODE_DRAIN_ACTION,
+                "direct_execution": True,
+                "payload": exact_node_payload(timeout_seconds=30, max_parallel=4),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["evicted"] == 1
+    assert result["failed"] == 0
+    assert result["partial_failure"] is False
+    assert client.cluster_patches[0]["body"] == {
+        "metadata": {"resourceVersion": "7"},
+        "spec": {"unschedulable": True},
+    }
+    assert client.evictions[0]["subresource"] == "eviction"
+
+
+def test_pod_debug_rejects_stale_target_before_ephemeral_container_patch() -> None:
+    module = load_agent_module()
+    client = ResourceMaintenanceKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+    payload = {
+        "namespace": "sandbox",
+        "name": "checkout-1",
+        "pod_ref": {
+            "api_group": "",
+            "version": "v1",
+            "kind": "Pod",
+            "namespace": "sandbox",
+            "name": "checkout-1",
+            "uid": "recreated-pod",
+        },
+        "pod_resource_version": "11",
+        "target_container": "app",
+        "container_name": "opsia-debug-abc123",
+        "image": "registry.example/debug@sha256:" + "a" * 64,
+    }
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_POD_DEBUG_ACTION,
+                "direct_execution": True,
+                "payload": payload,
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "stale" in result["message"]
+    assert client.patches == []
+
+
+def test_node_debug_cleanup_deletes_only_owned_exact_debug_pod() -> None:
+    module = load_agent_module()
+    client = ResourceMaintenanceKubernetesClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = client
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+                "direct_execution": True,
+                "payload": exact_node_payload(
+                    namespace="sandbox",
+                    session_id="debug-session-1",
+                    debug_pod_name="opsia-node-debug-abc123",
+                ),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert client.namespaced_deletes == [
+        {
+            "api_group": "core",
+            "version": "v1",
+            "namespace": "sandbox",
+            "resource": "pods",
+            "name": "opsia-node-debug-abc123",
+            "preconditions": {"uid": "debug-pod-uid-1", "resourceVersion": "3"},
+            "propagation_policy": "Background",
+        }
+    ]
+
     agent.node_control_enabled = True
     assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY in agent.advertised_capabilities()
     agent.direct_commands_enabled = False
