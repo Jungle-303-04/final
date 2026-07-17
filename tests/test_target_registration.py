@@ -2513,6 +2513,15 @@ def test_target_manifest_packages_exact_cronjob_read_and_control_rbac(manifest: 
         "resources": ["jobs", "cronjobs"],
         "verbs": ["get", "list", "watch"],
     }
+    apps_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == ["apps"])
+    assert set(apps_read["resources"]) == {
+        "deployments",
+        "replicasets",
+        "controllerrevisions",
+        "daemonsets",
+        "statefulsets",
+    }
+    assert apps_read["verbs"] == ["get", "list", "watch"]
     core_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == [""])
     assert {"serviceaccounts", "resourcequotas"}.issubset(core_read["resources"])
     rbac_read = next(
