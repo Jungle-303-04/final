@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -13,13 +14,10 @@ LOCAL_RENDERERS = {
     ROOT / "src" / "domains" / "gitops" / "repository_discovery.py",
     ROOT / "src" / "services" / "gitops" / "manifest-render-worker" / "app.py",
 }
-MANAGEMENT_CLUSTER_INFRASTRUCTURE = {
-    ROOT / "src" / "packages" / "security" / "vault.py",
-}
 TARGET_RUNTIME_EXCEPTIONS = {
-    TARGET_BOOTSTRAP,
-    *LOCAL_RENDERERS,
-    *MANAGEMENT_CLUSTER_INFRASTRUCTURE,
+    TARGET_BOOTSTRAP: frozenset({"target_process"}),
+    **{path: frozenset({"target_process"}) for path in LOCAL_RENDERERS},
+    ROOT / "src" / "packages" / "security" / "vault.py": frozenset({"target_network"}),
 }
 
 
@@ -131,6 +129,13 @@ httpx.get("https://target.svc/api/v1/namespaces/shop/pods")
 """,
         ),
         (
+            "kube_token.py",
+            """import httpx
+KUBE_TOKEN = "target-token"
+httpx.get("https://target.svc/version", headers={"Authorization": KUBE_TOKEN})
+""",
+        ),
+        (
             "prometheus.py",
             """import httpx
 PROMETHEUS_BASE_URL = "http://prometheus.target.svc"
@@ -158,6 +163,13 @@ subprocess.run(["kubectl", "apply", "--dry-run=server"], check=True)
 """,
         ),
         (
+            "argocd.py",
+            """import httpx
+ARGOCD_URL = "https://argocd.target.svc"
+httpx.post(ARGOCD_URL + "/api/v1/applications/shop/sync")
+""",
+        ),
+        (
             "pod_logs.py",
             """import httpx
 KUBERNETES_SERVICE_HOST = "target.svc"
@@ -177,7 +189,7 @@ def test_target_runtime_gate_detects_direct_authority(
     assert _target_runtime_authority_offenders(
         tmp_path,
         allowed_roots=(),
-        exception_paths=frozenset(),
+        exception_paths={},
     ) == [Path(name)]
 
 
@@ -185,9 +197,166 @@ def _target_runtime_authority_offenders(
     root: Path,
     *,
     allowed_roots: tuple[Path, ...],
-    exception_paths: set[Path] | frozenset[Path],
+    exception_paths: Mapping[Path, frozenset[str]],
 ) -> list[Path]:
-    return []
+    allowed = tuple(path.resolve() for path in allowed_roots)
+    exceptions = {path.resolve(): kinds for path, kinds in exception_paths.items()}
+    offenders: list[Path] = []
+
+    for path in _python_sources(root):
+        resolved = path.resolve()
+        if any(
+            resolved == allowed_root or allowed_root in resolved.parents for allowed_root in allowed
+        ):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        authority = _target_runtime_authority(tree) - exceptions.get(resolved, frozenset())
+        if authority:
+            offenders.append(path.relative_to(root))
+
+    return offenders
+
+
+def _target_runtime_authority(tree: ast.AST) -> set[str]:
+    authority: set[str] = set()
+    imports = _imported_modules(tree)
+    if any(
+        module == "kubernetes"
+        or module.startswith("kubernetes.")
+        or module == "kubernetes_asyncio"
+        or module.startswith("kubernetes_asyncio.")
+        for module in imports
+    ):
+        authority.add("kubernetes_client")
+
+    strings = {
+        value.casefold()
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        for value in (node.value,)
+    }
+    identifiers = {node.id.casefold() for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    call_names = {
+        name.casefold()
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        if (name := _qualified_name(node.func))
+    }
+
+    if _has_target_process_authority(imports, strings, call_names):
+        authority.add("target_process")
+    if _has_target_network_authority(imports, strings, identifiers, call_names):
+        authority.add("target_network")
+    return authority
+
+
+def _has_target_process_authority(
+    imports: set[str],
+    strings: set[str],
+    call_names: set[str],
+) -> bool:
+    process_imported = "subprocess" in imports or "asyncio" in imports
+    process_called = any(
+        name.startswith("subprocess.")
+        or name.endswith("create_subprocess_exec")
+        or name.endswith("create_subprocess_shell")
+        for name in call_names
+    )
+    command_tokens = {token for value in strings for token in value.replace("=", " ").split()}
+    target_tools = {"kubectl", "helm", "argocd", "flux"}
+    return (
+        process_imported
+        and process_called
+        and (
+            bool(command_tokens & target_tools)
+            or any(tool in value for tool in target_tools for value in strings)
+        )
+    )
+
+
+def _has_target_network_authority(
+    imports: set[str],
+    strings: set[str],
+    identifiers: set[str],
+    call_names: set[str],
+) -> bool:
+    outbound_modules = {"httpx", "requests", "aiohttp", "socket", "websockets"}
+    outbound_imported = any(
+        module.split(".", 1)[0] in outbound_modules
+        or module == "urllib.request"
+        or module.startswith("urllib.request.")
+        for module in imports
+    )
+    outbound_called = any(
+        name.startswith(("httpx.", "requests.", "aiohttp.", "websockets.", "socket."))
+        or name.endswith((".request", ".get", ".post", ".put", ".patch", ".delete"))
+        or name.endswith((".urlopen", ".create_connection", ".asyncclient", ".clientsession"))
+        for name in call_names
+    )
+    if not (outbound_imported and outbound_called):
+        return False
+
+    target_identifiers = {
+        "prometheus_base_url",
+        "prometheus_url",
+        "loki_base_url",
+        "tempo_base_url",
+        "kubeconfig",
+        "kube_token",
+        "kubernetes_token",
+        "kubernetes_api",
+        "kubernetes_api_url",
+        "kubernetes_api_base_url",
+        "kubernetes_service_host",
+        "kubernetes_service_port",
+        "service_account_token",
+        "target_api_url",
+        "target_cluster_url",
+        "target_url",
+        "argocd_url",
+        "flux_url",
+    }
+    endpoint_markers = (
+        "/api/v1/query",
+        "/loki/api/v1/",
+        "/api/search",
+        "/api/traces",
+        "/api/v1/namespaces/",
+        "/apis/apps/",
+        "/apis/batch/",
+        "/apis/argoproj.io/",
+        "/apis/kustomize.toolkit.fluxcd.io/",
+        "/apis/helm.toolkit.fluxcd.io/",
+        "/var/run/secrets/kubernetes.io/serviceaccount/",
+    )
+    return bool((identifiers | strings) & target_identifiers) or any(
+        marker in value for marker in endpoint_markers for value in strings
+    )
+
+
+def _imported_modules(tree: ast.AST) -> set[str]:
+    modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module = node.module or ""
+        modules.add(module)
+        modules.update(f"{module}.{alias.name}" for alias in node.names if module)
+    return modules
+
+
+def _qualified_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _qualified_name(node.value)
+        return f"{parent}.{node.attr}" if parent else node.attr
+    return ""
 
 
 def _runtime_sources(root: Path) -> list[Path]:
