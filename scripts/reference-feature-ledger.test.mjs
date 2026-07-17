@@ -1006,6 +1006,7 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
     ["reference.feature.064", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
     ["reference.feature.093", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
     ["reference.feature.094", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
+    ["reference.feature.097", "upstream-ui:namespace:scope:authorized-rescope:v1"],
   ]);
   const interactionOwners = new Map();
   for (const [path, classification] of Object.entries(classifications.classifications)) {

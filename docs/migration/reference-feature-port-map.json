@@ -615,6 +615,34 @@
         }
       }
     },
+    "reference.feature.097": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
+      "frontendContract": "frontend/src/features/global-filter/globalFilterContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_global_filter_facets",
+          "consumer": "src/domains/inventory_filter/repository.py#list_authorized_namespace_catalog",
+          "reason": "The server returns only workspace-, user-, cluster-, and RBAC-authorized namespaces with bounded observed counts instead of exposing a raw cluster namespace list.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/features/global-filter/createGlobalFilterAdapter.ts#createGlobalFilterAdapter",
+          "reason": "The namespace selector consumes the shared server facet catalog, preserves cluster identity, and commits canonical URL scope without a hardcoded namespace list.",
+          "test": "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts"
+        }
+      }
+    },
     "reference.feature.098": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.kubernetes_discovery.ApiResourceDiscoveryObservation",
