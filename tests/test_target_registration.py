@@ -225,6 +225,8 @@ class StubUnregisterDb:
         self.environment = environment
         self.unregistered: list[tuple[str, str]] = []
         self.purged: list[tuple[str, str]] = []
+        self.queued: list[dict[str, object]] = []
+        self.registration_status_updates: list[str] = []
 
     def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
         return {
@@ -242,6 +244,17 @@ class StubUnregisterDb:
         self, _workspace_id: str, _cluster_id: str
     ) -> list[dict[str, object]]:
         return []
+
+    def queue_agent_command(
+        self, correlation_id: str, plan: dict[str, object], status: str
+    ) -> bool:
+        self.queued.append({"correlation_id": correlation_id, "plan": plan, "status": status})
+        return True
+
+    def update_cluster_registration_status(
+        self, _workspace_id: str, _cluster_id: str, status: str
+    ) -> None:
+        self.registration_status_updates.append(status)
 
     def purge_test_target_cluster_registration(
         self,
@@ -2524,13 +2537,14 @@ def test_target_cluster_unregister_updates_registration() -> None:
     asyncio.run(
         unregister_cluster(
             "cluster-1",
-            manual_cleanup_attested=True,
-            current=SimpleNamespace(workspace_id="default"),
+            current=SimpleNamespace(workspace_id="default", user_id="admin"),
             db=db,
         )
     )
 
-    assert db.unregistered == [("default", "cluster-1")]
+    assert db.unregistered == []
+    assert db.queued[0]["plan"]["action"] == "cluster.agent.uninstall"
+    assert db.registration_status_updates == [ClusterRegistrationStatus.UNINSTALL_REQUESTED.value]
     assert db.purged == []
 
 
@@ -2542,13 +2556,13 @@ def test_explicit_purge_false_keeps_soft_delete_compatibility(monkeypatch) -> No
         unregister_cluster(
             "cluster-1",
             purge=False,
-            manual_cleanup_attested=True,
-            current=SimpleNamespace(workspace_id="default"),
+            current=SimpleNamespace(workspace_id="default", user_id="admin"),
             db=db,
         )
     )
 
-    assert db.unregistered == [("default", "cluster-1")]
+    assert db.unregistered == []
+    assert len(db.queued) == 1
     assert db.purged == []
     assert db.uow_count == 0
 
@@ -2565,17 +2579,16 @@ def test_offline_target_requires_actual_cleanup_before_registration_revocation()
     )
 
     assert response.status == "cleanup_required"
-    assert response.stage == "manual_cleanup_required"
-    assert "kubectl delete -n target deployment/cluster-agent" in response.uninstall_command
-    assert "namespace/target" not in response.uninstall_command
-    assert "namespace/sandbox" not in response.uninstall_command
+    assert response.stage == "agent_cleanup_pending"
+    assert response.command_id.startswith("cmd-uninstall-")
+    assert db.registration_status_updates == [ClusterRegistrationStatus.UNINSTALL_REQUESTED.value]
+    assert len(db.queued) == 1
     assert db.unregistered == []
 
 
 class OnlineUnregisterDb(StubUnregisterDb):
     def __init__(self) -> None:
         super().__init__(cluster_role="target")
-        self.queued: list[dict[str, object]] = []
 
     def list_cluster_agent_statuses(
         self, workspace_id: str, cluster_id: str
@@ -2588,12 +2601,6 @@ class OnlineUnregisterDb(StubUnregisterDb):
                 "last_seen_at": datetime.now(UTC).isoformat(),
             }
         ]
-
-    def queue_agent_command(
-        self, correlation_id: str, plan: dict[str, object], status: str
-    ) -> bool:
-        self.queued.append({"correlation_id": correlation_id, "plan": plan, "status": status})
-        return True
 
 
 def test_online_target_queues_agent_cleanup_and_keeps_registration_until_confirmation() -> None:

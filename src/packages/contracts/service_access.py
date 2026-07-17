@@ -2,8 +2,9 @@
 
 The management server never constructs an arbitrary outbound URL and never
 binds a workstation port.  A service request is resolved from an exact
-``ResourceRef`` and executed by the target Cluster Agent.  Local port binding is
-validated here for parity, but remains a Tauri-owned capability.
+``ResourceRef`` and executed by the target Cluster Agent.  A desktop may own
+only the loopback listener; target identity, RBAC and transport remain agent
+authority.
 """
 
 from __future__ import annotations
@@ -25,12 +26,13 @@ SERVICE_REQUEST_MAX_HEADERS = 100
 SERVICE_REQUEST_MAX_HEADER_VALUE_BYTES = 4 * 1024
 SERVICE_REQUEST_MAX_PATH_LENGTH = 2_048
 SERVICE_REQUEST_MAX_ACTIVE_PER_CLUSTER = 16
-LOCAL_PORT_FORWARD_DESKTOP_REASON = "desktop_port_forward_bridge_required"
+PORT_FORWARD_AGENT_CAPABILITY = "port_forward_stream_v1"
+AGENT_PORT_FORWARD_DESKTOP_REASON = "desktop_agent_port_forward_required"
+AGENT_PORT_FORWARD_UNAVAILABLE_REASON = "agent_port_forward_unavailable"
 SERVICE_REQUEST_AGENT_UNAVAILABLE_REASON = "service_request_agent_unavailable"
 SERVICE_REQUEST_RESOURCE_UNAVAILABLE_REASON = "service_request_resource_unavailable"
 SERVICE_REQUEST_NO_TCP_PORTS_REASON = "service_request_no_tcp_ports"
 POD_SERVICE_REQUEST_UNSUPPORTED_REASON = "pod_service_request_unsupported"
-POD_EXEC_CAPABILITY_UNAVAILABLE_REASON = "pod_exec_capability_unavailable"
 PORT_DISCOVERY_PARTIAL_REASON = "port_discovery_partial"
 PORT_FORWARD_NO_TCP_PORTS_REASON = "port_forward_no_tcp_ports"
 PORT_FORWARD_RESOURCE_UNAVAILABLE_REASON = "port_forward_resource_unavailable"
@@ -84,9 +86,9 @@ class ServiceAccessCapabilities(StrictModel):
     revision: str = Field(pattern=r"^[0-9a-f]{64}$")
     service_request: ServiceAccessAvailability
     service_request_reason: str | None = Field(default=None, max_length=240)
-    local_port_forward: LocalPortForwardAvailability = "desktop_required"
+    local_port_forward: LocalPortForwardAvailability = "unavailable"
     local_port_forward_reason: str = Field(
-        default=LOCAL_PORT_FORWARD_DESKTOP_REASON,
+        default=AGENT_PORT_FORWARD_UNAVAILABLE_REASON,
         min_length=1,
         max_length=240,
     )
@@ -101,11 +103,11 @@ class ServiceAccessCapabilities(StrictModel):
         if self.service_request != "available" and not self.service_request_reason:
             raise ValueError("unavailable service request capability requires a reason")
         if self.local_port_forward == "desktop_required":
-            if self.local_port_forward_reason != LOCAL_PORT_FORWARD_DESKTOP_REASON:
-                raise ValueError("desktop port forward requires the desktop boundary reason")
+            if self.local_port_forward_reason != AGENT_PORT_FORWARD_DESKTOP_REASON:
+                raise ValueError("desktop port forward requires the agent transport reason")
             if not self.ports:
                 raise ValueError("desktop port forward requires an observed TCP port")
-        elif self.local_port_forward_reason == LOCAL_PORT_FORWARD_DESKTOP_REASON:
+        elif self.local_port_forward_reason == AGENT_PORT_FORWARD_DESKTOP_REASON:
             raise ValueError("unavailable port forward requires an unavailable reason")
         if (self.port_discovery == "complete") != (self.port_discovery_reason is None):
             raise ValueError("port discovery reason is inconsistent")

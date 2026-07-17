@@ -2463,16 +2463,13 @@ class ClusterUnregisterResponse(StrictModel):
     status: Literal["uninstalling", "cleanup_required", "disconnected", "purged"]
     stage: Literal[
         "agent_cleanup_queued",
-        "manual_cleanup_required",
+        "agent_cleanup_pending",
         "registration_revoked",
         "purged",
     ]
     command_id: str | None = None
     command_status_path: str | None = None
-    uninstall_command: str | None = None
     cleanup_verified: bool = False
-    resources: list[str] = Field(default_factory=list)
-    residual_resources: list[str] = Field(default_factory=list)
     failure_reason: str | None = None
 
 

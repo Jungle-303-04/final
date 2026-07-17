@@ -7305,7 +7305,7 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -7324,15 +7324,17 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "frontend": {
-          "state": "implemented",
-          "destination": "frontend/src/app/PortForwardSessionIndicator.tsx#PortForwardSessionIndicator",
+          "state": "blocked",
+          "destination": "frontend/src/features/service-access/createPortForwardSessionAdapter.ts#createPortForwardSessionAdapter",
           "consumer": "frontend/src/features/service-access/PortForwardSessionsProvider.tsx#PortForwardSessionsProvider",
+          "reason": "The session adapter is intentionally fail-closed until the audited gateway-to-agent stream exists; no empty or synthetic session registry is shown.",
           "test": "frontend/src/app/ProductShell.portForward.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
-          "destination": "desktop/src-tauri/src/port_forward.rs#PortForwardSessionRegistry",
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
           "consumer": "frontend/src/desktop/desktopBridge.ts#listPortForwardSessions",
+          "reason": "The desktop capability is unsupported until its loopback-only listener is connected to the agent stream; direct target processes were removed.",
           "test": "desktop/src-tauri/tests/reference_parity.rs"
         },
         "realtime": "not_required"
@@ -7387,9 +7389,9 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
-          "state": "not_required",
-          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#buildKubectlPortForwardCommand",
-          "reason": "Exact Service port discovery and a manual loopback command are safe browser capabilities; only ownership of the listener requires Tauri.",
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "reason": "Exact port discovery remains implemented, but no browser command is exposed and the desktop action stays absent until the agent-backed tunnel is available.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "realtime": "not_required"
@@ -7419,7 +7421,7 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -7433,21 +7435,23 @@
       ],
       "coverage": {
         "backend": {
-          "state": "not_required",
-          "destination": "src/packages/contracts/service_access.py#LocalPortForwardRequest",
-          "reason": "Python validates the portable request shape but must never own a workstation listener.",
+          "state": "blocked",
+          "destination": "src/packages/contracts/service_access.py#PORT_FORWARD_AGENT_CAPABILITY",
+          "reason": "A bounded bidirectional gateway-to-agent tunnel contract and audit lifecycle are not implemented yet; the capability therefore remains unavailable.",
           "test": "tests/contracts/test_service_access.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "frontend/src/pages/resources/PortForwardAction.tsx#PortForwardAction",
           "consumer": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
+          "reason": "The action is omitted instead of exposing a direct command or invoking an unavailable native adapter.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "desktop/src-tauri/src/port_forward.rs#desktop_port_forward_start",
           "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "The fail-closed command owns no target process; a future implementation may bind loopback only after receiving an agent tunnel receipt.",
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
         },
         "realtime": "not_required"
@@ -7476,7 +7480,7 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -7495,15 +7499,17 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
           "consumer": "frontend/src/app/PortForwardSessionIndicator.tsx#PortForwardSessionIndicator",
+          "reason": "No session lifecycle is mounted while the canonical adapter is fail-closed.",
           "test": "frontend/src/features/service-access/usePortForwardSessions.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "desktop/src-tauri/src/port_forward.rs#desktop_port_forward_stop",
           "consumer": "frontend/src/desktop/desktopBridge.ts#recreatePortForward",
+          "reason": "Stop and recreate reject because there can be no native-owned target session before the agent tunnel exists.",
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
         },
         "realtime": "not_required"

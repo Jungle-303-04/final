@@ -50,7 +50,7 @@ describe("ClusterDisconnectDialog", () => {
       failureReason: null,
     });
     const onDisconnected = vi.fn();
-    renderDialog({ confirmManualCleanup: vi.fn(), disconnect, loadDisconnect }, onDisconnected);
+    renderDialog({ disconnect, loadDisconnect }, onDisconnected);
 
     const submit = screen.getByRole("button", { name: "연결 해제" });
     expect(submit.hasAttribute("disabled")).toBe(true);
@@ -71,9 +71,8 @@ describe("ClusterDisconnectDialog", () => {
     expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
 
     resolveDisconnect?.();
-    expect(await screen.findByText("에이전트 실행이 중단되었습니다")).toBeTruthy();
-    expect(screen.getByText("남은 권한 정리 명령")).toBeTruthy();
-    expect(screen.getByText("kubectl delete deployment/cluster-agent")).toBeTruthy();
+    expect(await screen.findByText("연결이 해제되었습니다")).toBeTruthy();
+    expect(screen.queryByText(/kubectl/)).toBeNull();
     expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(1);
     expect(onDisconnected).toHaveBeenCalledWith("cluster-1");
   });
@@ -85,7 +84,6 @@ describe("ClusterDisconnectDialog", () => {
       .mockResolvedValueOnce(uninstallingReceipt());
     const onDisconnected = vi.fn();
     renderDialog({
-      confirmManualCleanup: vi.fn(),
       disconnect,
       loadDisconnect: vi.fn().mockResolvedValue({
         status: "completed",
@@ -99,7 +97,7 @@ describe("ClusterDisconnectDialog", () => {
     expect(await screen.findByText("연결을 해제하지 못했습니다")).toBeTruthy();
     expect(onDisconnected).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "연결 해제" }));
-    expect(await screen.findByText("에이전트 실행이 중단되었습니다")).toBeTruthy();
+    expect(await screen.findByText("연결이 해제되었습니다")).toBeTruthy();
   });
 
   it("forwards an unauthorized mutation to the session gate", async () => {
@@ -107,7 +105,6 @@ describe("ClusterDisconnectDialog", () => {
     const reportUnauthorized = vi.fn();
     renderDialog(
       {
-        confirmManualCleanup: vi.fn(),
         disconnect: vi.fn().mockRejectedValue(new ClustersPortFailure("unauthorized")),
         loadDisconnect: vi.fn(),
       },
@@ -121,26 +118,25 @@ describe("ClusterDisconnectDialog", () => {
     expect(reportUnauthorized).toHaveBeenCalledOnce();
   });
 
-  it("keeps an offline agent visible until the operator runs the exact cleanup command", async () => {
+  it("keeps an offline agent pending without a kubectl or registration-revocation escape hatch", async () => {
     const user = userEvent.setup();
-    const confirmManualCleanup = vi.fn().mockResolvedValue({
-      ...cleanupRequiredReceipt(),
-      status: "disconnected",
-    });
     const onDisconnected = vi.fn();
     renderDialog({
-      confirmManualCleanup,
       disconnect: vi.fn().mockResolvedValue(cleanupRequiredReceipt()),
-      loadDisconnect: vi.fn(),
+      loadDisconnect: vi.fn().mockResolvedValue({
+        status: "failed",
+        cleanupCompleted: false,
+        failureReason: "agent offline",
+      }),
     }, onDisconnected);
     await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
     await user.click(screen.getByRole("button", { name: "연결 해제" }));
 
-    expect(await screen.findByText("클러스터에서 정리 명령을 실행하세요")).toBeTruthy();
+    expect(await screen.findByText("에이전트 정리를 기다리는 중")).toBeTruthy();
     expect(onDisconnected).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "DB 등록 강제 제거" }));
-    expect(confirmManualCleanup).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
-    expect(await screen.findByText("연결이 해제되었습니다")).toBeTruthy();
+    expect(screen.queryByText(/kubectl/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /강제 제거/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "에이전트 상태 다시 확인" })).toBeTruthy();
   });
 
   it("stops indefinite command polling and offers honest DB-only cleanup", async () => {
@@ -156,7 +152,6 @@ describe("ClusterDisconnectDialog", () => {
       };
     });
     renderDialog({
-      confirmManualCleanup: vi.fn(),
       disconnect: vi.fn().mockResolvedValue(uninstallingReceipt()),
       loadDisconnect,
     });
@@ -164,8 +159,8 @@ describe("ClusterDisconnectDialog", () => {
     await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
     await user.click(screen.getByRole("button", { name: "연결 해제" }));
 
-    expect(await screen.findByText("클러스터에서 정리 명령을 실행하세요")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "DB 등록 강제 제거" })).toBeTruthy();
+    expect(await screen.findByText("에이전트 정리를 기다리는 중")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "에이전트 상태 다시 확인" })).toBeTruthy();
     expect(loadDisconnect).toHaveBeenCalledOnce();
   });
 });
@@ -174,8 +169,6 @@ function uninstallingReceipt() {
   return {
     status: "uninstalling" as const,
     commandId: "cmd-uninstall-1",
-    uninstallCommand: "kubectl delete deployment/cluster-agent",
-    residualResources: ["target:serviceaccount/cluster-agent"],
     failureReason: null,
   };
 }
@@ -183,9 +176,7 @@ function uninstallingReceipt() {
 function cleanupRequiredReceipt() {
   return {
     status: "cleanup-required" as const,
-    commandId: null,
-    uninstallCommand: "kubectl delete deployment/cluster-agent",
-    residualResources: ["target:serviceaccount/cluster-agent"],
+    commandId: "cmd-uninstall-1",
     failureReason: "agent is offline",
   };
 }

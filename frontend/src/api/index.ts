@@ -356,7 +356,6 @@ export {
   unregisterCluster,
   type ClusterUnregisterResponse,
   type ListClustersOptions,
-  type UnregisterClusterOptions,
 } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";

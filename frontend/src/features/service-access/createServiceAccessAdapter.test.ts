@@ -22,7 +22,7 @@ const CAPABILITIES: ServiceAccessCapabilities = {
   serviceRequest: "available",
   serviceRequestReason: null,
   localPortForward: "desktop-required",
-  localPortForwardReason: "desktop-port-forward-bridge-required",
+  localPortForwardReason: "desktop-agent-port-forward-required",
   portDiscovery: "complete",
   portDiscoveryReason: null,
   ports: [{
@@ -56,7 +56,7 @@ describe("service access adapter", () => {
       service_request: "available",
       service_request_reason: null,
       local_port_forward: "desktop_required",
-      local_port_forward_reason: "desktop_port_forward_bridge_required",
+      local_port_forward_reason: "desktop_agent_port_forward_required",
       port_discovery: "complete",
       port_discovery_reason: null,
       ports: [{

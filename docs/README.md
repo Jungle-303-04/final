@@ -163,6 +163,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
+- [architecture/agent-port-forward-boundary](architecture/agent-port-forward-boundary.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
 - [argocd-reference-learning-lab](argocd-reference-learning-lab.md)
 - [aws-testing-runbook](aws-testing-runbook.md)

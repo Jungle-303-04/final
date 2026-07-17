@@ -44,6 +44,25 @@ def test_repository_disconnect_uses_distinct_terminal_status() -> None:
     assert ClusterRegistrationStatus.DISCONNECTED.value in compiled.params.values()
 
 
+def test_agent_reconnect_does_not_overwrite_uninstall_pending_status() -> None:
+    connection = _CaptureConnection()
+    repository = object.__new__(WorkspaceAccessRepository)
+
+    @contextmanager
+    def use_connection():
+        yield connection
+
+    repository.connection = use_connection  # type: ignore[method-assign]
+
+    assert repository.mark_cluster_registration_connected("default", "cluster-2") is True
+
+    compiled = connection.statements[0].compile(dialect=postgresql.dialect())
+    assert ClusterRegistrationStatus.REGISTERED.value in compiled.params.values()
+    allowed_statuses = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert ClusterRegistrationStatus.PENDING_INSTALL.value in allowed_statuses
+    assert ClusterRegistrationStatus.UNINSTALL_REQUESTED.value not in allowed_statuses
+
+
 class _LifecycleDb:
     def __init__(self) -> None:
         self.registrations: list[dict[str, Any]] = [

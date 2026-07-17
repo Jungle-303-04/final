@@ -28,12 +28,6 @@ export const logStreamEndSchema = z.strictObject({
   reason: safeText,
   diagnostic: z.strictObject({
     code: z.enum(["no_matching_pods", "no_log_lines"]),
-    recovery: z.strictObject({
-      kind: z.literal("copy_command"),
-      command: z.string().min(1).max(1024),
-      cluster_id: z.string().min(1).max(512),
-      read_only: z.literal(true),
-    }).nullable(),
   }).nullable(),
 });
 

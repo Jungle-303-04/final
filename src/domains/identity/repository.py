@@ -226,6 +226,30 @@ class IdentityAccessRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    def mark_cluster_registration_connected(self, workspace_id: str, cluster_id: str) -> bool:
+        """Promote an enrolled agent without cancelling a pending uninstall."""
+
+        table = ClusterRegistration.__table__
+        statement = (
+            update(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status.in_(
+                    (
+                        ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+                        ClusterRegistrationStatus.INSTALL_FAILED.value,
+                        ClusterRegistrationStatus.REGISTERED.value,
+                    )
+                ),
+            )
+            .values(status=ClusterRegistrationStatus.REGISTERED.value, updated_at=func.now())
+            .returning(table.c.cluster_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).first() is not None
+
     def reissue_target_cluster_install(
         self,
         workspace_id: str,

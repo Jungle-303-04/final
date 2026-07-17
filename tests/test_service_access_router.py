@@ -12,6 +12,7 @@ from domains.service_access.router import (
 )
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.service_access import (
+    PORT_FORWARD_AGENT_CAPABILITY,
     SERVICE_HTTP_REQUEST_ACTION,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
     SERVICE_REQUEST_MAX_ACTIVE_PER_CLUSTER,
@@ -89,13 +90,13 @@ class ServiceAccessDb:
         allowed: bool = True,
         active: int = 0,
         connected: bool = True,
-        pod_exec_supported: bool = True,
+        port_forward_supported: bool = False,
         resource: dict[str, object] | None = None,
     ) -> None:
         self.allowed = allowed
         self.active = active
         self.connected = connected
-        self.pod_exec_supported = pod_exec_supported
+        self.port_forward_supported = port_forward_supported
         self.resource = resource or inventory_service()
         self.access_calls: list[tuple[str, str, str, str, str]] = []
 
@@ -154,8 +155,8 @@ class ServiceAccessDb:
         if not self.connected:
             return []
         capabilities = ["command_receiver", SERVICE_HTTP_REQUEST_AGENT_CAPABILITY]
-        if self.pod_exec_supported:
-            capabilities.append("pod_exec_stream")
+        if self.port_forward_supported:
+            capabilities.append(PORT_FORWARD_AGENT_CAPABILITY)
         return [
             {
                 "status": "connected",
@@ -221,6 +222,8 @@ def test_capabilities_bind_session_workspace_rbac_exact_resource_and_tcp_ports()
     assert [item.port for item in response.ports] == [80, 443]
     assert [item.default_scheme for item in response.ports] == ["http", "https"]
     assert response.service_request == "available"
+    assert response.local_port_forward == "unavailable"
+    assert response.local_port_forward_reason == "agent_port_forward_unavailable"
     assert db.access_calls[-1][-1] == "pod.exec"
 
 
@@ -235,7 +238,8 @@ def test_capabilities_report_agent_unavailability_without_inventing_a_browser_se
 
     assert response.service_request == "unavailable"
     assert response.service_request_reason == "service_request_agent_unavailable"
-    assert response.local_port_forward == "desktop_required"
+    assert response.local_port_forward == "unavailable"
+    assert response.local_port_forward_reason == "agent_port_forward_unavailable"
 
 
 def test_pod_capabilities_project_exact_scope_uid_and_only_observed_tcp_container_ports() -> None:
@@ -267,7 +271,8 @@ def test_pod_capabilities_project_exact_scope_uid_and_only_observed_tcp_containe
     assert response.port_discovery == "complete"
     assert response.port_discovery_reason is None
     assert response.service_request == "unavailable"
-    assert response.local_port_forward == "desktop_required"
+    assert response.local_port_forward == "unavailable"
+    assert response.local_port_forward_reason == "agent_port_forward_unavailable"
 
 
 @pytest.mark.parametrize(
@@ -294,14 +299,14 @@ def test_pod_capabilities_project_exact_scope_uid_and_only_observed_tcp_containe
             True,
             "partial",
             "desktop_required",
-            "desktop_port_forward_bridge_required",
+            "desktop_agent_port_forward_required",
         ),
         (
             inventory_pod()["summary"],
             False,
             "complete",
             "unavailable",
-            "pod_exec_capability_unavailable",
+            "agent_port_forward_unavailable",
         ),
     ],
 )
@@ -318,7 +323,7 @@ def test_pod_capabilities_fail_closed_for_empty_partial_or_unsupported_observati
             current=current(),
             db=ServiceAccessDb(
                 resource=inventory_pod(summary=summary),
-                pod_exec_supported=supported,
+                port_forward_supported=supported,
             ),
         )
     )

@@ -53,7 +53,6 @@ const clusterScopePort: ClusterScopePort = {
 
 const clustersPort: ClustersPort & ClusterDisconnectPort = {
   connect: vi.fn(),
-  confirmManualCleanup: vi.fn(),
   disconnect: vi.fn(),
   loadConnection: vi.fn(),
   loadDisconnect: vi.fn(),

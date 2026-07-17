@@ -1,9 +1,9 @@
 """Target agent uninstall contract.
 
 The management plane has no inbound route to a target cluster.  Disconnect is
-therefore a two-phase operation: an online agent can remove its own runtime
-after acknowledging the command, while an operator command remains the safe
-fallback for offline agents and the final self-authorizing RBAC pair.
+therefore an agent-owned operation: the command remains queued while an agent
+is offline and registration is revoked only after the authenticated agent has
+reported a durable cleanup completion receipt.
 
 Every resource below is an exact name emitted by ``target_install_manifest``.
 Namespaces and sample/user workloads are deliberately outside this allowlist.
@@ -177,73 +177,15 @@ FINAL_AGENT_DEPLOYMENT = NamespacedCleanupResource(
     "apps", "v1", TARGET_NAMESPACE, "deployments", "cluster-agent"
 )
 
-TARGET_NAMESPACED_RESOURCES = (
-    "deployment/cluster-agent",
-    "daemonset/optional-node-collector",
-    "configmap/target-runtime-config",
-    "configmap/target-agent-policy",
-    "secret/target-runtime-secret",
-    f"serviceaccount/{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}",
-    "serviceaccount/cluster-agent",
-    "role/cluster-agent-self-manage",
-    "role/cluster-agent-target-manage",
-    "rolebinding/cluster-agent-self-manage",
-    "rolebinding/cluster-agent-target-manage",
-)
-SANDBOX_RBAC_RESOURCES = (
-    "role/cluster-agent-sandbox-write",
-    "role/cluster-agent-catalog-install",
-    "rolebinding/cluster-agent-sandbox-write",
-    "rolebinding/cluster-agent-catalog-install",
-    "role/cluster-agent-cronjob-control",
-    "rolebinding/cluster-agent-cronjob-control",
-)
-CLUSTER_SCOPED_RESOURCES = (
-    f"clusterrolebinding/{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}",
-    "clusterrolebinding/cluster-agent-gitops-control",
-    "clusterrolebinding/cluster-agent-node-control",
-    "clusterrolebinding/cluster-agent-read",
-    "clusterrolebinding/cluster-agent-uninstall",
-    "clusterrole/cluster-agent-node-control",
-    "clusterrole/cluster-agent-gitops-control",
-    "clusterrole/cluster-agent-read",
-    "clusterrole/cluster-agent-uninstall",
-    f"clusterrole/{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}",
-    "priorityclass/gitops-control-critical",
-    "priorityclass/gitops-demo-fast",
-)
-
 # A running service account cannot reliably delete the binding that grants the
-# deletion and then delete the role behind it.  Those inert objects are always
-# included in the operator fallback instead of pretending self-cleanup is total.
+# deletion and then delete the role behind it.  The completion receipt records
+# these inert residuals without turning them into a browser-side direct command
+# escape hatch; follow-up cleanup remains an agent contract concern.
 SELF_CLEANUP_RESIDUALS = (
     f"{TARGET_NAMESPACE}:serviceaccount/cluster-agent",
     "cluster:clusterrolebinding/cluster-agent-uninstall",
     "cluster:clusterrole/cluster-agent-uninstall",
 )
-
-
-def target_uninstall_resources() -> list[str]:
-    return [
-        *(f"{TARGET_NAMESPACE}:{item}" for item in TARGET_NAMESPACED_RESOURCES),
-        *(f"{SANDBOX_NAMESPACE}:{item}" for item in SANDBOX_RBAC_RESOURCES),
-        *(f"cluster:{item}" for item in CLUSTER_SCOPED_RESOURCES),
-    ]
-
-
-def target_uninstall_command() -> str:
-    """Render one idempotent command that deletes only Opsia-owned names."""
-
-    target = " ".join(TARGET_NAMESPACED_RESOURCES)
-    sandbox = " ".join(SANDBOX_RBAC_RESOURCES)
-    cluster = " ".join(CLUSTER_SCOPED_RESOURCES)
-    return " && ".join(
-        (
-            f"kubectl delete -n {TARGET_NAMESPACE} {target} --ignore-not-found --wait=true",
-            f"kubectl delete -n {SANDBOX_NAMESPACE} {sandbox} --ignore-not-found --wait=true",
-            f"kubectl delete {cluster} --ignore-not-found --wait=true",
-        )
-    )
 
 
 @dataclass(frozen=True)
