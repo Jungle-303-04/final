@@ -5,6 +5,8 @@ import {
   HELM_CHART_SOURCES_PATH,
   listHelmChartSources,
   registerHelmChartSource,
+  refreshHelmRepository,
+  HELM_REPOSITORY_UPDATE_PATH,
 } from "./helm-chart-sources";
 
 describe("Helm chart source API", () => {
@@ -92,6 +94,23 @@ describe("Helm chart source API", () => {
       name: "Stable",
       reference: "https://charts.example.test/index.yaml",
     });
+  });
+
+  it("refreshes one authorized repository and projects its audited observation", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      source_id: "source-repository",
+      chart_count: 42,
+      observed_at: "2026-07-17T08:10:00Z",
+      event_id: "event-refresh-source",
+      correlation_id: "correlation-refresh-source",
+    }));
+
+    await expect(refreshHelmRepository("Team charts"))
+      .resolves.toMatchObject({ source_id: "source-repository", chart_count: 42 });
+
+    expect(HELM_REPOSITORY_UPDATE_PATH).toBe("/api/helm/repositories/{name}/update");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/helm/repositories/Team%20charts/update");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
   });
 
   it("rejects unsafe delete identities and invalid mutation receipts before projection", async () => {
