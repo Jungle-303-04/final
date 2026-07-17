@@ -145,7 +145,9 @@ interface TopologyViewport {
 }
 
 interface HoveredTopologyNode {
+  height: number;
   node: InfraTopologyNode;
+  width: number;
   x: number;
   y: number;
 }
@@ -198,7 +200,9 @@ export function ResourcesInfraMapTopologyFlow({
   ) => {
     const rect = viewportRef.current?.getBoundingClientRect();
     setHoveredNode({
+      height: rect?.height ?? 0,
       node,
+      width: rect?.width ?? 0,
       x: rect ? event.clientX - rect.left : event.clientX,
       y: rect ? event.clientY - rect.top : event.clientY,
     });
@@ -257,41 +261,43 @@ export function ResourcesInfraMapTopologyFlow({
       ref={viewportRef}
     >
       {typeof ResizeObserver !== "undefined" ? (
-        <ReactFlow
-          colorMode={colorMode}
-          edges={graph.edges}
-          fitView
-          fitViewOptions={TOPOLOGY_FIT_VIEW_OPTIONS}
-          maxZoom={INFRA_MAP_TOPOLOGY_ZOOM.max}
-          minZoom={INFRA_MAP_TOPOLOGY_ZOOM.min}
-          nodes={graph.nodes}
-          nodeTypes={nodeTypes}
-          nodesConnectable={false}
-          nodesDraggable={false}
-          onInit={handleInit}
-          onMove={handleMove}
-          onNodeMouseEnter={handleNodeMouseEnter}
-          onNodeMouseLeave={handleNodeMouseLeave}
-          onNodeMouseMove={handleNodeMouseMove}
-          panOnScroll
-          proOptions={{ hideAttribution: true }}
-          zoomOnDoubleClick={false}
-          zoomOnScroll
-        >
-          <Background color={TOPOLOGY_BACKGROUND_DOT} gap={22} size={1} />
-          <TopologyMiniMap
-            bounds={graph.bounds}
+        <>
+          <ReactFlow
+            colorMode={colorMode}
             edges={graph.edges}
+            fitView
+            fitViewOptions={TOPOLOGY_FIT_VIEW_OPTIONS}
+            maxZoom={INFRA_MAP_TOPOLOGY_ZOOM.max}
+            minZoom={INFRA_MAP_TOPOLOGY_ZOOM.min}
             nodes={graph.nodes}
-            viewport={viewport}
-            viewportSize={viewportSize}
-          />
-          <TopologyZoomControls
-            instance={flowInstance}
-            zoomPercent={zoomPercent}
-          />
+            nodeTypes={nodeTypes}
+            nodesConnectable={false}
+            nodesDraggable={false}
+            onInit={handleInit}
+            onMove={handleMove}
+            onNodeMouseEnter={handleNodeMouseEnter}
+            onNodeMouseLeave={handleNodeMouseLeave}
+            onNodeMouseMove={handleNodeMouseMove}
+            panOnScroll
+            proOptions={{ hideAttribution: true }}
+            zoomOnDoubleClick={false}
+            zoomOnScroll
+          >
+            <Background color={TOPOLOGY_BACKGROUND_DOT} gap={22} size={1} />
+            <TopologyMiniMap
+              bounds={graph.bounds}
+              edges={graph.edges}
+              nodes={graph.nodes}
+              viewport={viewport}
+              viewportSize={viewportSize}
+            />
+            <TopologyZoomControls
+              instance={flowInstance}
+              zoomPercent={zoomPercent}
+            />
+          </ReactFlow>
           {hoveredNode ? <TopologyHoverCard hover={hoveredNode} /> : null}
-        </ReactFlow>
+        </>
       ) : (
         <TopologyStaticFallback
           cluster={cluster}
@@ -540,14 +546,26 @@ function zoomTopologyByStep(
 }
 
 function TopologyHoverCard({ hover }: { hover: HoveredTopologyNode }) {
+  const edgePadding = 8;
+  const gap = 14;
+  const cardWidth = Math.min(288, Math.max(0, hover.width - edgePadding * 2));
+  const maxLeft = Math.max(edgePadding, hover.width - cardWidth - edgePadding);
+  const left = Math.min(Math.max(edgePadding, hover.x + gap), maxLeft);
+  const placeAbove = hover.height > 0 && hover.y > hover.height / 2;
+  const verticalOffset = placeAbove
+    ? Math.max(edgePadding, hover.height - hover.y + gap)
+    : Math.max(edgePadding, hover.y + gap);
   return (
     <div
-      className="pointer-events-none absolute z-30 w-72 max-w-[calc(100%-1rem)] overflow-hidden rounded-md bg-foreground text-background shadow-lg"
+      className="pointer-events-none absolute z-50 w-72 max-w-[calc(100%-1rem)] overflow-hidden rounded-md bg-foreground text-background shadow-lg"
       data-slot="infra-map-topology-hover-card"
       role="tooltip"
       style={{
-        left: Math.max(8, hover.x + 14),
-        top: Math.max(8, hover.y + 14),
+        bottom: placeAbove ? verticalOffset : undefined,
+        left,
+        maxHeight: "calc(100% - 1rem)",
+        top: placeAbove ? undefined : verticalOffset,
+        width: cardWidth || undefined,
       }}
     >
       {hover.node.type === "infra-map-cluster" ? (

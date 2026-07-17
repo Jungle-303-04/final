@@ -34,6 +34,9 @@ describe("ResourcesInfraMapView", () => {
       name: "Infra Map Pod placement legend",
     });
 
+    expect(screen.getByText(
+      "Summarizes each node as a server card, highlighting key Pods, Pod distribution, and node capacity at a glance.",
+    )).toBeTruthy();
     expect(legend.getAttribute("data-slot")).toBe("infra-map-legend");
     expect(within(legend).getByText("Green · normal")).toBeTruthy();
     expect(within(legend).getByText("Card fill · CPU request usage")).toBeTruthy();
@@ -41,11 +44,17 @@ describe("ResourcesInfraMapView", () => {
     expect(within(legend).getByText("Dashed card · metric or request unavailable")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Topology" }));
+    expect(screen.getByText(
+      "Shows Cluster, Node, and Pod relationships as a graph, with hover details for status, usage, restarts, and placement.",
+    )).toBeTruthy();
     expect(within(legend).getByText("Solid line · placement relationship")).toBeTruthy();
     expect(within(legend).getByText("Icon color · health and pressure")).toBeTruthy();
     expect(within(legend).getByText("Dashed line · metric or request unavailable")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Navigator" }));
+    expect(screen.getByText(
+      "Shows the cluster as a radial navigator so you can scan node placement, Pod density, and requested capacity visually.",
+    )).toBeTruthy();
     expect(within(legend).getByText("Line · cluster, node, and pod placement")).toBeTruthy();
     expect(within(legend).getByText("Rack · node")).toBeTruthy();
     expect(within(legend).getByText("Dot size · requested capacity")).toBeTruthy();

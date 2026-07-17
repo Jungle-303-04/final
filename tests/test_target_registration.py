@@ -652,7 +652,7 @@ def test_target_rca_cleanup_delete_permission_is_limited_to_owned_manifest_kinds
 
 def test_static_target_manifest_keeps_the_same_minimal_rca_cleanup_permissions() -> None:
     manifest_path = Path(__file__).resolve().parents[1] / "deploy/target/target.yaml"
-    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
+    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text(encoding="utf-8")) if doc]
     sandbox_role = next(
         doc
         for doc in docs
@@ -847,7 +847,9 @@ def test_management_install_manifest_includes_direct_node_control_safety_rbac() 
 )
 def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> None:
     root = Path(__file__).resolve().parents[1]
-    docs = [doc for doc in yaml.safe_load_all((root / manifest_path).read_text()) if doc]
+    docs = [
+        doc for doc in yaml.safe_load_all((root / manifest_path).read_text(encoding="utf-8")) if doc
+    ]
     read_roles = [doc for doc in docs if doc.get("kind") == "ClusterRole"]
     argo_rules = [
         rule
@@ -865,7 +867,7 @@ def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> No
 
 def test_static_management_agent_limits_writes_to_gitops_control() -> None:
     manifest_path = Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml"
-    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
+    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text(encoding="utf-8")) if doc]
     forbidden_verbs = {"create", "update", "patch", "delete", "deletecollection", "apply"}
 
     for doc in docs:

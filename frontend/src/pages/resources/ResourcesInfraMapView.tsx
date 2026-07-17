@@ -72,7 +72,7 @@ export function ResourcesInfraMapView({
             </h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("resources.infraMap.description")}
+            {t(infraMapDescriptionKey(viewerMode))}
           </p>
         </div>
         <InfraMapViewerTabs onChange={setViewerMode} value={viewerMode} />
@@ -342,6 +342,12 @@ function infraMapLegendVariant(mode: InfraMapViewerMode) {
   if (mode === "topology") return "infra-topology";
   if (mode === "navigator") return "infra-navigator";
   return "infra-card";
+}
+
+function infraMapDescriptionKey(mode: InfraMapViewerMode) {
+  if (mode === "topology") return "resources.infraMap.description.topology";
+  if (mode === "navigator") return "resources.infraMap.description.navigator";
+  return "resources.infraMap.description.card";
 }
 
 function focusTitle(item: InfraMapFocusItem): string {
