@@ -6,7 +6,7 @@ import {
   type HelmPort,
   HelmPortFailure,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy, type HelmCopy } from "../../features/helm/helmCopy";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -43,11 +43,12 @@ export function HelmChartSourcesPanelContent({
   data: ReturnType<typeof useHelmChartSources>;
   port: HelmPort;
 }) {
+  const copy = useHelmCopy();
   return (
     <Card>
       <CardHeader>
-        <CardTitle><h2>{HELM_COPY.chartSources}</h2></CardTitle>
-        <CardDescription>{HELM_COPY.chartSourcesDescription}</CardDescription>
+        <CardTitle><h2>{copy.chartSources}</h2></CardTitle>
+        <CardDescription>{copy.chartSourcesDescription}</CardDescription>
         <CardAction>
           <HelmChartSourceRegistrationDialog onRegistered={data.refresh} port={port} />
         </CardAction>
@@ -66,11 +67,12 @@ function ChartSourceListBoundary({
   data: ReturnType<typeof useHelmChartSources>;
   port: HelmPort;
 }) {
+  const copy = useHelmCopy();
   if (data.state.phase === "loading") {
     return (
-      <div aria-label={HELM_COPY.chartSourcesLoading} className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground" role="status">
+      <div aria-label={copy.chartSourcesLoading} className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground" role="status">
         <Spinner decorative />
-        {HELM_COPY.chartSourcesLoading}
+        {copy.chartSourcesLoading}
       </div>
     );
   }
@@ -78,32 +80,32 @@ function ChartSourceListBoundary({
     return (
       <Alert variant="destructive">
         <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-          <span>{sourceFailureCopy(data.state.failure)}</span>
+          <span>{sourceFailureCopy(data.state.failure, copy)}</span>
           <Button onClick={data.refresh} size="sm" type="button" variant="outline">
             <RefreshCw aria-hidden="true" />
-            {HELM_COPY.chartSourcesRetry}
+            {copy.chartSourcesRetry}
           </Button>
         </AlertDescription>
       </Alert>
     );
   }
   if (data.state.items.length === 0) {
-    return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{HELM_COPY.chartSourcesEmpty}</p>;
+    return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.chartSourcesEmpty}</p>;
   }
   return (
     <>
       <ChartSourceTable items={data.state.items} onDeleted={data.refresh} port={port} />
       {data.state.loadMoreFailure ? (
-        <Alert variant="destructive"><AlertDescription>{HELM_COPY.chartSourcesLoadMoreFailed}</AlertDescription></Alert>
+        <Alert variant="destructive"><AlertDescription>{copy.chartSourcesLoadMoreFailed}</AlertDescription></Alert>
       ) : null}
       {data.state.hasMore ? (
         <Button aria-busy={data.state.loadingMore} className="w-fit" disabled={data.state.loadingMore} onClick={data.loadMore} size="sm" type="button" variant="outline">
           {data.state.loadingMore ? <Spinner decorative /> : null}
-          {HELM_COPY.chartSourcesLoadMore}
+          {copy.chartSourcesLoadMore}
         </Button>
       ) : null}
       {data.state.refreshing ? (
-        <span aria-label={HELM_COPY.chartSourcesLoading} className="sr-only" role="status">{HELM_COPY.chartSourcesLoading}</span>
+        <span aria-label={copy.chartSourcesLoading} className="sr-only" role="status">{copy.chartSourcesLoading}</span>
       ) : null}
     </>
   );
@@ -118,6 +120,7 @@ function ChartSourceTable({
   onDeleted: () => void;
   port: HelmPort;
 }) {
+  const copy = useHelmCopy();
   const [selected, setSelected] = useState<HelmChartSource | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshFailure, setRefreshFailure] = useState(false);
@@ -138,34 +141,34 @@ function ChartSourceTable({
   return (
     <>
       {refreshFailure ? (
-        <Alert variant="destructive"><AlertDescription>{HELM_COPY.chartSourceRefreshFailed}</AlertDescription></Alert>
+        <Alert variant="destructive"><AlertDescription>{copy.chartSourceRefreshFailed}</AlertDescription></Alert>
       ) : null}
-      <Table scrollAreaLabel={HELM_COPY.chartSources}>
+      <Table scrollAreaLabel={copy.chartSources}>
         <TableHeader>
           <TableRow>
-            <TableHead>{HELM_COPY.chartSourceName}</TableHead>
-            <TableHead>{HELM_COPY.chartSourceType}</TableHead>
-            <TableHead>{HELM_COPY.chartSourceReference}</TableHead>
-            <TableHead>{HELM_COPY.chartSourceCredentials}</TableHead>
-            <TableHead>{HELM_COPY.chartSourceStatus}</TableHead>
-            <TableHead>{HELM_COPY.chartSourceObserved}</TableHead>
-            {hasActions ? <TableHead>{HELM_COPY.chartSourceActions}</TableHead> : null}
+            <TableHead>{copy.chartSourceName}</TableHead>
+            <TableHead>{copy.chartSourceType}</TableHead>
+            <TableHead>{copy.chartSourceReference}</TableHead>
+            <TableHead>{copy.chartSourceCredentials}</TableHead>
+            <TableHead>{copy.chartSourceStatus}</TableHead>
+            <TableHead>{copy.chartSourceObserved}</TableHead>
+            {hasActions ? <TableHead>{copy.chartSourceActions}</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.map((source) => (
             <TableRow key={source.id}>
               <TableCell className="max-w-48 truncate font-medium" title={source.name}>{source.name}</TableCell>
-              <TableCell>{source.provider === "oci" ? HELM_COPY.chartSourceOci : HELM_COPY.chartSourceRepository}</TableCell>
+              <TableCell>{source.provider === "oci" ? copy.chartSourceOci : copy.chartSourceRepository}</TableCell>
               <TableCell className="max-w-96 break-all text-muted-foreground">{source.reference}</TableCell>
-              <TableCell>{source.credentialsConfigured ? HELM_COPY.chartSourceCredentialsConfigured : HELM_COPY.chartSourceCredentialsNone}</TableCell>
+              <TableCell>{source.credentialsConfigured ? copy.chartSourceCredentialsConfigured : copy.chartSourceCredentialsNone}</TableCell>
               <TableCell><Badge variant="outline">{source.status}</Badge></TableCell>
-              <TableCell className="text-muted-foreground">{formatObservedAt(source.observedAt)}</TableCell>
+              <TableCell className="text-muted-foreground">{formatObservedAt(source.observedAt, copy)}</TableCell>
               {hasActions ? (
                 <TableCell>
                   {source.actions.includes("refresh") ? (
                     <Button
-                      aria-label={HELM_COPY.chartSourceRefreshButton(source.name)}
+                      aria-label={copy.chartSourceRefreshButton(source.name)}
                       disabled={refreshingId !== null}
                       onClick={() => void refresh(source)}
                       size="icon-sm"
@@ -179,7 +182,7 @@ function ChartSourceTable({
                   ) : null}
                   {source.actions.includes("delete") ? (
                     <Button
-                      aria-label={HELM_COPY.chartSourceDeleteButton(source.name)}
+                      aria-label={copy.chartSourceDeleteButton(source.name)}
                       onClick={() => setSelected(source)}
                       size="icon-sm"
                       type="button"
@@ -209,14 +212,14 @@ function ChartSourceTable({
   );
 }
 
-function sourceFailureCopy(failure: HelmPortFailure): string {
-  if (failure.code === "forbidden" || failure.code === "unauthorized") return HELM_COPY.chartSourcesForbidden;
-  if (failure.code === "offline") return HELM_COPY.chartSourcesUnavailable;
-  return HELM_COPY.chartSourcesFailed;
+function sourceFailureCopy(failure: HelmPortFailure, copy: HelmCopy): string {
+  if (failure.code === "forbidden" || failure.code === "unauthorized") return copy.chartSourcesForbidden;
+  if (failure.code === "offline") return copy.chartSourcesUnavailable;
+  return copy.chartSourcesFailed;
 }
 
-function formatObservedAt(value: string | null): string {
-  if (value === null) return HELM_COPY.unavailableValue;
+function formatObservedAt(value: string | null, copy: HelmCopy): string {
+  if (value === null) return copy.unavailableValue;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }

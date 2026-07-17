@@ -7,7 +7,7 @@ import {
   type HelmChartSummary,
   type HelmPort,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy } from "../../features/helm/helmCopy";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -47,6 +47,7 @@ export function HelmChartCatalogPanel({
   port: HelmPort;
   urlState: HelmChartCatalogUrlState;
 }) {
+  const copy = useHelmCopy();
   const [query, setQuery] = useState(urlState.query);
   const [sourceId, setSourceId] = useState(urlState.sourceId ?? "");
   const [provider, setProvider] = useState(urlState.provider ?? "");
@@ -113,35 +114,35 @@ export function HelmChartCatalogPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle><h2>{HELM_COPY.chartCatalog}</h2></CardTitle>
-        <CardDescription>{HELM_COPY.chartCatalogDescription}</CardDescription>
+        <CardTitle><h2>{copy.chartCatalog}</h2></CardTitle>
+        <CardDescription>{copy.chartCatalogDescription}</CardDescription>
       </CardHeader>
       <CardContent className="grid min-w-0 gap-4">
         <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(12rem,2fr)_minmax(10rem,1fr)_minmax(9rem,1fr)_auto] lg:items-end">
           <label className="grid gap-1 text-sm" htmlFor="helm-chart-catalog-query">
-            <span className="font-medium">{HELM_COPY.chartCatalogSearchLabel}</span>
-            <Input id="helm-chart-catalog-query" onChange={(event) => setQuery(event.target.value)} placeholder={HELM_COPY.chartCatalogSearchPlaceholder} value={query} />
+            <span className="font-medium">{copy.chartCatalogSearchLabel}</span>
+            <Input id="helm-chart-catalog-query" onChange={(event) => setQuery(event.target.value)} placeholder={copy.chartCatalogSearchPlaceholder} value={query} />
           </label>
           <label className="grid gap-1 text-sm" htmlFor="helm-chart-catalog-source">
-            <span className="font-medium">{HELM_COPY.chartCatalogSource}</span>
+            <span className="font-medium">{copy.chartCatalogSource}</span>
             <select className="h-9 min-w-0 rounded-md border bg-background px-2 text-sm" id="helm-chart-catalog-source" onChange={(event) => setSourceId(event.target.value)} value={sourceId}>
-              <option value="">{HELM_COPY.chartCatalogAllSources}</option>
+              <option value="">{copy.chartCatalogAllSources}</option>
               {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-sm" htmlFor="helm-chart-catalog-provider">
-            <span className="font-medium">{HELM_COPY.chartCatalogProvider}</span>
+            <span className="font-medium">{copy.chartCatalogProvider}</span>
             <select className="h-9 min-w-0 rounded-md border bg-background px-2 text-sm" id="helm-chart-catalog-provider" onChange={(event) => setProvider(event.target.value)} value={provider}>
-              <option value="">{HELM_COPY.chartCatalogAllProviders}</option>
-              <option value="repository">{HELM_COPY.chartSourceRepository}</option>
-              <option value="oci">{HELM_COPY.chartSourceOci}</option>
+              <option value="">{copy.chartCatalogAllProviders}</option>
+              <option value="repository">{copy.chartSourceRepository}</option>
+              <option value="oci">{copy.chartSourceOci}</option>
             </select>
           </label>
-          <Button onClick={submit} type="button">{HELM_COPY.chartCatalogSearch}</Button>
+          <Button onClick={submit} type="button">{copy.chartCatalogSearch}</Button>
         </div>
         <label className="flex w-fit items-center gap-2 text-sm">
           <input checked={allVersions} onChange={(event) => setAllVersions(event.target.checked)} type="checkbox" />
-          {HELM_COPY.chartCatalogAllVersions}
+          {copy.chartCatalogAllVersions}
         </label>
         <CatalogBoundary catalog={catalog} onSelect={select} />
         <DetailBoundary clusterId={clusterId} detail={detail} port={port} />
@@ -151,12 +152,13 @@ export function HelmChartCatalogPanel({
 }
 
 function CatalogBoundary({ catalog, onSelect }: { catalog: CatalogState; onSelect: (chart: HelmChartSummary) => void }) {
-  if (catalog.phase === "loading") return <Status>{HELM_COPY.chartCatalogLoading}</Status>;
-  if (catalog.phase === "failed") return <Alert variant="destructive"><AlertDescription>{HELM_COPY.chartCatalogFailed}</AlertDescription></Alert>;
+  const copy = useHelmCopy();
+  if (catalog.phase === "loading") return <Status>{copy.chartCatalogLoading}</Status>;
+  if (catalog.phase === "failed") return <Alert variant="destructive"><AlertDescription>{copy.chartCatalogFailed}</AlertDescription></Alert>;
   return (
     <div className="grid min-w-0 gap-2">
-      {catalog.page.availability === "partial" ? <Alert><AlertDescription>{HELM_COPY.chartCatalogPartial}</AlertDescription></Alert> : null}
-      {catalog.page.items.length === 0 ? <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{HELM_COPY.chartCatalogEmpty}</p> : (
+      {catalog.page.availability === "partial" ? <Alert><AlertDescription>{copy.chartCatalogPartial}</AlertDescription></Alert> : null}
+      {catalog.page.items.length === 0 ? <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.chartCatalogEmpty}</p> : (
         <ul className="grid min-w-0 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {catalog.page.items.map((chart) => (
             <li key={`${chart.source.id}:${chart.name}:${chart.version}`}>
@@ -175,9 +177,10 @@ function CatalogBoundary({ catalog, onSelect }: { catalog: CatalogState; onSelec
 }
 
 function DetailBoundary({ clusterId, detail, port }: { clusterId: string | null; detail: DetailState; port: HelmPort }) {
+  const copy = useHelmCopy();
   if (detail.phase === "idle") return null;
-  if (detail.phase === "loading") return <Status>{HELM_COPY.chartCatalogDetailLoading}</Status>;
-  if (detail.phase === "failed" || detail.detail.chart === null) return <Alert variant="destructive"><AlertDescription>{HELM_COPY.chartCatalogDetailFailed}</AlertDescription></Alert>;
+  if (detail.phase === "loading") return <Status>{copy.chartCatalogDetailLoading}</Status>;
+  if (detail.phase === "failed" || detail.detail.chart === null) return <Alert variant="destructive"><AlertDescription>{copy.chartCatalogDetailFailed}</AlertDescription></Alert>;
   const chart = detail.detail.chart;
   return (
     <section className="grid min-w-0 gap-3 rounded-lg border p-4" aria-labelledby="helm-chart-detail-title">
@@ -187,18 +190,18 @@ function DetailBoundary({ clusterId, detail, port }: { clusterId: string | null;
           <span className="text-sm text-muted-foreground">{chart.version}</span>
         </div>
         {detail.detail.install.availability === "available" && clusterId ? (
-          <HelmReleaseInstallDialog clusterId={clusterId} port={port} preferredTarget={detail.detail.install.target} triggerLabel={HELM_COPY.chartCatalogInstall(`${chart.source.name}/${chart.name}`)} />
-        ) : <Badge variant="outline">{HELM_COPY.chartCatalogInstallUnavailable}</Badge>}
+          <HelmReleaseInstallDialog clusterId={clusterId} port={port} preferredTarget={detail.detail.install.target} triggerLabel={copy.chartCatalogInstall(`${chart.source.name}/${chart.name}`)} />
+        ) : <Badge variant="outline">{copy.chartCatalogInstallUnavailable}</Badge>}
       </div>
       <div className="grid gap-1 text-sm">
-        <span className="font-medium">{HELM_COPY.chartCatalogVersions}</span>
+        <span className="font-medium">{copy.chartCatalogVersions}</span>
         <span className="break-words text-muted-foreground">{detail.detail.versions.map((item) => item.version).join(", ") || chart.version}</span>
       </div>
       <div className="grid min-w-0 gap-1 text-sm">
-        <span className="font-medium">{HELM_COPY.chartCatalogValuesSchema}</span>
+        <span className="font-medium">{copy.chartCatalogValuesSchema}</span>
         {detail.detail.valuesSchema.availability === "available" ? (
           <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(detail.detail.valuesSchema.schema, null, 2)}</pre>
-        ) : <span className="text-muted-foreground">{HELM_COPY.chartCatalogValuesSchemaUnavailable}</span>}
+        ) : <span className="text-muted-foreground">{copy.chartCatalogValuesSchemaUnavailable}</span>}
       </div>
     </section>
   );

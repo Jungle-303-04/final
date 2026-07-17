@@ -14,7 +14,7 @@ import {
   type HelmPort,
   HelmPortFailure,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy, type HelmCopy } from "../../features/helm/helmCopy";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -60,6 +60,7 @@ export function HelmChartSourceRegistrationDialog({
   onRegistered: () => void;
   port: HelmPort;
 }) {
+  const copy = useHelmCopy();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<RegistrationForm>(EMPTY_REGISTRATION);
   const [pending, setPending] = useState(false);
@@ -110,74 +111,74 @@ export function HelmChartSourceRegistrationDialog({
     <Dialog onOpenChange={changeOpen} open={open}>
       <DialogTrigger render={<Button size="sm" variant="outline" />}>
         <Plus aria-hidden="true" />
-        {HELM_COPY.chartSourcesRegister}
+        {copy.chartSourcesRegister}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl" showCloseButton={!pending}>
         <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
           <DialogHeader>
-            <DialogTitle>{HELM_COPY.chartSourcesRegister}</DialogTitle>
-            <DialogDescription>{HELM_COPY.chartSourcesRegisterDescription}</DialogDescription>
+            <DialogTitle>{copy.chartSourcesRegister}</DialogTitle>
+            <DialogDescription>{copy.chartSourcesRegisterDescription}</DialogDescription>
           </DialogHeader>
           {failure ? (
             <Alert variant="destructive">
-              <AlertDescription>{registrationFailureCopy(failure)}</AlertDescription>
+              <AlertDescription>{registrationFailureCopy(failure, copy)}</AlertDescription>
             </Alert>
           ) : null}
           <FieldGroup className="grid gap-4 sm:grid-cols-2">
             <Field>
-              <FieldLabel htmlFor="helm-chart-source-provider">{HELM_COPY.chartSourceType}</FieldLabel>
+              <FieldLabel htmlFor="helm-chart-source-provider">{copy.chartSourceType}</FieldLabel>
               <NativeSelect
                 autoFocus
                 id="helm-chart-source-provider"
                 onChange={(event) => update("provider", event.target.value as HelmChartSourceProvider)}
                 value={form.provider}
               >
-                <option value="repository">{HELM_COPY.chartSourceRepository}</option>
-                <option value="oci">{HELM_COPY.chartSourceOci}</option>
+                <option value="repository">{copy.chartSourceRepository}</option>
+                <option value="oci">{copy.chartSourceOci}</option>
               </NativeSelect>
             </Field>
             <Field>
-              <FieldLabel htmlFor="helm-chart-source-name">{HELM_COPY.chartSourceName}</FieldLabel>
+              <FieldLabel htmlFor="helm-chart-source-name">{copy.chartSourceName}</FieldLabel>
               <Input id="helm-chart-source-name" maxLength={120} onChange={(event) => update("name", event.target.value)} required value={form.name} />
             </Field>
             <Field className="sm:col-span-2">
-              <FieldLabel htmlFor="helm-chart-source-reference">{HELM_COPY.chartSourceReference}</FieldLabel>
+              <FieldLabel htmlFor="helm-chart-source-reference">{copy.chartSourceReference}</FieldLabel>
               <Input
                 autoCapitalize="none"
                 id="helm-chart-source-reference"
                 maxLength={2048}
                 onChange={(event) => update("reference", event.target.value)}
-                placeholder={form.provider === "oci" ? HELM_COPY.chartSourceReferenceOciHint : HELM_COPY.chartSourceReferenceRepositoryHint}
+                placeholder={form.provider === "oci" ? copy.chartSourceReferenceOciHint : copy.chartSourceReferenceRepositoryHint}
                 required
                 spellCheck={false}
                 value={form.reference}
               />
             </Field>
             <Field className="sm:col-span-2">
-              <FieldLabel htmlFor="helm-chart-source-authentication">{HELM_COPY.chartSourceAuthentication}</FieldLabel>
+              <FieldLabel htmlFor="helm-chart-source-authentication">{copy.chartSourceAuthentication}</FieldLabel>
               <NativeSelect id="helm-chart-source-authentication" onChange={(event) => update("authentication", event.target.value as AuthenticationKind)} value={form.authentication}>
-                <option value="none">{HELM_COPY.chartSourceAuthenticationNone}</option>
-                <option value="bearer">{HELM_COPY.chartSourceAuthenticationBearer}</option>
-                <option value="basic">{HELM_COPY.chartSourceAuthenticationBasic}</option>
+                <option value="none">{copy.chartSourceAuthenticationNone}</option>
+                <option value="bearer">{copy.chartSourceAuthenticationBearer}</option>
+                <option value="basic">{copy.chartSourceAuthenticationBasic}</option>
               </NativeSelect>
             </Field>
-            {form.authentication === "bearer" ? <SecretField id="helm-chart-source-token" label={HELM_COPY.chartSourceBearerToken} onChange={(value) => update("token", value)} value={form.token} /> : null}
+            {form.authentication === "bearer" ? <SecretField id="helm-chart-source-token" label={copy.chartSourceBearerToken} onChange={(value) => update("token", value)} value={form.token} /> : null}
             {form.authentication === "basic" ? (
               <>
                 <Field>
-                  <FieldLabel htmlFor="helm-chart-source-username">{HELM_COPY.chartSourceUsername}</FieldLabel>
+                  <FieldLabel htmlFor="helm-chart-source-username">{copy.chartSourceUsername}</FieldLabel>
                   <Input autoCapitalize="none" autoComplete="username" id="helm-chart-source-username" maxLength={512} onChange={(event) => update("username", event.target.value)} required spellCheck={false} value={form.username} />
                 </Field>
-                <SecretField id="helm-chart-source-password" label={HELM_COPY.chartSourcePassword} onChange={(value) => update("password", value)} value={form.password} />
+                <SecretField id="helm-chart-source-password" label={copy.chartSourcePassword} onChange={(value) => update("password", value)} value={form.password} />
               </>
             ) : null}
           </FieldGroup>
           <DialogFooter>
             <Button aria-busy={pending} disabled={pending || !registrationComplete(form)} type="submit">
               {pending ? <Spinner decorative /> : <Plus aria-hidden="true" />}
-              {pending ? HELM_COPY.chartSourcesRegisterPending : HELM_COPY.chartSourcesRegisterSave}
+              {pending ? copy.chartSourcesRegisterPending : copy.chartSourcesRegisterSave}
             </Button>
-            <Button disabled={pending} onClick={() => changeOpen(false)} type="button" variant="outline">{HELM_COPY.chartSourceCancel}</Button>
+            <Button disabled={pending} onClick={() => changeOpen(false)} type="button" variant="outline">{copy.chartSourceCancel}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -219,7 +220,7 @@ function registrationRequest(form: RegistrationForm): HelmChartSourceRegisterReq
   };
 }
 
-function registrationFailureCopy(failure: HelmPortFailure): string {
-  if (failure.code === "forbidden" || failure.code === "unauthorized") return HELM_COPY.chartSourcesRegisterForbidden;
-  return HELM_COPY.chartSourcesRegisterFailed;
+function registrationFailureCopy(failure: HelmPortFailure, copy: HelmCopy): string {
+  if (failure.code === "forbidden" || failure.code === "unauthorized") return copy.chartSourcesRegisterForbidden;
+  return copy.chartSourcesRegisterFailed;
 }

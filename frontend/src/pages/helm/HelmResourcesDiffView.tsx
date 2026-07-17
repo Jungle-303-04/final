@@ -3,7 +3,7 @@ import type {
   HelmRenderedResourceRef,
   HelmValuesPreviewResources,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy, type HelmCopy } from "../../features/helm/helmCopy";
 import {
   Table,
   TableBody,
@@ -18,21 +18,23 @@ export function HelmResourcesDiffView({
 }: {
   diff: HelmValuesPreviewResources;
 }) {
+  const copy = useHelmCopy();
   return (
     <div className="grid min-w-0 gap-3">
       <StructuredParseNotice
         count={diff.parseErrorCount}
-        singular={HELM_COPY.resourceParseError}
-        plural={HELM_COPY.resourceParseErrors}
+        singular={copy.resourceParseError}
+        plural={copy.resourceParseErrors}
       />
-      <ResourceRefSection heading={HELM_COPY.resourcesAdded} items={diff.added} />
-      <ResourceRefSection heading={HELM_COPY.resourcesRemoved} items={diff.removed} />
+      <ResourceRefSection copy={copy} heading={copy.resourcesAdded} items={diff.added} />
+      <ResourceRefSection copy={copy} heading={copy.resourcesRemoved} items={diff.removed} />
       {diff.modified.length > 0 ? (
         <section className="grid min-w-0 gap-2">
-          <h3 className="text-sm font-semibold">{HELM_COPY.resourcesModified}</h3>
+          <h3 className="text-sm font-semibold">{copy.resourcesModified}</h3>
           <ul className="grid min-w-0 gap-2">
             {diff.modified.map((resource) => (
               <HelmResourceChangeCard
+                copy={copy}
                 key={`${resource.apiVersion}:${resource.kind}:${resource.namespace}:${resource.name}`}
                 resource={resource}
               />
@@ -41,11 +43,11 @@ export function HelmResourcesDiffView({
         </section>
       ) : null}
       {diff.added.length + diff.removed.length + diff.modified.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>
+        <p className="text-sm text-muted-foreground">{copy.artifactEmpty}</p>
       ) : null}
       {diff.unchanged.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          {HELM_COPY.resourcesUnchanged}: {diff.unchanged.length}
+          {copy.resourcesUnchanged}: {diff.unchanged.length}
         </p>
       ) : null}
     </div>
@@ -73,9 +75,11 @@ export function StructuredParseNotice({
 }
 
 function ResourceRefSection({
+  copy,
   heading,
   items,
 }: {
+  copy: HelmCopy;
   heading: string;
   items: readonly HelmRenderedResourceRef[];
 }) {
@@ -91,7 +95,7 @@ function ResourceRefSection({
           >
             <span className="font-mono font-medium">{item.kind}/{item.name}</span>
             <span className="text-muted-foreground">
-              {item.namespace || HELM_COPY.unavailableValue}
+              {item.namespace || copy.unavailableValue}
             </span>
           </li>
         ))}
@@ -100,7 +104,13 @@ function ResourceRefSection({
   );
 }
 
-function HelmResourceChangeCard({ resource }: { resource: HelmRenderedResourceChange }) {
+function HelmResourceChangeCard({
+  copy,
+  resource,
+}: {
+  copy: HelmCopy;
+  resource: HelmRenderedResourceChange;
+}) {
   return (
     <li className="grid min-w-0 gap-2 rounded-md border bg-background p-3 text-xs">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -108,34 +118,37 @@ function HelmResourceChangeCard({ resource }: { resource: HelmRenderedResourceCh
         <span className="text-muted-foreground">{resource.summary}</span>
       </div>
       {resource.fields.length > 0 ? (
-        <Table scrollAreaLabel={`${resource.kind}/${resource.name} ${HELM_COPY.changedFields}`}>
+        <Table scrollAreaLabel={`${resource.kind}/${resource.name} ${copy.changedFields}`}>
           <TableHeader>
             <TableRow>
-              <TableHead>{HELM_COPY.changedFields}</TableHead>
-              <TableHead>{HELM_COPY.previousValue}</TableHead>
-              <TableHead>{HELM_COPY.currentValue}</TableHead>
+              <TableHead>{copy.changedFields}</TableHead>
+              <TableHead>{copy.previousValue}</TableHead>
+              <TableHead>{copy.currentValue}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {resource.fields.map((field) => (
               <TableRow key={field.path}>
                 <TableCell><code className="break-all">{field.path}</code></TableCell>
-                <TableCell className="break-all">{formatStructuredValue(field.oldValue)}</TableCell>
-                <TableCell className="break-all">{formatStructuredValue(field.newValue)}</TableCell>
+                <TableCell className="break-all">{formatStructuredValue(field.oldValue, copy.unavailableValue)}</TableCell>
+                <TableCell className="break-all">{formatStructuredValue(field.newValue, copy.unavailableValue)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       ) : (
         <p className="text-muted-foreground">
-          {HELM_COPY.changedFields}: {resource.fieldCount}
+          {copy.changedFields}: {resource.fieldCount}
         </p>
       )}
     </li>
   );
 }
 
-function formatStructuredValue(value: string | number | boolean | null): string {
-  if (value === null) return HELM_COPY.unavailableValue;
+function formatStructuredValue(
+  value: string | number | boolean | null,
+  unavailableValue: string,
+): string {
+  if (value === null) return unavailableValue;
   return typeof value === "string" ? value : String(value);
 }

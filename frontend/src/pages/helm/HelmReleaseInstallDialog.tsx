@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { type HelmPort, type HelmUpgradeTarget } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy } from "../../features/helm/helmCopy";
 import { useOptionalOperationStatusStore } from "../../features/operations/OperationStatusStore";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
@@ -19,13 +19,15 @@ export function HelmReleaseInstallDialog({
   clusterId,
   port,
   preferredTarget,
-  triggerLabel = HELM_COPY.install,
+  triggerLabel,
 }: {
   clusterId: string;
   port: HelmPort;
   preferredTarget?: Pick<HelmUpgradeTarget, "itemId" | "version">;
   triggerLabel?: string;
 }) {
+  const copy = useHelmCopy();
+  const resolvedTriggerLabel = triggerLabel ?? copy.install;
   const operationStore = useOptionalOperationStatusStore();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -57,7 +59,7 @@ export function HelmReleaseInstallDialog({
       setTargetKey(first ? key(first) : "");
       setValues(first ? initialValues(first) : {});
     } catch {
-      if (!controller.signal.aborted) setFailure(HELM_COPY.installTargetsFailed);
+      if (!controller.signal.aborted) setFailure(copy.installTargetsFailed);
     } finally {
       if (!controller.signal.aborted) setPending(false);
     }
@@ -88,10 +90,10 @@ export function HelmReleaseInstallDialog({
         idempotencyKey: globalThis.crypto.randomUUID(),
       }, controller.signal);
       operationStore?.start(receipt.commandId);
-      if (!operationStore) setFailure(HELM_COPY.operationStreamUnavailable);
+      if (!operationStore) setFailure(copy.operationStreamUnavailable);
       setOpen(false);
     } catch {
-      setFailure(HELM_COPY.installFailed);
+      setFailure(copy.installFailed);
     } finally {
       if (!controller.signal.aborted) setPending(false);
     }
@@ -99,29 +101,29 @@ export function HelmReleaseInstallDialog({
 
   return (
     <>
-      <Button onClick={() => void show()} size="sm" type="button">{triggerLabel}</Button>
+      <Button onClick={() => void show()} size="sm" type="button">{resolvedTriggerLabel}</Button>
       <ConfirmationDialog
-        cancelLabel={HELM_COPY.chartSourceCancel}
+        cancelLabel={copy.chartSourceCancel}
         confirmDisabled={target === null || releaseName.trim() === "" || !valuesAreValid(target, values)}
-        confirmLabel={pending ? HELM_COPY.installPending : HELM_COPY.installConfirm}
-        description={HELM_COPY.installDescription}
+        confirmLabel={pending ? copy.installPending : copy.installConfirm}
+        description={copy.installDescription}
         details={target ? `${clusterId} · ${namespace} · ${releaseName.trim()} · ${target.name} ${target.version}` : undefined}
         onConfirm={() => void confirm()}
         onOpenChange={(next) => { if (!pending) setOpen(next); }}
         open={open}
         pending={pending}
-        title={HELM_COPY.installTitle}
+        title={copy.installTitle}
         variant="warning"
       >
         <div className="grid min-w-0 gap-3">
           <label className="grid gap-1 text-sm" htmlFor="helm-install-target">
-            <span className="font-medium">{HELM_COPY.installTarget}</span>
+            <span className="font-medium">{copy.installTarget}</span>
             <select className="h-9 min-w-0 rounded-md border bg-background px-2 text-sm" id="helm-install-target" onChange={(event) => selectTarget(event.target.value)} value={target ? key(target) : ""}>
               {targets.map((item) => <option key={key(item)} value={key(item)}>{item.name} {item.version}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-sm" htmlFor="helm-install-release">
-            <span className="font-medium">{HELM_COPY.installReleaseName}</span>
+            <span className="font-medium">{copy.installReleaseName}</span>
             <Input id="helm-install-release" onChange={(event) => setReleaseName(event.target.value)} value={releaseName} />
           </label>
           {target?.inputs.map((input) => (

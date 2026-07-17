@@ -5,7 +5,7 @@ import {
   type HelmPort,
   type HelmReleaseDetail,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy, type HelmCopy } from "../../features/helm/helmCopy";
 import { useOptionalOperationStatusStore } from "../../features/operations/OperationStatusStore";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
@@ -22,6 +22,7 @@ export function HelmReleaseOperationDialogs({
   onAccepted: () => void;
   port: HelmPort;
 }) {
+  const copy = useHelmCopy();
   const operationStore = useOptionalOperationStatusStore();
   const [operation, setOperation] = useState<Operation | null>(null);
   const [pending, setPending] = useState(false);
@@ -76,18 +77,18 @@ export function HelmReleaseOperationDialogs({
         ? await port.rollbackRelease({
           ...base,
           revision: rollbackRevision as number,
-          reason: HELM_COPY.rollbackReason(detail.release.name, rollbackRevision as number),
+          reason: copy.rollbackReason(detail.release.name, rollbackRevision as number),
         }, controller.signal)
         : await port.uninstallRelease({
           ...base,
-          reason: HELM_COPY.uninstallReason(detail.release.name),
+          reason: copy.uninstallReason(detail.release.name),
         }, controller.signal);
       operationStore?.start(receipt.commandId);
-      if (!operationStore) setFailure(HELM_COPY.operationStreamUnavailable);
+      if (!operationStore) setFailure(copy.operationStreamUnavailable);
       onAccepted();
       setOperation(null);
     } catch (error) {
-      setFailure(operationFailureCopy(error, operation));
+      setFailure(operationFailureCopy(error, operation, copy));
     } finally {
       if (requestRef.current === controller) requestRef.current = null;
       setPending(false);
@@ -98,19 +99,19 @@ export function HelmReleaseOperationDialogs({
   return (
     <>
       <Button disabled={rollbackRevisions.length === 0} onClick={() => open("rollback")} size="sm" type="button" variant="outline">
-        {HELM_COPY.rollback}
+        {copy.rollback}
       </Button>
       <Button onClick={() => open("uninstall")} size="sm" type="button" variant="destructive">
-        {HELM_COPY.uninstall}
+        {copy.uninstall}
       </Button>
       <ConfirmationDialog
-        cancelLabel={HELM_COPY.chartSourceCancel}
+        cancelLabel={copy.chartSourceCancel}
         confirmDisabled={rollback && rollbackRevision === null}
         confirmLabel={pending
-          ? HELM_COPY.operationPending
-          : rollback ? HELM_COPY.rollbackConfirm : HELM_COPY.uninstallConfirm}
-        description={rollback ? HELM_COPY.rollbackDescription : HELM_COPY.uninstallDescription}
-        details={HELM_COPY.operationDiff(
+          ? copy.operationPending
+          : rollback ? copy.rollbackConfirm : copy.uninstallConfirm}
+        description={rollback ? copy.rollbackDescription : copy.uninstallDescription}
+        details={copy.operationDiff(
           detail.release.scope.clusterId,
           detail.release.storageNamespace,
           detail.release.name,
@@ -121,12 +122,12 @@ export function HelmReleaseOperationDialogs({
         onOpenChange={changeOpen}
         open={operation !== null}
         pending={pending}
-        title={rollback ? HELM_COPY.rollbackTitle : HELM_COPY.uninstallTitle}
+        title={rollback ? copy.rollbackTitle : copy.uninstallTitle}
         variant={rollback ? "warning" : "destructive"}
       >
         {rollback ? (
           <label className="grid gap-1 text-sm" htmlFor="helm-rollback-revision">
-            <span className="font-medium">{HELM_COPY.rollbackRevision}</span>
+            <span className="font-medium">{copy.rollbackRevision}</span>
             <select
               className="h-9 min-w-0 rounded-md border bg-background px-2 text-sm text-foreground"
               id="helm-rollback-revision"
@@ -147,10 +148,10 @@ export function HelmReleaseOperationDialogs({
   );
 }
 
-function operationFailureCopy(error: unknown, operation: Operation): string {
+function operationFailureCopy(error: unknown, operation: Operation, copy: HelmCopy): string {
   if (error instanceof HelmPortFailure) {
-    if (error.code === "forbidden" || error.code === "unauthorized") return HELM_COPY.operationForbidden;
-    if (error.code === "invalid-request" || error.code === "not-found") return HELM_COPY.operationStale;
+    if (error.code === "forbidden" || error.code === "unauthorized") return copy.operationForbidden;
+    if (error.code === "invalid-request" || error.code === "not-found") return copy.operationStale;
   }
-  return operation === "rollback" ? HELM_COPY.rollbackFailed : HELM_COPY.uninstallFailed;
+  return operation === "rollback" ? copy.rollbackFailed : copy.uninstallFailed;
 }

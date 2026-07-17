@@ -5,7 +5,7 @@ import {
   type HelmPort,
   HelmPortFailure,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy, type HelmCopy } from "../../features/helm/helmCopy";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { ConfirmationDialog } from "../../shared/ui/primitives/confirmation-dialog";
 import { isAbortError, toHelmFailure } from "./helmChartSourceUi";
@@ -23,6 +23,7 @@ export function HelmChartSourceDeleteDialog({
   port: HelmPort;
   source: HelmChartSource;
 }) {
+  const copy = useHelmCopy();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<HelmPortFailure | null>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -69,30 +70,30 @@ export function HelmChartSourceDeleteDialog({
 
   return (
     <ConfirmationDialog
-      cancelLabel={HELM_COPY.chartSourceCancel}
-      confirmLabel={pending ? HELM_COPY.chartSourceDeletePending : HELM_COPY.chartSourceDeleteConfirm}
-      description={HELM_COPY.chartSourceDeleteDescription}
+      cancelLabel={copy.chartSourceCancel}
+      confirmLabel={pending ? copy.chartSourceDeletePending : copy.chartSourceDeleteConfirm}
+      description={copy.chartSourceDeleteDescription}
       details={`${source.name}\n${source.reference}`}
       onConfirm={() => void confirm()}
       onOpenChange={changeOpen}
       open={open}
       pending={pending}
-      title={HELM_COPY.chartSourceDelete}
+      title={copy.chartSourceDelete}
     >
       {failure ? (
         <Alert variant="destructive">
-          <AlertDescription>{deleteFailureCopy(failure)}</AlertDescription>
+          <AlertDescription>{deleteFailureCopy(failure, copy)}</AlertDescription>
         </Alert>
       ) : null}
     </ConfirmationDialog>
   );
 }
 
-function deleteFailureCopy(failure: HelmPortFailure): string {
+function deleteFailureCopy(failure: HelmPortFailure, copy: HelmCopy): string {
   if (failure.code === "forbidden" || failure.code === "unauthorized") {
-    return HELM_COPY.chartSourceDeleteForbidden;
+    return copy.chartSourceDeleteForbidden;
   }
-  if (failure.code === "not-found") return HELM_COPY.chartSourceDeleteNotFound;
-  if (failure.code === "invalid-request") return HELM_COPY.chartSourceDeleteConflict;
-  return HELM_COPY.chartSourceDeleteFailed;
+  if (failure.code === "not-found") return copy.chartSourceDeleteNotFound;
+  if (failure.code === "invalid-request") return copy.chartSourceDeleteConflict;
+  return copy.chartSourceDeleteFailed;
 }

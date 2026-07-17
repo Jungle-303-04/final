@@ -9,14 +9,23 @@ import {
   type HelmPort,
   type HelmChartSource,
 } from "../../features/helm/helmContract";
+import { I18nProvider } from "../../shared/i18n";
 import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
 
 afterEach(() => cleanup());
 
+function renderPanel(port: HelmPort) {
+  return render(
+    <I18nProvider navigatorLanguage="en" storage={null}>
+      <HelmChartSourcesPanel port={port} />
+    </I18nProvider>,
+  );
+}
+
 describe("HelmChartSourcesPanel", () => {
   it("renders repository and OCI sources from the port without unsafe identity fields", async () => {
     const port = helmPort();
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     expect(await screen.findByRole("heading", { name: "Chart sources" })).toBeTruthy();
     expect(await screen.findByText("Stable")).toBeTruthy();
@@ -29,13 +38,13 @@ describe("HelmChartSourcesPanel", () => {
   it("shows loading, empty, and retryable failure states inside the source section", async () => {
     const loadingPort = helmPort();
     loadingPort.listChartSources.mockReturnValue(new Promise(() => undefined));
-    const loading = render(<HelmChartSourcesPanel port={loadingPort} />);
+    const loading = renderPanel(loadingPort);
     expect(screen.getByRole("status", { name: "Loading chart sources" })).toBeTruthy();
     loading.unmount();
 
     const emptyPort = helmPort();
     emptyPort.listChartSources.mockResolvedValue(sourcePage([]));
-    const empty = render(<HelmChartSourcesPanel port={emptyPort} />);
+    const empty = renderPanel(emptyPort);
     expect(await screen.findByText("No chart sources are registered for this workspace.")).toBeTruthy();
     empty.unmount();
 
@@ -43,7 +52,7 @@ describe("HelmChartSourcesPanel", () => {
     failedPort.listChartSources
       .mockRejectedValueOnce(new HelmPortFailure("offline"))
       .mockResolvedValueOnce(sourcePage([source()]));
-    render(<HelmChartSourcesPanel port={failedPort} />);
+    renderPanel(failedPort);
     expect(await screen.findByText("Chart sources cannot be reached right now.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry chart sources" }));
     expect(await screen.findByText("Stable")).toBeTruthy();
@@ -53,7 +62,7 @@ describe("HelmChartSourcesPanel", () => {
   it("registers a basic-auth OCI source, clears secrets, closes, and refetches", async () => {
     const user = userEvent.setup();
     const port = helmPort();
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     await screen.findByText("Stable");
     await user.click(screen.getByRole("button", { name: "Register chart source" }));
@@ -94,7 +103,7 @@ describe("HelmChartSourcesPanel", () => {
       eventId: "event-refresh-source",
       correlationId: "correlation-refresh-source",
     });
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     fireEvent.click(await screen.findByRole("button", { name: "Refresh Stable chart source" }));
 
@@ -106,7 +115,7 @@ describe("HelmChartSourcesPanel", () => {
     const user = userEvent.setup();
     const port = helmPort();
     port.registerChartSource.mockRejectedValue(new HelmPortFailure("forbidden"));
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     await screen.findByText("Stable");
     await user.click(screen.getByRole("button", { name: "Register chart source" }));
@@ -131,7 +140,7 @@ describe("HelmChartSourcesPanel", () => {
     port.listChartSources
       .mockResolvedValueOnce({ ...sourcePage([source()]), hasMore: true, nextCursor: "page-2" })
       .mockResolvedValueOnce(sourcePage([source({ id: "source-oci", provider: "oci", name: "Private OCI" })]));
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     await user.click(await screen.findByRole("button", { name: "Load more chart sources" }));
 
@@ -146,7 +155,7 @@ describe("HelmChartSourcesPanel", () => {
   it("confirms an authorized delete with the listed identity and refetches after receipt", async () => {
     const user = userEvent.setup();
     const port = helmPort();
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     await user.click(await screen.findByRole("button", { name: "Delete Stable chart source" }));
     const dialog = screen.getByRole("dialog", { name: "Delete chart source" });
@@ -173,7 +182,7 @@ describe("HelmChartSourcesPanel", () => {
       source({ id: "source-oci", provider: "oci", name: "Private OCI", actions: ["delete"] }),
     ]));
     port.deleteChartSource.mockRejectedValue(new HelmPortFailure("forbidden"));
-    render(<HelmChartSourcesPanel port={port} />);
+    renderPanel(port);
 
     await screen.findByText("Stable");
     expect(screen.queryByRole("button", { name: "Delete Stable chart source" })).toBeNull();

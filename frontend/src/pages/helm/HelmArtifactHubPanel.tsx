@@ -6,7 +6,7 @@ import type {
   ArtifactHubSearchPage,
   HelmPort,
 } from "../../features/helm/helmContract";
-import { HELM_COPY } from "../../features/helm/helmCopy";
+import { useHelmCopy } from "../../features/helm/helmCopy";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -21,6 +21,7 @@ type SearchState =
   | { phase: "ready"; page: ArtifactHubSearchPage };
 
 export function HelmArtifactHubPanel({ port }: { port: HelmPort }) {
+  const copy = useHelmCopy();
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>({ phase: "idle" });
   const [detail, setDetail] = useState<ArtifactHubChartDetail | null>(null);
@@ -61,27 +62,27 @@ export function HelmArtifactHubPanel({ port }: { port: HelmPort }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle><h2>{HELM_COPY.artifactHub}</h2></CardTitle>
-        <CardDescription>{HELM_COPY.artifactHubDescription}</CardDescription>
+        <CardTitle><h2>{copy.artifactHub}</h2></CardTitle>
+        <CardDescription>{copy.artifactHubDescription}</CardDescription>
       </CardHeader>
       <CardContent className="grid min-w-0 gap-3">
         <form className="flex min-w-0 gap-2" onSubmit={(event) => { event.preventDefault(); void search(); }}>
           <Input
-            aria-label={HELM_COPY.artifactHubSearchLabel}
+            aria-label={copy.artifactHubSearchLabel}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={HELM_COPY.artifactHubSearchPlaceholder}
+            placeholder={copy.artifactHubSearchPlaceholder}
             value={query}
           />
           <Button disabled={query.trim() === "" || state.phase === "loading"} type="submit" variant="outline">
             {state.phase === "loading" ? <Spinner decorative /> : null}
-            {HELM_COPY.artifactHubSearch}
+            {copy.artifactHubSearch}
           </Button>
         </form>
         {state.phase === "failed" ? (
-          <Alert variant="destructive"><AlertDescription>{HELM_COPY.artifactHubFailed}</AlertDescription></Alert>
+          <Alert variant="destructive"><AlertDescription>{copy.artifactHubFailed}</AlertDescription></Alert>
         ) : null}
         {state.phase === "ready" && state.page.items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{HELM_COPY.artifactHubEmpty}</p>
+          <p className="text-sm text-muted-foreground">{copy.artifactHubEmpty}</p>
         ) : null}
         {state.phase === "ready" && state.page.items.length > 0 ? (
           <ul className="grid gap-2">
@@ -94,15 +95,15 @@ export function HelmArtifactHubPanel({ port }: { port: HelmPort }) {
                   {chart.description ? <p className="line-clamp-2 text-sm text-muted-foreground">{chart.description}</p> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
-                  {chart.repository.official ? <Badge variant="outline">{HELM_COPY.artifactHubOfficial}</Badge> : null}
-                  {chart.repository.verifiedPublisher ? <Badge variant="outline">{HELM_COPY.artifactHubVerified}</Badge> : null}
-                  {chart.signed ? <Badge variant="outline">{HELM_COPY.artifactHubSigned}</Badge> : null}
+                  {chart.repository.official ? <Badge variant="outline">{copy.artifactHubOfficial}</Badge> : null}
+                  {chart.repository.verifiedPublisher ? <Badge variant="outline">{copy.artifactHubVerified}</Badge> : null}
+                  {chart.signed ? <Badge variant="outline">{copy.artifactHubSigned}</Badge> : null}
                 </div>
               </li>
             ))}
           </ul>
         ) : null}
-        {detailLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner decorative />{HELM_COPY.artifactHubDetailLoading}</div> : null}
+        {detailLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner decorative />{copy.artifactHubDetailLoading}</div> : null}
         {detail ? (
           <section aria-labelledby="helm-artifacthub-detail" className="grid min-w-0 gap-2 rounded-lg border bg-muted/30 p-3">
             <h3 className="font-semibold" id="helm-artifacthub-detail">{detail.chart.repository.name}/{detail.chart.name}</h3>
