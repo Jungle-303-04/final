@@ -86,10 +86,11 @@ class TrafficControlDb:
         assert workspace_id == "workspace-a"
         if not self.include_observation:
             return {}
+        observed_at = datetime.now(UTC).isoformat()
         return {
             cluster_id: {
                 "status": "connected",
-                "last_seen_at": OBSERVED_AT,
+                "last_seen_at": observed_at,
                 "capabilities": [
                     "command_receiver",
                     "traffic_source_observer.v1",
@@ -99,7 +100,7 @@ class TrafficControlDb:
                 "details": {
                     "traffic_sources": {
                         "schema_version": 1,
-                        "observed_at": OBSERVED_AT,
+                        "observed_at": observed_at,
                         "active_source": "hubble",
                         "cluster": {
                             "platform": "eks",

@@ -129,10 +129,10 @@ def agent_connected_body_from_request(
     identity: ClusterAgentIdentity,
 ) -> AgentConnectedBody:
     """agent 연결 이벤트는 body cluster_id가 아니라 인증 identity를 권위값으로 사용함."""
-    body = payload.model_dump(exclude={"cluster_id"})
     return AgentConnectedBody(
-        **body,
         cluster_id=identity.cluster_id,
+        agent_id=payload.agent_id,
+        capabilities=payload.capabilities,
         workspace_id=identity.workspace_id,
     )
 
