@@ -1,0 +1,346 @@
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+from domains.integrations.prometheus import agent_router, router
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
+from pydantic import ValidationError
+
+from domains.identity.dependencies import ClusterAgentIdentity, require_cluster_agent
+from packages.contracts.parity import OperationEvent
+from packages.runtime.dependencies import get_db, get_events, get_operation_events
+from packages.security.credentials import decrypt_credential
+
+
+class SessionAuth:
+    async def require_session(self, _request: Request) -> Any:
+        return SimpleNamespace(
+            workspace_id="workspace-a",
+            user_id="user-a",
+            roles=("user",),
+        )
+
+
+class IntegrationDb:
+    def __init__(self) -> None:
+        self.credential: dict[str, Any] | None = None
+        self.policy: dict[str, Any] | None = None
+        self.metadata_updates: list[dict[str, Any]] = []
+        self.staged: list[OperationEvent] = []
+
+    def can_access(self, *_args: Any) -> bool:
+        return True
+
+    def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, Any]:
+        assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
+        return {"workspace_id": workspace_id, "cluster_id": cluster_id}
+
+    def get_cluster_policy(self, workspace_id: str, cluster_id: str) -> dict[str, Any] | None:
+        assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
+        return self.policy
+
+    def upsert_cluster_policy(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        policy: dict[str, Any],
+        *,
+        conn: Any | None = None,
+    ) -> dict[str, Any]:
+        assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
+        assert conn is not None
+        self.policy = policy
+        return policy
+
+    def upsert_workspace_credential(
+        self,
+        payload: dict[str, Any],
+        *,
+        conn: Any | None = None,
+    ) -> dict[str, Any]:
+        assert conn is not None
+        self.credential = {
+            "credential_id": "cred-a",
+            "status": "active",
+            **payload,
+        }
+        return self.credential
+
+    def get_workspace_credential(
+        self,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+    ) -> dict[str, Any] | None:
+        assert (workspace_id, provider, scope) == (
+            "workspace-a",
+            "prometheus",
+            "cluster:cluster-a",
+        )
+        return self.credential
+
+    def update_workspace_credential_metadata(
+        self,
+        *,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+        expected_revision: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        assert self.credential is not None
+        assert (workspace_id, provider, scope) == (
+            "workspace-a",
+            "prometheus",
+            "cluster:cluster-a",
+        )
+        if self.credential["metadata"]["revision"] != expected_revision:
+            return None
+        self.credential["metadata"] = {**self.credential["metadata"], **metadata}
+        self.metadata_updates.append(metadata)
+        return self.credential
+
+    def stage_integration_operation_event(
+        self,
+        conn: Any,
+        *,
+        workspace_id: str,
+        operation_id: str,
+        cluster_id: str,
+        payload: dict[str, object],
+    ) -> OperationEvent:
+        assert conn is not None
+        event = OperationEvent(
+            command_id=operation_id,
+            sequence=1,
+            kind="progress",
+            payload={"cluster_id": cluster_id, **payload},
+        )
+        self.staged.append(event)
+        return event
+
+
+class IntegrationEvents:
+    def __init__(self) -> None:
+        self.bodies: list[Any] = []
+
+    async def accept_body(self, body: Any, **kwargs: Any) -> Any:
+        self.bodies.append(body)
+        event = SimpleNamespace(event_id="event-a", correlation_id="correlation-a")
+        kwargs["transactional_stage"](object(), event)
+        return SimpleNamespace(event=event)
+
+
+class IntegrationOperations:
+    def __init__(self) -> None:
+        self.announced: list[OperationEvent] = []
+        self.published: list[dict[str, Any]] = []
+
+    async def announce(self, event: OperationEvent, **_kwargs: Any) -> None:
+        self.announced.append(event)
+
+    async def publish(self, **kwargs: Any) -> OperationEvent:
+        self.published.append(kwargs)
+        return OperationEvent(
+            command_id=kwargs["command_id"],
+            sequence=2,
+            kind=kwargs["kind"],
+            payload=kwargs["payload"],
+        )
+
+
+def test_prometheus_integration_request_normalizes_and_bounds_sensitive_headers() -> None:
+    request = PrometheusIntegrationUpdateRequest(
+        cluster_id="cluster-a",
+        prometheus_url="https://prometheus.example.test/",
+        headers={"X-Scope-OrgID": "tenant-a", "Authorization": "Bearer secret"},
+    )
+
+    assert request.prometheus_url == "https://prometheus.example.test"
+    assert tuple(request.headers) == ("Authorization", "X-Scope-OrgID")
+
+    for invalid in (
+        "https://user:pass@prometheus.example.test",
+        "https://prometheus.example.test/api?token=secret",
+        "file:///tmp/prometheus",
+    ):
+        with pytest.raises(ValidationError):
+            PrometheusIntegrationUpdateRequest(
+                cluster_id="cluster-a",
+                prometheus_url=invalid,
+            )
+    with pytest.raises(ValidationError):
+        PrometheusIntegrationUpdateRequest(
+            cluster_id="cluster-a",
+            prometheus_url="https://prometheus.example.test",
+            headers={"Connection": "keep-alive"},
+        )
+    with pytest.raises(ValidationError):
+        PrometheusIntegrationUpdateRequest(
+            cluster_id="cluster-a",
+            prometheus_url="https://prometheus.example.test",
+            headers={"Authorization": "Bearer secret\nX-Leak: yes"},
+        )
+
+
+def test_update_encrypts_headers_advances_policy_and_returns_durable_receipt() -> None:
+    db = IntegrationDb()
+    events = IntegrationEvents()
+    operations = IntegrationOperations()
+    client = _client(db, events, operations)
+
+    response = client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://prometheus.example.test/",
+            "headers": {
+                "Authorization": "Bearer secret-value",
+                "X-Scope-OrgID": "tenant-a",
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["state"] == "pending"
+    assert body["address"] == "https://prometheus.example.test"
+    assert body["header_keys"] == ["Authorization", "X-Scope-OrgID"]
+    assert body["receipt"] == {
+        "accepted": True,
+        "command_id": body["operation_id"],
+        "event_id": "event-a",
+        "audit_event_id": "event-a",
+        "correlation_id": "correlation-a",
+        "status": "queued",
+        "audit_id": None,
+    }
+    serialized = json.dumps(body, sort_keys=True)
+    assert "secret-value" not in serialized
+    assert db.credential is not None
+    assert "secret-value" not in db.credential["encrypted_value"]
+    assert json.loads(decrypt_credential(db.credential["encrypted_value"])) == {
+        "headers": {
+            "Authorization": "Bearer secret-value",
+            "X-Scope-OrgID": "tenant-a",
+        }
+    }
+    assert db.policy is not None
+    provider = db.policy["evidence"]["providers"]["metrics"]
+    assert provider["configuration_revision"] == body["revision"]
+    assert provider["configuration_operation_id"] == body["operation_id"]
+    assert len(db.staged) == 1
+    assert operations.announced == db.staged
+    assert events.bodies[0].header_keys == ["Authorization", "X-Scope-OrgID"]
+    assert "secret-value" not in repr(events.bodies[0])
+
+
+def test_browser_status_redacts_values_and_agent_fetch_is_revision_bound() -> None:
+    db = IntegrationDb()
+    events = IntegrationEvents()
+    operations = IntegrationOperations()
+    client = _client(db, events, operations)
+    created = client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://prometheus.example.test",
+            "headers": {"Authorization": "Bearer secret-value"},
+        },
+    ).json()
+
+    browser = client.get(
+        "/integrations/prometheus",
+        params={"cluster_id": "cluster-a"},
+    )
+    assert browser.status_code == 200
+    assert browser.json()["header_keys"] == ["Authorization"]
+    assert "headers" not in browser.json()
+    assert "secret-value" not in browser.text
+
+    stale = client.get(
+        "/agent/integrations/prometheus",
+        params={"revision": "stale-revision"},
+        headers={"Authorization": "Bearer agent"},
+    )
+    assert stale.status_code == 409
+    agent = client.get(
+        "/agent/integrations/prometheus",
+        params={"revision": created["revision"]},
+        headers={"Authorization": "Bearer agent"},
+    )
+    assert agent.status_code == 200
+    assert agent.json()["headers"] == {"Authorization": "Bearer secret-value"}
+    assert agent.json()["operation_id"] == created["operation_id"]
+
+
+def test_agent_probe_status_is_exactly_bound_and_closes_operation_stream() -> None:
+    db = IntegrationDb()
+    events = IntegrationEvents()
+    operations = IntegrationOperations()
+    client = _client(db, events, operations)
+    created = client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://prometheus.example.test",
+        },
+    ).json()
+
+    mismatched = client.post(
+        "/agent/integrations/prometheus/status",
+        json={
+            "revision": "different",
+            "operation_id": created["operation_id"],
+            "state": "connected",
+        },
+        headers={"Authorization": "Bearer agent"},
+    )
+    assert mismatched.status_code == 409
+
+    accepted = client.post(
+        "/agent/integrations/prometheus/status",
+        json={
+            "revision": created["revision"],
+            "operation_id": created["operation_id"],
+            "state": "connected",
+        },
+        headers={"Authorization": "Bearer agent"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json() == {"accepted": True}
+    assert db.metadata_updates[-1]["state"] == "connected"
+    assert operations.published[-1]["kind"] == "completed"
+    assert operations.published[-1]["command_id"] == created["operation_id"]
+    assert operations.published[-1]["payload"] == {
+        "cluster_id": "cluster-a",
+        "status": "completed",
+        "state": "connected",
+        "revision": created["revision"],
+        "address": "https://prometheus.example.test",
+        "error_code": None,
+    }
+
+
+def _client(
+    db: IntegrationDb,
+    events: IntegrationEvents,
+    operations: IntegrationOperations,
+) -> TestClient:
+    app = FastAPI()
+    app.state.auth = SessionAuth()
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_events] = lambda: events
+    app.dependency_overrides[get_operation_events] = lambda: operations
+    app.dependency_overrides[require_cluster_agent] = lambda: ClusterAgentIdentity(
+        workspace_id="workspace-a",
+        cluster_id="cluster-a",
+    )
+    app.include_router(router)
+    app.include_router(agent_router)
+    return TestClient(app)
