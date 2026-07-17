@@ -10,6 +10,9 @@ import type { TimelineMessageKey } from "./keys/timeline";
 import type { DesktopMessageKey } from "./keys/desktop";
 import type { CostMessageKey } from "./keys/cost";
 import type { RightsizingMessageKey } from "./keys/rightsizing";
+import type { ApplicationsMessageKey } from "./keys/applications";
+import type { ChecksMessageKey } from "./keys/checks";
+import type { TrafficMessageKey } from "./keys/traffic";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -375,7 +378,9 @@ type CoreMessageKey =
 
 export type MessageKey =
   | CoreMessageKey
+  | ApplicationsMessageKey
   | AlertsMessageKey
+  | ChecksMessageKey
   | DockMessageKey
   | DesktopMessageKey
   | CostMessageKey
@@ -386,6 +391,7 @@ export type MessageKey =
   | MetricsMessageKey
   | ResourcesMessageKey
   | TimelineMessageKey
+  | TrafficMessageKey
   | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;

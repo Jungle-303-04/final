@@ -12,6 +12,7 @@ import {
   isKubernetesNamespace,
   isStableFilterValue,
 } from "../../features/filters/filterUrlSyntax";
+import { useI18n } from "../../shared/i18n";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -44,6 +45,7 @@ export function ChecksSettingsDialog({
   open,
   port,
 }: ChecksSettingsDialogProps) {
+  const { t } = useI18n();
   const [frame, setFrame] = useState<SettingsFrame>({ phase: "loading" });
   const [namespaceInput, setNamespaceInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -105,23 +107,23 @@ export function ChecksSettingsDialog({
     <Dialog onOpenChange={(next) => !saving && (next ? onOpenChange(true) : close())} open={open}>
       <DialogContent className="grid max-h-[88svh] w-[min(94vw,44rem)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden" showCloseButton={!saving}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Settings2 aria-hidden="true" />Checks settings</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Settings2 aria-hidden="true" />{t("checks.settings.title")}</DialogTitle>
           <DialogDescription>
-            Hide selected agent-observed checks for your current workspace. Changes are revisioned and audited.
+            {t("checks.settings.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 overflow-y-auto pr-1">
-          {frame.phase === "loading" ? <p className="py-8 text-center text-muted-foreground">Loading settings…</p> : null}
+          {frame.phase === "loading" ? <p className="py-8 text-center text-muted-foreground">{t("checks.settings.loading")}</p> : null}
           {frame.phase === "failed" ? (
             <Alert variant="destructive">
-              <AlertTitle>{frame.conflict ? "Settings changed elsewhere" : "Settings are unavailable"}</AlertTitle>
+              <AlertTitle>{frame.conflict ? t("checks.settings.changed.title") : t("checks.settings.unavailable.title")}</AlertTitle>
               <AlertDescription>
                 {frame.conflict
-                  ? "The latest server revision is being reloaded before another save."
-                  : "No draft was saved. Retry the server-backed settings read."}
+                  ? t("checks.settings.changed.description")
+                  : t("checks.settings.unavailable.description")}
               </AlertDescription>
-              <Button className="mt-3" onClick={() => void load()} size="sm" variant="outline">Retry</Button>
+              <Button className="mt-3" onClick={() => void load()} size="sm" variant="outline">{t("common.action.retry")}</Button>
             </Alert>
           ) : null}
           {frame.phase === "ready" ? (
@@ -137,12 +139,12 @@ export function ChecksSettingsDialog({
         </div>
 
         <DialogFooter>
-          <Button disabled={saving} onClick={close} variant="outline">Cancel</Button>
+          <Button disabled={saving} onClick={close} variant="outline">{t("common.action.cancel")}</Button>
           <Button
             disabled={frame.phase !== "ready" || !frame.settings.canEdit || saving || !validPendingNamespace(namespaceInput)}
             onClick={() => void save()}
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("checks.settings.saving") : t("common.action.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -165,6 +167,7 @@ function ChecksSettingsEditor({
   onDraftChange(draft: ChecksSettingsPolicy): void;
   onNamespaceInputChange(value: string): void;
 }) {
+  const { t } = useI18n();
   const checks = useMemo(() => mergeChecks(catalog, draft.hiddenCheckIds), [catalog, draft.hiddenCheckIds]);
   const categories = useMemo(
     () => sortedUnique([...catalog.map((entry) => entry.category), ...draft.hiddenCategories]),
@@ -178,13 +181,13 @@ function ChecksSettingsEditor({
     <div className="grid gap-6">
       {!editable ? (
         <Alert>
-          <AlertTitle>Read-only policy</AlertTitle>
-          <AlertDescription>Only the workspace owner can update this policy.</AlertDescription>
+          <AlertTitle>{t("checks.settings.readOnly.title")}</AlertTitle>
+          <AlertDescription>{t("checks.settings.readOnly.description")}</AlertDescription>
         </Alert>
       ) : null}
 
-      <SettingsSection description="Hidden checks are excluded by the Python projection." title="Checks">
-        {checks.length === 0 ? <p className="text-sm text-muted-foreground">No agent check catalog is available.</p> : (
+      <SettingsSection description={t("checks.settings.checks.description")} title={t("checks.settings.checks.title")}>
+        {checks.length === 0 ? <p className="text-sm text-muted-foreground">{t("checks.settings.checks.empty")}</p> : (
           <ul className="grid gap-1">
             {checks.map((check) => (
               <li key={check.id}>
@@ -210,7 +213,7 @@ function ChecksSettingsEditor({
         )}
       </SettingsSection>
 
-      <SettingsSection description="A hidden category excludes every matching check without a browser-owned category list." title="Categories">
+      <SettingsSection description={t("checks.settings.categories.description")} title={t("checks.settings.categories.title")}>
         <div className="flex flex-wrap gap-2">
           {categories.map((category) => (
             <Button
@@ -230,13 +233,13 @@ function ChecksSettingsEditor({
         </div>
       </SettingsSection>
 
-      <SettingsSection description="Use an exact cluster/namespace reference. The server verifies current inventory RBAC before saving." title="Namespaces">
+      <SettingsSection description={t("checks.settings.namespaces.description")} title={t("checks.settings.namespaces.title")}>
         <ul className="grid gap-2">
           {draft.hiddenNamespaces.map((reference) => (
             <li className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-3 py-2" key={reference}>
               <span className="min-w-0 break-all text-sm">{reference}</span>
               <Button
-                aria-label={`Remove ${reference}`}
+                aria-label={t("checks.settings.namespaces.remove", { reference })}
                 disabled={!editable}
                 onClick={() => onDraftChange({
                   ...draft,
@@ -253,11 +256,11 @@ function ChecksSettingsEditor({
             aria-invalid={namespace.length > 0 && (!namespaceValid || namespaceDuplicate)}
             disabled={!editable}
             onChange={(event) => onNamespaceInputChange(event.target.value)}
-            placeholder="cluster-id/namespace"
+            placeholder={t("checks.settings.namespaces.placeholder")}
             value={namespaceInput}
           />
           <Button
-            aria-label="Add hidden namespace"
+            aria-label={t("checks.settings.namespaces.add")}
             disabled={!editable || !namespaceValid || namespaceDuplicate}
             onClick={() => {
               onDraftChange({ ...draft, hiddenNamespaces: sortedUnique([...draft.hiddenNamespaces, namespace]) });
@@ -266,8 +269,8 @@ function ChecksSettingsEditor({
             size="icon"
           ><Plus aria-hidden="true" /></Button>
         </div>
-        {namespace.length > 0 && !namespaceValid ? <p className="mt-1 text-xs text-destructive">Enter a valid cluster/namespace reference.</p> : null}
-        {namespaceDuplicate ? <p className="mt-1 text-xs text-destructive">This namespace is already hidden.</p> : null}
+        {namespace.length > 0 && !namespaceValid ? <p className="mt-1 text-xs text-destructive">{t("checks.settings.namespaces.invalid")}</p> : null}
+        {namespaceDuplicate ? <p className="mt-1 text-xs text-destructive">{t("checks.settings.namespaces.duplicate")}</p> : null}
       </SettingsSection>
     </div>
   );

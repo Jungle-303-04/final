@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TrafficPort } from "../../features/traffic/trafficContract";
+import { I18nProvider } from "../../shared/i18n";
 import { TrafficPage } from "./TrafficPage";
+
+function render(ui: Parameters<typeof testingRender>[0]) {
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="en-US" storage={null}>{children}</I18nProvider>
+    ),
+  });
+}
 
 interface TestScopeState {
   selection: unknown;
@@ -43,6 +52,19 @@ beforeEach(() => {
 });
 
 describe("TrafficPage", () => {
+  it("localizes product controls while preserving server action labels", async () => {
+    const port = trafficPort();
+    testingRender(
+      <I18nProvider navigatorLanguage="ko" storage={null}>
+        <MemoryRouter><TrafficPage port={port} /></MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "트래픽" })).toBeTruthy();
+    expect(screen.getByText("트래픽 소스")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect Hubble" })).toBeTruthy();
+  });
+
   it("does not query an unbounded scope while cluster authority is still resolving", () => {
     scopeState.value = { selection: { kind: "resolving", requestedIds: [] } };
     const port = trafficPort();

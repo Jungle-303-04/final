@@ -11,8 +11,8 @@ import { applicationStatusTone, formatObservedTime } from "./applicationPresenta
 const EMPTY_TOPOLOGY_NODES: ApplicationTopologyNode[] = [];
 
 export function ApplicationTopologyPanel({ topology }: { topology: ApplicationTopology }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { locale, t } = useI18n();
+  const copy = applicationsCopy(t);
   const nodes = topology.nodes ?? EMPTY_TOPOLOGY_NODES;
   const nodeById = useMemo(
     () => new Map(nodes.map((node) => [node.id, node])),
@@ -67,8 +67,8 @@ export function ApplicationTopologyPanel({ topology }: { topology: ApplicationTo
 }
 
 function UnavailableTopology() {
-  const { locale } = useI18n();
-  return <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">{applicationsCopy(locale).unavailable}</p>;
+  const { t } = useI18n();
+  return <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">{applicationsCopy(t).unavailable}</p>;
 }
 
 function nodeLabel(node: ApplicationTopologyNode | undefined, fallback: string): string {

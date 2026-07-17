@@ -21,8 +21,8 @@ export function ApplicationDeploymentsPanel({
   resource: ApplicationsResource<readonly ApplicationDeploymentModel[] | null>;
   retry: () => void;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { locale, t } = useI18n();
+  const copy = applicationsCopy(t);
   if (resource.phase === "loading") return <p className="p-6 text-sm text-muted-foreground">{copy.loading}</p>;
   if (resource.phase === "failed") return <ApplicationsFailureState failure={resource.failure} onRetry={retry} />;
   const deployments = resource.data ?? [];

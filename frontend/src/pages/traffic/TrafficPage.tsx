@@ -15,8 +15,9 @@ import {
   type TrafficSourceActionDescriptor,
   type TrafficSourceDescriptor,
 } from "../../features/traffic/trafficContract";
-import { TRAFFIC_COPY } from "../../features/traffic/trafficCopy";
+import { trafficCopy, type TrafficCopy } from "../../features/traffic/trafficCopy";
 import type { CommandReceipt } from "../../shared/parity/referenceParity";
+import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
@@ -119,6 +120,7 @@ function TrafficReadyPage({
   scopeInvalidationRevision: number;
   trafficState: TrafficFlowUrlState;
 }) {
+  const copy = useTrafficCopy();
   const data = useTrafficOverview(port, {
     clusterIds,
     namespaces,
@@ -145,8 +147,8 @@ function TrafficReadyPage({
   return (
     <ProductPageFrame className="gap-4">
       <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{TRAFFIC_COPY.title}</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{TRAFFIC_COPY.description}</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
       </header>
       <TrafficSourcesSection
         frame={data.sourcesFrame}
@@ -180,6 +182,8 @@ function TrafficSourcesSection({
   onRefresh: () => void;
   port: TrafficPort;
 }) {
+  const { t } = useI18n();
+  const copy = useTrafficCopy();
   const operationStore = useOptionalOperationStatusStore();
   const commandController = useRef<AbortController | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingSourceAction | null>(null);
@@ -193,7 +197,7 @@ function TrafficSourcesSection({
     return (
       <Card aria-labelledby="traffic-sources-title">
         <CardHeader>
-          <CardTitle id="traffic-sources-title">{TRAFFIC_COPY.sources}</CardTitle>
+          <CardTitle id="traffic-sources-title">{copy.sources}</CardTitle>
         </CardHeader>
         <CardContent><ProductStateScreen kind="loading" placement="content" /></CardContent>
       </Card>
@@ -202,11 +206,11 @@ function TrafficSourcesSection({
   if (frame.phase === "failed") {
     return (
       <Card aria-labelledby="traffic-sources-title">
-        <CardHeader><CardTitle id="traffic-sources-title">{TRAFFIC_COPY.sources}</CardTitle></CardHeader>
+        <CardHeader><CardTitle id="traffic-sources-title">{copy.sources}</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
-          <p className="text-sm text-destructive">{TRAFFIC_COPY.sourceObservationFailed}</p>
+          <p className="text-sm text-destructive">{copy.sourceObservationFailed}</p>
           <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" />{TRAFFIC_COPY.refresh}
+            <RefreshCw aria-hidden="true" />{copy.refresh}
           </Button>
         </CardContent>
       </Card>
@@ -250,17 +254,17 @@ function TrafficSourcesSection({
   return (
     <section aria-labelledby="traffic-sources-title" className="grid min-w-0 gap-3">
       <div className="grid min-w-0 gap-1">
-        <h2 className="text-lg font-semibold" id="traffic-sources-title">{TRAFFIC_COPY.sources}</h2>
-        <p className="text-sm text-muted-foreground">{TRAFFIC_COPY.sourcesDescription}</p>
+        <h2 className="text-lg font-semibold" id="traffic-sources-title">{copy.sources}</h2>
+        <p className="text-sm text-muted-foreground">{copy.sourcesDescription}</p>
       </div>
       {sources.availability === "available" ? null : (
         <Alert>
-          <AlertTitle>{TRAFFIC_COPY.sourcesUnavailable}</AlertTitle>
+          <AlertTitle>{copy.sourcesUnavailable}</AlertTitle>
           <AlertDescription><ReasonCodes reasons={sources.reasonCodes} /></AlertDescription>
         </Alert>
       )}
       {sources.clusters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{TRAFFIC_COPY.notObserved}</p>
+        <p className="text-sm text-muted-foreground">{copy.notObserved}</p>
       ) : (
         <div className="grid min-w-0 gap-3 xl:grid-cols-2">
           {sources.clusters.map((catalog) => (
@@ -276,13 +280,13 @@ function TrafficSourcesSection({
           ))}
         </div>
       )}
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{TRAFFIC_COPY.sourceObservationFailed}</p> : null}
-      {commandFailed ? <p className="text-sm text-destructive">{TRAFFIC_COPY.commandFailed}</p> : null}
+      {frame.refreshFailure ? <p className="text-sm text-destructive">{copy.sourceObservationFailed}</p> : null}
+      {commandFailed ? <p className="text-sm text-destructive">{copy.commandFailed}</p> : null}
       {receipt ? (
         operationStore
           ? <OperationStatusFeedback commandId={receipt.commandId} correlationId={receipt.correlationId} />
           : <output className="break-all text-xs text-muted-foreground">
-              {TRAFFIC_COPY.accepted.replace("{id}", receipt.correlationId)}
+              {t("traffic.sources.accepted", { id: receipt.correlationId })}
             </output>
       ) : null}
       <TrafficSourceActionDialog
@@ -306,6 +310,7 @@ function TrafficSourceCatalogCard({
   catalog: TrafficClusterSourceCatalog;
   onAction: (source: TrafficSourceDescriptor, action: TrafficSourceActionDescriptor) => void;
 }) {
+  const copy = useTrafficCopy();
   return (
     <Card className="min-w-0">
       <CardHeader className="border-b">
@@ -315,7 +320,7 @@ function TrafficSourceCatalogCard({
         </div>
         {catalog.cluster ? (
           <p className="break-words text-xs text-muted-foreground">
-            {TRAFFIC_COPY.clusterEnvironment}: {catalog.cluster.platform} · {catalog.cluster.cni}
+            {copy.clusterEnvironment}: {catalog.cluster.platform} · {catalog.cluster.cni}
             {catalog.cluster.kubernetesVersion ? ` · ${catalog.cluster.kubernetesVersion}` : ""}
           </p>
         ) : null}
@@ -326,13 +331,13 @@ function TrafficSourceCatalogCard({
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <p className="min-w-0 truncate font-medium" title={source.label}>{source.label}</p>
               <div className="flex flex-wrap items-center gap-1.5">
-                {catalog.activeSource === source.key ? <Badge>{TRAFFIC_COPY.active}</Badge> : null}
-                <Badge variant="outline">{sourceStatusLabel(source.status)}</Badge>
+                {catalog.activeSource === source.key ? <Badge>{copy.active}</Badge> : null}
+                <Badge variant="outline">{sourceStatusLabel(source.status, copy)}</Badge>
               </div>
             </div>
             <p className="break-words text-xs text-muted-foreground">{source.message}</p>
             {source.version ? (
-              <p className="text-xs text-muted-foreground">{TRAFFIC_COPY.version}: {source.version}</p>
+              <p className="text-xs text-muted-foreground">{copy.version}: {source.version}</p>
             ) : null}
             {source.actions.length === 0 ? null : (
               <div className="flex min-w-0 flex-wrap gap-2">
@@ -373,21 +378,22 @@ function TrafficSourceActionDialog({
   setReason: (reason: string) => void;
   submitting: boolean;
 }) {
+  const copy = useTrafficCopy();
   return (
     <Dialog onOpenChange={onOpenChange} open={action !== null}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{action?.action.label ?? TRAFFIC_COPY.sources}</DialogTitle>
-          <DialogDescription>{TRAFFIC_COPY.actionDescription}</DialogDescription>
+          <DialogTitle>{action?.action.label ?? copy.sources}</DialogTitle>
+          <DialogDescription>{copy.actionDescription}</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="traffic-source-action-reason">{TRAFFIC_COPY.reason}</Label>
+            <Label htmlFor="traffic-source-action-reason">{copy.reason}</Label>
             <Input
               autoFocus
               id="traffic-source-action-reason"
               onChange={(event) => setReason(event.target.value)}
-              placeholder={TRAFFIC_COPY.reasonPlaceholder}
+              placeholder={copy.reasonPlaceholder}
               required
               value={reason}
             />
@@ -395,8 +401,8 @@ function TrafficSourceActionDialog({
           <DialogFooter>
             <Button disabled={submitting || !reason.trim()} type="submit">
               {submitting
-                ? TRAFFIC_COPY.commandPending
-                : `${TRAFFIC_COPY.confirm} ${action?.action.label ?? ""}`.trim()}
+                ? copy.commandPending
+                : `${copy.confirm} ${action?.action.label ?? ""}`.trim()}
             </Button>
           </DialogFooter>
         </form>
@@ -405,10 +411,10 @@ function TrafficSourceActionDialog({
   );
 }
 
-function sourceStatusLabel(status: TrafficSourceDescriptor["status"]): string {
-  if (status === "available") return TRAFFIC_COPY.available;
-  if (status === "not_detected") return TRAFFIC_COPY.notDetected;
-  return TRAFFIC_COPY.sourceError;
+function sourceStatusLabel(status: TrafficSourceDescriptor["status"], copy: TrafficCopy): string {
+  if (status === "available") return copy.available;
+  if (status === "not_detected") return copy.notDetected;
+  return copy.sourceError;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -430,6 +436,7 @@ function TrafficContent({
   onSelectFlow: (flowId: string | null) => void;
   trafficState: TrafficFlowUrlState;
 }) {
+  const copy = useTrafficCopy();
   if (frame.phase === "idle" || frame.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
@@ -439,17 +446,17 @@ function TrafficContent({
   return (
     <section aria-labelledby="traffic-overview-title" className="grid min-w-0 gap-4">
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="sr-only" id="traffic-overview-title">{TRAFFIC_COPY.title}</h2>
-        <p className="min-w-0 break-words text-sm text-muted-foreground">{scopeDescription(overview)}</p>
+        <h2 className="sr-only" id="traffic-overview-title">{copy.title}</h2>
+        <p className="min-w-0 break-words text-sm text-muted-foreground">{scopeDescription(overview, copy.notObserved)}</p>
         <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" />{TRAFFIC_COPY.refresh}
+          <RefreshCw aria-hidden="true" />{copy.refresh}
         </Button>
       </div>
       <ObservationNotice overview={overview} />
-      <section className="grid min-w-0 gap-3 xl:grid-cols-3" aria-label={TRAFFIC_COPY.summary}>
-        <SummaryCard label={TRAFFIC_COPY.totalFlows} value={overview.summary.totalFlowCount} />
-        <SummaryCard label={TRAFFIC_COPY.deniedFlows} value={overview.summary.deniedFlowCount} />
-        <SummaryCard label={TRAFFIC_COPY.externalFlows} value={overview.summary.externalFlowCount} />
+      <section className="grid min-w-0 gap-3 xl:grid-cols-3" aria-label={copy.summary}>
+        <SummaryCard label={copy.totalFlows} value={overview.summary.totalFlowCount} />
+        <SummaryCard label={copy.deniedFlows} value={overview.summary.deniedFlowCount} />
+        <SummaryCard label={copy.externalFlows} value={overview.summary.externalFlowCount} />
       </section>
       <ScopeCard overview={overview} />
       <TrafficFlowSurface
@@ -459,24 +466,23 @@ function TrafficContent({
         overview={overview}
         state={trafficState}
       />
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{TRAFFIC_COPY.refreshFailed}</p> : null}
+      {frame.refreshFailure ? <p className="text-sm text-destructive">{copy.refreshFailed}</p> : null}
     </section>
   );
 }
 
 function ObservationNotice({ overview }: { overview: TrafficOverview }) {
+  const { t } = useI18n();
+  const copy = useTrafficCopy();
   const observation = overview.observation;
   return (
     <Alert>
       <Activity aria-hidden="true" />
-      <AlertTitle>{TRAFFIC_COPY.status}</AlertTitle>
+      <AlertTitle>{copy.status}</AlertTitle>
       <AlertDescription>
         <p>{observation.availability !== "unavailable"
-          ? TRAFFIC_COPY.statusObserved.replace(
-              "{sources}",
-              observation.sourceKeys.join(", "),
-            )
-          : TRAFFIC_COPY.statusUnavailable}</p>
+          ? t("traffic.status.observed", { sources: observation.sourceKeys.join(", ") })
+          : copy.statusUnavailable}</p>
         <ReasonCodes reasons={observation.reasonCodes} />
       </AlertDescription>
     </Alert>
@@ -484,25 +490,28 @@ function ObservationNotice({ overview }: { overview: TrafficOverview }) {
 }
 
 function SummaryCard({ label, value }: { label: string; value: number | null }) {
+  const { formatNumber } = useI18n();
+  const copy = useTrafficCopy();
   return (
     <Card size="sm">
       <CardHeader><CardTitle>{label}</CardTitle></CardHeader>
-      <CardContent><p className="text-lg font-semibold tabular-nums">{value === null ? TRAFFIC_COPY.notObserved : value.toLocaleString()}</p></CardContent>
+      <CardContent><p className="text-lg font-semibold tabular-nums">{value === null ? copy.notObserved : formatNumber(value)}</p></CardContent>
     </Card>
   );
 }
 
 function ScopeCard({ overview }: { overview: TrafficOverview }) {
+  const copy = useTrafficCopy();
   const coverage = overview.scopeCoverage;
   return (
     <Card>
       <CardHeader className="border-b">
-        <CardTitle>{TRAFFIC_COPY.scope}</CardTitle>
-        {coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground">{TRAFFIC_COPY.scopeUnavailable}</p>}
+        <CardTitle>{copy.scope}</CardTitle>
+        {coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground">{copy.scopeUnavailable}</p>}
       </CardHeader>
       <CardContent className="grid min-w-0 gap-3">
-        {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{TRAFFIC_COPY.notObserved}</p> : (
-          <ul className="grid min-w-0 gap-2" aria-label={TRAFFIC_COPY.scope}>
+        {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{copy.notObserved}</p> : (
+          <ul className="grid min-w-0 gap-2" aria-label={copy.scope}>
             {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
           </ul>
         )}
@@ -513,8 +522,9 @@ function ScopeCard({ overview }: { overview: TrafficOverview }) {
 }
 
 function ScopeRow({ scope }: { scope: TrafficClusterScope }) {
+  const copy = useTrafficCopy();
   const namespaces = scope.namespaces.length === 0
-    ? TRAFFIC_COPY.noNamespaces
+    ? copy.noNamespaces
     : scope.namespaces.join(", ");
   return (
     <li className="grid min-w-0 gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -528,9 +538,10 @@ function ScopeRow({ scope }: { scope: TrafficClusterScope }) {
 }
 
 function ReasonCodes({ reasons }: { reasons: readonly string[] }) {
+  const { t } = useI18n();
   if (reasons.length === 0) return null;
   return (
-    <ul className="grid gap-1 pt-1" aria-label="Availability reasons">
+    <ul className="grid gap-1 pt-1" aria-label={t("traffic.reasons.label")}>
       {reasons.map((reason) => <li className="break-all font-mono text-xs text-muted-foreground" key={reason}>{reason}</li>)}
     </ul>
   );
@@ -543,14 +554,15 @@ function TrafficFailureScreen({
   failure: TrafficPortFailure;
   onRefresh: () => void;
 }) {
+  const copy = useTrafficCopy();
   if (failure.code === "forbidden") {
-    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: TRAFFIC_COPY.refreshFailed }} placement="content" />;
+    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: copy.refreshFailed }} placement="content" />;
   }
   if (failure.code === "offline") {
     return (
       <ProductStateScreen
         kind="offline"
-        issue={{ code: "network", safeDetail: TRAFFIC_COPY.refreshFailed }}
+        issue={{ code: "network", safeDetail: copy.refreshFailed }}
         placement="content"
         retry={{ pending: false, onRetry: onRefresh }}
       />
@@ -559,7 +571,7 @@ function TrafficFailureScreen({
   return (
     <ProductStateScreen
       kind="error"
-      issue={{ code: stateIssueCode(failure), safeDetail: TRAFFIC_COPY.refreshFailed }}
+      issue={{ code: stateIssueCode(failure), safeDetail: copy.refreshFailed }}
       placement="content"
       retry={{ pending: false, onRetry: onRefresh }}
     />
@@ -571,9 +583,13 @@ function stateIssueCode(failure: TrafficPortFailure): "unknown" | "invalid-respo
   return "unknown";
 }
 
-function scopeDescription(overview: TrafficOverview): string {
+function scopeDescription(overview: TrafficOverview, unavailable: string): string {
   const observedAt = overview.observation.observedAt ?? overview.scopeCoverage.observedAt;
-  return observedAt === null ? TRAFFIC_COPY.notObserved : observedAt;
+  return observedAt === null ? unavailable : observedAt;
+}
+
+function useTrafficCopy(): TrafficCopy {
+  return trafficCopy(useI18n().t);
 }
 
 function scopeSelection(scope: ReturnType<typeof useClusterScope>):

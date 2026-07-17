@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChecksPortFailure, type ChecksPort } from "../../features/checks/checksContract";
 import { HomePortFailure } from "../../features/home/homeContract";
+import { I18nProvider } from "../../shared/i18n";
 import { ChecksPage } from "./ChecksPage";
+
+function render(ui: Parameters<typeof testingRender>[0]) {
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <I18nProvider navigatorLanguage="en-US" storage={null}>{children}</I18nProvider>
+    ),
+  });
+}
 
 const scopeState = vi.hoisted(() => ({ value: null as unknown }));
 const filterState = vi.hoisted(() => ({ value: null as unknown }));
@@ -29,6 +38,21 @@ beforeEach(() => {
 });
 
 describe("ChecksPage", () => {
+  it("localizes product controls while preserving agent check evidence", async () => {
+    const port = checksPort();
+    port.getOverview.mockResolvedValueOnce(observedOverview());
+
+    testingRender(
+      <I18nProvider navigatorLanguage="ko" storage={null}>
+        <MemoryRouter><ChecksPage port={port} /></MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "검사" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "검사 설정" })).toBeTruthy();
+    expect(screen.getByText("Workload limits")).toBeTruthy();
+  });
+
   it("does not query an unbounded scope while authority is resolving", () => {
     scopeState.value = { selection: { kind: "resolving", requestedIds: [] } };
     const port = checksPort();

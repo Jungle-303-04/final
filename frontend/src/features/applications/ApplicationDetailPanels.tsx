@@ -20,8 +20,8 @@ import {
 } from "./ApplicationCatalogSignals";
 
 export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetailModel }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { locale, t } = useI18n();
+  const copy = applicationsCopy(t);
   const deliveryLabels = {
     succeeded: copy.deliverySucceeded,
     failed: copy.deliveryFailed,
@@ -116,8 +116,8 @@ export function ApplicationWorkloadOverviewPanel({
 }: {
   workload: ApplicationWorkloadDetail;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   return (
     <div className="grid min-w-0 gap-4 lg:grid-cols-2">
       <Card data-testid="application-workload-runtime">
@@ -152,8 +152,8 @@ export function ApplicationUnavailableEvidencePanel({
   evidence: ApplicationUnavailableEvidence;
   title: string;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   return (
     <Card data-testid="application-workload-unavailable-evidence">
       <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
@@ -169,8 +169,8 @@ export function ApplicationSourcePanel({
 }: {
   source: ApplicationDetailModel["source"];
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   if (source.availability === "unavailable") {
     return (
       <Card>
@@ -201,8 +201,8 @@ export function ApplicationHistoryPanel({
 }: {
   history: ApplicationDetailModel["history"];
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { locale, t } = useI18n();
+  const copy = applicationsCopy(t);
   if (history.availability === "unavailable" || history.entries === null) {
     return <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">{copy.unavailable}</p>;
   }
@@ -236,8 +236,8 @@ export function ApplicationResourcesPanel({
   detail: ApplicationDetailModel;
   href: string;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   return (
     <Card>
       <CardHeader><CardTitle>{copy.resources}</CardTitle></CardHeader>
@@ -270,8 +270,8 @@ export function ApplicationIncidentsPanel({
   detail: ApplicationDetailModel;
   href: string;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { locale, t } = useI18n();
+  const copy = applicationsCopy(t);
   return (
     <Card>
       <CardHeader><CardTitle>{copy.incidents}</CardTitle></CardHeader>
@@ -309,8 +309,8 @@ function Fact({ label, mono = false, value }: { label: string; mono?: boolean; v
 }
 
 function Unavailable() {
-  const { locale } = useI18n();
-  return <span className="text-sm text-muted-foreground">{applicationsCopy(locale).unavailable}</span>;
+  const { t } = useI18n();
+  return <span className="text-sm text-muted-foreground">{applicationsCopy(t).unavailable}</span>;
 }
 
 function podRatio(detail: ApplicationDetailModel, unavailable: string): string {

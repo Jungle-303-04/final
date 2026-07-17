@@ -30,8 +30,8 @@ export function ApplicationCard({
   application: ApplicationCardModel;
   onOpen: () => void;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { locale, t } = useI18n();
+  const copy = applicationsCopy(t);
   const deployment = application.currentDeployment;
   const resourceTotal = application.resourceCounts?.reduce((sum, item) => sum + item.count, 0) ?? null;
   const deliveryLabels = {

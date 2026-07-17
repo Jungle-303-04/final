@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { vi } from "vitest";
-import { I18nProvider } from "../../shared/i18n";
+import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import { UnifiedFilterProvider } from "../filters/UnifiedFilterProvider";
 import { ApplicationsSurface } from "./ApplicationsSurface";
 import type {
@@ -221,12 +221,13 @@ export function applicationsPort(overrides: Partial<ApplicationsPort> = {}): App
 export function renderApplications(
   port: ApplicationsPort,
   initialEntry = "/applications",
+  locale: SupportedLocale = "en",
 ) {
   const router = createMemoryRouter([
     {
       path: "/applications/*",
       element: (
-        <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <I18nProvider navigatorLanguage={locale} storage={null}>
           <UnifiedFilterProvider>
             <ApplicationsSurface port={port} />
             <LocationProbe />

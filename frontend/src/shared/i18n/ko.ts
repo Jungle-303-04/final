@@ -10,6 +10,9 @@ import { timelineKo } from "./catalogs/ko/timeline";
 import { desktopKo } from "./catalogs/ko/desktop";
 import { costKo } from "./catalogs/ko/cost";
 import { rightsizingKo } from "./catalogs/ko/rightsizing";
+import { applicationsKo } from "./catalogs/ko/applications";
+import { checksKo } from "./catalogs/ko/checks";
+import { trafficKo } from "./catalogs/ko/traffic";
 
 export const ko = {
   "product.name": "Opsia",
@@ -422,6 +425,9 @@ export const ko = {
   ...desktopKo,
   ...costKo,
   ...rightsizingKo,
+  ...applicationsKo,
+  ...checksKo,
+  ...trafficKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,

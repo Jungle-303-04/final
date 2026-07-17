@@ -59,8 +59,8 @@ export function ApplicationDetailWorkspace({
   filter: UnifiedFilterController;
   port: ApplicationsPort;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   const requestedTab = applicationTab(filter.detail.tab);
   const requestedInstanceId = filter.detail.applicationInstance ?? null;
   const requestedWorkloadKey = filter.detail.applicationWorkload ?? null;

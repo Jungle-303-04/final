@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CostPortFailure, type CostPort } from "../../features/cost/costContract";
 import type { RightsizingPort } from "../../features/rightsizing/rightsizingContract";
-import { I18nProvider } from "../../shared/i18n";
+import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { CostPage } from "./CostPage";
 
@@ -23,6 +23,14 @@ beforeEach(() => {
 });
 
 describe("CostPage", () => {
+  it("localizes product copy while preserving node evidence", async () => {
+    renderCostPage(costPort(), "/cost", "ko");
+
+    expect(await screen.findByRole("heading", { name: "비용" })).toBeTruthy();
+    expect(screen.getByText("이 권한 범위에서 확인할 수 있는 비용 할당 관측이 없습니다.")).toBeTruthy();
+    expect(await screen.findByText("node-a")).toBeTruthy();
+  });
+
   it("shows unavailable observation rather than invented currency, zero, or recommendations", async () => {
     const port = costPort();
     renderCostPage(port);
@@ -223,9 +231,9 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
   };
 }
 
-function renderCostPage(port: CostPort, entry = "/cost") {
+function renderCostPage(port: CostPort, entry = "/cost", locale: SupportedLocale = "en") {
   return render(
-    <I18nProvider navigatorLanguage="en" storage={null}>
+    <I18nProvider navigatorLanguage={locale} storage={null}>
       <MemoryRouter initialEntries={[entry]}>
         <UnifiedFilterProvider>
           <CostPage port={port} rightsizingPort={rightsizingPort()} />

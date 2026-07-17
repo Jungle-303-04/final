@@ -22,6 +22,15 @@ afterEach(() => {
 });
 
 describe("S10 Applications surface", () => {
+  it("localizes product controls while preserving server-owned identities", async () => {
+    renderApplications(applicationsPort(), "/applications", "ko");
+
+    expect(await screen.findByRole("heading", { name: "애플리케이션" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "표 보기" })).toBeTruthy();
+    expect(screen.getByText("checkout-api")).toBeTruthy();
+    expect(screen.getByText("prod")).toBeTruthy();
+  });
+
   it("forwards the canonical unified filter state and switches the same result set to table view", async () => {
     const user = userEvent.setup();
     const port = applicationsPort();

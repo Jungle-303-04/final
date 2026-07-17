@@ -30,8 +30,8 @@ export function ApplicationsTable({
   applications: readonly ApplicationCardModel[];
   onOpen: (applicationId: string) => void;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   const deliveryLabels = {
     succeeded: copy.deliverySucceeded,
     failed: copy.deliveryFailed,

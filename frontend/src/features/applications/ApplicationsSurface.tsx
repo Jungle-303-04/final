@@ -41,8 +41,8 @@ function ApplicationsCatalog({
   filter: ReturnType<typeof useUnifiedFilter>;
   port: ApplicationsPort;
 }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   const [view, setView] = useState<ApplicationsView>("grid");
   const catalogFilter = useMemo(
     () => applicationCatalogFilterFromState(filter.state),
@@ -86,8 +86,8 @@ function ApplicationsCatalog({
 }
 
 function ApplicationsEmptyState({ href }: { href: string }) {
-  const { locale } = useI18n();
-  const copy = applicationsCopy(locale);
+  const { t } = useI18n();
+  const copy = applicationsCopy(t);
   return (
     <Empty className="min-h-80 rounded-xl border bg-card px-6 py-12 shadow-sm">
       <EmptyMedia className="bg-primary/10 text-primary" variant="icon">
