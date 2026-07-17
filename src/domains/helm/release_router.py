@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -13,6 +14,7 @@ from domains.catalog.install import (
     CatalogHelmUpgradeGuard,
     CatalogInstallValidationError,
     CatalogRecipeUnsupported,
+    ServerHelmRecipe,
     server_helm_recipe,
     server_helm_recipes,
     validate_catalog_values,
@@ -69,10 +71,14 @@ from packages.contracts.helm import (
     HELM_RELEASE_OPERATION_ACTION,
     HELM_RELEASE_OPERATION_CAPABILITY,
     HELM_UPGRADE_BATCH_MAX_RELEASES,
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
+    HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER,
     HelmArtifactCommandPayload,
     HelmArtifactReadRequest,
     HelmFeatureAvailability,
     HelmInstallTargetsResponse,
+    HelmRelease,
     HelmReleaseCommands,
     HelmReleaseGuard,
     HelmReleaseInstallRequest,
@@ -82,9 +88,11 @@ from packages.contracts.helm import (
     HelmReleaseUpgradeBatch,
     HelmReleaseUpgradeInfo,
     HelmReleaseUpgradeRequest,
+    HelmReleaseValuesPreviewRequest,
     HelmReleaseVersionList,
     HelmUpgradeInput,
     HelmUpgradeTarget,
+    HelmValuesPreviewCommandPayload,
 )
 from packages.contracts.helm.releases import HelmReleaseDetailResponse, HelmReleaseListResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
@@ -111,6 +119,17 @@ UPGRADE_TARGETS_UNAVAILABLE = "helm_upgrade_targets_unavailable"
 OPERATION_AGENT_UNAVAILABLE_DETAIL = "Helm release operation runner is unavailable"
 OPERATION_STALE_REVISION_DETAIL = "Helm release revision changed; refresh before operating"
 MAX_SCOPE_VALUES = 200
+
+
+@dataclass(frozen=True)
+class _ReviewedHelmCandidate:
+    workspace_id: str
+    cluster_id: str
+    namespace: str
+    release_name: str
+    release: HelmRelease
+    recipe: ServerHelmRecipe
+    values: dict[str, Any]
 
 
 @router.get(gateway_routes.HELM_RELEASES_PATH, response_model=HelmReleaseListResponse)
@@ -360,78 +379,29 @@ async def create_helm_release_upgrade(
 ) -> CommandReceipt:
     """Upgrade one observed release through the existing digest-pinned agent executor."""
 
-    selected_namespace = _single_scope_value(namespace)
-    selected_release = _single_scope_value(release_name)
-    selected_cluster = _single_scope_value(payload.cluster_id)
-    workspace_id = _workspace_id(current)
-    require_cluster_access(
-        db,
-        current,
-        workspace_id,
-        selected_cluster,
-        Permission.DEPLOY_RUN.value,
-    )
-    if selected_namespace != Sandbox.NAMESPACE or not control_namespace_allowed(selected_namespace):
-        raise HTTPException(status_code=409, detail=UPGRADE_NAMESPACE_UNAVAILABLE)
-    if not await asyncio.to_thread(
-        _agent_supports_release_upgrade,
-        db,
-        workspace_id,
-        selected_cluster,
-    ):
-        raise HTTPException(status_code=409, detail=UPGRADE_AGENT_UNAVAILABLE_DETAIL)
-    detail = await get_helm_release(
-        selected_namespace,
-        selected_release,
-        selected_cluster,
-        current,
-        db,
-    )
-    release = detail.detail.release
-    if release.revision != payload.expected_revision:
-        raise HTTPException(status_code=409, detail=UPGRADE_STALE_REVISION_DETAIL)
-    if release.storage_resource_version is None:
-        raise HTTPException(status_code=409, detail=UPGRADE_STALE_REVISION_DETAIL)
-    try:
-        recipe = server_helm_recipe(payload.catalog_item_id, payload.catalog_version)
-        if not _recipe_matches_release(recipe, release.chart, release.chart_version):
-            raise HTTPException(status_code=409, detail=UPGRADE_CHART_MISMATCH_DETAIL)
-        validate_install_names(
-            application_name=selected_release,
-            namespace=selected_namespace,
-            release_name=selected_release,
-        )
-        values = validate_catalog_values(recipe.values_schema, payload.values)
-    except HTTPException:
-        raise
-    except (CatalogRecipeUnsupported, CatalogInstallValidationError) as error:
-        raise HTTPException(status_code=422, detail=UPGRADE_RECIPE_INVALID_DETAIL) from error
-
-    catalogs = await resolve_helm_release_catalogs(
-        db=db,
+    candidate = await _reviewed_helm_candidate(
+        namespace=namespace,
+        release_name=release_name,
+        cluster_id=payload.cluster_id,
+        expected_revision=payload.expected_revision,
+        catalog_item_id=payload.catalog_item_id,
+        catalog_version=payload.catalog_version,
+        submitted_values=payload.values,
         current=current,
-        releases=(release,),
+        db=db,
         provider=provider,
+        agent_supports=_agent_supports_release_upgrade,
     )
-    resolution = catalogs[helm_release_upgrade_key(release)]
-    if (
-        resolution.availability == "unavailable"
-        or resolution.source is None
-        or not any(
-            not item.deprecated
-            and compare_helm_chart_versions(item.version, recipe.chart_version) == 0
-            for item in resolution.versions
-        )
-    ):
-        raise HTTPException(status_code=409, detail=UPGRADE_SOURCE_TARGET_DETAIL)
+    release = candidate.release
+    recipe = candidate.recipe
 
     command_payload = CatalogHelmInstallPayload(
         catalog_item_id=recipe.item_id,
         catalog_version=recipe.version,
-        namespace=selected_namespace,
-        application_name=selected_release,
-        release_name=selected_release,
-        values=values,
+        namespace=candidate.namespace,
+        application_name=candidate.release_name,
+        release_name=candidate.release_name,
+        values=candidate.values,
         upgrade_guard=CatalogHelmUpgradeGuard(
             expected_revision=payload.expected_revision,
             storage=release.storage,
@@ -441,15 +411,15 @@ async def create_helm_release_upgrade(
         ),
     )
     command = CommandRequestedBody(
-        cluster_id=selected_cluster,
+        cluster_id=candidate.cluster_id,
         action=Command.CATALOG_HELM_INSTALL_ACTION,
-        namespace=selected_namespace,
-        reason=payload.reason or f"upgrade Helm release {selected_release}",
+        namespace=candidate.namespace,
+        reason=payload.reason or f"upgrade Helm release {candidate.release_name}",
         diff=Diff(
-            workspace_id=workspace_id,
-            cluster_id=selected_cluster,
-            resource=f"helm-release/{selected_namespace}/{selected_release}",
-            namespace=selected_namespace,
+            workspace_id=candidate.workspace_id,
+            cluster_id=candidate.cluster_id,
+            resource=f"helm-release/{candidate.namespace}/{candidate.release_name}",
+            namespace=candidate.namespace,
             desired_image=f"catalog:{recipe.item_id}@{recipe.version}",
             actual_image=f"helm-revision:{release.revision}",
             risk=RiskLevel.SANDBOX_ONLY,
@@ -463,7 +433,7 @@ async def create_helm_release_upgrade(
         ),
         command_id=new_command_id(),
         payload=command_payload.model_dump(mode="json"),
-        workspace_id=workspace_id,
+        workspace_id=candidate.workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
         requested_by=str(getattr(current, "user_id", "")),
         direct_execution=True,
@@ -481,7 +451,108 @@ async def create_helm_release_upgrade(
     if not await announce_staged_operation_event(
         operation_events,
         receipt_event,
-        workspace_id=workspace_id,
+        workspace_id=candidate.workspace_id,
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
+
+
+@router.post(
+    gateway_routes.HELM_RELEASE_VALUES_PREVIEW_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def create_helm_values_preview(
+    namespace: str,
+    release_name: str,
+    payload: HelmReleaseValuesPreviewRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> CommandReceipt:
+    """Queue one bounded Agent-rendered preview for the exact observed release revision."""
+
+    candidate = await _reviewed_helm_candidate(
+        namespace=namespace,
+        release_name=release_name,
+        cluster_id=payload.cluster_id,
+        expected_revision=payload.expected_revision,
+        catalog_item_id=payload.catalog_item_id,
+        catalog_version=payload.catalog_version,
+        submitted_values=payload.values,
+        current=current,
+        db=db,
+        provider=provider,
+        agent_supports=_agent_supports_values_preview,
+    )
+    release = candidate.release
+    command_payload = HelmValuesPreviewCommandPayload(
+        namespace=candidate.namespace,
+        release_name=candidate.release_name,
+        catalog_item_id=candidate.recipe.item_id,
+        catalog_version=candidate.recipe.version,
+        values=candidate.values,
+        guard=HelmReleaseGuard(
+            expected_revision=payload.expected_revision,
+            storage=release.storage,
+            storage_resource_version=release.storage_resource_version or "",
+            chart_name=release.chart or "",
+            chart_version=release.chart_version or "",
+        ),
+    )
+    command = CommandRequestedBody(
+        cluster_id=candidate.cluster_id,
+        action=HELM_VALUES_PREVIEW_ACTION,
+        namespace=candidate.namespace,
+        reason=f"preview Helm release {candidate.release_name} values",
+        diff=Diff(
+            workspace_id=candidate.workspace_id,
+            cluster_id=candidate.cluster_id,
+            resource=f"helm-release/{candidate.namespace}/{candidate.release_name}",
+            namespace=candidate.namespace,
+            desired_image=f"catalog:{candidate.recipe.item_id}@{candidate.recipe.version}",
+            actual_image=f"helm-revision:{release.revision}",
+            risk=RiskLevel.REVIEW_REQUIRED,
+            status="preview",
+            basis={
+                "expected_revision": release.revision,
+                "catalog_item_id": candidate.recipe.item_id,
+                "catalog_version": candidate.recipe.version,
+                "chart_version": candidate.recipe.chart_version,
+            },
+        ),
+        command_id=new_command_id(),
+        payload=command_payload.model_dump(mode="json"),
+        workspace_id=candidate.workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=str(getattr(current, "user_id", "")),
+        direct_execution=False,
+        direct_execution_confirmed=False,
+    )
+    try:
+        accepted, receipt_event = await accept_command_with_receipt_stage(
+            events,
+            command,
+            actor=Actor(
+                str(getattr(current, "user_id", "")),
+                tuple(getattr(current, "roles", ()) or ()),
+            ),
+            max_active_per_action=HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER,
+        )
+    except AgentCommandCapacityExceeded as error:
+        raise HTTPException(
+            status_code=429,
+            detail="too many active Helm values previews",
+            headers={"Retry-After": "1"},
+        ) from error
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events,
+        receipt_event,
+        workspace_id=candidate.workspace_id,
     ):
         await publish_accepted_operation(operation_events, command, response)
     return response
@@ -1039,6 +1110,100 @@ def _release_is_observed(rows: list[dict[str, Any]], release_name: str) -> bool:
     return False
 
 
+async def _reviewed_helm_candidate(
+    *,
+    namespace: str,
+    release_name: str,
+    cluster_id: str,
+    expected_revision: int,
+    catalog_item_id: str,
+    catalog_version: str,
+    submitted_values: Mapping[str, Any],
+    current: Any,
+    db: Any,
+    provider: HelmChartVersionProvider,
+    agent_supports: Callable[[Any, str, str], bool],
+) -> _ReviewedHelmCandidate:
+    """Resolve the same authorized, revision-bound candidate for preview and apply."""
+
+    selected_namespace = _single_scope_value(namespace)
+    selected_release = _single_scope_value(release_name)
+    selected_cluster = _single_scope_value(cluster_id)
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        selected_cluster,
+        Permission.DEPLOY_RUN.value,
+    )
+    if selected_namespace != Sandbox.NAMESPACE or not control_namespace_allowed(selected_namespace):
+        raise HTTPException(status_code=409, detail=UPGRADE_NAMESPACE_UNAVAILABLE)
+    if not await asyncio.to_thread(
+        agent_supports,
+        db,
+        workspace_id,
+        selected_cluster,
+    ):
+        raise HTTPException(status_code=409, detail=UPGRADE_AGENT_UNAVAILABLE_DETAIL)
+    detail = await get_helm_release(
+        selected_namespace,
+        selected_release,
+        selected_cluster,
+        current,
+        db,
+    )
+    release = detail.detail.release
+    if (
+        release.revision != expected_revision
+        or release.storage_resource_version is None
+        or release.chart is None
+        or release.chart_version is None
+    ):
+        raise HTTPException(status_code=409, detail=UPGRADE_STALE_REVISION_DETAIL)
+    try:
+        recipe = server_helm_recipe(catalog_item_id, catalog_version)
+        if not _recipe_matches_release(recipe, release.chart, release.chart_version):
+            raise HTTPException(status_code=409, detail=UPGRADE_CHART_MISMATCH_DETAIL)
+        validate_install_names(
+            application_name=selected_release,
+            namespace=selected_namespace,
+            release_name=selected_release,
+        )
+        values = validate_catalog_values(recipe.values_schema, dict(submitted_values))
+    except HTTPException:
+        raise
+    except (CatalogRecipeUnsupported, CatalogInstallValidationError) as error:
+        raise HTTPException(status_code=422, detail=UPGRADE_RECIPE_INVALID_DETAIL) from error
+
+    catalogs = await resolve_helm_release_catalogs(
+        db=db,
+        current=current,
+        releases=(release,),
+        provider=provider,
+    )
+    resolution = catalogs[helm_release_upgrade_key(release)]
+    if (
+        resolution.availability == "unavailable"
+        or resolution.source is None
+        or not any(
+            not item.deprecated
+            and compare_helm_chart_versions(item.version, recipe.chart_version) == 0
+            for item in resolution.versions
+        )
+    ):
+        raise HTTPException(status_code=409, detail=UPGRADE_SOURCE_TARGET_DETAIL)
+    return _ReviewedHelmCandidate(
+        workspace_id=workspace_id,
+        cluster_id=selected_cluster,
+        namespace=selected_namespace,
+        release_name=selected_release,
+        release=release,
+        recipe=recipe,
+        values=values,
+    )
+
+
 def _release_upgrade_commands(
     db: Any,
     workspace_id: str,
@@ -1058,7 +1223,9 @@ def _release_upgrade_commands(
         return HelmFeatureAvailability(reason_code=UPGRADE_REVISION_UNAVAILABLE)
     if chart_name is None or chart_version is None or storage_resource_version is None:
         return HelmFeatureAvailability(reason_code=UPGRADE_TARGETS_UNAVAILABLE)
-    if not _agent_supports_release_upgrade(db, workspace_id, cluster_id):
+    if not _agent_supports_release_upgrade(
+        db, workspace_id, cluster_id
+    ) or not _agent_supports_values_preview(db, workspace_id, cluster_id):
         return HelmFeatureAvailability(reason_code=UPGRADE_AGENT_UNAVAILABLE)
     targets = _helm_upgrade_targets(chart_name, chart_version)
     if not targets:
@@ -1163,6 +1330,19 @@ def _agent_supports_catalog_install(
         workspace_id,
         cluster_id,
         Command.CATALOG_HELM_INSTALL_CAPABILITY,
+    )
+
+
+def _agent_supports_values_preview(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> bool:
+    return _agent_supports_capabilities(
+        db,
+        workspace_id,
+        cluster_id,
+        HELM_VALUES_PREVIEW_CAPABILITY,
     )
 
 
