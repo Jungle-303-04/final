@@ -8,12 +8,14 @@ import {
   listHelmChartSources,
   listHelmReleases,
   listHelmReleaseVersions,
+  listHelmInstallTargets,
   registerHelmChartSource,
   refreshHelmRepository,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
   startHelmReleaseRollback,
   startHelmReleaseUninstall,
+  startHelmReleaseInstall,
   searchArtifactHubCharts,
 } from "../../../api";
 import { createHelmAdapter } from "../../../features/helm/createHelmAdapter";
@@ -29,12 +31,14 @@ export function loadHelmSurface(): ComponentType {
     listHelmChartSources,
     listHelmReleases,
     listHelmReleaseVersions,
+    listHelmInstallTargets,
     registerHelmChartSource,
     refreshHelmRepository,
     startHelmArtifactRead,
     startHelmReleaseUpgrade,
     startHelmReleaseRollback,
     startHelmReleaseUninstall,
+    startHelmReleaseInstall,
     searchArtifactHubCharts,
   }));
 }

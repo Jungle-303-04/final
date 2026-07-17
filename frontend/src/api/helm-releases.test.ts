@@ -9,16 +9,20 @@ import {
   HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_ROLLBACK_STREAM_PATH,
   HELM_RELEASE_VALUES_PATH,
+  HELM_INSTALL_TARGETS_PATH,
+  HELM_RELEASE_INSTALL_STREAM_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,
   HELM_RELEASE_VERSIONS_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
   listHelmReleases,
   listHelmReleaseVersions,
+  listHelmInstallTargets,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
   startHelmReleaseRollback,
   startHelmReleaseUninstall,
+  startHelmReleaseInstall,
   HELM_UPGRADE_CHECK_PATH,
 } from "./helm-releases";
 
@@ -37,6 +41,39 @@ describe("Helm release API", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "/api/helm/releases?clusters=cluster-a%2Ccluster-b&namespaces=storefront",
     );
+  });
+
+  it("lists server-owned install targets and queues one idempotent install", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse({ namespace: "sandbox", targets: [] }))
+      .mockResolvedValueOnce(jsonResponse({
+        accepted: true,
+        command_id: "cmd-install-1",
+        correlation_id: "corr-install-1",
+        status: "queued",
+      }));
+
+    await listHelmInstallTargets();
+    await startHelmReleaseInstall({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      applicationName: "redis",
+      releaseName: "redis",
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+      confirmation: true,
+      idempotencyKey: "helm-install-request-1",
+    });
+
+    expect(HELM_INSTALL_TARGETS_PATH).toBe("/api/helm/install-targets");
+    expect(HELM_RELEASE_INSTALL_STREAM_PATH).toBe("/api/helm/releases/install-stream");
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/helm/install-targets",
+      "/api/helm/releases/install-stream",
+    ]);
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Idempotency-Key"))
+      .toBe("helm-install-request-1");
   });
 
   it("encodes the exact detail identity and rejects fabricated provider fields", async () => {

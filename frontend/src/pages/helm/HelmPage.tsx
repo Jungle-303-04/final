@@ -58,6 +58,7 @@ import {
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
 import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
 import { HelmArtifactHubPanel } from "./HelmArtifactHubPanel";
+import { HelmReleaseInstallDialog } from "./HelmReleaseInstallDialog";
 import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
 import { HelmReleaseOperationDialogs } from "./HelmReleaseOperationDialogs";
 import {
@@ -145,9 +146,14 @@ function HelmReleaseListPage({
 
   return (
     <ProductPageFrame className="gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{HELM_COPY.title}</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{HELM_COPY.description}</p>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="grid min-w-0 gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{HELM_COPY.title}</h1>
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{HELM_COPY.description}</p>
+        </div>
+        {scopeResolution.clusterIds.length === 1 ? (
+          <HelmReleaseInstallDialog clusterId={scopeResolution.clusterIds[0] as string} port={port} />
+        ) : null}
       </header>
       <HelmListBoundary
         frame={data.frame}

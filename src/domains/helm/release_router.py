@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from domains.catalog.install import (
     CatalogHelmInstallPayload,
@@ -18,6 +18,7 @@ from domains.catalog.install import (
     validate_catalog_values,
     validate_install_names,
 )
+from domains.catalog.router import install_catalog_item
 from domains.command.events import CommandRequestedBody
 from domains.command.repository import AgentCommandCapacityExceeded
 from domains.command.router import (
@@ -55,6 +56,8 @@ from packages.config.control import control_namespace_allowed
 from packages.config.helm import helm_owned_resource_query_limit
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.requests import CatalogInstallRequest
+from packages.contracts.gateway.responses import CatalogInstallAcceptedResponse
 from packages.contracts.helm import (
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
     HELM_RELEASE_ARTIFACT_READ_ACTION,
@@ -65,8 +68,10 @@ from packages.contracts.helm import (
     HelmArtifactCommandPayload,
     HelmArtifactReadRequest,
     HelmFeatureAvailability,
+    HelmInstallTargetsResponse,
     HelmReleaseCommands,
     HelmReleaseGuard,
+    HelmReleaseInstallRequest,
     HelmReleaseOperationCommandPayload,
     HelmReleaseRollbackRequest,
     HelmReleaseUninstallRequest,
@@ -476,6 +481,66 @@ async def create_helm_release_upgrade(
     ):
         await publish_accepted_operation(operation_events, command, response)
     return response
+
+
+@router.get(
+    gateway_routes.HELM_INSTALL_TARGETS_PATH,
+    response_model=HelmInstallTargetsResponse,
+)
+async def list_helm_install_targets(
+    current: Any = Depends(require_session),
+) -> HelmInstallTargetsResponse:
+    """List only digest-pinned recipes the target Agent can actually execute."""
+
+    _ = current
+    targets: list[HelmUpgradeTarget] = []
+    for recipe in server_helm_recipes():
+        inputs = _upgrade_inputs(recipe.values_schema)
+        if inputs is None:
+            continue
+        targets.append(
+            HelmUpgradeTarget(
+                item_id=recipe.item_id,
+                name=recipe.display_name,
+                version=recipe.version,
+                chart_version=recipe.chart_version,
+                inputs=inputs,
+            )
+        )
+    return HelmInstallTargetsResponse(namespace=Sandbox.NAMESPACE, targets=tuple(targets))
+
+
+@router.post(
+    gateway_routes.HELM_RELEASE_INSTALL_STREAM_PATH,
+    response_model=CatalogInstallAcceptedResponse,
+    status_code=202,
+)
+async def create_helm_release_install_stream(
+    payload: HelmReleaseInstallRequest,
+    idempotency_key: str = Header(
+        alias="Idempotency-Key",
+        min_length=8,
+        max_length=128,
+    ),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> CatalogInstallAcceptedResponse:
+    """Compatibility path backed by the existing idempotent catalog installer."""
+
+    return await install_catalog_item(
+        item_id=payload.catalog_item_id,
+        payload=CatalogInstallRequest(
+            cluster_id=payload.cluster_id,
+            namespace=payload.namespace,
+            application_name=payload.application_name,
+            release_name=payload.release_name,
+            version=payload.catalog_version,
+            values=payload.values,
+        ),
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+    )
 
 
 @router.post(

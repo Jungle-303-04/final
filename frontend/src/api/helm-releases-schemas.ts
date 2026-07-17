@@ -47,18 +47,32 @@ export const helmUpgradeInputSchema = z.strictObject({
   }
 });
 
+export const helmUpgradeTargetSchema = z.strictObject({
+  item_id: z.string().min(1).max(120),
+  name: z.string().min(1).max(120),
+  version: z.string().min(1).max(80),
+  chart_version: z.string().min(1).max(80),
+  inputs: z.array(helmUpgradeInputSchema),
+});
+
+export const helmInstallTargetsSchema = z.strictObject({
+  namespace: z.string().min(1).max(63),
+  targets: z.array(helmUpgradeTargetSchema).max(100),
+});
+
+export const helmInstallAcceptedSchema = z.strictObject({
+  accepted: z.literal(true),
+  command_id: z.string().min(1),
+  correlation_id: z.string().min(1),
+  status: z.string().min(1),
+});
+
 export const helmReleaseCommandsSchema = z.strictObject({
   availability: z.literal("available"),
   actions: z.tuple([z.literal("upgrade"), z.literal("rollback"), z.literal("uninstall")]),
   confirmation_required: z.literal(true),
   realtime: z.literal(true),
-  upgrade_targets: z.array(z.strictObject({
-    item_id: z.string().min(1).max(120),
-    name: z.string().min(1).max(120),
-    version: z.string().min(1).max(80),
-    chart_version: z.string().min(1).max(80),
-    inputs: z.array(helmUpgradeInputSchema),
-  })).min(1),
+  upgrade_targets: z.array(helmUpgradeTargetSchema).min(1),
 }).superRefine((value, context) => {
   const targets = value.upgrade_targets.map((item) => `${item.item_id}\u001f${item.version}`);
   if (new Set(targets).size !== targets.length) {

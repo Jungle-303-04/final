@@ -14,6 +14,7 @@ from domains.helm.release_router import (
     create_helm_release_rollback,
     create_helm_release_uninstall,
     create_helm_release_upgrade,
+    list_helm_install_targets,
 )
 from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.helm.source_router import get_helm_chart_version_provider
@@ -703,6 +704,24 @@ def test_release_values_apply_is_the_reviewed_upgrade_contract() -> None:
 
     assert "202" in operation["responses"]
     assert operation["requestBody"]["required"] is True
+
+
+def test_install_stream_exposes_only_server_recipe_targets_and_the_accepted_contract() -> None:
+    targets = asyncio.run(
+        list_helm_install_targets(
+            current=SimpleNamespace(user_id="user-a", workspace_id="workspace-a", roles=("user",))
+        )
+    )
+    serialized = targets.model_dump(mode="json")
+    assert serialized["namespace"] == "sandbox"
+    assert serialized["targets"]
+    assert all("package_ref" not in target for target in serialized["targets"])
+
+    module = importlib.import_module("domains.helm.release_router")
+    app = FastAPI()
+    app.include_router(module.router)
+    operation = app.openapi()["paths"]["/helm/releases/install-stream"]["post"]
+    assert "202" in operation["responses"]
 
 
 def test_release_rollback_reuses_common_receipt_and_revision_bound_agent_command(

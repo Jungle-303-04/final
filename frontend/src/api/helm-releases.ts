@@ -1,5 +1,7 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
+  helmInstallAcceptedSchema,
+  helmInstallTargetsSchema,
   helmReleaseDetailSchema,
   helmReleaseListSchema,
   helmReleaseUpgradeBatchSchema,
@@ -33,10 +35,51 @@ export const HELM_RELEASE_UPGRADE_INFO_PATH =
 export const HELM_RELEASE_VERSIONS_PATH =
   "/api/helm/releases/{namespace}/{release_name}/versions" as const;
 export const HELM_UPGRADE_CHECK_PATH = "/api/helm/upgrade-check" as const;
+export const HELM_INSTALL_TARGETS_PATH = "/api/helm/install-targets" as const;
+export const HELM_RELEASE_INSTALL_STREAM_PATH = "/api/helm/releases/install-stream" as const;
 
 export interface HelmReleaseListQuery {
   clusterIds?: readonly string[];
   namespaces?: readonly string[];
+}
+
+export function listHelmInstallTargets(signal?: AbortSignal) {
+  return apiRequest(HELM_INSTALL_TARGETS_PATH, helmInstallTargetsSchema, { signal });
+}
+
+export function startHelmReleaseInstall(
+  input: {
+    clusterId: string;
+    namespace: string;
+    applicationName: string;
+    releaseName: string;
+    catalogItemId: string;
+    catalogVersion: string;
+    values: Readonly<Record<string, unknown>>;
+    confirmation: true;
+    idempotencyKey: string;
+  },
+  signal?: AbortSignal,
+) {
+  const idempotencyKey = requiredIdentity(input.idempotencyKey, "idempotencyKey");
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+    throw new RangeError("idempotencyKey length is invalid");
+  }
+  return apiRequest(HELM_RELEASE_INSTALL_STREAM_PATH, helmInstallAcceptedSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({
+      cluster_id: requiredIdentity(input.clusterId, "clusterId"),
+      namespace: requiredIdentity(input.namespace, "namespace"),
+      application_name: requiredIdentity(input.applicationName, "applicationName"),
+      release_name: requiredIdentity(input.releaseName, "releaseName"),
+      catalog_item_id: requiredIdentity(input.catalogItemId, "catalogItemId"),
+      catalog_version: requiredIdentity(input.catalogVersion, "catalogVersion"),
+      values: input.values,
+      confirmation: input.confirmation,
+    }),
+    signal,
+  });
 }
 
 export function listHelmReleases(

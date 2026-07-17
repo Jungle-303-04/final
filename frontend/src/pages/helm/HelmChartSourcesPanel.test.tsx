@@ -195,6 +195,8 @@ function helmPort(): HelmPort & {
   refreshChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    listInstallTargets: vi.fn().mockResolvedValue({ namespace: "sandbox", targets: [] }),
+    installRelease: vi.fn().mockResolvedValue({ accepted: true, commandId: "cmd-install", correlationId: "corr-install", status: "queued" }),
     searchArtifactHub: vi.fn(),
     getArtifactHubChart: vi.fn(),
     checkReleaseUpgrades: vi.fn(),

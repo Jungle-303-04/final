@@ -192,6 +192,35 @@ export interface HelmConfigMutationEndpointReceipt {
 }
 
 export interface HelmEndpointDependencies {
+  listHelmInstallTargets(signal?: AbortSignal): Promise<{
+    namespace: string;
+    targets: Array<{
+      item_id: string;
+      name: string;
+      version: string;
+      chart_version: string;
+      inputs: HelmEndpointUpgradeInput[];
+    }>;
+  }>;
+  startHelmReleaseInstall(
+    input: {
+      clusterId: string;
+      namespace: string;
+      applicationName: string;
+      releaseName: string;
+      catalogItemId: string;
+      catalogVersion: string;
+      values: Readonly<Record<string, unknown>>;
+      confirmation: true;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{
+    accepted: true;
+    command_id: string;
+    correlation_id: string;
+    status: string;
+  }>;
   searchArtifactHubCharts(
     query: {
       query: string;

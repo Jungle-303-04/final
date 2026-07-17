@@ -373,6 +373,30 @@ export interface HelmReleaseUpgradeRequest extends HelmReleaseDetailRequest {
   reason?: string;
 }
 
+export interface HelmInstallTargets {
+  namespace: string;
+  targets: readonly HelmUpgradeTarget[];
+}
+
+export interface HelmReleaseInstallRequest {
+  clusterId: string;
+  namespace: string;
+  applicationName: string;
+  releaseName: string;
+  catalogItemId: string;
+  catalogVersion: string;
+  values: Readonly<Record<string, unknown>>;
+  confirmation: true;
+  idempotencyKey: string;
+}
+
+export interface HelmInstallReceipt {
+  accepted: true;
+  commandId: string;
+  correlationId: string;
+  status: string;
+}
+
 export interface HelmReleaseRollbackRequest extends HelmReleaseDetailRequest {
   expectedRevision: number;
   revision: number;
@@ -409,6 +433,11 @@ export class HelmPortFailure extends Error {
 }
 
 export interface HelmPort {
+  listInstallTargets(signal?: AbortSignal): Promise<HelmInstallTargets>;
+  installRelease(
+    request: HelmReleaseInstallRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmInstallReceipt>;
   searchArtifactHub(
     request: ArtifactHubSearchRequest,
     signal?: AbortSignal,

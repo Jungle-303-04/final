@@ -92,7 +92,46 @@ describe("HelmPage", () => {
       chart: "redis",
       version: "22.0.0",
     }, expect.any(AbortSignal));
-    expect(screen.queryByRole("button", { name: /install/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /install bitnami\/redis/i })).toBeNull();
+  });
+
+  it("installs only a server-owned recipe and hands its command to the operation stream", async () => {
+    const port = helmPort();
+    port.listInstallTargets.mockResolvedValue({
+      namespace: "sandbox",
+      targets: [{
+        itemId: "catalog-redis",
+        name: "Redis",
+        version: "1.0.0",
+        chartVersion: "23.1.1",
+        inputs: [],
+      }],
+    });
+    const store = {
+      start: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+      getSnapshot: vi.fn(() => null),
+    };
+    operationState.value = store;
+    renderRoute("/helm", port);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Install release" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Release name" }), {
+      target: { value: "redis" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm install" }));
+
+    await waitFor(() => expect(port.installRelease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: "cluster-a",
+        namespace: "sandbox",
+        releaseName: "redis",
+        catalogItemId: "catalog-redis",
+        confirmation: true,
+      }),
+      expect.any(AbortSignal),
+    ));
+    expect(store.start).toHaveBeenCalledWith("cmd-install");
   });
 
   it("decorates the release list only with server-resolved batch upgrade evidence", async () => {
@@ -595,6 +634,8 @@ function LocationProbe() {
 }
 
 function helmPort(): HelmPort & {
+  listInstallTargets: ReturnType<typeof vi.fn>;
+  installRelease: ReturnType<typeof vi.fn>;
   searchArtifactHub: ReturnType<typeof vi.fn>;
   getArtifactHubChart: ReturnType<typeof vi.fn>;
   checkReleaseUpgrades: ReturnType<typeof vi.fn>;
@@ -612,6 +653,8 @@ function helmPort(): HelmPort & {
   deleteChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    listInstallTargets: vi.fn().mockResolvedValue({ namespace: "sandbox", targets: [] }),
+    installRelease: vi.fn().mockResolvedValue({ accepted: true, commandId: "cmd-install", correlationId: "corr-install", status: "queued" }),
     searchArtifactHub: vi.fn().mockResolvedValue({
       items: [], total: 0, offset: 0, limit: 20, hasMore: false,
       observedAt: "2026-07-17T08:00:00Z",

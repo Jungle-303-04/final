@@ -24,6 +24,38 @@ import type { HelmEndpointDependencies } from "./helmEndpointContract";
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
   return {
     ...createHelmChartSourcesPort(endpoints),
+    async listInstallTargets(signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.listHelmInstallTargets(signal);
+        return {
+          namespace: value.namespace,
+          targets: value.targets.map((target) => ({
+            itemId: target.item_id,
+            name: target.name,
+            version: target.version,
+            chartVersion: target.chart_version,
+            inputs: target.inputs.map((input) => ({
+              name: input.name,
+              valueType: input.value_type,
+              required: input.required,
+              defaultValue: input.default,
+              allowedValues: input.allowed_values,
+            })),
+          })),
+        };
+      });
+    },
+    async installRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseInstall(request, signal);
+        return {
+          accepted: receipt.accepted,
+          commandId: receipt.command_id,
+          correlationId: receipt.correlation_id,
+          status: receipt.status,
+        };
+      });
+    },
     async searchArtifactHub(request, signal) {
       return withHelmPortFailure(async () => {
         const value = await endpoints.searchArtifactHubCharts(request, signal);

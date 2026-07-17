@@ -1,6 +1,15 @@
 /** Product-owned UI copy. Runtime values always arrive through HelmPort. */
 export const HELM_COPY = {
   title: "Helm releases",
+  install: "Install release",
+  installTitle: "Confirm Helm install",
+  installDescription: "Choose a server-owned digest-pinned recipe and review its target before installation.",
+  installTarget: "Install target",
+  installReleaseName: "Release name",
+  installConfirm: "Confirm install",
+  installPending: "Queueing install",
+  installFailed: "The Helm install could not be queued.",
+  installTargetsFailed: "Executable Helm install targets could not be loaded.",
   refresh: "Refresh",
   refreshPending: "Refreshing Helm releases.",
   refreshSucceeded: "Helm releases refreshed.",

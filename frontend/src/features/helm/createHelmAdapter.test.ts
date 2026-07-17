@@ -410,6 +410,8 @@ function upgradeReadEndpoints() {
     refresh_after_seconds: 10,
   };
   return {
+    listHelmInstallTargets: vi.fn(),
+    startHelmReleaseInstall: vi.fn(),
     searchArtifactHubCharts: vi.fn(),
     getArtifactHubChart: vi.fn(),
     startHelmReleaseRollback: vi.fn().mockResolvedValue(receipt()),

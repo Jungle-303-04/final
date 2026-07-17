@@ -146,6 +146,34 @@ class HelmReleaseUpgradeRequest(StrictModel):
         return self
 
 
+class HelmInstallTargetsResponse(StrictModel):
+    namespace: str = Field(min_length=1, max_length=63)
+    targets: tuple[HelmUpgradeTarget, ...] = Field(default=(), max_length=100)
+
+
+class HelmReleaseInstallRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=253)
+    namespace: str = Field(min_length=1, max_length=63)
+    application_name: str = Field(min_length=1, max_length=120)
+    release_name: str = Field(min_length=1, max_length=120)
+    catalog_item_id: str = Field(min_length=1, max_length=120)
+    catalog_version: str = Field(min_length=1, max_length=80)
+    values: dict[str, Any] = Field(default_factory=dict)
+    confirmation: Literal[True]
+
+    @model_validator(mode="after")
+    def values_are_bounded(self) -> HelmReleaseInstallRequest:
+        HelmReleaseUpgradeRequest(
+            cluster_id=self.cluster_id,
+            expected_revision=1,
+            catalog_item_id=self.catalog_item_id,
+            catalog_version=self.catalog_version,
+            values=self.values,
+            confirmation=True,
+        )
+        return self
+
+
 def _upgrade_scalar_matches(value_type: HelmUpgradeValueType, value: object) -> bool:
     if value_type == "string":
         return isinstance(value, str)

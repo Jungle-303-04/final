@@ -15,7 +15,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { ConfirmationDialog } from "../../shared/ui/primitives/confirmation-dialog";
 import { Input } from "../../shared/ui/primitives/input";
 
-type FormValues = Readonly<Record<string, string>>;
+export type HelmFormValues = Readonly<Record<string, string>>;
 
 export function HelmReleaseUpgradeDialog({
   availableVersions,
@@ -34,7 +34,7 @@ export function HelmReleaseUpgradeDialog({
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [targetKey, setTargetKey] = useState("");
-  const [values, setValues] = useState<FormValues>({});
+  const [values, setValues] = useState<HelmFormValues>({});
   const requestRef = useRef<AbortController | null>(null);
   const authorizedVersions = new Set(
     availableVersions.availability !== "unavailable"
@@ -163,7 +163,7 @@ export function HelmReleaseUpgradeDialog({
   );
 }
 
-function UpgradeInputField({
+export function UpgradeInputField({
   input,
   onChange,
   value,
@@ -226,14 +226,14 @@ function comparableChartVersion(value: string): string | null {
   return match?.[1] ?? null;
 }
 
-function initialValues(target: HelmUpgradeTarget): FormValues {
+export function initialValues(target: HelmUpgradeTarget): HelmFormValues {
   return Object.fromEntries(target.inputs.map((input) => [
     input.name,
     input.defaultValue === null ? "" : String(input.defaultValue),
   ]));
 }
 
-function valuesAreValid(target: HelmUpgradeTarget | null, values: FormValues): boolean {
+export function valuesAreValid(target: HelmUpgradeTarget | null, values: HelmFormValues): boolean {
   if (target === null) return false;
   return target.inputs.every((input) => {
     const value = values[input.name]?.trim() ?? "";
@@ -246,7 +246,7 @@ function valuesAreValid(target: HelmUpgradeTarget | null, values: FormValues): b
   });
 }
 
-function typedValues(target: HelmUpgradeTarget, values: FormValues): Record<string, unknown> {
+export function typedValues(target: HelmUpgradeTarget, values: HelmFormValues): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const input of target.inputs) {
     const raw = values[input.name]?.trim() ?? "";
