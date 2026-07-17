@@ -94,8 +94,8 @@ describe("CompareRoute", () => {
     renderRoute(port, "ko-KR");
 
     expect(await screen.findByRole("heading", { name: "비교" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "차이만 보기" })).toBeTruthy();
-    expect(screen.getByLabelText("비교 설정")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "차이만 보기" })).toBeTruthy();
+    expect(await screen.findByLabelText("비교 설정")).toBeTruthy();
   });
 });
 
