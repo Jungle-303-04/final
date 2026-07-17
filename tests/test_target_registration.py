@@ -12,6 +12,7 @@ import pytest
 import yaml
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
+from pydantic import ValidationError
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -757,6 +758,61 @@ def test_management_install_manifest_limits_writes_to_gitops_controller_resource
         ("source.toolkit.fluxcd.io",),
     }
     assert all(rule["verbs"] == ["get", "patch"] for rule in control_role["rules"])
+
+
+@pytest.mark.parametrize(
+    "control_namespaces",
+    [
+        "sandbox,Invalid_Name",
+        "sandbox,team\n---\nkind: Secret",
+        f"sandbox,{'a' * 64}",
+    ],
+)
+def test_target_registration_rejects_non_dns_control_namespaces(
+    control_namespaces: str,
+) -> None:
+    with pytest.raises(ValidationError, match="control_namespaces"):
+        TargetRegisterRequest.model_validate(
+            {
+                **target_request().model_dump(),
+                "control_namespaces": control_namespaces,
+            }
+        )
+
+
+def test_target_registration_canonicalizes_control_namespaces() -> None:
+    request = TargetRegisterRequest.model_validate(
+        {
+            **target_request().model_dump(),
+            "control_namespaces": " sandbox,prod-web,sandbox ",
+        }
+    )
+
+    assert request.control_namespaces == "sandbox,prod-web"
+
+
+def test_management_install_manifest_includes_direct_node_control_safety_rbac() -> None:
+    request = TargetRegisterRequest.model_validate(
+        {
+            **target_request().model_dump(),
+            "cluster_role": "management",
+            "control_namespaces": "sandbox",
+        }
+    )
+    normalized = normalize_target_provider_defaults(request)
+
+    manifest = target_install_manifest(normalized, "agent-secret")
+    documents = [document for document in yaml.safe_load_all(manifest) if document]
+    names = {
+        document.get("metadata", {}).get("name")
+        for document in documents
+        if isinstance(document, dict)
+    }
+
+    assert normalized.control_namespaces == "sandbox"
+    assert "cluster-agent-node-control" in names
+    assert "cluster-agent-resource-debug" in names
+    assert 'NODE_CONTROL_ENABLED: "true"' in manifest
 
 
 @pytest.mark.parametrize(

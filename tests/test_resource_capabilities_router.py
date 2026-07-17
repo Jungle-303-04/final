@@ -539,6 +539,32 @@ def test_capabilities_include_management_cluster_actions_for_confirmed_direct_ex
     ]
 
 
+def test_capabilities_include_management_node_actions_only_with_agent_safety_capability() -> None:
+    allowed = client(
+        ResourceCapabilitiesDb(
+            management=True,
+            resource=node_resource(cordoned=False),
+        )
+    ).get("/capabilities", params={"resource": "resource-node-worker-a"})
+    unsupported = client(
+        ResourceCapabilitiesDb(
+            management=True,
+            node_control_supported=False,
+            resource=node_resource(cordoned=False),
+        )
+    ).get("/capabilities", params={"resource": "resource-node-worker-a"})
+
+    assert allowed.status_code == 200
+    assert {item["capability_id"] for item in allowed.json()["capabilities"]} == {
+        "node.cordon",
+        "node.drain",
+        "node.debug",
+        "node.debug.cleanup",
+    }
+    assert unsupported.status_code == 200
+    assert unsupported.json()["capabilities"] == []
+
+
 @pytest.mark.parametrize(
     "db",
     [

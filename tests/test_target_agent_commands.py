@@ -2761,6 +2761,19 @@ class TimeoutDrainKubernetesClient(PartialDrainKubernetesClient):
         return {"accepted": True}
 
 
+class CancellingDrainKubernetesClient(PartialDrainKubernetesClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.blocked_eviction_started = asyncio.Event()
+
+    async def create_namespaced_subresource(self, **kwargs: object) -> dict[str, object]:
+        self.evictions.append(kwargs)
+        if kwargs["name"] == "checkout-2":
+            self.blocked_eviction_started.set()
+            await asyncio.Event().wait()
+        return {"accepted": True}
+
+
 def exact_node_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "name": "worker-a",
@@ -2821,21 +2834,67 @@ def test_node_drain_preserves_partial_failure_without_dropping_pod_identity() ->
     agent.kubernetes = client
     register_agent_commands(module, agent)
 
+    progress_batches: list[dict[str, object]] = []
+
+    async def report_progress(progress: dict[str, object]) -> None:
+        progress_batches.append(progress)
+
     result = asyncio.run(
-        agent.execute_command(
-            {
-                "action": module.Command.KUBERNETES_NODE_DRAIN_ACTION,
+        agent.command_registry.execute(
+            module.Command.KUBERNETES_NODE_DRAIN_ACTION,
+            exact_node_payload(timeout_seconds=30, max_parallel=2),
+            metadata={
                 "direct_execution": True,
-                "payload": exact_node_payload(timeout_seconds=30, max_parallel=2),
-            }
+                "operation_progress_reporter": report_progress,
+            },
         )
     )
 
-    assert result["status"] == "completed"
+    assert result["status"] == "failed"
     assert result["evicted"] == 1
     assert result["failed"] == 1
     assert result["partial_failure"] is True
     assert {item["name"] for item in result["resources"]} == {"checkout-1", "checkout-2"}
+    assert [
+        (item["name"], item["status"]) for batch in progress_batches for item in batch["resources"]
+    ] == [("checkout-1", "evicted"), ("checkout-2", "failed")]
+
+
+def test_node_drain_observes_running_cancel_without_waiting_for_timeout() -> None:
+    async def run() -> dict[str, object]:
+        module = load_agent_module()
+        client = CancellingDrainKubernetesClient()
+        agent = object.__new__(module.TargetClusterAgent)
+        agent.cluster_id = "cluster-1"
+        agent.cluster_role = "target"
+        agent.direct_commands_enabled = True
+        agent.node_control_enabled = True
+        agent.kubernetes = client
+        register_agent_commands(module, agent)
+        cancel_requested = asyncio.Event()
+        task = asyncio.create_task(
+            agent.execute_command(
+                {
+                    "action": module.Command.KUBERNETES_NODE_DRAIN_ACTION,
+                    "direct_execution": True,
+                    "payload": exact_node_payload(timeout_seconds=30, max_parallel=2),
+                },
+                cancel_requested=cancel_requested,
+            )
+        )
+        await asyncio.wait_for(client.blocked_eviction_started.wait(), timeout=0.5)
+        cancel_requested.set()
+        return await asyncio.wait_for(task, timeout=0.5)
+
+    result = asyncio.run(run())
+
+    assert result["status"] == "cancelled"
+    assert result["evicted"] == 1
+    assert result["partial_failure"] is True
+    assert {item["name"]: item["status"] for item in result["resources"]} == {
+        "checkout-1": "evicted",
+        "checkout-2": "cancelled",
+    }
 
 
 def test_node_drain_timeout_preserves_completed_evictions_and_marks_only_pending_pods(

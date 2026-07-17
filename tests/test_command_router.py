@@ -59,7 +59,7 @@ from packages.contracts.gateway.requests import (
     WorkloadRollbackRequest,
 )
 from packages.contracts.gateway.responses import AcceptedResponse
-from packages.contracts.parity import ResourceRef
+from packages.contracts.parity import OperationEvent, ResourceRef
 from packages.runtime.operation_events import InMemoryOperationEventBroker
 
 AGENT_IDENTITY = ClusterAgentIdentity(
@@ -496,6 +496,27 @@ class SpyCommandLeaseDb:
     ) -> str | None:
         self.calls.append((command_id, workspace_id, cluster_id, lease_id, agent_id, lease_seconds))
         return self.correlation_id
+
+
+class SpyCommandProgressDb(SpyCommandLeaseDb):
+    def __init__(self) -> None:
+        super().__init__(correlation_id="corr-1")
+        self.progress_events: list[tuple[str, str, str, dict[str, object]]] = []
+
+    async def append_command_operation_event(
+        self,
+        workspace_id: str,
+        command_id: str,
+        kind: str,
+        payload: dict[str, object],
+    ) -> OperationEvent:
+        self.progress_events.append((workspace_id, command_id, kind, payload))
+        return OperationEvent(
+            command_id=command_id,
+            sequence=2,
+            kind="progress",
+            payload=payload,
+        )
 
 
 class SpyUninstallResultDb:
@@ -1809,6 +1830,69 @@ def test_command_heartbeat_extends_current_lease() -> None:
         assert db.calls == [
             ("cmd-1", "trusted-workspace", "trusted-cluster", "lease-1", "agent-1", 60)
         ]
+
+    asyncio.run(run())
+
+
+def test_command_heartbeat_persists_bounded_node_drain_progress() -> None:
+    async def run() -> None:
+        db = SpyCommandProgressDb()
+        broker = InMemoryOperationEventBroker()
+        subscription = await broker.subscribe("cmd-1", workspace_id="trusted-workspace")
+        progress = {
+            "progress_id": "node-drain-batch-1",
+            "phase": "node_drain_evictions",
+            "completed": 2,
+            "total": 2,
+            "resources": [
+                {
+                    "namespace": "sandbox",
+                    "name": "checkout-1",
+                    "uid": "pod-uid-1",
+                    "resource_version": "11",
+                    "status": "evicted",
+                    "error_code": None,
+                },
+                {
+                    "namespace": "sandbox",
+                    "name": "checkout-2",
+                    "uid": "pod-uid-2",
+                    "resource_version": "12",
+                    "status": "failed",
+                    "error_code": "PodDisruptionBudget",
+                },
+            ],
+        }
+        response = await command_heartbeat(
+            "cmd-1",
+            CommandHeartbeatRequest(
+                agent_id="agent-1",
+                lease_id="lease-1",
+                progress=progress,
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+            operation_events=broker,
+        )
+
+        assert response.accepted is True
+        assert db.progress_events == [
+            (
+                "trusted-workspace",
+                "cmd-1",
+                "progress",
+                {
+                    "cluster_id": "trusted-cluster",
+                    "correlation_id": "corr-1",
+                    "status": "running",
+                    "progress": progress,
+                },
+            )
+        ]
+        event = await subscription.next()
+        assert event.sequence == 2
+        assert event.payload["progress"] == progress
+        await subscription.close()
 
     asyncio.run(run())
 
