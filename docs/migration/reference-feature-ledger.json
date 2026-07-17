@@ -7014,12 +7014,13 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.rightsizing",
       "frontendContract": "frontend/src/features/rightsizing",
       "desktopContract": "desktop",
       "verification": [
         "tests/test_rightsizing.py",
+        "tests/test_rightsizing_observations.py",
         "tests/test_workload_detail.py",
         "frontend/src/api/rightsizing.test.ts",
         "frontend/src/api/rightsizing-schemas.test.ts",
@@ -7030,17 +7031,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/workload_detail/router.py#get_rightsizing_scan",
-          "consumer": "src/domains/workload_detail/rightsizing_projection.py#rightsizing_scan_result",
-          "reason": "The typed RBAC and bounded scan boundary is implemented, but no persisted provider-backed rightsizing observation repository is connected.",
-          "test": "tests/test_rightsizing.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory/repository.py#list_rightsizing_observations",
+          "consumer": "src/domains/workload_detail/rightsizing_observations.py#project_rightsizing_workload",
+          "reason": "The RBAC-bound scan reads only durable cluster-agent inventory and usage samples, follows exact workload-to-Pod owner UIDs, buckets the seven-day history, and emits versioned recommendations without a direct target or Prometheus connection.",
+          "test": "tests/test_rightsizing_observations.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/cost/RightsizingScanView.tsx#RightsizingScanView",
           "consumer": "frontend/src/features/rightsizing/createRightsizingAdapter.ts#createRightsizingAdapter",
-          "reason": "The workload strip and explicit multi-cluster Cost scan surface render the strict observed-or-unavailable union; production remains unavailable until the collector repository supplies evidence.",
+          "reason": "The workload strip and explicit multi-cluster Cost scan surface consume the connected strict observation repository with exact provenance, coverage, confidence, safety reasons, and partial failure states.",
           "test": "frontend/src/pages/cost/RightsizingScanView.test.tsx"
         },
         "desktop": null,

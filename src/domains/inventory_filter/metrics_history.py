@@ -7,10 +7,10 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from domains.inventory.container_metrics import container_metric_observations
 from packages.contracts.event_bus.interfaces import JsonObject
 
 Completeness = Literal["exact", "partial", "unavailable"]
-MAX_CONTAINER_METRIC_SERIES = 64
 
 
 def build_resource_metric_history(
@@ -60,7 +60,7 @@ def build_resource_metric_history(
             metrics_observed_at = _non_empty_text(measured.get("metrics_observed_at"))
             metrics_window = _non_empty_text(measured.get("metrics_window"))
             raw_container_metrics = measured.get("container_metrics")
-            container_metrics = _container_metrics(raw_container_metrics)
+            container_metrics = container_metric_observations(raw_container_metrics)
             container_metrics_complete = (
                 measured.get("container_metrics_complete") is True
                 and isinstance(raw_container_metrics, list)
@@ -231,25 +231,3 @@ def _timestamp_sort_key(value: str) -> float:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.timestamp()
-
-
-def _container_metrics(value: Any) -> list[JsonObject]:
-    if not isinstance(value, list):
-        return []
-    containers: dict[str, JsonObject] = {}
-    for item in value:
-        if not isinstance(item, Mapping):
-            continue
-        name = _non_empty_text(item.get("name"))
-        if name is None or name in containers:
-            continue
-        cpu_mcores = _non_negative_number(item.get("cpu_mcores"))
-        mem_mib = _non_negative_number(item.get("mem_mib", item.get("memory_mib")))
-        if cpu_mcores is None and mem_mib is None:
-            continue
-        containers[name] = {
-            "name": name,
-            "cpu_mcores": cpu_mcores,
-            "mem_mib": mem_mib,
-        }
-    return [containers[name] for name in sorted(containers)[:MAX_CONTAINER_METRIC_SERIES]]

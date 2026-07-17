@@ -2714,6 +2714,7 @@ def revision_summary(kind: str, item: JsonObject) -> JsonObject | None:
         "owner_kind": owner_kind,
         "owner_name": owner_name,
         "owner_uid": owner_uid(item),
+        "owner_references_complete": owner_references_complete(item),
         "revision": str(revision),
         "created_at": meta.get("creationTimestamp"),
         "template": template,

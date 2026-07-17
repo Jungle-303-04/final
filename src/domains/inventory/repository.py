@@ -31,7 +31,18 @@ from domains.inventory_filter.repository import (
 )
 from domains.timeline.coverage import project_kubernetes_event_capture_coverage
 from domains.timeline.mapping import inventory_timeline_event
+from domains.workload_detail.rightsizing_observations import (
+    RIGHTSIZING_WINDOW,
+    project_rightsizing_workload,
+    rightsizing_provenance,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.parity import ResourceRef
+from packages.contracts.rightsizing import (
+    RightsizingObservedScan,
+    RightsizingScanCoverage,
+    RightsizingWorkloadFailure,
+)
 from packages.contracts.timeline import TimelineCoverage, TimelineEvent, TimelineWindow
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
@@ -1569,6 +1580,262 @@ class InventoryRepository(DatabaseConnection):
             for row in rows
         ]
 
+    def get_rightsizing_observation(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_uid: str,
+    ) -> JsonObject | None:
+        """Read one recommendation solely from durable cluster-agent observations."""
+        source = self._load_rightsizing_source(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            namespaces=(),
+            limit=1,
+            resource_uid=resource_uid,
+        )
+        if source is None or not source["workloads"]:
+            return None
+        projection = project_rightsizing_workload(
+            source["workloads"][0],
+            dependents=source["dependents"],
+            usage_samples=source["usage_samples"],
+            snapshot_complete=True,
+        )
+        return (
+            projection.observation.model_dump(mode="json")
+            if projection.observation is not None
+            else None
+        )
+
+    def list_rightsizing_observations(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        namespaces: tuple[str, ...],
+        limit: int,
+    ) -> JsonObject | None:
+        """Project a bounded scan from one complete inventory cut and agent history."""
+        effective_limit = max(1, min(limit, 200))
+        source = self._load_rightsizing_source(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            namespaces=namespaces,
+            limit=effective_limit,
+            resource_uid=None,
+        )
+        if source is None:
+            return None
+        projections = [
+            (
+                workload,
+                project_rightsizing_workload(
+                    workload,
+                    dependents=source["dependents"],
+                    usage_samples=source["usage_samples"],
+                    snapshot_complete=True,
+                ),
+            )
+            for workload in source["workloads"]
+        ]
+        observations = tuple(
+            projection.observation
+            for _workload, projection in projections
+            if projection.observation is not None
+        )
+        failures = tuple(
+            RightsizingWorkloadFailure(
+                resource=_rightsizing_resource_ref(workload),
+                reason_code=projection.reason_code or "rightsizing_observation_unavailable",
+            )
+            for workload, projection in projections
+            if projection.observation is None
+        )
+        usage_timestamps = [
+            parsed
+            for sample in source["usage_samples"]
+            if (parsed := _rightsizing_datetime(sample.get("sampled_at"))) is not None
+        ]
+        ended_at = max(usage_timestamps, default=source["collected_at"])
+        provenance = (
+            observations[0].provenance
+            if observations
+            else rightsizing_provenance(
+                snapshot_id=source["snapshot_id"],
+                ended_at=ended_at,
+                usage_samples=source["usage_samples"],
+            )
+        )
+        has_data = sum(projection.has_data for _workload, projection in projections)
+        reason_codes: tuple[str, ...] = ()
+        availability: Literal["available", "partial"] = "available"
+        if projections:
+            availability = "partial"
+            reason_codes = ("current_pod_ownership_only",)
+        if failures:
+            availability = "partial"
+            reason_codes = tuple(sorted({*reason_codes, "partial_workload_observations"}))
+        scan = RightsizingObservedScan(
+            availability=availability,
+            observed_at=provenance.window_ended_at,
+            provenance=provenance,
+            coverage=RightsizingScanCoverage(
+                workloads_discovered=source["workloads_discovered"],
+                workloads_evaluated=len(source["workloads"]),
+                workloads_with_data=has_data,
+                truncated=source["workloads_discovered"] > len(source["workloads"]),
+            ),
+            workloads=observations,
+            failures=failures,
+            reason_codes=reason_codes,
+        )
+        return scan.model_dump(mode="json")
+
+    def _load_rightsizing_source(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        namespaces: tuple[str, ...],
+        limit: int,
+        resource_uid: str | None,
+    ) -> JsonObject | None:
+        """Load a complete cut and 5-minute-bucketed agent samples without target I/O."""
+        snapshot = ClusterInventorySnapshotRecord.__table__
+        resource = ClusterInventoryResourceRecord.__table__
+        usage = ClusterUsageSampleRecord.__table__
+        snapshot_statement = (
+            select(snapshot.c.snapshot_id, snapshot.c.collected_at, snapshot.c.summary)
+            .where(
+                snapshot.c.workspace_id == workspace_id,
+                snapshot.c.cluster_id == cluster_id,
+                snapshot.c.status != "ignored_stale",
+                live_inventory_snapshot_clause(snapshot),
+            )
+            .order_by(snapshot.c.collected_at.desc(), snapshot.c.created_at.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            conn.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        inventory_snapshot_lock_key(workspace_id, cluster_id)
+                    )
+                )
+            )
+            snapshot_row = conn.execute(snapshot_statement).mappings().first()
+            if snapshot_row is None or not _rightsizing_snapshot_complete(snapshot_row["summary"]):
+                return None
+            snapshot_id = str(snapshot_row["snapshot_id"])
+            workload_filters = (
+                resource.c.workspace_id == workspace_id,
+                resource.c.cluster_id == cluster_id,
+                resource.c.snapshot_id == snapshot_id,
+                resource.c.resource_type == WORKLOAD_RESOURCE_TYPE,
+                resource.c.kind.in_(("Deployment", "StatefulSet", "DaemonSet")),
+                resource.c.deleted_at.is_(None),
+            )
+            count_statement = select(func.count()).select_from(resource).where(*workload_filters)
+            workload_statement = (
+                _rightsizing_resource_statement(resource)
+                .where(*workload_filters)
+                .order_by(
+                    resource.c.namespace.nullsfirst(),
+                    resource.c.kind,
+                    resource.c.name,
+                    resource.c.inventory_key,
+                )
+                .limit(limit)
+            )
+            if namespaces:
+                count_statement = count_statement.where(resource.c.namespace.in_(namespaces))
+                workload_statement = workload_statement.where(resource.c.namespace.in_(namespaces))
+            if resource_uid is not None:
+                count_statement = count_statement.where(resource.c.uid == resource_uid)
+                workload_statement = workload_statement.where(resource.c.uid == resource_uid)
+            workloads_discovered = int(conn.execute(count_statement).scalar_one())
+            workloads = [dict(row) for row in conn.execute(workload_statement).mappings().all()]
+            workload_uids = tuple(sorted({str(row["uid"]) for row in workloads if row.get("uid")}))
+            dependents: list[JsonObject] = []
+            if workload_uids:
+                first_statement = _rightsizing_resource_statement(resource).where(
+                    resource.c.workspace_id == workspace_id,
+                    resource.c.cluster_id == cluster_id,
+                    resource.c.snapshot_id == snapshot_id,
+                    resource.c.deleted_at.is_(None),
+                    resource.c.resource_type.in_(("workload_revision", POD_RESOURCE_TYPE)),
+                    resource.c.summary["owner_uid"].astext.in_(workload_uids),
+                )
+                first = [dict(row) for row in conn.execute(first_statement).mappings().all()]
+                revision_uids = tuple(
+                    sorted(
+                        {
+                            str(row["uid"])
+                            for row in first
+                            if row.get("resource_type") == "workload_revision" and row.get("uid")
+                        }
+                    )
+                )
+                dependents.extend(first)
+                if revision_uids:
+                    pod_statement = _rightsizing_resource_statement(resource).where(
+                        resource.c.workspace_id == workspace_id,
+                        resource.c.cluster_id == cluster_id,
+                        resource.c.snapshot_id == snapshot_id,
+                        resource.c.deleted_at.is_(None),
+                        resource.c.resource_type == POD_RESOURCE_TYPE,
+                        resource.c.summary["owner_uid"].astext.in_(revision_uids),
+                    )
+                    dependents.extend(
+                        dict(row) for row in conn.execute(pod_statement).mappings().all()
+                    )
+            latest_sampled_at = (
+                select(func.max(usage.c.sampled_at))
+                .where(
+                    usage.c.workspace_id == workspace_id,
+                    usage.c.cluster_id == cluster_id,
+                )
+                .scalar_subquery()
+            )
+            bucket = func.floor(func.extract("epoch", usage.c.sampled_at) / 300)
+            ranked = (
+                select(
+                    usage.c.id,
+                    usage.c.sampled_at,
+                    usage.c.usage,
+                    func.row_number()
+                    .over(
+                        partition_by=bucket, order_by=(usage.c.sampled_at.desc(), usage.c.id.desc())
+                    )
+                    .label("sample_rank"),
+                )
+                .where(
+                    usage.c.workspace_id == workspace_id,
+                    usage.c.cluster_id == cluster_id,
+                    usage.c.sampled_at >= latest_sampled_at - RIGHTSIZING_WINDOW,
+                )
+                .subquery()
+            )
+            sample_statement = (
+                select(ranked.c.id, ranked.c.sampled_at, ranked.c.usage)
+                .where(ranked.c.sample_rank == 1)
+                .order_by(ranked.c.sampled_at.asc())
+            )
+            usage_samples = [dict(row) for row in conn.execute(sample_statement).mappings().all()]
+        collected_at = _rightsizing_datetime(snapshot_row["collected_at"])
+        if collected_at is None:
+            return None
+        return {
+            "snapshot_id": snapshot_id,
+            "collected_at": collected_at,
+            "workloads_discovered": workloads_discovered,
+            "workloads": workloads,
+            "dependents": dependents,
+            "usage_samples": usage_samples,
+        }
+
     def fleet_inventory_rollup(
         self,
         workspace_id: str,
@@ -1861,6 +2128,60 @@ def pod_owner_matches(pod: JsonObject, *, kind: str, name: str) -> bool:
     owner_kind = str(summary.get("owner_kind") or "")
     owner_name = str(summary.get("owner_name") or "")
     return owner_kind.lower() == kind.lower() and owner_name == name
+
+
+def _rightsizing_resource_statement(table: Any) -> Any:
+    """Select only the persisted fields used by the rightsizing projector."""
+    return select(
+        table.c.inventory_key,
+        table.c.snapshot_id,
+        table.c.resource_type,
+        table.c.api_version,
+        table.c.kind,
+        table.c.namespace,
+        table.c.name,
+        table.c.uid,
+        table.c.summary,
+        table.c.observed_at,
+    )
+
+
+def _rightsizing_snapshot_complete(value: Any) -> bool:
+    envelope = value if isinstance(value, Mapping) else {}
+    summary = envelope.get("summary") if isinstance(envelope.get("summary"), Mapping) else {}
+    limits = (
+        summary.get("collection_limits")
+        if isinstance(summary.get("collection_limits"), Mapping)
+        else {}
+    )
+    return summary.get("resources_complete") is True and limits.get("truncated") is not True
+
+
+def _rightsizing_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=value.tzinfo or UTC).astimezone(UTC)
+    return parse_timestamp(value if isinstance(value, str) else None)
+
+
+def _rightsizing_resource_ref(workload: Mapping[str, Any]) -> ResourceRef | None:
+    api_version = str(workload.get("api_version") or "")
+    kind = str(workload.get("kind") or "")
+    name = str(workload.get("name") or "")
+    uid = str(workload.get("uid") or "")
+    if not api_version or not kind or not name or not uid:
+        return None
+    api_group, separator, version = api_version.partition("/")
+    if not separator:
+        api_group, version = "", api_group
+    namespace_value = workload.get("namespace")
+    return ResourceRef(
+        api_group=api_group,
+        version=version,
+        kind=kind,
+        namespace=str(namespace_value) if namespace_value is not None else None,
+        name=name,
+        uid=uid,
+    )
 
 
 def event_involves_resource(event: JsonObject, resource: JsonObject) -> bool:
