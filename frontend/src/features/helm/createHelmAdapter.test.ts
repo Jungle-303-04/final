@@ -498,6 +498,7 @@ function upgradeReadEndpoints() {
     getArtifactHubChart: vi.fn(),
     startHelmReleaseRollback: vi.fn().mockResolvedValue(receipt()),
     startHelmReleaseUninstall: vi.fn().mockResolvedValue(receipt()),
+    startHelmReleaseValuesPreview: vi.fn().mockResolvedValue(receipt()),
     refreshHelmRepository: vi.fn(),
     getHelmReleaseUpgradeInfo: vi.fn().mockResolvedValue(info),
     listHelmReleaseVersions: vi.fn().mockResolvedValue({

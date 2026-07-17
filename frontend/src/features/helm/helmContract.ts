@@ -212,6 +212,24 @@ export interface HelmResourcesDiff {
   parseErrorCount: number;
 }
 
+export type HelmValuesPreviewResources = Omit<HelmResourcesDiff, "revision1" | "revision2">;
+
+export interface HelmValuesPreviewResult {
+  namespace: string;
+  releaseName: string;
+  expectedRevision: number;
+  catalogItemId: string;
+  catalogVersion: string;
+  chartName: string;
+  chartVersion: string;
+  resources: HelmValuesPreviewResources;
+  projectionSha256: string;
+  projectionBytes: number;
+  sourceBytes: number;
+  redactionApplied: true;
+  truncated: boolean;
+}
+
 export interface HelmResourcesDiffArtifactResult extends HelmArtifactResultBase {
   artifact: "resources_diff";
   format: "structured";
@@ -373,6 +391,11 @@ export interface HelmReleaseUpgradeRequest extends HelmReleaseDetailRequest {
   reason?: string;
 }
 
+export type HelmReleaseValuesPreviewRequest = Omit<
+  HelmReleaseUpgradeRequest,
+  "confirmation" | "reason"
+>;
+
 export interface HelmInstallTargets {
   namespace: string;
   targets: readonly HelmUpgradeTarget[];
@@ -464,6 +487,10 @@ export interface HelmPort {
   ): Promise<HelmReleaseUpgradeBatch>;
   readArtifact(
     request: HelmArtifactReadRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmArtifactReceipt>;
+  previewReleaseValues(
+    request: HelmReleaseValuesPreviewRequest,
     signal?: AbortSignal,
   ): Promise<HelmArtifactReceipt>;
   upgradeRelease(

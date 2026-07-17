@@ -204,6 +204,7 @@ function helmPort(): HelmPort & {
       correlationId: "corr-install",
       status: "queued",
     }),
+    previewReleaseValues: vi.fn(),
     searchArtifactHub: vi.fn(),
     getArtifactHubChart: vi.fn(),
     checkReleaseUpgrades: vi.fn(),

@@ -119,6 +119,7 @@ function endpointDependencies() {
     listHelmReleaseVersions: vi.fn(),
     startHelmArtifactRead: vi.fn(),
     startHelmReleaseUpgrade: vi.fn(),
+    startHelmReleaseValuesPreview: vi.fn(),
     startHelmReleaseRollback: vi.fn(),
     startHelmReleaseUninstall: vi.fn(),
     refreshHelmRepository: vi.fn(),

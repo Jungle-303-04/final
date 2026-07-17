@@ -15,9 +15,13 @@ import {
   type HelmResourceRef,
   type HelmResourceHealth,
   type HelmUnavailableFeature,
+  type HelmValuesPreviewResult,
 } from "./helmContract";
 import { recordValue, withHelmPortFailure } from "./helmAdapterRuntime";
-import { helmArtifactResultSchema } from "./helmArtifactSchemas";
+import {
+  helmArtifactResultSchema,
+  helmValuesPreviewResultSchema,
+} from "./helmArtifactSchemas";
 import { createHelmChartSourcesPort, toChartSource } from "./createHelmChartSourcesPort";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
@@ -151,6 +155,15 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         return toArtifactReceipt(receipt);
       });
     },
+    async previewReleaseValues(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseValuesPreview(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm preview audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
     async rollbackRelease(request, signal) {
       return withHelmPortFailure(async () => {
         const receipt = await endpoints.startHelmReleaseRollback(request, signal);
@@ -253,16 +266,7 @@ export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResul
         revision2: artifact.resources_diff.revision2,
         added: artifact.resources_diff.added.map(toRenderedResourceRef),
         removed: artifact.resources_diff.removed.map(toRenderedResourceRef),
-        modified: artifact.resources_diff.modified.map((item) => ({
-          ...toRenderedResourceRef(item),
-          summary: item.summary,
-          fieldCount: item.field_count,
-          fields: item.fields.map((field) => ({
-            path: field.path,
-            oldValue: field.old_value,
-            newValue: field.new_value,
-          })),
-        })),
+        modified: artifact.resources_diff.modified.map(toRenderedResourceChange),
         unchanged: artifact.resources_diff.unchanged.map(toRenderedResourceRef),
         parseErrorCount: artifact.resources_diff.parse_error_count,
       },
@@ -275,6 +279,37 @@ export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResul
     content: artifact.content,
     contentSha256: artifact.content_sha256,
     contentBytes: artifact.content_bytes,
+  };
+}
+
+export function toHelmValuesPreviewOperationResult(
+  value: unknown,
+): HelmValuesPreviewResult | null {
+  const payload = recordValue(value);
+  const result = recordValue(payload?.result);
+  const parsed = helmValuesPreviewResultSchema.safeParse(result?.preview);
+  if (!parsed.success) return null;
+  const preview = parsed.data;
+  return {
+    namespace: preview.namespace,
+    releaseName: preview.release_name,
+    expectedRevision: preview.expected_revision,
+    catalogItemId: preview.catalog_item_id,
+    catalogVersion: preview.catalog_version,
+    chartName: preview.chart_name,
+    chartVersion: preview.chart_version,
+    resources: {
+      added: preview.resources.added.map(toRenderedResourceRef),
+      removed: preview.resources.removed.map(toRenderedResourceRef),
+      modified: preview.resources.modified.map(toRenderedResourceChange),
+      unchanged: preview.resources.unchanged.map(toRenderedResourceRef),
+      parseErrorCount: preview.resources.parse_error_count,
+    },
+    projectionSha256: preview.projection_sha256,
+    projectionBytes: preview.projection_bytes,
+    sourceBytes: preview.source_bytes,
+    redactionApplied: preview.redaction_applied,
+    truncated: preview.truncated,
   };
 }
 
@@ -313,6 +348,31 @@ function toRenderedResourceRef(value: {
     kind: value.kind,
     name: value.name,
     namespace: value.namespace,
+  };
+}
+
+function toRenderedResourceChange(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  summary: string;
+  field_count: number;
+  fields: Array<{
+    path: string;
+    old_value: string | number | boolean | null;
+    new_value: string | number | boolean | null;
+  }>;
+}) {
+  return {
+    ...toRenderedResourceRef(value),
+    summary: value.summary,
+    fieldCount: value.field_count,
+    fields: value.fields.map((field) => ({
+      path: field.path,
+      oldValue: field.old_value,
+      newValue: field.new_value,
+    })),
   };
 }
 

@@ -29,6 +29,8 @@ export const HELM_RELEASE_ROLLBACK_STREAM_PATH =
   "/api/helm/releases/{namespace}/{release_name}/rollback-stream" as const;
 export const HELM_RELEASE_VALUES_PATH =
   "/api/helm/releases/{namespace}/{release_name}/values" as const;
+export const HELM_RELEASE_VALUES_PREVIEW_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/values/preview" as const;
 export const HELM_RELEASE_UPGRADE_INFO_PATH =
   "/api/helm/releases/{namespace}/{release_name}/upgrade-info" as const;
 export const HELM_RELEASE_VERSIONS_PATH =
@@ -242,6 +244,36 @@ export function applyHelmReleaseValues(
   });
 }
 
+export function startHelmReleaseValuesPreview(
+  input: {
+    clusterId: string;
+    namespace: string;
+    releaseName: string;
+    expectedRevision: number;
+    catalogItemId: string;
+    catalogVersion: string;
+    values: Readonly<Record<string, unknown>>;
+  },
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const path = releaseMutationPath(HELM_RELEASE_VALUES_PREVIEW_PATH, input);
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    throw new RangeError("expectedRevision must be a positive integer");
+  }
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: requiredIdentity(input.clusterId, "clusterId"),
+      expected_revision: input.expectedRevision,
+      catalog_item_id: requiredIdentity(input.catalogItemId, "catalogItemId"),
+      catalog_version: requiredIdentity(input.catalogVersion, "catalogVersion"),
+      values: input.values,
+    }),
+    signal,
+  });
+}
+
 export function startHelmReleaseRollback(
   input: {
     clusterId: string;
@@ -304,7 +336,10 @@ export function startHelmReleaseUninstall(
 }
 
 function releaseMutationPath(
-  template: typeof HELM_RELEASE_PATH | typeof HELM_RELEASE_ROLLBACK_STREAM_PATH,
+  template:
+    | typeof HELM_RELEASE_PATH
+    | typeof HELM_RELEASE_ROLLBACK_STREAM_PATH
+    | typeof HELM_RELEASE_VALUES_PREVIEW_PATH,
   input: { namespace: string; releaseName: string },
 ): ApiPath {
   return template
