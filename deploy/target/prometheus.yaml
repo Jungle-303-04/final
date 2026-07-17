@@ -4,6 +4,13 @@
 server:
   # target-cluster-agent의 PROMETHEUS_BASE_URL과 server Service name 정렬
   fullnameOverride: prometheus
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
   persistentVolume:
     # Prometheus Pod restart 후에도 time-series data 유지
@@ -17,10 +24,24 @@ server:
 kube-state-metrics:
   # Kubernetes object 상태를 kube_pod_info 같은 metric으로 변환
   enabled: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 prometheus-node-exporter:
   # 각 Kubernetes node의 CPU, memory, disk, network metric 노출
   enabled: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
   hostRootFsMount:
     # Docker Desktop/kind local cluster 친화 설정
     enabled: false
@@ -28,6 +49,13 @@ prometheus-node-exporter:
 alertmanager:
   # Prometheus 생성 alert 수신
   enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
   persistence:
     enabled: true
   service:
@@ -39,6 +67,13 @@ alertmanager:
 prometheus-pushgateway:
   # 짧은 batch job 종료 전 metric push 허용
   enabled: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
   serviceAnnotations:
     prometheus.io/scrape: "true"
     prometheus.io/path: /metrics

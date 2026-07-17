@@ -5,12 +5,20 @@ import type {
 } from "@xyflow/react";
 import { useEffect, useState, type RefObject } from "react";
 
+const DEFAULT_GRAPH_FIT_VIEW_OPTIONS = { padding: 0.12, minZoom: 0.4 } as const;
+
 export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
+  fitViewOptions = DEFAULT_GRAPH_FIT_VIEW_OPTIONS,
   fitKey,
   instance,
   nodeCount,
   viewportRef,
 }: {
+  fitViewOptions?: {
+    maxZoom?: number;
+    minZoom?: number;
+    padding?: number;
+  };
   fitKey: string;
   instance: ReactFlowInstance<NodeType, EdgeType> | undefined;
   nodeCount: number;
@@ -23,14 +31,14 @@ export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
     let innerFrame = 0;
     const outerFrame = requestAnimationFrame(() => {
       innerFrame = requestAnimationFrame(() => {
-        void instance.fitView({ padding: 0.12, minZoom: 0.4 });
+        void instance.fitView(fitViewOptions);
       });
     });
     return () => {
       cancelAnimationFrame(outerFrame);
       cancelAnimationFrame(innerFrame);
     };
-  }, [fitKey, instance, nodeCount, viewportRevision]);
+  }, [fitKey, fitViewOptions, instance, nodeCount, viewportRevision]);
 
   useEffect(() => {
     const viewport = viewportRef.current;

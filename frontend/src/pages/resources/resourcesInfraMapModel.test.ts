@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { PhysicalTopologySnapshot } from "../../features/resources/physicalTopologyContract";
-import { buildInfraMapModel } from "./resourcesInfraMapModel";
+import {
+  buildInfraMapModel,
+  INFRA_MAP_DISTRIBUTION_PODS_PER_NODE,
+} from "./resourcesInfraMapModel";
 
 describe("resources infra map model", () => {
   it("hides node pods when a selected resource has no related pods", () => {
@@ -57,7 +60,7 @@ describe("resources infra map model", () => {
     expect(model.nodes[0]?.visiblePods.map((pod) => pod.selected)).toEqual([true]);
   });
 
-  it("summarizes pods after the first four by default", () => {
+  it("keeps observed pods for the distribution by default", () => {
     const model = buildInfraMapModel({
       selectionActive: false,
       topology: snapshot({
@@ -74,8 +77,8 @@ describe("resources infra map model", () => {
     const visibleNames = model.nodes[0]?.visiblePods.map((pod) => pod.name) ?? [];
     const hiddenNames = model.nodes[0]?.hiddenPods.map((pod) => pod.name) ?? [];
 
-    expect(visibleNames).toHaveLength(4);
-    expect(hiddenNames).toHaveLength(1);
+    expect(visibleNames).toHaveLength(5);
+    expect(hiddenNames).toHaveLength(0);
     expect([...visibleNames, ...hiddenNames].sort()).toEqual([
       "pod-five",
       "pod-four",
@@ -83,7 +86,21 @@ describe("resources infra map model", () => {
       "pod-three",
       "pod-two",
     ]);
-    expect(model.nodes[0]?.hiddenPodCount).toBe(1);
+    expect(model.nodes[0]?.hiddenPodCount).toBe(0);
+  });
+
+  it("summarizes pods only after the distribution limit", () => {
+    const totalPods = 34;
+    const pods = Array.from({ length: totalPods }, (_, index) =>
+      pod({ id: `pod:${index}`, name: `pod-${index.toString().padStart(2, "0")}` }));
+    const model = buildInfraMapModel({
+      selectionActive: false,
+      topology: snapshot({ pods }),
+    });
+
+    expect(model.nodes[0]?.visiblePods).toHaveLength(INFRA_MAP_DISTRIBUTION_PODS_PER_NODE);
+    expect(model.nodes[0]?.hiddenPods).toHaveLength(totalPods - INFRA_MAP_DISTRIBUTION_PODS_PER_NODE);
+    expect(model.nodes[0]?.hiddenPodCount).toBe(totalPods - INFRA_MAP_DISTRIBUTION_PODS_PER_NODE);
   });
 
   it("uses pod requests when calculating pod capacity ratios", () => {
@@ -176,6 +193,27 @@ describe("resources infra map model", () => {
 
     expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toEqual(["bounded"]);
     expect(model.nodes[0]?.hiddenPods.map((pod) => pod.name)).toEqual(["usage-only"]);
+  });
+
+  it("does not turn the synthetic unassigned bucket into an observed node health state", () => {
+    const model = buildInfraMapModel({
+      selectionActive: false,
+      topology: snapshot({
+        pods: [
+          pod({
+            id: "pod:unassigned",
+            name: "unassigned-pod",
+            serverId: null,
+          }),
+        ],
+      }),
+    });
+
+    const unassigned = model.nodes.find((node) => node.unassigned);
+
+    expect(unassigned).toBeTruthy();
+    expect(unassigned?.health).toBe("unknown");
+    expect(unassigned?.ready).toBeNull();
   });
 });
 

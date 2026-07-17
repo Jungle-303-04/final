@@ -229,7 +229,7 @@ def test_resource_filter_sql_uses_same_axis_or_cross_axis_and_and_label_and() ->
     assert "search_text like '%%checkout%%'" in sql
 
 
-def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matches() -> None:
+def test_physical_topology_sql_is_scoped_ranked_unbounded_and_server_evaluates_filter_matches() -> None:
     server_statement, pod_statement, count_statement = _physical_topology_statements(
         workspace_id="workspace-a",
         cluster_ids=("cluster-a",),
@@ -256,7 +256,7 @@ def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matc
     assert "owner_uid" in pod_sql
     assert "matches_filter" in pod_sql
     assert "row_number() over (partition by" in pod_sql
-    assert "placement_rank <= 12" in pod_sql
+    assert "placement_rank <=" not in pod_sql
     assert "matched_pod_count" in pod_sql
     assert "selected_label_0.key = 'team'" in pod_sql
     assert "selected_label_1.key = 'tier'" in pod_sql

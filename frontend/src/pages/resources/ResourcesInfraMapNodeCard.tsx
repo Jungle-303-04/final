@@ -1,4 +1,4 @@
-import { AlertTriangle, Box, RotateCcw, Server } from "lucide-react";
+import { AlertTriangle, Box, Server } from "lucide-react";
 import { useId, type CSSProperties } from "react";
 
 import { useI18n } from "../../shared/i18n";
@@ -14,7 +14,8 @@ import {
   RatioMetric,
 } from "./ResourcesInfraMapMetrics";
 import {
-  INFRA_MAP_DEFAULT_VISIBLE_PODS_PER_NODE,
+  INFRA_MAP_DISTRIBUTION_PODS_PER_NODE,
+  INFRA_MAP_REPRESENTATIVE_PODS_PER_NODE,
   type InfraMapNode,
   type InfraMapPod,
 } from "./resourcesInfraMapModel";
@@ -33,7 +34,8 @@ import {
   type PodResourcePressureTone,
 } from "./podVisualState";
 
-const POD_DISTRIBUTION_VISIBLE_LIMIT = 19;
+const POD_DISTRIBUTION_VISIBLE_LIMIT = INFRA_MAP_DISTRIBUTION_PODS_PER_NODE;
+const POD_NAME_VISIBLE_PREFIX_PARTS = 2;
 
 export function InfraMapNodeCard({
   metricMode,
@@ -122,12 +124,7 @@ function InfraMapPodArea({
   const { formatNumber, t } = useI18n();
   const knownPods = [...node.visiblePods, ...node.hiddenPods];
   const orderedPods = orderInfraMapPodsForMetric(knownPods, metricMode);
-  const representativePods = orderedPods.slice(0, INFRA_MAP_DEFAULT_VISIBLE_PODS_PER_NODE);
-  const unobservedPodCount = Math.max(0, node.hiddenPodCount - node.hiddenPods.length);
-  const additionalPodCount = Math.max(
-    0,
-    orderedPods.length - representativePods.length,
-  ) + unobservedPodCount;
+  const representativePods = orderedPods.slice(0, INFRA_MAP_REPRESENTATIVE_PODS_PER_NODE);
   if (orderedPods.length === 0) {
     return (
       <div className="grid h-full min-h-24 place-items-center rounded-md border border-dashed bg-muted/10 px-3 text-center text-xs text-muted-foreground">
@@ -164,17 +161,13 @@ function InfraMapPodArea({
           pods={orderedPods}
         />
       </div>
-      {additionalPodCount > 0 ? (
-        <button
-          className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/80 px-2 text-[0.6875rem] font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => onShowMorePods(node)}
-          type="button"
-        >
-          {t("resources.infraMap.morePods", {
-            count: formatNumber(additionalPodCount),
-          })}
-        </button>
-      ) : null}
+      <button
+        className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/80 px-2 text-[0.6875rem] font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => onShowMorePods(node)}
+        type="button"
+      >
+        {t("resources.infraMap.viewPodDetails")}
+      </button>
     </div>
   );
 }
@@ -193,8 +186,10 @@ function InfraMapPodDistribution({
   const { formatNumber, t } = useI18n();
   const unobservedPodCount = Math.max(0, node.hiddenPodCount - node.hiddenPods.length);
   const visiblePods = pods.slice(0, POD_DISTRIBUTION_VISIBLE_LIMIT);
-  const clippedPodCount = Math.max(0, pods.length - visiblePods.length);
-  const remainingPodCount = clippedPodCount + unobservedPodCount;
+  const remainingPodCount = infraMapDistributionOverflowPodCount({
+    observedPodCount: pods.length,
+    unobservedPodCount,
+  });
   return (
     <div
       aria-label={t("resources.infraMap.podDistribution")}
@@ -226,6 +221,17 @@ function InfraMapPodDistribution({
   );
 }
 
+function infraMapDistributionOverflowPodCount({
+  observedPodCount,
+  unobservedPodCount,
+}: {
+  observedPodCount: number;
+  unobservedPodCount: number;
+}): number {
+  return Math.max(0, observedPodCount - POD_DISTRIBUTION_VISIBLE_LIMIT) +
+    unobservedPodCount;
+}
+
 function InfraMapPodCube({
   metricMode,
   onOpenPod,
@@ -240,6 +246,16 @@ function InfraMapPodCube({
   const selectedMetric = podMetricForMode(pod, metricMode, { formatNumber, t });
   const pressureTone = podResourcePressureTone(selectedMetric.ratio);
   const healthVisualTone = podHealthTone(pod);
+  const cubeStyle = selectedMetric.ratio === null
+    ? undefined
+    : ({
+      "--infra-map-pod-cube-color": podUsageColorFromRatio(selectedMetric.ratio),
+    } as CSSProperties);
+  const iconStyle = cubeStyle === undefined
+    ? undefined
+    : ({
+      color: "var(--infra-map-pod-cube-color)",
+    } as CSSProperties);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -250,20 +266,26 @@ function InfraMapPodCube({
             className={cn(
               "inline-grid size-4 shrink-0 place-items-center rounded-sm border outline-none transition-[background-color,border-color,box-shadow,transform]",
               "hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              POD_CUBE_PRESSURE_CLASS[pressureTone],
+              podCubeShellClass(pressureTone, healthVisualTone),
               POD_CUBE_HEALTH_BORDER_CLASS[healthVisualTone],
               pod.selected && "ring-1 ring-primary/50",
             )}
             data-health-tone={healthVisualTone}
             data-metric={metricMode}
+            data-metric-available={selectedMetric.ratio === null ? "false" : "true"}
             data-slot="infra-map-pod-cube"
             data-usage-tone={pressureTone}
             onClick={() => onOpenPod(pod)}
+            style={cubeStyle}
             type="button"
           />
         )}
       >
-        <Box aria-hidden="true" className="size-3" />
+        <Box
+          aria-hidden="true"
+          className="size-3 transition-colors"
+          style={iconStyle}
+        />
       </TooltipTrigger>
       <PodEvidenceTooltipContent
         id={tooltipId}
@@ -317,7 +339,7 @@ function InfraMapPodSlot({
             className={cn(
               "relative flex h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-sm border px-2 text-left shadow-xs outline-none transition-[background-color,border-color,box-shadow,transform]",
               "hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              POD_PRESSURE_CLASS[pressureTone],
+              podSlotShellClass(pressureTone, healthVisualTone),
               POD_HEALTH_BORDER_CLASS[healthVisualTone],
               pod.selected && "ring-2 ring-primary/45",
             )}
@@ -409,6 +431,36 @@ const POD_CUBE_HEALTH_BORDER_CLASS: Record<PodHealthTone, string> = {
   warning: "border-border",
 };
 
+const POD_UNKNOWN_HEALTH_SLOT_CLASS: Record<PodHealthTone, string> = {
+  critical: "border-dashed border-destructive/65 bg-destructive/5 text-foreground",
+  healthy: "border-dashed border-emerald-500/50 bg-emerald-500/5 text-foreground",
+  unknown: POD_PRESSURE_CLASS.unknown,
+  warning: "border-dashed border-status-warning/60 bg-status-warning/5 text-foreground",
+};
+
+const POD_UNKNOWN_HEALTH_CUBE_CLASS: Record<PodHealthTone, string> = {
+  critical: "border-dashed border-destructive/70 bg-destructive/10 text-destructive",
+  healthy: "border-dashed border-emerald-500/60 bg-emerald-500/10 text-emerald-500",
+  unknown: POD_CUBE_PRESSURE_CLASS.unknown,
+  warning: "border-dashed border-status-warning/70 bg-status-warning/10 text-status-warning",
+};
+
+function podSlotShellClass(
+  pressureTone: PodResourcePressureTone,
+  healthTone: PodHealthTone,
+): string {
+  if (pressureTone !== "unknown") return POD_PRESSURE_CLASS[pressureTone];
+  return POD_UNKNOWN_HEALTH_SLOT_CLASS[healthTone];
+}
+
+function podCubeShellClass(
+  pressureTone: PodResourcePressureTone,
+  healthTone: PodHealthTone,
+): string {
+  if (pressureTone !== "unknown") return POD_CUBE_PRESSURE_CLASS[pressureTone];
+  return POD_UNKNOWN_HEALTH_CUBE_CLASS[healthTone];
+}
+
 function HealthDot({ tone }: { tone: string }) {
   const className = {
     critical: "bg-destructive",
@@ -433,11 +485,7 @@ function PodStatusBadge({ badge }: { badge: PodAbnormalBadge }) {
       className={`relative z-10 grid size-4 shrink-0 place-items-center rounded-full border shadow-xs ${className}`}
       data-pod-badge={badge}
     >
-      {badge === "restarting" ? (
-        <RotateCcw aria-hidden="true" className="size-2.5" />
-      ) : (
-        <AlertTriangle aria-hidden="true" className="size-2.5" />
-      )}
+      <AlertTriangle aria-hidden="true" className="size-2.5" />
     </span>
   );
 }
@@ -488,11 +536,11 @@ function ratioDisplay(
 
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
+  return Math.max(0, Math.min(PERCENT_SCALE, value));
 }
 
 function shortPodName(name: string): string {
   const parts = name.split("-");
-  if (parts.length <= 2) return name;
-  return `${parts.slice(0, 2).join("-")}...`;
+  if (parts.length <= POD_NAME_VISIBLE_PREFIX_PARTS) return name;
+  return `${parts.slice(0, POD_NAME_VISIBLE_PREFIX_PARTS).join("-")}...`;
 }

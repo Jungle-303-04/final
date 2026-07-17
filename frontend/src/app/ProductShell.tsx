@@ -17,6 +17,7 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarText,
+  SidebarTrigger,
   useSidebar,
 } from "../shared/ui/primitives/sidebar";
 import { Separator } from "../shared/ui/primitives/separator";
@@ -48,7 +49,6 @@ import {
 import { Toaster, toast } from "../shared/ui/primitives/sonner";
 import { AiAssistantPanel } from "./AiAssistantPanel";
 import { createAiAssistantContext } from "./aiAssistantContext";
-import { ProductSidebarTrigger } from "./ProductShellSidebar";
 import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
 import { BottomDock } from "./BottomDock";
@@ -344,6 +344,27 @@ function ProductShellFrame({
     </>
   );
 }
+
+function ProductSidebarTrigger({
+  labelMode = "responsive",
+}: {
+  labelMode?: "responsive" | "sr-only";
+}) {
+  const { t } = useI18n();
+  return (
+    <SidebarTrigger
+      collapseLabel={t("shell.sidebar.collapse")}
+      controls="product-primary-navigation"
+      expandLabel={t("shell.sidebar.expand")}
+      labelMode={labelMode}
+      mobileCloseLabel={t("shell.menu.mobileClose")}
+      mobileOpenLabel={t("shell.menu.mobileOpen")}
+      size={labelMode === "sr-only" ? "icon-sm" : "default"}
+      variant="ghost"
+    />
+  );
+}
+
 function isNarrowAiViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 895px)").matches;
 }

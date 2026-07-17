@@ -30,12 +30,16 @@ describe("ResourcesInfraMapTopologyView", () => {
       }),
     ]), { onOpenPod });
 
-    expect(screen.getByText("Production")).toBeTruthy();
-    const group = screen.getByText("Deployment · api").closest("section");
+    expect(screen.getByLabelText("Production")).toBeTruthy();
+    expect(document.querySelector('[data-slot="infra-map-topology-detail"]')?.className)
+      .toContain("grid-rows-[minmax(0,1fr)]");
+    expect(screen.queryByText("Production")).toBeNull();
+    expect(screen.queryByText("worker-a")).toBeNull();
+    expect(screen.queryByText(/Deployment/u)).toBeNull();
+    const group = document.querySelector('[data-pod-group-key="default/Deployment/api"]');
     expect(group).not.toBeNull();
     expect(group?.getAttribute("data-group-evidence")).toBe("replicaGroup");
-    expect(group?.getAttribute("data-pod-group-key")).toBe("default/Deployment/api");
-    expect(group?.querySelector('[data-slot="infra-map-topology-honeycomb"]')).not.toBeNull();
+    expect(group?.getAttribute("data-slot")).toBe("infra-map-topology-pod-static-group");
     expect(within(group as HTMLElement).getAllByRole("button")).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: /api-a/u }));
@@ -55,10 +59,57 @@ describe("ResourcesInfraMapTopologyView", () => {
       warningCount: 0,
     });
     renderTopology(model);
+    expect(document.querySelector('[data-slot="infra-map-topology-overview"]')).not.toBeNull();
 
     expect(screen.getByText("클러스터 개요")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Production/u }));
-    expect(screen.getByText("worker-a")).toBeTruthy();
+    expect(document.querySelector('[data-slot="infra-map-topology-detail"]')?.className)
+      .toContain("grid-rows-[auto_minmax(0,1fr)]");
+    expect(screen.getByLabelText("worker-a")).toBeTruthy();
+    expect(screen.queryByText("worker-a")).toBeNull();
+  });
+
+  it("shows the same node capacity summary on server icon hover as the card view", async () => {
+    const model = infraMapModel([pod({ id: "pod:api", name: "api" })]);
+    model.nodes[0] = {
+      ...model.nodes[0]!,
+      assignedPodCount: 12,
+      cpuRatio: 0.25,
+      memoryRatio: 0.5,
+      podCapacity: 110,
+    };
+
+    renderTopology(model);
+
+    fireEvent.mouseEnter(screen.getByLabelText("worker-a"));
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(within(tooltip).getByText("12/110")).toBeTruthy();
+    expect(within(tooltip).getByText("25% / 75%")).toBeTruthy();
+    expect(within(tooltip).getByText("50% / 50%")).toBeTruthy();
+  });
+
+  it("shows the same pod evidence on topology pod hover as the card view", async () => {
+    renderTopology(infraMapModel([
+      pod({
+        cpu: { request: 100, ratio: 0.25, value: 25 },
+        id: "pod:api",
+        memory: { request: 128, ratio: 0.5, value: 64 },
+        name: "api",
+        restartCount: 2,
+        usagePercent: 25,
+      }),
+    ]));
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /api/u }));
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(within(tooltip).getByText("api")).toBeTruthy();
+    expect(within(tooltip).getByText("25m")).toBeTruthy();
+    expect(within(tooltip).getByText("100m", { exact: false })).toBeTruthy();
+    expect(within(tooltip).getByText("64 MiB")).toBeTruthy();
+    expect(within(tooltip).getByText("128 MiB", { exact: false })).toBeTruthy();
+    expect(within(tooltip).getByText("2")).toBeTruthy();
   });
 });
 

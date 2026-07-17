@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
   type ComponentProps,
+  type Context,
   type ReactNode,
 } from "react";
 import { Button } from "./button";
@@ -30,7 +31,12 @@ export type SidebarContextValue = {
   setMobileOpen: (next: StateUpdater) => void;
   toggle: () => void;
 };
-const SidebarContext = createContext<SidebarContextValue | null>(null);
+type SidebarContextRegistry = typeof globalThis & {
+  __opsiaSidebarContext?: Context<SidebarContextValue | null>;
+};
+const sidebarContextRegistry = globalThis as SidebarContextRegistry;
+const SidebarContext = sidebarContextRegistry.__opsiaSidebarContext ??=
+  createContext<SidebarContextValue | null>(null);
 export function useSidebar(): SidebarContextValue {
   const context = useContext(SidebarContext);
   if (!context) throw new TypeError("useSidebar must be inside SidebarProvider");

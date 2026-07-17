@@ -34,7 +34,6 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 PROJECTION_WRITE_CHUNK = 500
 UNKNOWN_PROVIDER = "unknown"
 KNOWN_PROVIDERS = frozenset({"eks", "gke", "aks", "onprem", "kind", UNKNOWN_PROVIDER})
-PHYSICAL_TOPOLOGY_PODS_PER_SERVER = 12
 
 
 def inventory_snapshot_lock_key(workspace_id: str, cluster_id: str) -> int:
@@ -1143,7 +1142,7 @@ class InventoryFilterRepository(DatabaseConnection):
         filters: ResourceFilters,
         snapshot_revision: int,
     ) -> JsonObject:
-        """Return bounded node/pod placement plus server-evaluated filter membership."""
+        """Return node/pod placement plus server-evaluated filter membership."""
         cluster_ids = _ids(allowed_cluster_ids)
         application_ids = _ids(allowed_application_ids)
         if not workspace_id or len(cluster_ids) != 1 or snapshot_revision <= 0:
@@ -1168,9 +1167,7 @@ class InventoryFilterRepository(DatabaseConnection):
             pods = [dict(row) for row in conn.execute(pod_statement).mappings().all()]
             counts = dict(conn.execute(count_statement).mappings().one())
 
-        truncated_by_node_name: dict[str, int] = {}
         pod_counts_by_node_name: dict[str, JsonObject] = {}
-        unassigned_truncated_count = 0
         for row in pods:
             total = int(row.get("placement_pod_count") or 0)
             node_name = str(row.get("placement_node_name") or "")
@@ -1178,19 +1175,12 @@ class InventoryFilterRepository(DatabaseConnection):
                 "matched": int(row.get("matched_pod_count") or 0),
                 "total": total,
             }
-            omitted = max(0, total - PHYSICAL_TOPOLOGY_PODS_PER_SERVER)
-            if omitted <= 0:
-                continue
-            if node_name:
-                truncated_by_node_name[node_name] = omitted
-            else:
-                unassigned_truncated_count = omitted
         return {
             "servers": servers,
             "pods": pods,
             "pod_counts_by_node_name": pod_counts_by_node_name,
-            "truncated_by_node_name": truncated_by_node_name,
-            "unassigned_truncated_count": unassigned_truncated_count,
+            "truncated_by_node_name": {},
+            "unassigned_truncated_count": 0,
             "filtered_count": int(counts.get("filtered_count") or 0),
             "unfiltered_count": int(counts.get("unfiltered_count") or 0),
         }
@@ -1488,7 +1478,7 @@ def _physical_topology_statements(
     filters: ResourceFilters,
     snapshot_revision: int,
 ) -> tuple[Select[Any], Select[Any], Select[Any]]:
-    """Build PostgreSQL statements for a bounded, snapshot-consistent physical view."""
+    """Build PostgreSQL statements for a snapshot-consistent physical view."""
     current = _current_versions(
         workspace_id,
         cluster_ids,
@@ -1598,7 +1588,6 @@ def _physical_topology_statements(
     ).cte("ranked_physical_topology_pods")
     pod_statement = (
         select(ranked_pods)
-        .where(ranked_pods.c.placement_rank <= PHYSICAL_TOPOLOGY_PODS_PER_SERVER)
         .order_by(
             ranked_pods.c.placement_node_name,
             ranked_pods.c.placement_rank,

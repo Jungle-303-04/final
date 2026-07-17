@@ -3,8 +3,7 @@ import { cn } from "../../shared/lib/cn";
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import { TopologyPodHex } from "./ResourcesInfraMapTopologyPodHex";
 import type { InfraMapPod } from "./resourcesInfraMapModel";
-
-const HONEYCOMB_COLUMNS = 6;
+import { honeycombRows } from "./resourcesInfraMapTopologyLayout";
 
 export function TopologyPodHoneycomb({
   ariaLabel,
@@ -53,16 +52,4 @@ export function TopologyPodHoneycomb({
       </span>
     </div>
   );
-}
-
-export function honeycombRows<T>(
-  items: readonly T[],
-  columns: number = HONEYCOMB_COLUMNS,
-): T[][] {
-  if (columns < 1) return [Array.from(items)];
-  const rows: T[][] = [];
-  for (let index = 0; index < items.length; index += columns) {
-    rows.push(items.slice(index, index + columns));
-  }
-  return rows;
 }

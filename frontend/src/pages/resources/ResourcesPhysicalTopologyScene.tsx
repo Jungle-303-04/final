@@ -5,6 +5,7 @@ import type { HomePort } from "../../features/home/homeContract";
 import { FirstAppearanceMotionBoundary } from "../../motion/useFirstAppearanceMotion";
 import { useI18n } from "../../shared/i18n";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
+import { PodPlacementLegend } from "./PodPlacementLegend";
 import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
@@ -74,31 +75,11 @@ export function ResourcesPhysicalTopologyScene({
 }
 
 function PhysicalTopologyLegend() {
-  const { t } = useI18n();
   return (
-    <aside
-      aria-label={t("resources.graph.physical.legend")}
-      className="flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto border-b bg-muted/20 px-4 py-2 text-[0.6875rem] text-muted-foreground sm:px-5"
-      data-slot="physical-topology-legend"
-    >
-      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-        <span
-          aria-hidden="true"
-          className="size-3.5 rounded border border-border bg-[color-mix(in_oklch,var(--status-warning)_32%,var(--card))]"
-        />
-        {t("resources.graph.physical.legend.fill")}
-      </span>
-      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-        <span aria-hidden="true" className="size-3.5 rounded border border-dashed border-border bg-background" />
-        {t("resources.graph.physical.legend.missing")}
-      </span>
-      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-        <span className="relative size-3.5 rounded border border-border bg-card" aria-hidden="true">
-          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-destructive ring-1 ring-background" />
-        </span>
-        {t("resources.graph.physical.legend.badge")}
-      </span>
-    </aside>
+    <PodPlacementLegend
+      className="border-b bg-muted/20 px-4 py-2 sm:px-5"
+      dataSlot="physical-topology-legend"
+    />
   );
 }
 

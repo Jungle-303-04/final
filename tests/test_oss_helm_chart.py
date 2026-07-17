@@ -103,6 +103,21 @@ def test_helm_chart_keeps_the_public_profile_fail_closed() -> None:
     assert agent_env["RECONCILER_MODE"] == "argocd"
 
 
+def test_helm_chart_sets_agent_container_resources() -> None:
+    documents = _render_chart()
+    agent_daemonset = next(
+        item
+        for item in documents
+        if item["kind"] == "DaemonSet" and item["metadata"]["name"] == "opsia-agent"
+    )
+    agent = _container(agent_daemonset, "agent")
+
+    assert agent["resources"] == {
+        "requests": {"cpu": "100m", "memory": "256Mi"},
+        "limits": {"cpu": "1", "memory": "1Gi"},
+    }
+
+
 def test_helm_chart_persists_and_injects_the_filter_cursor_signing_key() -> None:
     documents = _render_chart()
     secret = next(

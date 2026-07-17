@@ -20,10 +20,13 @@ export interface InfraMapTopologyCluster extends InfraMapClusterSummary {
 
 export interface InfraMapTopologyNode {
   clusterId: string;
+  cpuRatio: number | null;
   groups: InfraMapTopologyPodGroup[];
   hiddenPodCount: number;
   id: string;
+  memoryRatio: number | null;
   name: string;
+  podCapacity: number | null;
   podCount: number;
   ready: boolean | null;
   unassigned: boolean;
@@ -68,10 +71,13 @@ function topologyNodeFromInfraMapNode(
   );
   return {
     clusterId: node.clusterId,
+    cpuRatio: node.cpuRatio,
     groups: podGroups(knownPods),
     hiddenPodCount: Math.max(0, node.hiddenPodCount - node.hiddenPods.length),
     id: node.id,
+    memoryRatio: node.memoryRatio,
     name: node.name,
+    podCapacity: node.podCapacity,
     podCount: node.assignedPodCount,
     ready: node.ready,
     unassigned: node.unassigned,
@@ -141,7 +147,7 @@ function groupLabel(
   name: string | null,
   fallback: string,
 ): string {
-  if (kind && name) return `${kind} · ${name}`;
+  if (kind && name) return `${kind} / ${name}`;
   if (name) return name;
   return fallback;
 }

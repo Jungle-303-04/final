@@ -1,5 +1,6 @@
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import type { InfraMapPod } from "./resourcesInfraMapModel";
+import { compareNullableMetricDesc } from "./resourcesInfraMapMetricComparison";
 import { podHealthTone } from "./podVisualState";
 
 export function orderInfraMapPodsForMetric(
@@ -22,14 +23,13 @@ export function compareInfraMapPodsForMetric(
 
   const leftRatio = infraMapPodMetricRatio(left, metricMode);
   const rightRatio = infraMapPodMetricRatio(right, metricMode);
-  const leftMissingRank = leftRatio === null ? 1 : 0;
-  const rightMissingRank = rightRatio === null ? 1 : 0;
-  if (leftMissingRank !== rightMissingRank) return leftMissingRank - rightMissingRank;
-  if (leftRatio !== rightRatio) return (rightRatio ?? 0) - (leftRatio ?? 0);
+  const ratioOrder = compareNullableMetricDesc(leftRatio, rightRatio);
+  if (ratioOrder !== 0) return ratioOrder;
 
   const leftValue = infraMapPodMetricValue(left, metricMode);
   const rightValue = infraMapPodMetricValue(right, metricMode);
-  if (leftValue !== rightValue) return (rightValue ?? 0) - (leftValue ?? 0);
+  const valueOrder = compareNullableMetricDesc(leftValue, rightValue);
+  if (valueOrder !== 0) return valueOrder;
 
   return left.name.localeCompare(right.name);
 }

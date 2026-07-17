@@ -31,7 +31,7 @@ describe("resources infra map topology model", () => {
 
     expect(groups).toHaveLength(2);
     expect(groups[0]?.evidence).toBe("replicaGroup");
-    expect(groups[0]?.label).toBe("Deployment · api-gateway");
+    expect(groups[0]?.label).toBe("Deployment / api-gateway");
     expect(groups[0]?.pods.map((item) => item.id).sort()).toEqual([
       "pod:api-a",
       "pod:api-b",

@@ -14,15 +14,21 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primitives/popover";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { ResourcesInfraMapTopologyView } from "./ResourcesInfraMapTopologyView";
+import { ResourcesInfraMapNavigatorView } from "./ResourcesInfraMapNavigatorView";
 import { InfraMapNodeCard } from "./ResourcesInfraMapNodeCard";
-import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
+import { PodPlacementLegend } from "./PodPlacementLegend";
+import {
+  INFRA_MAP_METRIC_MODES,
+  type InfraMapMetricMode,
+} from "./ResourcesInfraMapMetrics";
 import type { InfraMapModel } from "./resourcesInfraMapModel";
 import type { InfraMapFocusItem } from "./useInfraMapFocusDetails";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 
-type InfraMapViewerMode = "card" | "topology";
+type InfraMapViewerMode = "card" | "navigator" | "topology";
 
-const INFRA_MAP_VIEWER_MODES: InfraMapViewerMode[] = ["card", "topology"];
+const INFRA_MAP_VIEWER_MODES: InfraMapViewerMode[] = ["card", "topology", "navigator"];
+const INFRA_MAP_LOADING_NODE_SKELETON_COUNT = 2;
 
 export function ResourcesInfraMapView({
   focusOptions,
@@ -82,6 +88,13 @@ export function ResourcesInfraMapView({
           onSelect={onFocusSelect}
         />
       </div>
+      <PodPlacementLegend
+        ariaLabel={`${t("resources.infraMap.title")} ${t("resources.graph.physical.legend")}`}
+        className="mt-3 rounded-lg border bg-background/45 px-3 py-2"
+        dataSlot="infra-map-legend"
+        metricMode={metricMode}
+        variant={infraMapLegendVariant(viewerMode)}
+      />
 
       <InfraMapViewerContent
         metricMode={metricMode}
@@ -162,12 +175,18 @@ function InfraMapViewerContent({
         <InfraMapFailure onRetry={onRetry} />
       ) : model && model.nodes.length > 0 ? (
         viewerMode === "topology" ? (
-        <ResourcesInfraMapTopologyView
-          metricMode={metricMode}
-          model={model}
-          onOpenPod={onOpenPod}
-        />
-      ) : (
+          <ResourcesInfraMapTopologyView
+            metricMode={metricMode}
+            model={model}
+            onOpenPod={onOpenPod}
+          />
+        ) : viewerMode === "navigator" ? (
+          <ResourcesInfraMapNavigatorView
+            metricMode={metricMode}
+            model={model}
+            onOpenPod={onOpenPod}
+          />
+        ) : (
           <InfraMapNodeGrid
             metricMode={metricMode}
             model={model}
@@ -190,14 +209,13 @@ function InfraMapMetricTabs({
   value: InfraMapMetricMode;
 }) {
   const { t } = useI18n();
-  const options: InfraMapMetricMode[] = ["cpu", "memory"];
   return (
     <div
       aria-label={t("resources.infraMap.metricTabs.aria")}
       className="flex h-8 items-center gap-0.5 rounded-lg border bg-background/70 p-0.5"
       role="group"
     >
-      {options.map((option) => {
+      {INFRA_MAP_METRIC_MODES.map((option) => {
         const active = option === value;
         return (
           <Button
@@ -316,12 +334,19 @@ function infraMapViewerLabel(
   t: ReturnType<typeof useI18n>["t"],
 ): string {
   if (option === "card") return t("resources.infraMap.viewer.card");
-  return t("resources.infraMap.viewer.topology");
+  if (option === "topology") return t("resources.infraMap.viewer.topology");
+  return t("resources.infraMap.viewer.navigator");
+}
+
+function infraMapLegendVariant(mode: InfraMapViewerMode) {
+  if (mode === "topology") return "infra-topology";
+  if (mode === "navigator") return "infra-navigator";
+  return "infra-card";
 }
 
 function focusTitle(item: InfraMapFocusItem): string {
   return item.identity.namespace
-    ? `${item.label} · ${item.identity.namespace}`
+    ? `${item.label} / ${item.identity.namespace}`
     : item.label;
 }
 
@@ -374,7 +399,7 @@ function infraMapNodeGridLayout(nodeCount: number): {
 function InfraMapLoading() {
   return (
     <div className="mt-5 grid justify-center gap-3 grid-cols-[repeat(auto-fit,minmax(17rem,18rem))]">
-      {[0, 1].map((item) => (
+      {Array.from({ length: INFRA_MAP_LOADING_NODE_SKELETON_COUNT }, (_, item) => (
         <div className="rounded-lg border bg-background/65 p-3" key={item}>
           <Skeleton className="h-28 rounded-lg" />
           <Skeleton className="mt-3 h-4 w-1/2" />

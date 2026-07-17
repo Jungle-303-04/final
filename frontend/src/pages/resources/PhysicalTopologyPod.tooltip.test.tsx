@@ -27,7 +27,7 @@ describe("PhysicalTopologyPod evidence tooltip", () => {
     fireEvent.focus(screen.getByRole("button"));
     const tooltip = await screen.findByRole("tooltip");
     expect(within(tooltip).getByText("checkout-api-0")).toBeTruthy();
-    expect(within(tooltip).getByText("shop · Running")).toBeTruthy();
+    expect(within(tooltip).getByText("shop / Running")).toBeTruthy();
     expect(within(tooltip).getByText("531m")).toBeTruthy();
     expect(within(tooltip).getByText("· 요청 500m")).toBeTruthy();
     expect(within(tooltip).getByText("64 MiB")).toBeTruthy();

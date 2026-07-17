@@ -276,6 +276,13 @@ spec:
               # 만든다(deploy/target/opentelemetry.yaml: fullnameOverride=opentelemetry-collector,
               # mode=daemonset → Service 이름 opentelemetry-collector-agent).
               value: http://opentelemetry-collector-agent.target.svc:4318/v1/traces
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
           volumeMounts:
             - name: target-agent-runtime
               mountPath: /var/lib/target-agent

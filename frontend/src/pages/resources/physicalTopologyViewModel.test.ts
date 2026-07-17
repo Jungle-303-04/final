@@ -35,7 +35,7 @@ describe("physical topology view model", () => {
     expect(podAbnormalBadge(pod({ phase: "Pending", usagePercent: 99 })))
       .toBe("pending");
     expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 1 })))
-      .toBe("restarting");
+      .toBeNull();
     expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 0 })))
       .toBeNull();
   });

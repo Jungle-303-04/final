@@ -31,7 +31,6 @@ export function PodEvidenceTooltipContent({
   slot?: string;
   usageText?: string | null;
 }) {
-  const { formatNumber, t } = useI18n();
   const fallbackUsageLabel = pod.usagePercent === null
     ? null
     : podUsageLabel(pod.usagePercent);
@@ -45,17 +44,32 @@ export function PodEvidenceTooltipContent({
       role="tooltip"
       side={side}
     >
+      <PodEvidenceTooltipPanel pod={pod} usageText={usageLabel} />
+    </TooltipContent>
+  );
+}
+
+export function PodEvidenceTooltipPanel({
+  pod,
+  usageText,
+}: {
+  pod: PodEvidenceTooltipValue;
+  usageText: string | null;
+}) {
+  const { formatNumber, t } = useI18n();
+  return (
+    <>
       <div className="border-b border-background/15 px-3 py-2.5">
         <p className="break-all text-xs font-semibold leading-snug">{pod.name}</p>
         <p className="mt-0.5 text-[0.6875rem] text-background/70">
-          {[pod.namespace, pod.phase].filter(Boolean).join(" · ")}
+          {[pod.namespace, pod.phase].filter(Boolean).join(" / ")}
         </p>
       </div>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 px-3 py-2.5 text-[0.6875rem]">
-        {usageLabel === null ? null : (
+        {usageText === null ? null : (
           <EvidenceRow
             label={t("resources.graph.pod.evidence.usage")}
-            value={usageLabel}
+            value={usageText}
           />
         )}
         <MetricEvidenceRow
@@ -75,7 +89,7 @@ export function PodEvidenceTooltipContent({
           value={formatNumber(pod.restartCount)}
         />
       </dl>
-    </TooltipContent>
+    </>
   );
 }
 

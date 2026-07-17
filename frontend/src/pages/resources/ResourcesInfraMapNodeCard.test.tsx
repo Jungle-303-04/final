@@ -64,15 +64,43 @@ describe("InfraMapNodeCard", () => {
     expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod']")).toHaveLength(4);
     expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod-cube']")).toHaveLength(6);
 
-    fireEvent.click(screen.getByRole("button", { name: "View 2 more Pods" }));
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
 
     expect(onShowMorePods).toHaveBeenCalledWith(node);
     expect(screen.queryByText("hidden-three")).toBeNull();
     expect(screen.queryByText("hidden-two")).toBeNull();
   });
 
+  it("keeps detail drilldown available even when no Pods are hidden", () => {
+    const onShowMorePods = vi.fn();
+    const node = nodeFixture({
+      assignedPodCount: 2,
+      visiblePods: [
+        podFixture({ id: "pod:api", name: "api-gateway-0" }),
+        podFixture({ id: "pod:worker", name: "worker-0" }),
+      ],
+    });
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <TooltipProvider delay={0}>
+          <InfraMapNodeCard
+            metricMode="cpu"
+            node={node}
+            onOpenPod={vi.fn()}
+            onShowMorePods={onShowMorePods}
+            selectionActive={false}
+          />
+        </TooltipProvider>
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
+
+    expect(onShowMorePods).toHaveBeenCalledWith(node);
+  });
+
   it("summarizes Pod distribution after the visible two-row limit", () => {
-    const pods = Array.from({ length: 24 }, (_, index) =>
+    const pods = Array.from({ length: 31 }, (_, index) =>
       podFixture({
         id: `pod:visible-${index}`,
         name: `visible-${index}`,
@@ -96,8 +124,38 @@ describe("InfraMapNodeCard", () => {
       </I18nProvider>,
     );
 
-    expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod-cube']")).toHaveLength(19);
+    expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod-cube']")).toHaveLength(26);
     expect(screen.getByText("+5")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View details" })).toBeTruthy();
+  });
+
+  it("keeps the distribution overflow count separate from the detail button label", () => {
+    const pods = Array.from({ length: 12 }, (_, index) =>
+      podFixture({
+        id: `pod:observed-${index}`,
+        name: `observed-${index}`,
+      }));
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <TooltipProvider delay={0}>
+          <InfraMapNodeCard
+            metricMode="cpu"
+            node={nodeFixture({
+              assignedPodCount: 34,
+              hiddenPodCount: 30,
+              hiddenPods: pods.slice(4),
+              visiblePods: pods.slice(0, 4),
+            })}
+            onOpenPod={vi.fn()}
+            onShowMorePods={vi.fn()}
+            selectionActive={false}
+          />
+        </TooltipProvider>
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("+22")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View details" })).toBeTruthy();
   });
 
   it("colors Pod cards from the selected metric risk without inventing missing values", () => {
@@ -150,13 +208,23 @@ describe("InfraMapNodeCard", () => {
     expect(cpuPods[2]?.getAttribute("aria-label")).toContain("unknown-worker");
     expect(cpuPods[2]?.dataset.usageTone).toBe("unknown");
     expect(cpuPods[2]?.dataset.metricAvailable).toBe("false");
+    expect(cpuPods[2]?.dataset.healthTone).toBe("healthy");
+    expect(cpuPods[2]?.className).toContain("emerald");
 
     const cpuCubes = rendered.container.querySelectorAll<HTMLElement>(
       "[data-slot='infra-map-pod-cube']",
     );
     expect(cpuCubes[0]?.getAttribute("aria-label")).toContain("hot-worker");
+    expect(cpuCubes[0]?.dataset.metricAvailable).toBe("true");
+    expect(cpuCubes[0]?.style.getPropertyValue("--infra-map-pod-cube-color")).toContain("orange");
     expect(cpuCubes[1]?.getAttribute("aria-label")).toContain("stable-api");
+    expect(cpuCubes[1]?.dataset.metricAvailable).toBe("true");
+    expect(cpuCubes[1]?.style.getPropertyValue("--infra-map-pod-cube-color")).toContain("emerald");
     expect(cpuCubes[2]?.getAttribute("aria-label")).toContain("unknown-worker");
+    expect(cpuCubes[2]?.dataset.metricAvailable).toBe("false");
+    expect(cpuCubes[2]?.style.getPropertyValue("--infra-map-pod-cube-color")).toBe("");
+    expect(cpuCubes[2]?.dataset.healthTone).toBe("healthy");
+    expect(cpuCubes[2]?.className).toContain("emerald");
 
     rendered.rerender(
       <I18nProvider navigatorLanguage="en-US" storage={null}>

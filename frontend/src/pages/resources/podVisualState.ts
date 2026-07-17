@@ -1,8 +1,19 @@
 export const POD_RESOURCE_PRESSURE_WARNING_RATIO = 0.8;
 export const POD_RESOURCE_PRESSURE_DANGER_RATIO = 0.95;
 export const PERCENT_SCALE = 100;
+const POD_SHORT_LABEL_CHARACTER_COUNT = 2;
+const POD_USAGE_UNKNOWN_LABEL = "\u2014";
 
-export type PodAbnormalBadge = "crash-loop" | "error" | "pending" | "restarting" | null;
+const POD_PROBLEM_PRIORITY = {
+  criticalHealth: 0,
+  warningHealth: 1,
+  dangerPressure: 2,
+  warningPressure: 3,
+  healthy: 4,
+  unknownPressure: 5,
+} as const;
+
+export type PodAbnormalBadge = "crash-loop" | "error" | "pending" | null;
 export type PodHealthTone = "critical" | "healthy" | "unknown" | "warning";
 export type PodResourcePressureTone = "danger" | "healthy" | "unknown" | "warning";
 export type PodVisualTone = "critical" | PodResourcePressureTone;
@@ -32,7 +43,6 @@ export function podAbnormalBadge(pod: PodStatusEvidence): PodAbnormalBadge {
     combined.includes("unhealthy")
   ) return "error";
   if (phase === "pending") return "pending";
-  if ((pod.restartCount ?? 0) > 0) return "restarting";
   return null;
 }
 
@@ -132,7 +142,7 @@ export function podUsageColorFromPercent(percent: number | null): string {
 }
 
 export function podUsageLabel(usagePercent: number | null): string {
-  if (usagePercent === null) return "—";
+  if (usagePercent === null) return POD_USAGE_UNKNOWN_LABEL;
   const measured = Math.round(usagePercent * 10) / 10;
   return `${measured}%`;
 }
@@ -140,20 +150,24 @@ export function podUsageLabel(usagePercent: number | null): string {
 export function podShortLabel(name: string): string {
   return Array.from(name.normalize("NFKC"))
     .filter((character) => /[\p{L}\p{N}]/u.test(character))
-    .slice(0, 2)
+    .slice(0, POD_SHORT_LABEL_CHARACTER_COUNT)
     .join("")
     .toUpperCase();
 }
 
 export function podProblemPriority(pod: PodStatusEvidence & { usagePercent?: number | null }): number {
   const healthTone = podHealthTone(pod);
-  if (healthTone === "critical") return 0;
-  if (healthTone === "warning") return 1;
-  const pressureTone = podResourcePressureToneFromPercent(pod.usagePercent ?? null);
-  if (pressureTone === "danger") return 2;
-  if (pressureTone === "warning") return 3;
-  if (pressureTone === "unknown") return 5;
-  return 4;
+  if (healthTone === "critical") return POD_PROBLEM_PRIORITY.criticalHealth;
+  if (healthTone === "warning") return POD_PROBLEM_PRIORITY.warningHealth;
+  const pressureTone = podResourcePressureToneFromPercent(optionalPercent(pod.usagePercent));
+  if (pressureTone === "danger") return POD_PROBLEM_PRIORITY.dangerPressure;
+  if (pressureTone === "warning") return POD_PROBLEM_PRIORITY.warningPressure;
+  if (pressureTone === "unknown") return POD_PROBLEM_PRIORITY.unknownPressure;
+  return POD_PROBLEM_PRIORITY.healthy;
+}
+
+function optionalPercent(value: number | null | undefined): number | null {
+  return value === undefined ? null : value;
 }
 
 function clampPercent(value: number): number {

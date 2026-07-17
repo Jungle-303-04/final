@@ -10,6 +10,10 @@ loki:
     allow_structured_metadata: true
   storage:
     type: s3
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-ruler
+      admin: loki-admin
     s3:
       endpoint: http://minio.${TARGET_NAMESPACE}.svc:9000
       bucketnames: loki-chunks
@@ -30,6 +34,13 @@ loki:
 
 singleBinary:
   replicas: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   persistence:
     enabled: true
     size: 5Gi
@@ -54,6 +65,24 @@ singleBinary:
 # kind/local 대상 클러스터는 작게 구성. Loki chart는 기본으로
 # memcached result/chunk cache 활성화, chunk cache request는 약 9.8Gi
 # production 설치에서는 cache size 조정 또는 재활성화
+gateway:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+lokiCanary:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
 chunksCache:
   enabled: false
 

@@ -9,7 +9,7 @@ import { PHYSICAL_TOPOLOGY_ENDPOINT } from "./physical-topology.testSupport";
 describe("physical topology API", () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it("serializes the canonical physical view and validates its bounded response", async () => {
+  it("serializes the canonical physical view and validates its response", async () => {
     const controller = new AbortController();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(
       PHYSICAL_TOPOLOGY_ENDPOINT,
@@ -65,6 +65,24 @@ describe("physical topology API", () => {
     }));
     await expect(getPhysicalTopology({ clusters: ["cluster-a"] }))
       .rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
+  it("accepts complete pod placement data without applying the Infra Map display limit", async () => {
+    const pods = Array.from({ length: 24 }, (_, index) => ({
+      ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+      id: `pod:shop/checkout-${index}`,
+      name: `checkout-${index}`,
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      ...PHYSICAL_TOPOLOGY_ENDPOINT,
+      pods,
+      truncated: {},
+    }));
+    const acceptedTopology = await getPhysicalTopology({ clusters: ["cluster-a"] });
+    expect(acceptedTopology.pods).toHaveLength(pods.length);
+    expect(acceptedTopology.pods[acceptedTopology.pods.length - 1]?.id)
+      .toBe("pod:shop/checkout-23");
   });
 });
 

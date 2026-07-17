@@ -137,3 +137,4 @@ spec:
               done
               mc mb --ignore-existing local/loki-chunks
               mc mb --ignore-existing local/loki-ruler
+              mc mb --ignore-existing local/loki-admin

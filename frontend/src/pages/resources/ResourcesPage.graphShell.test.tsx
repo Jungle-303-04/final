@@ -32,7 +32,6 @@ describe("ResourcesPage S4 physical topology", () => {
       .closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
     expect(screen.getByText("Physical placement")).toBeTruthy();
     expect(screen.getByRole("group", { name: "Server placement view" })).toBeTruthy();
-    expect(document.body.textContent).not.toContain("Topology");
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
     const physicalGrid = document.querySelector('[data-slot="physical-topology-grid"]');
@@ -44,9 +43,10 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(screen.getByText("2 / 18 pods")).toBeTruthy();
     const legend = screen.getByRole("complementary", { name: "Pod placement legend" });
     expect(legend.className).toContain("flex-nowrap");
-    expect(within(legend).getByText("Fill · highest CPU / memory request usage")).toBeTruthy();
-    expect(within(legend).getByText("Dashed · metric or request unavailable")).toBeTruthy();
-    expect(within(legend).getByText("Badge · abnormal phase or restarts")).toBeTruthy();
+    expect(within(legend).getByText("Green · normal")).toBeTruthy();
+    expect(within(legend).getByText("Yellow / orange · high CPU or memory usage")).toBeTruthy();
+    expect(within(legend).getByText("Red · abnormal state")).toBeTruthy();
+    expect(within(legend).getByText("Dashed gray · metric or request unavailable")).toBeTruthy();
 
     const crashLoop = screen.getByRole("button", {
       name: "Pod checkout-api-0, CrashLoopBackOff, usage 12%",

@@ -1,4 +1,4 @@
-import { AlertTriangle, Pause, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Pause, X } from "lucide-react";
 import { useId, useLayoutEffect, useRef } from "react";
 
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
@@ -109,7 +109,6 @@ export function PhysicalTopologyPod({
             {badge === "crash-loop" ? <X aria-hidden="true" /> : null}
             {badge === "error" ? <AlertTriangle aria-hidden="true" /> : null}
             {badge === "pending" ? <Pause aria-hidden="true" /> : null}
-            {badge === "restarting" ? <RotateCcw aria-hidden="true" /> : null}
           </Badge>
         )}
       </TooltipTrigger>

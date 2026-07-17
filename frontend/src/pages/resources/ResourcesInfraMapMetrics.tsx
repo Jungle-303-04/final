@@ -3,6 +3,12 @@ import { Progress } from "../../shared/ui/primitives/progress";
 
 export type InfraMapMetricMode = "cpu" | "memory";
 
+export const INFRA_MAP_METRIC_MODES: readonly InfraMapMetricMode[] = ["cpu", "memory"];
+
+const PERCENT_SCALE = 100;
+const RATIO_MIN = 0;
+const RATIO_MAX = 1;
+
 export function RatioMetric({
   label,
   ratio,
@@ -11,7 +17,7 @@ export function RatioMetric({
   ratio: number | null;
 }) {
   const { formatNumber, t } = useI18n();
-  const percent = ratio === null ? null : ratio * 100;
+  const percent = ratio === null ? null : ratio * PERCENT_SCALE;
   const display = ratio === null
     ? t("common.value.unavailable")
     : ratioSplitText(ratio, formatNumber);
@@ -38,7 +44,7 @@ export function CountMetric({
   return (
     <MetricBar
       label={label}
-      value={ratio === null ? null : ratio * 100}
+      value={ratio === null ? null : ratio * PERCENT_SCALE}
       valueText={display}
     />
   );
@@ -48,8 +54,8 @@ export function ratioSplitText(
   ratio: number,
   formatNumber: ReturnType<typeof useI18n>["formatNumber"],
 ): string {
-  const used = Math.max(0, Math.min(1, ratio));
-  const available = Math.max(0, 1 - used);
+  const used = Math.max(RATIO_MIN, Math.min(RATIO_MAX, ratio));
+  const available = Math.max(RATIO_MIN, RATIO_MAX - used);
   return `${formatPercent(used, formatNumber)} / ${formatPercent(available, formatNumber)}`;
 }
 
@@ -88,7 +94,7 @@ function MetricBar({
 
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
+  return Math.max(0, Math.min(PERCENT_SCALE, value));
 }
 
 function formatPercent(

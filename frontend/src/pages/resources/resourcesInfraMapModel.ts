@@ -3,9 +3,18 @@ import type {
   PhysicalTopologySnapshot,
 } from "../../features/resources/physicalTopologyContract";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
-import { podHealthTone, type PodHealthTone } from "./podVisualState";
+import {
+  compareNullableMetricDesc,
+  isFiniteMetric,
+} from "./resourcesInfraMapMetricComparison";
+import {
+  PERCENT_SCALE,
+  podHealthTone,
+  type PodHealthTone,
+} from "./podVisualState";
 
-export const INFRA_MAP_DEFAULT_VISIBLE_PODS_PER_NODE = 4;
+export const INFRA_MAP_REPRESENTATIVE_PODS_PER_NODE = 4;
+export const INFRA_MAP_DISTRIBUTION_PODS_PER_NODE = 26;
 
 export interface InfraMapPodMetric {
   request: number | null;
@@ -84,7 +93,7 @@ export interface BuildInfraMapModelInput {
 }
 
 export function buildInfraMapModel({
-  maxPodsPerNode = INFRA_MAP_DEFAULT_VISIBLE_PODS_PER_NODE,
+  maxPodsPerNode = INFRA_MAP_DISTRIBUTION_PODS_PER_NODE,
   selectionActive,
   selectedPodIds,
   topology,
@@ -113,7 +122,7 @@ export function buildInfraMapModel({
         server.cpuMillicores,
         server.allocatableCpuMillicores,
       ),
-      health: serverStatusToHealth(server.status),
+      health: placement.unassigned ? "unknown" : serverStatusToHealth(server.status),
       hiddenPodCount: placement.omittedCount,
       hiddenPods: placement.hiddenPods.map(toPod),
       id: server.id,
@@ -195,8 +204,8 @@ function infraMapClusterSummary(
   nodes: readonly InfraMapNode[],
 ): InfraMapClusterSummary {
   const podCountsFromServers = topology.servers.map((server) => server.totalPodCount);
-  const serverPodCount = podCountsFromServers.every((value) => value !== null)
-    ? podCountsFromServers.reduce((total, value) => total + (value ?? 0), 0)
+  const serverPodCount = podCountsFromServers.every(isFiniteMetric)
+    ? podCountsFromServers.reduce((total, value) => total + value, 0)
     : null;
   const observedPodCount = topology.pods.length +
     Object.values(topology.truncatedByServer).reduce((total, count) => total + count, 0) +
@@ -249,16 +258,17 @@ function comparePodsByInfraMapWeight(
   right: PhysicalTopologyPod,
 ): number {
   return podMetricAvailability(right) - podMetricAvailability(left) ||
-    podWeight(right) - podWeight(left) ||
+    compareNullableMetricDesc(podWeight(left), podWeight(right)) ||
     left.name.localeCompare(right.name);
 }
 
-function podWeight(pod: PhysicalTopologyPod): number {
-  return Math.max(
-    pod.usagePercent ?? 0,
-    pod.cpuMillicores ?? 0,
-    pod.memoryMebibytes ?? 0,
-  );
+function podWeight(pod: PhysicalTopologyPod): number | null {
+  const knownMetrics = [
+    pod.usagePercent,
+    pod.cpuMillicores,
+    pod.memoryMebibytes,
+  ].filter(isFiniteMetric);
+  return knownMetrics.length === 0 ? null : Math.max(...knownMetrics);
 }
 
 function podMetricAvailability(pod: PhysicalTopologyPod): number {
@@ -284,7 +294,7 @@ function ratioFromPercentOrValues(
 function percentToRatio(value: number | null): number | null {
   if (value === null) return null;
   if (!Number.isFinite(value)) return null;
-  return Math.max(0, Math.min(100, value)) / 100;
+  return Math.max(0, Math.min(PERCENT_SCALE, value)) / PERCENT_SCALE;
 }
 
 function ratioFromValues(value: number | null, total: number | null): number | null {

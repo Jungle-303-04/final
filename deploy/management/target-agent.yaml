@@ -118,6 +118,13 @@ spec:
               value: "/data/agent-control.db"
             - name: COMMAND_OUTBOX_DB_PATH
               value: "/data/command-outbox.db"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
           volumeMounts:
             - name: agent-control-data
               mountPath: /data

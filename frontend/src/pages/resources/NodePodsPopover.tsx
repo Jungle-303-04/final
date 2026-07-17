@@ -1,4 +1,4 @@
-import { AlertTriangle, Box, RotateCcw } from "lucide-react";
+import { AlertTriangle, Box } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -229,8 +229,7 @@ function PodRow({ onOpen, pod }: { onOpen: () => void; pod: HomePodSummary }) {
         </div>
         <div className="grid min-w-28 justify-items-end gap-1 text-[0.6875rem]">
           <span className="font-medium tabular-nums">{usage}</span>
-          <span className={cn("flex items-center gap-1 text-muted-foreground", pod.restartCount > 0 && "text-destructive") }>
-            <RotateCcw aria-hidden="true" className="size-3" />
+          <span className={cn("text-muted-foreground", pod.restartCount > 0 && "text-destructive")}>
             {t("resources.graph.server.pods.restarts", {
               count: formatNumber(pod.restartCount),
             })}

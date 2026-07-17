@@ -55,6 +55,75 @@ type ReadyPhysicalTopologyFrame = Extract<
   { phase: "ready" }
 >;
 
+const RESOURCES_LIST_SURFACE_ID = "resources-list-surface";
+const PRODUCT_MAIN_ID = "product-main";
+const RESOURCES_LIST_REVEAL_RETRY_DELAY_MS = 120;
+
+type MotionAwareScrollIntoView = ReturnType<typeof useMotionAwareScrollIntoView>;
+
+function revealResourcesListSurface(scrollIntoView: MotionAwareScrollIntoView) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scrollResourcesListSurfaceIntoView(scrollIntoView);
+      window.setTimeout(
+        () => scrollResourcesListSurfaceIntoView(scrollIntoView),
+        RESOURCES_LIST_REVEAL_RETRY_DELAY_MS,
+      );
+    });
+  });
+}
+
+function scrollResourcesListSurfaceIntoView(scrollIntoView: MotionAwareScrollIntoView) {
+  const target = document.getElementById(RESOURCES_LIST_SURFACE_ID);
+  if (!(target instanceof HTMLElement)) return;
+  scrollIntoView(target, { block: "start" });
+  scrollNearestContainerToTarget(target);
+}
+
+function scrollNearestContainerToTarget(target: HTMLElement) {
+  const scrollContainer = findScrollContainer(target);
+  const behavior = prefersReducedMotion() ? "auto" : "smooth";
+  if (scrollContainer) {
+    const targetRect = target.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    scrollContainer.scrollTo({
+      behavior,
+      top: Math.max(0, targetRect.top - containerRect.top + scrollContainer.scrollTop),
+    });
+    return;
+  }
+  window.scrollTo({
+    behavior,
+    top: Math.max(0, target.getBoundingClientRect().top + window.scrollY),
+  });
+}
+
+function findScrollContainer(target: HTMLElement): HTMLElement | null {
+  let current = target.parentElement;
+  while (current && current !== document.body) {
+    if (isScrollable(current)) return current;
+    current = current.parentElement;
+  }
+  const productMain = document.getElementById(PRODUCT_MAIN_ID);
+  if (productMain instanceof HTMLElement && productMain.scrollHeight > productMain.clientHeight) {
+    return productMain;
+  }
+  const scrollingElement = document.scrollingElement;
+  return scrollingElement instanceof HTMLElement ? scrollingElement : null;
+}
+
+function isScrollable(element: HTMLElement) {
+  const style = window.getComputedStyle(element);
+  return element.scrollHeight > element.clientHeight &&
+    ["auto", "scroll", "overlay"].some((value) =>
+      style.overflowY === value || style.overflow === value);
+}
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function ResourcesListSurface({
   filterList,
   listFallback,
@@ -119,9 +188,7 @@ export function ResourcesListSurface({
       (current) => ({ ...current, node: serverId }),
       "drill-in",
     );
-    requestAnimationFrame(() => {
-      scrollIntoView(document.getElementById("resources-list-surface"), { block: "start" });
-    });
+    revealResourcesListSurface(scrollIntoView);
   };
   const rewindToCluster = () => filter.updateFilters(
     (current) => ({
@@ -271,9 +338,7 @@ export function ResourcesListSurface({
       (current) => ({ ...current, node: node.name }),
       "drill-in",
     );
-    requestAnimationFrame(() => {
-      scrollIntoView(document.getElementById("resources-list-surface"), { block: "start" });
-    });
+    revealResourcesListSurface(scrollIntoView);
   }, [filter, infraMapFocusItems.length, scrollIntoView, state]);
   const timelineRange = filter.detail.timeRange ?? "1h";
   const changeTimelineRange = (range: TimelineRange) => filter.updateDetail(
@@ -375,7 +440,7 @@ export function ResourcesListSurface({
             <Surface
               aria-labelledby="resources-list-title"
               className="min-w-0 overflow-hidden"
-              id="resources-list-surface"
+              id={RESOURCES_LIST_SURFACE_ID}
             >
               <div className="border-b px-4 py-3">
                 <h3 className="font-medium" id="resources-list-title">

@@ -22,6 +22,14 @@ CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
 FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
+CLUSTER_AGENT_CPU_REQUEST = "100m"
+CLUSTER_AGENT_MEMORY_REQUEST = "256Mi"
+CLUSTER_AGENT_CPU_LIMIT = "1"
+CLUSTER_AGENT_MEMORY_LIMIT = "1Gi"
+SAMPLE_WORKLOAD_CPU_REQUEST = "25m"
+SAMPLE_WORKLOAD_MEMORY_REQUEST = "64Mi"
+SAMPLE_WORKLOAD_CPU_LIMIT = "250m"
+SAMPLE_WORKLOAD_MEMORY_LIMIT = "256Mi"
 
 
 def yaml_string(value: str) -> str:
@@ -458,6 +466,13 @@ spec:
           command: ["python", "-m", "http.server", "8080"]
           ports:
             - containerPort: 8080
+          resources:
+            requests:
+              cpu: {yaml_string(SAMPLE_WORKLOAD_CPU_REQUEST)}
+              memory: {yaml_string(SAMPLE_WORKLOAD_MEMORY_REQUEST)}
+            limits:
+              cpu: {yaml_string(SAMPLE_WORKLOAD_CPU_LIMIT)}
+              memory: {yaml_string(SAMPLE_WORKLOAD_MEMORY_LIMIT)}
 """
 
 
@@ -506,6 +521,13 @@ spec:
               value: {yaml_string(payload.management_base_url)}
             - name: REALTIME_GATEWAY_URL
               value: {yaml_string(derive_realtime_gateway_url(payload.management_base_url, management_cluster=payload.cluster_role == MANAGEMENT_CLUSTER_ROLE))}
+          resources:
+            requests:
+              cpu: {yaml_string(CLUSTER_AGENT_CPU_REQUEST)}
+              memory: {yaml_string(CLUSTER_AGENT_MEMORY_REQUEST)}
+            limits:
+              cpu: {yaml_string(CLUSTER_AGENT_CPU_LIMIT)}
+              memory: {yaml_string(CLUSTER_AGENT_MEMORY_LIMIT)}
           volumeMounts:
             - name: target-agent-runtime
               mountPath: /var/lib/target-agent

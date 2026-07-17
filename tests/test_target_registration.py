@@ -457,6 +457,7 @@ def assert_guarded_install_command(
 
 def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
 
     assert "name: cluster-agent" in manifest
     assert "name: checkout-api" not in manifest
@@ -483,6 +484,17 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+    deployment = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment"
+        and doc.get("metadata", {}).get("name") == "cluster-agent"
+    )
+    container = deployment["spec"]["template"]["spec"]["containers"][0]
+    assert container["resources"] == {
+        "requests": {"cpu": "100m", "memory": "256Mi"},
+        "limits": {"cpu": "1", "memory": "1Gi"},
+    }
 
 
 def test_target_uninstall_rbac_is_exact_name_scoped_and_cannot_delete_namespaces() -> None:
@@ -738,6 +750,47 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         "name": "target-runtime-secret",
         "key": "AGENT_TOKEN",
     }
+    container = deployment["spec"]["template"]["spec"]["containers"][0]
+    assert container["resources"] == {
+        "requests": {"cpu": "100m", "memory": "256Mi"},
+        "limits": {"cpu": "1", "memory": "1Gi"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("manifest_path", "deployment_name", "container_name"),
+    [
+        ("deploy/target/target.yaml", "cluster-agent", "cluster-agent"),
+        ("deploy/management/target-agent.yaml", "cluster-agent", "agent"),
+    ],
+)
+def test_static_agent_manifests_set_container_resources(
+    manifest_path: str,
+    deployment_name: str,
+    container_name: str,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    docs = [
+        doc
+        for doc in yaml.safe_load_all((root / manifest_path).read_text(encoding="utf-8"))
+        if doc
+    ]
+    deployment = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment"
+        and doc.get("metadata", {}).get("name") == deployment_name
+    )
+    container = next(
+        item
+        for item in deployment["spec"]["template"]["spec"]["containers"]
+        if item["name"] == container_name
+    )
+
+    assert container["resources"] == {
+        "requests": {"cpu": "100m", "memory": "256Mi"},
+        "limits": {"cpu": "1", "memory": "1Gi"},
+    }
 
 
 def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
@@ -750,11 +803,23 @@ def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
     )
 
     manifest = target_install_manifest(request, "agent-secret")
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
 
     assert 'name: "demo-api"' in manifest
     assert 'image: "ghcr.io/acme/demo-api:test"' in manifest
     assert "priorityClassName: gitops-demo-fast" in manifest
     assert "terminationGracePeriodSeconds: 1" in manifest
+    deployment = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment"
+        and doc.get("metadata", {}).get("name") == "demo-api"
+    )
+    container = deployment["spec"]["template"]["spec"]["containers"][0]
+    assert container["resources"] == {
+        "requests": {"cpu": "25m", "memory": "64Mi"},
+        "limits": {"cpu": "250m", "memory": "256Mi"},
+    }
 
 
 def test_target_registration_records_cluster_and_returns_install_manifest() -> None:

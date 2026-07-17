@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
+NODE_COLLECTOR_CPU_REQUEST = "25m"
+NODE_COLLECTOR_MEMORY_REQUEST = "64Mi"
+NODE_COLLECTOR_CPU_LIMIT = "250m"
+NODE_COLLECTOR_MEMORY_LIMIT = "256Mi"
+
 
 def node_collector_daemonset(
     *,
@@ -81,4 +86,14 @@ def node_collector_container(
             },
         ],
         "ports": [{"name": "metrics", "containerPort": port}],
+        "resources": {
+            "requests": {
+                "cpu": NODE_COLLECTOR_CPU_REQUEST,
+                "memory": NODE_COLLECTOR_MEMORY_REQUEST,
+            },
+            "limits": {
+                "cpu": NODE_COLLECTOR_CPU_LIMIT,
+                "memory": NODE_COLLECTOR_MEMORY_LIMIT,
+            },
+        },
     }
