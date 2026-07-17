@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -123,11 +123,36 @@ describe("ChecksPage", () => {
     expect(screen.queryByText("cluster-private")).toBeNull();
     expect(unknownPort.getOverview).not.toHaveBeenCalled();
   });
+
+  it("loads revisioned settings on demand and refreshes overview after an audited save", async () => {
+    const port = checksPort();
+    port.getOverview.mockResolvedValue(observedOverview());
+    render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
+
+    await screen.findByText("Container limits are not observed.");
+    fireEvent.click(screen.getByRole("button", { name: "Checks settings" }));
+    expect(await screen.findByRole("heading", { name: "Checks settings" })).toBeTruthy();
+    expect(port.getSettings).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Workload limits/ }));
+    fireEvent.change(screen.getByPlaceholderText("cluster-id/namespace"), {
+      target: { value: "cluster-a/storefront" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(port.updateSettings).toHaveBeenCalledWith({
+      hiddenCheckIds: ["workload-limits"],
+      hiddenCategories: [],
+      hiddenNamespaces: ["cluster-a/storefront"],
+    }, 4));
+    await waitFor(() => expect(port.getOverview.mock.calls.length).toBeGreaterThan(1));
+  });
 });
 
 function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksPort & {
   getOverview: ReturnType<typeof vi.fn>;
   getDetail: ReturnType<typeof vi.fn>;
+  getSettings: ReturnType<typeof vi.fn>;
+  updateSettings: ReturnType<typeof vi.fn>;
 } {
   return {
     loadRefreshPolicy: vi.fn().mockResolvedValue(refreshPolicy()),
@@ -168,6 +193,26 @@ function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksP
         findings: null,
         reasonCodes: ["checks_catalog_not_integrated", "checks_result_projection_not_integrated"],
       },
+    }),
+    getSettings: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      policy: { hiddenCheckIds: [], hiddenCategories: [], hiddenNamespaces: [] },
+      revision: 4,
+      invalidationGeneration: 7,
+      canEdit: true,
+      updatedAt: "2026-07-17T10:00:00Z",
+    }),
+    updateSettings: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      policy: { hiddenCheckIds: ["workload-limits"], hiddenCategories: [], hiddenNamespaces: [] },
+      revision: 5,
+      invalidationGeneration: 8,
+      canEdit: true,
+      updatedAt: "2026-07-17T10:01:00Z",
+      eventId: "event-5",
+      auditEventId: "event-5",
     }),
   };
 }

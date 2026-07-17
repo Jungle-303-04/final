@@ -27,6 +27,7 @@ from packages.contracts.checks.observations import (
     ChecksVisibility,
     ChecksVisibilitySummary,
 )
+from packages.contracts.checks.settings import ChecksSettingsPolicy
 from packages.contracts.parity import ClusterScope
 
 CHECKS_OBSERVATION_UNAVAILABLE = "checks_observation_unavailable"
@@ -52,6 +53,7 @@ def checks_overview(
     snapshots: Mapping[str, Mapping[str, Any]] | None = None,
     namespace_refs: Iterable[tuple[str, str]],
     selected_cluster_ids: Iterable[str],
+    settings: ChecksSettingsPolicy | None = None,
     now: datetime | None = None,
 ) -> ChecksOverviewResponse:
     """Project only observations persisted from an outbound agent session."""
@@ -63,6 +65,7 @@ def checks_overview(
         namespace_refs=namespace_refs,
         selected_cluster_ids=selected_cluster_ids,
         now=now or datetime.now(UTC),
+        settings=settings,
     )
     if projected.evaluated_at is None:
         reasons = projected.reason_codes or (CHECKS_OBSERVATION_UNAVAILABLE,)
@@ -110,6 +113,7 @@ def checks_detail(
     snapshots: Mapping[str, Mapping[str, Any]] | None = None,
     namespace_refs: Iterable[tuple[str, str]],
     selected_cluster_ids: Iterable[str],
+    settings: ChecksSettingsPolicy | None = None,
     now: datetime | None = None,
 ) -> ChecksDetailResponse:
     """Resolve a check only when an authorized agent observation declares it."""
@@ -121,6 +125,7 @@ def checks_detail(
         namespace_refs=namespace_refs,
         selected_cluster_ids=selected_cluster_ids,
         now=now or datetime.now(UTC),
+        settings=settings,
     )
     entry = next(
         (item for item in projected.catalog if item.check_id == requested_check_id),
@@ -174,6 +179,7 @@ def _project(
     namespace_refs: Iterable[tuple[str, str]],
     selected_cluster_ids: Iterable[str],
     now: datetime,
+    settings: ChecksSettingsPolicy | None,
 ) -> _ProjectedChecks:
     selected = tuple(sorted({value.strip() for value in selected_cluster_ids if value.strip()}))
     requested_namespaces = _namespaces_by_cluster(namespace_refs)
@@ -281,14 +287,50 @@ def _project(
         observed_at=max(observed_at).isoformat() if observed_at else base.observed_at,
         reason_codes=reason_codes,
     )
+    return _apply_settings(
+        _ProjectedChecks(
+            coverage=coverage,
+            findings=tuple(sorted(findings, key=_finding_key)),
+            catalog=tuple(catalogs[key] for key in sorted(catalogs)),
+            visibility=tuple(sorted(visibility, key=lambda item: item.cluster_id)),
+            evaluated_at=max(observed_at).isoformat() if observed_at else None,
+            availability=availability,
+            reason_codes=reason_codes,
+        ),
+        settings or ChecksSettingsPolicy(),
+    )
+
+
+def _apply_settings(
+    projected: _ProjectedChecks,
+    settings: ChecksSettingsPolicy,
+) -> _ProjectedChecks:
+    hidden_checks = set(settings.hidden_check_ids)
+    hidden_categories = set(settings.hidden_categories)
+    hidden_namespaces = set(settings.hidden_namespaces)
+    catalog = tuple(
+        entry
+        for entry in projected.catalog
+        if entry.check_id not in hidden_checks and entry.category not in hidden_categories
+    )
+    findings = tuple(
+        finding
+        for finding in projected.findings
+        if finding.check_id not in hidden_checks
+        and finding.category not in hidden_categories
+        and (
+            finding.resource.namespace is None
+            or f"{finding.cluster_id}/{finding.resource.namespace}" not in hidden_namespaces
+        )
+    )
     return _ProjectedChecks(
-        coverage=coverage,
-        findings=tuple(sorted(findings, key=_finding_key)),
-        catalog=tuple(catalogs[key] for key in sorted(catalogs)),
-        visibility=tuple(sorted(visibility, key=lambda item: item.cluster_id)),
-        evaluated_at=max(observed_at).isoformat() if observed_at else None,
-        availability=availability,
-        reason_codes=reason_codes,
+        coverage=projected.coverage,
+        findings=findings,
+        catalog=catalog,
+        visibility=projected.visibility,
+        evaluated_at=projected.evaluated_at,
+        availability=projected.availability,
+        reason_codes=projected.reason_codes,
     )
 
 

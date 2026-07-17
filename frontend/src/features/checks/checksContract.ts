@@ -138,6 +138,27 @@ export interface ChecksRequest {
   namespaces: readonly string[];
 }
 
+export interface ChecksSettingsPolicy {
+  hiddenCheckIds: readonly string[];
+  hiddenCategories: readonly string[];
+  hiddenNamespaces: readonly string[];
+}
+
+export interface ChecksSettings {
+  workspaceId: string;
+  userId: string;
+  policy: ChecksSettingsPolicy;
+  revision: number;
+  invalidationGeneration: number;
+  canEdit: boolean;
+  updatedAt: string | null;
+}
+
+export interface ChecksSettingsUpdateReceipt extends ChecksSettings {
+  eventId: string;
+  auditEventId: string;
+}
+
 export type ChecksFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -146,6 +167,7 @@ export type ChecksFailureCode =
   | "not-found"
   | "offline"
   | "rate-limited"
+  | "conflict"
   | "error";
 
 export class ChecksPortFailure extends Error {
@@ -164,4 +186,10 @@ export interface ChecksPort {
   loadRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   getOverview(request: ChecksRequest, signal?: AbortSignal): Promise<ChecksOverview>;
   getDetail(checkId: string, request: ChecksRequest, signal?: AbortSignal): Promise<ChecksDetailResponse>;
+  getSettings(signal?: AbortSignal): Promise<ChecksSettings>;
+  updateSettings(
+    policy: ChecksSettingsPolicy,
+    expectedRevision: number,
+    signal?: AbortSignal,
+  ): Promise<ChecksSettingsUpdateReceipt>;
 }

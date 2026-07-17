@@ -1,5 +1,5 @@
-import { CircleAlert } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { CircleAlert, Settings } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
@@ -21,8 +21,10 @@ import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
+import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useChecksDetail, useChecksOverview } from "./useChecksData";
+import { ChecksSettingsDialog } from "./ChecksSettingsDialog";
 
 export function ChecksPage({ port }: { port: ChecksPort }) {
   const clusterScope = useClusterScope();
@@ -54,14 +56,32 @@ function ChecksReadyPage({
   port: ChecksPort;
 }) {
   const data = useChecksOverview(port, { clusterIds, namespaces });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const catalog = data.frame.phase === "ready" && data.frame.data.catalog.availability !== "unavailable"
+    ? data.frame.data.catalog.entries
+    : [];
   return (
     <ProductPageFrame className="gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{CHECKS_COPY.title}</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{CHECKS_COPY.description}</p>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{CHECKS_COPY.title}</h1>
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{CHECKS_COPY.description}</p>
+        </div>
+        <Button aria-label="Checks settings" onClick={() => setSettingsOpen(true)} variant="outline">
+          <Settings aria-hidden="true" />Settings
+        </Button>
       </header>
       <ChecksOverviewContent frame={data.frame} onRefresh={data.refresh} />
       {checkId === null ? null : <ChecksDetailPanel checkId={checkId} clusterIds={clusterIds} namespaces={namespaces} port={port} />}
+      {settingsOpen ? (
+        <ChecksSettingsDialog
+          catalog={catalog}
+          onOpenChange={setSettingsOpen}
+          onSaved={data.refresh}
+          open
+          port={port}
+        />
+      ) : null}
     </ProductPageFrame>
   );
 }

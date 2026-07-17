@@ -5,6 +5,8 @@ import {
   type ChecksOverview,
   type ChecksPort,
   type ChecksScopeCoverage,
+  type ChecksSettings,
+  type ChecksSettingsUpdateReceipt,
 } from "./checksContract";
 import type {
   ChecksEndpointCatalog,
@@ -34,6 +36,45 @@ export function createChecksAdapter(
     async getDetail(checkId, request, signal) {
       return withPortFailure(async () => toDetail(await endpoints.getChecksDetail(checkId, request, signal)));
     },
+    async getSettings(signal) {
+      return withPortFailure(async () => toSettings(await endpoints.getChecksSettings(signal)));
+    },
+    async updateSettings(policy, expectedRevision, signal) {
+      return withPortFailure(async () => toSettingsReceipt(await endpoints.updateChecksSettings({
+        policy: {
+          hidden_check_ids: [...policy.hiddenCheckIds],
+          hidden_categories: [...policy.hiddenCategories],
+          hidden_namespaces: [...policy.hiddenNamespaces],
+        },
+        expected_revision: expectedRevision,
+      }, signal)));
+    },
+  };
+}
+
+function toSettings(value: Awaited<ReturnType<ChecksEndpointDependencies["getChecksSettings"]>>): ChecksSettings {
+  return {
+    workspaceId: value.workspace_id,
+    userId: value.user_id,
+    policy: {
+      hiddenCheckIds: value.policy.hidden_check_ids,
+      hiddenCategories: value.policy.hidden_categories,
+      hiddenNamespaces: value.policy.hidden_namespaces,
+    },
+    revision: value.revision,
+    invalidationGeneration: value.invalidation_generation,
+    canEdit: value.can_edit,
+    updatedAt: value.updated_at,
+  };
+}
+
+function toSettingsReceipt(
+  value: Awaited<ReturnType<ChecksEndpointDependencies["updateChecksSettings"]>>,
+): ChecksSettingsUpdateReceipt {
+  return {
+    ...toSettings(value),
+    eventId: value.event_id,
+    auditEventId: value.audit_event_id,
   };
 }
 
@@ -192,6 +233,8 @@ function toPortFailure(error: unknown): ChecksPortFailure {
     : null;
   const kind = typeof record?.kind === "string" ? record.kind : "";
   const retryAfter = typeof record?.retryAfter === "number" ? record.retryAfter : null;
+  const status = typeof record?.status === "number" ? record.status : null;
+  if (status === 409) return new ChecksPortFailure("conflict", retryAfter);
   return new ChecksPortFailure(kinds[kind] ?? "error", retryAfter);
 }
 

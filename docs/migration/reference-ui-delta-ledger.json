@@ -11099,19 +11099,24 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/checks/ChecksPage.tsx",
-              "src/domains/checks/router.py"
+              "frontend/src/pages/checks/ChecksSettingsDialog.tsx",
+              "frontend/src/features/checks/createChecksAdapter.ts",
+              "src/domains/checks/router.py",
+              "src/domains/checks/repository.py",
+              "src/packages/contracts/checks/settings.py",
+              "tests/test_checks_router.py",
+              "frontend/src/pages/checks/ChecksPage.test.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.checks.observations",
+              "packages.contracts.checks.settings",
               "packages.contracts.identity"
             ],
             "plannedTestIds": [
               "checks.shared-input.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "No revisioned Python audit-settings repository or authenticated read contract exists.",
-            "rationale": "The product does not store hidden finding policy in browser state or reuse unrelated user presentation preferences."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The authenticated Python contract now returns only the current user and workspace policy with revision, invalidation generation, and server-derived edit authority. The product does not store hidden finding policy in browser storage or reuse unrelated UI preferences."
           }
         },
         {
@@ -11130,19 +11135,25 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/checks/ChecksPage.tsx",
-              "src/domains/checks/router.py"
+              "frontend/src/pages/checks/ChecksSettingsDialog.tsx",
+              "frontend/src/features/checks/createChecksAdapter.ts",
+              "src/domains/checks/router.py",
+              "src/domains/checks/repository.py",
+              "src/domains/checks/events.py",
+              "src/packages/contracts/checks/settings.py",
+              "tests/test_checks_router.py",
+              "frontend/src/pages/checks/ChecksPage.test.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.checks.observations",
+              "packages.contracts.checks.settings",
               "packages.contracts.identity"
             ],
             "plannedTestIds": [
               "checks.shared-input.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "No owner-authorized PUT contract, expected-revision guard, audit event, or targeted finding-cache invalidation exists.",
-            "rationale": "The shared Input is reusable, but it is not evidence of a persistence contract; the save flow stays unavailable."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The owner-authorized write validates bounded policy and exact RBAC-visible namespace references, commits state and audit evidence under expected-revision CAS, advances a targeted invalidation generation, reloads on conflict, and refreshes Checks only after a receipt."
           }
         }
       ]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from domains.checks.observation_projection import checks_detail, checks_overview
+from packages.contracts.checks import ChecksSettingsPolicy
 
 NOW = datetime(2026, 7, 17, 6, 0, tzinfo=UTC)
 
@@ -267,3 +268,34 @@ def test_checks_detail_preserves_requested_url_identity_without_claiming_catalog
     assert body.detail.findings is not None
     assert body.detail.affected_resource_count == 2
     assert body.detail.availability == "partial"
+
+
+def test_checks_projection_applies_user_policy_without_mutating_agent_evidence() -> None:
+    snapshot = _snapshot()
+    body = checks_overview(
+        workspace_id="workspace-a",
+        selected_cluster_ids=("cluster-a",),
+        namespace_refs=(),
+        contexts={
+            "cluster-a": {
+                "snapshot_revision": 8,
+                "observed_at": "2026-07-17T05:59:30Z",
+                "resources_complete": True,
+                "labels_complete": True,
+                "partial_reason_codes": [],
+            }
+        },
+        snapshots={"cluster-a": snapshot},
+        settings=ChecksSettingsPolicy(
+            hidden_categories=("networking",),
+            hidden_namespaces=("cluster-a/storefront",),
+        ),
+        now=NOW,
+    )
+
+    assert body.result_set.total_check_count == 1
+    assert body.result_set.total_finding_count == 0
+    assert body.catalog.entries is not None
+    assert [entry.check_id for entry in body.catalog.entries] == ["workload-limits"]
+    observation = snapshot["summary"]["summary"]["checks_observation"]  # type: ignore[index]
+    assert len(observation["findings"]) == 2  # type: ignore[arg-type,index]

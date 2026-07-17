@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CHECKS_OVERVIEW_PATH, checksDetailPath, getChecksDetail, getChecksOverview } from "./checks";
+import {
+  CHECKS_OVERVIEW_PATH,
+  CHECKS_SETTINGS_PATH,
+  checksDetailPath,
+  getChecksDetail,
+  getChecksOverview,
+  getChecksSettings,
+  updateChecksSettings,
+} from "./checks";
 
 describe("Checks API", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -49,7 +57,49 @@ describe("Checks API", () => {
     }));
     await expect(getChecksOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
+
+  it("reads and revision-writes strict server-backed settings with CSRF protection", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(settings()));
+
+    await expect(getChecksSettings()).resolves.toMatchObject({ revision: 2, can_edit: true });
+    expect(CHECKS_SETTINGS_PATH).toBe("/api/settings/audit");
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ...settings(),
+      revision: 3,
+      invalidation_generation: 3,
+      event_id: "event-3",
+      audit_event_id: "event-3",
+    }));
+    await expect(updateChecksSettings({
+      policy: settings().policy,
+      expected_revision: 2,
+    })).resolves.toMatchObject({ revision: 3, event_id: "event-3" });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/settings/audit");
+    const init = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(init.method).toBe("PUT");
+    expect(new Headers(init.headers).get("x-service-csrf")).toBe("same-origin");
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...settings(), credential: "secret" }));
+    await expect(getChecksSettings()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
 });
+
+function settings() {
+  return {
+    workspace_id: "workspace-a",
+    user_id: "user-a",
+    policy: {
+      hidden_check_ids: ["workload-limits"],
+      hidden_categories: [],
+      hidden_namespaces: ["cluster-a/storefront"],
+    },
+    revision: 2,
+    invalidation_generation: 2,
+    can_edit: true,
+    updated_at: "2026-07-17T10:00:00Z",
+  };
+}
 
 function overview() {
   return {

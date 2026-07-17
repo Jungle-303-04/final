@@ -70,5 +70,7 @@ function checksPort(): ChecksPort & {
       visibility: { availability: "available", clusters: [], reasonCodes: [] },
     }),
     getDetail: vi.fn(),
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
   };
 }

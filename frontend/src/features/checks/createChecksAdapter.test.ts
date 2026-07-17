@@ -8,6 +8,8 @@ describe("createChecksAdapter", () => {
     const port = createChecksAdapter({
       getChecksOverview: vi.fn().mockResolvedValue(overview()),
       getChecksDetail: vi.fn().mockResolvedValue(detail()),
+      getChecksSettings: vi.fn().mockResolvedValue(settings()),
+      updateChecksSettings: vi.fn().mockResolvedValue(settingsReceipt()),
     }, refreshPolicies());
 
     const response = await port.getOverview({ clusterIds: ["cluster-a"], namespaces: [] });
@@ -23,6 +25,8 @@ describe("createChecksAdapter", () => {
     const port = createChecksAdapter({
       getChecksOverview: vi.fn().mockResolvedValue(observedOverview()),
       getChecksDetail: vi.fn().mockResolvedValue(observedDetail()),
+      getChecksSettings: vi.fn().mockResolvedValue(settings()),
+      updateChecksSettings: vi.fn().mockResolvedValue(settingsReceipt()),
     }, refreshPolicies());
 
     const response = await port.getOverview({ clusterIds: ["cluster-a"], namespaces: ["cluster-a/storefront"] });
@@ -36,8 +40,58 @@ describe("createChecksAdapter", () => {
     expect(response.catalog).toMatchObject({ entries: [{ checkId: "workload-limits" }] });
     expect(response.visibility.clusters[0]).toMatchObject({ clusterId: "cluster-a", state: "limited" });
     expect(direct.detail).toMatchObject({ title: "Workload limits", affectedResourceCount: 1 });
+
+    await expect(port.getSettings()).resolves.toMatchObject({
+      workspaceId: "workspace-a",
+      policy: { hiddenNamespaces: ["cluster-a/storefront"] },
+      revision: 2,
+    });
+    await expect(port.updateSettings({
+      hiddenCheckIds: ["workload-limits"],
+      hiddenCategories: [],
+      hiddenNamespaces: [],
+    }, 2)).resolves.toMatchObject({ revision: 3, auditEventId: "event-3" });
+  });
+
+  it("maps a stale settings revision to a conflict without exposing response detail", async () => {
+    const port = createChecksAdapter({
+      getChecksOverview: vi.fn().mockResolvedValue(overview()),
+      getChecksDetail: vi.fn().mockResolvedValue(detail()),
+      getChecksSettings: vi.fn().mockResolvedValue(settings()),
+      updateChecksSettings: vi.fn().mockRejectedValue({ kind: "http", status: 409, detail: "database detail" }),
+    }, refreshPolicies());
+
+    await expect(port.updateSettings({
+      hiddenCheckIds: [], hiddenCategories: [], hiddenNamespaces: [],
+    }, 1)).rejects.toMatchObject({ code: "conflict", message: "Checks port failed: conflict" });
   });
 });
+
+function settings() {
+  return {
+    workspace_id: "workspace-a",
+    user_id: "user-a",
+    policy: {
+      hidden_check_ids: [],
+      hidden_categories: [],
+      hidden_namespaces: ["cluster-a/storefront"],
+    },
+    revision: 2,
+    invalidation_generation: 2,
+    can_edit: true,
+    updated_at: "2026-07-17T10:00:00Z",
+  };
+}
+
+function settingsReceipt() {
+  return {
+    ...settings(),
+    revision: 3,
+    invalidation_generation: 3,
+    event_id: "event-3",
+    audit_event_id: "event-3",
+  };
+}
 
 function overview() {
   return {

@@ -3,12 +3,17 @@ import { canonicalFacetSelections } from "./resource-filter-query";
 import {
   checksDetailResponseSchema,
   checksOverviewSchema,
+  checksSettingsSchema,
+  checksSettingsUpdateSchema,
   type ChecksDetailEndpoint,
   type ChecksOverviewEndpoint,
+  type ChecksSettingsEndpoint,
+  type ChecksSettingsUpdateEndpoint,
 } from "./checks-schemas";
 import { withQuery } from "./url";
 
 export const CHECKS_OVERVIEW_PATH = "/api/checks/overview" as const;
+export const CHECKS_SETTINGS_PATH = "/api/settings/audit" as const;
 export const checksDetailPath = (checkId: string): ApiPath => `/api/checks/${encodeURIComponent(checkId)}`;
 
 export interface ChecksQuery {
@@ -29,6 +34,25 @@ export function getChecksDetail(
   signal?: AbortSignal,
 ): Promise<ChecksDetailEndpoint> {
   return apiRequest(withScope(checksDetailPath(checkId), query), checksDetailResponseSchema, { signal });
+}
+
+export function getChecksSettings(signal?: AbortSignal): Promise<ChecksSettingsEndpoint> {
+  return apiRequest(CHECKS_SETTINGS_PATH, checksSettingsSchema, { signal });
+}
+
+export function updateChecksSettings(
+  payload: {
+    policy: ChecksSettingsEndpoint["policy"];
+    expected_revision: number;
+  },
+  signal?: AbortSignal,
+): Promise<ChecksSettingsUpdateEndpoint> {
+  return apiRequest(CHECKS_SETTINGS_PATH, checksSettingsUpdateSchema, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
 }
 
 function withScope(path: ApiPath, query: ChecksQuery): ApiPath {

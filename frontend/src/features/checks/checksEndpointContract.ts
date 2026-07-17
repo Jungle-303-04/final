@@ -88,6 +88,25 @@ export interface ChecksDetailEndpoint {
   detail: ChecksEndpointDetail;
 }
 
+export interface ChecksSettingsEndpoint {
+  workspace_id: string;
+  user_id: string;
+  policy: {
+    hidden_check_ids: string[];
+    hidden_categories: string[];
+    hidden_namespaces: string[];
+  };
+  revision: number;
+  invalidation_generation: number;
+  can_edit: boolean;
+  updated_at: string | null;
+}
+
+export interface ChecksSettingsUpdateEndpoint extends ChecksSettingsEndpoint {
+  event_id: string;
+  audit_event_id: string;
+}
+
 export type ChecksEndpointDetail = {
   requested_check_id: string;
   availability: "available" | "partial";
@@ -122,4 +141,12 @@ export interface ChecksEndpointDependencies {
     query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
     signal?: AbortSignal,
   ): Promise<ChecksDetailEndpoint>;
+  getChecksSettings(signal?: AbortSignal): Promise<ChecksSettingsEndpoint>;
+  updateChecksSettings(
+    payload: {
+      policy: ChecksSettingsEndpoint["policy"];
+      expected_revision: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<ChecksSettingsUpdateEndpoint>;
 }

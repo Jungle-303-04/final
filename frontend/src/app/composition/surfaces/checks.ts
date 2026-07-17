@@ -1,5 +1,10 @@
 import type { ComponentType } from "react";
-import { getChecksDetail, getChecksOverview } from "../../../api";
+import {
+  getChecksDetail,
+  getChecksOverview,
+  getChecksSettings,
+  updateChecksSettings,
+} from "../../../api";
 import { createChecksAdapter } from "../../../features/checks/createChecksAdapter";
 import { createChecksSurface } from "../../../pages/checks/createChecksSurface";
 import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
@@ -8,7 +13,7 @@ export function loadChecksSurface(
   refreshPolicies: BrowserRefreshPolicyRegistry<"issues_audit">,
 ): ComponentType {
   return createChecksSurface(createChecksAdapter(
-    { getChecksDetail, getChecksOverview },
+    { getChecksDetail, getChecksOverview, getChecksSettings, updateChecksSettings },
     refreshPolicies,
   ));
 }

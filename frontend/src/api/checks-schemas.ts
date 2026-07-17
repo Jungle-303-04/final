@@ -178,5 +178,28 @@ export const checksDetailResponseSchema = z.strictObject({
   detail: checksDetailSchema,
 });
 
+export const checksSettingsPolicySchema = z.strictObject({
+  hidden_check_ids: z.array(z.string().min(1).max(253)).max(200),
+  hidden_categories: z.array(z.string().min(1).max(253)).max(200),
+  hidden_namespaces: z.array(z.string().min(3).max(507)).max(200),
+});
+
+export const checksSettingsSchema = z.strictObject({
+  workspace_id: z.string().min(1),
+  user_id: z.string().min(1),
+  policy: checksSettingsPolicySchema,
+  revision: z.number().int().nonnegative(),
+  invalidation_generation: z.number().int().nonnegative(),
+  can_edit: z.boolean(),
+  updated_at: z.string().min(1).nullable(),
+});
+
+export const checksSettingsUpdateSchema = checksSettingsSchema.extend({
+  event_id: z.string().min(1),
+  audit_event_id: z.string().min(1),
+});
+
 export type ChecksOverviewEndpoint = z.infer<typeof checksOverviewSchema>;
 export type ChecksDetailEndpoint = z.infer<typeof checksDetailResponseSchema>;
+export type ChecksSettingsEndpoint = z.infer<typeof checksSettingsSchema>;
+export type ChecksSettingsUpdateEndpoint = z.infer<typeof checksSettingsUpdateSchema>;

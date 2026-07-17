@@ -1800,51 +1800,61 @@
       }
     },
     "reference.feature.121": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.checks.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.checks.settings",
       "frontendContract": "frontend/src/features/checks/checksContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_checks_router.py",
+        "tests/test_checks_settings_migration.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/features/checks/createChecksAdapter.test.ts",
         "frontend/src/pages/checks/ChecksPage.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/checks/router.py#get_checks_overview",
-          "reason": "No revisioned hidden check, category, or namespace settings repository and authenticated read endpoint exists.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/checks/router.py#get_checks_settings",
+          "consumer": "src/domains/checks/repository.py#ChecksSettingsRepository.get_checks_settings",
+          "reason": "The authenticated read returns only the current user and workspace policy, revision, invalidation generation, and server-owned edit authority; absent state is an explicit revision-zero policy and no browser storage or cluster connection participates.",
+          "test": "tests/test_checks_router.py#test_checks_settings_are_revisioned_audited_and_applied_to_agent_results"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
-          "reason": "No server-backed audit settings editor can be mounted.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/checks/ChecksSettingsDialog.tsx#ChecksSettingsDialog",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "reason": "The dialog reads one strict server-backed policy when opened, exposes read-only authority truthfully, and keeps drafts local only until an audited server receipt commits them.",
           "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
         }
       }
     },
     "reference.feature.122": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.checks.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.checks.settings",
       "frontendContract": "frontend/src/features/checks/checksContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_checks_router.py",
+        "tests/test_checks_settings_migration.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/features/checks/createChecksAdapter.test.ts",
         "frontend/src/pages/checks/ChecksPage.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/checks/router.py",
-          "reason": "No owner-authorized PUT contract, expected revision, audit event, or targeted finding invalidation exists.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/checks/router.py#update_checks_settings",
+          "consumer": "src/domains/checks/repository.py#ChecksSettingsRepository.put_checks_settings",
+          "reason": "The owner-authorized transaction validates bounded identifiers and exact RBAC-visible cluster/namespace references, uses advisory locking plus expected revision CAS, commits an audit event atomically, and advances a targeted Checks invalidation generation.",
+          "test": "tests/test_checks_router.py#test_checks_settings_reject_stale_unauthorized_partial_and_secret_input"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
-          "reason": "No persistence receipt or conflict-safe save flow exists.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/checks/ChecksSettingsDialog.tsx#ChecksSettingsDialog",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "reason": "The strict adapter submits one expected revision, maps conflict without exposing server detail, reloads server authority after conflict, and refreshes the existing Checks overview only after a committed receipt.",
           "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
         }
       }

@@ -246,9 +246,12 @@ export {
 } from "./cost-overview-schemas";
 export {
   CHECKS_OVERVIEW_PATH,
+  CHECKS_SETTINGS_PATH,
   checksDetailPath,
   getChecksDetail,
   getChecksOverview,
+  getChecksSettings,
+  updateChecksSettings,
   type ChecksQuery,
 } from "./checks";
 export {
@@ -258,9 +261,14 @@ export {
   checksDetailSchema,
   checksOverviewSchema,
   checksResultSetSchema,
+  checksSettingsPolicySchema,
+  checksSettingsSchema,
+  checksSettingsUpdateSchema,
   checksScopeCoverageSchema,
   type ChecksDetailEndpoint,
   type ChecksOverviewEndpoint,
+  type ChecksSettingsEndpoint,
+  type ChecksSettingsUpdateEndpoint,
 } from "./checks-schemas";
 export {
   timelineCapabilityDescriptorSchema,
