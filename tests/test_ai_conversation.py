@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
-from conftest import load_service, run_handler
+from conftest import load_service, make_context, run_handler
 
 from domains.ai.events import AiMessageReceivedBody
 from domains.ai.repository import STATUS_COMPLETED, STATUS_FAILED, AiConversationRepository
@@ -25,6 +25,10 @@ from packages.ai.llm import (
 )
 from packages.contracts.gateway.requests import AiConversationCreateRequest
 from packages.events.envelope import event
+from services.mcp.internal_control.api_client import ManagementApiClient
+from services.mcp.internal_control.config import McpSettings
+from services.mcp.internal_control.tools import McpTool
+from services.mcp.internal_control.tools import ToolRegistry as McpToolRegistry
 
 
 class ScriptedLlm:
@@ -37,6 +41,44 @@ class ScriptedLlm:
     async def complete(self, prompt: str, **options: Any) -> str:
         self.prompts.append(prompt)
         return self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
+
+
+async def _read_cluster_mcp_handler(
+    _client: ManagementApiClient,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    return {"cluster_id": arguments["cluster_id"], "source": "mcp"}
+
+
+def _worker_mcp_registry() -> McpToolRegistry:
+    return McpToolRegistry(
+        [
+            McpTool(
+                name="read_cluster",
+                title="Read Cluster",
+                description="Read one cluster through Gateway.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "cluster_id": {
+                            "type": "string",
+                            "description": "Existing cluster id.",
+                        }
+                    },
+                    "required": ["cluster_id"],
+                    "additionalProperties": False,
+                },
+                handler=_read_cluster_mcp_handler,
+            )
+        ]
+    )
+
+
+def _worker_mcp_client() -> ManagementApiClient:
+    return ManagementApiClient(
+        McpSettings(api_base_url="https://opsia.test", bearer_token="token-1").validate(),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200))),
+    )
 
 
 class StubConversationStore:
@@ -120,6 +162,73 @@ def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
     assert {sample.status for sample in store.llm_samples} == {"succeeded"}
     assert {sample.event_id for sample in store.llm_samples} == {"evt-1"}
     assert {sample.correlation_id for sample in store.llm_samples} == {"corr-1"}
+
+
+def test_chat_worker_merges_mcp_read_tools_into_existing_engine() -> None:
+    worker = load_service("ai/chat-worker")
+    worker.mcp_registry = _worker_mcp_registry()
+    worker._mcp_client = _worker_mcp_client()
+    scripted = ScriptedLlm(
+        json.dumps(
+            {
+                "type": "tool_call",
+                "tool": "read_cluster",
+                "arguments": {"cluster_id": "target-cluster-01"},
+            }
+        ),
+        json.dumps({"type": "final", "content": "MCP cluster facts are available"}),
+    )
+    worker.engine.llm = scripted
+    store = StubConversationStore()
+
+    outs = run_handler(
+        worker.on_ai_message_received,
+        AiMessageReceivedBody(
+            conversation_id="aic-mcp",
+            message_id="aim-mcp",
+            content="summarize target-cluster-01",
+            agent="operations-chat",
+            user_id="user-1",
+            context={"cluster_id": "target-cluster-01"},
+        ),
+        db=store,
+    )
+
+    assert [out.__subject__ for out in outs] == ["ai.message.responded"]
+    assert outs[0].content == "MCP cluster facts are available"
+    trace = outs[0].metadata["tool_trace"]
+    assert trace[0]["tool"] == "read_cluster"
+    assert trace[0]["ok"] is True
+    assert trace[0]["result"]["result"] == {
+        "cluster_id": "target-cluster-01",
+        "source": "mcp",
+    }
+    assert "read_cluster" in scripted.prompts[0]
+    assert "list_command_actions" in scripted.prompts[0]
+
+
+def test_chat_worker_mcp_requires_explicit_worker_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPSIA_MCP_API_BASE_URL", "https://opsia.test")
+    monkeypatch.setenv("OPSIA_MCP_BEARER_TOKEN", "token-1")
+    monkeypatch.delenv("OPSIA_AI_CHAT_WORKER_ENABLE_MCP", raising=False)
+    worker = load_service("ai/chat-worker")
+    worker._mcp_client = worker._MCP_CLIENT_UNSET
+
+    request_engine = worker.engine_for_request(
+        AiMessageReceivedBody(
+            conversation_id="aic-no-mcp",
+            message_id="aim-no-mcp",
+            content="summarize clusters",
+            agent="operations-chat",
+            user_id="user-1",
+        ),
+        make_context(db=StubConversationStore()),
+    )
+
+    assert "list_clusters" not in request_engine.registry.tool_names()
+    assert "list_command_actions" in request_engine.registry.tool_names()
 
 
 def test_chat_worker_promotes_resource_context_to_tool_context() -> None:

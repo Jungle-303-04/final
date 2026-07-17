@@ -110,6 +110,30 @@ function trafficPort(): TrafficPort {
         totalFlowCount: null,
       },
     }),
+    getSources: vi.fn().mockResolvedValue({
+      availability: "available",
+      clusters: [],
+      coverage: {
+        availability: "available",
+        observedAt: "2026-07-16T09:00:00Z",
+        reasonCodes: [],
+        scopes: [],
+      },
+      reasonCodes: [],
+    }),
+    selectSource: vi.fn().mockResolvedValue(commandReceipt()),
+    connectSource: vi.fn().mockResolvedValue(commandReceipt()),
+  };
+}
+
+function commandReceipt() {
+  return {
+    accepted: true as const,
+    auditEventId: "event-a",
+    commandId: "command-a",
+    correlationId: "correlation-a",
+    eventId: "event-a",
+    status: "queued" as const,
   };
 }
 

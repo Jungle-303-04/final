@@ -21,6 +21,21 @@ export const INVENTORY_SUMMARY: ResourcesEndpointInventorySummary = {
     { resource_type: "service", health: "healthy", count: 1 },
     { resource_type: "service", health: "future-state", count: 2 },
   ],
+  counts_evidence: {
+    completeness: "observed",
+    observed_at: "2026-07-12T10:00:00Z",
+    namespace_scope: ["shop"],
+    reason_codes: [],
+    forbidden: [{
+      namespace: "shop",
+      api_group: "apps",
+      version: "v1",
+      resource: "deployments",
+      kind: "Deployment",
+      namespaced: true,
+      reason_code: "list_permission_not_observed",
+    }],
+  },
 };
 
 export const API_RESOURCES: KubernetesApiResourcesEndpoint = {

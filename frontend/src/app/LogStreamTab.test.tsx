@@ -52,30 +52,21 @@ describe("LogStreamTab", () => {
     expect(screen.getByText("request complete")).toBeTruthy();
   });
 
-  it("renders a server diagnostic as a copy-only recovery action", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
+  it("requeries through the agent without exposing a local kubectl command", () => {
+    const retry = vi.fn();
     renderTab(tab({
       status: "ended",
       endReason: "no_pods",
       lines: [],
       diagnostic: {
         code: "no_matching_pods",
-        recovery: {
-          kind: "copy-command",
-          command: "kubectl get deployment checkout --namespace shop",
-          clusterId: "cluster-1",
-          readOnly: true,
-        },
       },
-    }));
+    }), retry);
 
     expect(screen.getByText("이 대상과 일치하는 Pod가 관측되지 않았습니다.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "읽기 전용 진단 명령 복사" }));
-    expect(writeText).toHaveBeenCalledWith("kubectl get deployment checkout --namespace shop");
+    expect(screen.queryByText(/kubectl/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "로그 스트림 다시 시작" }));
+    expect(retry).toHaveBeenCalledOnce();
   });
 });
 

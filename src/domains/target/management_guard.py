@@ -59,6 +59,7 @@ def freeze_management_policy(policy: AgentPolicy) -> AgentPolicy:
     return policy.model_copy(
         update={
             "cluster_role": MANAGEMENT_CLUSTER_ROLE,
+            "evidence": policy.evidence.model_copy(update={"profile": "management"}),
             "bootstrap": BootstrapPolicy(mode=MANAGEMENT_BOOTSTRAP_MODE, resources=[]),
             "desired_state": DesiredStatePolicy(resources=[]),
             "scheduling": SchedulingPolicy(),

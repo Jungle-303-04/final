@@ -2257,7 +2257,11 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.097",
+            "reference.feature.102",
+            "reference.feature.103"
+          ],
           "symbol": "NamespacePicker cache-scoped rescope",
           "interaction": "a cache-scoped namespace selector exposes only authorized namespaces, applies one replacement scope, communicates the rescope lifecycle, and invalidates incompatible active sessions",
           "transport": "none",
@@ -2308,10 +2312,7 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:provider-detail:aws-machine:v1",
-          "legacyContractIds": [
-            "reference.feature.102",
-            "reference.feature.103"
-          ],
+          "legacyContractIds": [],
           "symbol": "AWSMachineRenderer",
           "interaction": "an authorized AWSMachine detail presents observed instance identity, lifecycle state, configuration, addresses, and Cluster API conditions without exposing the raw object",
           "transport": "poll",
@@ -6854,7 +6855,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The initial vertical is evidence-backed and scope-pinned, but source grouping, export, focus, and large-cluster behavior remain separate work items."
+            "rationale": "The shared Resources relation view is evidence-backed, scope- and revision-pinned, bounded for large clusters, freshness-aware, keyboard-drillable, and explicit about partial or unavailable relationships; source-only export remains outside the normalized product contract."
           }
         }
       ]
@@ -9554,7 +9555,6 @@
           "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
           "legacyContractIds": [
             "reference.feature.127",
-            "reference.feature.129",
             "reference.feature.147",
             "reference.feature.148",
             "reference.feature.166"
@@ -9619,7 +9619,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product reuses smaller authorized Python projections and one Home adapter rather than duplicating the source monolithic dashboard response."
+            "rationale": "The product reuses smaller authorized Python projections and one Home adapter rather than duplicating the source monolithic dashboard response; section-scoped last-success, failure, freshness, generation, and deferred-ready semantics are now covered by contract and interaction tests."
           }
         },
         {
@@ -9719,7 +9719,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product preserves explicit provider absence and does not substitute generic audit-log rows for security findings."
+            "rationale": "The shared Checks projection now reads only validated findings persisted in outbound Agent snapshots, enforces workspace, cluster, namespace, and user policy scope, preserves explicit provider absence, and does not substitute generic audit-log rows for security findings."
           }
         },
         {
@@ -10056,46 +10056,6 @@
             "state": "blocked",
             "blockedReason": "The catalog Agent can install only server-owned recipes; it cannot identify or mutate an arbitrary observed release, and no rollback or uninstall command payload, capability projection, or executor exists.",
             "rationale": "The generic command stream is reusable after acceptance, but it is not evidence of Helm mutation authority and is therefore not exposed without an action-specific Python and Agent contract."
-          }
-        },
-        {
-          "sourceKey": "upstream-ui:events:scoped:durable-streams:v1",
-          "legacyContractIds": [
-            "reference.feature.224"
-          ],
-          "symbol": "global events stream and reconnect policy",
-          "interaction": "browser live updates are decomposed into authenticated topology, retained timeline, and command-operation streams with explicit scope, replay, reconnect, and render-coalescing contracts",
-          "transport": "sse",
-          "realtime": {
-            "resume": "timeline and command streams resume from durable cursors while topology performs a typed resync after sequence loss",
-            "backpressure": "bounded queues, negotiated frame rates, server replay limits, and animation-frame notification coalescing prevent unbounded paint work",
-            "merge": "each stream applies only records whose workspace, cluster, resource, query, and command identities match its active subscription"
-          },
-          "motion": null,
-          "opsiaPort": {
-            "destinations": [
-              "frontend/src/api/timeline.ts",
-              "frontend/src/api/operation-events.ts",
-              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
-              "frontend/src/features/operations/OperationStatusStore.tsx",
-              "src/domains/timeline/router.py",
-              "src/domains/command/router.py",
-              "src/services/realtime/realtime-gateway/app.py"
-            ],
-            "requiredBackendContracts": [
-              "packages.contracts.timeline",
-              "packages.contracts.parity",
-              "packages.contracts.realtime",
-              "packages.runtime.operation_events"
-            ],
-            "plannedTestIds": [
-              "events.timeline.resume",
-              "events.operation.resume",
-              "events.topology.resync"
-            ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The product reuses stronger domain-scoped streams instead of one mixed global EventSource. Timeline, topology, and audited operation delivery are implemented; a context-switch progress stream is still represented by transactional shell-state completion rather than a separate live channel."
           }
         },
         {
@@ -10636,6 +10596,48 @@
           }
         },
         {
+          "sourceKey": "upstream-ui:app-shell:scope-and-session:header:v1",
+          "legacyContractIds": [
+            "reference.feature.015"
+          ],
+          "symbol": "ScopePill, header connection state, reconnect action, and PortForwardIndicator",
+          "interaction": "one stable global scope row combines cluster and multi-namespace selection with an observed connection mark, a scope-safe status refresh, and capability-gated port-forward session feedback without allowing browser-owned target connectivity",
+          "transport": "poll",
+          "realtime": {
+            "resume": "explicit status refresh and the visible thirty-second catalog clock reacquire only the current authenticated authority while preserving the last safe same-scope pills",
+            "backpressure": "the shared cluster-scope request deduplicates concurrent readers and aborts the final unused request while the native session registry keeps its own bounded refresh policy",
+            "merge": "only a response for the current authority and canonical cluster scope may replace connection metadata; namespace and session identity remain independently URL- and registry-owned"
+          },
+          "motion": {
+            "reducedMotion": "cluster, namespace, connection, refresh, and session meaning remains in fixed geometry and text or status semantics when decorative pill entry, pulse, and color transitions are disabled.",
+            "evidence": [
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx",
+              "src/domains/target/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.target.router"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-scope.selection",
+              "shell.connection-retry.safety"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia reuses its canonical URL filter, cluster-scope provider, agent-derived catalog, and native session registry. The offline affordance refreshes observation only; it cannot directly reconnect to a cluster because agents remain outbound authority."
+          }
+        },
+        {
           "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
           "legacyContractIds": [
             "reference.feature.043",
@@ -11056,19 +11058,24 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/checks/ChecksPage.tsx",
-              "src/domains/checks/router.py"
+              "frontend/src/pages/checks/ChecksSettingsDialog.tsx",
+              "frontend/src/features/checks/createChecksAdapter.ts",
+              "src/domains/checks/router.py",
+              "src/domains/checks/repository.py",
+              "src/packages/contracts/checks/settings.py",
+              "tests/test_checks_router.py",
+              "frontend/src/pages/checks/ChecksPage.test.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.checks.observations",
+              "packages.contracts.checks.settings",
               "packages.contracts.identity"
             ],
             "plannedTestIds": [
               "checks.shared-input.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "No revisioned Python audit-settings repository or authenticated read contract exists.",
-            "rationale": "The product does not store hidden finding policy in browser state or reuse unrelated user presentation preferences."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The authenticated Python contract now returns only the current user and workspace policy with revision, invalidation generation, and server-derived edit authority. The product does not store hidden finding policy in browser storage or reuse unrelated UI preferences."
           }
         },
         {
@@ -11087,19 +11094,25 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/checks/ChecksPage.tsx",
-              "src/domains/checks/router.py"
+              "frontend/src/pages/checks/ChecksSettingsDialog.tsx",
+              "frontend/src/features/checks/createChecksAdapter.ts",
+              "src/domains/checks/router.py",
+              "src/domains/checks/repository.py",
+              "src/domains/checks/events.py",
+              "src/packages/contracts/checks/settings.py",
+              "tests/test_checks_router.py",
+              "frontend/src/pages/checks/ChecksPage.test.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.checks.observations",
+              "packages.contracts.checks.settings",
               "packages.contracts.identity"
             ],
             "plannedTestIds": [
               "checks.shared-input.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "No owner-authorized PUT contract, expected-revision guard, audit event, or targeted finding-cache invalidation exists.",
-            "rationale": "The shared Input is reusable, but it is not evidence of a persistence contract; the save flow stays unavailable."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The owner-authorized write validates bounded policy and exact RBAC-visible namespace references, commits state and audit evidence under expected-revision CAS, advances a targeted invalidation generation, reloads on conflict, and refreshes Checks only after a receipt."
           }
         }
       ]
@@ -15218,9 +15231,9 @@
               "settings.access.surface",
               "settings.access.contract"
             ],
-            "state": "blocked",
-            "blockedReason": "The cluster agent authenticates as its own service account and no delegated or impersonated Kubernetes subject identity exists for the signed-in product user, so a SelfSubjectRulesReview would report the wrong principal.",
-            "rationale": "Explicit ServiceAccount, User, Group, Role, and Namespace reverse lookups use one complete retained RBAC index in resource detail. The signed-in user's SelfSubjectRulesReview remains unavailable because the product identity is not delegated, and agent service-account rules never impersonate user permissions."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia normalizes the source whoami semantics into two explicit authorities: authenticated product-user decisions remain under opsia_rbac, while the actual outbound cluster-agent ServiceAccount execution rules come from exact retained RBAC and discovery evidence for the selected namespace. The UI labels both authorities, cancels superseded namespace reads, and fails closed when agent evidence is missing without impersonating the product user or claiming a false SelfSubjectRulesReview."
           }
         },
         {
@@ -15396,18 +15409,30 @@
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
               "frontend/src/pages/settings/SettingsPage.test.tsx",
-              "src/packages/contracts/shell_state.py"
+              "frontend/src/pages/settings/PrometheusIntegrationCard.tsx",
+              "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
+              "frontend/src/api/prometheus-integration.ts",
+              "frontend/src/features/settings/createSettingsAdapter.ts",
+              "src/packages/contracts/integrations.py",
+              "src/domains/integrations/prometheus.py",
+              "src/services/target/cluster-agent/agent.py",
+              "tests/test_prometheus_integration.py",
+              "tests/test_target_agent_client.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.shell_state",
-              "packages.contracts.identity"
+              "packages.contracts.integrations",
+              "packages.contracts.identity",
+              "packages.runtime.operation_events",
+              "domains.integrations.prometheus"
             ],
             "plannedTestIds": [
-              "settings.integrations.gate"
+              "settings.integrations.gate",
+              "settings.integrations.api",
+              "settings.integrations.agent"
             ],
-            "state": "blocked",
-            "blockedReason": "The provider status and automatic audited connection probe are implemented through the scoped metrics runtime; only reference.feature.223 credential URL/header mutation remains blocked because no Python secret integration repository owns write-only preservation or live client replacement.",
-            "rationale": "Resource surfaces reuse real agent query receipts, source freshness, coverage, and failure reasons for connection feedback. Settings still exposes no fake credential editor and does not store provider secrets in browser state."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing metrics query registry is preserved while one typed settings contract updates encrypted write-only credentials, versions the exact agent policy, supersedes older probes, streams durable operation feedback, and swaps the live provider only after a bounded successful probe."
           }
         },
         {
@@ -16032,7 +16057,9 @@
           "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
           "legacyContractIds": [
             "reference.feature.064",
-            "reference.feature.065"
+            "reference.feature.065",
+            "reference.feature.093",
+            "reference.feature.094"
           ],
           "symbol": "ConnectionProvider status, reconnect, and cache refresh",
           "interaction": "the authenticated shell observes selected-cluster connection stage and freshness, preserves the last safe projection during a transient refresh, and exposes one bounded refresh action without letting browser state switch kubeconfig or impersonate an agent reconnect",
@@ -16342,6 +16369,55 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The source delta is limited to connecting lifecycle semantics. Opsia deliberately uses its authenticated typed WebSocket gateway rather than the source EventSource runtime, preserving a stricter negotiated policy, resync, and scope model."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:events:scoped:durable-streams:v1",
+          "legacyContractIds": [
+            "reference.feature.224"
+          ],
+          "symbol": "useEventSource global events stream and reconnect policy",
+          "interaction": "browser live updates are decomposed into authenticated operation, timeline, topology, and one shared scope stream with explicit authority, replay, reconnect, and render-coalescing contracts",
+          "transport": "sse",
+          "realtime": {
+            "resume": "timeline and command streams resume from durable cursors, topology performs a typed resync, and the shared scope stream resumes its authorization-bound snapshot cursor",
+            "backpressure": "bounded queues, server replay limits, one scope owner, and animation-frame notification coalescing prevent duplicate streams and unbounded paint work",
+            "merge": "each stream applies only records whose workspace, cluster, resource, query, command, and active authority epoch match its subscription"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.ts",
+              "frontend/src/api/operation-events.ts",
+              "frontend/src/api/home-dashboard-events.ts",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
+              "src/domains/timeline/router.py",
+              "src/domains/command/router.py",
+              "src/domains/dashboard/fleet_router.py",
+              "src/domains/dashboard/ready_stream.py",
+              "src/packages/runtime/operation_events.py",
+              "src/services/realtime/realtime-gateway/app.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "packages.contracts.parity",
+              "packages.contracts.realtime",
+              "packages.contracts.freshness",
+              "packages.runtime.operation_events"
+            ],
+            "plannedTestIds": [
+              "events.timeline.resume",
+              "events.operation.resume",
+              "events.topology.resync",
+              "events.scope.authority-rotation",
+              "events.scope.bounded-reconnect"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses stronger purpose-scoped streams instead of one mixed direct-Kubernetes EventSource. The global scope owner projects context progress and completion from the existing authenticated dashboard stream, emits a 30-second heartbeat, bounds reconnect at 30 seconds, aborts obsolete authorities, and forwards one invalidation revision to consumers."
           }
         }
       ]

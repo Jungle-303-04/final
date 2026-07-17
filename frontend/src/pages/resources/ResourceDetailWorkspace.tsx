@@ -35,6 +35,7 @@ import { PodTerminalDialog } from "./PodTerminalDialog";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
 import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import { ServiceAccessActions } from "./ServiceAccessActions";
+import type { ChecksPort } from "../../features/checks/checksContract";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -47,6 +48,7 @@ export function ResourceDetailWorkspace({
   full,
   metricHistory,
   resourceIssues,
+  checksPort,
   manifestPort,
   onUnauthorized,
   onNavigateResource,
@@ -66,6 +68,7 @@ export function ResourceDetailWorkspace({
   full: boolean;
   metricHistory: ResourceMetricsHistoryFrame;
   resourceIssues: ResourceIssuesFrame;
+  checksPort?: ChecksPort;
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
   onNavigateResource: (identity: ResourceIdentity) => void;
@@ -262,6 +265,7 @@ export function ResourceDetailWorkspace({
           )}
           onNavigateResource={onNavigateResource}
           resourceIssues={resourceIssues}
+          checksPort={checksPort}
           onTabChange={onTabChange}
           tab={tab}
         />

@@ -64,12 +64,52 @@ export function toResourceCatalog(
       healthCounts,
     }))
     .sort((left, right) => left.resourceType.localeCompare(right.resourceType));
+  const evidence = resourceCountEvidence(wire.counts_evidence);
   return {
     clusterId: requestedClusterId,
-    completeness: "unknown",
-    observedAt: catalogObservedAt(wire.latest_snapshot),
+    completeness: evidence.completeness,
+    observedAt: evidence.observedAt,
+    namespaceScope: evidence.namespaceScope,
+    reasonCodes: evidence.reasonCodes,
+    forbidden: evidence.forbidden,
     items,
     apiDiscovery: toApiResourceDiscovery(apiWire),
+  };
+}
+
+function resourceCountEvidence(
+  value: ResourcesEndpointInventorySummary["counts_evidence"],
+): Pick<
+  ResourceCatalog,
+  "completeness" | "observedAt" | "namespaceScope" | "reasonCodes" | "forbidden"
+> {
+  const namespaceScope = value.namespace_scope.map(responseIdentity);
+  const reasonCodes = value.reason_codes.map(responseIdentity);
+  if (new Set(namespaceScope).size !== namespaceScope.length
+    || [...namespaceScope].sort().some((item, index) => item !== namespaceScope[index])
+    || new Set(reasonCodes).size !== reasonCodes.length) invalidResponse();
+  const observedAt = responseTimestamp(value.observed_at);
+  if (value.completeness === "observed" && (observedAt === null || reasonCodes.length > 0)) {
+    invalidResponse();
+  }
+  if (value.completeness !== "observed" && reasonCodes.length === 0) invalidResponse();
+  if (value.completeness === "unavailable" && (observedAt !== null || value.forbidden.length > 0)) {
+    invalidResponse();
+  }
+  return {
+    completeness: value.completeness,
+    observedAt,
+    namespaceScope,
+    reasonCodes,
+    forbidden: value.forbidden.map((item) => ({
+      namespace: responseOptionalIdentity(item.namespace),
+      apiGroup: item.api_group,
+      version: responseIdentity(item.version),
+      resource: responseIdentity(item.resource),
+      kind: responseIdentity(item.kind),
+      namespaced: item.namespaced,
+      reasonCode: item.reason_code,
+    })),
   };
 }
 
@@ -214,10 +254,6 @@ export function toResourceDetail(
     eventExcludedCount: projectedEvents.excludedCount,
     dataQualityWarnings,
   };
-}
-
-function catalogObservedAt(snapshot: Record<string, unknown> | null): string | null {
-  return snapshot === null ? null : responseTimestamp(responseRecord(snapshot).collected_at);
 }
 
 function assertDetailIdentity(

@@ -16,6 +16,7 @@ import {
   grantDiagnoseConsent,
   getScheduledWorkloadRuns,
   getSettingsAccessProfile,
+  getPrometheusIntegration,
   getRuntimeDiagnostics,
   getVersionCheck,
   getNodePodsSummary,
@@ -39,6 +40,7 @@ import {
   updateAlertRule,
   updateNamespaceScope,
   updateUiPreferences,
+  updatePrometheusIntegration,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
@@ -119,7 +121,11 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     updateNamespaceScope,
     updateUiPreferences,
   });
-  const settingsPort = createSettingsAdapter({ getSettingsAccessProfile });
+  const settingsPort = createSettingsAdapter({
+    getPrometheusIntegration,
+    getSettingsAccessProfile,
+    updatePrometheusIntegration,
+  });
   const diagnosePort = createDiagnoseAdapter({
     addDiagnoseTurn,
     clearDiagnoseHistory,
@@ -210,7 +216,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "checks",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/checks")).loadChecksSurface(),
+        default: (await import("./composition/surfaces/checks")).loadChecksSurface(refreshPolicies),
       })),
     },
     {

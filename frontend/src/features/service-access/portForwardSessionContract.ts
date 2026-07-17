@@ -17,6 +17,7 @@ export interface LocalPortForwardRequest {
     name: string;
     uid: string;
   };
+  capabilityRevision: string;
   remotePort: number;
   localPort: number | null;
   listenAddress: "127.0.0.1";
@@ -42,7 +43,7 @@ export interface PortForwardSession {
   podName: string | null;
   podPort: number;
   localPort: number;
-  listenAddress: "127.0.0.1" | "0.0.0.0";
+  listenAddress: "127.0.0.1";
   serviceName: string | null;
   servicePort: number | null;
   scheme: "http" | "https" | null;

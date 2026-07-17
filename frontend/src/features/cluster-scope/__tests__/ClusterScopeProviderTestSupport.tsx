@@ -31,7 +31,9 @@ export function ScopeProbe() {
     phase: scope.collection.phase,
     refreshFailure,
     requestedClusterId: scope.requestedClusterId,
+    scopeInvalidationRevision: scope.scopeInvalidationRevision,
     scopeKey: scope.scopeKey,
+    scopeOperation: scope.scopeOperation,
     selectedClusterId: scope.selectedCluster?.id ?? null,
     selection: scope.selection.kind,
   };
@@ -88,7 +90,9 @@ export function readState(): {
   phase: string;
   refreshFailure: string | null;
   requestedClusterId: string | null;
+  scopeInvalidationRevision: number;
   scopeKey: string | null;
+  scopeOperation: unknown;
   selectedClusterId: string | null;
   selection: string;
 } {

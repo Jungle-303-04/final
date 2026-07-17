@@ -30,6 +30,10 @@ function renderClustersPage() {
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
         <ProductSessionProvider session={{
+          authEnabled: true,
+          authMode: "password",
+          groups: [],
+          logout: { action: "end_session", supported: true, reauthenticationExpected: false },
           userId: "service-admin",
           roles: ["service_admin"],
           workspaceId: "workspace-main",
@@ -53,7 +57,6 @@ const clusterScopePort: ClusterScopePort = {
 
 const clustersPort: ClustersPort & ClusterDisconnectPort = {
   connect: vi.fn(),
-  confirmManualCleanup: vi.fn(),
   disconnect: vi.fn(),
   loadConnection: vi.fn(),
   loadDisconnect: vi.fn(),

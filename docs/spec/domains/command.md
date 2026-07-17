@@ -316,6 +316,7 @@ leased/running + 만료 후 grace 300s 경과 ──janitor──▶ failed
 - 브라우저 입력에는 LogQL이 없다. 서버가 exact namespace/pod/container selector만 만들고 `queue_debug_query`로 기존 `telemetry.query.run` agent protocol에 적재한다. 공용 `POST /agent/debug/query`는 예약 metadata `log_stream`과 `browser_log_stream_` name prefix를 422로 거부하므로 사용자가 AI용 stream handle을 위조할 수 없다. 에이전트 protocol과 Loki provider wire shape은 바뀌지 않는다.
 - SSE는 named event를 쓰지 않고 `data: <strict JSON>\n\n`만 보낸다. envelope type은 `connected`, `log`, `pod_added`, `pod_removed`, `end`, `error`다. `connected.stream_id`는 첫 persisted debug command ID이며 process-local cache가 아니다. 후속 poll batch는 command ID는 새로 발급하되 첫 command의 correlation ID를 공유해 하나의 논리 스트림으로 묶는다.
 - 로그는 Loki provider의 `redaction_summary.applied=true`인 persisted completed result만 읽고, 공용 `packages.security.log_lines`로 다시 redact/truncate한 최대 4096자 line만 내보낸다. polling/batch/dedupe는 모두 bounded이며 연결 해제는 100ms 이내 poll로 중단한다. fake line이나 synthetic fallback은 없다.
+- 빈 결과 진단은 코드(`no_matching_pods`/`no_log_lines`)만 브라우저에 전달한다. 복구는 같은 인증·권한 경계에서 `telemetry.query.run`을 다시 큐에 넣는 에이전트 재조회이며, 로컬 Kubernetes 명령이나 컨텍스트를 브라우저에 노출하지 않는다.
 
 ## 불변식·오류 (Invariants & Errors)
 

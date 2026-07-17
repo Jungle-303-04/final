@@ -90,6 +90,12 @@ class AgentControlStore:
                 message text not null,
                 updated_at real not null
             );
+
+            create table if not exists runtime_settings (
+                setting_key text primary key,
+                setting_value text not null,
+                updated_at real not null
+            );
             """
         )
         conn.commit()
@@ -205,6 +211,39 @@ class AgentControlStore:
                     now,
                 ),
             )
+
+    def save_runtime_setting(self, key: str, value: str) -> None:
+        normalized_key = key.strip()
+        normalized_value = value.strip()
+        if not normalized_key or not normalized_value:
+            raise ValueError("runtime setting key and value are required")
+        conn = self.connection()
+        with conn:
+            conn.execute(
+                """
+                insert into runtime_settings (setting_key, setting_value, updated_at)
+                values (?, ?, ?)
+                on conflict (setting_key) do update set
+                    setting_value = excluded.setting_value,
+                    updated_at = excluded.updated_at
+                """,
+                (normalized_key, normalized_value, time.time()),
+            )
+
+    def load_runtime_setting(self, key: str) -> str | None:
+        row = (
+            self.connection()
+            .execute(
+                """
+                select setting_value
+                from runtime_settings
+                where setting_key = ?
+                """,
+                (key.strip(),),
+            )
+            .fetchone()
+        )
+        return str(row["setting_value"]) if row is not None else None
 
 
 def desired_resource_hash(resource: DesiredResource) -> str:

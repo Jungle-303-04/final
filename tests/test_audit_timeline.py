@@ -322,6 +322,7 @@ def test_every_known_subject_has_an_explicit_canonical_journey_stage() -> None:
     assert (
         audit_router.audit_journey_stage(EventSubject.HELM_CHART_SOURCE_REFRESHED.value) == "system"
     )
+    assert audit_router.audit_journey_stage(EventSubject.CHECKS_SETTINGS_UPDATED.value) == "system"
     assert audit_router.audit_journey_stage("extension.secret") == "unknown"
 
 

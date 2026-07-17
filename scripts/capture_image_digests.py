@@ -14,6 +14,8 @@ from revert_image_digests import (
     GIT_SHA,
     IMAGE_DIGEST,
     KUBERNETES_NAME,
+    BootstrapTarget,
+    ProtectedTarget,
     RollbackPlan,
     RollbackTarget,
 )
@@ -168,6 +170,7 @@ def build_plan(
     namespace: str,
     previous_release_sha: str,
     verified_live_images: Mapping[str, str] | None = None,
+    managed_repository: str | None = None,
 ) -> RollbackPlan:
     if not KUBERNETES_NAME.fullmatch(namespace):
         raise ValueError("namespace is not a Kubernetes name")
@@ -175,13 +178,28 @@ def build_plan(
         raise ValueError("previous_release_sha must be a full lowercase Git SHA")
 
     live_images = live_deployment_images(live_document)
+    live_deployments = {deployment for deployment, _container in live_images}
     verified = dict(verified_live_images or {})
     used_attestations: set[str] = set()
     targets: list[RollbackTarget] = []
+    bootstrap_targets: list[BootstrapTarget] = []
+    protected_targets: list[ProtectedTarget] = []
     for deployment, container in expected:
         image = live_images.get((deployment, container))
         if image is None:
-            raise ValueError(f"live deployment container is missing: {deployment}/{container}")
+            if deployment not in live_deployments:
+                bootstrap_targets.append(
+                    BootstrapTarget(
+                        namespace=namespace,
+                        resource=f"deployment/{deployment}",
+                        container=container,
+                        state="not_present_before_rollout",
+                    )
+                )
+                continue
+            raise ValueError(
+                f"existing live deployment container is missing: {deployment}/{container}"
+            )
         if not IMAGE_DIGEST.fullmatch(image):
             live_tag = image
             image = verified.get(live_tag)
@@ -198,19 +216,51 @@ def build_plan(
                 image=image,
             )
         )
+    if managed_repository is not None:
+        expected_identities = set(expected)
+        for (deployment, container), observed_image in live_images.items():
+            if (deployment, container) in expected_identities:
+                continue
+            if image_repository(observed_image) != managed_repository:
+                continue
+            image = observed_image
+            if not IMAGE_DIGEST.fullmatch(image):
+                image = verified.get(observed_image, "")
+                if not image:
+                    raise ValueError(
+                        "protected live deployment image is not digest-pinned: "
+                        f"{deployment}/{container}"
+                    )
+                used_attestations.add(observed_image)
+            protected_targets.append(
+                ProtectedTarget(
+                    namespace=namespace,
+                    resource=f"deployment/{deployment}",
+                    container=container,
+                    image=image,
+                    state="outside_manifest_scope_before_rollout",
+                )
+            )
     unused_attestations = sorted(set(verified) - used_attestations)
     if unused_attestations:
         raise ValueError(f"verified live image was not observed: {unused_attestations[0]}")
-    if not targets:
-        raise ValueError("no existing managed deployment container was captured")
-    return RollbackPlan(previous_release_sha=previous_release_sha, targets=tuple(targets))
+    if not targets and not bootstrap_targets and not protected_targets:
+        raise ValueError("no managed deployment container was captured")
+    return RollbackPlan(
+        previous_release_sha=previous_release_sha,
+        targets=tuple(targets),
+        bootstrap_targets=tuple(bootstrap_targets),
+        protected_targets=tuple(protected_targets),
+    )
 
 
 def write_plan(path: Path, plan: RollbackPlan) -> None:
     document = {
-        "version": 1,
+        "version": 3,
         "previous_release_sha": plan.previous_release_sha,
         "targets": [asdict(target) for target in plan.targets],
+        "bootstrap_targets": [asdict(target) for target in plan.bootstrap_targets],
+        "protected_targets": [asdict(target) for target in plan.protected_targets],
     }
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
@@ -279,6 +329,7 @@ def capture(
         namespace=namespace,
         previous_release_sha=previous_release_sha,
         verified_live_images=verified_live_images,
+        managed_repository=managed_repository,
     )
     write_plan(output, plan)
     return plan
@@ -318,7 +369,11 @@ def main() -> int:
         managed_repository=args.managed_repository,
         verified_live_images=parse_verified_live_images(args.verified_live_image),
     )
-    print(f"captured {len(plan.targets)} digest-pinned deployment container(s)")
+    print(
+        f"captured {len(plan.targets)} digest-pinned deployment container(s); "
+        f"recorded {len(plan.bootstrap_targets)} bootstrap target(s)"
+        f"; protected {len(plan.protected_targets)} outside-manifest target(s)"
+    )
     return 0
 
 

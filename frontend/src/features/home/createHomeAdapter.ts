@@ -6,12 +6,23 @@ import {
   toNodeCollection,
   toPodCollection,
 } from "./homeCanonical";
-import type { HomeEndpointDependencies } from "./homeEndpointContract";
+import type {
+  HomeEndpointDashboardEvent,
+  HomeEndpointDependencies,
+} from "./homeEndpointContract";
+import type {
+  ClusterScope,
+  ScopeTransitionOperationEvent,
+} from "../../shared/parity/referenceParity";
 import { isHomeCanonicalError } from "./homeValidation";
 import {
   loadInjectedBrowserRefreshPolicy,
   type BrowserRefreshPolicyRegistry,
 } from "../../shared/data/browserRefreshPolicyRegistry";
+
+const INITIAL_SCOPE_RECONNECT_DELAY_MS = 3_000;
+const MAX_SCOPE_RECONNECT_DELAY_MS = 30_000;
+const SCOPE_RECONNECT_MULTIPLIER = 1.5;
 
 export type {
   HomeEndpointClusterList,
@@ -71,36 +82,104 @@ export function createHomeAdapter(
       );
     },
 
-    async *subscribeDashboardInvalidations(clusterId, subscription) {
+    async *subscribeDashboardInvalidations(scope, subscription) {
       let cursor: string | undefined;
       let reconnectAfterMs: number | null = null;
+      let attempt = 0;
+      let changed = false;
       const signal = subscription?.signal;
+      publishScopeOperation(subscription?.onScopeOperation, {
+        attempt,
+        kind: "progress",
+        phase: "context_switch_progress",
+        retryAfterMs: null,
+        scope,
+      });
       while (!signal?.aborted) {
         try {
-          for await (const frame of endpoints.subscribeHomeDashboardEvents(clusterId, {
+          for await (const frame of endpoints.subscribeHomeDashboardEvents(scope.clusterId, {
             after: cursor,
             signal,
           })) {
-            if (frame.scope.cluster_id !== clusterId) {
+            if (
+              frame.scope.workspace_id !== scope.workspaceId ||
+              frame.scope.cluster_id !== scope.clusterId ||
+              !sameNamespaces(frame.scope.namespaces, scope.namespaces ?? [])
+            ) {
               throw new HomePortFailure("invalid-response");
             }
             cursor = frame.cursor;
             reconnectAfterMs = frame.reconnect_after_ms;
+            attempt = 0;
+            if (frame.kind === "connected" && !changed) {
+              changed = true;
+              publishScopeOperation(subscription?.onScopeOperation, {
+                attempt,
+                kind: "completed",
+                phase: "context_changed",
+                retryAfterMs: null,
+                scope: scopeFromFrame(frame.scope),
+              });
+            }
             if (frame.kind === "deferred_ready") {
               if (!frame.snapshot_id) throw new HomePortFailure("invalid-response");
               yield { snapshotId: frame.snapshot_id };
             }
           }
-          if (signal?.aborted || reconnectAfterMs === null) return;
+          if (signal?.aborted) return;
         } catch (error) {
           if (isAbortError(error) || signal?.aborted) return;
           const failure = error instanceof HomePortFailure ? error : toPortFailure(error);
-          if (!isRetryableStreamFailure(failure) || reconnectAfterMs === null) throw failure;
+          if (!isRetryableStreamFailure(failure)) throw failure;
         }
-        await waitForServerReconnect(reconnectAfterMs, signal);
+        attempt += 1;
+        const retryAfterMs = scopeReconnectDelayMs(reconnectAfterMs, attempt);
+        publishScopeOperation(subscription?.onScopeOperation, {
+          attempt,
+          kind: "progress",
+          phase: "context_switch_progress",
+          retryAfterMs,
+          scope: { ...scope, freshness: "disconnected" },
+        });
+        await waitForServerReconnect(retryAfterMs, signal);
       }
     },
   };
+}
+
+function scopeFromFrame(scope: HomeEndpointDashboardEvent["scope"]): ClusterScope {
+  return {
+    workspaceId: scope.workspace_id,
+    clusterId: scope.cluster_id,
+    namespaces: scope.namespaces,
+    freshness: scope.freshness,
+  };
+}
+
+function sameNamespaces(left: readonly string[], right: readonly string[]): boolean {
+  const canonical = (values: readonly string[]) => [...new Set(values)]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .sort();
+  const leftCanonical = canonical(left);
+  const rightCanonical = canonical(right);
+  return leftCanonical.length === rightCanonical.length
+    && leftCanonical.every((value, index) => value === rightCanonical[index]);
+}
+
+function publishScopeOperation(
+  listener: ((event: ScopeTransitionOperationEvent) => void) | undefined,
+  event: ScopeTransitionOperationEvent,
+): void {
+  listener?.(event);
+}
+
+function scopeReconnectDelayMs(serverDelayMs: number | null, attempt: number): number {
+  const base = serverDelayMs ?? INITIAL_SCOPE_RECONNECT_DELAY_MS;
+  return Math.min(
+    MAX_SCOPE_RECONNECT_DELAY_MS,
+    Math.round(base * SCOPE_RECONNECT_MULTIPLIER ** Math.max(0, attempt - 1)),
+  );
 }
 
 function isRetryableStreamFailure(failure: HomePortFailure): boolean {

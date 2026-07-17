@@ -17,6 +17,14 @@ import {
 } from "./authContract";
 
 const TEST_SESSION: ProductSession = {
+  authEnabled: true,
+  authMode: "password",
+  groups: [],
+  logout: {
+    action: "end_session",
+    supported: true,
+    reauthenticationExpected: false,
+  },
   userId: "operator-17",
   roles: ["viewer"],
   workspaceId: "workspace-main",

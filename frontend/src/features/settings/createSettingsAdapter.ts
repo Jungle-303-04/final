@@ -5,14 +5,17 @@ import {
   type SettingsFailureCode,
   type SettingsPort,
   type SettingsUnavailableEvidence,
+  type PrometheusIntegrationStatus,
+  type PrometheusIntegrationUpdate,
 } from "./settingsContract";
+import type { PrometheusIntegrationEndpoint } from "./settingsEndpointContract";
 
 export function createSettingsAdapter(
   endpoints: SettingsEndpointDependencies,
 ): SettingsPort {
   return {
-    getAccessProfile: (clusterId, signal) => withPortFailure(async () => {
-      const value = await endpoints.getSettingsAccessProfile(clusterId, signal);
+    getAccessProfile: (clusterId, namespace, signal) => withPortFailure(async () => {
+      const value = await endpoints.getSettingsAccessProfile(clusterId, namespace, signal);
       return {
         workspaceId: value.workspace_id,
         userId: value.user_id,
@@ -20,11 +23,61 @@ export function createSettingsAdapter(
         roles: [...value.roles],
         authority: value.authority,
         permissions: value.permissions.map((permission) => ({ ...permission })),
-        kubernetesRules: unavailableEvidence(value.kubernetes_rules),
-        restrictedResourceTypes: unavailableEvidence(value.restricted_resource_types),
+        kubernetesRules: kubernetesRulesEvidence(value.kubernetes_rules),
+        restrictedResourceTypes: restrictedResourceTypesEvidence(
+          value.restricted_resource_types,
+        ),
         revision: value.revision,
       } satisfies SettingsAccessProfile;
     }),
+    getPrometheusIntegration: (clusterId, signal) => withPortFailure(async () => (
+      integrationStatus(await endpoints.getPrometheusIntegration(clusterId, signal))
+    )),
+    updatePrometheusIntegration: (input, signal) => withPortFailure(async () => {
+      const headers = integrationHeaders(input);
+      return integrationStatus(await endpoints.updatePrometheusIntegration({
+        clusterId: input.clusterId.trim(),
+        prometheusUrl: input.url.trim(),
+        headers,
+      }, signal));
+    }),
+  };
+}
+
+function integrationHeaders(input: PrometheusIntegrationUpdate): Record<string, string> | undefined {
+  if (input.headers === undefined) return undefined;
+  const headers: Record<string, string> = {};
+  const names = new Set<string>();
+  for (const header of input.headers) {
+    const name = header.name.trim();
+    const value = header.value.trim();
+    if (!name || !value || names.has(name.toLocaleLowerCase("en-US"))) {
+      throw new SettingsPortFailure("invalid-request");
+    }
+    names.add(name.toLocaleLowerCase("en-US"));
+    headers[name] = value;
+  }
+  return headers;
+}
+
+function integrationStatus(value: PrometheusIntegrationEndpoint): PrometheusIntegrationStatus {
+  const receipt = value.receipt;
+  return {
+    clusterId: value.cluster_id,
+    configurationRevision: value.revision,
+    operationId: value.operation_id,
+    url: value.address,
+    headerNames: [...value.header_keys],
+    state: value.state,
+    errorCode: value.error_code,
+    receipt: receipt ? {
+      accepted: true,
+      commandId: receipt.command_id,
+      eventId: receipt.event_id,
+      auditEventId: receipt.audit_event_id,
+      correlationId: receipt.correlation_id,
+      status: receipt.status,
+    } : null,
   };
 }
 
@@ -37,6 +90,56 @@ function unavailableEvidence(value: {
     status: value.status,
     reasonCode: value.reason_code,
     detail: value.detail,
+  };
+}
+
+function kubernetesRulesEvidence(
+  value: import("./settingsEndpointContract").SettingsAccessProfileEndpoint["kubernetes_rules"],
+): import("./settingsContract").SettingsAccessProfile["kubernetesRules"] {
+  if (value.status === "unavailable") return unavailableEvidence(value);
+  return {
+    status: value.status,
+    authority: value.authority,
+    namespace: value.namespace,
+    observedAt: value.observed_at,
+    subject: { ...value.subject },
+    resourceRules: value.resource_rules.map(policyRule),
+    nonResourceRules: value.non_resource_rules.map(policyRule),
+    truncated: value.truncated,
+  };
+}
+
+function restrictedResourceTypesEvidence(
+  value: import("./settingsEndpointContract").SettingsAccessProfileEndpoint["restricted_resource_types"],
+): import("./settingsContract").SettingsAccessProfile["restrictedResourceTypes"] {
+  if (value.status === "unavailable") return unavailableEvidence(value);
+  return {
+    status: value.status,
+    authority: value.authority,
+    namespace: value.namespace,
+    observedAt: value.observed_at,
+    completeness: value.completeness,
+    reasonCodes: [...value.reason_codes],
+    items: value.items.map((item) => ({
+      apiGroup: item.api_group,
+      version: item.version,
+      resource: item.resource,
+      kind: item.kind,
+      namespaced: item.namespaced,
+      reasonCode: item.reason_code,
+    })),
+  };
+}
+
+function policyRule(
+  value: import("./settingsEndpointContract").SettingsKubernetesPolicyRuleEndpoint,
+): import("./settingsContract").SettingsKubernetesPolicyRule {
+  return {
+    verbs: [...value.verbs],
+    apiGroups: [...value.api_groups],
+    resources: [...value.resources],
+    resourceNames: [...value.resource_names],
+    nonResourceUrls: [...value.non_resource_urls],
   };
 }
 

@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 import re
-import shlex
 import time
 import uuid
 from collections import deque
@@ -25,6 +24,7 @@ from domains.command.debug_queries import (
 )
 from domains.identity.dependencies import require_cluster_access
 from packages.config.constants import Command, CommandStatus
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway.requests import AgentDebugQueryRequest
 from packages.contracts.identity import Permission
 from packages.contracts.log_stream import (
@@ -35,7 +35,6 @@ from packages.contracts.log_stream import (
     LogStreamLog,
     LogStreamPodAdded,
     LogStreamPodRemoved,
-    LogStreamRecoveryCommand,
     ScheduledRunLifecycleEvent,
     ScheduledWorkloadRun,
     ScheduledWorkloadRunCatalog,
@@ -104,7 +103,7 @@ class LogStreamTarget:
         return "/resources?" + urlencode(
             {
                 "clusters": self.cluster_id,
-                "resources.types": self.resource_type,
+                gateway_params.RESOURCE_TYPES_QUERY: self.resource_type,
                 "detail": detail,
             }
         )
@@ -526,7 +525,7 @@ async def stream_log_events(
     if not known_pods:
         yield LogStreamEnd(
             reason="no_pods",
-            diagnostic=empty_log_diagnostic(initial_target, reason="no_matching_pods"),
+            diagnostic=empty_log_diagnostic(reason="no_matching_pods"),
         )
         return
 
@@ -569,9 +568,7 @@ async def stream_log_events(
             yield LogStreamEnd(
                 reason="window_complete",
                 diagnostic=(
-                    empty_log_diagnostic(target, reason="no_log_lines")
-                    if emitted_line_count == 0
-                    else None
+                    empty_log_diagnostic(reason="no_log_lines") if emitted_line_count == 0 else None
                 ),
             )
             return
@@ -580,7 +577,7 @@ async def stream_log_events(
         if not known_pods:
             yield LogStreamEnd(
                 reason="no_pods",
-                diagnostic=empty_log_diagnostic(target, reason="no_matching_pods"),
+                diagnostic=empty_log_diagnostic(reason="no_matching_pods"),
             )
             return
         try:
@@ -601,60 +598,12 @@ async def stream_log_events(
 
 
 def empty_log_diagnostic(
-    target: LogStreamTarget,
     *,
     reason: Literal["no_matching_pods", "no_log_lines"],
 ) -> LogStreamDiagnostic:
-    """Build one target-bound read-only recovery command on the server.
+    """Describe an empty agent result without exposing a local cluster escape hatch."""
 
-    Kubernetes identifiers have already crossed the strict target resolver, but
-    ``shlex.join`` still makes the copy boundary safe if that validation changes.
-    The command deliberately omits ``--context``: an Opsia cluster id is not a
-    local kubeconfig context.  The typed recovery carries the cluster id so the
-    UI can make that requirement explicit instead of silently targeting another
-    cluster.
-    """
-
-    argv: list[str]
-    if reason == "no_matching_pods":
-        if target.target_type == "pod":
-            argv = ["kubectl", "get", "pod", target.name, "--namespace", target.namespace]
-        else:
-            resource_name = {
-                "Deployment": "deployment",
-                "StatefulSet": "statefulset",
-                "DaemonSet": "daemonset",
-                "Job": "job",
-            }.get(target.kind)
-            if resource_name is None:
-                return LogStreamDiagnostic(code=reason)
-            argv = [
-                "kubectl",
-                "get",
-                resource_name,
-                target.name,
-                "--namespace",
-                target.namespace,
-            ]
-    elif len(target.pods) == 1:
-        argv = [
-            "kubectl",
-            "logs",
-            target.pods[0],
-            "--namespace",
-            target.namespace,
-            "--all-containers=true",
-            "--tail=100",
-        ]
-    else:
-        argv = ["kubectl", "get", "pods", "--namespace", target.namespace]
-    return LogStreamDiagnostic(
-        code=reason,
-        recovery=LogStreamRecoveryCommand(
-            command=shlex.join(argv),
-            cluster_id=target.cluster_id,
-        ),
-    )
+    return LogStreamDiagnostic(code=reason)
 
 
 async def read_log_stream_evidence(

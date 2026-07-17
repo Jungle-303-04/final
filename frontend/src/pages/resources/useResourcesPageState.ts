@@ -51,6 +51,9 @@ export function useResourcesPageState(
         (candidate) => candidate.clusterId === selectedClusterId,
       )
     : [];
+  const catalogNamespaces = [...new Set(
+    selectedNamespaces.map((candidate) => candidate.namespace),
+  )].sort();
   const namespace =
     namespaceRefs.length === 1 && selectedNamespaces.length === 1
       ? (selectedNamespaces[0]?.namespace ?? null)
@@ -197,6 +200,7 @@ export function useResourcesPageState(
 
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
+    catalogNamespaces,
     catalogQuerySupported: true,
     catalogRevision,
     detailClusterId: detailTarget?.clusterId ?? null,

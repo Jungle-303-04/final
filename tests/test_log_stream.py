@@ -525,7 +525,7 @@ def test_scheduled_catalog_keeps_inventory_history_without_log_permission() -> N
     assert stream.status_code == 404
 
 
-def test_empty_stream_end_exposes_copy_only_read_only_diagnostic(
+def test_empty_stream_end_requires_agent_requery_without_local_kubectl_recovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("domains.log_stream.service.LOG_STREAM_BATCH_LIMIT", 1)
@@ -540,12 +540,8 @@ def test_empty_stream_end_exposes_copy_only_read_only_diagnostic(
     terminal = data_envelopes(response.text)[-1]
     assert terminal["type"] == "end"
     assert terminal["diagnostic"]["code"] == "no_log_lines"
-    assert terminal["diagnostic"]["recovery"] == {
-        "kind": "copy_command",
-        "command": f"kubectl logs {POD_NAME} --namespace {NAMESPACE} --all-containers=true --tail=100",
-        "cluster_id": CLUSTER_ID,
-        "read_only": True,
-    }
+    assert terminal["diagnostic"] == {"code": "no_log_lines"}
+    assert "kubectl" not in response.text
 
 
 def test_unredacted_agent_result_never_crosses_browser_boundary(

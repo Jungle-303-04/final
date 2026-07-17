@@ -239,7 +239,7 @@ status: synced
 | POST | `/agent/commands/{command_id}/result` | agent | — |
 | GET | `/dashboard/rca/timeline` | 세션 | cluster read 필터 |
 | GET | `/dashboard/rca/incidents/{incident_id}` | 세션 | cluster read 필터 |
-| POST | `/metrics/validate` | 세션 | PromQL dry-run 검증 |
+| POST | `/metrics/validate` | 세션 + cluster `evidence.read` | `telemetry.query.run` agent PromQL 검증 접수(202) |
 | GET | `/fleet/summary` | 세션 | `accessible_resource_ids`(cluster read)로 클러스터 필터 — `src/domains/dashboard/fleet_router.py :: fleet_summary` |
 | GET | `/clusters/{cluster_id}/summary` | 세션 | cluster read 접근 — `src/domains/dashboard/fleet_router.py :: cluster_summary_detail` |
 

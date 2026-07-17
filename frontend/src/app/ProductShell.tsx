@@ -86,6 +86,7 @@ import {
 } from "../features/service-access/portForwardSessionContract";
 import { PortForwardSessionsProvider } from "../features/service-access/PortForwardSessionsProvider";
 import { PortForwardSessionIndicator } from "./PortForwardSessionIndicator";
+import { ShellSessionsProvider } from "../features/shell-sessions/ShellSessionsProvider";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -121,18 +122,20 @@ export function ProductShell({
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
           <PortForwardSessionsProvider port={portForwardSessions}>
-            <BottomDockProvider port={logStreamPort}>
-              <AlertEventsProvider port={alertEventsPort}>
-                <ProductShellFrame
-                  auth={auth}
-                  aiAssistantPort={aiAssistantPort}
-                  globalFilterPort={globalFilterPort}
-                  releasedSurfaceIds={releasedSurfaceIds}
-                  shellStatePort={shellStatePort}
-                  runtimeStatusPort={runtimeStatusPort}
-                />
-              </AlertEventsProvider>
-            </BottomDockProvider>
+            <ShellSessionsProvider>
+              <BottomDockProvider port={logStreamPort}>
+                <AlertEventsProvider port={alertEventsPort}>
+                  <ProductShellFrame
+                    auth={auth}
+                    aiAssistantPort={aiAssistantPort}
+                    globalFilterPort={globalFilterPort}
+                    releasedSurfaceIds={releasedSurfaceIds}
+                    shellStatePort={shellStatePort}
+                    runtimeStatusPort={runtimeStatusPort}
+                  />
+                </AlertEventsProvider>
+              </BottomDockProvider>
+            </ShellSessionsProvider>
           </PortForwardSessionsProvider>
         </SidebarProvider>
       </TooltipProvider>

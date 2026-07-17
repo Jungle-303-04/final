@@ -670,6 +670,19 @@ def test_capabilities_lookup_is_workspace_scoped_and_missing_is_404() -> None:
     assert db.access_checks == []
 
 
+def test_capabilities_rejects_a_broad_namespace_only_query() -> None:
+    db = ResourceCapabilitiesDb()
+
+    response = client(db).get(
+        "/capabilities",
+        params={"namespace": "sandbox"},
+    )
+
+    assert response.status_code == 422
+    assert db.lookups == []
+    assert db.access_checks == []
+
+
 def test_capabilities_revision_changes_when_effective_permission_changes() -> None:
     allowed = client(ResourceCapabilitiesDb()).get(
         "/capabilities", params={"resource": "resource-deployment-api"}

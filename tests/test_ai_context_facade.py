@@ -12,9 +12,10 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from domains.ai.alert_actions import DEFAULT_ALERT_RULE_FOR_SECONDS
-from domains.ai.context_facade import get_context_chat_llm
+from domains.ai.context_facade import get_context_chat_llm, get_context_mcp_engine
 from domains.ai.router import router as ai_router
 from domains.identity.dependencies import require_session
+from packages.ai.engine import EngineResult
 from packages.contracts.gateway.responses import (
     AI_NO_DATA_ANSWER,
     AiChatResponse,
@@ -71,6 +72,16 @@ class StubContextLlm:
     async def complete(self, prompt: str, **_options: Any) -> str:
         self.prompts.append(prompt)
         return self.reply
+
+
+class StubMcpEngine:
+    def __init__(self, reply: str = "MCP-grounded answer") -> None:
+        self.reply = reply
+        self.calls: list[dict[str, Any]] = []
+
+    async def respond(self, **kwargs: Any) -> EngineResult:
+        self.calls.append(kwargs)
+        return EngineResult(self.reply, tool_trace=[{"tool": "list_clusters", "ok": True}])
 
 
 class FailingContextLlm(StubContextLlm):
@@ -130,12 +141,15 @@ def ai_app(
     *,
     authenticated: bool = True,
     llm: StubContextLlm | None = None,
+    mcp_engine: StubMcpEngine | None = None,
 ) -> FastAPI:
     app = FastAPI()
     app.include_router(ai_router)
     app.dependency_overrides[get_db] = lambda: db
     if llm is not None:
         app.dependency_overrides[get_context_chat_llm] = lambda: llm
+    if mcp_engine is not None:
+        app.dependency_overrides[get_context_mcp_engine] = lambda: mcp_engine
     if authenticated:
         app.dependency_overrides[require_session] = current_session
     else:
@@ -162,6 +176,48 @@ def test_context_chat_calls_configured_llm_with_only_sanitized_evidence() -> Non
     assert len(llm.prompts) == 1
     assert "checkout-api-0" in llm.prompts[0]
     assert "must-not-leak" not in llm.prompts[0]
+
+
+def test_context_chat_can_use_mcp_engine_with_existing_evidence() -> None:
+    llm = StubContextLlm("plain LLM should not be used")
+    mcp_engine = StubMcpEngine("MCP tool result explains the selected pod.")
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm, mcp_engine=mcp_engine)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "Use tools to check this pod."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "MCP tool result explains the selected pod."
+    assert response.json()["evidence"]
+    assert llm.prompts == []
+    assert len(mcp_engine.calls) == 1
+    call = mcp_engine.calls[0]
+    assert "Observed evidence" in call["system_prompt"]
+    assert "checkout-api-0" in call["system_prompt"]
+    assert "must-not-leak" not in call["system_prompt"]
+    assert call["context"].workspace_id == "ws-1"
+    assert call["context"].user_id == "user-1"
+    assert call["context"].cluster_id == "cluster-1"
+    assert call["context"].resource_type == "pod"
+    assert call["context"].kind == "Pod"
+    assert call["context"].namespace == "shop"
+    assert call["context"].name == "checkout-api-0"
+
+
+def test_context_chat_keeps_no_data_boundary_before_calling_mcp_engine() -> None:
+    llm = StubContextLlm("no evidence invention")
+    mcp_engine = StubMcpEngine("unsupported evidence-free operational answer")
+
+    response = TestClient(ai_app(StubAiDb(rows=[]), llm=llm, mcp_engine=mcp_engine)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "Is the selected pod broken?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": AI_NO_DATA_ANSWER, "evidence": []}
+    assert llm.prompts == []
+    assert mcp_engine.calls == []
 
 
 def test_context_chat_uses_empty_resource_type_filter_as_all_resources() -> None:

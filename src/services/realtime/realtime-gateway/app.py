@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
@@ -16,9 +17,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from agent_connections import AgentConnectionRegistry
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from hub import BrowserClient, RealtimeHub, RealtimeSnapshotLimitError
+from port_forward_sessions import (
+    PortForwardAuditor,
+    PortForwardAuthorizer,
+    PortForwardSessionBroker,
+    database_port_forward_auditor,
+    database_port_forward_authorizer,
+    port_forward_capability_revision,
+    port_forward_local_availability,
+    port_forward_resource_ports,
+    port_forward_scope_and_resource,
+)
 from terminal_sessions import (
     TerminalAuditor,
     TerminalAuthorizer,
@@ -43,6 +56,7 @@ from packages.contracts.identity import (
     Permission,
     ServiceRole,
 )
+from packages.contracts.port_forward import BROWSER_PORT_FORWARD_PATH, PortForwardStart
 from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     BROWSER_LIVE_PATH,
@@ -66,6 +80,14 @@ from packages.security.trusted_proxy import (
 )
 from packages.storage.database import Database, wait_for_database
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
+
+__all__ = [
+    "PortForwardStart",
+    "port_forward_capability_revision",
+    "port_forward_local_availability",
+    "port_forward_resource_ports",
+    "port_forward_scope_and_resource",
+]
 
 LOGGER = get_logger(__name__)
 
@@ -97,12 +119,17 @@ class AgentIngressBudget:
     byte_count: int = 0
 
     def consume(self, payload: object, *, now: float | None = None) -> None:
+        self._consume_size(serialized_json_bytes(payload), now=now)
+
+    def consume_binary(self, payload: bytes, *, now: float | None = None) -> None:
+        self._consume_size(len(payload), now=now)
+
+    def _consume_size(self, payload_bytes: int, *, now: float | None = None) -> None:
         observed_at = time.monotonic() if now is None else now
         if observed_at - self.window_started_at >= self.limits.agent_ingress_window_seconds:
             self.window_started_at = observed_at
             self.message_count = 0
             self.byte_count = 0
-        payload_bytes = serialized_json_bytes(payload)
         if payload_bytes > self.limits.agent_message_max_bytes:
             raise RealtimeLimitError("agent_message_too_large")
         if self.message_count + 1 > self.limits.agent_messages_per_window:
@@ -210,6 +237,8 @@ def create_app(
     authorize_browser_cluster: BrowserClusterAuthorizer | None = None,
     authorize_browser_terminal: TerminalAuthorizer | None = None,
     audit_terminal: TerminalAuditor | None = None,
+    authorize_browser_port_forward: PortForwardAuthorizer | None = None,
+    audit_port_forward: PortForwardAuditor | None = None,
     persist_live_usage: LiveUsagePersister | None = None,
     realtime_limits: RealtimeIngressLimits | None = None,
 ) -> FastAPI:
@@ -232,6 +261,14 @@ def create_app(
         )
     if audit_terminal is None:
         audit_terminal = database_terminal_auditor(db) if db is not None else _fail_terminal_audit
+    if authorize_browser_port_forward is None:
+        authorize_browser_port_forward = (
+            database_port_forward_authorizer(db) if db is not None else _deny_port_forward
+        )
+    if audit_port_forward is None:
+        audit_port_forward = (
+            database_port_forward_auditor(db) if db is not None else _fail_port_forward_audit
+        )
     if persist_live_usage is None and db is not None:
         save_live_usage = getattr(db, "save_live_cluster_usage_sample", None)
         if callable(save_live_usage):
@@ -252,9 +289,16 @@ def create_app(
 
     limits = realtime_limits or realtime_gateway_limits()
     hub = RealtimeHub(limits=limits)
+    agent_connections = AgentConnectionRegistry()
     terminal_broker = TerminalSessionBroker(
         authorize=authorize_browser_terminal,
         audit=audit_terminal,
+        connections=agent_connections,
+    )
+    port_forward_broker = PortForwardSessionBroker(
+        authorize=authorize_browser_port_forward,
+        audit=audit_port_forward,
+        connections=agent_connections,
     )
 
     @asynccontextmanager
@@ -272,6 +316,9 @@ def create_app(
 
     app = FastAPI(title=GATEWAY_NAME, lifespan=lifespan)
     app.state.hub = hub
+    app.state.agent_connections = agent_connections
+    app.state.terminal_broker = terminal_broker
+    app.state.port_forward_broker = port_forward_broker
 
     @app.get("/healthz", response_class=PlainTextResponse)
     async def healthz() -> str:
@@ -297,28 +344,51 @@ def create_app(
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
 
-        agent_channel = await terminal_broker.register_agent(cluster_id, websocket)
+        agent_connection, previous_connection = agent_connections.register(cluster_id, websocket)
+        if previous_connection is not None:
+            await terminal_broker.agent_disconnected(cluster_id, previous_connection)
+            await port_forward_broker.agent_disconnected(cluster_id, previous_connection)
+            with suppress(Exception):
+                await previous_connection.websocket.close(code=1012)
         ingress_budget = AgentIngressBudget(limits)
-        await websocket.send_json(HelloMessage().model_dump(mode="json"))
+        await agent_connection.send_json(HelloMessage())
         LOGGER.info("agent_stream_connected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}})
         try:
             while True:
-                payload = await websocket.receive_json()
+                incoming = await websocket.receive()
+                if incoming["type"] == "websocket.disconnect":
+                    raise WebSocketDisconnect(int(incoming.get("code") or 1000))
                 try:
+                    binary = incoming.get("bytes")
+                    if binary is not None:
+                        payload_bytes = bytes(binary)
+                        ingress_budget.consume_binary(payload_bytes)
+                        await port_forward_broker.handle_agent_binary(
+                            cluster_id, agent_connection, payload_bytes
+                        )
+                        continue
+                    payload = json.loads(str(incoming.get("text") or ""))
                     ingress_budget.consume(payload)
-                except (RealtimeLimitError, ValueError):
+                except (json.JSONDecodeError, RealtimeLimitError, ValueError):
                     LOGGER.warning(
                         "agent_ingress_limit_exceeded",
                         extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}},
                     )
                     await websocket.close(code=CLOSE_PROTOCOL_VIOLATION)
                     return
-                terminal_result = await terminal_broker.handle_agent_payload(cluster_id, payload)
+                terminal_result = await terminal_broker.handle_agent_payload(
+                    cluster_id, agent_connection, payload
+                )
                 if terminal_result is True:
+                    continue
+                port_forward_result = await port_forward_broker.handle_agent_payload(
+                    cluster_id, agent_connection, payload
+                )
+                if port_forward_result is True:
                     continue
                 message = (
                     _ingest(hub, cluster_id, payload, limits=limits)
-                    if terminal_result is not False
+                    if terminal_result is not False and port_forward_result is not False
                     else None
                 )
                 if message is None:
@@ -355,7 +425,9 @@ def create_app(
                 "agent_stream_disconnected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
             )
         finally:
-            await terminal_broker.unregister_agent(cluster_id, agent_channel)
+            if agent_connections.unregister(cluster_id, agent_connection):
+                await terminal_broker.agent_disconnected(cluster_id, agent_connection)
+                await port_forward_broker.agent_disconnected(cluster_id, agent_connection)
 
     @app.websocket(BROWSER_LIVE_PATH)
     async def browser_live(websocket: WebSocket) -> None:
@@ -365,16 +437,7 @@ def create_app(
         if not params[Gateway.WORKSPACE_ID] or not params[Gateway.CLUSTER_ID]:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
-        proxy_identity = trusted_proxy_identity(websocket.headers)
-        session = (
-            {
-                Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
-                "user_id": proxy_identity.user_id,
-                "roles": [ServiceRole.SERVICE_ADMIN.value],
-            }
-            if proxy_identity is not None
-            else await authenticate_browser(browser_session_token(websocket))
-        )
+        session = await authenticated_browser_session(websocket, authenticate_browser)
         session_workspace = session_workspace_id(session)
         if not session_workspace or params[Gateway.WORKSPACE_ID] != session_workspace:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
@@ -418,20 +481,20 @@ def create_app(
     @app.websocket(BROWSER_TERMINAL_PATH)
     async def browser_terminal(websocket: WebSocket) -> None:
         await websocket.accept()
-        proxy_identity = trusted_proxy_identity(websocket.headers)
-        session = (
-            {
-                Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
-                "user_id": proxy_identity.user_id,
-                "roles": [ServiceRole.SERVICE_ADMIN.value],
-            }
-            if proxy_identity is not None
-            else await authenticate_browser(browser_session_token(websocket))
-        )
+        session = await authenticated_browser_session(websocket, authenticate_browser)
         if session is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
         await terminal_broker.serve_browser(websocket, session)
+
+    @app.websocket(BROWSER_PORT_FORWARD_PATH)
+    async def browser_port_forward(websocket: WebSocket) -> None:
+        await websocket.accept()
+        session = await authenticated_browser_session(websocket, authenticate_browser)
+        if session is None:
+            await websocket.close(code=CLOSE_UNAUTHORIZED)
+            return
+        await port_forward_broker.serve_browser(websocket, session)
 
     return app
 
@@ -442,6 +505,28 @@ async def _deny_terminal(*_args: object) -> bool:
 
 async def _fail_terminal_audit(*_args: object) -> None:
     raise RuntimeError("terminal audit store is unavailable")
+
+
+async def _deny_port_forward(*_args: object) -> bool:
+    return False
+
+
+async def _fail_port_forward_audit(*_args: object) -> None:
+    raise RuntimeError("port-forward audit store is unavailable")
+
+
+async def authenticated_browser_session(
+    websocket: WebSocket,
+    authenticate: BrowserSessionAuthenticator,
+) -> Any:
+    proxy_identity = trusted_proxy_identity(websocket.headers)
+    if proxy_identity is not None:
+        return {
+            Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
+            "user_id": proxy_identity.user_id,
+            "roles": [ServiceRole.SERVICE_ADMIN.value],
+        }
+    return await authenticate(browser_session_token(websocket))
 
 
 def browser_session_token(websocket: WebSocket) -> str | None:

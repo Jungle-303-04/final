@@ -8,8 +8,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from domains.command.router import debug_query_plan
-from domains.dashboard.metrics_validation import validate_promql_query
+from domains.command.debug_queries import queue_debug_query
+from domains.command.router import debug_query_plan, publish_operation_event
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
     require_cluster_access,
@@ -21,19 +21,19 @@ from domains.issue_filter.query import IssueFilters, parse_issue_filters
 from domains.rca_changes.router import recent_change_item
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     MetricQueryPresetUpsertRequest,
-    MetricsValidateRequest,
     MetricWidgetUpsertRequest,
+    PrometheusQueryDefinition,
 )
 from packages.contracts.gateway.responses import (
     AgentDebugQueryResponse,
     MetricQueryPresetItem,
     MetricQueryPresetListResponse,
     MetricQueryPresetResponse,
-    MetricsValidateResponse,
     MetricWidgetItem,
     MetricWidgetListResponse,
     MetricWidgetResponse,
@@ -49,10 +49,11 @@ from packages.contracts.gateway.responses import (
     ResourceIssueListResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
-from packages.runtime.dependencies import get_db
+from packages.runtime.dependencies import get_db, get_operation_events
 
-DEFAULT_TIMELINE_LIMIT = 50
-MAX_TIMELINE_LIMIT = 100
+DEFAULT_TIMELINE_LIMIT = gateway_limits.DASHBOARD_RCA_DEFAULT_LIMIT
+MAX_TIMELINE_LIMIT = gateway_limits.DASHBOARD_RCA_MAX_LIMIT
+DEFAULT_RESOURCE_ISSUE_LIMIT = gateway_limits.RESOURCE_ISSUE_DEFAULT_LIMIT
 NOT_FOUND_CODE = 404
 TIMELINE_ITEM_FIELDS = set(RcaTimelineItem.model_fields)
 METRIC_QUERY_FIELDS = set(MetricQueryPresetItem.model_fields)
@@ -63,21 +64,53 @@ METRIC_WIDGET_NOT_FOUND = "metric widget not found"
 router = APIRouter()
 
 
-@router.post(gateway_routes.METRICS_VALIDATE_PATH, response_model=MetricsValidateResponse)
-async def validate_metrics_query(
-    payload: MetricsValidateRequest,
-    _current: Any = Depends(require_session),
-) -> MetricsValidateResponse:
-    result = await validate_promql_query(
-        payload.query,
-        range_seconds=payload.range_seconds,
-        step_seconds=payload.step_seconds,
+@router.post(
+    gateway_routes.METRICS_VALIDATE_PATH,
+    response_model=AgentDebugQueryResponse,
+    status_code=202,
+)
+async def queue_metrics_validation(
+    payload: AgentDebugQueryRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
+) -> AgentDebugQueryResponse:
+    """Queue PromQL validation through the authenticated target agent only."""
+    if "cluster_id" not in payload.model_fields_set or not payload.cluster_id.strip():
+        raise HTTPException(status_code=422, detail="explicit cluster_id is required")
+    workspace_id = _workspace_id(current)
+    _require_evidence_access(db, current, workspace_id, payload.cluster_id)
+    try:
+        query = PrometheusQueryDefinition.model_validate(payload.query)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Prometheus agent query is invalid",
+        ) from exc
+    payload = payload.model_copy(update={"query": query.model_dump(exclude_none=True)})
+    queued = queue_debug_query(
+        db,
+        payload,
+        workspace_id=workspace_id,
+        requested_by=current.user_id,
     )
-    return MetricsValidateResponse(
-        valid=result.valid,
-        code=result.code,
-        detail=result.detail,
-        result_type=result.result_type,
+    if not queued.inserted:
+        raise HTTPException(status_code=409, detail="Prometheus validation is already queued")
+    await publish_operation_event(
+        operation_events,
+        command_id=queued.command_id,
+        workspace_id=workspace_id,
+        status=CommandStatus.QUEUED,
+        payload={
+            "cluster_id": payload.cluster_id,
+            "action": str(queued.plan["action"]),
+            "correlation_id": queued.correlation_id,
+        },
+    )
+    return AgentDebugQueryResponse(
+        accepted=True,
+        command_id=queued.command_id,
+        correlation_id=queued.correlation_id,
     )
 
 
@@ -373,7 +406,7 @@ async def resource_rca_issues(
     kind: str = Query(min_length=1, max_length=253),
     name: str = Query(min_length=1, max_length=253),
     namespace: str | None = Query(default=None, max_length=253),
-    limit: int = Query(default=25, ge=1, le=MAX_TIMELINE_LIMIT),
+    limit: int = Query(default=DEFAULT_RESOURCE_ISSUE_LIMIT, ge=1, le=MAX_TIMELINE_LIMIT),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ResourceIssueListResponse:

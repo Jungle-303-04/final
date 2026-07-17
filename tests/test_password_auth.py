@@ -32,6 +32,31 @@ def load_auth_module():
             sys.modules["settings"] = previous_settings
 
 
+def test_session_identity_uses_active_user_role_and_workspace_groups() -> None:
+    auth = load_auth_module()
+    users = StubUserStore(
+        {
+            "operator@example.com": {
+                "user_id": "user-1",
+                "email": "operator@example.com",
+                "display_name": "Operator",
+                "status": "active",
+                "role": "user",
+                "workspace_id": "workspace-a",
+                "groups": ["group-release", "group-platform"],
+            },
+        }
+    )
+    service = auth.PasswordAuthService(users, StubSessionStore(auth))
+
+    assert service.session_identity("user-1", "workspace-a") == {
+        "display_name": "Operator",
+        "email": "operator@example.com",
+        "groups": ["group-platform", "group-release"],
+        "roles": ["user"],
+    }
+
+
 class StubUserStore:
     def __init__(self, users: dict[str, dict[str, Any]]) -> None:
         self.users = users
@@ -96,6 +121,12 @@ class StubUserStore:
         if user is not None and user.get("workspace_id"):
             return str(user["workspace_id"])
         return None
+
+    def list_active_group_ids_for_user(self, user_id: str, workspace_id: str) -> list[str]:
+        user = self._find_user(user_id)
+        if user is None or user.get("workspace_id") != workspace_id:
+            return []
+        return [str(group_id) for group_id in user.get("groups", [])]
 
     def _find_user(self, user_id: str) -> dict[str, Any] | None:
         for user in self.users.values():

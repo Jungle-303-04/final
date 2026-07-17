@@ -5,6 +5,14 @@ import { ApiError } from "./client";
 
 const SESSION = {
   authenticated: true,
+  auth_enabled: true,
+  auth_mode: "password",
+  groups: ["group-platform"],
+  logout: {
+    action: "end_session",
+    supported: true,
+    reauthentication_expected: false,
+  },
   user_id: "user-123",
   roles: ["service_admin"],
   workspace_id: "default",
@@ -54,6 +62,24 @@ describe("auth API", () => {
   it("rejects a session response that does not match the wire contract", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ ...SESSION, roles: "service_admin" }),
+    );
+
+    await expect(getSession()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects source-only cloud roles and raw proxy logout URLs", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        ...SESSION,
+        cloud_role: "owner",
+        logout: {
+          ...SESSION.logout,
+          redirect_url: "https://identity.example.test/logout",
+        },
+      }),
     );
 
     await expect(getSession()).rejects.toMatchObject({

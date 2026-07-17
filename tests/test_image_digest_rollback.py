@@ -10,6 +10,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -92,6 +93,22 @@ def write_grouped_target_plan(tmp_path: Path) -> Path:
             "image": DIGEST,
         },
     )
+    path.write_text(json.dumps(document))
+    return path
+
+
+def write_bootstrap_plan(tmp_path: Path) -> Path:
+    path = write_plan(tmp_path)
+    document = json.loads(path.read_text())
+    document["version"] = 2
+    document["bootstrap_targets"] = [
+        {
+            "namespace": "management",
+            "resource": "deployment/audit-worker",
+            "container": "audit-worker",
+            "state": "not_present_before_rollout",
+        }
+    ]
     path.write_text(json.dumps(document))
     return path
 
@@ -201,6 +218,57 @@ def test_apply_uses_explicit_context_digest_and_rollout_status(
     ]
     assert all("undo" not in command for call in calls for command in call)
     assert all("alembic" not in command for call in calls for command in call)
+
+
+def test_rollback_restores_existing_digest_and_removes_bootstrapped_deployment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = revert_image_digests.load_plan(write_bootstrap_plan(tmp_path))
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(tuple(command))
+        if command[1:3] == ("config", "get-contexts"):
+            return subprocess.CompletedProcess(command, 0, stdout="opsia-dev\n")
+        if command[-4:] == ("get", "deployments", "-o", "json"):
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps(
+                    {
+                        "items": [
+                            {
+                                "metadata": {"name": "api-gateway"},
+                                "spec": {
+                                    "template": {
+                                        "spec": {
+                                            "containers": [{"name": "api-gateway", "image": DIGEST}]
+                                        }
+                                    }
+                                },
+                            }
+                        ]
+                    }
+                ),
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="")
+
+    monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
+
+    revert_image_digests.apply_plan(plan, context="opsia-dev", timeout="300s")
+
+    assert (
+        "kubectl",
+        "--context",
+        "opsia-dev",
+        "-n",
+        "management",
+        "delete",
+        "deployment/audit-worker",
+        "--ignore-not-found",
+        "--wait=true",
+    ) in calls
 
 
 def test_apply_fails_closed_when_explicit_context_is_missing(
@@ -448,15 +516,43 @@ def test_capture_rejects_tagged_or_missing_live_targets(tmp_path: Path) -> None:
         )
 
 
-def test_capture_rejects_missing_managed_targets_without_a_partial_escape_hatch(
+def test_capture_records_whole_missing_deployment_as_bootstrap_evidence(
     tmp_path: Path,
 ) -> None:
     expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
 
-    with pytest.raises(ValueError, match="is missing"):
+    plan = capture_image_digests.build_plan(
+        expected=expected,
+        live_document={"items": live_deployments()["items"][:1]},
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+
+    assert [(target.resource, target.container) for target in plan.targets] == [
+        ("deployment/api-gateway", "api-gateway")
+    ]
+    assert [
+        (target.resource, target.container, target.state) for target in plan.bootstrap_targets
+    ] == [("deployment/audit-worker", "audit-worker", "not_present_before_rollout")]
+
+
+def test_capture_rejects_missing_container_on_existing_deployment_as_manifest_typo(
+    tmp_path: Path,
+) -> None:
+    expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
+    live = live_deployments()
+    items = live["items"]
+    assert isinstance(items, list)
+    audit = items[1]
+    assert isinstance(audit, dict)
+    audit["spec"]["template"]["spec"]["containers"] = [
+        {"name": "misspelled-worker", "image": DIGEST}
+    ]
+
+    with pytest.raises(ValueError, match="existing live deployment container is missing"):
         capture_image_digests.build_plan(
             expected=expected,
-            live_document={"items": live_deployments()["items"][:1]},
+            live_document=live,
             namespace="management",
             previous_release_sha=SHA,
         )
@@ -479,6 +575,43 @@ def test_capture_accepts_only_explicit_same_repository_tag_attestation(tmp_path:
         capture_image_digests.parse_verified_live_images(
             ["registry.example/other/service:release=" + DIGEST]
         )
+
+
+def test_capture_protects_same_repository_target_outside_manifest_scope(
+    tmp_path: Path,
+) -> None:
+    expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
+    live = live_deployments()
+    items = live["items"]
+    assert isinstance(items, list)
+    items.append(
+        {
+            "metadata": {"name": "cluster-agent"},
+            "spec": {
+                "template": {"spec": {"containers": [{"name": "cluster-agent", "image": DIGEST}]}}
+            },
+        }
+    )
+
+    plan = capture_image_digests.build_plan(
+        expected=expected,
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+        managed_repository="registry.example/opsia/service",
+    )
+
+    assert [
+        (target.resource, target.container, target.image, target.state)
+        for target in plan.protected_targets
+    ] == [
+        (
+            "deployment/cluster-agent",
+            "cluster-agent",
+            DIGEST,
+            "outside_manifest_scope_before_rollout",
+        )
+    ]
 
 
 def test_capture_rejects_duplicate_or_mutable_live_image_attestations() -> None:
@@ -660,6 +793,107 @@ def test_rollout_repository_verification_fails_closed_on_stale_or_extra_target(
         )
 
 
+def test_rollout_keeps_captured_outside_manifest_target_digest_unchanged(
+    tmp_path: Path,
+) -> None:
+    plan = capture_image_digests.build_plan(
+        expected=(("api-gateway", "api-gateway"),),
+        live_document={
+            "items": [
+                live_deployments()["items"][0],
+                {
+                    "metadata": {"name": "cluster-agent"},
+                    "spec": {
+                        "template": {
+                            "spec": {"containers": [{"name": "cluster-agent", "image": DIGEST}]}
+                        }
+                    },
+                },
+            ]
+        },
+        namespace="management",
+        previous_release_sha=SHA,
+        managed_repository="registry.example/opsia/service",
+    )
+    next_digest = "registry.example/opsia/service@sha256:" + "c" * 64
+    live = {
+        "items": [
+            {
+                "metadata": {"name": "api-gateway"},
+                "spec": {
+                    "template": {
+                        "spec": {"containers": [{"name": "api-gateway", "image": next_digest}]}
+                    }
+                },
+            },
+            {
+                "metadata": {"name": "cluster-agent"},
+                "spec": {
+                    "template": {
+                        "spec": {"containers": [{"name": "cluster-agent", "image": DIGEST}]}
+                    }
+                },
+            },
+        ]
+    }
+
+    assert (
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image=next_digest,
+            live_document=live,
+            require_exact_digest=True,
+        )
+        == 1
+    )
+    live["items"][1]["spec"]["template"]["spec"]["containers"][0]["image"] = next_digest
+    with pytest.raises(RuntimeError, match="protected repository target changed"):
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image=next_digest,
+            live_document=live,
+            require_exact_digest=True,
+        )
+
+
+def test_rollout_renders_only_recorded_bootstrap_deployment_at_new_digest(
+    tmp_path: Path,
+) -> None:
+    plan = revert_image_digests.load_plan(write_bootstrap_plan(tmp_path))
+    next_digest = "service@sha256:" + "c" * 64
+
+    rendered = rollout_image_digest.render_bootstrap_manifest(
+        plan,
+        manifest=deployment_manifest(tmp_path),
+        image=next_digest,
+    )
+
+    documents = list(yaml.safe_load_all(rendered))
+    assert [document["metadata"]["name"] for document in documents] == ["audit-worker"]
+    assert documents[0]["spec"]["template"]["spec"]["containers"] == [
+        {"name": "audit-worker", "image": next_digest}
+    ]
+
+
+def test_rollout_rejects_bootstrap_manifest_container_typo_before_kubectl(
+    tmp_path: Path,
+) -> None:
+    plan = revert_image_digests.load_plan(write_bootstrap_plan(tmp_path))
+    manifest = deployment_manifest(tmp_path)
+    source = manifest.read_text(encoding="utf-8").replace(
+        "name: audit-worker\n          image:",
+        "name: misspelled-worker\n          image:",
+    )
+    manifest.write_text(source, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="bootstrap manifest target mismatch"):
+        rollout_image_digest.render_bootstrap_manifest(
+            plan,
+            manifest=manifest,
+            image="service@sha256:" + "c" * 64,
+        )
+
+
 def test_rollout_updates_only_captured_targets_to_one_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -710,6 +944,87 @@ def test_rollout_updates_only_captured_targets_to_one_digest(
     assert calls[3][-2:] == ("deployment/api-gateway", "--timeout=300s")
     assert calls[1][-4:] == ("get", "deployments", "-o", "json")
     assert calls[4][-4:] == ("get", "deployments", "-o", "json")
+
+
+def test_rollout_creates_recorded_bootstrap_before_setting_all_images(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = revert_image_digests.load_plan(write_bootstrap_plan(tmp_path))
+    next_digest = "service@sha256:" + "c" * 64
+    live_calls = 0
+    events: list[str] = []
+
+    def document(*, include_audit: bool, image: str) -> dict[str, object]:
+        items = [
+            {
+                "metadata": {"name": "api-gateway"},
+                "spec": {
+                    "template": {"spec": {"containers": [{"name": "api-gateway", "image": image}]}}
+                },
+            }
+        ]
+        if include_audit:
+            items.append(
+                {
+                    "metadata": {"name": "audit-worker"},
+                    "spec": {
+                        "template": {
+                            "spec": {"containers": [{"name": "audit-worker", "image": next_digest}]}
+                        }
+                    },
+                }
+            )
+        return {"items": items}
+
+    def fake_live_deployments(*, context: str, namespace: str) -> dict[str, object]:
+        nonlocal live_calls
+        assert (context, namespace) == ("opsia-dev", "management")
+        live_calls += 1
+        events.append(f"live-{live_calls}")
+        if live_calls == 1:
+            return document(include_audit=False, image=DIGEST)
+        if live_calls == 2:
+            return document(include_audit=True, image=DIGEST)
+        return document(include_audit=True, image=next_digest)
+
+    def fake_run(
+        command: tuple[str, ...],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        if command[1:3] == ("config", "get-contexts"):
+            return subprocess.CompletedProcess(command, 0, stdout="opsia-dev\n")
+        if command[5:7] == ("create", "--filename"):
+            events.append("create")
+            payload = kwargs.get("input")
+            assert isinstance(payload, str)
+            created = list(yaml.safe_load_all(payload))
+            assert [item["metadata"]["name"] for item in created] == ["audit-worker"]
+            return subprocess.CompletedProcess(command, 0)
+        events.append(f"{command[5]}:{command[-2]}")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(rollout_image_digest, "live_deployments", fake_live_deployments)
+    monkeypatch.setattr(rollout_image_digest.subprocess, "run", fake_run)
+
+    rollout_image_digest.rollout(
+        plan,
+        context="opsia-dev",
+        image=next_digest,
+        timeout="300s",
+        manifest=deployment_manifest(tmp_path),
+    )
+
+    assert events[:3] == ["live-1", "create", "live-2"]
+    assert events[3:5] == [
+        "set:deployment/api-gateway",
+        "set:deployment/audit-worker",
+    ]
+    assert set(events[5:7]) == {
+        "rollout:deployment/api-gateway",
+        "rollout:deployment/audit-worker",
+    }
+    assert events[7:] == ["live-3"]
 
 
 def test_rollout_command_plan_sets_every_image_before_waiting(tmp_path: Path) -> None:

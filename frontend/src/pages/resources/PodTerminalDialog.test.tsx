@@ -267,6 +267,10 @@ function renderTerminal(
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <ProductSessionProvider session={{
+        authEnabled: true,
+        authMode: "password",
+        groups: [],
+        logout: { action: "end_session", supported: true, reauthenticationExpected: false },
         userId: "operator-1",
         roles: ["cluster_steward"],
         workspaceId: "workspace-main",

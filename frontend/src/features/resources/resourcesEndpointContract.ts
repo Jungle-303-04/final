@@ -33,6 +33,21 @@ export interface ResourcesEndpointInventorySummary {
   cluster_id: string;
   latest_snapshot: ResourcesEndpointJsonMap | null;
   counts: ResourcesEndpointJsonMap[];
+  counts_evidence: {
+    completeness: "observed" | "partial" | "unavailable";
+    observed_at: string | null;
+    namespace_scope: string[];
+    reason_codes: string[];
+    forbidden: Array<{
+      namespace: string | null;
+      api_group: string;
+      version: string;
+      resource: string;
+      kind: string;
+      namespaced: boolean;
+      reason_code: "list_permission_not_observed";
+    }>;
+  };
 }
 
 export interface ResourcesEndpointResource {
@@ -102,6 +117,7 @@ export interface ResourcesEndpointDependencies {
   ): Promise<KubernetesApiResourcesEndpoint>;
   getInventorySummary(
     clusterId: string,
+    namespaces: readonly string[],
     signal?: AbortSignal,
   ): Promise<ResourcesEndpointInventorySummary>;
   listInventoryResourcesByType(

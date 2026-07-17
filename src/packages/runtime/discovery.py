@@ -17,6 +17,7 @@ from pathlib import Path
 # entrypoint 파일명 규약. 이 이름의 파일이 있으면 서비스로 간주함.
 ENTRYPOINT_FILENAME = "app.py"
 SERVICES_ROOT = Path("src") / "services"
+DISCOVERY_IGNORE_PATTERN = re.compile(r"(?m)^\s*RUNTIME_DISCOVERY_IGNORE\s*=\s*True\s*$")
 
 # 런타임 헬퍼 → 서비스 종류. \b 로 FastApiService 내부 부분 문자열 오탐 방지.
 _RUNNER_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -57,6 +58,8 @@ def discover_services(root: Path) -> tuple[DiscoveredService, ...]:
     for entrypoint in sorted(services_dir.glob(f"*/*/{ENTRYPOINT_FILENAME}")):
         relative = entrypoint.relative_to(root)
         source = entrypoint.read_text(encoding="utf-8")
+        if DISCOVERY_IGNORE_PATTERN.search(source):
+            continue
         service = DiscoveredService(
             name=_service_name(source, entrypoint.parent.name),
             group=relative.parts[2],

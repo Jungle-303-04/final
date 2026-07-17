@@ -10,20 +10,13 @@ export interface ListClustersOptions {
   limit?: number;
 }
 
-export interface UnregisterClusterOptions {
-  manualCleanupAttested?: boolean;
-}
-
 const clusterUnregisterResponseSchema = z.strictObject({
   cluster_id: z.string().min(1),
   status: z.enum(["uninstalling", "cleanup_required", "disconnected", "purged"]),
   stage: z.string().min(1),
   command_id: z.string().min(1).nullable(),
   command_status_path: z.string().min(1).nullable(),
-  uninstall_command: z.string().min(1).nullable(),
   cleanup_verified: z.boolean(),
-  resources: z.array(z.string()),
-  residual_resources: z.array(z.string()),
   failure_reason: z.string().nullable(),
 });
 
@@ -45,21 +38,17 @@ export function listClusters(
 
 /**
  * Stops an installed target agent without ever exposing physical fixture purge.
- * Manual cleanup is an explicit operator attestation, never an inferred retry.
+ * Cleanup remains agent-owned and registration survives until its verified ACK.
  */
 export function unregisterCluster(
   clusterId: string,
-  options: UnregisterClusterOptions = {},
   signal?: AbortSignal,
 ): Promise<ClusterUnregisterResponse> {
   const normalized = clusterId.trim();
   if (!normalized) throw new TypeError("clusterId must not be empty");
   const path = withQuery(
     `/api/clusters/${encodePathSegment(normalized)}` as ApiPath,
-    [
-      ["purge", false],
-      ["manual_cleanup_attested", options.manualCleanupAttested ? true : null],
-    ],
+    [["purge", false]],
   );
   return apiRequest(path, clusterUnregisterResponseSchema, { method: "DELETE", signal });
 }

@@ -18,12 +18,23 @@ from packages.contracts.gateway.requests import (
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
 )
-from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
+from packages.contracts.target import (
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+    TARGET_RBAC_MANIFEST_VERSION,
+)
+from packages.security.credentials import (
+    agent_envelope_context,
+    generate_agent_envelope_keypair,
+    seal_agent_payload,
+)
 
 
 @pytest.fixture(autouse=True)
 def management_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MANAGEMENT_BASE_URL", "http://management.local")
+    monkeypatch.setenv("AGENT_TOKEN", "agent-test-token")
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +116,7 @@ def make_client(agent_module: Any, status_code: int) -> Any:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status_code, request=request)
 
-    client = agent_module.HttpManagementPlaneClient("http://management.local")
+    client = agent_module.HttpManagementPlaneClient("https://management.local")
     asyncio.run(client.client.aclose())
     client.client = httpx.AsyncClient(
         transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
@@ -181,6 +192,13 @@ async def close_client(client: Any) -> None:
                 "resources": [],
             }
         ),
+        lambda client: client.report_prometheus_integration_status(
+            {
+                "revision": "revision-1",
+                "operation_id": "operation-1",
+                "state": "connected",
+            }
+        ),
     ],
 )
 def test_management_client_write_calls_raise_on_gateway_error(
@@ -226,6 +244,390 @@ def test_management_client_polls_evidence_job() -> None:
         "provider_key": "metrics",
         "lease_id": "lease-1",
     }
+
+
+def test_management_client_fetches_revision_bound_prometheus_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent_module = load_agent_module()
+    requests: list[httpx.Request] = []
+    public_key, private_key = generate_agent_envelope_keypair()
+    monkeypatch.setenv("WORKSPACE_ID", "workspace-1")
+    monkeypatch.setenv("AGENT_ENVELOPE_PRIVATE_KEY", private_key)
+    context = agent_envelope_context(
+        "workspace-1",
+        "cluster-1",
+        "revision-1",
+        "operation-1",
+        "https://prometheus.test",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "cluster_id": "cluster-1",
+                "revision": "revision-1",
+                "operation_id": "operation-1",
+                "address": "https://prometheus.test",
+                "sealed_headers": seal_agent_payload(
+                    {"headers": {"Authorization": "Bearer secret"}},
+                    public_key,
+                    context,
+                ),
+            },
+            request=request,
+        )
+
+    client = agent_module.HttpManagementPlaneClient("http://management.local")
+    asyncio.run(client.client.aclose())
+    client.client = httpx.AsyncClient(
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
+    )
+
+    async def run() -> dict[str, object]:
+        try:
+            return await client.fetch_prometheus_integration("revision-1")
+        finally:
+            await close_client(client)
+
+    result = asyncio.run(run())
+
+    assert result["headers"] == {"Authorization": "Bearer secret"}
+    assert requests[0].url.params["revision"] == "revision-1"
+
+
+def test_target_agent_applies_revision_once_and_reports_probe_status(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setattr(
+        agent_module.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                agent_module.socket.AF_INET,
+                agent_module.socket.SOCK_STREAM,
+                6,
+                "",
+                ("93.184.216.34", 443),
+            )
+        ],
+    )
+    probe_requests: list[httpx.Request] = []
+
+    def probe_handler(request: httpx.Request) -> httpx.Response:
+        probe_requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "vector", "result": []}},
+            request=request,
+        )
+
+    class IntegrationClient:
+        def __init__(self, cluster_id: str) -> None:
+            self.cluster_id = cluster_id
+            self.fetches = 0
+            self.statuses: list[dict[str, object]] = []
+
+        async def fetch_prometheus_integration(self, revision: str) -> dict[str, object]:
+            self.fetches += 1
+            assert revision == "revision-1"
+            return {
+                "cluster_id": self.cluster_id,
+                "revision": revision,
+                "operation_id": "operation-1",
+                "address": "https://prometheus.test",
+                "headers": {"Authorization": "Bearer secret"},
+            }
+
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            self.statuses.append(status)
+
+    agent = target_agent_factory(
+        agent_module,
+        telemetry_transport=getattr(httpx, "Mo" + "ckTransport")(probe_handler),
+    )
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-1",
+                    configuration_operation_id="operation-1",
+                    queries=[
+                        {
+                            "name": "integration_up",
+                            "description": "Integration availability",
+                            "query": "up",
+                        }
+                    ],
+                )
+            }
+        ),
+    )
+    client = IntegrationClient(agent.cluster_id)
+
+    first = asyncio.run(agent.apply_runtime_configurations(client, policy))
+    second = asyncio.run(agent.apply_runtime_configurations(client, policy))
+    applied_policy = agent.apply_policy(policy)
+
+    assert first == second
+    assert client.fetches == 1
+    assert client.statuses == [
+        {
+            "revision": "revision-1",
+            "operation_id": "operation-1",
+            "state": "connected",
+        }
+    ]
+    assert probe_requests[0].url.host == "93.184.216.34"
+    assert probe_requests[0].headers["host"] == "prometheus.test"
+    assert probe_requests[0].extensions["sni_hostname"] == "prometheus.test"
+    assert probe_requests[0].headers["authorization"] == "Bearer secret"
+    assert agent.evidence_collector.providers["metrics"].base_url == "https://prometheus.test"
+    assert "metrics" in agent.evidence_scheduler.provider_keys
+    assert agent.evidence_scheduler.provider_worker_counts["metrics"] == 1
+    assert agent.query_registry.get("prometheus", "integration_up").query == "up"
+    assert applied_policy["registered_queries"]["metrics"] == ["integration_up"]
+    assert "secret" not in repr(asyncio.run(agent.policy_status_details()))
+
+
+def test_target_agent_has_no_static_prometheus_provider(
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    agent = target_agent_factory(agent_module)
+
+    assert "metrics" not in agent.evidence_collector.providers
+    assert "metrics" not in agent.evidence_scheduler.provider_keys
+
+
+def test_target_agent_never_reports_connected_before_local_provider_registration(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    agent = target_agent_factory(agent_module)
+    reports: list[dict[str, object]] = []
+
+    async def probe(*_args: object, **_kwargs: object) -> object:
+        return agent_module.PrometheusMetricsProvider("https://prometheus.test")
+
+    class IntegrationClient:
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            reports.append(status)
+
+    monkeypatch.setattr(agent, "probe_prometheus_runtime_configuration", probe)
+    monkeypatch.setattr(
+        agent.evidence_scheduler,
+        "register_provider",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("scheduler unavailable")),
+    )
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-local-failure",
+                    configuration_operation_id="operation-local-failure",
+                )
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="scheduler unavailable"):
+        asyncio.run(agent.apply_runtime_configurations(IntegrationClient(), policy))
+
+    assert reports == []
+    assert "metrics" not in agent.evidence_collector.providers
+    assert "metrics" not in agent.evidence_scheduler.provider_keys
+
+
+def test_target_agent_rolls_back_local_provider_when_connected_report_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    agent = target_agent_factory(agent_module)
+
+    async def probe(*_args: object, **_kwargs: object) -> object:
+        return agent_module.PrometheusMetricsProvider("https://prometheus.test")
+
+    class IntegrationClient:
+        async def report_prometheus_integration_status(self, _status: dict[str, object]) -> None:
+            raise OSError("management unavailable")
+
+    monkeypatch.setattr(agent, "probe_prometheus_runtime_configuration", probe)
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-report-failure",
+                    configuration_operation_id="operation-report-failure",
+                )
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="^prometheus_status_report_failed$"):
+        asyncio.run(agent.apply_runtime_configurations(IntegrationClient(), policy))
+
+    assert "metrics" not in agent.evidence_collector.providers
+    assert "metrics" not in agent.evidence_scheduler.provider_keys
+    assert agent.prometheus_integration_status["state"] == "unconfigured"
+
+
+def test_target_agent_caches_failed_probe_without_replaying_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setattr(
+        agent_module.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                agent_module.socket.AF_INET6,
+                agent_module.socket.SOCK_STREAM,
+                6,
+                "",
+                ("2606:2800:220:1:248:1893:25c8:1946", 443, 0, 0),
+            )
+        ],
+    )
+    agent = target_agent_factory(
+        agent_module,
+        telemetry_transport=getattr(httpx, "Mo" + "ckTransport")(
+            lambda request: httpx.Response(503, text="secret upstream detail", request=request)
+        ),
+    )
+
+    class IntegrationClient:
+        def __init__(self) -> None:
+            self.fetches = 0
+            self.statuses: list[dict[str, object]] = []
+
+        async def fetch_prometheus_integration(self, revision: str) -> dict[str, object]:
+            self.fetches += 1
+            return {
+                "cluster_id": agent.cluster_id,
+                "revision": revision,
+                "operation_id": "operation-failed",
+                "address": "https://secret-host.prometheus.test",
+                "headers": {"Authorization": "Bearer secret-value"},
+            }
+
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            self.statuses.append(status)
+
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-failed",
+                    configuration_operation_id="operation-failed",
+                )
+            }
+        ),
+    )
+    client = IntegrationClient()
+
+    for _ in range(agent_module.PROMETHEUS_PROBE_MAX_ATTEMPTS + 1):
+        with pytest.raises(RuntimeError, match="^prometheus_probe_http_error$"):
+            asyncio.run(agent.apply_runtime_configurations(client, policy))
+
+    assert client.fetches == agent_module.PROMETHEUS_PROBE_MAX_ATTEMPTS
+    assert [status["state"] for status in client.statuses] == [
+        *(["retrying"] * (agent_module.PROMETHEUS_PROBE_MAX_ATTEMPTS - 1)),
+        "failed",
+    ]
+    assert all(
+        status
+        == {
+            "revision": "revision-failed",
+            "operation_id": "operation-failed",
+            "state": status["state"],
+            "error_code": "prometheus_probe_http_error",
+        }
+        for status in client.statuses
+    )
+    details = repr(asyncio.run(agent.policy_status_details()))
+    assert "secret-host" not in details
+    assert "secret-value" not in details
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected"),
+    [(401, False), (404, False), (408, True), (429, True), (503, True)],
+)
+def test_prometheus_probe_http_retry_classification(status_code: int, expected: bool) -> None:
+    agent_module = load_agent_module()
+    request = httpx.Request("GET", "https://prometheus.test/api/v1/query")
+    response = httpx.Response(status_code, request=request)
+    error = httpx.HTTPStatusError("probe failed", request=request, response=response)
+
+    assert agent_module.prometheus_transport_error_retryable(error) is expected
+
+
+def test_target_agent_rejects_dns_resolution_to_link_local_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setattr(
+        agent_module.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                agent_module.socket.AF_INET,
+                agent_module.socket.SOCK_STREAM,
+                6,
+                "",
+                ("169.254.169.254", 443),
+            )
+        ],
+    )
+    agent = target_agent_factory(agent_module)
+
+    class IntegrationClient:
+        def __init__(self) -> None:
+            self.statuses: list[dict[str, object]] = []
+
+        async def fetch_prometheus_integration(self, revision: str) -> dict[str, object]:
+            return {
+                "cluster_id": agent.cluster_id,
+                "revision": revision,
+                "operation_id": "operation-dns",
+                "address": "https://prometheus.monitoring.svc",
+                "headers": {},
+            }
+
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            self.statuses.append(status)
+
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-dns",
+                    configuration_operation_id="operation-dns",
+                )
+            }
+        ),
+    )
+    client = IntegrationClient()
+
+    with pytest.raises(RuntimeError, match="^prometheus_destination_denied$"):
+        asyncio.run(agent.apply_runtime_configurations(client, policy))
+
+    assert client.statuses[-1]["state"] == "failed"
+    assert client.statuses[-1]["error_code"] == "prometheus_destination_denied"
 
 
 def test_target_agent_builds_apply_manifest_patch() -> None:
@@ -703,6 +1105,18 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
 
         def handler(request: httpx.Request) -> httpx.Response:
             methods.append(request.method)
+            if request.url.path.endswith(
+                (
+                    f"/serviceaccounts/{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}",
+                    f"/clusterroles/{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}",
+                    f"/clusterrolebindings/{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}",
+                )
+            ):
+                return httpx.Response(
+                    200,
+                    json={"metadata": {"name": NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}},
+                    request=request,
+                )
             if request.url.path.endswith("/pods"):
                 return httpx.Response(
                     200,
@@ -751,13 +1165,69 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
     ).daemonset()
 
     assert body["kind"] == "DaemonSet"
+    assert body["metadata"]["labels"]["ops.service/managed-by"] == "cluster-agent"
+    assert body["spec"]["template"]["metadata"]["labels"]["ops.service/managed-by"] == (
+        "cluster-agent"
+    )
     assert body["spec"]["template"]["spec"]["tolerations"] == [{"operator": "Exists"}]
+    assert (
+        body["spec"]["template"]["spec"]["serviceAccountName"]
+        == NODE_COLLECTOR_SERVICE_ACCOUNT_NAME
+    )
+    assert body["spec"]["template"]["spec"]["serviceAccountName"] != "cluster-agent"
     assert body["spec"]["template"]["spec"]["containers"][0]["command"] == [
         "python",
         "src/services/target/node-collector/app.py",
     ]
-    assert asyncio.run(run_with_get_status(404)) == ["GET", "POST", "GET"]
-    assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH", "GET"]
+    assert asyncio.run(run_with_get_status(404)) == ["GET"] * 4 + ["POST", "GET"]
+    assert asyncio.run(run_with_get_status(200)) == ["GET"] * 4 + ["PATCH", "GET"]
+
+
+@pytest.mark.parametrize(
+    "missing_path",
+    [
+        f"/api/v1/namespaces/target/serviceaccounts/{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}",
+        (
+            "/apis/rbac.authorization.k8s.io/v1/clusterroles/"
+            f"{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}"
+        ),
+        (
+            "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/"
+            f"{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}"
+        ),
+    ],
+)
+def test_node_collector_manager_waits_for_complete_dedicated_identity_before_mutation(
+    monkeypatch,
+    missing_path: str,
+) -> None:
+    manager_module = load_node_collector_manager_module()
+    image = f"registry.example/opsia/node-collector@sha256:{'3' * 64}"
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(manager_module, "service_account_token", lambda: "token")
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        status_code = 404 if request.url.path == missing_path else 200
+        return httpx.Response(status_code, json={"kind": "Status"}, request=request)
+
+    manager = manager_module.NodeCollectorManager(
+        enabled=True,
+        image=image,
+        namespace="target",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    applied, message = asyncio.run(manager.reconcile())
+
+    assert applied is False
+    assert (
+        message == manager_module.NodeCollectorManagerConfig.NODE_COLLECTOR_IDENTITY_PENDING_MESSAGE
+    )
+    assert requested_paths[-1] == missing_path
+    assert all("daemonsets" not in path for path in requested_paths)
 
 
 def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(
@@ -776,6 +1246,18 @@ def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal rollout_image
+        if request.url.path.endswith(
+            (
+                f"/serviceaccounts/{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}",
+                f"/clusterroles/{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}",
+                f"/clusterrolebindings/{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}",
+            )
+        ):
+            return httpx.Response(
+                200,
+                json={"metadata": {"name": NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}},
+                request=request,
+            )
         if request.method == "GET" and request.url.path.endswith("/pods"):
             return httpx.Response(
                 200,
@@ -964,7 +1446,7 @@ def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
     )
 
 
-def test_target_agent_registers_query_policy_from_management_policy(
+def test_target_agent_ignores_prometheus_policy_without_runtime_integration(
     target_agent_factory: Callable[..., Any],
 ) -> None:
     agent_module = load_agent_module()
@@ -987,10 +1469,11 @@ def test_target_agent_registers_query_policy_from_management_policy(
     )
 
     result = agent.apply_policy(policy)
-    definition = agent.query_registry.get("prometheus", "checkout_error_rate")
 
-    assert result["registered_queries"]["metrics"] == ["checkout_error_rate"]
-    assert definition.query.startswith("sum(rate")
+    with pytest.raises(ValueError, match="unknown telemetry query"):
+        agent.query_registry.get("prometheus", "checkout_error_rate")
+    assert "metrics" not in result["registered_queries"]
+    assert "metrics" not in result["enabled_providers"]
 
 
 def test_target_agent_wires_argocd_reconciler_mode(

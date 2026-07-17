@@ -245,6 +245,7 @@ def _workload_revision_resource(item: JsonObject) -> JsonObject:
             "owner_kind": item.get("owner_kind"),
             "owner_name": item.get("owner_name"),
             "owner_uid": item.get("owner_uid"),
+            "owner_references_complete": item.get("owner_references_complete") is True,
             "revision": item.get("revision"),
             "created_at": item.get("created_at"),
         },

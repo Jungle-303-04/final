@@ -1,4 +1,4 @@
-import { Copy, PlugZap } from "lucide-react";
+import { PlugZap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type {
@@ -65,10 +65,14 @@ export function PortForwardAction({
     ?? capabilities.ports[0]
     ?? null;
   const localPortNumber = parsePort(localPort);
-  const available = capabilities.localPortForward === "desktop-required" && selected !== null;
-  const command = selected && localPortNumber !== null
-    ? buildKubectlPortForwardCommand(capabilities, selected, localPortNumber)
-    : null;
+  const available = capabilities.localPortForward === "desktop-required"
+    && selected !== null
+    && sessions?.available === true;
+
+  // A browser must never offer a manual target-cluster escape hatch. Until the
+  // typed agent tunnel and the desktop loopback transport are both present,
+  // the capability is absent rather than rendering a dead action.
+  if (!available) return null;
 
   const start = async () => {
     if (!available || !selected || !sessions?.available || localPortNumber === null || pending) {
@@ -104,6 +108,7 @@ export function PortForwardAction({
           name: current.resource.name,
           uid: current.resource.uid,
         },
+        capabilityRevision: current.revision,
         remotePort: exactPort.port,
         localPort: localPortNumber,
         listenAddress: "127.0.0.1",
@@ -136,13 +141,6 @@ export function PortForwardAction({
         <PlugZap aria-hidden="true" />
         {t("resources.serviceAccess.forward.action")}
       </Button>
-      {!available ? (
-        <span className="sr-only" id="port-forward-unavailable" role="status">
-          {capabilities.localPortForwardReason === "port-forward-no-tcp-ports"
-            ? t("resources.serviceAccess.forward.noTcp")
-            : t("resources.serviceAccess.forward.unavailable")}
-        </span>
-      ) : null}
       {receipt ? (
         <Alert className="w-full max-w-[32rem]">
           <AlertDescription>
@@ -156,9 +154,7 @@ export function PortForwardAction({
           <DialogHeader>
             <DialogTitle>{t("resources.serviceAccess.forward.title")}</DialogTitle>
             <DialogDescription>
-              {sessions?.available
-                ? t("resources.serviceAccess.forward.nativeBoundary")
-                : `${t("resources.serviceAccess.forward.browserBoundary")} ${t("resources.serviceAccess.forward.desktopBoundary")}`}
+              {t("resources.serviceAccess.forward.nativeBoundary")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -215,66 +211,26 @@ export function PortForwardAction({
                 </AlertDescription>
               </Alert>
             ) : null}
-            {command && !sessions?.available ? (
-              <div className="grid gap-2">
-                <code className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">{command}</code>
-                <Button
-                  onClick={() => void navigator.clipboard?.writeText(command)}
-                  type="button"
-                  variant="outline"
-                >
-                  <Copy aria-hidden="true" />
-                  {t("resources.serviceAccess.forward.copy")}
-                </Button>
-              </div>
-            ) : localPortNumber === null ? (
+            {localPortNumber === null ? (
               <Alert variant="destructive">
                 <AlertDescription>{t("resources.serviceAccess.forward.invalidPort")}</AlertDescription>
               </Alert>
             ) : null}
-            {sessions?.available ? (
-              <DialogFooter>
-                <Button disabled={pending} onClick={() => setOpen(false)} type="button" variant="outline">
-                  {t("common.action.cancel")}
-                </Button>
-                <Button disabled={pending || localPortNumber === null} onClick={() => void start()} type="button">
-                  {pending
-                    ? t("resources.serviceAccess.forward.starting")
-                    : t("resources.serviceAccess.forward.start")}
-                </Button>
-              </DialogFooter>
-            ) : null}
+            <DialogFooter>
+              <Button disabled={pending} onClick={() => setOpen(false)} type="button" variant="outline">
+                {t("common.action.cancel")}
+              </Button>
+              <Button disabled={pending || localPortNumber === null} onClick={() => void start()} type="button">
+                {pending
+                  ? t("resources.serviceAccess.forward.starting")
+                  : t("resources.serviceAccess.forward.start")}
+              </Button>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
     </>
   );
-}
-
-export function buildKubectlPortForwardCommand(
-  capabilities: ServiceAccessCapabilities,
-  selected: ServiceAccessPortDescriptor,
-  localPort: number,
-): string {
-  if (
-    !Number.isSafeInteger(localPort)
-    || localPort < 1
-    || localPort > 65_535
-    || selected.protocol !== "TCP"
-    || !capabilities.ports.some((item) => descriptorKey(item) === descriptorKey(selected))
-  ) {
-    throw new TypeError("port forward ports must be exact and valid");
-  }
-  return [
-    "kubectl",
-    "-n",
-    capabilities.resource.namespace,
-    "port-forward",
-    `${capabilities.resource.kind.toLocaleLowerCase()}/${capabilities.resource.name}`,
-    `${localPort}:${selected.port}`,
-    "--address",
-    "127.0.0.1",
-  ].join(" ");
 }
 
 function sameResource(

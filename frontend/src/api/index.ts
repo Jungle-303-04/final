@@ -86,6 +86,18 @@ export {
   type SettingsAccessProfileEndpoint,
 } from "./settings-access-schemas";
 export {
+  getPrometheusIntegration,
+  PROMETHEUS_INTEGRATION_PATH,
+  updatePrometheusIntegration,
+  type PrometheusIntegrationUpdateInput,
+} from "./prometheus-integration";
+export {
+  prometheusIntegrationReceiptSchema,
+  prometheusIntegrationStatusSchema,
+  type PrometheusIntegrationEndpoint,
+  type PrometheusIntegrationReceiptEndpoint,
+} from "./prometheus-integration-schemas";
+export {
   getTimelineCapabilities,
   getTimelineOverview,
   getTimelinePins,
@@ -195,6 +207,22 @@ export {
   type TrafficOverviewEndpoint,
 } from "./traffic-overview-schemas";
 export {
+  connectTrafficSource,
+  getTrafficSources,
+  setTrafficSource,
+  TRAFFIC_CONNECT_PATH,
+  TRAFFIC_SOURCE_PATH,
+  TRAFFIC_SOURCES_PATH,
+  type TrafficSourceCommandPayload,
+  type TrafficSourcesQuery,
+} from "./traffic-control";
+export {
+  trafficCommandReceiptSchema,
+  trafficSourcesSchema,
+  type TrafficCommandReceiptEndpoint,
+  type TrafficSourcesEndpoint,
+} from "./traffic-control-schemas";
+export {
   getCostOverview,
   COST_OVERVIEW_PATH,
   type CostOverviewQuery,
@@ -218,9 +246,12 @@ export {
 } from "./cost-overview-schemas";
 export {
   CHECKS_OVERVIEW_PATH,
+  CHECKS_SETTINGS_PATH,
   checksDetailPath,
   getChecksDetail,
   getChecksOverview,
+  getChecksSettings,
+  updateChecksSettings,
   type ChecksQuery,
 } from "./checks";
 export {
@@ -230,9 +261,14 @@ export {
   checksDetailSchema,
   checksOverviewSchema,
   checksResultSetSchema,
+  checksSettingsPolicySchema,
+  checksSettingsSchema,
+  checksSettingsUpdateSchema,
   checksScopeCoverageSchema,
   type ChecksDetailEndpoint,
   type ChecksOverviewEndpoint,
+  type ChecksSettingsEndpoint,
+  type ChecksSettingsUpdateEndpoint,
 } from "./checks-schemas";
 export {
   timelineCapabilityDescriptorSchema,
@@ -328,7 +364,6 @@ export {
   unregisterCluster,
   type ClusterUnregisterResponse,
   type ListClustersOptions,
-  type UnregisterClusterOptions,
 } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";

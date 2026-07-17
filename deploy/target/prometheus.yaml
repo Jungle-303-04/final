@@ -2,7 +2,7 @@
 # target Kubernetes cluster의 Prometheus 설치 제어
 
 server:
-  # target-cluster-agent의 PROMETHEUS_BASE_URL과 server Service name 정렬
+  # 에이전트의 동적 Prometheus integration이 참조할 서비스
   fullnameOverride: prometheus
   resources:
     requests:

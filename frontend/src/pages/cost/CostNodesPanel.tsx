@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { useCostNodes } from "./useCostNodesData";
 
 export function CostNodesPanel({
@@ -31,7 +32,19 @@ export function CostNodesPanel({
   const state = useCostNodes(port, { clusterIds, namespaces });
   const frame = state.frame;
   if (frame.phase === "idle" || frame.phase === "loading") {
-    return <ProductStateScreen kind="loading" placement="content" />;
+    return (
+      <Card aria-label={t("cost.nodes.title")} aria-busy="true">
+        <CardHeader className="border-b">
+          <Skeleton className="h-5 w-44" />
+          <Skeleton className="h-4 w-28" />
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
   if (frame.phase === "failed") {
     if (frame.failure.code === "forbidden") {

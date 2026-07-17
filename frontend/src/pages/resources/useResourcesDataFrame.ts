@@ -34,6 +34,7 @@ interface ScopedState<T> {
 }
 
 interface ResourcesDataFrameInput {
+  catalogNamespaces: readonly string[];
   catalogQuerySupported: boolean;
   detailClusterId: string | null;
   detailIdentity: ResourceIdentity | null;
@@ -53,6 +54,7 @@ interface ResourcesDataFrameInput {
 
 export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
   const {
+    catalogNamespaces,
     catalogQuerySupported,
     detailClusterId,
     detailIdentity,
@@ -130,7 +132,10 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     if (target === "detail") setDetailRecord(fail);
   }, [denyTarget, onRequestFailure, reportUnauthorized]);
 
-  const catalogScope = catalogQuerySupported && selectedClusterExists ? selectedClusterId : null;
+  const catalogNamespaceKey = catalogNamespaces.join(",");
+  const catalogScope = catalogQuerySupported && selectedClusterExists && selectedClusterId
+    ? `${selectedClusterId}:${catalogNamespaceKey}`
+    : null;
   const catalog = scopedValue(catalogRecord, catalogScope);
   useEffect(() => {
     if (!catalogScope || !selectedClusterId) return;
@@ -149,7 +154,11 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     const request = acquireSharedRequest(
       port,
       `resources:catalog:${catalogScope}:r${catalogRevision}`,
-      (signal) => port.loadCatalog(selectedClusterId, signal),
+      (signal) => port.loadCatalog(
+        selectedClusterId,
+        catalogNamespaceKey === "" ? [] : catalogNamespaceKey.split(","),
+        signal,
+      ),
     );
     void request.promise.then(
       (data) => {
@@ -165,8 +174,8 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     return () => { active = false; request.release(); };
   }, [
-    catalogQuerySupported, catalogScope, handleFailure, onRequestSuccess, port, recoverDeniedTarget,
-    catalogRevision, selectedClusterId,
+    catalogNamespaceKey, catalogQuerySupported, catalogScope, handleFailure, onRequestSuccess, port,
+    recoverDeniedTarget, catalogRevision, selectedClusterId,
   ]);
 
   const selectedTypeExists = catalog.phase === "ready" && selectedResourceType !== null &&

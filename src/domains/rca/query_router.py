@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from domains.identity.dependencies import require_session
 from domains.rca.report_projection import rca_report_summary
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     EvidenceQueryResponse,
@@ -32,8 +33,8 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db
 
-DEFAULT_QUERY_LIMIT = 50
-MAX_QUERY_LIMIT = 200
+DEFAULT_QUERY_LIMIT = gateway_limits.RCA_QUERY_DEFAULT_LIMIT
+MAX_QUERY_LIMIT = gateway_limits.RCA_QUERY_MAX_LIMIT
 HTTP_NOT_FOUND = 404
 HTTP_UNPROCESSABLE = 422
 INVALID_TIMESTAMP_DETAIL = "must be an ISO-8601 timestamp"

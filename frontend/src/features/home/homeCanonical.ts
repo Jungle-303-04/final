@@ -62,6 +62,7 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
   const id = canonicalIdentity(wire.cluster_id);
   const nodeCount = nullableNonNegativeInteger(wire.node_count);
   const podCount = nullableNonNegativeInteger(wire.pod_count);
+  const namespaceCount = nullableNonNegativeInteger(wire.namespace_count);
   const incidentCount = nullableNonNegativeInteger(wire.incident_count);
   const serverCount = nullableNonNegativeInteger(wire.server_count);
   const appCount = nullableNonNegativeInteger(wire.app_count);
@@ -79,6 +80,9 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
     lastObservedAt: canonicalTimestamp(wire.last_seen_at ?? wire.last_agent_seen_at),
     nodeCount,
     podCount,
+    namespaceCount,
+    kubernetesVersion: canonicalOptionalIdentity(wire.kubernetes_version ?? null),
+    crdDiscoveryStatus: wire.crd_discovery_status ?? null,
     incidentCount,
     serverCount,
     appCount,

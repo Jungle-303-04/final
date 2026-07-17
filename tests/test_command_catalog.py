@@ -70,6 +70,8 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
         Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
         Command.GITOPS_RESOURCE_CONTROL_ACTION,
+        Command.TRAFFIC_SOURCE_SELECT_ACTION,
+        Command.TRAFFIC_SOURCE_CONNECT_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:

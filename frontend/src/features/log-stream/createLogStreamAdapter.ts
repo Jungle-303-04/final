@@ -79,12 +79,6 @@ function toEvent(event: LogStreamEndpointEvent): LogStreamEvent {
       reason: required(event.reason),
       diagnostic: event.diagnostic === null ? null : {
         code: event.diagnostic.code,
-        recovery: event.diagnostic.recovery === null ? null : {
-          kind: "copy-command",
-          command: required(event.diagnostic.recovery.command),
-          clusterId: required(event.diagnostic.recovery.cluster_id),
-          readOnly: event.diagnostic.recovery.read_only,
-        },
       },
     };
   }

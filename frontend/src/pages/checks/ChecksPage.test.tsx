@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,6 +55,22 @@ describe("ChecksPage", () => {
     }, expect.any(AbortSignal)));
   });
 
+  it("renders namespace-scoped findings and collector visibility reported by the agent", async () => {
+    const port = checksPort();
+    port.getOverview.mockResolvedValueOnce(observedOverview());
+
+    render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
+
+    expect(await screen.findByText("Container limits are not observed.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Deployment/checkout" }).getAttribute("href")).toBe(
+      "/resources?clusters=cluster-a&resources.types=deployment&detail=Deployment%2Fstorefront%2Fcheckout",
+    );
+    expect(screen.getByText("Workload limits")).toBeTruthy();
+    expect(screen.getByText("cluster-a · storefront")).toBeTruthy();
+    expect(screen.getByText("Optional kinds not observed: Gateway")).toBeTruthy();
+    expect(screen.queryByText(CHECKS_RESULT_INTERNAL_REASON)).toBeNull();
+  });
+
   it("resolves a direct check detail URL as unavailable without rendering fabricated finding details", async () => {
     filterState.value = {
       detail: { detail: "check:workload-limits" },
@@ -85,7 +101,7 @@ describe("ChecksPage", () => {
     const port = checksPort({ scopeReasons: ["internal_probe:secret-cluster"] });
     render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
 
-    expect(await screen.findByText("Some scope evidence is unavailable.")).toBeTruthy();
+    expect((await screen.findAllByText("Some scope evidence is unavailable.")).length).toBeGreaterThan(0);
     expect(screen.queryByText("internal_probe:secret-cluster")).toBeNull();
   });
 
@@ -107,13 +123,39 @@ describe("ChecksPage", () => {
     expect(screen.queryByText("cluster-private")).toBeNull();
     expect(unknownPort.getOverview).not.toHaveBeenCalled();
   });
+
+  it("loads revisioned settings on demand and refreshes overview after an audited save", async () => {
+    const port = checksPort();
+    port.getOverview.mockResolvedValue(observedOverview());
+    render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
+
+    await screen.findByText("Container limits are not observed.");
+    fireEvent.click(screen.getByRole("button", { name: "Checks settings" }));
+    expect(await screen.findByRole("heading", { name: "Checks settings" })).toBeTruthy();
+    expect(port.getSettings).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Workload limits/ }));
+    fireEvent.change(screen.getByPlaceholderText("cluster-id/namespace"), {
+      target: { value: "cluster-a/storefront" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(port.updateSettings).toHaveBeenCalledWith({
+      hiddenCheckIds: ["workload-limits"],
+      hiddenCategories: [],
+      hiddenNamespaces: ["cluster-a/storefront"],
+    }, 4));
+    await waitFor(() => expect(port.getOverview.mock.calls.length).toBeGreaterThan(1));
+  });
 });
 
 function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksPort & {
   getOverview: ReturnType<typeof vi.fn>;
   getDetail: ReturnType<typeof vi.fn>;
+  getSettings: ReturnType<typeof vi.fn>;
+  updateSettings: ReturnType<typeof vi.fn>;
 } {
   return {
+    loadRefreshPolicy: vi.fn().mockResolvedValue(refreshPolicy()),
     getOverview: vi.fn().mockResolvedValue({
       scopeCoverage: {
         availability: "partial",
@@ -130,6 +172,7 @@ function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksP
         reasonCodes: ["checks_result_projection_not_integrated"],
       },
       catalog: { availability: "unavailable", entries: null, reasonCodes: ["checks_catalog_not_integrated"] },
+      visibility: { availability: "unavailable", clusters: [], reasonCodes: ["checks_visibility_not_observed"] },
     }),
     getDetail: vi.fn().mockResolvedValue({
       scopeCoverage: {
@@ -151,5 +194,101 @@ function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksP
         reasonCodes: ["checks_catalog_not_integrated", "checks_result_projection_not_integrated"],
       },
     }),
+    getSettings: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      policy: { hiddenCheckIds: [], hiddenCategories: [], hiddenNamespaces: [] },
+      revision: 4,
+      invalidationGeneration: 7,
+      canEdit: true,
+      updatedAt: "2026-07-17T10:00:00Z",
+    }),
+    updateSettings: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      policy: { hiddenCheckIds: ["workload-limits"], hiddenCategories: [], hiddenNamespaces: [] },
+      revision: 5,
+      invalidationGeneration: 8,
+      canEdit: true,
+      updatedAt: "2026-07-17T10:01:00Z",
+      eventId: "event-5",
+      auditEventId: "event-5",
+    }),
+  };
+}
+
+const CHECKS_RESULT_INTERNAL_REASON = "checks_observation_partial:cluster-a";
+
+function observedOverview() {
+  return {
+    scopeCoverage: {
+      availability: "available" as const,
+      scopes: [{ workspaceId: "workspace-a", clusterId: "cluster-a", namespaces: ["storefront"], freshness: "live" as const }],
+      observedAt: "2026-07-17T05:59:30+00:00",
+      reasonCodes: [],
+    },
+    resultSet: {
+      availability: "available" as const,
+      evaluatedAt: "2026-07-17T05:59:30+00:00",
+      checks: [finding()],
+      totalCheckCount: 1,
+      totalFindingCount: 1,
+      reasonCodes: [],
+    },
+    catalog: {
+      availability: "available" as const,
+      entries: [{
+        checkId: "workload-limits",
+        title: "Workload limits",
+        category: "resources",
+        severity: "warning" as const,
+        description: "Checks container resource limits.",
+        remediation: "Set explicit resource limits.",
+      }],
+      reasonCodes: [],
+    },
+    visibility: {
+      availability: "available" as const,
+      clusters: [{
+        clusterId: "cluster-a",
+        state: "limited" as const,
+        namespaceScope: ["storefront"],
+        core: { deployments: "allowed" as const },
+        missingOptionalKinds: ["Gateway"],
+      }],
+      reasonCodes: [],
+    },
+  };
+}
+
+function finding() {
+  return {
+    findingId: "finding-a",
+    clusterId: "cluster-a",
+    checkId: "workload-limits",
+    category: "resources",
+    severity: "warning" as const,
+    message: "Container limits are not observed.",
+    resource: {
+      apiGroup: "apps",
+      version: "v1",
+      kind: "Deployment",
+      namespace: "storefront",
+      name: "checkout",
+      uid: "uid-checkout",
+    },
+  };
+}
+
+function refreshPolicy() {
+  return {
+    staleAfterSeconds: 30,
+    refreshAfterSeconds: 60,
+    keepLastSuccess: true as const,
+    pauseWhenHidden: true as const,
+    eventInvalidation: false,
+    retryAfterSeconds: null,
+    retryLimit: null,
+    postMutationRefreshAfterSeconds: null,
   };
 }

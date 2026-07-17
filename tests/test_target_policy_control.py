@@ -242,6 +242,38 @@ def test_policy_sync_merges_runtime_drift_details_for_unchanged_policy(tmp_path:
     assert client.policy_statuses[0]["details"] == asyncio.run(status_details())
 
 
+def test_policy_sync_applies_runtime_configuration_for_new_and_unchanged_policy(
+    tmp_path: Path,
+) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    policy = AgentPolicy(cluster_id="cluster-1", generation=3)
+    calls: list[tuple[object, int]] = []
+
+    async def apply_runtime(client: object, selected: AgentPolicy) -> dict[str, object]:
+        calls.append((client, selected.generation))
+        return {"integrations": {"prometheus": {"state": "connected"}}}
+
+    sync = control.AgentPolicySync(
+        cluster_id="cluster-1",
+        store=store,
+        default_policy=AgentPolicy(cluster_id="cluster-1"),
+        apply_policy=lambda _policy: {"applied": True},
+        interval_seconds=10,
+        apply_runtime_configuration=apply_runtime,
+    )
+    remote = StubPolicyClient(policy)
+
+    assert asyncio.run(sync.sync_once(remote)) == "applied"
+    remote.policy = None
+    assert asyncio.run(sync.sync_once(remote)) == "unchanged"
+
+    assert [generation for _, generation in calls] == [3, 3]
+    assert remote.policy_statuses[-1]["details"]["integrations"]["prometheus"]["state"] == (
+        "connected"
+    )
+
+
 def test_reconciler_rejects_user_workload_until_scope_is_enabled(tmp_path: Path) -> None:
     control = load_control_module()
     store = control.AgentControlStore(str(tmp_path / "agent-control.db"))

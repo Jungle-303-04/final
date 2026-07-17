@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from domains.inventory.snapshot_evidence import snapshot_source_summary
 from domains.target.connectivity import (
     AGENT_STATUS_NEVER_CONNECTED,
     AGENT_STATUS_ONLINE,
@@ -369,7 +370,7 @@ def observation_context(
     latest_snapshot_id = text_or_none(latest.get("snapshot_id"))
     if latest_snapshot_id is None:
         raise CompareUnavailable("inventory snapshot identity is unavailable")
-    summary = mapping(mapping(latest.get("summary")).get("summary"))
+    summary = snapshot_source_summary(latest) or {}
     reasons: list[str] = []
     limits = mapping(summary.get("collection_limits"))
     if limits.get("truncated") is True:

@@ -180,6 +180,14 @@ WORKSPACE_COMPAT_COLUMNS = {
         "agent_token_hash": (
             "alter table cluster_registrations add column if not exists agent_token_hash text"
         ),
+        "agent_envelope_public_key": (
+            "alter table cluster_registrations add column if not exists "
+            "agent_envelope_public_key text"
+        ),
+        "agent_envelope_private_key_encrypted": (
+            "alter table cluster_registrations add column if not exists "
+            "agent_envelope_private_key_encrypted text"
+        ),
     },
 }
 WORKSPACE_BACKFILL_COLUMNS = (
@@ -227,6 +235,25 @@ OPERATIONAL_INDEXES = (
         "create index if not exists ix_ai_llm_invocation_correlation_created "
         "on ai_llm_invocation_metrics (correlation_id, created_at) "
         "where correlation_id is not null"
+    ),
+)
+INVENTORY_FILTER_COMPAT_COLUMNS = {
+    "change_ledger_epoch": (
+        "alter table inventory_filter_revisions add column if not exists change_ledger_epoch text"
+    ),
+}
+INVENTORY_CHANGE_TIMELINE_COMPAT_INDEXES = (
+    (
+        "create index if not exists ix_timeline_events_inventory_changes "
+        "on timeline_events (workspace_id, cluster_id, occurred_at, event_id) "
+        "where source = 'inventory' and activity = 'change' "
+        "and event_type in ('add', 'update', 'delete')"
+    ),
+    (
+        "create index if not exists ix_inventory_filter_revisions_change_coverage "
+        "on inventory_filter_revisions "
+        "(workspace_id, cluster_id, change_ledger_epoch, resources_complete, "
+        "observed_at, revision_id)"
     ),
 )
 REPO_CHANGE_COMPAT_COLUMNS = {
@@ -728,6 +755,13 @@ class DatabaseConnection:
             self._add_missing_columns(conn, table_name, columns)
         conn.execute(text(CLUSTER_AGENT_TOKEN_HASH_INDEX))
         for statement in OPERATIONAL_INDEXES:
+            conn.execute(text(statement))
+        self._add_missing_columns(
+            conn,
+            "inventory_filter_revisions",
+            INVENTORY_FILTER_COMPAT_COLUMNS,
+        )
+        for statement in INVENTORY_CHANGE_TIMELINE_COMPAT_INDEXES:
             conn.execute(text(statement))
 
         for table_name in WORKSPACE_BACKFILL_COLUMNS:

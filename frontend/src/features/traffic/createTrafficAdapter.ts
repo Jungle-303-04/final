@@ -3,8 +3,11 @@ import {
   type TrafficFailureCode,
   type TrafficOverview,
   type TrafficPort,
+  type TrafficSourceCommandInput,
+  type TrafficSources,
 } from "./trafficContract";
 import type { TrafficEndpointDependencies } from "./trafficEndpointContract";
+import type { CommandReceipt } from "../../shared/parity/referenceParity";
 
 export function createTrafficAdapter(endpoints: TrafficEndpointDependencies): TrafficPort {
   return {
@@ -14,6 +17,91 @@ export function createTrafficAdapter(endpoints: TrafficEndpointDependencies): Tr
         namespaces: request.namespaces,
       }, signal)));
     },
+    async getSources(request, signal) {
+      return withPortFailure(async () => toSources(await endpoints.getTrafficSources({
+        clusterIds: request.clusterIds,
+      }, signal)));
+    },
+    async selectSource(input, signal) {
+      return executeSourceCommand(endpoints.setTrafficSource, input, signal);
+    },
+    async connectSource(input, signal) {
+      return executeSourceCommand(endpoints.connectTrafficSource, input, signal);
+    },
+  };
+}
+
+async function executeSourceCommand(
+  endpoint: TrafficEndpointDependencies["setTrafficSource"],
+  input: TrafficSourceCommandInput,
+  signal?: AbortSignal,
+): Promise<CommandReceipt> {
+  return withPortFailure(async () => {
+    const receipt = await endpoint({
+      scope: {
+        workspace_id: input.scope.workspaceId,
+        cluster_id: input.scope.clusterId,
+        namespaces: input.scope.namespaces,
+        freshness: input.scope.freshness,
+      },
+      source_key: input.sourceKey,
+      capability_revision: input.capabilityRevision,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }, input.idempotencyKey, signal);
+    return {
+      accepted: receipt.accepted,
+      commandId: receipt.command_id,
+      eventId: receipt.event_id,
+      auditEventId: receipt.audit_event_id,
+      correlationId: receipt.correlation_id,
+      status: receipt.status,
+    };
+  });
+}
+
+function toSources(
+  value: Awaited<ReturnType<TrafficEndpointDependencies["getTrafficSources"]>>,
+): TrafficSources {
+  return {
+    availability: value.availability,
+    coverage: {
+      availability: value.coverage.availability,
+      scopes: value.coverage.scopes.map(toScope),
+      observedAt: value.coverage.observed_at,
+      reasonCodes: value.coverage.reason_codes,
+    },
+    clusters: value.clusters.map((catalog) => ({
+      scope: toScope(catalog.scope),
+      freshness: catalog.freshness,
+      observedAt: catalog.observed_at,
+      activeSource: catalog.active_source,
+      capabilityRevision: catalog.capability_revision,
+      cluster: catalog.cluster === null ? null : {
+        platform: catalog.cluster.platform,
+        cni: catalog.cluster.cni,
+        dataplaneV2: catalog.cluster.dataplane_v2,
+        kubernetesVersion: catalog.cluster.kubernetes_version,
+      },
+      sources: catalog.sources.map((source) => ({
+        key: source.key,
+        label: source.label,
+        status: source.status,
+        version: source.version,
+        native: source.native,
+        message: source.message,
+        actions: source.actions.map((action) => ({
+          id: action.id,
+          kind: action.kind,
+          label: action.label,
+          enabled: action.enabled,
+          confirmationRequired: action.confirmation_required,
+          reasonCode: action.reason_code,
+        })),
+      })),
+      reasonCodes: catalog.reason_codes,
+    })),
+    reasonCodes: value.reason_codes,
   };
 }
 
@@ -21,12 +109,7 @@ function toOverview(value: Awaited<ReturnType<TrafficEndpointDependencies["getTr
   return {
     scopeCoverage: {
       availability: value.scope_coverage.availability,
-      scopes: value.scope_coverage.scopes.map((scope) => ({
-        workspaceId: scope.workspace_id,
-        clusterId: scope.cluster_id,
-        namespaces: scope.namespaces,
-        freshness: scope.freshness,
-      })),
+      scopes: value.scope_coverage.scopes.map(toScope),
       observedAt: value.scope_coverage.observed_at,
       reasonCodes: value.scope_coverage.reason_codes,
     },
@@ -47,6 +130,20 @@ function toOverview(value: Awaited<ReturnType<TrafficEndpointDependencies["getTr
       edges: value.relationships.edges,
       reasonCodes: value.relationships.reason_codes,
     },
+  };
+}
+
+function toScope(scope: {
+  workspace_id: string;
+  cluster_id: string;
+  namespaces: string[];
+  freshness: "live" | "stale" | "partial" | "disconnected";
+}) {
+  return {
+    workspaceId: scope.workspace_id,
+    clusterId: scope.cluster_id,
+    namespaces: scope.namespaces,
+    freshness: scope.freshness,
   };
 }
 

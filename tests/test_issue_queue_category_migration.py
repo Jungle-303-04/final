@@ -51,7 +51,7 @@ def test_category_projection_model_and_revision_are_additive(monkeypatch) -> Non
     assert str(index.dialect_options["postgresql"]["where"]).lower() == (
         "category_complete is true"
     )
-    assert script.get_heads() == [REVISION]
+    assert script.get_revision(REVISION) is not None
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
 

@@ -25,6 +25,7 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
 import { subscribeNamespaceScopeInvalidation } from "../../features/namespace-scope/namespaceScopeInvalidation";
+import { useOptionalShellSessions } from "../../features/shell-sessions/ShellSessionsProvider";
 
 type TerminalStatus = "idle" | "connecting" | "connected" | "ended" | "failed";
 
@@ -47,6 +48,7 @@ export function PodTerminalDialog({
 }) {
   const { t } = useI18n();
   const session = useOptionalProductSession();
+  const shellSessions = useOptionalShellSessions();
   const observedContainers = useMemo(
     () => detail.resource.facts.type === "pod"
       ? detail.resource.facts.containerNames ?? []
@@ -100,6 +102,7 @@ export function PodTerminalDialog({
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [failure, setFailure] = useState("");
   const connectionRef = useRef<PodTerminalConnection | null>(null);
+  const unregisterSessionRef = useRef<(() => void) | null>(null);
   const selectedContainer = resolvedPreferredTarget?.container
     ?? (containers.includes(container) ? container : containers[0] ?? "");
   const target = useMemo(() => {
@@ -125,7 +128,10 @@ export function PodTerminalDialog({
     onPreferredTargetHandled?.();
   }, [onPreferredContainerHandled, onPreferredTargetHandled]);
 
-  useEffect(() => () => connectionRef.current?.close(), []);
+  useEffect(() => () => {
+    connectionRef.current?.close();
+    unregisterSessionRef.current?.();
+  }, []);
   useEffect(() => subscribeNamespaceScopeInvalidation((invalidation) => {
     const namespace = target?.namespace ?? detail.identity.namespace;
     if (
@@ -136,6 +142,8 @@ export function PodTerminalDialog({
     ) return;
     connectionRef.current?.close();
     connectionRef.current = null;
+    unregisterSessionRef.current?.();
+    unregisterSessionRef.current = null;
     setStatus("ended");
     setOpen(false);
     handlePreferredTarget();
@@ -154,6 +162,12 @@ export function PodTerminalDialog({
     event.preventDefault();
     if (!target || !command.trim() || status === "connecting" || status === "connected") return;
     connectionRef.current?.close();
+    unregisterSessionRef.current?.();
+    unregisterSessionRef.current = shellSessions?.register({
+      clusterId: target.clusterId,
+      id: `${target.namespace}/${target.pod}/${target.container}`,
+      kind: "exec",
+    }) ?? null;
     setOutput("");
     setExitCode(null);
     setFailure("");
@@ -169,21 +183,29 @@ export function PodTerminalDialog({
             setExitCode(next.exitCode);
             setStatus("ended");
             connectionRef.current = null;
+            unregisterSessionRef.current?.();
+            unregisterSessionRef.current = null;
           } else {
             setFailure(next.message);
             setStatus("failed");
             connectionRef.current = null;
+            unregisterSessionRef.current?.();
+            unregisterSessionRef.current = null;
           }
         },
         onFailure() {
           setFailure(t("resources.detail.terminal.transportFailed"));
           setStatus("failed");
           connectionRef.current = null;
+          unregisterSessionRef.current?.();
+          unregisterSessionRef.current = null;
         },
       });
     } catch {
       setFailure(t("resources.detail.terminal.transportFailed"));
       setStatus("failed");
+      unregisterSessionRef.current?.();
+      unregisterSessionRef.current = null;
     }
   };
 
@@ -202,6 +224,8 @@ export function PodTerminalDialog({
   const stop = () => {
     connectionRef.current?.close();
     connectionRef.current = null;
+    unregisterSessionRef.current?.();
+    unregisterSessionRef.current = null;
     setStatus("ended");
     setExitCode(null);
   };

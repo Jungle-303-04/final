@@ -93,6 +93,10 @@ class EventSubject(StrEnum):
     # --- 사용자별 웹 셸 상태 ---
     NAMESPACE_SCOPE_UPDATED = "namespace.scope.updated"
     UI_PREFERENCES_UPDATED = "ui.preferences.updated"
+    CHECKS_SETTINGS_UPDATED = "checks.settings.updated"
+
+    # --- Workspace/cluster integration configuration ---
+    PROMETHEUS_INTEGRATION_CONFIGURED = "integration.prometheus.configured"
 
     # --- Helm workspace configuration ---
     HELM_CHART_SOURCE_DELETED = "helm.chart_source.deleted"

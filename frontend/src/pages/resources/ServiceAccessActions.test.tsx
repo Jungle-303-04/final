@@ -86,7 +86,7 @@ function servicePort(): ServiceAccessPort {
       serviceRequest: "available",
       serviceRequestReason: null,
       localPortForward: "desktop-required",
-      localPortForwardReason: "desktop-port-forward-bridge-required",
+      localPortForwardReason: "desktop-agent-port-forward-required",
       portDiscovery: "complete",
       portDiscoveryReason: null,
       ports: [{
@@ -130,7 +130,7 @@ function podPort(overrides: Record<string, unknown> = {}): ServiceAccessPort {
     serviceRequest: "unavailable" as const,
     serviceRequestReason: "pod_service_request_unsupported",
     localPortForward: "desktop-required" as const,
-    localPortForwardReason: "desktop-port-forward-bridge-required",
+    localPortForwardReason: "desktop-agent-port-forward-required",
     portDiscovery: "complete" as const,
     portDiscoveryReason: null,
     ports: [
@@ -215,20 +215,12 @@ describe("ServiceAccessActions", () => {
     expect(screen.getByTestId("service-access-session").classList.contains("max-w-[26rem]")).toBe(true);
   });
 
-  it("makes the native ownership boundary explicit and only builds a manual kubectl command", async () => {
+  it("does not expose a direct target command when the agent tunnel is absent", async () => {
     const port = servicePort();
-    const user = userEvent.setup();
     renderActions(port);
 
-    await user.click(await screen.findByRole("button", { name: "Port forwarding" }));
-    expect(screen.getByText(/The browser does not bind local ports\./u)).toBeTruthy();
-    const localPort = screen.getByLabelText("Local port");
-    expect(localPort.getAttribute("data-slot")).toBe("input");
-    await user.clear(localPort);
-    await user.type(localPort, "18080");
-    expect(screen.getByText(
-      "kubectl -n shop port-forward service/checkout 18080:80 --address 127.0.0.1",
-    )).toBeTruthy();
+    await screen.findByRole("button", { name: "HTTP request" });
+    expect(screen.queryByRole("button", { name: "Port forwarding" })).toBeNull();
     expect(port.start).not.toHaveBeenCalled();
   });
 
@@ -260,6 +252,7 @@ describe("ServiceAccessActions", () => {
         name: "checkout",
         uid: "uid-service-1",
       },
+      capabilityRevision: "a".repeat(64),
       remotePort: 80,
       localPort: 18_080,
       listenAddress: "127.0.0.1",
@@ -268,22 +261,13 @@ describe("ServiceAccessActions", () => {
     expect(await screen.findByText(/18080/u)).toBeTruthy();
   });
 
-  it("builds Pod container and port choices only from the server descriptor in browser mode", async () => {
+  it("does not expose Pod forwarding without the agent-backed desktop session port", async () => {
     const port = podPort();
-    const user = userEvent.setup();
     renderActions(port, undefined, POD_DETAIL);
 
-    await user.click(await screen.findByRole("button", { name: "Port forwarding" }));
+    await waitFor(() => expect(port.resolve).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("button", { name: "HTTP request" })).toBeNull();
-    await user.click(screen.getByRole("combobox", { name: "Remote port" }));
-    expect(await screen.findByText("app · http · 8080/TCP")).toBeTruthy();
-    expect(screen.getByText("metrics · metrics · 8080/TCP")).toBeTruthy();
-    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
-    expect(screen.getByRole("combobox", { name: "Remote port" }).textContent).toContain("metrics");
-    expect(screen.getByText(
-      "kubectl -n shop port-forward pod/checkout-api-7d9f 8080:8080 --address 127.0.0.1",
-    )).toBeTruthy();
-    expect(port.resolve).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Port forwarding" })).toBeNull();
   });
 
   it("re-resolves an exact Pod before one native confirmation and blocks a stale UID", async () => {
@@ -310,7 +294,7 @@ describe("ServiceAccessActions", () => {
     expect(await screen.findByText(/changed since it was observed/u)).toBeTruthy();
   });
 
-  it("shows an explicit unavailable Pod action when no observed TCP port exists", async () => {
+  it("omits the unavailable Pod action when no observed TCP port exists", async () => {
     renderActions(podPort({
       localPortForward: "unavailable",
       localPortForwardReason: "port-forward-no-tcp-ports",
@@ -319,29 +303,21 @@ describe("ServiceAccessActions", () => {
       ports: [],
     }), undefined, POD_DETAIL);
 
-    const action = await screen.findByRole("button", { name: "Port forwarding" });
-    expect(action.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText(/No observed TCP ports/u)).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Port forwarding" })).toBeNull());
   });
 
-  it("keeps partial Pod discovery keyboard-accessible under reduced motion", async () => {
+  it("keeps partial Pod discovery hidden until the audited tunnel exists", async () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
       matches: true,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }));
-    const user = userEvent.setup();
     renderActions(podPort({
       portDiscovery: "partial",
       portDiscoveryReason: "port-discovery-partial",
     }), undefined, POD_DETAIL);
 
-    await user.click(await screen.findByRole("button", { name: "Port forwarding" }));
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Remote port" })).toBeTruthy();
-    expect(screen.getByText(/only exact observed TCP ports/u)).toBeTruthy();
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Port forwarding" })).toBeNull());
   });
 
   it("renders the native session list without clipping long identities", async () => {

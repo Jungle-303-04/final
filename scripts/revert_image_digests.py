@@ -28,9 +28,28 @@ class RollbackTarget:
 
 
 @dataclass(frozen=True)
+class BootstrapTarget:
+    namespace: str
+    resource: str
+    container: str
+    state: str
+
+
+@dataclass(frozen=True)
+class ProtectedTarget:
+    namespace: str
+    resource: str
+    container: str
+    image: str
+    state: str
+
+
+@dataclass(frozen=True)
 class RollbackPlan:
     previous_release_sha: str
     targets: tuple[RollbackTarget, ...]
+    bootstrap_targets: tuple[BootstrapTarget, ...] = ()
+    protected_targets: tuple[ProtectedTarget, ...] = ()
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -69,25 +88,114 @@ def parse_target(value: Any, index: int) -> RollbackTarget:
     return target
 
 
+def parse_bootstrap_target(value: Any, index: int) -> BootstrapTarget:
+    mapping = require_mapping(value, f"bootstrap_targets[{index}]")
+    expected = {"namespace", "resource", "container", "state"}
+    if set(mapping) != expected:
+        raise ValueError(f"bootstrap_targets[{index}] must contain exactly {sorted(expected)}")
+    target = BootstrapTarget(
+        namespace=require_text(mapping, "namespace"),
+        resource=require_text(mapping, "resource"),
+        container=require_text(mapping, "container"),
+        state=require_text(mapping, "state"),
+    )
+    if not KUBERNETES_NAME.fullmatch(target.namespace):
+        raise ValueError(f"bootstrap_targets[{index}].namespace is not a Kubernetes name")
+    if not DEPLOYMENT_RESOURCE.fullmatch(target.resource):
+        raise ValueError(f"bootstrap_targets[{index}].resource must be deployment/<name>")
+    if not KUBERNETES_NAME.fullmatch(target.container):
+        raise ValueError(f"bootstrap_targets[{index}].container is not a Kubernetes name")
+    if target.state != "not_present_before_rollout":
+        raise ValueError(f"bootstrap_targets[{index}].state must be not_present_before_rollout")
+    return target
+
+
+def parse_protected_target(value: Any, index: int) -> ProtectedTarget:
+    mapping = require_mapping(value, f"protected_targets[{index}]")
+    expected = {"namespace", "resource", "container", "image", "state"}
+    if set(mapping) != expected:
+        raise ValueError(f"protected_targets[{index}] must contain exactly {sorted(expected)}")
+    target = ProtectedTarget(
+        namespace=require_text(mapping, "namespace"),
+        resource=require_text(mapping, "resource"),
+        container=require_text(mapping, "container"),
+        image=require_text(mapping, "image"),
+        state=require_text(mapping, "state"),
+    )
+    if not KUBERNETES_NAME.fullmatch(target.namespace):
+        raise ValueError(f"protected_targets[{index}].namespace is not a Kubernetes name")
+    if not DEPLOYMENT_RESOURCE.fullmatch(target.resource):
+        raise ValueError(f"protected_targets[{index}].resource must be deployment/<name>")
+    if not KUBERNETES_NAME.fullmatch(target.container):
+        raise ValueError(f"protected_targets[{index}].container is not a Kubernetes name")
+    if not IMAGE_DIGEST.fullmatch(target.image):
+        raise ValueError(f"protected_targets[{index}].image must use an immutable sha256 digest")
+    if target.state != "outside_manifest_scope_before_rollout":
+        raise ValueError(
+            f"protected_targets[{index}].state must be outside_manifest_scope_before_rollout"
+        )
+    return target
+
+
 def load_plan(path: Path) -> RollbackPlan:
     document = require_mapping(json.loads(path.read_text(encoding="utf-8")), "plan")
-    if set(document) != {"version", "previous_release_sha", "targets"}:
-        raise ValueError("plan must contain exactly version, previous_release_sha, and targets")
-    if document["version"] != 1:
-        raise ValueError("plan version must be 1")
+    version = document.get("version")
+    if version == 1:
+        expected_fields = {"version", "previous_release_sha", "targets"}
+    elif version == 2:
+        expected_fields = {
+            "version",
+            "previous_release_sha",
+            "targets",
+            "bootstrap_targets",
+        }
+    elif version == 3:
+        expected_fields = {
+            "version",
+            "previous_release_sha",
+            "targets",
+            "bootstrap_targets",
+            "protected_targets",
+        }
+    else:
+        raise ValueError("plan version must be 1, 2, or 3")
+    if set(document) != expected_fields:
+        raise ValueError(f"plan must contain exactly {sorted(expected_fields)}")
 
     previous_release_sha = require_text(document, "previous_release_sha")
     if not GIT_SHA.fullmatch(previous_release_sha):
         raise ValueError("previous_release_sha must be a full lowercase Git SHA")
 
     raw_targets = document["targets"]
-    if not isinstance(raw_targets, list) or not raw_targets:
-        raise ValueError("targets must be a non-empty list")
+    if not isinstance(raw_targets, list):
+        raise ValueError("targets must be a list")
     targets = tuple(parse_target(value, index) for index, value in enumerate(raw_targets))
-    identities = [(target.namespace, target.resource, target.container) for target in targets]
+    raw_bootstrap_targets = document.get("bootstrap_targets", [])
+    if not isinstance(raw_bootstrap_targets, list):
+        raise ValueError("bootstrap_targets must be a list")
+    bootstrap_targets = tuple(
+        parse_bootstrap_target(value, index) for index, value in enumerate(raw_bootstrap_targets)
+    )
+    raw_protected_targets = document.get("protected_targets", [])
+    if not isinstance(raw_protected_targets, list):
+        raise ValueError("protected_targets must be a list")
+    protected_targets = tuple(
+        parse_protected_target(value, index) for index, value in enumerate(raw_protected_targets)
+    )
+    if not targets and not bootstrap_targets and not protected_targets:
+        raise ValueError("plan must contain at least one target")
+    identities = [
+        (target.namespace, target.resource, target.container)
+        for target in (*targets, *bootstrap_targets, *protected_targets)
+    ]
     if len(identities) != len(set(identities)):
-        raise ValueError("targets must not contain duplicate deployment containers")
-    return RollbackPlan(previous_release_sha=previous_release_sha, targets=targets)
+        raise ValueError("plan must not contain duplicate deployment containers")
+    return RollbackPlan(
+        previous_release_sha=previous_release_sha,
+        targets=targets,
+        bootstrap_targets=bootstrap_targets,
+        protected_targets=protected_targets,
+    )
 
 
 def kubectl_commands(
@@ -125,6 +233,24 @@ def grouped_targets(
     for target in plan.targets:
         grouped.setdefault((target.namespace, target.resource), []).append(target)
     return {identity: tuple(targets) for identity, targets in grouped.items()}
+
+
+def bootstrap_delete_commands(plan: RollbackPlan, *, context: str) -> tuple[tuple[str, ...], ...]:
+    resources = sorted({(target.namespace, target.resource) for target in plan.bootstrap_targets})
+    return tuple(
+        (
+            "kubectl",
+            "--context",
+            context,
+            "-n",
+            namespace,
+            "delete",
+            resource,
+            "--ignore-not-found",
+            "--wait=true",
+        )
+        for namespace, resource in resources
+    )
 
 
 def timeout_seconds(timeout: str) -> float:
@@ -231,19 +357,40 @@ def live_deployment_images(*, context: str, namespace: str) -> dict[tuple[str, s
 
 
 def verify_exact_live_digests(plan: RollbackPlan, *, context: str) -> int:
+    expected = (*plan.targets, *plan.protected_targets)
     observed_by_namespace = {
         namespace: live_deployment_images(context=context, namespace=namespace)
-        for namespace in dict.fromkeys(target.namespace for target in plan.targets)
+        for namespace in dict.fromkeys(target.namespace for target in expected)
     }
     mismatches = sorted(
         (target.namespace, target.resource, target.container)
-        for target in plan.targets
+        for target in expected
         if observed_by_namespace[target.namespace].get((target.resource, target.container))
         != target.image
     )
     if mismatches:
         raise RuntimeError(f"rollback digest mismatch: {mismatches!r}")
-    return len(plan.targets)
+    return len(expected)
+
+
+def verify_bootstrap_targets_absent(plan: RollbackPlan, *, context: str) -> int:
+    expected_absent = {
+        (target.namespace, target.resource, target.container) for target in plan.bootstrap_targets
+    }
+    observed_by_namespace = {
+        namespace: live_deployment_images(context=context, namespace=namespace)
+        for namespace in dict.fromkeys(target.namespace for target in plan.bootstrap_targets)
+    }
+    present = sorted(
+        identity
+        for identity in expected_absent
+        if any(
+            resource == identity[1] for resource, _container in observed_by_namespace[identity[0]]
+        )
+    )
+    if present:
+        raise RuntimeError(f"bootstrap deployment still present after rollback: {present!r}")
+    return len(expected_absent)
 
 
 def apply_plan(plan: RollbackPlan, *, context: str, timeout: str) -> None:
@@ -264,10 +411,19 @@ def apply_plan(plan: RollbackPlan, *, context: str, timeout: str) -> None:
         wait_for_rollout_statuses(rollout_status_commands, timeout=timeout)
     except Exception as error:  # noqa: BLE001 - exact digest verification must still run
         failures.append(("rollout status", error))
+    for command in bootstrap_delete_commands(plan, context=context):
+        try:
+            subprocess.run(command, check=True)
+        except Exception as error:  # noqa: BLE001 - continue restoring every captured target
+            failures.append((f"delete bootstrap {command[6]}", error))
     try:
         verify_exact_live_digests(plan, context=context)
     except Exception as error:  # noqa: BLE001 - aggregate the fail-closed rollback evidence
         failures.append(("exact digest verification", error))
+    try:
+        verify_bootstrap_targets_absent(plan, context=context)
+    except Exception as error:  # noqa: BLE001 - aggregate the fail-closed rollback evidence
+        failures.append(("bootstrap absence verification", error))
     if failures:
         details = "; ".join(f"{label}: {error}" for label, error in failures)
         raise RuntimeError(f"rollback failed closed: {details}") from failures[0][1]
@@ -305,6 +461,10 @@ def main() -> int:
                 "mode": "dry-run",
                 "previous_release_sha": plan.previous_release_sha,
                 "commands": [list(command) for command in commands],
+                "bootstrap_delete_commands": [
+                    list(command)
+                    for command in bootstrap_delete_commands(plan, context=args.context)
+                ],
             },
             indent=2,
             sort_keys=True,

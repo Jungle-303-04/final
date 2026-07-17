@@ -5,7 +5,8 @@ from pydantic import ValidationError
 
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.service_access import (
-    LOCAL_PORT_FORWARD_DESKTOP_REASON,
+    AGENT_PORT_FORWARD_DESKTOP_REASON,
+    AGENT_PORT_FORWARD_UNAVAILABLE_REASON,
     LocalPortForwardRequest,
     ServiceAccessCapabilities,
     ServiceHttpRequestCommandPayload,
@@ -82,7 +83,9 @@ def test_service_request_rejects_non_service_or_non_namespaced_identity(
         )
 
 
-def test_service_access_capabilities_are_sorted_unique_and_keep_desktop_boundary_explicit() -> None:
+def test_service_access_capabilities_default_to_no_agent_tunnel_and_validate_future_transport() -> (
+    None
+):
     capabilities = ServiceAccessCapabilities(
         scope=scope(),
         resource=service_ref(),
@@ -94,8 +97,16 @@ def test_service_access_capabilities_are_sorted_unique_and_keep_desktop_boundary
         ),
     )
 
-    assert capabilities.local_port_forward == "desktop_required"
-    assert capabilities.local_port_forward_reason == LOCAL_PORT_FORWARD_DESKTOP_REASON
+    assert capabilities.local_port_forward == "unavailable"
+    assert capabilities.local_port_forward_reason == AGENT_PORT_FORWARD_UNAVAILABLE_REASON
+
+    enabled = capabilities.model_copy(
+        update={
+            "local_port_forward": "desktop_required",
+            "local_port_forward_reason": AGENT_PORT_FORWARD_DESKTOP_REASON,
+        }
+    )
+    ServiceAccessCapabilities.model_validate(enabled.model_dump())
 
     with pytest.raises(ValidationError):
         ServiceAccessCapabilities(
@@ -121,6 +132,7 @@ def test_pod_port_capabilities_preserve_container_identity_and_fail_closed_witho
         service_request="unavailable",
         service_request_reason="pod_service_request_unsupported",
         local_port_forward="desktop_required",
+        local_port_forward_reason=AGENT_PORT_FORWARD_DESKTOP_REASON,
         port_discovery="complete",
         ports=(
             ServicePort(
@@ -157,6 +169,7 @@ def test_pod_port_capabilities_preserve_container_identity_and_fail_closed_witho
             service_request="unavailable",
             service_request_reason="pod_service_request_unsupported",
             local_port_forward="desktop_required",
+            local_port_forward_reason=AGENT_PORT_FORWARD_DESKTOP_REASON,
             port_discovery="complete",
             ports=capabilities.ports,
         )
@@ -189,20 +202,45 @@ def test_local_forward_contract_validates_port_address_and_namespace_without_cla
     request = LocalPortForwardRequest(
         scope=scope(),
         resource=service_ref(),
+        capability_revision="a" * 64,
         remote_port=8080,
         local_port=18080,
         listen_address="127.0.0.1",
         confirmation=True,
     )
     assert request.local_port == 18080
+    assert request.capability_revision == "a" * 64
 
     with pytest.raises(ValidationError):
         LocalPortForwardRequest(
             scope=scope(),
             resource=service_ref(),
+            capability_revision="a" * 64,
             remote_port=8080,
             local_port=0,
             listen_address="localhost",
+            confirmation=True,
+        )
+
+    with pytest.raises(ValidationError):
+        LocalPortForwardRequest(
+            scope=scope(),
+            resource=service_ref(),
+            capability_revision="a" * 64,
+            remote_port=8080,
+            local_port=18080,
+            listen_address="0.0.0.0",
+            confirmation=True,
+        )
+
+    with pytest.raises(ValidationError):
+        LocalPortForwardRequest(
+            scope=scope(),
+            resource=service_ref(),
+            capability_revision="stale",
+            remote_port=8080,
+            local_port=18080,
+            listen_address="127.0.0.1",
             confirmation=True,
         )
 

@@ -68,7 +68,7 @@ status: synced
 - `EmailCheckRequest`: `email: str` (동일 패턴). 가입 폼 저장 전 중복 확인 전용.
 - `LoginRequest`: `email: str` (동일 패턴), `password: str` (min_length=8)
 - `ResendEmailVerificationRequest`: `email: str` (동일 패턴), `password: str` (min_length=8)
-- `AuthSessionResponse`: `authenticated: bool`, `user_id: str`, `roles: list[str]`, `workspace_id: str`
+- `AuthSessionResponse`: 인증된 세션의 `auth_mode`, 저장소 권위 `groups`·`roles`, 사용자/workspace 신원, raw URL 없는 typed `logout` 의미를 함께 반환한다.
 - `EmailCheckResponse`: `available: bool`, `reason_code: str = ""`, `detail: str = ""`, `retry_after: int | None = None`. 중복이면 `available=false`, `reason_code="already_registered"`이고, rate limit은 429 detail에 `code/detail/retry_after`를 담는다.
 - `EmailVerificationResponse`: `accepted: bool`, `verification_required: bool`, `email: str | None = None`
 - `UserApprovalResponse`: `accepted: bool`, `user_id: str`, `status: str`, `role: str`, `workspace_id: str`

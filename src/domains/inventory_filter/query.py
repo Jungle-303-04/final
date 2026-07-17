@@ -7,13 +7,15 @@ import json
 import re
 from dataclasses import dataclass
 
-MAX_AXIS_VALUES = 100
-MAX_LABEL_SELECTORS = 24
-MAX_TOKEN_LENGTH = 253
-MAX_LABEL_VALUE_LENGTH = 1024
-MAX_QUERY_LENGTH = 200
-MAX_KUBERNETES_LABEL_NAME_LENGTH = 63
-MAX_KUBERNETES_LABEL_PREFIX_LENGTH = 253
+from packages.contracts.gateway import limits as gateway_limits
+
+MAX_AXIS_VALUES = gateway_limits.FILTER_AXIS_MAX_VALUES
+MAX_LABEL_SELECTORS = gateway_limits.FILTER_LABEL_SELECTOR_MAX_VALUES
+MAX_TOKEN_LENGTH = gateway_limits.FILTER_AXIS_VALUE_MAX_LENGTH
+MAX_LABEL_VALUE_LENGTH = gateway_limits.FILTER_LABEL_VALUE_MAX_LENGTH
+MAX_QUERY_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
+MAX_KUBERNETES_LABEL_NAME_LENGTH = gateway_limits.KUBERNETES_LABEL_NAME_MAX_LENGTH
+MAX_KUBERNETES_LABEL_PREFIX_LENGTH = gateway_limits.KUBERNETES_LABEL_PREFIX_MAX_LENGTH
 LABEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9](?:[-A-Za-z0-9_.]*[A-Za-z0-9])?$")
 DNS_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 
@@ -44,6 +46,8 @@ def parse_resource_filters(
     parsed_query = query.strip() if query is not None else None
     if parsed_query == "":
         parsed_query = None
+    if parsed_query is not None and _has_control_character(parsed_query):
+        raise ValueError("query contains unsafe control characters")
     if parsed_query is not None and len(parsed_query) > MAX_QUERY_LENGTH:
         raise ValueError("query is too long")
     return ResourceFilters(
@@ -83,25 +87,39 @@ def parse_facet_values(axis: str, value: str | None) -> tuple[str, ...]:
     raise ValueError("facet axis is invalid")
 
 
-def _tokens(value: str | None, *, limit: int) -> list[str]:
+def parse_filter_axis_values(
+    value: str | None,
+    *,
+    casefold: bool = False,
+    field_name: str = "filter",
+    max_values: int = MAX_AXIS_VALUES,
+    max_length: int = MAX_TOKEN_LENGTH,
+) -> tuple[str, ...]:
+    values = _tokens(value, limit=max_values, field_name=field_name)
+    if any(len(item) > max_length for item in values):
+        raise ValueError(f"{field_name} filter value is too long")
+    normalized = [item.casefold() if casefold else item for item in values]
+    return tuple(sorted(set(normalized)))
+
+
+def _tokens(value: str | None, *, limit: int, field_name: str = "filter") -> list[str]:
     if value is None:
         return []
     raw = value.split(",")
     if not raw or len(raw) > limit:
-        raise ValueError("too many filter values")
+        raise ValueError(f"too many {field_name} filter values")
     tokens = [item.strip() for item in raw]
     if any(not item for item in tokens):
-        raise ValueError("filter values cannot be empty")
+        raise ValueError(f"{field_name} filter values cannot be empty")
+    if any(_has_control_character(item) for item in tokens):
+        raise ValueError(f"{field_name} filter values contain unsafe control characters")
     if any(len(item) > MAX_LABEL_VALUE_LENGTH for item in tokens):
-        raise ValueError("filter value is too long")
+        raise ValueError(f"{field_name} filter value is too long")
     return tokens
 
 
 def _axis(value: str | None) -> tuple[str, ...]:
-    values = _tokens(value, limit=MAX_AXIS_VALUES)
-    if any(len(item) > MAX_TOKEN_LENGTH for item in values):
-        raise ValueError("filter value is too long")
-    return tuple(sorted(set(values)))
+    return parse_filter_axis_values(value)
 
 
 def _namespaces(value: str | None) -> tuple[tuple[str, str], ...]:
@@ -156,3 +174,7 @@ def _valid_label_value(value: str) -> bool:
         len(value) <= MAX_KUBERNETES_LABEL_NAME_LENGTH
         and LABEL_NAME_PATTERN.fullmatch(value) is not None
     )
+
+
+def _has_control_character(value: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in value)

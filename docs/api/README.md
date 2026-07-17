@@ -266,8 +266,8 @@ management 배포 manifest에는 제어 경로용 PriorityClass만 두고, targe
 `05-get-scheduling-profiles`는 현재 저장된 scheduling profile만 읽는다.
 프론트는 이 응답으로 fast-lane 토글, 노드 배치 표시, pre-pull 후보 이미지 표시를 구성한다.
 
-Target 등록 요청의 `prometheus_base_url`, `loki_base_url`, `tempo_base_url`은 target cluster 안에서 agent가 실제로 호출할 관측 스택 주소다.
-이 세 값은 설치 manifest의 `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`로 그대로 들어가고, metrics/logs/traces provider의 기본 접속 주소가 된다.
+Target 등록 요청의 `loki_base_url`, `tempo_base_url`은 target cluster 안에서 agent가 실제로 호출할 관측 스택 주소다.
+Prometheus는 등록 또는 설치 manifest에 주소를 넣지 않고, cluster 범위 `/integrations/prometheus` revision 계약을 agent가 검증한 후에만 동적 연결한다.
 `otel_traces_endpoint`는 provider 조회 주소가 아니라 cluster-agent 자신의 span을 OpenTelemetry collector로 내보낼 endpoint다.
 
 ### 03-agent-runtime
@@ -513,7 +513,7 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 `05-repo-manifests`는 선택 branch에서 Kubernetes `kind`가 파싱되는 `.yaml/.yml` 파일만 반환한다.
 `06-alert-channel-test`는 저장 전 webhook 테스트 알림 1건을 실제 전송하고 성공/실패 사유를 반환한다.
 `07-rca-rule-validate`는 RCA 룰 YAML을 `packages.ai.rule_catalog` schema로 검증하고 첫 symptom과 후보 수를 반환한다.
-`08-metrics-validate`는 PromQL dry-run 결과를 반환한다.
+`08-metrics-validate`는 explicit cluster 권한을 검사한 뒤 PromQL을 `telemetry.query.run` agent 명령으로 접수하고 command identity를 반환한다.
 
 ### 11-clusters
 

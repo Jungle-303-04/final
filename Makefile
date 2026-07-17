@@ -87,6 +87,7 @@ reference-feature-ledger: ## 원본 기능·계약 전수 ledger 생성
 
 reference-feature-ledger-check: ## 원본 기능 ledger의 완전성 확인
 	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check
+	node --test scripts/reference-feature-ledger.test.mjs scripts/reference-feature-source-identity.test.mjs scripts/reference-resource-metrics-parity.test.mjs scripts/release-governance.test.mjs
 
 reference-upstream-prepare: ## strict UI delta 검증용 승인 원본 Git object 준비
 	@if [[ -e "$(REFERENCE_UPSTREAM_GIT)" ]]; then \
@@ -202,7 +203,7 @@ smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행
 	bash scripts/smoke.sh
 
 demo: ## Kind에서 bad rollout → Safe PR 리뷰 병합 → 외부 GitOps 정상화 데모
-	bash scripts/oss-demo.sh
+	bash -c "DEMO_DRY_RUN='$(DEMO_DRY_RUN)' bash scripts/oss-demo.sh"
 
 local-smoke: ## .env.local-test를 source해서 로컬 smoke 실행
 	@test -f "$(LOCAL_TEST_ENV)" || { echo "missing $(LOCAL_TEST_ENV); run make local-test-env"; exit 1; }

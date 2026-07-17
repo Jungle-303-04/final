@@ -312,7 +312,6 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 | `EMPTY_COMMAND_MESSAGE` | `""` | 빈 메시지 |
 | `DEFAULT_TARGET_NAME` | `"target-cluster"` | 대상 클러스터 이름 기본 |
 | `DEFAULT_TARGET_ENVIRONMENT` | `"sandbox"` | 대상 환경 기본 |
-| `DEFAULT_PROMETHEUS_BASE_URL` | `"http://prometheus.target.svc:9090"` | 관측 스택 기본 주소(유일한 정의 지점, deploy/target Helm values 와 정렬) |
 | `DEFAULT_LOKI_BASE_URL` | `"http://loki-gateway.target.svc"` | 〃 |
 | `DEFAULT_TEMPO_BASE_URL` | `"http://tempo.target.svc:3200"` | 〃 |
 | `DEFAULT_OTEL_SERVICE_NAME` | `"target-cluster-agent"` | OTel 서비스 이름 |
@@ -397,7 +396,6 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 | `workspace_id` | `str` | `DEFAULT_WORKSPACE_ID` |
 | `management_base_url` | `str` | `""` — 클라이언트 생략 가능. 백엔드가 공개 URL env 로 정규화하고, 최종 미해결 시 preflight/register 에서 차단 |
 | `image` | `str` | `""` |
-| `prometheus_base_url` | `str` | `DEFAULT_PROMETHEUS_BASE_URL` |
 | `loki_base_url` | `str` | `DEFAULT_LOKI_BASE_URL` |
 | `tempo_base_url` | `str` | `DEFAULT_TEMPO_BASE_URL` |
 | `otel_traces_endpoint` | `str` | `DEFAULT_OTEL_TRACES_ENDPOINT` |
@@ -420,12 +418,12 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 - `DeploymentScaleRequest` — `replicas: int`(`ge=0, le=MAX_DEPLOYMENT_REPLICAS`), `reason: str | None`(`max_length=500`), `approval_ref: str | None = None`, `policy_decision_ref: str | None = None`.
 - `DeploymentRestartRequest` — `reason: str | None`(`max_length=500`), `approval_ref: str | None = None`, `policy_decision_ref: str | None = None`.
 - `AgentDebugQueryRequest` — `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `query: dict[str, Any]`, `reason: str | None = None`.
+- `PrometheusQueryDefinition` — agent 실행용 strict source 계약. `source="prometheus"`, 필수 `name/query`, 선택 `description`, bounded `range_seconds/step_seconds`; extra 필드와 `step_seconds > range_seconds`를 거부한다. URL·header·credential 필드는 허용하지 않는다. `MetricQueryPresetUpsertRequest`가 이 공용 정의를 상속해 동일 검증을 재사용한다.
 - `AlertChannelUpsertRequest` — workspace 알림 채널 생성/수정 입력. `channel_id: str = ""`(빈 값이면 서버 생성), `name: str`(`min_length=1`), `kind: Literal["webhook"] = "webhook"`, `url: str`(`min_length=1`), `min_severity: Literal["info","warning","critical"] = "warning"`, `enabled: bool = True`.
 - `EmailCheckRequest` — `email: str`. `/auth/check-email` 사전 검증 요청.
 - `RepoValidateRequest` — `url: str`, `token: str | None = None`. URL은 GitHub `owner/repo`로 정규화되며 token 원문은 응답에 절대 포함하지 않는다.
 - `AlertChannelTestRequest` — 저장 전 알림 테스트. `name`, `kind="webhook"`, `url`, `min_severity`, `severity`, `message`.
 - `RcaRuleValidateRequest` — `yaml_text: str`(`max_length=100_000`). RCA 룰 저장 전 검증 전용.
-- `MetricsValidateRequest` — `source="prometheus"`, `query`, `base_url`, `range_seconds`, `step_seconds`. PromQL dry-run 검증 전용.
 - `AlertmanagerAlert` — 외부 Alertmanager webhook alert 항목. `model_config.extra="allow"`이고 외부 camelCase 계약을 유지한다. 필드: `status: str = "firing"`, `labels/annotations: dict[str, Any] = {}`, `startsAt: str = ""`, `endsAt: str = ""`, `fingerprint: str = ""`.
 - `AlertmanagerWebhookRequest` — Alertmanager v4 webhook payload. `model_config.extra="allow"`. 필드: `version: str = "4"`, `groupKey: str = ""`, `status: str = "firing"`, `receiver: str = ""`, `alerts: list[AlertmanagerAlert] = []`.
 - `AiConversationCreateRequest` — `message: str`(`min_length=1, max_length=MAX_AI_MESSAGE_LENGTH`), `title: str | None`(`max_length=120`), `agent: str = DEFAULT_AI_AGENT`(`min_length=1, max_length=80`), `context: dict[str, Any] = {}`.
@@ -480,7 +478,7 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `AcceptedResponse` | `accepted: bool`, `event_id: str`, `correlation_id: str` |
 | `AcceptedEventResponse` | `AcceptedResponse` + `event: JsonMap` |
 | `EventIdAcceptedResponse` | `accepted: bool`, `event_id: str` |
-| `AuthSessionResponse` | `authenticated: bool`, `user_id: str`, `roles: list[str]`, `workspace_id: str` |
+| `AuthSessionResponse` | `authenticated: true`, `auth_enabled: true`, `auth_mode: password | trusted_proxy`, `user_id`, `groups`, `roles`, `workspace_id`, typed `logout` capability |
 | `EmailVerificationResponse` | `accepted: bool`, `verification_required: bool`, `email: str \| None = None` |
 | `UserApprovalResponse` | `accepted: bool`, `user_id: str`, `status: str`, `role: str`, `workspace_id: str` |
 | `LogoutResponse` | `authenticated: bool` |
@@ -527,7 +525,6 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `ValidationErrorItem` | `code: str`, `detail: str`, `line: int \| None` |
 | `AlertChannelTestResponse` | `valid: bool`, `delivered: bool`, `code: str \| None`, `detail: str`, `status_code: int \| None` |
 | `RcaRuleValidateResponse` | `valid: bool`, `errors: list[ValidationErrorItem]`, `matched_symptom: str \| None`, `candidates_count: int` |
-| `MetricsValidateResponse` | `valid: bool`, `code: str \| None`, `detail: str`, `result_type: str \| None` |
 | `BootstrapStep` | `label: str`, `command: str` |
 | `TargetInstallResponse` | `registered: bool`, `cluster_id: str`, `status: str`, `applied: bool`, `apply_output: str \| None`, `install_manifest: str`, `agent_token: str`, `install_command: str = ""`, `bootstrap_command: str = ""`, `bootstrap_steps: list[BootstrapStep] = []`, `connect_timeout_seconds`, `connect_expires_at`, `connection_stage: str \| None = None`(등록 응답은 `token_issued`) — per-cluster agent 토큰 **원문**은 등록 관리자에게 1회만 반환(서버는 해시만 저장, agent 는 `x-agent-token` 으로 인증) |
 | `ClusterAgentStatus` | `workspace_id/cluster_id/agent_id/status: str`, `capabilities: list[str] = []`, `details: JsonMap = {}`, `last_seen_at/created_at/updated_at: str \| None = None` |
@@ -884,6 +881,7 @@ async def fail_expired_agent_commands(self) -> list[JsonObject]
 ## 모듈: `target.py`
 
 - `src/packages/contracts/target.py :: TargetComponent` — `StrEnum`: `CLUSTER_AGENT="cluster-agent"`, `NODE_COLLECTOR="node-collector"`.
+- node-collector identity 상수는 `NODE_COLLECTOR_SERVICE_ACCOUNT_NAME="cluster-agent-node-collector"`, `NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME="cluster-agent-node-collector-read"`, 동일 이름의 binding 상수로 중앙화한다. install/admin-upgrade/static manifest와 DaemonSet spec은 이 계약을 공유하며 collector에는 `pods get/list` 외 권한을 부여하지 않는다.
 - `src/packages/contracts/target.py :: TargetDesiredStateStatus` — `StrEnum`: `ACTIVE="active"`.
 - `src/packages/contracts/target.py :: TargetReconcileStatus` — `StrEnum`: `REQUESTED="requested"`, `IN_SYNC="in_sync"`, `DRIFTED="drifted"`, `FAILED="failed"`.
 - `src/packages/contracts/target.py :: TARGET_NAMESPACE` — `= "target"`.

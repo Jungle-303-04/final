@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from packages.config.constants import CommandStatus
 from packages.config.settings import env
+from packages.contracts.gateway import limits as gateway_limits
 
 
 class Settings:
@@ -31,8 +32,8 @@ class Settings:
     COMMAND_STATUS_LEASED = CommandStatus.LEASED
     COMMAND_STATUS_RUNNING = CommandStatus.RUNNING
     EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
-    DEFAULT_DEAD_LETTER_LIMIT = 50
-    MAX_DEAD_LETTER_LIMIT = 100
+    DEFAULT_DEAD_LETTER_LIMIT = gateway_limits.DEAD_LETTER_DEFAULT_LIMIT
+    MAX_DEAD_LETTER_LIMIT = gateway_limits.DEAD_LETTER_MAX_LIMIT
     # 브라우저 SPA CORS — 쿠키 인증 요청 허용 origin(콤마 구분). 로컬 개발 origin 기본 포함.
     CORS_ALLOW_ORIGINS_ENV = "CORS_ALLOW_ORIGINS"
     DEFAULT_CORS_ALLOW_ORIGINS = (

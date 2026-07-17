@@ -66,8 +66,8 @@ export function homeApi(refreshAfterSeconds = 30) {
       loadInsights: insightsMock,
       loadNodes: nodesMock,
       loadNodePods: podsMock,
-      subscribeDashboardInvalidations: vi.fn((clusterId, options) => {
-        const stream = dashboardInvalidationStream(clusterId, options?.signal);
+      subscribeDashboardInvalidations: vi.fn((scope, options) => {
+        const stream = dashboardInvalidationStream(scope.clusterId, options?.signal);
         dashboardStreams.push(stream);
         return stream.events;
       }),

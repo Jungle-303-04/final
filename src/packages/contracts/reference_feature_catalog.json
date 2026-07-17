@@ -417,85 +417,132 @@
     },
     {
       "contractId": "reference.feature.015",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:scope-and-session:header:v1",
       "legacyContractIds": [
         "reference.feature.015"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-015",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterListResponse",
+      "frontendContract": "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/ProductShell.portForward.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#list_clusters",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#listClusterChoices",
+          "reason": "The authorized cluster catalog derives connection status, stage, and last observation from stored outbound-agent heartbeat and inventory evidence; the browser never opens a target connection or impersonates an agent reconnect.",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useClusterScope",
+          "reason": "One fixed-height, horizontally scrolling filter control owns cluster and multi-namespace pills, renders the selected cluster's authorized agent-derived status mark, and reuses the scope refresh plus native-capability-gated port-forward indicator without adding a selector or transport.",
+          "test": "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.016",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:omnibar-and-command:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.016"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-016",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIdentitySearchResponse",
+      "frontendContract": "frontend/src/features/global-filter/globalFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#search_resource_identities",
+          "consumer": "frontend/src/features/global-filter/createGlobalFilterAdapter.ts#createGlobalFilterAdapter",
+          "reason": "The authenticated search contract returns authorized resource identities and counted facets from persisted outbound-Agent observations; it never performs a direct target lookup.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/app/ProductCommandPalette.tsx#ProductCommandPalette",
+          "reason": "The existing filter and descriptor-backed command palette are the single search, scope, resource-kind, and route authorities without duplicating paths or labels.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.017",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1",
       "legacyContractIds": [
         "reference.feature.017"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-017",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_runtime_diagnostics.py",
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.test.tsx",
+        "frontend/src/desktop/DesktopLocalTerminalEntry.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "reason": "Diagnostics consume authenticated server and stored Agent observations; theme, help, and native terminal capability remain their existing browser or desktop authorities.",
+          "test": "tests/test_runtime_diagnostics.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductShell.tsx#ProductShellFrame",
+          "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts",
+          "reason": "Theme, shortcut help, diagnostics, update notice, and capability-gated terminal reuse shared controllers. Source repository promotion is intentionally excluded by the product policy and its dedicated not-applicable rows.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalEntry.tsx#DesktopLocalTerminalEntry",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#capabilities",
+          "test": "frontend/src/desktop/DesktopLocalTerminalEntry.test.tsx"
+        },
         "realtime": "not_required"
       }
     },
@@ -540,56 +587,89 @@
     },
     {
       "contractId": "reference.feature.019",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1",
       "legacyContractIds": [
         "reference.feature.019"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-019",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.OperationEvent",
+      "frontendContract": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_realtime_gateway.py",
+        "frontend/src/app/ProductShell.dock.test.tsx",
+        "frontend/src/features/shell-sessions/ShellSessionsProvider.test.tsx",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+        "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py#TerminalSessionBroker",
+          "consumer": "src/services/target/cluster-agent/terminal_exec.py#PodExecController",
+          "reason": "Exec and log streams retain their authenticated bounded Agent path. The browser session registry composes lifetimes without adding another Python transport or direct cluster connection.",
+          "test": "tests/test_realtime_gateway.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/BottomDock.tsx#BottomDock",
+          "consumer": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#ShellSessionsProvider",
+          "reason": "The existing resizable, collapsible, reconnectable bounded dock remains the log and operation surface while existing exec, local-terminal, and port-forward owners register their live session lifetime in one shared shell contract.",
+          "test": "frontend/src/app/ProductShell.dock.test.tsx"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx#DesktopLocalTerminalSurface",
+          "consumer": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#register",
+          "test": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
+        },
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.020",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1",
       "legacyContractIds": [
         "reference.feature.020"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-020",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.InventoryResourceDetailResponse",
+      "frontendContract": "frontend/src/shared/ui/primitives/dialog.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+        "frontend/src/pages/resources/resourcesUrlState.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
+          "consumer": "frontend/src/features/resources/createResourcesAdapter.ts#createResourcesAdapter",
+          "reason": "Resource and operation overlays consume their existing authenticated contracts; modal focus and URL ownership do not require a duplicate overlay endpoint.",
+          "test": "tests/test_inventory_domain.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/ui/primitives/dialog.tsx#DialogContent",
+          "consumer": "frontend/src/app/ProductShell.tsx#ProductShellFrame",
+          "reason": "Base UI provides one modal focus boundary, Escape dismissal, inert background, and opener focus restoration; resource details retain canonical URL deep links and full/peek history.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1210,28 +1290,44 @@
     },
     {
       "contractId": "reference.feature.037",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:auth:navigation:server-session-handoff:v1",
       "legacyContractIds": [
         "reference.feature.037"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-037",
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.AuthSessionResponse",
+      "frontendContract": "frontend/src/features/auth/authContract.ts#ProductSession",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_identity_auth_routes.py",
+        "tests/test_password_auth.py",
+        "frontend/src/api/auth.test.ts",
+        "frontend/src/features/auth/AuthBarrier.test.tsx",
+        "frontend/src/features/auth/createAuthAdapter.test.ts",
+        "scripts/reference-feature-source-identity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/identity/router.py#login",
+          "consumer": "src/services/gateway/api-gateway/auth.py#PasswordAuthService",
+          "reason": "The existing Python password and trusted-proxy authorities own login, server session refresh, and capability-aware logout. The frozen source OIDC callback runtime is not recreated because external identity handoff is intentionally delegated to the configured trusted proxy rather than becoming a second product authentication authority.",
+          "test": "tests/test_identity_auth_routes.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/auth/AuthBarrier.tsx#AuthBarrier",
+          "consumer": "frontend/src/features/auth/createAuthAdapter.ts#createAuthAdapter",
+          "reason": "The authentication barrier preserves the requested browser route across sign-in, consumes the strict server-owned session contract, and exposes sign-out only when the server capability supports ending that session.",
+          "test": "frontend/src/features/auth/AuthBarrier.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -2143,56 +2239,85 @@
     },
     {
       "contractId": "reference.feature.061",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:events:context-switch-progress:scoped-operation:v1",
       "legacyContractIds": [
         "reference.feature.061"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-061",
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
       "area": "realtime-events",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts#ScopeTransitionOperationEvent",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_home_dashboard_ready_stream.py",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "scripts/reference-realtime-context-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "src/domains/dashboard/ready_stream.py#dashboard_ready_heartbeat_seconds",
+          "reason": "The authenticated Python stream validates workspace and cluster access before emitting a scope-bound connected frame; the product never changes an in-process kube-context or contacts Kubernetes directly.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The single global scope owner projects connecting and reconnecting phases as progress OperationEvent semantics and keeps stable layout state while the authenticated replacement scope connects.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.062",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:events:context-changed:authority-rotation:v1",
       "legacyContractIds": [
         "reference.feature.062"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-062",
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
       "area": "realtime-events",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts#ClusterScopeValue",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_home_dashboard_ready_stream.py",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/pages/home/useHomePageState.test.tsx",
+        "scripts/reference-realtime-context-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "src/domains/dashboard/ready_stream.py#DashboardReadyCursorBinding",
+          "reason": "The signed cursor binds user, authorization revision, workspace, and cluster so a prior context cannot resume into a replacement authority.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "consumer": "frontend/src/pages/home/useHomePageState.ts#useHomePageState",
+          "reason": "The completed context event advances the selected scope authority; the previous AbortSignal is closed, late operations are discarded, and one shared invalidation revision refreshes consumers without retaining stale cache state.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -2514,7 +2639,7 @@
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
-        "tests/test_changes_router.py",
+        "tests/test_change_timeline_router.py",
         "frontend/src/api/refresh-policies.test.ts",
         "frontend/src/api/change-timeline.test.ts",
         "frontend/src/shared/data/browserRefreshPolicyRegistry.test.ts",
@@ -3159,11 +3284,11 @@
     },
     {
       "contractId": "reference.feature.089",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
       "legacyContractIds": [
         "reference.feature.089"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-089",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3172,17 +3297,31 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/api/bootstrap-status.test.ts",
+        "frontend/src/features/runtime-status/createRuntimeStatusAdapter.test.ts",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "src/domains/diagnostics/runtime.py#collect_runtime_diagnostics",
+          "reason": "Authenticated diagnostics batch bounded service health, event-consumer lag, provider failures, and projection counts while the public readiness endpoint remains tenant-neutral.",
+          "test": "tests/test_bootstrap_diagnostics.py#test_runtime_diagnostics_is_session_scoped_batched_and_bounded"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx#RuntimeDiagnosticsDialog",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "reason": "The shared authenticated dialog renders partial and unavailable diagnostics explicitly and never derives runtime health from hardcoded browser values.",
+          "test": "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3231,11 +3370,11 @@
     },
     {
       "contractId": "reference.feature.091",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:auth:session:server-authority:v1",
       "legacyContractIds": [
         "reference.feature.091"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-091",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3244,17 +3383,34 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.AuthSessionResponse",
+      "frontendContract": "frontend/src/features/auth/authContract.ts#ProductSession",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_identity_auth_routes.py",
+        "tests/test_password_auth.py",
+        "tests/test_identity_repository.py",
+        "frontend/src/api/auth.test.ts",
+        "frontend/src/features/auth/createAuthAdapter.test.ts",
+        "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx",
+        "scripts/reference-feature-ledger.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/identity/router.py#session",
+          "consumer": "src/services/gateway/api-gateway/auth.py#PasswordAuthService.session_identity",
+          "reason": "The existing authenticated session endpoint derives password versus trusted-proxy mode from the validated session authority, projects persistent workspace groups and roles, and exposes logout effects without a proxy URL or secret.",
+          "test": "tests/test_identity_auth_routes.py#test_password_session_exposes_storage_owned_auth_context_without_source_only_role"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/ui/blocks/SidebarProfileMenu.tsx#SidebarProfileMenu",
+          "consumer": "frontend/src/features/auth/createAuthAdapter.ts#createAuthAdapter",
+          "reason": "The strict session schema and existing AuthBarrier carry server-owned identity and prevent the user menu from claiming a sign-out that trusted-proxy injection cannot perform.",
+          "test": "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3303,11 +3459,11 @@
     },
     {
       "contractId": "reference.feature.093",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
       "legacyContractIds": [
         "reference.feature.093"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-093",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3316,28 +3472,41 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/cluster-connection.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#get_cluster_connection_status",
+          "consumer": "src/domains/target/connectivity.py#cluster_connection_status",
+          "reason": "The normalized response exposes the authenticated outbound agent state, selected cluster identity, observation time, stage, and bounded failure detail without a direct target connection.",
+          "test": "tests/test_target_registration.py#test_cluster_connection_status_route_returns_agent_details"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider",
+          "consumer": "frontend/src/api/cluster-connection.ts#getClusterConnectionStatus",
+          "reason": "One scope authority preserves the last safe matching response and discards completions from obsolete cluster selections.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.094",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
       "legacyContractIds": [
         "reference.feature.094"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-094",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3346,28 +3515,40 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/pages/clusters/ClustersPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "src/domains/target/router.py#get_cluster_connection_status",
+          "reason": "The installed cluster agent owns outbound reconnect. A browser-triggered target connection mutation would violate the agent-only boundary, so retry refreshes the authoritative observation instead.",
+          "test": "tests/test_target_registration.py#test_cluster_connection_status_route_returns_agent_details"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/clusters/ClustersPage.tsx#ClustersPage",
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider",
+          "reason": "The retry control starts one deduplicated status refresh for the current authority and never opens a direct Kubernetes or Prometheus connection.",
+          "test": "frontend/src/pages/clusters/ClustersPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.095",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cluster-info:agent-observation:summary:v1",
       "legacyContractIds": [
         "reference.feature.095"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-095",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3376,28 +3557,45 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterSummary",
+      "frontendContract": "frontend/src/features/home/homeEndpointContract.ts#HomeEndpointClusterSummary",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "scripts/reference-cluster-info-parity.test.mjs",
+        "tests/test_target_registration.py",
+        "tests/test_target_agent_traffic_sources.py",
+        "frontend/src/api/clusters.test.ts",
+        "frontend/src/features/home/createHomeAdapter.validation.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/features/traffic/createTrafficAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#cluster_summary",
+          "consumer": "src/domains/target/router.py#cluster_observation_metadata",
+          "reason": "The existing workspace-scoped cluster contract combines registration identity with the latest persisted outbound Agent observation. Kubernetes server version comes from the Agent traffic-source probe, counts are exposed only for complete inventory snapshots, and CRD discovery completeness remains explicit; no server-side direct cluster connection or duplicate cluster-info endpoint is introduced.",
+          "test": "tests/test_target_registration.py#test_cluster_list_uses_access_filter_and_agent_status"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/home/homeCanonical.ts#toClusterChoice",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "Home, the fixed global scope row, and Traffic reuse strict cluster and Agent-source contracts. Unknown or partial observations remain nullable instead of becoming hardcoded zeroes, while Agent reconnect events and the shared refresh policy replace source-only in-process discovery polling.",
+          "test": "frontend/src/features/home/createHomeAdapter.validation.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.096",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:capabilities:rbac:resource-authority:v1",
       "legacyContractIds": [
         "reference.feature.096"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-096",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3406,28 +3604,52 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceCapabilitiesResponse",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "scripts/reference-capabilities-parity.test.mjs",
+        "tests/test_helm_release_router.py",
+        "tests/test_kubernetes_api_discovery_contract.py",
+        "tests/test_log_stream.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_service_access_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/api/api-resource-discovery.test.ts",
+        "frontend/src/api/log-stream.test.ts",
+        "frontend/src/api/resource-capabilities.test.ts",
+        "frontend/src/api/service-access.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_resource_capabilities",
+          "consumer": "src/domains/inventory/capabilities.py#resource_capabilities_response",
+          "reason": "One exact-resource response composes workspace and cluster RBAC, immutable inventory identity, namespace safety, observed resource state, and connected outbound Agent capability. Logs, service access and port-forward, Helm operations, and readable API kinds reuse their typed authorities rather than a second namespace-wide boolean endpoint or direct target access.",
+          "test": "tests/test_resource_capabilities_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/api/resource-capabilities.ts#getResourceCapabilities",
+          "reason": "The browser renders only server-owned descriptors for the exact resource and delegates logs, service access, port-forward, Helm, and dynamic kind visibility to their shared typed ports without a hardcoded capability matrix.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.097",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
       "legacyContractIds": [
         "reference.feature.097"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-097",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3436,17 +3658,31 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
+      "frontendContract": "frontend/src/features/global-filter/globalFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_global_filter_facets",
+          "consumer": "src/domains/inventory_filter/repository.py#list_authorized_namespace_catalog",
+          "reason": "The server returns only workspace-, user-, cluster-, and RBAC-authorized namespaces with bounded observed counts instead of exposing a raw cluster namespace list.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/features/global-filter/createGlobalFilterAdapter.ts#createGlobalFilterAdapter",
+          "reason": "The namespace selector consumes the shared server facet catalog, preserves cluster identity, and commits canonical URL scope without a hardcoded namespace list.",
+          "test": "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3540,11 +3776,11 @@
     },
     {
       "contractId": "reference.feature.100",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1",
       "legacyContractIds": [
         "reference.feature.100"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-100",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3553,18 +3789,37 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.OperationEvent",
+      "frontendContract": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_realtime_gateway.py",
+        "frontend/src/features/shell-sessions/ShellSessionsProvider.test.tsx",
+        "frontend/src/app/ProductShell.sessions.test.tsx",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+        "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#ShellSessionsProvider",
+          "reason": "Unlike the upstream single-process server, product sessions are distributed across the authenticated realtime Agent broker, browser owners, and a native local PTY. A Python aggregate would be stale and incomplete, so the owning clients compose the exact active snapshot without a duplicate endpoint.",
+          "test": "frontend/src/features/shell-sessions/ShellSessionsProvider.test.tsx"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#countsForCluster",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "reason": "Cluster-scope changes read live port-forward, exec, and local-terminal lifetimes, then require one focus-trapped confirmation while preserving each session's original cluster authority.",
+          "test": "frontend/src/app/ProductShell.sessions.test.tsx"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx#DesktopLocalTerminalSurface",
+          "consumer": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#register",
+          "test": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
+        },
         "realtime": "not_required"
       }
     },
@@ -4072,7 +4327,7 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ClusterSummaryDetailResponse",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
@@ -4085,17 +4340,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
           "consumer": "src/domains/dashboard/fleet_router.py#build_cluster_summary_detail",
-          "reason": "The normalized Python endpoints provide authorized health, workload, warning, incident, usage, Node, and Pod sections, but not the complete monolithic topology, traffic, posture, and deferred-loading response.",
+          "reason": "The normalized Python boundary deliberately decomposes the source monolith into authorized cluster summary, insights, Node, Pod, relation, Traffic, and Checks contracts. Each section owns scope, completeness, observation time, and failure without coupling healthy data to an unavailable provider; optional provider bands remain independently tracked by their own feature rows.",
           "test": "tests/test_fleet_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/home/useHomeClusterFrame.ts#useHomeClusterFrame",
           "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "Home preserves last-success, partial failure, forbidden access, and scope generation per section, while provider-specific dashboard sections remain unavailable.",
+          "reason": "One Home adapter and frame compose independent strict sections, preserve last success through partial failure, reject stale cluster and refresh generations, report forbidden access once, and follow the server-owned refresh policy instead of recreating a browser dashboard object.",
           "test": "frontend/src/pages/home/useHomePageState.test.tsx"
         },
         "desktop": null,
@@ -4291,11 +4546,12 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.inventory_filter.graph",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.RelationsTopologyResponse",
       "frontendContract": "frontend/src/features/resources/relationTopologyContract.ts",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
+        "scripts/reference-topology-parity.test.mjs",
         "tests/test_relations_topology_router.py",
         "tests/test_relations_topology_contract.py",
         "frontend/src/api/relation-topology.test.ts",
@@ -4304,15 +4560,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/inventory_filter/router.py#get_topology",
           "consumer": "src/domains/inventory_filter/graph.py#build_resource_graph",
+          "reason": "The existing relations view resolves one authorized cluster and canonical filter scope, pins an inventory revision, and returns a bounded evidence graph with directed relation evidence, exact/partial/unavailable completeness, omitted counts, and server refresh policy. Traffic remains in its typed Agent observation contract and no direct cluster read or duplicate topology service is introduced.",
           "test": "tests/test_relations_topology_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/RelationTopologyCanvas.tsx#RelationTopologyCanvas",
           "consumer": "frontend/src/features/resources/createRelationTopologyAdapter.ts#createRelationTopologyAdapter",
+          "reason": "The Resources relation view reuses canonical URL filters, aborts superseded reads, rejects late scope results, retains the last verified graph during refresh, and exposes unavailable or truncated evidence without recreating the removed standalone Topology route.",
           "test": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
         },
         "desktop": null,
@@ -4379,27 +4637,30 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.checks.observations",
       "frontendContract": "frontend/src/features/checks/checksContract.ts",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
         "tests/test_checks_router.py",
         "tests/test_checks_observation_projection.py",
         "frontend/src/api/checks.test.ts",
-        "frontend/src/pages/checks/ChecksPage.test.tsx"
+        "frontend/src/pages/checks/ChecksPage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/checks/router.py#get_checks_overview",
           "consumer": "src/domains/checks/observation_projection.py#checks_overview",
+          "reason": "The normalized Checks overview replaces the source workspace audit endpoint with one RBAC-scoped projection of persisted outbound Agent findings, definitions, visibility, observation time, and partial/unavailable reasons; generic workspace action history is never substituted and the gateway never evaluates a cluster directly.",
           "test": "tests/test_checks_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
           "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "reason": "Checks and resource links consume the strict shared finding contract, preserve exact ResourceRef identity and provider availability, and refresh the same authorized scope without a duplicate browser audit model.",
           "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
         },
         "desktop": null,
@@ -4421,26 +4682,31 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.checks.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.checks.settings",
       "frontendContract": "frontend/src/features/checks/checksContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_checks_router.py",
+        "tests/test_checks_settings_migration.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/features/checks/createChecksAdapter.test.ts",
         "frontend/src/pages/checks/ChecksPage.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/checks/router.py#get_checks_overview",
-          "reason": "No revisioned hidden check, category, or namespace settings repository and authenticated read endpoint exists.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/checks/router.py#get_checks_settings",
+          "consumer": "src/domains/checks/repository.py#ChecksSettingsRepository.get_checks_settings",
+          "reason": "The authenticated read returns only the current user and workspace policy, revision, invalidation generation, and server-owned edit authority; absent state is an explicit revision-zero policy and no browser storage or cluster connection participates.",
+          "test": "tests/test_checks_router.py#test_checks_settings_are_revisioned_audited_and_applied_to_agent_results"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
-          "reason": "No server-backed audit settings editor can be mounted.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/checks/ChecksSettingsDialog.tsx#ChecksSettingsDialog",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "reason": "The dialog reads one strict server-backed policy when opened, exposes read-only authority truthfully, and keeps drafts local only until an audited server receipt commits them.",
           "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
         },
         "desktop": null,
@@ -4462,26 +4728,31 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.checks.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.checks.settings",
       "frontendContract": "frontend/src/features/checks/checksContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_checks_router.py",
+        "tests/test_checks_settings_migration.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/features/checks/createChecksAdapter.test.ts",
         "frontend/src/pages/checks/ChecksPage.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/checks/router.py",
-          "reason": "No owner-authorized PUT contract, expected revision, audit event, or targeted finding invalidation exists.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/checks/router.py#update_checks_settings",
+          "consumer": "src/domains/checks/repository.py#ChecksSettingsRepository.put_checks_settings",
+          "reason": "The owner-authorized transaction validates bounded identifiers and exact RBAC-visible cluster/namespace references, uses advisory locking plus expected revision CAS, commits an audit event atomically, and advances a targeted Checks invalidation generation.",
+          "test": "tests/test_checks_router.py#test_checks_settings_reject_stale_unauthorized_partial_and_secret_input"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
-          "reason": "No persistence receipt or conflict-safe save flow exists.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/checks/ChecksSettingsDialog.tsx#ChecksSettingsDialog",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "reason": "The strict adapter submits one expected revision, maps conflict without exposing server detail, reloads server authority after conflict, and refreshes the existing Checks overview only after a committed receipt.",
           "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
         },
         "desktop": null,
@@ -4544,30 +4815,33 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
-      "frontendContract": "frontend/src/features/settings/settingsContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.InventorySummaryResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesContract.ts#ResourceCatalog",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
-        "frontend/src/api/settings-access.test.ts",
-        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "tests/test_inventory_domain.py",
+        "frontend/src/api/inventory-summary.test.ts",
+        "frontend/src/features/resources/createResourcesAdapter.mapping.test.ts",
+        "frontend/src/features/resources/createResourcesAdapter.validation.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.collectionHonesty.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.filterCutover.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "consumer": "src/packages/contracts/shell_state.py#SettingsAccessProfileResponse",
-          "reason": "Product RBAC decisions are exact, but the cluster agent cannot attribute Kubernetes discovery denial to the signed-in product subject.",
-          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_inventory_summary",
+          "consumer": "src/domains/inventory/resource_count_evidence.py#project_inventory_resource_counts_evidence",
+          "reason": "The existing inventory summary contract filters persisted resource counts by canonical namespace scope and projects observed, partial, unavailable, and forbidden kind evidence only from the retained outbound cluster-agent discovery and access snapshot.",
+          "test": "tests/test_inventory_domain.py#test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
-          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
-          "reason": "The panel renders explicit unavailable evidence instead of claiming per-kind hidden resources until delegated Kubernetes subject identity exists.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+          "consumer": "frontend/src/features/resources/createResourcesAdapter.ts#createResourcesAdapter",
+          "reason": "The existing Resources adapter forwards the selected namespace scope, validates typed count evidence, exposes restricted kinds, and distinguishes a confirmed empty catalog from partial or unavailable observation without copied catalog claims.",
+          "test": "frontend/src/pages/resources/ResourcesPage.collectionHonesty.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -4752,7 +5026,7 @@
     },
     {
       "contractId": "reference.feature.129",
-      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
+      "sourceKey": "upstream-ui:audit:resource:exact-agent-findings:v1",
       "legacyContractIds": [
         "reference.feature.129"
       ],
@@ -4765,27 +5039,29 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.audit",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.checks.observations.ChecksOverviewResponse",
+      "frontendContract": "frontend/src/features/checks/checksContract.ts#ChecksRequest.resource",
       "desktopContract": null,
       "verification": [
-        "tests/test_audit.py",
-        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "tests/test_checks_observation_projection.py",
+        "tests/test_checks_router.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/pages/resources/ResourceChecksSection.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/audit/router.py",
-          "reason": "The audit log is workspace action history and no collector-backed resource finding repository is keyed by an exact Kubernetes ResourceRef.",
-          "test": "tests/test_audit.py"
+          "state": "implemented",
+          "destination": "src/domains/checks/router.py#get_checks_overview",
+          "consumer": "src/domains/checks/observation_projection.py#checks_overview",
+          "test": "tests/test_checks_router.py#test_checks_overview_filters_exact_resource_identity_and_rejects_ambiguous_scope"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "Provider security reports may render when observed, but they cannot impersonate a generic resource audit finding endpoint.",
-          "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceChecksSection.tsx#ResourceChecksSection",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "test": "frontend/src/pages/resources/ResourceChecksSection.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -4986,11 +5262,12 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
       "frontendContract": "frontend/src/features/settings/settingsContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_resource_access_projection.py",
         "tests/test_shell_state_router.py",
         "frontend/src/api/settings-access.test.ts",
         "frontend/src/features/settings/createSettingsAdapter.test.ts",
@@ -4998,17 +5275,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "consumer": "src/domains/identity/repository.py#effective_permissions_for_resource",
-          "reason": "Product RBAC decisions are implemented, but the cluster agent cannot run SelfSubjectRulesReview for the signed-in product subject.",
-          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+          "consumer": "src/domains/resource_access/projection.py#agent_execution_access_projection",
+          "reason": "The workspace-scoped response keeps signed-in product decisions under opsia_rbac and separately projects the actual cluster-agent ServiceAccount execution rules from retained outbound-agent RBAC and discovery evidence; absent, partial, or ambiguous evidence fails closed without claiming a user SelfSubjectRulesReview.",
+          "test": "tests/test_shell_state_router.py#test_settings_access_merges_product_rbac_with_agent_execution_authority"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
           "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
-          "reason": "The access panel shows explicit Kubernetes rule unavailability and never translates product permissions into Kubernetes verbs.",
+          "reason": "The selected namespace loads one typed access profile that labels product-user decisions and observed cluster-agent ServiceAccount rules as separate authorities, cancels superseded reads, and renders unavailable evidence without translating product permissions into Kubernetes verbs.",
           "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
         },
         "desktop": null,
@@ -5277,7 +5554,7 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.gateway.responses.ClusterConnectResponse",
       "frontendContract": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
       "desktopContract": null,
@@ -5288,15 +5565,15 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "src/domains/target/router.py",
-          "reason": "Cluster registration does not authorize or export a management-cluster CAPI Secret as a one-time kubeconfig artifact.",
+          "reason": "The product never exports a management-cluster CAPI Secret as a browser-downloadable kubeconfig. Cluster credentials stay inside the cluster and every managed connection is established by an installed outbound Agent, while CAPI resource detail remains available through persisted Agent observations.",
           "test": "tests/test_target_registration.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
-          "reason": "The connect dialog cannot offer a CAPI kubeconfig download without secret redaction, encrypted delivery, expiry, and audit policy.",
+          "reason": "The connect dialog intentionally offers Agent installation guidance instead of a CAPI kubeconfig download, so no credential bytes, temporary artifact URL, or browser secret lifecycle exists.",
           "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
         },
         "desktop": null,
@@ -5318,7 +5595,7 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.gateway.responses.ClusterConnectResponse",
       "frontendContract": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
       "desktopContract": null,
@@ -5329,15 +5606,15 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "src/domains/target/router.py",
-          "reason": "The existing target registration flow requires an installed agent and cannot treat a CAPI Secret as an authenticated live connection.",
+          "reason": "A CAPI Secret cannot become an authenticated live server connection. The existing target registration contract requires the workload cluster to install and authenticate its outbound Agent before any inventory or command capability is exposed.",
           "test": "tests/test_target_registration.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
-          "reason": "No CAPI capability, audited command receipt, connection progress stream, or resulting managed-cluster identity exists.",
+          "reason": "The browser does not expose a direct CAPI connect action; it resumes the canonical Agent registration flow and waits for the authenticated outbound heartbeat that creates the managed-cluster identity.",
           "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
         },
         "desktop": null,
@@ -5861,12 +6138,13 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.rightsizing",
       "frontendContract": "frontend/src/features/rightsizing",
       "desktopContract": "desktop",
       "verification": [
         "tests/test_rightsizing.py",
+        "tests/test_rightsizing_observations.py",
         "tests/test_workload_detail.py",
         "frontend/src/api/rightsizing.test.ts",
         "frontend/src/api/rightsizing-schemas.test.ts",
@@ -5877,17 +6155,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/workload_detail/router.py#get_rightsizing_scan",
-          "consumer": "src/domains/workload_detail/rightsizing_projection.py#rightsizing_scan_result",
-          "reason": "The typed RBAC and bounded scan boundary is implemented, but no persisted provider-backed rightsizing observation repository is connected.",
-          "test": "tests/test_rightsizing.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory/repository.py#list_rightsizing_observations",
+          "consumer": "src/domains/workload_detail/rightsizing_observations.py#project_rightsizing_workload",
+          "reason": "The RBAC-bound scan reads only durable cluster-agent inventory and usage samples, follows exact workload-to-Pod owner UIDs, buckets the seven-day history, and emits versioned recommendations without a direct target or Prometheus connection.",
+          "test": "tests/test_rightsizing_observations.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/cost/RightsizingScanView.tsx#RightsizingScanView",
           "consumer": "frontend/src/features/rightsizing/createRightsizingAdapter.ts#createRightsizingAdapter",
-          "reason": "The workload strip and explicit multi-cluster Cost scan surface render the strict observed-or-unavailable union; production remains unavailable until the collector repository supplies evidence.",
+          "reason": "The workload strip and explicit multi-cluster Cost scan surface consume the connected strict observation repository with exact provenance, coverage, confidence, safety reasons, and partial failure states.",
           "test": "frontend/src/pages/cost/RightsizingScanView.test.tsx"
         },
         "desktop": null,
@@ -6152,7 +6430,7 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -6171,15 +6449,17 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "frontend": {
-          "state": "implemented",
-          "destination": "frontend/src/app/PortForwardSessionIndicator.tsx#PortForwardSessionIndicator",
+          "state": "blocked",
+          "destination": "frontend/src/features/service-access/createPortForwardSessionAdapter.ts#createPortForwardSessionAdapter",
           "consumer": "frontend/src/features/service-access/PortForwardSessionsProvider.tsx#PortForwardSessionsProvider",
+          "reason": "The session adapter is intentionally fail-closed until the audited gateway-to-agent stream exists; no empty or synthetic session registry is shown.",
           "test": "frontend/src/app/ProductShell.portForward.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
-          "destination": "desktop/src-tauri/src/port_forward.rs#PortForwardSessionRegistry",
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
           "consumer": "frontend/src/desktop/desktopBridge.ts#listPortForwardSessions",
+          "reason": "The desktop capability is unsupported until its loopback-only listener is connected to the agent stream; direct target processes were removed.",
           "test": "desktop/src-tauri/tests/reference_parity.rs"
         },
         "realtime": "not_required"
@@ -6226,9 +6506,9 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
-          "state": "not_required",
-          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#buildKubectlPortForwardCommand",
-          "reason": "Exact Service port discovery and a manual loopback command are safe browser capabilities; only ownership of the listener requires Tauri.",
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "reason": "Exact port discovery remains implemented, but no browser command is exposed and the desktop action stays absent until the agent-backed tunnel is available.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "realtime": "not_required"
@@ -6249,11 +6529,14 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
-      "backendContract": "packages.contracts.service_access",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.port_forward",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
+        "tests/contracts/test_port_forward.py",
+        "tests/test_agent_port_forward.py",
+        "tests/test_realtime_gateway.py",
         "tests/contracts/test_service_access.py",
         "tests/test_service_access_router.py",
         "frontend/src/features/service-access/createPortForwardSessionAdapter.test.ts",
@@ -6263,21 +6546,23 @@
       ],
       "coverage": {
         "backend": {
-          "state": "not_required",
-          "destination": "src/packages/contracts/service_access.py#LocalPortForwardRequest",
-          "reason": "Python validates the portable request shape but must never own a workstation listener.",
-          "test": "tests/contracts/test_service_access.py"
+          "state": "implemented",
+          "destination": "src/packages/contracts/port_forward.py#PortForwardOpen",
+          "consumer": "src/services/target/cluster-agent/port_forward_stream.py#PortForwardController",
+          "test": "tests/test_agent_port_forward.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "frontend/src/pages/resources/PortForwardAction.tsx#PortForwardAction",
           "consumer": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
+          "reason": "The action is omitted instead of exposing a direct command or invoking an unavailable native adapter.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "desktop/src-tauri/src/port_forward.rs#desktop_port_forward_start",
           "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "The fail-closed command owns no target process; a future implementation may bind loopback only after receiving an agent tunnel receipt.",
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
         },
         "realtime": "not_required"
@@ -6298,7 +6583,7 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -6317,15 +6602,17 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
           "consumer": "frontend/src/app/PortForwardSessionIndicator.tsx#PortForwardSessionIndicator",
+          "reason": "No session lifecycle is mounted while the canonical adapter is fail-closed.",
           "test": "frontend/src/features/service-access/usePortForwardSessions.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "desktop/src-tauri/src/port_forward.rs#desktop_port_forward_stop",
           "consumer": "frontend/src/desktop/desktopBridge.ts#recreatePortForward",
+          "reason": "Stop and recreate reject because there can be no native-owned target session before the agent tunnel exists.",
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
         },
         "realtime": "not_required"
@@ -6995,11 +7282,11 @@
     },
     {
       "contractId": "reference.feature.178",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:source-discovery:wizard-catalog:v1",
       "legacyContractIds": [
         "reference.feature.178"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-178",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -7008,25 +7295,29 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.TrafficSourcesResponse",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
+        "tests/test_traffic_control_router.py",
+        "tests/test_target_agent_traffic_sources.py",
+        "frontend/src/features/traffic/createTrafficAdapter.test.ts",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "Authorized scope coverage exists, but no agent-reported source detection catalog or freshness timestamp is persisted.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#get_traffic_sources",
+          "consumer": "src/domains/traffic/source_projection.py#traffic_sources_response",
+          "reason": "The target agent detects source workloads through the live Kubernetes API, persists observations in agent status details, and the authorized projection distinguishes freshness, partial coverage, RBAC probe errors, and no-data without fabricated samples.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "The page truthfully reports collector absence and has no source wizard contract.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficSourcesSection",
+          "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "reason": "The page renders agent-observed source catalogs, freshness, partial state, and source actions exclusively from strict server descriptors.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,
@@ -7035,11 +7326,11 @@
     },
     {
       "contractId": "reference.feature.179",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:source-selection:flow-invalidation:v1",
       "legacyContractIds": [
         "reference.feature.179"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-179",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -7048,25 +7339,29 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.TrafficSourceCommandRequest",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
+        "tests/test_traffic_control_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/traffic/createTrafficAdapter.test.ts",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "No workspace-cluster scoped source selection, agent capability validation, audit receipt, or cache invalidation contract exists.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#set_traffic_source",
+          "consumer": "src/services/target/cluster-agent/agent.py#select_traffic_source_command",
+          "reason": "Workspace and cluster RBAC, observed capability revision, confirmation, idempotent durable command receipt, audit staging, and canonical traffic cache invalidations gate source selection before the agent persists it.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "No server-authorized traffic source selector is rendered.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficSourceActionDialog",
+          "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "reason": "Only enabled server descriptors can open the one-confirmation reason dialog; accepted work is handed to the shared operation status store.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,
@@ -7075,11 +7370,11 @@
     },
     {
       "contractId": "reference.feature.180",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:source-connect:durable-progress:v1",
       "legacyContractIds": [
         "reference.feature.180"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-180",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -7088,25 +7383,31 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.TrafficSourceCommandRequest",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
+        "tests/test_traffic_control_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_operation_event_hub.py",
+        "frontend/src/features/operations/OperationStatusStore.test.ts",
+        "frontend/src/features/operations/OperationStatusP1.test.tsx",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "No target-agent traffic collector connection command or durable connection state projection exists.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#connect_traffic_source",
+          "consumer": "src/services/target/cluster-agent/agent.py#connect_traffic_source_command",
+          "reason": "Connection uses the same RBAC and capability revision gate, durable CommandReceipt and OperationEvent outbox, cooperative cancellation checkpoints, persisted active source, idempotent replay, and shared resumable command SSE.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "No connect command receipt, progress stream, or reconnect feedback is available.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficSourcesSection",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "reason": "The server-provided connect action returns a receipt to the shared 60fps-safe external store, which resumes SSE by sequence and surfaces reconnect, cancel, completion, and failure without a traffic-specific scheduler.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,
@@ -7157,11 +7458,11 @@
     },
     {
       "contractId": "reference.feature.182",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:network-policy:exact-flow-verdict:v1",
       "legacyContractIds": [
         "reference.feature.182"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-182",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -7170,26 +7471,26 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.NetworkPolicyEvaluationResponse",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
-        "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        "tests/test_traffic_control_router.py"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "No exact Pod or label identity NetworkPolicy evaluator is exposed from the Python traffic boundary.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#evaluate_network_policies",
+          "consumer": "src/domains/traffic/network_policy.py#evaluate_network_policy",
+          "reason": "The evaluator rejects stale Pod UIDs, uses exact Pod and namespace labels, implements Kubernetes selector, peer, port, named-port, IPBlock, direction, and union-of-allow semantics, and returns explicit partial indeterminate coverage for missing namespace evidence, bounded cuts, and selecting Cilium policies whose rules are not safely interpreted.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "Flow details cannot request a policy verdict until collector-backed endpoints and an evaluator contract exist.",
-          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+          "state": "not_required",
+          "destination": "src/packages/contracts/traffic/control.py#NetworkPolicyEvaluationResponse",
+          "reason": "This row owns exact evaluator semantics; the browser flow-detail consumer remains governed by the separate collector-backed traffic-flow row and must not fabricate a flow target before that evidence exists.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -7213,7 +7514,7 @@
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
         "tests/test_helm_release_projection.py",
@@ -7255,7 +7556,7 @@
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
         "tests/test_helm_release_projection.py",
@@ -8027,7 +8328,7 @@
         "realtime": {
           "state": "implemented",
           "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "consumer": "frontend/src/features/operations/OperationStatusStore.ts",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx",
           "reason": "Upgrade acceptance stages the first durable OperationEvent in the command transaction and the existing resumable stream carries progress, cancellation, failure, and completion for the exact command ID.",
           "test": "tests/test_operation_event_hub.py"
         }
@@ -8881,7 +9182,7 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.shell_state",
       "frontendContract": "frontend/src/features/shell-state",
       "desktopContract": null,
@@ -8893,17 +9194,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "not_required",
           "destination": "src/domains/shell_state/router.py#get_settings",
           "consumer": "src/domains/shell_state/repository.py#get_ui_preferences",
-          "reason": "User-scoped theme and locale preferences are revisioned server state; host kubeconfig, listener, browser, MCP, timeline, and secret integration configuration remain deployment-owned and unavailable to browser reads.",
+          "reason": "The source contract reads process-local Go runtime arguments such as kubeconfig paths, listener ports, browser launch, MCP, and timeline retention. That runtime is excluded from the Python and outbound-Agent product architecture, so these deployment-owned values are deliberately unavailable to browser reads; user preferences and Agent-managed integrations remain separate typed contracts.",
           "test": "tests/test_shell_state_router.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "not_required",
           "destination": "frontend/src/pages/settings/SettingsPage.tsx#SettingsPage",
           "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
-          "reason": "The route consumes only the safe user preference and access profile contracts and exposes no fake host configuration.",
+          "reason": "The Settings route names the unavailable host boundary and exposes no fake process configuration, while independently implemented preference and integration cards consume their own server contracts.",
           "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
         },
         "desktop": null,
@@ -8925,7 +9226,7 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.shell_state",
       "frontendContract": "frontend/src/features/shell-state",
       "desktopContract": null,
@@ -8936,17 +9237,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "not_required",
           "destination": "src/domains/shell_state/router.py#update_settings",
           "consumer": "src/domains/shell_state/repository.py#put_ui_preferences",
-          "reason": "User preferences use optimistic revision checks and an atomic audit event; browser mutation of process-level host configuration remains intentionally blocked.",
+          "reason": "A browser request cannot replace deployment process arguments or mutate host kubeconfig paths in the Python and outbound-Agent architecture. User preferences still use optimistic revision checks and an atomic audit event, and live Agent integrations use their dedicated command receipts.",
           "test": "tests/test_shell_state_router.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "not_required",
           "destination": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
           "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
-          "reason": "One shared synchronizer persists validated preferences and reloads server authority on revision conflict.",
+          "reason": "No host-config save control or restart promise is exposed. The existing synchronizer persists only validated user preferences and reloads server authority on revision conflict.",
           "test": "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
         },
         "desktop": null,
@@ -8968,26 +9269,31 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.shell_state",
-      "frontendContract": "frontend/src/pages/settings",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.integrations",
+      "frontendContract": "frontend/src/features/settings",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
+        "tests/test_prometheus_integration.py",
+        "tests/test_target_agent_client.py",
+        "frontend/src/api/prometheus-integration.test.ts",
+        "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
         "frontend/src/pages/settings/SettingsPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py",
-          "reason": "No workspace integration repository owns Prometheus URL metadata, write-only headers, owner authorization, live client replacement, bounded probe, or audit evidence.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/integrations/prometheus.py#update_prometheus_integration",
+          "consumer": "src/services/target/cluster-agent/agent.py#apply_runtime_configurations",
+          "reason": "The owner-authorized Python integration contract persists encrypted write-only headers, atomically versions policy and audit evidence, streams one superseding probe operation, and replaces the target-agent metrics provider only after a bounded live probe.",
+          "test": "tests/test_prometheus_integration.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/settings/SettingsPage.tsx",
-          "reason": "The settings route does not store provider credentials in browser state or claim that a metrics reader can reconfigure its provider.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/settings/PrometheusIntegrationCard.tsx#PrometheusIntegrationCard",
+          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "reason": "The typed settings adapter exposes configured header names without secret values, preserves omitted secrets only for the same origin, requires re-entry after origin changes, and follows the shared operation event stream for live probe feedback.",
+          "test": "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9008,7 +9314,7 @@
       "streaming": true,
       "area": "realtime-events",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.runtime.operation_events",
       "frontendContract": "frontend/src/shared/streaming",
       "desktopContract": null,
@@ -9018,30 +9324,33 @@
         "tests/test_timeline_sse_router.py",
         "frontend/src/api/operation-events.test.ts",
         "frontend/src/api/timeline.test.ts",
-        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "scripts/reference-realtime-context-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/command/router.py#command_events",
-          "consumer": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
-          "reason": "Durable command events, retained timeline SSE, and typed topology resync are implemented as scoped streams; namespace context changes remain transactional responses rather than a separate progress stream.",
-          "test": "tests/test_operation_event_hub.py"
+          "state": "implemented",
+          "destination": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
+          "consumer": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "reason": "Python serves existing purpose-scoped operation, timeline, topology, and dashboard streams. Context progress is normalized onto the authenticated dashboard scope lifecycle rather than recreating the upstream direct Kubernetes broadcaster.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
-          "reason": "The browser resumes exact operation and timeline cursors and resynchronizes topology without a mixed global event store; context-switch progress is not yet streamed.",
-          "test": "frontend/src/api/operation-events.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "One scope owner reuses the shared SSE parser and maps connected, reconnecting, deferred-ready, and heartbeat behavior onto OperationEvent progress/completed semantics plus scoped cache invalidation.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
         },
         "desktop": null,
         "realtime": {
           "state": "implemented",
           "destination": "frontend/src/shared/streaming/sse.ts#parseSseFrames",
-          "consumer": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
-          "reason": "All implemented streams share bounded parsing, durable ordering or typed resync, reconnect policy, and render coalescing instead of per-feature ad hoc loops.",
-          "test": "frontend/src/api/operation-events.test.ts"
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "reason": "All live surfaces share strict frame parsing, durable replay or typed resync, a 30-second heartbeat, bounded reconnect, obsolete authority abort, and render-coalesced consumers instead of per-feature ad hoc loops.",
+          "test": "scripts/reference-realtime-context-parity.test.mjs"
         }
       }
     },

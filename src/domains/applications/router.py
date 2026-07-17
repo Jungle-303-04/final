@@ -47,6 +47,8 @@ from domains.target.management_guard import (
     is_management_registration,
     management_readonly_detail,
 )
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
@@ -753,15 +755,25 @@ async def list_applications(
     labels: str | None = Query(default=None),
     applications_environment: str | None = Query(
         default=None,
-        alias="applications.environment",
+        alias=gateway_params.APPLICATIONS_ENVIRONMENT_QUERY,
     ),
-    applications_status: str | None = Query(default=None, alias="applications.status"),
+    applications_status: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_STATUS_QUERY,
+    ),
     applications_pending_promotion: str | None = Query(
         default=None,
-        alias="applications.pendingPromotion",
+        alias=gateway_params.APPLICATIONS_PENDING_PROMOTION_QUERY,
     ),
-    applications_q: str | None = Query(default=None, alias="applications.q"),
-    limit: int = Query(default=100, ge=1, le=200),
+    applications_q: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_SEARCH_QUERY,
+    ),
+    limit: int = Query(
+        default=gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.APPLICATION_LIST_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ApplicationProductListResponse:
@@ -1123,7 +1135,7 @@ async def get_application_drift(
         workspace_id=workspace_id,
         application_id=application_id,
         allowed_cluster_ids=allowed_cluster_ids,
-        limit=100,
+        limit=gateway_limits.APPLICATION_WORKFLOW_RUN_DEFAULT_LIMIT,
     )
     return ApplicationDriftResponse.model_validate(
         drift_projection(_runs_for_instance(runs, selected_binding))
@@ -1136,7 +1148,11 @@ async def get_application_drift(
 )
 async def list_application_deployments(
     application_id: str,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(
+        default=gateway_limits.APPLICATION_DEPLOYMENT_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.APPLICATION_DEPLOYMENT_MAX_LIMIT,
+    ),
     instance_id: Annotated[
         str | None,
         Query(alias="instance", min_length=1, max_length=200),
@@ -1256,7 +1272,11 @@ async def upsert_application_deployment(
 @router.get(gateway_routes.APPLICATION_RUNS_PATH, response_model=WorkflowRunListResponse)
 async def list_application_runs(
     application_id: str,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(
+        default=gateway_limits.APPLICATION_WORKFLOW_RUN_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.APPLICATION_WORKFLOW_RUN_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> WorkflowRunListResponse:

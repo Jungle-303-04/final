@@ -835,6 +835,8 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(changes.coverage.backend.state, "implemented");
   assert.equal(changes.coverage.frontend.state, "implemented");
   assert.equal(changes.coverage.realtime.state, "implemented");
+  assert.ok(changes.verification.includes("tests/test_change_timeline_router.py"));
+  assert.equal(changes.verification.includes("tests/test_changes_router.py"), false);
   assert.equal(changesFeature.deliveryStatus, "implemented");
   assert.equal(
     aliases.aliases["reference.feature.070"],
@@ -846,7 +848,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "implemented");
 });
 
-test("포트 전달 registry와 전역 표시는 단일 native 세션 수명주기를 공유한다", async () => {
+test("포트 전달 UI registry와 전역 표시는 native listener 전까지 fail-closed 상태를 공유한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
     readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
@@ -865,19 +867,36 @@ test("포트 전달 registry와 전역 표시는 단일 native 세션 수명주�
     const port = portMap.features[contractId];
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
-    assert.equal(port.deliveryStatus, "implemented");
-    assert.equal(port.coverage.frontend.state, "implemented");
-    assert.equal(port.coverage.desktop.state, "implemented");
+    assert.equal(port.deliveryStatus, "in_progress");
+    assert.equal(port.coverage.frontend.state, "blocked");
+    assert.equal(port.coverage.desktop.state, "blocked");
     assert.equal(aliases.aliases[contractId], sourceKey);
-    assert.equal(feature.deliveryStatus, "implemented");
+    assert.equal(feature.deliveryStatus, "in_progress");
     assert.equal(feature.sourceKey, sourceKey);
     assert.equal(interaction.opsiaPort.state, "in_progress");
     assert.equal(interaction.opsiaPort.blockedReason, null);
   }
 
-  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "implemented");
-  assert.equal(portMap.features["reference.feature.162"].coverage.frontend.state, "implemented");
-  assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "implemented");
+  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "in_progress");
+  assert.equal(portMap.features["reference.feature.162"].coverage.backend.state, "implemented");
+  assert.equal(portMap.features["reference.feature.162"].coverage.realtime.state, "implemented");
+  assert.equal(portMap.features["reference.feature.162"].coverage.frontend.state, "blocked");
+  assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "blocked");
+});
+
+test("공유 React Helm 조회 화면은 별도 desktop bridge 계약을 요구하지 않는다", async () => {
+  const [portMap, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+
+  for (const contractId of ["reference.feature.183", "reference.feature.184"]) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(port.deliveryStatus, "implemented", contractId);
+    assert.equal(port.desktopContract, null, contractId);
+    assert.equal(feature.desktopContract, null, contractId);
+  }
 });
 
 test("리소스 YAML 편집은 Safe PR와 직접 operation 적용을 함께 보존한다", async () => {
@@ -924,6 +943,10 @@ test("Helm 업그레이드는 서버 값 검증과 공용 operation stream 증�
   assert.equal(port.coverage.backend.state, "implemented");
   assert.equal(port.coverage.frontend.state, "implemented");
   assert.equal(port.coverage.realtime.state, "implemented");
+  assert.equal(
+    port.coverage.realtime.consumer,
+    "frontend/src/features/operations/OperationStatusStore.tsx",
+  );
   assert.equal(aliases.aliases[contractId], sourceKey);
   assert.equal(feature.deliveryStatus, "implemented");
   assert.equal(feature.sourceKey, sourceKey);
@@ -966,6 +989,7 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
   ]);
   const expected = new Map([
     ["reference.feature.014", "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1"],
+    ["reference.feature.015", "upstream-ui:app-shell:scope-and-session:header:v1"],
     ...[
       "021", "022", "023", "024", "027", "028", "029",
       "030", "031", "032", "033", "034", "035", "036",
@@ -981,6 +1005,9 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
     ["reference.feature.059", "upstream-ui:timeline:delta-sync:epoch-resync-test:v1"],
     ["reference.feature.060", "upstream-ui:topology:stream:connecting-lifecycle:v1"],
     ["reference.feature.064", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
+    ["reference.feature.093", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
+    ["reference.feature.094", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
+    ["reference.feature.097", "upstream-ui:namespace:scope:authorized-rescope:v1"],
   ]);
   const interactionOwners = new Map();
   for (const [path, classification] of Object.entries(classifications.classifications)) {
@@ -1013,6 +1040,68 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
     assert.equal(port.coverage.frontend.state, "not_required", contractId);
     assert.equal(feature.deliveryStatus, "not_applicable", contractId);
   }
+});
+
+test("런타임 health는 공개 준비 상태와 인증 진단 경계를 분리한다", async () => {
+  const [portMap, aliases, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.089";
+  const sourceKey = "upstream-ui:bootstrap:health:runtime-diagnostics:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+});
+
+test("인증 세션은 원본 auth identity와 저장소 권위 로그아웃 의미를 연결한다", async () => {
+  const [portMap, aliases, identities, sourceLedger, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-identities.json"),
+    readRepositoryJson("../docs/migration/reference-source-ledger.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.091";
+  const sourceKey = "upstream-ui:auth:session:server-authority:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  const identity = identities.identities.find((candidate) => candidate.sourceKey === sourceKey);
+  const hashes = new Map(sourceLedger.files.map((file) => [file.path, file.sha256]));
+
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(identity.legacyContractId, contractId);
+  assert.deepEqual(
+    identity.evidence.map(({ path, sha256, symbol }) => ({ path, sha256, symbol })),
+    [
+      {
+        path: "internal/server/server.go",
+        sha256: hashes.get("internal/server/server.go"),
+        symbol: "handleAuthMe",
+      },
+      {
+        path: "web/src/api/client.ts",
+        sha256: hashes.get("web/src/api/client.ts"),
+        symbol: "useAuthMe",
+      },
+      {
+        path: "web/src/components/UserMenu.tsx",
+        sha256: hashes.get("web/src/components/UserMenu.tsx"),
+        symbol: "UserMenu",
+      },
+    ],
+  );
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
 });
 
 test("Helm 리비전 비교는 URL 재개와 Python artifact 증거로 완결한다", async () => {
@@ -1075,7 +1164,7 @@ test("노드 비용은 실제 관측·권한 범위와 가격 부재를 단일 �
   ));
 });
 
-test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차단 사유를 연결한다", async () => {
+test("설정 권한과 호스트 설정 delta는 분리된 권한 주체와 명시적 차단 사유를 연결한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
     readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
@@ -1084,6 +1173,9 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
   ]);
   const permissions = classifications
     .classifications["web/src/components/settings/MyPermissionsDialog.tsx"];
+  const permissionsInteraction = permissions.interactions.find(
+    (candidate) => candidate.sourceKey === aliases.aliases["reference.feature.134"],
+  );
   const settings = classifications
     .classifications["web/src/components/settings/SettingsDialog.tsx"];
 
@@ -1109,7 +1201,14 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
     aliases.aliases["reference.feature.223"],
     "upstream-ui:settings:prometheus:live-apply:v1",
   );
-  assert.equal(portMap.features["reference.feature.134"].deliveryStatus, "in_progress");
+  assert.equal(portMap.features["reference.feature.134"].deliveryStatus, "implemented");
+  assert.equal(portMap.features["reference.feature.134"].coverage.backend.state, "implemented");
+  assert.equal(portMap.features["reference.feature.134"].coverage.frontend.state, "implemented");
+  assert.ok(
+    portMap.features["reference.feature.134"].verification.includes(
+      "tests/test_resource_access_projection.py",
+    ),
+  );
   assert.equal(
     portMap.features["reference.feature.134"].coverage.backend.destination,
     "src/domains/shell_state/router.py#get_settings_access",
@@ -1118,22 +1217,64 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
     portMap.features["reference.feature.134"].coverage.frontend.destination,
     "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
   );
+  const restrictedVisibilityPort = portMap.features["reference.feature.124"];
+  assert.equal(restrictedVisibilityPort.deliveryStatus, "implemented");
+  assert.equal(restrictedVisibilityPort.coverage.backend.state, "implemented");
+  assert.equal(restrictedVisibilityPort.coverage.frontend.state, "implemented");
+  assert.equal(
+    restrictedVisibilityPort.coverage.backend.destination,
+    "src/domains/inventory/router.py#get_inventory_summary",
+  );
+  assert.equal(
+    restrictedVisibilityPort.coverage.backend.consumer,
+    "src/domains/inventory/resource_count_evidence.py#project_inventory_resource_counts_evidence",
+  );
+  assert.equal(
+    restrictedVisibilityPort.coverage.frontend.destination,
+    "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+  );
+  assert.ok(restrictedVisibilityPort.verification.includes("tests/test_inventory_domain.py"));
+  assert.ok(restrictedVisibilityPort.verification.includes(
+    "frontend/src/features/resources/createResourcesAdapter.mapping.test.ts",
+  ));
+  assert.ok(restrictedVisibilityPort.verification.includes(
+    "frontend/src/pages/resources/ResourcesPage.collectionHonesty.test.tsx",
+  ));
+  const restrictedVisibilityFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.124",
+  );
+  assert.equal(restrictedVisibilityFeature.deliveryStatus, "implemented");
+  assert.equal(restrictedVisibilityFeature.sourceKey, aliases.aliases["reference.feature.124"]);
   for (const contractId of [
-    "reference.feature.124",
-    "reference.feature.134",
     "reference.feature.221",
     "reference.feature.222",
-    "reference.feature.223",
   ]) {
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     assert.equal(feature.sourceKey, aliases.aliases[contractId]);
-    assert.notEqual(feature.deliveryStatus, "implemented");
+    assert.equal(feature.deliveryStatus, "not_applicable");
+    assert.equal(portMap.features[contractId].coverage.backend.state, "not_required");
+    assert.equal(portMap.features[contractId].coverage.frontend.state, "not_required");
+    assert.match(portMap.features[contractId].coverage.backend.reason, /outbound-Agent/);
   }
+  const permissionsFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.134",
+  );
+  assert.equal(permissionsFeature.deliveryStatus, "implemented");
+  assert.equal(permissionsInteraction.opsiaPort.state, "in_progress");
+  assert.equal(permissionsInteraction.opsiaPort.blockedReason, null);
+  assert.match(permissionsInteraction.opsiaPort.rationale, /cluster-agent ServiceAccount/);
+  const prometheusFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.223",
+  );
+  assert.equal(prometheusFeature.sourceKey, aliases.aliases["reference.feature.223"]);
+  assert.equal(prometheusFeature.deliveryStatus, "implemented");
   assert.equal(
-    permissions.interactions.find((interaction) =>
-      interaction.sourceKey === "upstream-ui:settings:permissions:kubernetes-subject-rules:v1"
-    ).opsiaPort.state,
-    "blocked",
+    portMap.features["reference.feature.223"].coverage.backend.destination,
+    "src/domains/integrations/prometheus.py#update_prometheus_integration",
+  );
+  assert.equal(
+    portMap.features["reference.feature.223"].coverage.frontend.destination,
+    "frontend/src/pages/settings/PrometheusIntegrationCard.tsx#PrometheusIntegrationCard",
   );
   assert.equal(
     settings.interactions.find((interaction) =>

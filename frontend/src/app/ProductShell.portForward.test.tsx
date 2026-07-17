@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,6 +55,11 @@ describe("ProductShell port-forward session indicator", () => {
     const trigger = await screen.findByRole("button", {
       name: "포트 전달: 활성 1개, 실패 1개, 종료 1개",
     });
+    const scopeBar = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]');
+    expect(scopeBar?.className).toContain("h-9");
+    expect(await within(scopeBar!).findByText("cluster-1 · production")).toBeTruthy();
+    expect(scopeBar?.querySelector('[data-slot="status-mark"]')?.getAttribute("data-status"))
+      .toBe("healthy");
     expect(trigger.className).toContain("motion-reduce:transition-none");
     await waitFor(() => expect(port.list).toHaveBeenCalledTimes(1));
 

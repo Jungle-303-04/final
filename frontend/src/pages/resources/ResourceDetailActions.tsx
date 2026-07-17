@@ -36,6 +36,7 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
 import type { PodTerminalCoordinates } from "../../features/pod-terminal/podTerminalContract";
+import { exactResourceRef } from "../../features/resources/resourceApiIdentity";
 
 export function ResourceDetailActions({
   actionsPort,
@@ -518,9 +519,8 @@ function resourceActionExecutionContext(
   const rollback = capability.requestContext === "rollback";
   if (capability.requestContext === "simple") return null;
   if (frame.phase !== "ready" || idempotencyKey === null) return null;
-  const uid = detail.resource.uid;
-  const apiIdentity = splitApiVersion(detail.resource.apiVersion);
-  if (!uid || apiIdentity === null) return null;
+  const resource = exactResourceRef(detail);
+  if (resource === null) return null;
   const context: ResourceActionExecutionContext = {
     capabilityId: capability.capabilityId,
     idempotencyKey,
@@ -530,12 +530,12 @@ function resourceActionExecutionContext(
     snapshotId: frame.data.subject.snapshotId,
     revision: frame.data.revision,
     resource: {
-      apiGroup: apiIdentity.apiGroup,
-      version: apiIdentity.apiVersion,
-      kind: detail.identity.kind,
-      namespace: detail.identity.namespace,
-      name: detail.identity.name,
-      uid,
+      apiGroup: resource.apiGroup ?? "",
+      version: resource.version ?? "",
+      kind: resource.kind,
+      namespace: resource.namespace,
+      name: resource.name,
+      uid: resource.uid,
     },
   };
   if (!rollback) return context;
@@ -573,31 +573,18 @@ function resourceActionIdempotencyKey(prefix = "resource-action"): string {
 }
 
 function diagnoseTargetFrom(detail: ResourceDetail): DiagnoseResourceTarget | null {
-  const uid = detail.resource.uid;
-  if (!uid) return null;
-  const apiIdentity = splitApiVersion(detail.resource.apiVersion);
-  if (apiIdentity === null) return null;
+  const resource = exactResourceRef(detail);
+  if (resource === null) return null;
   return {
     clusterId: detail.clusterId,
     resourceType: detail.resource.resourceType,
-    apiGroup: apiIdentity.apiGroup,
-    apiVersion: apiIdentity.apiVersion,
-    kind: detail.identity.kind,
-    namespace: detail.identity.namespace,
-    name: detail.identity.name,
-    uid,
+    apiGroup: resource.apiGroup ?? "",
+    apiVersion: resource.version ?? "",
+    kind: resource.kind,
+    namespace: resource.namespace,
+    name: resource.name,
+    uid: resource.uid,
   };
-}
-
-function splitApiVersion(value: string): { apiGroup: string; apiVersion: string } | null {
-  const normalized = value.trim().replace(/^\/+|\/+$/gu, "");
-  if (!normalized) return null;
-  const segments = normalized.split("/");
-  if (segments.length === 1) return { apiGroup: "", apiVersion: segments[0] ?? "" };
-  if (segments.length === 2 && segments[0] && segments[1]) {
-    return { apiGroup: segments[0], apiVersion: segments[1] };
-  }
-  return null;
 }
 
 function enabledActions(

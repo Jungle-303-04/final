@@ -24,6 +24,7 @@ from packages.contracts.gateway.requests import (
     SignupRequest,
 )
 from packages.contracts.gateway.responses import (
+    AuthLogoutCapability,
     AuthSessionResponse,
     EmailCheckResponse,
     EmailVerificationResponse,
@@ -76,20 +77,47 @@ def _clear_session_cookie(response: Response) -> None:
 
 
 def _authenticated_body(session: Any, password_auth: Any | None = None) -> AuthSessionResponse:
+    auth_mode = "trusted_proxy" if session.token == TRUSTED_PROXY_SESSION_TOKEN else "password"
     display_name = getattr(session, "display_name", None)
     email = getattr(session, "email", None)
-    if password_auth is not None and (display_name is None or email is None):
-        identity = password_auth.user_identity(session.user_id)
-        if identity is not None:
-            display_name = display_name or identity.get("display_name")
-            email = email or identity.get("email")
+    groups: list[str] = []
+    roles = list(session.roles)
+    if auth_mode == "password":
+        identity = (
+            password_auth.session_identity(session.user_id, session.workspace_id)
+            if password_auth is not None
+            else None
+        )
+        if identity is None:
+            raise HTTPException(status_code=401, detail="authentication required")
+        display_name = identity.get("display_name")
+        email = identity.get("email")
+        groups = [str(group) for group in identity.get("groups", [])]
+        roles = [str(role) for role in identity.get("roles", [])]
+    logout = (
+        AuthLogoutCapability(
+            action="upstream_identity_required",
+            supported=False,
+            reauthentication_expected=True,
+        )
+        if auth_mode == "trusted_proxy"
+        else AuthLogoutCapability(
+            action="end_session",
+            supported=True,
+            reauthentication_expected=False,
+        )
+    )
     return AuthSessionResponse(
         authenticated=True,
+        auth_enabled=True,
+        auth_mode=auth_mode,
         display_name=display_name,
         email=email,
         user_id=session.user_id,
-        roles=session.roles,
+        groups=groups,
+        roles=roles,
         workspace_id=session.workspace_id,
+        logout=logout,
     )
 
 
@@ -240,7 +268,7 @@ async def login(
 ) -> AuthSessionResponse:
     current = await password_auth.login(payload.email, payload.password, _client_key(request))
     _set_session_cookie(response, current)
-    return _authenticated_body(current)
+    return _authenticated_body(current, password_auth)
 
 
 @router.get(gateway_routes.AUTH_VERIFY_EMAIL_PATH)

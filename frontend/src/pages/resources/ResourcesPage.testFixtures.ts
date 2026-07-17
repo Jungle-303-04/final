@@ -50,8 +50,11 @@ const HEALTH_COUNTS = {
 
 export const CATALOG: ResourceCatalog = {
   clusterId: "cluster-1",
-  completeness: "unknown",
+  completeness: "observed",
   observedAt: "2026-07-12T10:00:00.000Z",
+  namespaceScope: [],
+  reasonCodes: [],
+  forbidden: [],
   apiDiscovery: {
     completeness: "exact",
     observedAt: "2026-07-12T10:00:00.000Z",

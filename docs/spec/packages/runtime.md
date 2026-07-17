@@ -1,5 +1,5 @@
 ---
-source_commit: e14390882
+source_commit: 0cfaf575
 status: synced
 ---
 
@@ -268,7 +268,7 @@ gateway 가 `app.state.db/events` 를 세팅하고 도메인 router 는 이 prov
 
 ### `discovery.py` — 서비스 명부 자동 발견
 
-- 상수: `ENTRYPOINT_FILENAME = "app.py"`, `SERVICES_ROOT = Path("src") / "services"`.
+- 상수: `ENTRYPOINT_FILENAME = "app.py"`, `SERVICES_ROOT = Path("src") / "services"`, `DISCOVERY_IGNORE_PATTERN = re.compile(r"(?m)^\\s*RUNTIME_DISCOVERY_IGNORE\\s*=\\s*True\\s*$")`.
 - `src/packages/runtime/discovery.py :: DiscoveredService` — `@dataclass(frozen=True)`
 
 | 필드 | 타입 | 설명 |
@@ -284,10 +284,13 @@ gateway 가 `app.state.db/events` 를 세팅하고 도메인 router 는 이 prov
 ```python
 def discover_services(root: Path) -> tuple[DiscoveredService, ...]
     # src/services/*/*/app.py 전수 정적 스캔(import 없음, 부작용 없음).
+    # RUNTIME_DISCOVERY_IGNORE = True 선언이 있으면 배포 서비스 명부에서 제외.
     # 이름 중복 시 ValueError, 0개면 ValueError, App/FastApiService/AsyncService 선언 미발견 시 ValueError.
 def describe_services(services: tuple[DiscoveredService, ...]) -> str   # make services 표
 ```
 이 스캔이 서비스 명부의 단일 출처 — scripts/events.py·테스트·deploy manifest 검증이 이를 읽는다. 서비스 추가 = app.py 생성으로 끝.
+
+`RUNTIME_DISCOVERY_IGNORE = True`는 예외 표시다. MCP stdio entrypoint처럼 `src/services/*/*/app.py` 위치를 쓰지만 Kubernetes workload 서비스가 아닌 보조 진입점에만 붙인다. 이 표시가 있으면 서비스 명부와 deploy manifest 검증에서 빠진다. 일반 worker, gateway, async service에는 붙이지 않는다. 선언이 없는 일반 `app.py`는 기존처럼 runner 선언 부재를 fail-fast로 잡는다.
 
 ### `metrics.py` — Prometheus 텍스트 렌더
 

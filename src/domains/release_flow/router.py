@@ -36,6 +36,7 @@ from domains.release_flow.repository import (
 )
 from packages.config.constants import Sandbox, Target
 from packages.contracts.auth import Actor
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     ReleaseManifestRenderRequest,
@@ -272,7 +273,11 @@ release_audit_csv = release_report.release_audit_csv
 
 @router.get(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanListResponse)
 async def list_release_plans(
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(
+        default=gateway_limits.RELEASE_PLAN_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.RELEASE_PLAN_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ReleasePlanListResponse:
@@ -295,7 +300,11 @@ async def list_release_runs(
     policy_override_source: str | None = Query(default=None, max_length=120),
     active_change_freeze_only: bool = Query(default=False),
     change_freeze_override_only: bool = Query(default=False),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(
+        default=gateway_limits.RELEASE_RUN_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.RELEASE_RUN_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ReleaseRunListResponse:
@@ -328,7 +337,11 @@ async def summarize_release_runs(
     db: Any = Depends(get_db),
 ) -> ReleaseRunSummaryResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    runs = db.list_release_runs(workspace_id, plan_id=plan_id, limit=200)
+    runs = db.list_release_runs(
+        workspace_id,
+        plan_id=plan_id,
+        limit=gateway_limits.RELEASE_RUN_SUMMARY_LIMIT,
+    )
     for run in runs:
         require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
     return ReleaseRunSummaryResponse(**release_run_summary_from_runs(runs))
@@ -339,7 +352,11 @@ async def list_release_audit(
     plan_id: str | None = Query(default=None),
     run_id: str | None = Query(default=None),
     event_type: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(
+        default=gateway_limits.RELEASE_AUDIT_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.RELEASE_AUDIT_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ReleaseAuditListResponse:
@@ -361,7 +378,11 @@ async def export_release_audit(
     plan_id: str | None = Query(default=None),
     run_id: str | None = Query(default=None),
     event_type: str | None = Query(default=None),
-    limit: int = Query(default=500, ge=1, le=1000),
+    limit: int = Query(
+        default=gateway_limits.RELEASE_AUDIT_EXPORT_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.RELEASE_AUDIT_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> Response:

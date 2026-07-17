@@ -28,6 +28,7 @@ import type {
   ResourceManifestPort,
 } from "../../features/resources/resourceManifestContract";
 import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
+import type { ChecksPort } from "../../features/checks/checksContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -87,6 +88,7 @@ export function ResourcesPage({
   portForwardSessions,
   resourceManifestPort,
   resourceIssuesPort,
+  checksPort,
   port,
   trafficPort = INACTIVE_TRAFFIC_PORT,
 }: {
@@ -106,6 +108,7 @@ export function ResourcesPage({
   portForwardSessions?: PortForwardSessionPort;
   resourceManifestPort?: ResourceManifestPort;
   resourceIssuesPort?: ResourceIssuesPort;
+  checksPort?: ChecksPort;
   port: ResourcesPort;
   trafficPort?: TrafficPort;
 }) {
@@ -299,7 +302,7 @@ export function ResourcesPage({
         <ProductPageFrame>
           <header className="flex min-w-0 justify-end">
             <div
-              className="flex min-h-8 w-full min-w-0 flex-nowrap items-center justify-end gap-2"
+              className="flex h-8 w-full min-w-0 flex-nowrap items-center justify-end gap-2"
               data-slot="resources-status-row"
             >
               {isResourceManifestCreatePort(resourceManifestPort)
@@ -318,18 +321,28 @@ export function ResourcesPage({
                 <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
               ) : null}
               <ResourcesLiveStatus state={physicalRealtime.live} />
-              {physicalRealtime.live.status === "connected" || state.refreshAfterSeconds === null ? null : (
-                <PollingFreshness
-                  connectionState={
-                    physicalTopology.phase === "ready" && physicalTopology.refreshFailure
-                      ? "disconnected"
-                      : "connected"
-                  }
-                  dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-                  intervalSeconds={state.refreshAfterSeconds}
-                  isFetching={refreshing || physicalTopology.refreshing}
-                  onRefresh={state.refresh}
-                />
+              {state.refreshAfterSeconds === null ? null : (
+                <div
+                  aria-hidden={physicalRealtime.live.status === "connected" || undefined}
+                  className={cn(
+                    "flex h-8 shrink-0 items-center",
+                    physicalRealtime.live.status === "connected" && "invisible",
+                  )}
+                  data-slot="resources-polling-fallback"
+                  inert={physicalRealtime.live.status === "connected"}
+                >
+                  <PollingFreshness
+                    connectionState={
+                      physicalTopology.phase === "ready" && physicalTopology.refreshFailure
+                        ? "disconnected"
+                        : "connected"
+                    }
+                    dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
+                    intervalSeconds={state.refreshAfterSeconds}
+                    isFetching={refreshing || physicalTopology.refreshing}
+                    onRefresh={state.refresh}
+                  />
+                </div>
               )}
             </div>
           </header>
@@ -359,7 +372,11 @@ export function ResourcesPage({
               retryWaitSeconds={state.retryWaitSeconds}
             />
           ) : state.catalog.data.items.length === 0 ? (
-            <UnknownCompletenessEmpty variant="catalog" />
+            state.catalog.data.completeness === "observed" ? (
+              <ProductStateScreen kind="empty" placement="content" />
+            ) : (
+              <UnknownCompletenessEmpty variant="catalog" />
+            )
           ) : (
             <>
               <ResourcesRefreshFeedback
@@ -415,6 +432,7 @@ export function ResourcesPage({
             identity={state.detailIdentity}
             metricHistory={metricHistory}
             resourceIssues={resourceIssues}
+            checksPort={checksPort}
             manifestPort={resourceManifestPort}
             onUnauthorized={reportUnauthorized}
             onClose={state.closeDetail}
@@ -438,7 +456,10 @@ const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
 };
 
 const INACTIVE_TRAFFIC_PORT: TrafficPort = {
+  connectSource: () => Promise.reject(new Error("traffic port is inactive")),
   getOverview: () => Promise.reject(new Error("traffic port is inactive")),
+  getSources: () => Promise.reject(new Error("traffic port is inactive")),
+  selectSource: () => Promise.reject(new Error("traffic port is inactive")),
 };
 
 function isResourceManifestCreatePort(

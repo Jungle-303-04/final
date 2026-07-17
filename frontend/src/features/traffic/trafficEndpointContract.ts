@@ -36,4 +36,18 @@ export interface TrafficEndpointDependencies {
     query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
     signal?: AbortSignal,
   ): Promise<TrafficOverviewEndpoint>;
+  getTrafficSources(
+    query: { clusterIds?: readonly string[] },
+    signal?: AbortSignal,
+  ): Promise<import("../../api/traffic-control-schemas").TrafficSourcesEndpoint>;
+  setTrafficSource(
+    payload: import("../../api/traffic-control").TrafficSourceCommandPayload,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<import("../../api/traffic-control-schemas").TrafficCommandReceiptEndpoint>;
+  connectTrafficSource(
+    payload: import("../../api/traffic-control").TrafficSourceCommandPayload,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<import("../../api/traffic-control-schemas").TrafficCommandReceiptEndpoint>;
 }

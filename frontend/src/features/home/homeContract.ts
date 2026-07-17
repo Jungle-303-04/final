@@ -1,3 +1,9 @@
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
+import type {
+  ClusterScope,
+  ScopeTransitionOperationEvent,
+} from "../../shared/parity/referenceParity";
+
 export type HomeHealthTone =
   | "healthy"
   | "warning"
@@ -31,6 +37,9 @@ export interface HomeClusterChoice {
   lastObservedAt: string | null;
   nodeCount: number | null;
   podCount: number | null;
+  namespaceCount?: number | null;
+  kubernetesVersion?: string | null;
+  crdDiscoveryStatus?: "exact" | "partial" | "unavailable" | null;
   incidentCount: number | null;
   serverCount?: number | null;
   appCount?: number | null;
@@ -241,6 +250,7 @@ export interface HomeDashboardInvalidation {
 }
 
 export interface HomeDashboardInvalidationSubscription {
+  onScopeOperation?: (event: ScopeTransitionOperationEvent) => void;
   signal?: AbortSignal;
 }
 
@@ -277,8 +287,7 @@ export interface HomePort {
     signal?: AbortSignal,
   ): Promise<HomePodCollection>;
   subscribeDashboardInvalidations(
-    clusterId: string,
+    scope: ClusterScope,
     subscription?: HomeDashboardInvalidationSubscription,
   ): AsyncIterable<HomeDashboardInvalidation>;
 }
-import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";

@@ -72,6 +72,11 @@ class Command:
     GITOPS_RESOURCE_CONTROL_ACTION: Final[str] = "gitops.resource.control"
     GITOPS_RESOURCE_CONTROL_CAPABILITY: Final[str] = "gitops_control.v1"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
+    TRAFFIC_SOURCE_SELECT_ACTION: Final[str] = "traffic.source.select"
+    TRAFFIC_SOURCE_CONNECT_ACTION: Final[str] = "traffic.source.connect"
+    TRAFFIC_SOURCE_OBSERVER_CAPABILITY: Final[str] = "traffic_source_observer.v1"
+    TRAFFIC_SOURCE_SELECT_CAPABILITY: Final[str] = "traffic_source_select.v1"
+    TRAFFIC_SOURCE_CONNECT_CAPABILITY: Final[str] = "traffic_source_connect.v1"
     CLUSTER_AGENT_UNINSTALL_ACTION: Final[str] = "cluster.agent.uninstall"
 
 

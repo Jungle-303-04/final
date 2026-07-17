@@ -14,13 +14,14 @@ const FEATURE_IDS = Array.from(
 );
 
 const PROVIDER_BLOCKED = new Set([
-  "reference.feature.129",
-  "reference.feature.134",
   "reference.feature.136",
   "reference.feature.137",
   "reference.feature.138",
   "reference.feature.139",
   "reference.feature.140",
+]);
+
+const AGENT_ARCHITECTURE_EXCLUDED = new Set([
   "reference.feature.141",
   "reference.feature.142",
 ]);
@@ -33,10 +34,11 @@ const PROMETHEUS_RESOURCE_IMPLEMENTED = new Set([
 ]);
 
 test("resource, metrics, logs, and service access rows own immutable source evidence", async () => {
-  const [ports, aliases, classifications, ledger] = await Promise.all([
+  const [ports, aliases, classifications, identities, ledger] = await Promise.all([
     readJson("docs/migration/reference-feature-port-map.json"),
     readJson("docs/migration/reference-feature-source-aliases.json"),
     readJson("docs/migration/reference-ui-delta-classifications.json"),
+    readJson("docs/migration/reference-feature-source-identities.json"),
     readJson("docs/migration/reference-feature-ledger.json"),
   ]);
   const sourceOwners = new Map();
@@ -47,6 +49,18 @@ test("resource, metrics, logs, and service access rows own immutable source evid
         sourceOwners.set(contractId, { path, sourceKey: interaction.sourceKey });
       }
     }
+  }
+  for (const identity of identities.identities) {
+    if (!identity.legacyContractId) continue;
+    assert.equal(
+      sourceOwners.has(identity.legacyContractId),
+      false,
+      `${identity.legacyContractId} source owner is duplicated`,
+    );
+    sourceOwners.set(identity.legacyContractId, {
+      path: identity.evidence[0]?.path,
+      sourceKey: identity.sourceKey,
+    });
   }
   const ledgerById = new Map(
     ledger.features.map((feature) => [feature.contractId, feature]),
@@ -71,6 +85,11 @@ test("resource, metrics, logs, and service access rows own immutable source evid
         contractId,
       );
       assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    } else if (AGENT_ARCHITECTURE_EXCLUDED.has(contractId)) {
+      assert.equal(port.deliveryStatus, "not_applicable", contractId);
+      assert.equal(port.coverage.backend.state, "not_required", contractId);
+      assert.equal(port.coverage.frontend.state, "not_required", contractId);
+      assert.match(port.coverage.backend.reason, /outbound Agent/u, contractId);
     } else {
       assert.equal(port.deliveryStatus, "in_progress", contractId);
       assert.ok(
@@ -94,14 +113,27 @@ test("unavailable providers and native port authority remain explicit", async ()
       `${contractId} requires an actionable blocked reason`,
     );
   }
+  assert.equal(
+    ports.features["reference.feature.159"].coverage.desktop.state,
+    "implemented",
+  );
   for (const contractId of [
-    "reference.feature.159",
     "reference.feature.160",
     "reference.feature.162",
     "reference.feature.163",
   ]) {
-    assert.equal(ports.features[contractId].coverage.desktop.state, "implemented", contractId);
+    assert.equal(ports.features[contractId].deliveryStatus, "in_progress", contractId);
+    assert.equal(ports.features[contractId].coverage.desktop.state, "blocked", contractId);
   }
+
+  const resourceAudit = ports.features["reference.feature.129"];
+  assert.equal(
+    resourceAudit.coverage.backend.test,
+    "tests/test_checks_router.py#test_checks_overview_filters_exact_resource_identity_and_rejects_ambiguous_scope",
+  );
+  assert.equal(resourceAudit.deliveryStatus, "implemented");
+  assert.equal(resourceAudit.coverage.frontend.state, "implemented");
+  assert.equal(resourceAudit.verification.includes("tests/test_audit.py"), false);
 });
 
 test("Prometheus status, connection, resource categories, and HPA ranges reuse typed runtime ports", async () => {

@@ -21,8 +21,10 @@ from typing import Any
 
 from packages.ai.llm import LlmClient
 from packages.ai.tools import ToolContext, ToolRegistry
+from packages.security.log_lines import redact_log_line, redact_sensitive_value
 
 DEFAULT_MAX_TOOL_CALLS = 4
+MAX_TOOL_CALLS_LIMIT = 8
 
 REPLY_TYPE_FINAL = "final"
 REPLY_TYPE_TOOL_CALL = "tool_call"
@@ -62,7 +64,7 @@ class ConversationEngine:
     ) -> None:
         self.llm = llm
         self.registry = registry
-        self.max_tool_calls = max_tool_calls
+        self.max_tool_calls = _validate_max_tool_calls(max_tool_calls)
 
     def tools_prompt_section(self) -> str:
         """레지스트리에서 생성한 도구 안내 섹션 — 시스템 프롬프트에 주입됨."""
@@ -128,13 +130,31 @@ class ConversationEngine:
     async def _run_tool(self, reply: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         """도구 1회 실행 — 미등록/인자 오류/핸들러 예외는 오류로 기록해 LLM 에 회신함."""
         tool = str(reply.get("tool", ""))
-        arguments = reply.get("arguments")
-        arguments = arguments if isinstance(arguments, dict) else {}
+        raw_arguments = reply.get("arguments")
+        safe_tool = str(redact_sensitive_value(tool))
+        safe_arguments = redact_sensitive_value(raw_arguments)
+        if not isinstance(raw_arguments, dict):
+            return {
+                "tool": safe_tool,
+                "arguments": safe_arguments,
+                "ok": False,
+                "error": "tool arguments must be an object",
+            }
         try:
-            result = await self.registry.execute(tool, context, arguments)
-            return {"tool": tool, "arguments": arguments, "ok": True, "result": result}
+            result = await self.registry.execute(tool, context, raw_arguments)
+            return {
+                "tool": safe_tool,
+                "arguments": safe_arguments,
+                "ok": True,
+                "result": redact_sensitive_value(result),
+            }
         except Exception as exc:
-            return {"tool": tool, "arguments": arguments, "ok": False, "error": str(exc)}
+            return {
+                "tool": safe_tool,
+                "arguments": safe_arguments,
+                "ok": False,
+                "error": redact_log_line(str(exc)),
+            }
 
 
 def _parse_reply(raw: str) -> dict[str, Any]:
@@ -148,8 +168,17 @@ def _parse_reply(raw: str) -> dict[str, Any]:
     return {"type": REPLY_TYPE_FINAL, "content": raw.strip()}
 
 
+def _validate_max_tool_calls(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("max_tool_calls must be an integer")
+    if value < 1 or value > MAX_TOOL_CALLS_LIMIT:
+        raise ValueError(f"max_tool_calls must be between 1 and {MAX_TOOL_CALLS_LIMIT}")
+    return value
+
+
 __all__ = [
     "DEFAULT_MAX_TOOL_CALLS",
+    "MAX_TOOL_CALLS_LIMIT",
     "ConversationEngine",
     "EngineResult",
 ]

@@ -11,6 +11,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent_connections import AgentConnection, AgentConnectionRegistry
 from fastapi import WebSocket
 from fastapi.websockets import WebSocketDisconnect
 
@@ -25,6 +26,7 @@ from packages.contracts.identity import AccessResourceType, Permission, ServiceR
 from packages.contracts.terminal import (
     MAX_TERMINAL_INPUT_BYTES,
     MAX_TERMINAL_OUTPUT_BYTES,
+    MAX_TERMINAL_OUTPUT_CHUNK_LENGTH,
     MAX_TERMINAL_SESSION_SECONDS,
     MAX_TERMINAL_SESSIONS_PER_USER,
     AgentTerminalEvent,
@@ -45,6 +47,10 @@ CLOSE_BAD_REQUEST = 4400
 CLOSE_UNAUTHORIZED = 4401
 TERMINAL_START_TIMEOUT_SECONDS = 15
 TERMINAL_AUDIT_SOURCE = "realtime-gateway"
+TERMINAL_BROWSER_QUEUE_MAX = max(
+    4,
+    MAX_TERMINAL_OUTPUT_BYTES // MAX_TERMINAL_OUTPUT_CHUNK_LENGTH,
+)
 
 TerminalAuthorizer = Callable[[Any, str, str, str, str, str], Awaitable[bool]]
 TerminalAuditor = Callable[[str, str, dict[str, Any]], Awaitable[None]]
@@ -128,16 +134,6 @@ def database_terminal_auditor(db: Any) -> TerminalAuditor:
 
 
 @dataclass
-class AgentChannel:
-    websocket: WebSocket
-    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-
-    async def send(self, message: TerminalExec | TerminalInput | TerminalClose) -> None:
-        async with self.send_lock:
-            await self.websocket.send_json(message.model_dump(mode="json"))
-
-
-@dataclass
 class BrowserTerminalSession:
     session_id: str
     workspace_id: str
@@ -149,17 +145,23 @@ class BrowserTerminalSession:
     command_hash: str
     command_length: int
     browser: WebSocket
-    agent: AgentChannel
+    agent: AgentConnection
     started_at: float = field(default_factory=time.monotonic)
-    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     done: asyncio.Event = field(default_factory=asyncio.Event)
+    outbound: asyncio.Queue[AgentTerminalEvent] = field(
+        default_factory=lambda: asyncio.Queue(maxsize=TERMINAL_BROWSER_QUEUE_MAX)
+    )
     input_bytes: int = 0
     output_bytes: int = 0
     terminal_recorded: bool = False
+    terminal_receipt_queued: bool = False
 
-    async def send_browser(self, event: AgentTerminalEvent) -> None:
-        async with self.send_lock:
-            await self.browser.send_json(event.model_dump(mode="json"))
+    def offer_browser(self, message: AgentTerminalEvent) -> bool:
+        try:
+            self.outbound.put_nowait(message)
+        except asyncio.QueueFull:
+            return False
+        return True
 
 
 class TerminalSessionBroker:
@@ -168,27 +170,22 @@ class TerminalSessionBroker:
         *,
         authorize: TerminalAuthorizer,
         audit: TerminalAuditor,
+        connections: AgentConnectionRegistry,
     ) -> None:
         self.authorize = authorize
         self.audit = audit
-        self.agents: dict[str, AgentChannel] = {}
+        self.connections = connections
         self.sessions: dict[str, BrowserTerminalSession] = {}
 
-    async def register_agent(self, cluster_id: str, websocket: WebSocket) -> AgentChannel:
-        channel = AgentChannel(websocket)
-        previous = self.agents.get(cluster_id)
-        self.agents[cluster_id] = channel
-        if previous is not None and previous.websocket is not websocket:
-            with suppress(Exception):
-                await previous.websocket.close(code=1012)
-        return channel
-
-    async def unregister_agent(self, cluster_id: str, channel: AgentChannel) -> None:
-        if self.agents.get(cluster_id) is not channel:
-            return
-        self.agents.pop(cluster_id, None)
+    async def agent_disconnected(
+        self,
+        cluster_id: str,
+        connection: AgentConnection,
+    ) -> None:
         affected = [
-            session for session in self.sessions.values() if session.cluster_id == cluster_id
+            session
+            for session in self.sessions.values()
+            if session.cluster_id == cluster_id and session.agent is connection
         ]
         for session in affected:
             await self._send_error(
@@ -198,7 +195,12 @@ class TerminalSessionBroker:
                 retryable=True,
             )
 
-    async def handle_agent_payload(self, cluster_id: str, payload: object) -> bool | None:
+    async def handle_agent_payload(
+        self,
+        cluster_id: str,
+        connection: AgentConnection,
+        payload: object,
+    ) -> bool | None:
         if not isinstance(payload, dict) or not str(payload.get("type") or "").startswith(
             "terminal."
         ):
@@ -216,11 +218,15 @@ class TerminalSessionBroker:
             return True
         if session.cluster_id != cluster_id:
             return False
+        if session.agent is not connection:
+            # A replaced agent socket may still have buffered frames. They are
+            # stale for every session bound to the authoritative connection.
+            return True
         if isinstance(message, TerminalOutput):
             redacted = redact_log_line(message.data)
             next_size = session.output_bytes + len(redacted.encode("utf-8"))
             if next_size > MAX_TERMINAL_OUTPUT_BYTES:
-                await session.agent.send(TerminalClose(session_id=session.session_id))
+                await session.agent.send_json(TerminalClose(session_id=session.session_id))
                 await self._finish(
                     session,
                     TerminalEnd(
@@ -233,9 +239,17 @@ class TerminalSessionBroker:
             session.output_bytes = next_size
             message = message.model_copy(update={"data": redacted})
         if isinstance(message, (TerminalEnd, TerminalError)):
+            if session.outbound.full():
+                with suppress(Exception):
+                    await session.agent.send_json(TerminalClose(session_id=session.session_id))
+                message = TerminalEnd(
+                    session_id=session.session_id,
+                    exit_code=None,
+                    reason="output_limit",
+                )
             await self._finish(session, message)
-        else:
-            await session.send_browser(message)
+        elif not session.offer_browser(message):
+            await self._terminate_slow_browser(session)
         return True
 
     async def serve_browser(self, websocket: WebSocket, session_identity: Any) -> None:
@@ -262,7 +276,7 @@ class TerminalSessionBroker:
                 websocket, "session_limit", "Terminal session limit reached."
             )
             return
-        agent = self.agents.get(cluster_id)
+        agent = self.connections.current(cluster_id)
         if agent is None:
             await self._send_unbound_error(
                 websocket, "agent_unavailable", "Target agent is offline.", True
@@ -301,8 +315,9 @@ class TerminalSessionBroker:
             )
             return
         self.sessions[terminal.session_id] = terminal
+        sender = asyncio.create_task(self._browser_sender(terminal))
         try:
-            await agent.send(
+            await agent.send_json(
                 TerminalExec(
                     session_id=terminal.session_id,
                     namespace=namespace,
@@ -323,13 +338,39 @@ class TerminalSessionBroker:
                 message="Terminal transport failed.",
                 retryable=True,
             )
+        finally:
+            if terminal.terminal_receipt_queued:
+                with suppress(Exception):
+                    await asyncio.wait_for(sender, timeout=1)
+            sender.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await sender
+
+    async def _browser_sender(self, session: BrowserTerminalSession) -> None:
+        while True:
+            message = await session.outbound.get()
+            await session.browser.send_json(message.model_dump(mode="json"))
+            if isinstance(message, (TerminalEnd, TerminalError)):
+                return
+
+    async def _terminate_slow_browser(self, session: BrowserTerminalSession) -> None:
+        with suppress(Exception):
+            await session.agent.send_json(TerminalClose(session_id=session.session_id))
+        await self._finish(
+            session,
+            TerminalEnd(
+                session_id=session.session_id,
+                exit_code=None,
+                reason="output_limit",
+            ),
+        )
 
     async def _browser_receive_loop(self, session: BrowserTerminalSession) -> None:
         deadline = session.started_at + MAX_TERMINAL_SESSION_SECONDS
         while not session.done.is_set():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                await session.agent.send(TerminalClose(session_id=session.session_id))
+                await session.agent.send_json(TerminalClose(session_id=session.session_id))
                 await self._finish(
                     session,
                     TerminalEnd(session_id=session.session_id, exit_code=None, reason="timeout"),
@@ -349,7 +390,7 @@ class TerminalSessionBroker:
             if isinstance(message, TerminalInput):
                 next_size = session.input_bytes + len(message.data.encode("utf-8"))
                 if next_size > MAX_TERMINAL_INPUT_BYTES:
-                    await session.agent.send(TerminalClose(session_id=session.session_id))
+                    await session.agent.send_json(TerminalClose(session_id=session.session_id))
                     await self._finish(
                         session,
                         TerminalEnd(
@@ -360,16 +401,16 @@ class TerminalSessionBroker:
                     )
                     return
                 session.input_bytes = next_size
-                await session.agent.send(message)
+                await session.agent.send_json(message)
             else:
-                await session.agent.send(message)
+                await session.agent.send_json(message)
                 await self._browser_closed(session)
 
     async def _browser_closed(self, session: BrowserTerminalSession) -> None:
         if session.done.is_set():
             return
         with suppress(Exception):
-            await session.agent.send(TerminalClose(session_id=session.session_id))
+            await session.agent.send_json(TerminalClose(session_id=session.session_id))
         await self._record_finished(session, exit_code=None, reason="closed", error_code=None)
         session.done.set()
         self.sessions.pop(session.session_id, None)
@@ -399,8 +440,12 @@ class TerminalSessionBroker:
     ) -> None:
         if session.done.is_set():
             return
-        with suppress(Exception):
-            await session.send_browser(message)
+        if not session.offer_browser(message):
+            while not session.outbound.empty():
+                with suppress(asyncio.QueueEmpty):
+                    session.outbound.get_nowait()
+            session.offer_browser(message)
+        session.terminal_receipt_queued = True
         await self._record_finished(
             session,
             exit_code=message.exit_code if isinstance(message, TerminalEnd) else None,

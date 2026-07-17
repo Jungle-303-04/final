@@ -30,13 +30,13 @@ describe("getSettingsAccessProfile", () => {
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getSettingsAccessProfile(" cluster-a ")).resolves.toMatchObject({
+    await expect(getSettingsAccessProfile(" cluster-a ", " shop ")).resolves.toMatchObject({
       cluster_id: "cluster-a",
       authority: "opsia_rbac",
     });
     expect(SETTINGS_ACCESS_PATH).toBe("/api/settings/access");
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/settings/access?cluster_id=cluster-a",
+      "/api/settings/access?cluster_id=cluster-a&namespace=shop",
       expect.objectContaining({ credentials: "include" }),
     );
   });

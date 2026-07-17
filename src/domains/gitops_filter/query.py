@@ -7,19 +7,10 @@ import json
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from domains.inventory_filter.query import parse_resource_filters
+from domains.inventory_filter.query import parse_filter_axis_values, parse_resource_filters
+from packages.contracts.gateway import facets as gateway_facets
 
-MAX_GITOPS_AXIS_VALUES = 100
-MAX_GITOPS_AXIS_VALUE_LENGTH = 253
-
-GitOpsFacetAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "environment",
-    "approval",
-    "change_type",
-]
+GitOpsFacetAxis = Literal[*gateway_facets.GITOPS_FILTER_FACET_AXES]
 
 
 @dataclass(frozen=True)
@@ -113,14 +104,4 @@ def selected_facet_values(filters: GitOpsFilters, axis: GitOpsFacetAxis) -> tupl
 
 
 def _axis(value: str | None) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    raw = value.split(",")
-    if not raw or len(raw) > MAX_GITOPS_AXIS_VALUES:
-        raise ValueError("too many GitOps filter values")
-    normalized = [item.strip().casefold() for item in raw]
-    if any(not item for item in normalized):
-        raise ValueError("GitOps filter values cannot be empty")
-    if any(len(item) > MAX_GITOPS_AXIS_VALUE_LENGTH for item in normalized):
-        raise ValueError("GitOps filter value is too long")
-    return tuple(sorted(set(normalized)))
+    return parse_filter_axis_values(value, casefold=True, field_name="GitOps")

@@ -55,10 +55,15 @@ TERMINAL_SUBJECTS = {
     # committed state directly; workers must not replay them as another write.
     EventSubject.NAMESPACE_SCOPE_UPDATED,
     EventSubject.UI_PREFERENCES_UPDATED,
+    EventSubject.CHECKS_SETTINGS_UPDATED,
     # Source deletion is committed configuration/audit evidence. Replaying it
     # through a worker would attempt the same mutation a second time.
     EventSubject.HELM_CHART_SOURCE_DELETED,
     EventSubject.HELM_CHART_SOURCE_REFRESHED,
+    # Configuration is committed with encrypted credential, policy revision,
+    # audit event, and initial operation event in one UoW. The agent consumes
+    # the revision through policy sync rather than replaying this fact.
+    EventSubject.PROMETHEUS_INTEGRATION_CONFIGURED,
 }
 
 

@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   DESKTOP_COMMAND,
   createDesktopBridge,
   type DesktopCapabilitySet,
+  type DesktopLocalPortForwardRequest,
+  type DesktopPortForwardSession,
 } from "./desktopBridge";
 
 const CAPABILITIES: DesktopCapabilitySet = {
@@ -19,6 +21,11 @@ const CAPABILITIES: DesktopCapabilitySet = {
 };
 
 describe("desktopBridge", () => {
+  it("exposes loopback as the only native port-forward listen address", () => {
+    expectTypeOf<DesktopPortForwardSession["listenAddress"]>()
+      .toEqualTypeOf<"127.0.0.1">();
+  });
+
   it("keeps browser mode honest about unavailable native capabilities", async () => {
     const bridge = createDesktopBridge(undefined);
 
@@ -105,11 +112,12 @@ describe("desktopBridge", () => {
         name: "checkout",
         uid: "uid-service-1",
       },
+      capabilityRevision: "a".repeat(64),
       remotePort: 80,
       localPort: 18_080,
       listenAddress: "127.0.0.1" as const,
       confirmation: true as const,
-    };
+    } satisfies DesktopLocalPortForwardRequest;
 
     await expect(bridge.startPortForward(request)).resolves.toEqual(receipt);
     await expect(bridge.recreatePortForward(receipt.sessionId)).resolves.toEqual(receipt);

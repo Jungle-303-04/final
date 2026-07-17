@@ -17,6 +17,9 @@ const CLUSTER = {
   last_agent_seen_at: "2026-07-12T00:00:00Z",
   node_count: 2,
   pod_count: 20,
+  namespace_count: 6,
+  kubernetes_version: "v1.33.1",
+  crd_discovery_status: "exact" as const,
   incident_count: 1,
   created_at: "2026-07-01T00:00:00Z",
   updated_at: "2026-07-12T00:00:00Z",
@@ -131,16 +134,13 @@ describe("clusters API", () => {
         stage: "agent_cleanup_queued",
         command_id: "cmd-uninstall-1",
         command_status_path: "/api/commands/cmd-uninstall-1",
-        uninstall_command: "kubectl delete deployment/cluster-agent",
         cleanup_verified: false,
-        resources: ["target:deployment/cluster-agent"],
-        residual_resources: ["target:serviceaccount/cluster-agent"],
         failure_reason: null,
       }, 202),
     );
     const controller = new AbortController();
 
-    await expect(unregisterCluster("target/blue", {}, controller.signal)).resolves.toMatchObject({
+    await expect(unregisterCluster("target/blue", controller.signal)).resolves.toMatchObject({
       status: "uninstalling",
       command_id: "cmd-uninstall-1",
     });
@@ -154,28 +154,6 @@ describe("clusters API", () => {
     );
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("x-service-csrf"))
       .toBe("same-origin");
-  });
-
-  it("sends an explicit operator attestation only after manual cleanup", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      cluster_id: "target-blue",
-      status: "disconnected",
-      stage: "registration_revoked",
-      command_id: null,
-      command_status_path: null,
-      uninstall_command: null,
-      cleanup_verified: false,
-      resources: [],
-      residual_resources: [],
-      failure_reason: null,
-    }, 202));
-
-    await unregisterCluster("target-blue", { manualCleanupAttested: true });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/clusters/target-blue?purge=false&manual_cleanup_attested=true",
-      expect.objectContaining({ method: "DELETE" }),
-    );
   });
 
   it("rejects an empty cluster identity before issuing an unregister request", () => {

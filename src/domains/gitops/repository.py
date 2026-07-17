@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
+from contextlib import nullcontext
 from typing import Any
 
 from sqlalchemy import and_, bindparam, case, func, or_, select
@@ -219,12 +220,20 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         workspace_id: str,
         provider: str,
         scope: str,
+        *,
+        conn: Any | None = None,
     ) -> None:
         lock_key = workspace_credential_lock_key(workspace_id, provider, scope)
-        with self.connection() as conn:
-            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            connection.execute(select(func.pg_advisory_xact_lock(lock_key)))
 
-    def upsert_workspace_credential(self, payload: JsonObject) -> JsonObject:
+    def upsert_workspace_credential(
+        self,
+        payload: JsonObject,
+        *,
+        conn: Any | None = None,
+    ) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         provider = str(payload["provider"])
         scope = str(payload["scope"])
@@ -251,12 +260,18 @@ class RepoChangeRepository(GitOpsOverviewRepository):
                 "updated_at": func.now(),
             },
         ).returning(table)
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().one()
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            row = connection.execute(statement).mappings().one()
         return row_dict(row)
 
     def get_workspace_credential(
-        self, workspace_id: str, provider: str, scope: str
+        self,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+        *,
+        conn: Any | None = None,
     ) -> JsonObject | None:
         table = WorkspaceCredential.__table__
         statement = select(table).where(
@@ -265,8 +280,47 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             table.c.scope == scope,
             table.c.status == "active",
         )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            row = connection.execute(statement).mappings().first()
+        return row_dict(row) if row is not None else None
+
+    def update_workspace_credential_metadata(
+        self,
+        *,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+        expected_revision: str,
+        metadata: JsonObject,
+        expected_state: str | None = None,
+        conn: Any | None = None,
+    ) -> JsonObject | None:
+        """Merge non-secret probe evidence only for the exact active revision."""
+
+        if not all((workspace_id, provider, scope, expected_revision)):
+            return None
+        table = WorkspaceCredential.__table__
+        statement = (
+            table.update()
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.provider == provider,
+                table.c.scope == scope,
+                table.c.status == "active",
+                table.c.metadata["revision"].astext == expected_revision,
+            )
+            .values(
+                metadata=table.c.metadata.concat(dict(metadata)),
+                updated_at=func.now(),
+            )
+            .returning(table)
+        )
+        if expected_state is not None:
+            statement = statement.where(table.c.metadata["state"].astext == expected_state)
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            row = connection.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
     def delete_workspace_credential(self, workspace_id: str, provider: str, scope: str) -> bool:

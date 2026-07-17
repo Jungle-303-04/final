@@ -2,6 +2,7 @@ import type { ProviderResourceDetail } from "./providerResourceContract";
 import type { ResourceAccessDetail } from "./resourceAccessContract";
 
 export type ResourcesCollectionCompleteness = "unknown";
+export type ResourceCatalogCompleteness = "observed" | "partial" | "unavailable";
 
 export type ResourceHealthTone =
   | "healthy"
@@ -74,6 +75,16 @@ export interface ResourceCatalogItem {
   healthCounts: ResourceHealthCounts;
 }
 
+export interface ResourceCatalogForbiddenType {
+  namespace: string | null;
+  apiGroup: string;
+  version: string;
+  resource: string;
+  kind: string;
+  namespaced: boolean;
+  reasonCode: "list_permission_not_observed";
+}
+
 export interface DiscoveredApiResource {
   apiVersion: string;
   group: string;
@@ -95,8 +106,11 @@ export interface ResourceApiDiscovery {
 
 export interface ResourceCatalog {
   clusterId: string;
-  completeness: ResourcesCollectionCompleteness;
+  completeness: ResourceCatalogCompleteness;
   observedAt: string | null;
+  namespaceScope: string[];
+  reasonCodes: string[];
+  forbidden: ResourceCatalogForbiddenType[];
   items: ResourceCatalogItem[];
   apiDiscovery: ResourceApiDiscovery;
 }
@@ -291,7 +305,11 @@ export class ResourcesPortFailure extends Error {
 }
 
 export interface ResourcesPort {
-  loadCatalog(clusterId: string, signal?: AbortSignal): Promise<ResourceCatalog>;
+  loadCatalog(
+    clusterId: string,
+    namespaces?: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<ResourceCatalog>;
   listResources(
     clusterId: string,
     query: ResourceListQuery,

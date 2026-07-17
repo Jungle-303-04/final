@@ -56,17 +56,11 @@ export interface ClustersPort {
 export interface ClusterDisconnectPort {
   disconnect(clusterId: string, signal?: AbortSignal): Promise<ClusterDisconnectReceipt>;
   loadDisconnect(commandId: string, signal?: AbortSignal): Promise<ClusterDisconnectProgress>;
-  confirmManualCleanup(
-    clusterId: string,
-    signal?: AbortSignal,
-  ): Promise<ClusterDisconnectReceipt>;
 }
 
 export interface ClusterDisconnectReceipt {
   status: "uninstalling" | "cleanup-required" | "disconnected";
   commandId: string | null;
-  uninstallCommand: string | null;
-  residualResources: string[];
   failureReason: string | null;
 }
 

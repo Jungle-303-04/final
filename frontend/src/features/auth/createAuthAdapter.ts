@@ -5,15 +5,9 @@ import {
   type AuthPort,
   type ProductSession,
 } from "./authContract";
+import type { AuthEndpointSession } from "./authEndpointContract";
 
-export interface AuthEndpointSession {
-  authenticated: boolean;
-  display_name?: string | null;
-  email?: string | null;
-  user_id: string;
-  roles: readonly string[];
-  workspace_id: string;
-}
+export type { AuthEndpointSession } from "./authEndpointContract";
 
 export interface AuthEndpointDependencies {
   getSession(signal?: AbortSignal): Promise<AuthEndpointSession>;
@@ -80,14 +74,27 @@ function toProductSession(wireSession: AuthEndpointSession): ProductSession {
     throw new AuthPortFailure("invalid-response");
   }
 
+  const groups = wireSession.groups.map(canonicalIdentity);
   const roles = wireSession.roles.map(canonicalIdentity);
-  if (!roles.every((role): role is string => role !== null)) {
+  if (
+    wireSession.auth_enabled !== true
+    || !groups.every((group): group is string => group !== null)
+    || !roles.every((role): role is string => role !== null)
+  ) {
     throw new AuthPortFailure("invalid-response");
   }
 
   return {
+    authEnabled: true,
+    authMode: wireSession.auth_mode,
     ...(displayName === null ? {} : { displayName }),
     ...(email === null ? {} : { email }),
+    groups: [...new Set(groups)].sort((left, right) => left.localeCompare(right)),
+    logout: {
+      action: wireSession.logout.action,
+      supported: wireSession.logout.supported,
+      reauthenticationExpected: wireSession.logout.reauthentication_expected,
+    },
     userId,
     roles: [...new Set(roles)].sort((left, right) => left.localeCompare(right)),
     workspaceId,

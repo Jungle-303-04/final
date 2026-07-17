@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from os import getenv
 from typing import Any
 
-from kubernetes_dry_run import DryRunObjects, load_dry_run_objects
-
 from domains.gitops.diffing import (
     MISSING,
     ManagedFieldSnapshot,
@@ -38,11 +36,10 @@ app = App("diff-worker")
 
 UNKNOWN_ACTUAL_IMAGE = "unknown"
 RESOURCE_NOT_INSPECTED = "resource-not-inspected"
-ENABLE_SSA_DRY_RUN_ENV = "GITOPS_ENABLE_SSA_DRY_RUN"
-FIELD_MANAGER_ENV = "GITOPS_FIELD_MANAGER"
 REQUIRE_APPROVED_SNAPSHOT_ENV = "GITOPS_REQUIRE_APPROVED_SNAPSHOT"
-DEFAULT_FIELD_MANAGER = "myjob-gitops"
 CHANGE_CONTEXT_SOURCE = "gitops"
+SSA_EXECUTION_BOUNDARY = "cluster_agent"
+SSA_EVIDENCE_UNAVAILABLE = "unavailable"
 REDACTED_CHANGE_VALUE = "redacted"
 SENSITIVE_CHANGE_TOKENS = (
     "secret",
@@ -86,8 +83,8 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
     rendered = evt.rendered_manifest
     namespace = rendered.metadata.namespace or Sandbox.NAMESPACE
     policy = load_field_policy(rendered)
-    new_desired, dry_run, dry_run_meta = load_new_desired_snapshot(rendered)
-    live = load_live_snapshot(rendered, dry_run, actual_image)
+    new_desired, ssa_meta = load_new_desired_snapshot(rendered)
+    live = load_live_snapshot(rendered, actual_image)
     old_desired = load_previous_desired_snapshot(live, policy)
     changes = compare_managed_fields(
         old_desired=old_desired.fields,
@@ -114,7 +111,7 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
         unknown_fields=policy.unknown_fields,
         policy_source=policy.source,
     )
-    basis.update(dry_run_meta)
+    basis.update(ssa_meta)
     if rendered.artifact_digest:
         basis["artifact_digest"] = rendered.artifact_digest
     image_path = managed_image_path(rendered)
@@ -177,37 +174,21 @@ def load_field_policy(rendered: RenderedManifest) -> FieldPolicy:
 
 def load_new_desired_snapshot(
     rendered: RenderedManifest,
-) -> tuple[ManagedFieldSnapshot, DryRunObjects | None, dict[str, object]]:
-    if not env_enabled(ENABLE_SSA_DRY_RUN_ENV):
-        return (
-            snapshot_from_rendered_manifest(rendered),
-            None,
-            {"ssa_dry_run": "disabled"},
-        )
-
-    dry_run = load_dry_run_objects(
-        rendered,
-        field_manager=getenv(FIELD_MANAGER_ENV, DEFAULT_FIELD_MANAGER),
-    )
-    if dry_run.predicted is None:
-        return (
-            snapshot_from_rendered_manifest(rendered),
-            dry_run,
-            {"ssa_dry_run": "failed", "ssa_error": dry_run.error or "unknown"},
-        )
+) -> tuple[ManagedFieldSnapshot, dict[str, object]]:
+    """Use rendered intent until an agent-produced SSA observation is persisted."""
     return (
-        snapshot_from_kubernetes_object(dry_run.predicted, source="ssa_dry_run_predicted"),
-        dry_run,
-        {"ssa_dry_run": "ok"},
+        snapshot_from_rendered_manifest(rendered),
+        {
+            "ssa_execution_boundary": SSA_EXECUTION_BOUNDARY,
+            "ssa_evidence": SSA_EVIDENCE_UNAVAILABLE,
+        },
     )
 
 
 def load_live_snapshot(
-    rendered: RenderedManifest, dry_run: DryRunObjects | None, actual_image: str
+    rendered: RenderedManifest,
+    actual_image: str,
 ) -> ManagedFieldSnapshot:
-    if dry_run and dry_run.live is not None:
-        return snapshot_from_kubernetes_object(dry_run.live, source="cluster_live")
-
     live = rendered_manifest_to_object(rendered)
     if rendered.kind == "Deployment" and rendered.spec.image:
         containers = (

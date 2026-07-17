@@ -47,6 +47,9 @@ describe("canonical Home adapter mapping", () => {
             lastObservedAt: "2026-07-12T10:00:00.000Z",
             nodeCount: 2,
             podCount: 18,
+            namespaceCount: 6,
+            kubernetesVersion: "v1.33.1",
+            crdDiscoveryStatus: "exact",
             incidentCount: 1,
             serverCount: 2,
             appCount: null,
@@ -64,6 +67,9 @@ describe("canonical Home adapter mapping", () => {
             lastObservedAt: null,
             nodeCount: 0,
             podCount: 0,
+            namespaceCount: null,
+            kubernetesVersion: null,
+            crdDiscoveryStatus: null,
             incidentCount: 0,
             serverCount: null,
             appCount: null,
@@ -85,6 +91,43 @@ describe("canonical Home adapter mapping", () => {
 
     await expect(createHomeAdapter(dependencies).listClusterChoices()).resolves.toMatchObject({
       clusters: [{ id: "cluster-1", connectionStage: "ready" }],
+    });
+  });
+
+  it("maps durable agent installation outcomes without inventing a ready cluster", async () => {
+    const applied = {
+      ...CLUSTER_LIST.clusters[0],
+      cluster_id: "cluster-applied",
+      status: "install_applied",
+      connection_status: "pending_install",
+      connection_stage: "awaiting_install" as const,
+    };
+    const failed = {
+      ...CLUSTER_LIST.clusters[0],
+      cluster_id: "cluster-failed",
+      status: "install_failed",
+      connection_status: "install_failed",
+      connection_stage: "error" as const,
+    };
+    const dependencies = endpoints({
+      listClusters: vi.fn(async () => ({ clusters: [applied, failed] })),
+    });
+
+    await expect(createHomeAdapter(dependencies).listClusterChoices()).resolves.toMatchObject({
+      clusters: [
+        {
+          id: "cluster-applied",
+          registrationState: "pending",
+          connectionState: "pending",
+          connectionStage: "awaiting_install",
+        },
+        {
+          id: "cluster-failed",
+          registrationState: "expired",
+          connectionState: "offline",
+          connectionStage: "error",
+        },
+      ],
     });
   });
 

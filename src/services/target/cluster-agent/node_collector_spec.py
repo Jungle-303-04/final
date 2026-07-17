@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.target import NODE_COLLECTOR_SERVICE_ACCOUNT_NAME
 
 NODE_COLLECTOR_CPU_REQUEST = "25m"
 NODE_COLLECTOR_MEMORY_REQUEST = "64Mi"
@@ -45,6 +46,7 @@ def node_collector_daemonset(
                     "labels": labels,
                 },
                 "spec": {
+                    "serviceAccountName": NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
                     "tolerations": [{"operator": "Exists"}],
                     "containers": [
                         node_collector_container(

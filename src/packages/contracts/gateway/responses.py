@@ -13,6 +13,7 @@ from packages.contracts.cost.observations import (
     CostWorkloadAllocation,
     CostWorkloadKind,
 )
+from packages.contracts.gateway import facets as gateway_facets
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
@@ -57,13 +58,39 @@ class EventIdAcceptedResponse(StrictModel):
     event_id: str
 
 
+class AuthLogoutCapability(StrictModel):
+    action: Literal["end_session", "upstream_identity_required"]
+    supported: bool
+    reauthentication_expected: bool
+
+
 class AuthSessionResponse(StrictModel):
-    authenticated: bool
+    authenticated: Literal[True]
+    auth_enabled: Literal[True]
+    auth_mode: Literal["password", "trusted_proxy"]
     display_name: str | None = None
     email: str | None = None
-    user_id: str
-    roles: list[str]
-    workspace_id: str
+    user_id: str = Field(min_length=1)
+    groups: list[str]
+    roles: list[str] = Field(min_length=1)
+    workspace_id: str = Field(min_length=1)
+    logout: AuthLogoutCapability
+
+    @model_validator(mode="after")
+    def validate_logout_semantics(self) -> Self:
+        expected = (
+            ("end_session", True, False)
+            if self.auth_mode == "password"
+            else ("upstream_identity_required", False, True)
+        )
+        actual = (
+            self.logout.action,
+            self.logout.supported,
+            self.logout.reauthentication_expected,
+        )
+        if actual != expected:
+            raise ValueError("logout capability must match the authentication authority")
+        return self
 
 
 class EmailCheckResponse(StrictModel):
@@ -1085,7 +1112,7 @@ class ResourceManifestApproveResponse(StrictModel):
 
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
 FilterFacetAvailability = Literal["available", "restricted", "unresolved"]
-FilterFacetAxis = Literal["clusters", "namespaces", "applications"]
+FilterFacetAxis = Literal[*gateway_facets.RESOURCE_FILTER_FACET_AXES]
 FilterSurface = Literal["resources", "issues", "applications", "gitops", "checks"]
 
 
@@ -1761,14 +1788,7 @@ class LabelFacetPageResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
-ApplicationFilterAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "environment",
-    "status",
-    "pending_promotion",
-]
+ApplicationFilterAxis = Literal[*gateway_facets.APPLICATION_FILTER_FACET_AXES]
 ApplicationFilterAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -1809,15 +1829,7 @@ class ApplicationSurfaceFilterFacetItem(StrictModel):
 
 
 class ApplicationFilterCapability(StrictModel):
-    axis: Literal[
-        "clusters",
-        "namespaces",
-        "applications",
-        "environment",
-        "status",
-        "pending_promotion",
-        "labels",
-    ]
+    axis: Literal[*gateway_facets.APPLICATION_FILTER_CAPABILITY_AXES]
     availability: ApplicationFilterAvailability
     reason_code: str | None = None
     source_semantics: str = Field(min_length=1)
@@ -1877,14 +1889,7 @@ class ApplicationLabelFacetPageResponse(StrictModel):
     capabilities: list[ApplicationFilterCapability] = Field(default_factory=list)
 
 
-GitOpsFilterAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "environment",
-    "approval",
-    "change_type",
-]
+GitOpsFilterAxis = Literal[*gateway_facets.GITOPS_FILTER_FACET_AXES]
 GitOpsFilterAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -1927,15 +1932,7 @@ class GitOpsFilterFacetItem(StrictModel):
 
 
 class GitOpsFilterCapability(StrictModel):
-    axis: Literal[
-        "clusters",
-        "namespaces",
-        "applications",
-        "environment",
-        "approval",
-        "change_type",
-        "labels",
-    ]
+    axis: Literal[*gateway_facets.GITOPS_FILTER_CAPABILITY_AXES]
     availability: GitOpsFilterAvailability
     reason_code: str | None = None
     source_semantics: str = Field(min_length=1)
@@ -1984,15 +1981,7 @@ class GitOpsFilterFacetPageResponse(StrictModel):
     capabilities: list[GitOpsFilterCapability] = Field(default_factory=list)
 
 
-IssueFilterAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "severity",
-    "category",
-    "status",
-    "environment",
-]
+IssueFilterAxis = Literal[*gateway_facets.ISSUE_FILTER_FACET_AXES]
 IssueFilterAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -2041,16 +2030,7 @@ class IssueFilterFacetItem(StrictModel):
 
 
 class IssueFilterCapability(StrictModel):
-    axis: Literal[
-        "clusters",
-        "namespaces",
-        "applications",
-        "severity",
-        "category",
-        "status",
-        "environment",
-        "labels",
-    ]
+    axis: Literal[*gateway_facets.ISSUE_FILTER_CAPABILITY_AXES]
     availability: IssueFilterAvailability
     reason_code: str | None = None
     source_semantics: str = Field(min_length=1)
@@ -2121,10 +2101,49 @@ class ClusterUsageResponse(StrictModel):
     samples: list[ClusterUsageSample] = Field(default_factory=list)
 
 
+class InventoryResourceCountForbidden(StrictModel):
+    namespace: str | None = None
+    api_group: str = ""
+    version: str = Field(min_length=1)
+    resource: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespaced: bool
+    reason_code: Literal["list_permission_not_observed"] = "list_permission_not_observed"
+
+
+class InventoryResourceCountsEvidence(StrictModel):
+    completeness: Literal["observed", "partial", "unavailable"]
+    observed_at: str | None = None
+    namespace_scope: tuple[str, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    forbidden: tuple[InventoryResourceCountForbidden, ...] = ()
+
+    @field_validator("namespace_scope")
+    @classmethod
+    def canonicalize_namespace_scope(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if len(values) != len(set(values)) or tuple(sorted(values)) != values:
+            raise ValueError("inventory count namespace scope must be sorted and unique")
+        return values
+
+    @model_validator(mode="after")
+    def validate_evidence_state(self) -> Self:
+        if len(self.reason_codes) != len(set(self.reason_codes)):
+            raise ValueError("inventory count reason codes must be unique")
+        if self.completeness == "observed":
+            if self.observed_at is None or self.reason_codes:
+                raise ValueError("observed inventory counts require timestamp and no reasons")
+        elif not self.reason_codes:
+            raise ValueError("incomplete inventory counts require reasons")
+        if self.completeness == "unavailable" and (self.observed_at is not None or self.forbidden):
+            raise ValueError("unavailable inventory counts cannot carry observed evidence")
+        return self
+
+
 class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None
     counts: list[JsonMap] = Field(default_factory=list)
+    counts_evidence: InventoryResourceCountsEvidence
 
 
 class KubernetesApiResourcesResponse(StrictModel):
@@ -2473,6 +2492,9 @@ class ClusterSummary(StrictModel):
     last_agent_seen_at: str | None = None
     node_count: int | None = Field(default=None, ge=0)
     pod_count: int | None = Field(default=None, ge=0)
+    namespace_count: int | None = Field(default=None, ge=0)
+    kubernetes_version: str | None = None
+    crd_discovery_status: Literal["exact", "partial", "unavailable"] | None = None
     incident_count: int | None = Field(default=None, ge=0)
     # VP-015 / BQ-069 product fields. These stay nullable until the backing
     # inventory or incident source proves a value; unknown is never reported
@@ -2523,16 +2545,13 @@ class ClusterUnregisterResponse(StrictModel):
     status: Literal["uninstalling", "cleanup_required", "disconnected", "purged"]
     stage: Literal[
         "agent_cleanup_queued",
-        "manual_cleanup_required",
+        "agent_cleanup_pending",
         "registration_revoked",
         "purged",
     ]
     command_id: str | None = None
     command_status_path: str | None = None
-    uninstall_command: str | None = None
     cleanup_verified: bool = False
-    resources: list[str] = Field(default_factory=list)
-    residual_resources: list[str] = Field(default_factory=list)
     failure_reason: str | None = None
 
 
@@ -2596,13 +2615,6 @@ class RcaRuleCatalogResponse(StrictModel):
     items: list[RcaRuleCatalogItem] = Field(default_factory=list)
     rules_count: int = 0
     candidates_count: int = 0
-
-
-class MetricsValidateResponse(StrictModel):
-    valid: bool
-    code: str | None = None
-    detail: str = ""
-    result_type: str | None = None
 
 
 class DeadLettersResponse(StrictModel):

@@ -20,23 +20,8 @@ LogStreamErrorCode = Literal[
 LogStreamDiagnosticCode = Literal["no_matching_pods", "no_log_lines"]
 
 
-class LogStreamRecoveryCommand(StrictModel):
-    """Server-built, copy-only diagnostic command for the authorized target.
-
-    The browser may copy this value, but never executes it.  ``cluster_id`` is
-    carried separately because a local kubectl context cannot be inferred from
-    an Opsia cluster identity.
-    """
-
-    kind: Literal["copy_command"] = "copy_command"
-    command: str = Field(min_length=1, max_length=1024)
-    cluster_id: str = Field(min_length=1, max_length=512)
-    read_only: Literal[True] = True
-
-
 class LogStreamDiagnostic(StrictModel):
     code: LogStreamDiagnosticCode
-    recovery: LogStreamRecoveryCommand | None = None
 
 
 class LogStreamConnected(StrictModel):

@@ -169,7 +169,9 @@ verify_plan_images() {
           '.spec.template.spec.containers[] | select(.name == $container) | .image'
     )"
     test "${current_image}" = "${expected_image}"
-  done < <(jq -r '.targets[] | [.namespace, .resource, .container] | @tsv' "${plan}")
+  done < <(jq -r \
+    '(.targets[]?, .bootstrap_targets[]?) | [.namespace, .resource, .container] | @tsv' \
+    "${plan}")
 }
 
 echo "==> post-deploy immutable images"

@@ -155,12 +155,15 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `realtime`을 찾을 때는 [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md), [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
 
+`MCP`를 찾을 때는 [internal-control MCP 스펙](spec/services/mcp-internal-control.md), [api-gateway 스펙](spec/services/gateway-api-gateway.md), [보안 패키지 스펙](spec/packages/security.md)을 본다.
+
 ## 전체 문서 색인
 
 루트 문서는 아래에 있다.
 
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
+- [architecture/agent-port-forward-boundary](architecture/agent-port-forward-boundary.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
 - [argocd-reference-learning-lab](argocd-reference-learning-lab.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
@@ -186,6 +189,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [operations-deployment](operations-deployment.md)
 - [oss-remediation-roadmap](oss-remediation-roadmap.md)
 - [spec/oss-profile](spec/oss-profile.md)
+- [spec/services/mcp-internal-control](spec/services/mcp-internal-control.md)
 - [oss/CHANGELOG](oss/CHANGELOG.md)
 - [oss/CODE_OF_CONDUCT](oss/CODE_OF_CONDUCT.md)
 - [oss/CONTRIBUTING](oss/CONTRIBUTING.md)
@@ -466,6 +470,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/services/gitops-scm-worker](spec/services/gitops-scm-worker.md)
 - [spec/services/gitops-workflow-controller](spec/services/gitops-workflow-controller.md)
 - [spec/services/mail-mail-worker](spec/services/mail-mail-worker.md)
+- [spec/services/mcp-internal-control](spec/services/mcp-internal-control.md)
 - [spec/services/projection-audit-worker](spec/services/projection-audit-worker.md)
 - [spec/services/projection-dashboard-worker](spec/services/projection-dashboard-worker.md)
 - [spec/services/projection-dead-letter-monitor](spec/services/projection-dead-letter-monitor.md)

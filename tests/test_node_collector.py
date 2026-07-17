@@ -57,7 +57,7 @@ def test_node_collector_exposes_prometheus_metrics() -> None:
     module = load_node_collector_module()
 
     class StubKubernetesApi:
-        async def list_pods(self) -> dict[str, object]:
+        async def list_pods_on_node(self, _node_name: str) -> dict[str, object]:
             return {
                 "items": [
                     {

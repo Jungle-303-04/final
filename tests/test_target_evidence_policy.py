@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from domains.target.evidence_policy import default_agent_policy
+from domains.target.evidence_policy import DEMO_EVIDENCE_PROFILE, default_agent_policy
 
 
 def test_default_target_policy_collects_live_color_turf_failures() -> None:
-    policy = default_agent_policy(cluster_id="cluster-demo")
+    policy = default_agent_policy(
+        cluster_id="cluster-demo",
+        evidence_profile=DEMO_EVIDENCE_PROFILE,
+    )
 
     kubernetes_queries = policy.evidence.providers["kubernetes"].queries
     metrics_queries = policy.evidence.providers["metrics"].queries

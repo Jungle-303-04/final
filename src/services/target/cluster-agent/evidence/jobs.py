@@ -243,6 +243,44 @@ class EvidenceJobScheduler:
             self.provider_intervals[provider_key] = max(1, interval_seconds)
             self.next_provider_runs.setdefault(provider_key, 0.0)
 
+    def register_provider(
+        self,
+        provider_key: str,
+        *,
+        worker_count: int,
+        interval_seconds: int,
+        enabled: bool,
+    ) -> None:
+        """Register or update one provider added by a revision-bound runtime integration."""
+        if not provider_key.strip():
+            raise ValueError("evidence provider key is required")
+        if provider_key not in self.provider_keys:
+            self.provider_keys = (*self.provider_keys, provider_key)
+            self._worker_tasks[provider_key] = []
+            self._worker_serials[provider_key] = 0
+        self.provider_worker_counts[provider_key] = max(0, worker_count)
+        self.provider_intervals[provider_key] = max(1, interval_seconds)
+        self.next_provider_runs.setdefault(provider_key, 0.0)
+        if enabled:
+            self.enabled_provider_keys.add(provider_key)
+        else:
+            self.enabled_provider_keys.discard(provider_key)
+        if self._client is not None:
+            self.reconcile_worker_pool(provider_key, self._client)
+
+    def unregister_provider(self, provider_key: str) -> None:
+        """Disable and remove one runtime provider from future schedules."""
+        if provider_key not in self.provider_keys:
+            return
+        self.enabled_provider_keys.discard(provider_key)
+        self.provider_keys = tuple(key for key in self.provider_keys if key != provider_key)
+        for task in self._worker_tasks.pop(provider_key, []):
+            task.cancel()
+        self._worker_serials.pop(provider_key, None)
+        self.provider_worker_counts.pop(provider_key, None)
+        self.provider_intervals.pop(provider_key, None)
+        self.next_provider_runs.pop(provider_key, None)
+
     def set_worker_counts(
         self,
         provider_worker_counts: Mapping[str, int],

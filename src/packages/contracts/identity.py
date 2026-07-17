@@ -107,6 +107,8 @@ class AccessStatus(StrEnum):
 class ClusterRegistrationStatus(StrEnum):
     REGISTERED = "registered"
     PENDING_INSTALL = "pending_install"
+    INSTALL_APPLIED = "install_applied"
+    INSTALL_FAILED = "install_failed"
     INSTALL_EXPIRED = "install_expired"
     UNINSTALL_REQUESTED = "uninstall_requested"
     DISCONNECTED = "disconnected"

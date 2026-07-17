@@ -27,6 +27,8 @@ from domains.inventory_filter.cursor import (
     authorization_revision,
 )
 from packages.config.settings import env
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     ApplicationFilterCapability,
@@ -40,9 +42,10 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_PAGE_LIMIT = 50
-MAX_PAGE_LIMIT = 200
-MAX_CURSOR_LENGTH = 8192
+DEFAULT_PAGE_LIMIT = gateway_limits.FILTER_FACET_DEFAULT_LIMIT
+MAX_PAGE_LIMIT = gateway_limits.FILTER_FACET_MAX_LIMIT
+MAX_CURSOR_LENGTH = gateway_limits.FILTER_CURSOR_MAX_LENGTH
+MAX_FILTER_SEARCH_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "application filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "application filter scope not found"
@@ -75,14 +78,20 @@ async def list_filtered_applications(
     labels: str | None = Query(default=None),
     applications_environment: str | None = Query(
         default=None,
-        alias="applications.environment",
+        alias=gateway_params.APPLICATIONS_ENVIRONMENT_QUERY,
     ),
-    applications_status: str | None = Query(default=None, alias="applications.status"),
+    applications_status: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_STATUS_QUERY,
+    ),
     applications_pending_promotion: str | None = Query(
         default=None,
-        alias="applications.pendingPromotion",
+        alias=gateway_params.APPLICATIONS_PENDING_PROMOTION_QUERY,
     ),
-    applications_q: str | None = Query(default=None, alias="applications.q"),
+    applications_q: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_SEARCH_QUERY,
+    ),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
@@ -146,15 +155,21 @@ async def list_application_filter_facets(
     labels: str | None = Query(default=None),
     applications_environment: str | None = Query(
         default=None,
-        alias="applications.environment",
+        alias=gateway_params.APPLICATIONS_ENVIRONMENT_QUERY,
     ),
-    applications_status: str | None = Query(default=None, alias="applications.status"),
+    applications_status: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_STATUS_QUERY,
+    ),
     applications_pending_promotion: str | None = Query(
         default=None,
-        alias="applications.pendingPromotion",
+        alias=gateway_params.APPLICATIONS_PENDING_PROMOTION_QUERY,
     ),
-    applications_q: str | None = Query(default=None, alias="applications.q"),
-    facet_q: str | None = Query(default=None, max_length=200),
+    applications_q: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_SEARCH_QUERY,
+    ),
+    facet_q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
@@ -232,15 +247,21 @@ async def list_application_label_facets(
     labels: str | None = Query(default=None),
     applications_environment: str | None = Query(
         default=None,
-        alias="applications.environment",
+        alias=gateway_params.APPLICATIONS_ENVIRONMENT_QUERY,
     ),
-    applications_status: str | None = Query(default=None, alias="applications.status"),
+    applications_status: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_STATUS_QUERY,
+    ),
     applications_pending_promotion: str | None = Query(
         default=None,
-        alias="applications.pendingPromotion",
+        alias=gateway_params.APPLICATIONS_PENDING_PROMOTION_QUERY,
     ),
-    applications_q: str | None = Query(default=None, alias="applications.q"),
-    facet_q: str | None = Query(default=None, max_length=200),
+    applications_q: str | None = Query(
+        default=None,
+        alias=gateway_params.APPLICATIONS_SEARCH_QUERY,
+    ),
+    facet_q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),

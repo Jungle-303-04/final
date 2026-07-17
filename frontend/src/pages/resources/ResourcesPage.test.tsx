@@ -146,6 +146,7 @@ describe("ResourcesPage scope and collection semantics", () => {
       () =>
         expect(port.loadCatalog).toHaveBeenCalledWith(
           "cluster-1",
+          [],
           expect.any(AbortSignal),
         ),
       { timeout: 5_000 },

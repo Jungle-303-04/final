@@ -7,6 +7,11 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, field_validator
 
 from packages.contracts.modeling import StrictModel
+from packages.contracts.resource_access import (
+    KubernetesPolicyRule,
+    KubernetesRestrictedResourceType,
+    KubernetesSubject,
+)
 
 NamespaceScopeMode = Literal["all", "selected"]
 ProductThemeSelection = Literal["system", "light", "dark"]
@@ -101,6 +106,37 @@ class SettingsUnavailableEvidence(StrictModel):
     detail: str = Field(min_length=1)
 
 
+class SettingsObservedKubernetesRules(StrictModel):
+    status: Literal["observed"] = "observed"
+    authority: Literal["cluster_agent_service_account"] = "cluster_agent_service_account"
+    namespace: str = Field(min_length=1)
+    observed_at: str = Field(min_length=1)
+    subject: KubernetesSubject
+    resource_rules: tuple[KubernetesPolicyRule, ...] = ()
+    non_resource_rules: tuple[KubernetesPolicyRule, ...] = ()
+    truncated: bool = False
+
+
+class SettingsObservedRestrictedResourceTypes(StrictModel):
+    status: Literal["observed"] = "observed"
+    authority: Literal["cluster_agent_service_account"] = "cluster_agent_service_account"
+    namespace: str = Field(min_length=1)
+    observed_at: str = Field(min_length=1)
+    completeness: Literal["exact", "partial"]
+    reason_codes: tuple[str, ...] = ()
+    items: tuple[KubernetesRestrictedResourceType, ...] = ()
+
+
+SettingsKubernetesRulesEvidence = Annotated[
+    SettingsObservedKubernetesRules | SettingsUnavailableEvidence,
+    Field(discriminator="status"),
+]
+SettingsRestrictedResourceTypesEvidence = Annotated[
+    SettingsObservedRestrictedResourceTypes | SettingsUnavailableEvidence,
+    Field(discriminator="status"),
+]
+
+
 class SettingsAccessProfileResponse(StrictModel):
     workspace_id: str = Field(min_length=1)
     user_id: str = Field(min_length=1)
@@ -108,6 +144,6 @@ class SettingsAccessProfileResponse(StrictModel):
     roles: tuple[str, ...]
     authority: Literal["opsia_rbac"] = "opsia_rbac"
     permissions: tuple[SettingsAccessDecision, ...]
-    kubernetes_rules: SettingsUnavailableEvidence
-    restricted_resource_types: SettingsUnavailableEvidence
+    kubernetes_rules: SettingsKubernetesRulesEvidence
+    restricted_resource_types: SettingsRestrictedResourceTypesEvidence
     revision: RevisionHash
