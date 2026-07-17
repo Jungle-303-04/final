@@ -202,20 +202,45 @@ def test_local_forward_contract_validates_port_address_and_namespace_without_cla
     request = LocalPortForwardRequest(
         scope=scope(),
         resource=service_ref(),
+        capability_revision="a" * 64,
         remote_port=8080,
         local_port=18080,
         listen_address="127.0.0.1",
         confirmation=True,
     )
     assert request.local_port == 18080
+    assert request.capability_revision == "a" * 64
 
     with pytest.raises(ValidationError):
         LocalPortForwardRequest(
             scope=scope(),
             resource=service_ref(),
+            capability_revision="a" * 64,
             remote_port=8080,
             local_port=0,
             listen_address="localhost",
+            confirmation=True,
+        )
+
+    with pytest.raises(ValidationError):
+        LocalPortForwardRequest(
+            scope=scope(),
+            resource=service_ref(),
+            capability_revision="a" * 64,
+            remote_port=8080,
+            local_port=18080,
+            listen_address="0.0.0.0",
+            confirmation=True,
+        )
+
+    with pytest.raises(ValidationError):
+        LocalPortForwardRequest(
+            scope=scope(),
+            resource=service_ref(),
+            capability_revision="stale",
+            remote_port=8080,
+            local_port=18080,
+            listen_address="127.0.0.1",
             confirmation=True,
         )
 

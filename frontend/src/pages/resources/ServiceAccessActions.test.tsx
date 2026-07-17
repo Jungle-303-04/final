@@ -252,6 +252,7 @@ describe("ServiceAccessActions", () => {
         name: "checkout",
         uid: "uid-service-1",
       },
+      capabilityRevision: "a".repeat(64),
       remotePort: 80,
       localPort: 18_080,
       listenAddress: "127.0.0.1",
