@@ -20,6 +20,28 @@
       "interaction": "The authenticated diagnostics surface refreshes bounded runtime, timeline, resource projection, and provider collection health without exposing tenant state through the public readiness probe."
     },
     {
+      "sourceKey": "upstream-ui:cluster-info:agent-observation:summary:v1",
+      "legacyContractId": "reference.feature.095",
+      "evidence": [
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "useClusterInfo"
+        },
+        {
+          "path": "internal/server/server.go",
+          "sha256": "e5df3ea4ea2a5a7e0c8f3e4c63527be12890b84595c909b0631bdd96fb2c4129",
+          "symbol": "handleClusterInfo"
+        },
+        {
+          "path": "internal/k8s/cluster_detection.go",
+          "sha256": "c5d3b377586adfefb96fca7b041d195ed50d636e292d4954831ee63968fa6cb1",
+          "symbol": "GetClusterInfo"
+        }
+      ],
+      "interaction": "The authenticated workspace scope projects cluster identity, provider, Kubernetes server version, complete observed counts, discovery completeness, and outbound Agent connectivity from persisted Agent observations; the product does not recreate an in-process Kubernetes connection mode or a duplicate cluster-info endpoint."
+    },
+    {
       "sourceKey": "upstream-ui:capabilities:rbac:resource-authority:v1",
       "legacyContractId": "reference.feature.096",
       "evidence": [

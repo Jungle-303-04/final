@@ -64,6 +64,7 @@
     "reference.feature.092": "upstream-ui:api:client-boundary:request-orchestration:v1",
     "reference.feature.093": "upstream-ui:shell:connection-state:authorized-refresh:v1",
     "reference.feature.094": "upstream-ui:shell:connection-state:authorized-refresh:v1",
+    "reference.feature.095": "upstream-ui:cluster-info:agent-observation:summary:v1",
     "reference.feature.096": "upstream-ui:capabilities:rbac:resource-authority:v1",
     "reference.feature.097": "upstream-ui:namespace:scope:authorized-rescope:v1",
     "reference.feature.098": "upstream-ui:resources:dynamic-navigation:regression:v1",

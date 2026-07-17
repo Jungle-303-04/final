@@ -4044,11 +4044,11 @@
     {
       "id": "reference-feature-095",
       "contractId": "reference.feature.095",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cluster-info:agent-observation:summary:v1",
       "legacyContractIds": [
         "reference.feature.095"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 366,
       "cells": [
@@ -4064,17 +4064,34 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterSummary",
+      "frontendContract": "frontend/src/features/home/homeEndpointContract.ts#HomeEndpointClusterSummary",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "scripts/reference-cluster-info-parity.test.mjs",
+        "tests/test_target_registration.py",
+        "tests/test_target_agent_traffic_sources.py",
+        "frontend/src/api/clusters.test.ts",
+        "frontend/src/features/home/createHomeAdapter.validation.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/features/traffic/createTrafficAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#cluster_summary",
+          "consumer": "src/domains/target/router.py#cluster_observation_metadata",
+          "reason": "The existing workspace-scoped cluster contract combines registration identity with the latest persisted outbound Agent observation. Kubernetes server version comes from the Agent traffic-source probe, counts are exposed only for complete inventory snapshots, and CRD discovery completeness remains explicit; no server-side direct cluster connection or duplicate cluster-info endpoint is introduced.",
+          "test": "tests/test_target_registration.py#test_cluster_list_uses_access_filter_and_agent_status"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/home/homeCanonical.ts#toClusterChoice",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "Home, the fixed global scope row, and Traffic reuse strict cluster and Agent-source contracts. Unknown or partial observations remain nullable instead of becoming hardcoded zeroes, while Agent reconnect events and the shared refresh policy replace source-only in-process discovery polling.",
+          "test": "frontend/src/features/home/createHomeAdapter.validation.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
