@@ -16,6 +16,10 @@ from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
 )
+from packages.contracts.resource_files import (
+    RESOURCE_FILE_ACTION,
+    RESOURCE_FILE_AGENT_CAPABILITY,
+)
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
@@ -79,6 +83,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         elif spec.action in {
             SERVICE_HTTP_REQUEST_ACTION,
             HELM_RELEASE_ARTIFACT_READ_ACTION,
+            RESOURCE_FILE_ACTION,
         }:
             expected = ()
         elif spec.action in cronjob_actions | dynamic_workload_actions:
@@ -93,6 +98,11 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     assert service.read_only is True
     assert service.enforce_control_namespace is False
     assert service.required_agent_capability == SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
+    resource_files = command_action_spec(RESOURCE_FILE_ACTION)
+    assert resource_files is not None
+    assert resource_files.read_only is True
+    assert resource_files.enforce_control_namespace is False
+    assert resource_files.required_agent_capability == RESOURCE_FILE_AGENT_CAPABILITY
     helm_artifact = command_action_spec(HELM_RELEASE_ARTIFACT_READ_ACTION)
     assert helm_artifact is not None
     assert helm_artifact.allowed_namespaces == ()

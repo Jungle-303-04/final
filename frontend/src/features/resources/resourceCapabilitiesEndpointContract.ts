@@ -37,7 +37,7 @@ export interface ResourceCapabilitiesEndpointResponse {
     capability_id: string;
     label: string;
     description: string;
-    execution: "command" | "terminal";
+    execution: "command" | "terminal" | "resource-files";
     confirmation_required: boolean;
     realtime: boolean;
     input_schema: Array<{
@@ -53,7 +53,7 @@ export interface ResourceCapabilitiesEndpointResponse {
     method: "POST" | "WEBSOCKET";
     path: string;
     request_context: "simple" | "exact-resource" | "rollback";
-    result_intent: "refresh-resource" | "resource-summary" | "terminal-session";
+    result_intent: "refresh-resource" | "resource-summary" | "terminal-session" | "resource-files";
   }>;
 }
 

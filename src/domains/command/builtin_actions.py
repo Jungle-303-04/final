@@ -14,6 +14,10 @@ from packages.contracts.helm import (
     HELM_VALUES_PREVIEW_ACTION,
     HELM_VALUES_PREVIEW_CAPABILITY,
 )
+from packages.contracts.resource_files import (
+    RESOURCE_FILE_ACTION,
+    RESOURCE_FILE_AGENT_CAPABILITY,
+)
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
@@ -325,6 +329,19 @@ class ClusterAgentUninstallCommand:
 )
 class ServiceHttpRequestCommand:
     """One bounded, read-only HTTP GET resolved from an exact core/v1 Service."""
+
+
+@command.action(
+    RESOURCE_FILE_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    read_only=True,
+    required_agent_capability=RESOURCE_FILE_AGENT_CAPABILITY,
+)
+class ResourceFileReadCommand:
+    """One exact, bounded Pod or image filesystem read through the outbound Agent."""
 
 
 @command.action(

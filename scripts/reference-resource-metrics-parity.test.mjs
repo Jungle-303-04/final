@@ -13,7 +13,7 @@ const FEATURE_IDS = Array.from(
   (_, index) => `reference.feature.${String(index + 124).padStart(3, "0")}`,
 );
 
-const PROVIDER_BLOCKED = new Set([
+const RESOURCE_FILES_IMPLEMENTED = new Set([
   "reference.feature.136",
   "reference.feature.137",
   "reference.feature.138",
@@ -102,16 +102,15 @@ test("resource, metrics, logs, and service access rows own immutable source evid
   }
 });
 
-test("unavailable providers and native port authority remain explicit", async () => {
+test("resource files and native port authority remain explicit", async () => {
   const ports = await readJson("docs/migration/reference-feature-port-map.json");
-  for (const contractId of PROVIDER_BLOCKED) {
-    const coverage = ports.features[contractId].coverage;
-    const blocked = Object.values(coverage).filter((item) => item?.state === "blocked");
-    assert.ok(blocked.length > 0, `${contractId} requires a blocked boundary`);
-    assert.ok(
-      blocked.every((item) => typeof item.reason === "string" && item.reason.length > 0),
-      `${contractId} requires an actionable blocked reason`,
-    );
+  for (const contractId of RESOURCE_FILES_IMPLEMENTED) {
+    const port = ports.features[contractId];
+    assert.equal(port.deliveryStatus, "implemented", contractId);
+    assert.equal(port.coverage.backend.state, "implemented", contractId);
+    assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    assert.match(port.backendContract, /resource_files/u, contractId);
+    assert.match(port.frontendContract, /resource-files/u, contractId);
   }
   assert.equal(
     ports.features["reference.feature.159"].coverage.desktop.state,

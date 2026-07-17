@@ -878,13 +878,14 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
-ResourceCapabilityExecution = Literal["command", "terminal"]
+ResourceCapabilityExecution = Literal["command", "terminal", "resource-files"]
 ResourceCapabilityInputType = Literal["boolean", "integer", "string"]
 ResourceCapabilityRequestContext = Literal["simple", "exact-resource", "rollback"]
 ResourceCapabilityResultIntent = Literal[
     "refresh-resource",
     "resource-summary",
     "terminal-session",
+    "resource-files",
 ]
 
 

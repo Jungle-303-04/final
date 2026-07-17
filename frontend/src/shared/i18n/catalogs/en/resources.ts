@@ -1,6 +1,16 @@
 import type { ResourcesMessageKey } from "../../keys/resources";
 
 export const resourcesEn = {
+  "resources.files.image": "Image files",
+  "resources.files.pod": "Pod files",
+  "resources.files.filter": "File filter",
+  "resources.files.container": "Container",
+  "resources.files.loadImage": "Load image layers",
+  "resources.files.imageConsent": "Loading the image filesystem downloads its bounded layers through the cluster agent.",
+  "resources.files.loading": "Loading files…",
+  "resources.files.empty": "No files in this directory.",
+  "resources.files.download": "Download {name}",
+  "resources.files.root": "Root",
   "resources.access.title": "Kubernetes access",
   "resources.access.unavailable": "Kubernetes access evidence is unavailable for this observation.",
   "resources.access.direct": "Direct bindings",

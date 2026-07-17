@@ -78,6 +78,7 @@ class ResourceCapabilitiesDb:
         command_supported: bool = True,
         cronjob_supported: bool = True,
         pod_exec_supported: bool = True,
+        resource_files_supported: bool = False,
         node_control_supported: bool = True,
         delete_supported: bool = False,
         workload_rollback_supported: bool = False,
@@ -90,6 +91,7 @@ class ResourceCapabilitiesDb:
         self.command_supported = command_supported
         self.cronjob_supported = cronjob_supported
         self.pod_exec_supported = pod_exec_supported
+        self.resource_files_supported = resource_files_supported
         self.node_control_supported = node_control_supported
         self.delete_supported = delete_supported
         self.workload_rollback_supported = workload_rollback_supported
@@ -142,6 +144,8 @@ class ResourceCapabilitiesDb:
             capabilities.append("cronjob_control.v1")
         if self.pod_exec_supported:
             capabilities.append("pod_exec_stream")
+        if self.resource_files_supported:
+            capabilities.append("resource_files.v1")
         if self.node_control_supported:
             capabilities.append("node_control.v1")
         if self.delete_supported:
@@ -622,6 +626,25 @@ def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod()
         }
     ]
     assert [check[-1] for check in db.access_checks] == ["inventory.read", "pod.exec"]
+
+
+def test_capabilities_exposes_image_and_pod_files_only_when_agent_supports_contract() -> None:
+    db = ResourceCapabilitiesDb(resource=pod_resource(), resource_files_supported=True)
+    response = client(db).get(
+        "/capabilities",
+        params={"resource": "resource-pod-checkout-api-1"},
+    )
+
+    assert response.status_code == 200
+    filesystem = [
+        item for item in response.json()["capabilities"] if item["execution"] == "resource-files"
+    ]
+    assert [item["capability_id"] for item in filesystem] == [
+        "image.filesystem",
+        "pod.filesystem",
+    ]
+    assert all(item["path"] == "/resource-files/commands" for item in filesystem)
+    assert all(item["result_intent"] == "resource-files" for item in filesystem)
 
 
 @pytest.mark.parametrize(

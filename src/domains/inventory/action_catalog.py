@@ -24,12 +24,18 @@ from packages.contracts.gateway.responses import (
     ResourceCapabilitySubject,
 )
 from packages.contracts.identity import Permission
+from packages.contracts.resource_files import RESOURCE_FILE_AGENT_CAPABILITY
 from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
 NamespacePolicy = Literal["control", "terminal", "cluster", "resource"]
-ExecutionTransport = Literal["command", "terminal"]
+ExecutionTransport = Literal["command", "terminal", "resource-files"]
 RequestContext = Literal["simple", "exact-resource", "rollback"]
-ResultIntent = Literal["refresh-resource", "resource-summary", "terminal-session"]
+ResultIntent = Literal[
+    "refresh-resource",
+    "resource-summary",
+    "terminal-session",
+    "resource-files",
+]
 ResourceState = Literal[
     "always",
     "deletable",
@@ -494,6 +500,36 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         permission=Permission.POD_EXEC.value,
         agent_capability=POD_EXEC_AGENT_CAPABILITY,
         namespace_policy="terminal",
+    ),
+    ResourceActionDefinition(
+        capability_id="image.filesystem",
+        label="Image files",
+        description="Inspect the selected Pod container image through the outbound Agent.",
+        execution="resource-files",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_FILE_COMMAND_PATH,
+        resource_type="pod",
+        kind="pod",
+        permission=Permission.INVENTORY_READ.value,
+        agent_capability=RESOURCE_FILE_AGENT_CAPABILITY,
+        namespace_policy="resource",
+        request_context="exact-resource",
+        result_intent="resource-files",
+    ),
+    ResourceActionDefinition(
+        capability_id="pod.filesystem",
+        label="Pod files",
+        description="Browse the selected live Pod container through the outbound Agent.",
+        execution="resource-files",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_FILE_COMMAND_PATH,
+        resource_type="pod",
+        kind="pod",
+        permission=Permission.INVENTORY_READ.value,
+        agent_capability=RESOURCE_FILE_AGENT_CAPABILITY,
+        namespace_policy="resource",
+        request_context="exact-resource",
+        result_intent="resource-files",
     ),
     ResourceActionDefinition(
         capability_id="cronjob.resume",

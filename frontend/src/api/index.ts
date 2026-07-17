@@ -493,6 +493,14 @@ export {
   subscribeCommandOperationEvents,
 } from "./operation-events";
 export {
+  RESOURCE_FILE_COMMANDS_PATH,
+  startResourceFileCommand,
+} from "./resource-files";
+export {
+  resourceFileResultSchema,
+  type ResourceFileResultEndpoint,
+} from "./resource-files-schemas";
+export {
   commandOperationEventSchema,
   type CommandOperationEventEndpoint,
 } from "./operation-events-schemas";

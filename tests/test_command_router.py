@@ -26,6 +26,7 @@ from domains.command.router import (
     debug_pod,
     drain_node,
     lease_next_command,
+    read_resource_file,
     restart_deployment,
     restart_workload,
     resume_cronjob,
@@ -60,6 +61,11 @@ from packages.contracts.gateway.requests import (
 )
 from packages.contracts.gateway.responses import AcceptedResponse
 from packages.contracts.parity import OperationEvent, ResourceRef
+from packages.contracts.resource_files import (
+    RESOURCE_FILE_ACTION,
+    RESOURCE_FILE_AGENT_CAPABILITY,
+    ResourceFileCommandRequest,
+)
 from packages.runtime.operation_events import InMemoryOperationEventBroker
 
 AGENT_IDENTITY = ClusterAgentIdentity(
@@ -132,6 +138,7 @@ class SpyAccessDb:
                     Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
                     Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
                     Command.KUBERNETES_DEBUG_CAPABILITY,
+                    RESOURCE_FILE_AGENT_CAPABILITY,
                 ],
             }
         ]
@@ -330,6 +337,49 @@ def cronjob_control_request(
             name="nightly",
             uid="cronjob-uid-1",
         ),
+    )
+
+
+def resource_file_request(db: SpyAccessDb) -> ResourceFileCommandRequest:
+    db.inventory_resource = {
+        "inventory_key": "resource-pod-checkout-api-1",
+        "snapshot_id": "snapshot-pod-42",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "namespace": "sandbox",
+        "name": "checkout-api-1",
+        "uid": "pod-uid-1",
+        "resource_version": "917",
+    }
+    decision = resource_capabilities_response(
+        db,
+        workspace_id="workspace-1",
+        current=current_session(),
+        resource=db.inventory_resource,
+    )
+    return ResourceFileCommandRequest(
+        capability_id="pod.filesystem",
+        capability_revision=decision.revision,
+        resource_id="resource-pod-checkout-api-1",
+        snapshot_id="snapshot-pod-42",
+        resource=ResourceRef(
+            api_group="",
+            version="v1",
+            kind="Pod",
+            namespace="sandbox",
+            name="checkout-api-1",
+            uid="pod-uid-1",
+        ),
+        operation="pod.list",
+        container="app",
+        path="/var/log",
+        cursor=0,
+        limit=40,
+        confirmation=True,
+        idempotency_key="resource-files-command-001",
     )
 
 
@@ -1463,6 +1513,32 @@ def test_cronjob_control_requires_one_explicit_confirmation() -> None:
         assert excinfo.value.status_code == 422
         assert "confirmation" in str(excinfo.value.detail)
         assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_resource_file_command_revalidates_exact_pod_and_streams_audited_receipt() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = resource_file_request(db)
+        events = SpyEvents()
+        operation_events = SpyOperationEvents()
+
+        response = await read_resource_file(
+            payload,
+            current_session(),
+            db,
+            events,
+            operation_events,
+        )
+
+        assert response.status == "queued"
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == RESOURCE_FILE_ACTION
+        assert events.body.direct_execution is events.body.direct_execution_confirmed is True
+        assert events.body.payload["pod_resource_version"] == "917"
+        assert events.body.payload["resource"]["uid"] == "pod-uid-1"
+        assert operation_events.published[0]["command_id"] == response.command_id
 
     asyncio.run(run())
 

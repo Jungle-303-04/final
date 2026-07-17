@@ -42,14 +42,14 @@ export const resourceActionCapabilitySchema = z.strictObject({
   capability_id: resourceActionCapabilityIdSchema,
   label: z.string().min(1).max(120),
   description: z.string().min(1).max(500),
-  execution: z.enum(["command", "terminal"]),
+  execution: z.enum(["command", "terminal", "resource-files"]),
   confirmation_required: z.boolean(),
   realtime: z.boolean(),
   input_schema: z.array(resourceCapabilityInputSchema),
   method: z.enum(["POST", "WEBSOCKET"]),
   path: z.string().regex(/^\/(?!\/)[^?\s]+$/u),
   request_context: z.enum(["simple", "exact-resource", "rollback"]),
-  result_intent: z.enum(["refresh-resource", "resource-summary", "terminal-session"]),
+  result_intent: z.enum(["refresh-resource", "resource-summary", "terminal-session", "resource-files"]),
 });
 
 export const resourceCapabilitiesSchema = z.strictObject({

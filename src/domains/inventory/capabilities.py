@@ -34,7 +34,15 @@ def resource_capabilities_response(
         if definition.capability_id != "workload.rollback"
         or workload_rollback_available(db, workspace_id=workspace_id, resource=resource)
     )
-    required_permissions = {definition.permission for definition in applicable}
+    required_agent_capabilities = {definition.agent_capability for definition in applicable}
+    agent_support = {
+        capability: _agent_supports_capability(db, workspace_id, subject.cluster_id, capability)
+        for capability in required_agent_capabilities
+    }
+    supported = tuple(
+        definition for definition in applicable if agent_support[definition.agent_capability]
+    )
+    required_permissions = {definition.permission for definition in supported}
     permissions = {
         permission: _has_cluster_permission(
             db,
@@ -45,15 +53,8 @@ def resource_capabilities_response(
         )
         for permission in required_permissions
     }
-    required_agent_capabilities = {definition.agent_capability for definition in applicable}
-    agent_support = {
-        capability: _agent_supports_capability(db, workspace_id, subject.cluster_id, capability)
-        for capability in required_agent_capabilities
-    }
     capabilities = [
-        definition.render(subject)
-        for definition in applicable
-        if permissions[definition.permission] and agent_support[definition.agent_capability]
+        definition.render(subject) for definition in supported if permissions[definition.permission]
     ]
     capabilities.sort(key=lambda item: item.capability_id)
 

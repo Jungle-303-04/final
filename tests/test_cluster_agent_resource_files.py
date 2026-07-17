@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
 import io
+import json
+import sys
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -10,10 +13,15 @@ from conftest import ROOT, load_file
 
 
 def load_resource_files_module() -> Any:
-    return load_file(
-        ROOT / "src" / "services" / "target" / "cluster-agent" / "commands" / "resource_files.py",
-        "test_cluster_agent_resource_files_module",
-    )
+    agent_root = ROOT / "src" / "services" / "target" / "cluster-agent"
+    sys.path.insert(0, str(agent_root))
+    try:
+        return load_file(
+            agent_root / "commands" / "resource_files.py",
+            "test_cluster_agent_resource_files_module",
+        )
+    finally:
+        sys.path.remove(str(agent_root))
 
 
 def tar_layer(path: Path, files: dict[str, bytes], whiteouts: tuple[str, ...] = ()) -> None:
@@ -73,6 +81,18 @@ def test_find_parser_sorts_directories_first_and_pages_without_losing_identity()
     assert entries[1].link_target == "archive/latest"
 
 
+def test_ls_fallback_preserves_names_with_spaces_and_symlink_targets() -> None:
+    module = load_resource_files_module()
+    entries = module.parse_find_records(
+        b"__OPSIA_LS__\n-rw-r--r-- 1 1000 1000 12 Jul 18 00:00 app log\n"
+        b"lrwxrwxrwx 1 1000 1000 7 Jul 18 00:00 current -> app log\n",
+        "/var/log",
+    )
+
+    assert [entry.path for entry in entries] == ["/var/log/current", "/var/log/app log"]
+    assert entries[0].link_target == "app log"
+
+
 def test_exec_commands_quote_paths_and_never_accept_relative_traversal() -> None:
     module = load_resource_files_module()
 
@@ -82,3 +102,26 @@ def test_exec_commands_quote_paths_and_never_accept_relative_traversal() -> None
     assert "skip=4" in command
     with pytest.raises(ValueError, match="absolute POSIX"):
         module.pod_directory_list_command("../etc")
+
+
+def test_pull_secret_credentials_are_selected_for_the_exact_image_registry() -> None:
+    module = load_resource_files_module()
+    docker_config = {
+        "auths": {
+            "https://index.docker.io/v1/": {
+                "auth": base64.b64encode(b"robot:token-value").decode("ascii")
+            },
+            "registry.example.com": {"auth": base64.b64encode(b"other:password").decode("ascii")},
+        }
+    }
+    secret = {
+        "data": {
+            ".dockerconfigjson": base64.b64encode(json.dumps(docker_config).encode("utf-8")).decode(
+                "ascii"
+            )
+        }
+    }
+
+    credentials = module._docker_config_credentials(secret, "registry-1.docker.io")
+
+    assert credentials == module.RegistryCredentials(username="robot", password="token-value")

@@ -103,7 +103,7 @@ describe("resource files adapter", () => {
       subscribeCommandOperationEvents: vi.fn((commandId: string) => eventsFor(
         commandId,
         commandId === "command-1"
-          ? chunk("aGVsbG8g", 0, 6, false, "f6a6263167c92de8644ac998b3c4e4d1a5b03df5f4a09bd2770e408bafba5b0e")
+          ? chunk("aGVsbG8g", 0, 6, false, "5e3235a8346e5a4585f8c58562f5052b8fe26a3bb122e1e96c76784964dfc461")
           : chunk("d29ybGQ=", 6, 11, true, "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7"),
       )),
     });

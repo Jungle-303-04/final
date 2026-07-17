@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import ssl
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
+from commands.exec_transport import (
+    STATUS_CHANNEL,
+    STDERR_CHANNEL,
+    STDIN_CHANNEL,
+    STDOUT_CHANNEL,
+    kubernetes_exec_connector,
+    kubernetes_exit_code,
+)
 from kubernetes_api import kubernetes_api_base_url, service_account_token
 
 from config import (
@@ -36,13 +43,6 @@ from packages.contracts.terminal import (
 )
 from packages.security.log_lines import redact_log_line
 
-KUBERNETES_EXEC_SUBPROTOCOL = "v4.channel.k8s.io"
-STDIN_CHANNEL = 0
-STDOUT_CHANNEL = 1
-STDERR_CHANNEL = 2
-STATUS_CHANNEL = 3
-KUBERNETES_EXEC_OPEN_TIMEOUT_SECONDS = 10
-
 TerminalEmitter = Callable[
     [TerminalConnected | TerminalOutput | TerminalEnd | TerminalError], Awaitable[None]
 ]
@@ -58,24 +58,6 @@ ExecConnector = Callable[
     [str, dict[str, str], ssl.SSLContext],
     AbstractAsyncContextManager[ExecConnection],
 ]
-
-
-def kubernetes_exec_connector(
-    url: str,
-    headers: dict[str, str],
-    ssl_context: ssl.SSLContext,
-) -> AbstractAsyncContextManager[Any]:
-    import websockets
-
-    return websockets.connect(
-        url,
-        additional_headers=headers,
-        subprotocols=[KUBERNETES_EXEC_SUBPROTOCOL],
-        ssl=ssl_context,
-        open_timeout=KUBERNETES_EXEC_OPEN_TIMEOUT_SECONDS,
-        close_timeout=2,
-        max_size=MAX_TERMINAL_OUTPUT_CHUNK_LENGTH * 2,
-    )
 
 
 @dataclass
@@ -349,26 +331,6 @@ def _bounded_chunks(value: str) -> list[str]:
         for index in range(0, len(value), MAX_TERMINAL_OUTPUT_CHUNK_LENGTH)
         if value[index : index + MAX_TERMINAL_OUTPUT_CHUNK_LENGTH]
     ]
-
-
-def kubernetes_exit_code(payload: bytes) -> int | None:
-    try:
-        status = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return 1
-    if not isinstance(status, dict):
-        return 1
-    if status.get("status") == "Success":
-        return 0
-    details = status.get("details")
-    causes = details.get("causes", []) if isinstance(details, dict) else []
-    for cause in causes if isinstance(causes, list) else []:
-        if isinstance(cause, dict) and cause.get("reason") == "ExitCode":
-            try:
-                return int(cause.get("message"))
-            except (TypeError, ValueError):
-                return 1
-    return 1
 
 
 def _normal_websocket_close(exc: Exception) -> bool:

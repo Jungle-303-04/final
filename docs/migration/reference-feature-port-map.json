@@ -2467,124 +2467,131 @@
       }
     },
     "reference.feature.136": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_files",
+      "frontendContract": "frontend/src/features/resource-files/resourceFilesContract.ts",
       "desktopContract": null,
       "verification": [
-        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "tests/test_resource_files_contracts.py",
+        "tests/test_cluster_agent_resource_files.py",
+        "frontend/src/features/resource-files/createResourceFilesAdapter.test.ts",
+        "frontend/src/pages/resources/ResourceFilesystemBrowser.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory",
-          "reason": "No authenticated registry metadata provider, pull-secret delegation policy, cache provenance, or image identity repository exists.",
-          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/services/target/cluster-agent/commands/resource_files.py#OciRegistryClient",
+          "reason": "The outbound Agent resolves the exact Pod container image, authenticates with its local registry authority, and returns bounded digest, platform, layer, cache, and artifact metadata through the audited command stream.",
+          "test": "tests/test_cluster_agent_resource_files.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/shared/ui/primitives/input.tsx",
-          "reason": "The shared search input is reusable, but no server image metadata contract exists to open an image filesystem entry.",
-          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
+          "reason": "The resource detail launches the image filesystem from an exact capability and requires explicit layer loading when the artifact is not cached.",
+          "test": "frontend/src/pages/resources/ResourceFilesystemBrowser.test.tsx"
         }
       }
     },
     "reference.feature.137": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_files",
+      "frontendContract": "frontend/src/features/resource-files/resourceFilesContract.ts",
       "desktopContract": null,
       "verification": [
-        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "tests/test_resource_files_contracts.py",
+        "tests/test_cluster_agent_resource_files.py",
+        "frontend/src/pages/resources/ResourceFilesystemBrowser.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory",
-          "reason": "No sandboxed image layer inspector, bounded filesystem tree contract, or retained inspection artifact exists.",
-          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/services/target/cluster-agent/commands/resource_files.py#ImageLayerIndex",
+          "reason": "Digest-verified layers are indexed without extraction, OCI whiteouts and unsafe paths are handled, and opaque TTL artifacts expose bounded paginated directory results.",
+          "test": "tests/test_cluster_agent_resource_files.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/shared/ui/primitives/input.tsx",
-          "reason": "The browser does not construct an image filesystem tree without a typed server artifact.",
-          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
+          "reason": "The shared browser renders only typed image directory entries, preserves artifact identity, URL path state, filtering, breadcrumbs, keyboard dismissal, and partial failures.",
+          "test": "frontend/src/pages/resources/ResourceFilesystemBrowser.test.tsx"
         }
       }
     },
     "reference.feature.138": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_files",
+      "frontendContract": "frontend/src/features/resource-files/resourceFilesContract.ts",
       "desktopContract": null,
       "verification": [
-        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "tests/test_resource_files_contracts.py",
+        "frontend/src/features/resource-files/createResourceFilesAdapter.test.ts",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory",
-          "reason": "No image artifact handle, path allowlist, byte limit, content classification, or audited download response exists.",
-          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/packages/contracts/resource_files.py#ResourceFileReadResult",
+          "reason": "Opaque image artifacts return contiguous checksum-bound chunks with normalized absolute paths, byte ceilings, media type, filename, and audited command identity.",
+          "test": "tests/test_resource_files_contracts.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/shared/ui/primitives/input.tsx",
-          "reason": "Image file preview and download remain unavailable until the server issues an opaque bounded artifact handle.",
-          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/features/resource-files/createResourceFilesAdapter.ts#download",
+          "reason": "The browser applies sequential backpressure, verifies every SHA-256 chunk and offset, and creates a local Blob only after the bounded stream completes.",
+          "test": "frontend/src/features/resource-files/createResourceFilesAdapter.test.ts"
         }
       }
     },
     "reference.feature.139": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.terminal",
-      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_files",
+      "frontendContract": "frontend/src/features/resource-files/resourceFilesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_pod_terminal.py",
-        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "tests/test_resource_files_contracts.py",
+        "tests/test_cluster_agent_resource_files.py",
+        "frontend/src/pages/resources/ResourceFilesystemBrowser.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py",
-          "reason": "Pod exec is interactive and audited, but no read-only directory protocol, container path policy, or bounded listing result exists.",
-          "test": "tests/test_pod_terminal.py"
+          "state": "implemented",
+          "destination": "src/services/target/cluster-agent/commands/resource_files.py#PodFileReader",
+          "reason": "The outbound Agent revalidates exact Pod UID and resourceVersion before issuing a quoted read-only exec and returns bounded, sorted, paginated directory records.",
+          "test": "tests/test_cluster_agent_resource_files.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/shared/ui/primitives/input.tsx",
-          "reason": "The shared filter field cannot substitute for a server-authorized Pod filesystem listing.",
-          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
+          "reason": "The exact Pod capability opens a container-aware directory browser with URL state, breadcrumbs, filtering, Escape dismissal and retained partial data.",
+          "test": "frontend/src/pages/resources/ResourceFilesystemBrowser.test.tsx"
         }
       }
     },
     "reference.feature.140": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.terminal",
-      "frontendContract": "frontend/src/shared/ui/primitives/input.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_files",
+      "frontendContract": "frontend/src/features/resource-files/resourceFilesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_pod_terminal.py",
-        "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+        "tests/test_resource_files_contracts.py",
+        "frontend/src/features/resource-files/createResourceFilesAdapter.test.ts",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py",
-          "reason": "No read-only file stream, size ceiling, path containment, content disposition, or command audit contract exists for Pod downloads.",
-          "test": "tests/test_pod_terminal.py"
+          "state": "implemented",
+          "destination": "src/packages/contracts/resource_files.py#ResourceFileReadResult",
+          "reason": "Exact-Pod read commands return contiguous checksum-bound chunks with normalized absolute paths, explicit EOF, byte limits, filename, audit receipt, and OperationEvent completion.",
+          "test": "tests/test_resource_files_contracts.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/shared/ui/primitives/input.tsx",
-          "reason": "The browser never converts an arbitrary container path into a downloadable URL.",
-          "test": "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/features/resource-files/createResourceFilesAdapter.ts#download",
+          "reason": "The browser streams sequential bounded Pod chunks through audited Agent commands, verifies checksums, and downloads only the completed local Blob.",
+          "test": "frontend/src/features/resource-files/createResourceFilesAdapter.test.ts"
         }
       }
     },

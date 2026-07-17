@@ -26,6 +26,7 @@ from packages.contracts.kubernetes_discovery import (
     is_kubernetes_dns_label,
 )
 from packages.contracts.parity import ResourceRef
+from packages.contracts.resource_files import ResourceFileResult
 from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
 
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -852,6 +853,7 @@ class CommandResultRequest(StrictModel):
     # 실제 allowlist 정리 완료에만 등록 토큰을 폐기한다.
     cleanup_completed: bool = False
     residual_resources: list[str] = Field(default_factory=list)
+    resource_file: ResourceFileResult | None = None
 
 
 class EvidenceJobScheduleRequest(StrictModel):

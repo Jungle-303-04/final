@@ -36,6 +36,8 @@ import type { ServiceAccessPort } from "../../features/service-access/serviceAcc
 import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import { ServiceAccessActions } from "./ServiceAccessActions";
 import type { ChecksPort } from "../../features/checks/checksContract";
+import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
+import { ResourceFilesystemBrowser } from "./ResourceFilesystemBrowser";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -57,6 +59,7 @@ export function ResourceDetailWorkspace({
   terminalPort = EMPTY_POD_TERMINAL_PORT,
   serviceAccessPort,
   portForwardSessions,
+  resourceFilesPort,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
@@ -77,6 +80,7 @@ export function ResourceDetailWorkspace({
   terminalPort?: PodTerminalPort;
   serviceAccessPort?: ServiceAccessPort;
   portForwardSessions?: PortForwardSessionPort;
+  resourceFilesPort?: ResourceFilesPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
@@ -224,6 +228,13 @@ export function ResourceDetailWorkspace({
               preferredTarget={preferredTerminalTarget}
               onPreferredTargetHandled={clearPreferredTerminalTarget}
             />
+            {resourceFilesPort ? (
+              <ResourceFilesystemBrowser
+                capabilities={capabilities}
+                detail={detail.data}
+                port={resourceFilesPort}
+              />
+            ) : null}
             {serviceAccessPort ? (
               <ServiceAccessActions
                 detail={detail.data}

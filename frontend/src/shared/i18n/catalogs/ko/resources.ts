@@ -1,6 +1,16 @@
 import type { ResourcesMessageKey } from "../../keys/resources";
 
 export const resourcesKo = {
+  "resources.files.image": "이미지 파일",
+  "resources.files.pod": "Pod 파일",
+  "resources.files.filter": "파일 필터",
+  "resources.files.container": "컨테이너",
+  "resources.files.loadImage": "이미지 레이어 불러오기",
+  "resources.files.imageConsent": "이미지 파일 시스템은 클러스터 에이전트를 통해 제한된 레이어를 내려받아 표시합니다.",
+  "resources.files.loading": "파일을 불러오는 중…",
+  "resources.files.empty": "이 디렉터리에 파일이 없습니다.",
+  "resources.files.download": "{name} 다운로드",
+  "resources.files.root": "루트",
   "resources.access.title": "Kubernetes 접근 권한",
   "resources.access.unavailable": "현재 관측에서는 Kubernetes 접근 권한 근거를 사용할 수 없습니다.",
   "resources.access.direct": "직접 바인딩",

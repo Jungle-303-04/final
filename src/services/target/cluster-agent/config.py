@@ -19,6 +19,7 @@ from packages.contracts.helm import (
     HELM_RELEASE_OPERATION_CAPABILITY,
     HELM_VALUES_PREVIEW_CAPABILITY,
 )
+from packages.contracts.resource_files import RESOURCE_FILE_AGENT_CAPABILITY
 from packages.contracts.service_access import (
     PORT_FORWARD_AGENT_CAPABILITY,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
@@ -158,6 +159,7 @@ AGENT_CAPABILITIES = [
     "command_receiver",
     "command_control.cancel.v1",
     POD_EXEC_AGENT_CAPABILITY,
+    RESOURCE_FILE_AGENT_CAPABILITY,
     Command.CATALOG_HELM_INSTALL_CAPABILITY,
     Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
     Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,

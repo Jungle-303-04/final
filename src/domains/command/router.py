@@ -102,6 +102,11 @@ from packages.contracts.parity import (
     OperationEvent,
     ResourceRef,
 )
+from packages.contracts.resource_files import (
+    RESOURCE_FILE_ACTION,
+    ResourceFileCommandPayload,
+    ResourceFileCommandRequest,
+)
 from packages.contracts.scoped_metrics import (
     ScopedMetricCoverage,
     ScopedMetricQueryReceipt,
@@ -161,6 +166,7 @@ WORKLOAD_ROLLBACK_ACTIONS = {
 # payload (replicas, Helm values, uninstall contract, and similar) must use their
 # dedicated endpoint so a queued receipt is always executable by the agent.
 MANUAL_DIFF_ACTIONS = frozenset({Command.DEFAULT_ACTION, Command.APPLY_MANIFEST_ACTION})
+MAX_ACTIVE_RESOURCE_FILE_COMMANDS = 32
 
 router = APIRouter()
 __all__ = ["debug_query_plan", "router"]
@@ -616,6 +622,151 @@ async def commands(
     ):
         await publish_accepted_operation(operation_events, command, response)
     return response
+
+
+@router.post(
+    gateway_routes.RESOURCE_FILE_COMMAND_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def read_resource_file(
+    payload: ResourceFileCommandRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    """Queue one exact bounded filesystem read for the outbound cluster Agent."""
+
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    resource = payload.resource
+    if (
+        resource.api_group != ""
+        or resource.version != "v1"
+        or resource.kind.casefold() != "pod"
+        or resource.namespace is None
+    ):
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE, detail="resource file target must be a Pod"
+        )
+    inventory_resource = _resource_file_inventory(db, workspace_id, payload.resource_id)
+    cluster_id = str(inventory_resource.get("cluster_id") or "")
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.INVENTORY_READ.value,
+        detail=RESOURCE_ACCESS_DENIED,
+    )
+    inventory_resource, current_resource = exact_action_capability_resource(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=resource.namespace,
+        resource_kind="pod",
+        resource_name=resource.name,
+        capability_id=payload.capability_id,
+        payload=payload,
+        inventory_resource=inventory_resource,
+    )
+    resource_version = str(inventory_resource.get("resource_version") or "")
+    if not resource_version:
+        raise HTTPException(status_code=409, detail="resource file target is stale")
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "workspace_id": workspace_id,
+                "user_id": str(current.user_id),
+                **payload.model_dump(mode="json", exclude={"confirmation", "idempotency_key"}),
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    command_id = resource_action_command_id(
+        workspace_id, str(current.user_id), payload.idempotency_key
+    )
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=fingerprint,
+        idempotency_reused_code="resource_file_idempotency_key_reused",
+    )
+    if replay is not None:
+        return replay
+    agent_payload = ResourceFileCommandPayload(
+        **payload.model_dump(exclude={"confirmation", "idempotency_key"}),
+        pod_resource_version=resource_version,
+    )
+    diff = Diff(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource=f"Pod/{resource.name}",
+        namespace=resource.namespace,
+        desired_image="",
+        actual_image="resource-observed",
+        risk=Sandbox.RISK_TAG,
+        status="resource_files_read",
+        has_changes=False,
+        changes=[
+            {
+                "operation": payload.operation,
+                "path": payload.path,
+                "container": payload.container,
+            }
+        ],
+        basis={
+            "resource_id": payload.resource_id,
+            "snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "capability_id": payload.capability_id,
+            "resource_ref": current_resource.model_dump(),
+            "request_fingerprint": fingerprint,
+        },
+    )
+    command = CommandRequestedBody(
+        cluster_id=cluster_id,
+        action=RESOURCE_FILE_ACTION,
+        namespace=resource.namespace,
+        reason="operator confirmed a bounded resource filesystem read",
+        diff=diff,
+        command_id=command_id,
+        payload=agent_payload.model_dump(mode="json"),
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=current.user_id,
+        direct_execution=True,
+        direct_execution_confirmed=True,
+    )
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
+        command,
+        actor=Actor(current.user_id, tuple(current.roles)),
+        max_active_per_action=MAX_ACTIVE_RESOURCE_FILE_COMMANDS,
+    )
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events, receipt_event, workspace_id=workspace_id
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
+
+
+def _resource_file_inventory(db: Any, workspace_id: str, resource_id: str) -> dict[str, Any]:
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    resource = (
+        reader(workspace_id=workspace_id, inventory_key=resource_id) if callable(reader) else None
+    )
+    if not isinstance(resource, dict):
+        raise HTTPException(status_code=404, detail="inventory resource not found")
+    if not str(resource.get("cluster_id") or ""):
+        raise HTTPException(status_code=409, detail="resource file target is stale")
+    return resource
 
 
 def workload_action(actions: dict[str, str], kind: str) -> tuple[str, str]:
@@ -1141,14 +1292,21 @@ def exact_action_capability_resource(
     resource_kind: str,
     resource_name: str,
     capability_id: str,
-    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+    payload: NodeDrainRequest
+    | PodDebugRequest
+    | NodeDebugRequest
+    | NodeDebugCleanupRequest
+    | ResourceFileCommandRequest,
+    inventory_resource: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], ResourceRef]:
     reader = getattr(db, "get_inventory_resource_by_key", None)
-    resource = (
-        reader(workspace_id=workspace_id, inventory_key=payload.resource_id)
-        if callable(reader)
-        else None
-    )
+    resource = inventory_resource
+    if resource is None:
+        resource = (
+            reader(workspace_id=workspace_id, inventory_key=payload.resource_id)
+            if callable(reader)
+            else None
+        )
     if not isinstance(resource, dict):
         raise HTTPException(status_code=409, detail="resource action identity is stale")
     current_resource = inventory_resource_ref(resource)

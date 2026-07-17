@@ -138,6 +138,7 @@ COST_NODES_PATH = "/cost/nodes"
 CHECKS_OVERVIEW_PATH = "/checks/overview"
 CHECKS_DETAIL_PATH = "/checks/{check_id}"
 CHECKS_SETTINGS_PATH = "/settings/audit"
+RESOURCE_FILE_COMMAND_PATH = "/resource-files/commands"
 SCHEDULED_WORKLOAD_RUNS_PATH = "/workloads/scheduled/{kind}/{namespace}/{name}/runs"
 SCHEDULED_WORKLOAD_RUN_LOG_STREAM_PATH = (
     "/workloads/scheduled/{kind}/{namespace}/{name}/runs/{run_key}/logs/stream"

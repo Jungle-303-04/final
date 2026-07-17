@@ -44,6 +44,7 @@ from commands.helm import (
     validate_helm_release_operation_secret,
     validate_helm_release_secret,
 )
+from commands.resource_files import ResourceFileExecutor
 from commands.service_access import (
     ServiceAccessExecutionError,
     ServiceRequestCancelled,
@@ -202,6 +203,10 @@ from packages.contracts.integrations import (
     AgentPrometheusIntegrationEnvelope,
 )
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
+from packages.contracts.resource_files import (
+    RESOURCE_FILE_ACTION,
+    ResourceFileCommandPayload,
+)
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
     ServiceHttpRequestCommandPayload,
@@ -793,6 +798,7 @@ class TargetClusterAgent:
         )
         self.kubernetes = KubernetesApiClient()
         self.traffic_source_detector = TrafficSourceDetector(self.kubernetes)
+        self.resource_file_executor = ResourceFileExecutor()
         self.command_registry = AgentCommandRegistry.from_instance(
             self,
             cluster_id=self.cluster_id,
@@ -1832,6 +1838,13 @@ class TargetClusterAgent:
             query=definition.__dict__,
             result=result,
         )
+
+    @command.handler(RESOURCE_FILE_ACTION, payload_model=ResourceFileCommandPayload)
+    async def read_resource_file_command(
+        self,
+        ctx: CommandContext[ResourceFileCommandPayload],
+    ) -> JsonObject:
+        return await self.resource_file_executor.execute(ctx)
 
     @command.handler(
         Command.TRAFFIC_SOURCE_SELECT_ACTION,

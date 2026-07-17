@@ -69,6 +69,7 @@ import type { ServiceAccessPort } from "../../features/service-access/serviceAcc
 import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
+import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
 
 export function ResourcesPage({
   filterPort,
@@ -88,6 +89,7 @@ export function ResourcesPage({
   resourceManifestPort,
   resourceIssuesPort,
   checksPort,
+  resourceFilesPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
@@ -107,6 +109,7 @@ export function ResourcesPage({
   resourceManifestPort?: ResourceManifestPort;
   resourceIssuesPort?: ResourceIssuesPort;
   checksPort?: ChecksPort;
+  resourceFilesPort?: ResourceFilesPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -438,6 +441,7 @@ export function ResourcesPage({
             terminalPort={podTerminalPort}
             serviceAccessPort={serviceAccessPort}
             portForwardSessions={portForwardSessions}
+            resourceFilesPort={resourceFilesPort}
           />
         </div>
       ) : null}

@@ -100,7 +100,7 @@ describe("ResourceFilesystemBrowser", () => {
     await user.click(screen.getByRole("button", { name: "Pod 파일" }));
     await user.click(await screen.findByRole("button", { name: "etc" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("agent disconnected");
+    expect((await screen.findByRole("alert")).textContent).toContain("agent disconnected");
     expect(screen.getByRole("button", { name: "etc" })).toBeTruthy();
   });
 });

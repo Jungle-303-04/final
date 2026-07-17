@@ -42,6 +42,7 @@ SERVICE_LOCAL_MODULES = (
     "node_collector_spec",
     "commands",
     "commands.context",
+    "commands.exec_transport",
     "commands.kubernetes",
     "commands.outbox",
     "commands.registry",

@@ -14691,24 +14691,33 @@
             "reference.feature.138"
           ],
           "symbol": "ImageFilesystemModal search Input",
-          "interaction": "the latest image-filesystem search field reuses the product-owned identifier-safe Input boundary instead of copying raw browser text mutation behavior into the modal",
-          "transport": "none",
-          "realtime": null,
+          "interaction": "the image filesystem uses exact resource capabilities, audited outbound-Agent commands, opaque image artifacts, bounded directory pages, checksum-bound file chunks, shared filtering, breadcrumbs, keyboard dismissal, and explicit uncached layer loading",
+          "transport": "sse",
+          "realtime": {
+            "resume": "retry an idempotent bounded command after the Agent operation stream reconnects",
+            "backpressure": "request one directory page or one 64 KiB file chunk at a time and cap the complete artifact",
+            "merge": "accept results only for the active ResourceRef, capability revision, container, artifact handle, path, cursor, and offset"
+          },
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/primitives/input.tsx",
-              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+              "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
+              "frontend/src/features/resource-files/createResourceFilesAdapter.ts",
+              "src/packages/contracts/resource_files.py",
+              "src/services/target/cluster-agent/commands/resource_files.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.parity"
+              "packages.contracts.resource_files",
+              "domains.command.router"
             ],
             "plannedTestIds": [
-              "shared-ui.input.identifier-policy"
+              "resource-files.image.metadata",
+              "resource-files.image.list",
+              "resource-files.image.download"
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The source delta is limited to replacing the raw search field. The common product Input already owns the same policy without introducing an uncontracted image inspection endpoint."
+            "rationale": "The shared browser preserves the source UI interactions while Python contracts and the outbound Agent own registry authority, exact Pod identity, OCI layer safety, cache provenance, pagination, chunk checksums, audit receipts, and OperationEvent completion."
           }
         }
       ]
@@ -14734,24 +14743,32 @@
             "reference.feature.140"
           ],
           "symbol": "PodFilesystemModal search Input",
-          "interaction": "the latest pod-filesystem filter field reuses the product-owned identifier-safe Input boundary while directory identity, authorization, and file data remain server responsibilities",
-          "transport": "none",
-          "realtime": null,
+          "interaction": "the Pod filesystem uses an exact resource capability and container identity to browse quoted read-only directory commands and download sequential checksum-bound file chunks through the outbound Agent operation stream",
+          "transport": "sse",
+          "realtime": {
+            "resume": "retry an idempotent bounded command after the Agent operation stream reconnects",
+            "backpressure": "request one bounded listing or one 64 KiB file chunk at a time",
+            "merge": "retain the last observed directory and accept new data only for the active ResourceRef, capability revision, container, path, cursor, and offset"
+          },
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/primitives/input.tsx",
-              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+              "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
+              "frontend/src/features/resource-files/createResourceFilesAdapter.ts",
+              "src/packages/contracts/resource_files.py",
+              "src/services/target/cluster-agent/commands/resource_files.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.parity"
+              "packages.contracts.resource_files",
+              "domains.command.router"
             ],
             "plannedTestIds": [
-              "shared-ui.input.identifier-policy"
+              "resource-files.pod.list",
+              "resource-files.pod.download"
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The source delta is limited to replacing the raw filter field. Opsia keeps the shared input policy centralized and does not create a browser-only filesystem model."
+            "rationale": "The shared browser preserves filtering, breadcrumbs, container selection, keyboard dismissal and partial failure data while the Python gateway and outbound Agent enforce RBAC, exact Pod UID and resourceVersion, bounded exec output, audit receipts, and OperationEvent completion."
           }
         }
       ]

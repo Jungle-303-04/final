@@ -3,6 +3,9 @@ from __future__ import annotations
 import base64
 
 import pytest
+from pydantic import ValidationError
+
+from packages.contracts.parity import ResourceRef
 from packages.contracts.resource_files import (
     MAX_RESOURCE_FILE_CHUNK_BYTES,
     MAX_RESOURCE_FILE_PAGE_SIZE,
@@ -12,9 +15,6 @@ from packages.contracts.resource_files import (
     ResourceFileEntry,
     ResourceFileReadResult,
 )
-from pydantic import ValidationError
-
-from packages.contracts.parity import ResourceRef
 
 POD_REF = ResourceRef(
     api_group="",
@@ -119,7 +119,7 @@ def test_directory_and_file_results_are_bounded_and_checksum_each_chunk() -> Non
     assert base64.b64decode(chunk.data_base64) == content
     assert len(chunk.sha256) == 64
 
-    with pytest.raises(ValidationError, match="chunk"):
+    with pytest.raises(ValueError, match="chunk"):
         ResourceFileReadResult.from_bytes(
             operation="pod.read",
             path="/var/log/app.log",

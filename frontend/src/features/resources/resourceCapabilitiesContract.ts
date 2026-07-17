@@ -4,7 +4,8 @@ export type ResourceActionRequestContext = "simple" | "exact-resource" | "rollba
 export type ResourceActionResultIntent =
   | "refresh-resource"
   | "resource-summary"
-  | "terminal-session";
+  | "terminal-session"
+  | "resource-files";
 
 export interface ResourceCapabilityInput {
   key: string;
@@ -31,7 +32,7 @@ export interface ResourceActionCapability {
   capabilityId: ResourceActionCapabilityId;
   label: string;
   description: string;
-  execution: "command" | "terminal";
+  execution: "command" | "terminal" | "resource-files";
   confirmationRequired: boolean;
   realtime: boolean;
   inputSchema: ResourceCapabilityInput[];

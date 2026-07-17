@@ -183,6 +183,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
+  # Image filesystem inspection reads only names declared by the exact Pod's
+  # imagePullSecrets. Runtime validation prevents arbitrary or browser-supplied names.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
   # Kubernetes RBAC cannot resourceName-scope create on pods/exec. Runtime
   # authorization therefore requires exact inventory target, pod.exec, and
   # POD_EXEC_ALLOWED_NAMESPACES at both gateway and agent boundaries.
