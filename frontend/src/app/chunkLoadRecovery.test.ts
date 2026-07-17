@@ -96,4 +96,3 @@ function createMemoryStorage(): Pick<Storage, "getItem" | "setItem"> {
     },
   };
 }
-
