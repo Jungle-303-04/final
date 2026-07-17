@@ -9,7 +9,12 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from domains.helm.release_router import create_helm_artifact_read, create_helm_release_upgrade
+from domains.helm.release_router import (
+    create_helm_artifact_read,
+    create_helm_release_rollback,
+    create_helm_release_uninstall,
+    create_helm_release_upgrade,
+)
 from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.helm.source_router import get_helm_chart_version_provider
 from domains.identity.dependencies import require_session
@@ -18,7 +23,11 @@ from packages.contracts.helm import (
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
     HelmArtifactReadRequest,
+    HelmReleaseRollbackRequest,
+    HelmReleaseUninstallRequest,
     HelmReleaseUpgradeRequest,
 )
 from packages.contracts.helm.sources import (
@@ -271,6 +280,7 @@ class HelmUpgradeDb(HelmReleaseDb):
                     Command.CATALOG_HELM_INSTALL_CAPABILITY,
                     Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
                     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+                    HELM_RELEASE_OPERATION_CAPABILITY,
                 ],
             }
         ]
@@ -682,6 +692,89 @@ def test_release_upgrade_reuses_the_real_catalog_agent_command_and_audit_receipt
     }
     assert command.diff.basis["expected_revision"] == 3
     assert command.diff.basis["catalog_item_id"] == "catalog-redis"
+
+
+def test_release_rollback_reuses_common_receipt_and_revision_bound_agent_command(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_accept(_events, command, *, actor, max_active_per_action=None):
+        captured["command"] = command
+        assert actor.user_id == "user-a"
+        assert max_active_per_action is None
+        return SimpleNamespace(
+            event=SimpleNamespace(event_id="evt-rollback-1", correlation_id="corr-rollback-1")
+        ), None
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        fake_accept,
+    )
+    receipt = asyncio.run(
+        create_helm_release_rollback(
+            namespace="sandbox",
+            release_name="storefront",
+            payload=HelmReleaseRollbackRequest(
+                cluster_id="cluster-a",
+                expected_revision=3,
+                revision=2,
+                confirmation=True,
+            ),
+            current=SimpleNamespace(
+                user_id="user-a",
+                workspace_id="workspace-a",
+                roles=("user",),
+            ),
+            db=HelmUpgradeDb(),
+            events=SimpleNamespace(),
+            operation_events=SimpleNamespace(),
+        )
+    )
+
+    assert receipt.event_id == "evt-rollback-1"
+    command = captured["command"]
+    assert command.action == HELM_RELEASE_OPERATION_ACTION
+    assert command.payload["operation"] == "rollback"
+    assert command.payload["rollback_revision"] == 2
+    assert command.payload["guard"]["expected_revision"] == 3
+    assert command.payload["guard"]["storage_resource_version"] == "1042"
+    assert command.direct_execution_confirmed is True
+
+
+def test_release_uninstall_rejects_stale_browser_revision_before_agent_queue(
+    monkeypatch,
+) -> None:
+    async def unexpected_accept(*_args, **_kwargs):
+        raise AssertionError("stale uninstall must not queue an agent command")
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        unexpected_accept,
+    )
+    with pytest.raises(HTTPException) as captured:
+        asyncio.run(
+            create_helm_release_uninstall(
+                namespace="sandbox",
+                release_name="storefront",
+                payload=HelmReleaseUninstallRequest(
+                    cluster_id="cluster-a",
+                    expected_revision=2,
+                    confirmation=True,
+                ),
+                current=SimpleNamespace(
+                    user_id="user-a",
+                    workspace_id="workspace-a",
+                    roles=("user",),
+                ),
+                db=HelmUpgradeDb(),
+                events=SimpleNamespace(),
+                operation_events=SimpleNamespace(),
+            )
+        )
+
+    assert captured.value.status_code == 409
+    assert captured.value.detail == "Helm release revision changed; refresh before operating"
 
 
 def test_release_upgrade_fails_closed_for_a_stale_revision_before_command_acceptance(
