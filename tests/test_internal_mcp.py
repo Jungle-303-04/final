@@ -57,6 +57,8 @@ def test_mcp_read_tool_bounds_use_gateway_contract_limits() -> None:
     assert mcp_tools.MAX_RELATED_LIMIT == gateway_limits.INVENTORY_RELATED_MAX_LIMIT
     assert mcp_tools.DEFAULT_EVENT_LIMIT == gateway_limits.INVENTORY_EVENT_DEFAULT_LIMIT
     assert mcp_tools.MAX_EVENT_LIMIT == gateway_limits.INVENTORY_EVENT_MAX_LIMIT
+    assert mcp_tools.DEFAULT_CLUSTER_USAGE_LIMIT == gateway_limits.CLUSTER_USAGE_DEFAULT_LIMIT
+    assert mcp_tools.MAX_CLUSTER_USAGE_LIMIT == gateway_limits.CLUSTER_USAGE_MAX_LIMIT
     assert mcp_tools.DEFAULT_RECENT_INCIDENT_LIMIT == gateway_limits.RCA_QUERY_DEFAULT_LIMIT
     assert mcp_tools.MAX_QUERY_LIMIT == gateway_limits.RCA_QUERY_MAX_LIMIT
     assert mcp_tools.DEFAULT_APPLICATION_LIMIT == gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
@@ -275,15 +277,18 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "create_command_request",
         "create_release_plan",
         "disable_alert_rule",
+        "get_alert_channel",
         "get_alert_rule",
         "get_application_drift",
         "get_application_detail",
         "get_cluster_connection_status",
         "get_cluster_inventory_summary",
         "get_cluster_summary",
+        "get_cluster_usage",
         "get_command_status",
         "get_fleet_summary",
         "get_log_evidence",
+        "get_metric_widget",
         "get_rca_incident",
         "get_release_plan",
         "get_release_run_report",
@@ -294,13 +299,16 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "get_resource_graph",
         "get_workflow_run",
         "list_alert_events",
+        "list_alert_channels",
         "list_alert_rules",
         "list_application_deployments",
         "list_applications",
         "list_audit_timeline",
         "list_dead_letters",
         "list_evidence_windows",
+        "list_feature_contracts",
         "list_clusters",
+        "list_metric_widgets",
         "list_metric_query_presets",
         "list_pending_approvals",
         "list_rca_issues",
@@ -321,15 +329,18 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
     }
     assert all(tool["inputSchema"]["additionalProperties"] is False for tool in tools)
     read_tools = {
+        "get_alert_channel",
         "get_alert_rule",
         "get_application_drift",
         "get_application_detail",
         "get_cluster_connection_status",
         "get_cluster_inventory_summary",
         "get_cluster_summary",
+        "get_cluster_usage",
         "get_command_status",
         "get_fleet_summary",
         "get_log_evidence",
+        "get_metric_widget",
         "get_rca_incident",
         "get_release_plan",
         "get_release_run_report",
@@ -339,6 +350,7 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "get_resource_detail",
         "get_resource_graph",
         "get_workflow_run",
+        "list_alert_channels",
         "list_alert_events",
         "list_alert_rules",
         "list_application_deployments",
@@ -346,7 +358,9 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "list_audit_timeline",
         "list_dead_letters",
         "list_evidence_windows",
+        "list_feature_contracts",
         "list_clusters",
+        "list_metric_widgets",
         "list_metric_query_presets",
         "list_pending_approvals",
         "list_rca_issues",
@@ -394,6 +408,8 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             seen.append(request)
             if request.url.path == routes.ALERT_RULES_PATH:
                 return httpx.Response(200, json={"rules": [{"rule_id": "rule-1"}]})
+            if request.url.path == routes.ALERT_CHANNELS_PATH:
+                return httpx.Response(200, json={"channels": [{"channel_id": "channel-1"}]})
             if request.url.path == routes.APPLICATIONS_PATH:
                 return httpx.Response(200, json={"applications": [{"id": "app-1"}]})
             if request.url.path == routes.GITOPS_FILTER_RESULTS_PATH:
@@ -414,6 +430,10 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
                         ]
                     },
                 )
+            if request.url.path == routes.CLUSTER_METRIC_WIDGETS_PATH.format(
+                cluster_id="cluster-1"
+            ):
+                return httpx.Response(200, json={"items": [{"widget_id": "widget-1"}]})
             return httpx.Response(200, json={"ok": True})
 
         registry = default_tool_registry()
@@ -421,6 +441,7 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
 
         await registry.call("list_clusters", {}, client)
         await registry.call("get_fleet_summary", {}, client)
+        await registry.call("list_feature_contracts", {}, client)
         await registry.call("get_cluster_summary", {"cluster_id": "cluster-1"}, client)
         await registry.call(
             "get_cluster_connection_status",
@@ -432,6 +453,7 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             {"cluster_id": "cluster-1"},
             client,
         )
+        await registry.call("get_cluster_usage", {"cluster_id": "cluster-1"}, client)
         await registry.call("list_resources", {"cluster_id": "cluster-1"}, client)
         await registry.call(
             "get_resource_detail",
@@ -458,6 +480,8 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
         await registry.call("get_command_status", {"command_id": "cmd-1"}, client)
         await registry.call("list_alert_rules", {}, client)
         await registry.call("get_alert_rule", {"rule_id": "rule-1"}, client)
+        await registry.call("list_alert_channels", {}, client)
+        await registry.call("get_alert_channel", {"channel_id": "channel-1"}, client)
         await registry.call("list_alert_events", {}, client)
         await registry.call("get_recovery_plan", {"correlation_id": "corr-1"}, client)
         await registry.call("list_applications", {"limit": 2}, client)
@@ -498,13 +522,25 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             {"cluster_id": "cluster-1"},
             client,
         )
+        await registry.call(
+            "list_metric_widgets",
+            {"cluster_id": "cluster-1"},
+            client,
+        )
+        await registry.call(
+            "get_metric_widget",
+            {"cluster_id": "cluster-1", "widget_id": "widget-1"},
+            client,
+        )
 
         expected_paths = [
             routes.CLUSTERS_PATH,
             routes.FLEET_SUMMARY_PATH,
+            routes.FEATURE_CONTRACTS_PATH,
             routes.CLUSTER_SUMMARY_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_CONNECTION_STATUS_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_SUMMARY_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_USAGE_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_RESOURCES_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH.format(cluster_id="cluster-1"),
             routes.RCA_REPORTS_PATH,
@@ -517,6 +553,8 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             routes.COMMAND_STATUS_PATH.format(command_id="cmd-1"),
             routes.ALERT_RULES_PATH,
             routes.ALERT_RULES_PATH,
+            routes.ALERT_CHANNELS_PATH,
+            routes.ALERT_CHANNELS_PATH,
             routes.ALERT_EVENTS_PATH,
             routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH.format(correlation_id="corr-1"),
             routes.APPLICATIONS_PATH,
@@ -539,6 +577,8 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             routes.RESOURCES_GRAPH_PATH,
             routes.CHANGES_PATH,
             routes.CLUSTER_METRIC_QUERY_PRESETS_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_METRIC_WIDGETS_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_METRIC_WIDGETS_PATH.format(cluster_id="cluster-1"),
         ]
         assert [request.method for request in seen] == ["GET"] * len(expected_paths)
         assert [request.url.path for request in seen] == expected_paths
@@ -779,6 +819,159 @@ def test_alert_events_default_limit_matches_gateway_contract() -> None:
             {"limit": str(gateway_limits.ALERT_EVENT_DEFAULT_LIMIT)}
         )
         assert seen[0].content == b""
+
+    asyncio.run(run())
+
+
+def test_additional_context_read_tools_use_gateway_contracts_and_redaction() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path == routes.ALERT_CHANNELS_PATH:
+                return httpx.Response(
+                    200,
+                    json={
+                        "channels": [
+                            {
+                                "channel_id": "channel-1",
+                                "url": "https://hooks.slack.com/services/T000/B000/path-secret",
+                                "last_test_detail": "delivery failed at https://hooks.example/detail-secret",
+                            },
+                            {
+                                "channel_id": "channel-2",
+                                "webhook_url": "https://hooks.example/internal/path-secret-2",
+                            },
+                            {
+                                "channel_id": "channel-3",
+                                "endpoint": "https://hooks.example/internal/path-secret-3",
+                            }
+                        ]
+                    },
+                )
+            if request.url.path == routes.CLUSTER_METRIC_WIDGETS_PATH.format(
+                cluster_id="cluster-1"
+            ):
+                return httpx.Response(
+                    200,
+                    json={"items": [{"widget_id": "widget-1", "title": "CPU"}]},
+                )
+            return httpx.Response(200, json={"ok": True})
+
+        registry = default_tool_registry()
+        client = _client(handler)
+
+        await registry.call("list_feature_contracts", {}, client)
+        await registry.call(
+            "get_cluster_usage",
+            {"cluster_id": "cluster-1", "limit": 24},
+            client,
+        )
+        channels = await registry.call("list_alert_channels", {}, client)
+        channel = await registry.call("get_alert_channel", {"channel_id": "channel-1"}, client)
+        widgets = await registry.call("list_metric_widgets", {"cluster_id": "cluster-1"}, client)
+        widget = await registry.call(
+            "get_metric_widget",
+            {"cluster_id": "cluster-1", "widget_id": "widget-1"},
+            client,
+        )
+
+        assert [request.method for request in seen] == ["GET"] * 6
+        assert seen[0].url.path == routes.FEATURE_CONTRACTS_PATH
+        assert seen[0].url.params == httpx.QueryParams()
+        assert seen[1].url.path == routes.CLUSTER_USAGE_PATH.format(cluster_id="cluster-1")
+        assert seen[1].url.params == httpx.QueryParams({"limit": "24"})
+        assert seen[2].url.path == routes.ALERT_CHANNELS_PATH
+        assert seen[2].url.params == httpx.QueryParams()
+        assert seen[3].url.path == routes.ALERT_CHANNELS_PATH
+        assert seen[4].url.path == routes.CLUSTER_METRIC_WIDGETS_PATH.format(
+            cluster_id="cluster-1"
+        )
+        assert seen[5].url.path == routes.CLUSTER_METRIC_WIDGETS_PATH.format(
+            cluster_id="cluster-1"
+        )
+        assert channel["data"]["available"] is True
+        assert widgets["data"]["items"][0]["widget_id"] == "widget-1"
+        assert widget["data"]["widget"]["widget_id"] == "widget-1"
+        assert channels["data"]["channels"][0]["url"] == "[REDACTED]"
+        assert channels["data"]["channels"][0]["last_test_detail"] == "[REDACTED]"
+        assert channels["data"]["channels"][1]["webhook_url"] == "[REDACTED]"
+        assert channels["data"]["channels"][2]["endpoint"] == "[REDACTED]"
+        assert channel["data"]["channel"]["url"] == "[REDACTED]"
+        serialized_channels = json.dumps([channels, channel], ensure_ascii=False)
+        assert "path-secret" not in serialized_channels
+        assert "path-secret-2" not in serialized_channels
+        assert "path-secret-3" not in serialized_channels
+        assert "detail-secret" not in serialized_channels
+        assert "[REDACTED]" in serialized_channels
+        assert all(request.content == b"" for request in seen)
+
+    asyncio.run(run())
+
+
+def test_list_item_read_tools_return_unavailable_without_inventing_missing_items() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path == routes.ALERT_RULES_PATH:
+                return httpx.Response(200, json={"rules": [{"rule_id": "rule-existing"}]})
+            if request.url.path == routes.ALERT_CHANNELS_PATH:
+                return httpx.Response(
+                    200,
+                    json={"channels": [{"channel_id": "channel-existing"}]},
+                )
+            if request.url.path == routes.APPLICATION_RUNS_PATH.format(application_id="app-1"):
+                return httpx.Response(
+                    200,
+                    json={"runs": [{"workflow_run_id": "workflow-existing"}]},
+                )
+            if request.url.path == routes.CLUSTER_METRIC_WIDGETS_PATH.format(
+                cluster_id="cluster-1"
+            ):
+                return httpx.Response(
+                    200,
+                    json={"items": [{"widget_id": "widget-existing"}]},
+                )
+            return httpx.Response(500)
+
+        registry = default_tool_registry()
+        client = _client(handler)
+
+        alert_rule = await registry.call("get_alert_rule", {"rule_id": "missing-rule"}, client)
+        alert_channel = await registry.call(
+            "get_alert_channel",
+            {"channel_id": "missing-channel"},
+            client,
+        )
+        workflow_run = await registry.call(
+            "get_workflow_run",
+            {"application_id": "app-1", "run_id": "missing-workflow"},
+            client,
+        )
+        metric_widget = await registry.call(
+            "get_metric_widget",
+            {"cluster_id": "cluster-1", "widget_id": "missing-widget"},
+            client,
+        )
+
+        assert alert_rule["data"] == {"rule": None, "available": False}
+        assert alert_channel["data"] == {"channel": None, "available": False}
+        assert workflow_run["data"] == {"run": None, "available": False}
+        assert metric_widget["data"] == {"widget": None, "available": False}
+        assert [request.method for request in seen] == ["GET"] * 4
+        assert [request.url.path for request in seen] == [
+            routes.ALERT_RULES_PATH,
+            routes.ALERT_CHANNELS_PATH,
+            routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
+            routes.CLUSTER_METRIC_WIDGETS_PATH.format(cluster_id="cluster-1"),
+        ]
+        assert seen[2].url.params == httpx.QueryParams(
+            {"limit": str(gateway_limits.APPLICATION_WORKFLOW_RUN_MAX_LIMIT)}
+        )
+        assert all(request.content == b"" for request in seen)
 
     asyncio.run(run())
 

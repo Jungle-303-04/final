@@ -27,6 +27,8 @@ DEFAULT_RELATED_LIMIT = gateway_limits.INVENTORY_RELATED_DEFAULT_LIMIT
 MAX_RELATED_LIMIT = gateway_limits.INVENTORY_RELATED_MAX_LIMIT
 DEFAULT_EVENT_LIMIT = gateway_limits.INVENTORY_EVENT_DEFAULT_LIMIT
 MAX_EVENT_LIMIT = gateway_limits.INVENTORY_EVENT_MAX_LIMIT
+DEFAULT_CLUSTER_USAGE_LIMIT = gateway_limits.CLUSTER_USAGE_DEFAULT_LIMIT
+MAX_CLUSTER_USAGE_LIMIT = gateway_limits.CLUSTER_USAGE_MAX_LIMIT
 DEFAULT_RECENT_INCIDENT_LIMIT = gateway_limits.RCA_QUERY_DEFAULT_LIMIT
 MAX_QUERY_LIMIT = gateway_limits.RCA_QUERY_MAX_LIMIT
 DEFAULT_APPLICATION_LIMIT = gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
@@ -67,9 +69,16 @@ IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
 RESPONSE_RULES_KEY = "rules"
 RESPONSE_RUNS_KEY = "runs"
 RESPONSE_ITEMS_KEY = "items"
+RESPONSE_CHANNELS_KEY = "channels"
 ALERT_RULE_ID_KEY = "rule_id"
+ALERT_CHANNEL_ID_KEY = "channel_id"
+ALERT_CHANNEL_LAST_TEST_DETAIL_KEY = "last_test_detail"
+ALERT_CHANNEL_ENDPOINT_KEY = "endpoint"
+ALERT_CHANNEL_URL_KEY = "url"
+ALERT_CHANNEL_WEBHOOK_URL_KEY = "webhook_url"
 APPLICATION_ID_KEY = "application_id"
 WORKFLOW_RUN_ID_KEY = "workflow_run_id"
+METRIC_WIDGET_ID_KEY = "widget_id"
 READ_ONLY_TOOL_ANNOTATIONS = {
     "readOnlyHint": True,
     "destructiveHint": False,
@@ -102,6 +111,13 @@ SENSITIVE_PROPOSAL_MARKER_KEYS = frozenset({"key", "name"})
 SENSITIVE_PROPOSAL_MARKER_VALUE_KEYS = frozenset({"default", "literal", "value"})
 SENSITIVE_READ_EXACT_KEYS = frozenset({"binarydata", "edited_yaml", "raw", "stringdata"})
 SECRET_READ_DATA_KEYS = frozenset({"binarydata", "data", "stringdata"})
+ALERT_CHANNEL_CONTEXT_KEYS = frozenset({ALERT_CHANNEL_ID_KEY})
+ALERT_CHANNEL_ENDPOINT_KEYS = frozenset(
+    {ALERT_CHANNEL_ENDPOINT_KEY, ALERT_CHANNEL_URL_KEY, ALERT_CHANNEL_WEBHOOK_URL_KEY}
+)
+ALERT_CHANNEL_REDACTED_KEYS = ALERT_CHANNEL_ENDPOINT_KEYS | frozenset(
+    {ALERT_CHANNEL_LAST_TEST_DETAIL_KEY}
+)
 DIRECT_EXECUTION_KEYS = frozenset(
     {"confirmation", "direct_execution", "direct_execution_confirmed"}
 )
@@ -188,6 +204,16 @@ def default_tool_registry() -> ToolRegistry:
                 handler=get_fleet_summary,
             ),
             McpTool(
+                name="list_feature_contracts",
+                title="List Feature Contracts",
+                description=(
+                    "Return the authenticated Gateway feature-contract catalog so AI "
+                    "can explain which product capabilities exist without hard-coding them."
+                ),
+                input_schema=_schema(properties={}),
+                handler=list_feature_contracts,
+            ),
+            McpTool(
                 name="get_cluster_summary",
                 title="Get Cluster Summary",
                 description=(
@@ -230,6 +256,27 @@ def default_tool_registry() -> ToolRegistry:
                     required=["cluster_id"],
                 ),
                 handler=get_cluster_inventory_summary,
+            ),
+            McpTool(
+                name="get_cluster_usage",
+                title="Get Cluster Usage",
+                description=(
+                    "Return persisted usage rollup samples for one authorized cluster through "
+                    "the inventory API. MCP does not query Prometheus or the cluster directly."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "limit": _integer(
+                            "Maximum number of usage samples to return.",
+                            minimum=1,
+                            maximum=MAX_CLUSTER_USAGE_LIMIT,
+                            default=DEFAULT_CLUSTER_USAGE_LIMIT,
+                        ),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=get_cluster_usage,
             ),
             McpTool(
                 name="list_resources",
@@ -485,6 +532,31 @@ def default_tool_registry() -> ToolRegistry:
                     required=["rule_id"],
                 ),
                 handler=get_alert_rule,
+            ),
+            McpTool(
+                name="list_alert_channels",
+                title="List Alert Channels",
+                description=(
+                    "List existing alert delivery channels through the Gateway admin API "
+                    "so alert-rule proposals can reference real configured channels."
+                ),
+                input_schema=_schema(properties={}),
+                handler=list_alert_channels,
+            ),
+            McpTool(
+                name="get_alert_channel",
+                title="Get Alert Channel",
+                description=(
+                    "Fetch one existing alert channel by filtering the Gateway's channel "
+                    "list response. MCP does not read alert storage directly."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "channel_id": _string("Existing alert channel id.", max_length=120),
+                    },
+                    required=["channel_id"],
+                ),
+                handler=get_alert_channel,
             ),
             McpTool(
                 name="list_alert_events",
@@ -905,6 +977,37 @@ def default_tool_registry() -> ToolRegistry:
                 handler=list_metric_query_presets,
             ),
             McpTool(
+                name="list_metric_widgets",
+                title="List Metric Widgets",
+                description=(
+                    "List saved metric widgets for one authorized cluster through the "
+                    "existing dashboard API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=list_metric_widgets,
+            ),
+            McpTool(
+                name="get_metric_widget",
+                title="Get Metric Widget",
+                description=(
+                    "Fetch one metric widget by filtering the Gateway's metric widget "
+                    "list response for the requested cluster."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "widget_id": _string("Existing metric widget id.", max_length=120),
+                    },
+                    required=["cluster_id", "widget_id"],
+                ),
+                handler=get_metric_widget,
+            ),
+            McpTool(
                 name="run_metric_query_preset",
                 title="Run Metric Query Preset",
                 description=(
@@ -1322,6 +1425,14 @@ async def get_fleet_summary(
     return _read_result("get_fleet_summary", routes.FLEET_SUMMARY_PATH, data)
 
 
+async def list_feature_contracts(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, set())
+    data = await client.get_json(routes.FEATURE_CONTRACTS_PATH)
+    return _read_result("list_feature_contracts", routes.FEATURE_CONTRACTS_PATH, data)
+
+
 async def get_cluster_summary(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1350,6 +1461,27 @@ async def get_cluster_inventory_summary(
     path = _format_path(routes.CLUSTER_INVENTORY_SUMMARY_PATH, cluster_id=cluster_id)
     data = await client.get_json(path)
     return _read_result("get_cluster_inventory_summary", path, data)
+
+
+async def get_cluster_usage(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "limit"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    path = _format_path(routes.CLUSTER_USAGE_PATH, cluster_id=cluster_id)
+    data = await client.get_json(
+        path,
+        {
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_CLUSTER_USAGE_LIMIT,
+                1,
+                MAX_CLUSTER_USAGE_LIMIT,
+            ),
+        },
+    )
+    return _read_result("get_cluster_usage", path, data)
 
 
 async def list_resources(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1568,19 +1700,38 @@ async def get_alert_rule(
 ) -> dict[str, Any]:
     _reject_unknown(arguments, {"rule_id"})
     rule_id = _required_str(arguments, "rule_id", max_length=120)
-    data = await client.get_json(routes.ALERT_RULES_PATH)
-    rule = _find_mapping_by_key(
-        _list_from_response(data, RESPONSE_RULES_KEY),
-        ALERT_RULE_ID_KEY,
-        rule_id,
+    return await _read_list_item(
+        client,
+        tool_name="get_alert_rule",
+        api_path=routes.ALERT_RULES_PATH,
+        response_key=RESPONSE_RULES_KEY,
+        id_key=ALERT_RULE_ID_KEY,
+        expected_id=rule_id,
+        item_key="rule",
     )
-    return _read_result(
-        "get_alert_rule",
-        routes.ALERT_RULES_PATH,
-        {
-            "rule": rule,
-            "available": rule is not None,
-        },
+
+
+async def list_alert_channels(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, set())
+    data = await client.get_json(routes.ALERT_CHANNELS_PATH)
+    return _read_result("list_alert_channels", routes.ALERT_CHANNELS_PATH, data)
+
+
+async def get_alert_channel(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"channel_id"})
+    channel_id = _required_str(arguments, "channel_id", max_length=120)
+    return await _read_list_item(
+        client,
+        tool_name="get_alert_channel",
+        api_path=routes.ALERT_CHANNELS_PATH,
+        response_key=RESPONSE_CHANNELS_KEY,
+        id_key=ALERT_CHANNEL_ID_KEY,
+        expected_id=channel_id,
+        item_key="channel",
     )
 
 
@@ -1807,19 +1958,15 @@ async def get_workflow_run(
     application_id = _optional_str(arguments, "application_id", max_length=200)
     if application_id is not None:
         path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
-        data = await client.get_json(path, {"limit": MAX_APPLICATION_WORKFLOW_RUN_LIMIT})
-        run = _find_mapping_by_key(
-            _list_from_response(data, RESPONSE_RUNS_KEY),
-            WORKFLOW_RUN_ID_KEY,
-            run_id,
-        )
-        return _read_result(
-            "get_workflow_run",
-            path,
-            {
-                "run": run,
-                "available": run is not None,
-            },
+        return await _read_list_item(
+            client,
+            tool_name="get_workflow_run",
+            api_path=path,
+            response_key=RESPONSE_RUNS_KEY,
+            id_key=WORKFLOW_RUN_ID_KEY,
+            expected_id=run_id,
+            item_key="run",
+            params={"limit": MAX_APPLICATION_WORKFLOW_RUN_LIMIT},
         )
     path = _format_path(routes.RELEASE_RUN_PATH, run_id=run_id)
     data = await client.get_json(path)
@@ -2124,6 +2271,34 @@ async def list_metric_query_presets(
     path = _format_path(routes.CLUSTER_METRIC_QUERY_PRESETS_PATH, cluster_id=cluster_id)
     data = await client.get_json(path)
     return _read_result("list_metric_query_presets", path, data)
+
+
+async def list_metric_widgets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    path = _format_path(routes.CLUSTER_METRIC_WIDGETS_PATH, cluster_id=cluster_id)
+    data = await client.get_json(path)
+    return _read_result("list_metric_widgets", path, data)
+
+
+async def get_metric_widget(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "widget_id"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    widget_id = _required_str(arguments, "widget_id", max_length=120)
+    path = _format_path(routes.CLUSTER_METRIC_WIDGETS_PATH, cluster_id=cluster_id)
+    return await _read_list_item(
+        client,
+        tool_name="get_metric_widget",
+        api_path=path,
+        response_key=RESPONSE_ITEMS_KEY,
+        id_key=METRIC_WIDGET_ID_KEY,
+        expected_id=widget_id,
+        item_key="widget",
+    )
 
 
 async def run_metric_query_preset(
@@ -2576,6 +2751,33 @@ def _read_result(tool_name: str, api_path: str, data: Any) -> dict[str, Any]:
     }
 
 
+async def _read_list_item(
+    client: ManagementApiClient,
+    *,
+    tool_name: str,
+    api_path: str,
+    response_key: str,
+    id_key: str,
+    expected_id: str,
+    item_key: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    data = await client.get_json(api_path, params)
+    item = _find_mapping_by_key(
+        _list_from_response(data, response_key),
+        id_key,
+        expected_id,
+    )
+    return _read_result(
+        tool_name,
+        api_path,
+        {
+            item_key: item,
+            "available": item is not None,
+        },
+    )
+
+
 async def _post_or_propose(
     client: ManagementApiClient,
     arguments: dict[str, Any],
@@ -2685,6 +2887,7 @@ def _redact_response_strings(value: Any) -> Any:
 def _redact_read_response_value(value: Any) -> Any:
     if isinstance(value, dict):
         secret_context = _mapping_describes_secret(value)
+        alert_channel_context = _mapping_describes_alert_channel(value)
         has_sensitive_marker = _has_sensitive_proposal_marker(value)
         redacted: dict[str, Any] = {}
         for key, item in value.items():
@@ -2692,6 +2895,8 @@ def _redact_read_response_value(value: Any) -> Any:
             normalized_key = _normalized_proposal_identifier(key_text)
             if _is_sensitive_read_key(normalized_key) or (
                 secret_context and normalized_key in SECRET_READ_DATA_KEYS
+            ) or (
+                alert_channel_context and normalized_key in ALERT_CHANNEL_REDACTED_KEYS
             ) or (
                 has_sensitive_marker and _is_sensitive_marker_value_key(key_text)
             ):
@@ -2718,6 +2923,13 @@ def _mapping_describes_secret(value: dict[Any, Any]) -> bool:
         return True
     resource_type = value.get("resource_type") or value.get("type")
     return isinstance(resource_type, str) and resource_type.strip().casefold() == "secret"
+
+
+def _mapping_describes_alert_channel(value: dict[Any, Any]) -> bool:
+    normalized_keys = {_normalized_proposal_identifier(str(key)) for key in value}
+    return ALERT_CHANNEL_CONTEXT_KEYS.issubset(normalized_keys) and bool(
+        normalized_keys & ALERT_CHANNEL_ENDPOINT_KEYS
+    )
 
 
 def _operation_id_from_response(
