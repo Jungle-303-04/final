@@ -6,10 +6,14 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy.dialects import postgresql
 
 from domains.inventory.repository import InventoryRepository
-from domains.timeline.coverage import project_kubernetes_event_capture_coverage
+from domains.timeline.coverage import (
+    TimelineCoverageLimitExceeded,
+    project_kubernetes_event_capture_coverage,
+)
 from domains.timeline.repository import TimelineLedgerReadScope
 from packages.contracts.parity import ClusterScope
 from packages.contracts.timeline import TimelineWindow
@@ -176,6 +180,34 @@ def test_only_explicit_incomplete_gap_evidence_opens_coverage() -> None:
     )
 
     assert coverage == ()
+
+
+def test_ordered_coverage_projection_fails_closed_at_the_response_interval_bound() -> None:
+    snapshots = (
+        _snapshot(
+            observed_at=_timestamp(index * 2),
+            complete=False,
+            gap="timeout",
+        )
+        if index % 2 == 0
+        else _snapshot(
+            observed_at=_timestamp(index * 2),
+            complete=True,
+        )
+        for index in range(8)
+    )
+
+    with pytest.raises(TimelineCoverageLimitExceeded):
+        project_kubernetes_event_capture_coverage(
+            _read_scope(),
+            window=TimelineWindow(
+                from_ms=int(_timestamp(0).timestamp() * 1_000),
+                to_ms=int(_timestamp(59).timestamp() * 1_000),
+            ),
+            snapshots=snapshots,
+            snapshots_ordered=True,
+            max_intervals=3,
+        )
 
 
 def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
