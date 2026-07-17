@@ -62,7 +62,9 @@ describe("ChecksPage", () => {
     render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
 
     expect(await screen.findByText("Container limits are not observed.")).toBeTruthy();
-    expect(screen.getByText("Deployment/checkout")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Deployment/checkout" }).getAttribute("href")).toBe(
+      "/resources?clusters=cluster-a&resources.types=deployment&detail=Deployment%2Fstorefront%2Fcheckout",
+    );
     expect(screen.getByText("Workload limits")).toBeTruthy();
     expect(screen.getByText("cluster-a · storefront")).toBeTruthy();
     expect(screen.getByText("Optional kinds not observed: Gateway")).toBeTruthy();

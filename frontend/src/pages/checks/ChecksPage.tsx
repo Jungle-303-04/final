@@ -1,5 +1,6 @@
 import { CircleAlert } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import {
@@ -12,6 +13,7 @@ import {
   type ChecksScopeCoverage,
 } from "../../features/checks/checksContract";
 import { CHECKS_COPY } from "../../features/checks/checksCopy";
+import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
@@ -193,7 +195,17 @@ function FindingsList({ findings }: { findings: readonly ChecksFinding[] }) {
         <li className="grid min-w-0 gap-2 rounded-lg border p-3" key={`${finding.clusterId}:${finding.findingId}`}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge variant={finding.severity === "danger" ? "destructive" : "secondary"}>{finding.severity}</Badge>
-            <span className="min-w-0 break-words text-sm font-medium">{finding.resource.kind}/{finding.resource.name}</span>
+            <Link
+              className="min-w-0 break-words text-sm font-medium underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              to={alertEventResourceHref({
+                cluster: finding.clusterId,
+                kind: finding.resource.kind,
+                name: finding.resource.name,
+                namespace: finding.resource.namespace,
+              })}
+            >
+              {finding.resource.kind}/{finding.resource.name}
+            </Link>
           </div>
           <p className="break-words text-sm">{finding.message}</p>
           <p className="break-words text-xs text-muted-foreground">{finding.clusterId} · {finding.resource.namespace ?? CHECKS_COPY.noNamespaces}</p>
