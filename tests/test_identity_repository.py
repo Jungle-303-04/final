@@ -256,3 +256,40 @@ def test_list_access_grants_sql_always_filters_organization_id() -> None:
 
     assert "resource_assignments.organization_id =" in str(compiled)
     assert "workspace-a" in compiled.params.values()
+
+
+def test_active_user_groups_are_workspace_scoped_and_sorted() -> None:
+    captured: list[Any] = []
+
+    class StubMappings:
+        def all(self) -> list[dict[str, str]]:
+            return [{"group_id": "group-platform"}, {"group_id": "group-release"}]
+
+    class StubResult:
+        def mappings(self) -> StubMappings:
+            return StubMappings()
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            captured.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(WorkspaceAccessRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.list_active_group_ids_for_user("user-1", "workspace-a") == [
+        "group-platform",
+        "group-release",
+    ]
+    compiled = captured[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "groups.organization_id =" in sql
+    assert "group_members.user_id =" in sql
+    assert sql.count("status =") == 2
+    assert {"user-1", "workspace-a", AccessStatus.ACTIVE.value}.issubset(
+        set(compiled.params.values())
+    )
