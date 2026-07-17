@@ -1151,8 +1151,35 @@ test("설정 권한과 호스트 설정 delta는 분리된 권한 주체와 명�
     portMap.features["reference.feature.134"].coverage.frontend.destination,
     "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
   );
+  const restrictedVisibilityPort = portMap.features["reference.feature.124"];
+  assert.equal(restrictedVisibilityPort.deliveryStatus, "implemented");
+  assert.equal(restrictedVisibilityPort.coverage.backend.state, "implemented");
+  assert.equal(restrictedVisibilityPort.coverage.frontend.state, "implemented");
+  assert.equal(
+    restrictedVisibilityPort.coverage.backend.destination,
+    "src/domains/inventory/router.py#get_inventory_summary",
+  );
+  assert.equal(
+    restrictedVisibilityPort.coverage.backend.consumer,
+    "src/domains/inventory/resource_count_evidence.py#project_inventory_resource_counts_evidence",
+  );
+  assert.equal(
+    restrictedVisibilityPort.coverage.frontend.destination,
+    "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+  );
+  assert.ok(restrictedVisibilityPort.verification.includes("tests/test_inventory_domain.py"));
+  assert.ok(restrictedVisibilityPort.verification.includes(
+    "frontend/src/features/resources/createResourcesAdapter.mapping.test.ts",
+  ));
+  assert.ok(restrictedVisibilityPort.verification.includes(
+    "frontend/src/pages/resources/ResourcesPage.collectionHonesty.test.tsx",
+  ));
+  const restrictedVisibilityFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.124",
+  );
+  assert.equal(restrictedVisibilityFeature.deliveryStatus, "implemented");
+  assert.equal(restrictedVisibilityFeature.sourceKey, aliases.aliases["reference.feature.124"]);
   for (const contractId of [
-    "reference.feature.124",
     "reference.feature.221",
     "reference.feature.222",
   ]) {

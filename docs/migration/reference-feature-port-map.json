@@ -1638,30 +1638,33 @@
       }
     },
     "reference.feature.124": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
-      "frontendContract": "frontend/src/features/settings/settingsContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.InventorySummaryResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesContract.ts#ResourceCatalog",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
-        "frontend/src/api/settings-access.test.ts",
-        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "tests/test_inventory_domain.py",
+        "frontend/src/api/inventory-summary.test.ts",
+        "frontend/src/features/resources/createResourcesAdapter.mapping.test.ts",
+        "frontend/src/features/resources/createResourcesAdapter.validation.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.collectionHonesty.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.filterCutover.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "consumer": "src/packages/contracts/shell_state.py#SettingsAccessProfileResponse",
-          "reason": "Product RBAC decisions are exact, but the cluster agent cannot attribute Kubernetes discovery denial to the signed-in product subject.",
-          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_inventory_summary",
+          "consumer": "src/domains/inventory/resource_count_evidence.py#project_inventory_resource_counts_evidence",
+          "reason": "The existing inventory summary contract filters persisted resource counts by canonical namespace scope and projects observed, partial, unavailable, and forbidden kind evidence only from the retained outbound cluster-agent discovery and access snapshot.",
+          "test": "tests/test_inventory_domain.py#test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
-          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
-          "reason": "The panel renders explicit unavailable evidence instead of claiming per-kind hidden resources until delegated Kubernetes subject identity exists.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+          "consumer": "frontend/src/features/resources/createResourcesAdapter.ts#createResourcesAdapter",
+          "reason": "The existing Resources adapter forwards the selected namespace scope, validates typed count evidence, exposes restricted kinds, and distinguishes a confirmed empty catalog from partial or unavailable observation without copied catalog claims.",
+          "test": "frontend/src/pages/resources/ResourcesPage.collectionHonesty.test.tsx"
         }
       }
     },
