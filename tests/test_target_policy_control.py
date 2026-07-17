@@ -202,6 +202,34 @@ def test_policy_sync_reports_failed_payload_generation(tmp_path: Path) -> None:
     assert client.policy_statuses[0]["status"] == "failed"
 
 
+def test_policy_sync_merges_runtime_drift_details_for_unchanged_policy(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    store.save_policy(AgentPolicy(cluster_id="cluster-1", generation=3))
+
+    async def status_details() -> dict[str, object]:
+        return {
+            "target_rbac_manifest": {
+                "status": "admin_apply_required",
+                "actual_version": None,
+                "expected_version": "2026-07-17.1",
+            }
+        }
+
+    sync = control.AgentPolicySync(
+        cluster_id="cluster-1",
+        store=store,
+        default_policy=AgentPolicy(cluster_id="cluster-1"),
+        apply_policy=lambda _policy: {},
+        interval_seconds=10,
+        status_details=status_details,
+    )
+    client = StubPolicyClient(None)
+
+    assert asyncio.run(sync.sync_once(client)) == "unchanged"
+    assert client.policy_statuses[0]["details"] == asyncio.run(status_details())
+
+
 def test_reconciler_rejects_user_workload_until_scope_is_enabled(tmp_path: Path) -> None:
     control = load_control_module()
     store = control.AgentControlStore(str(tmp_path / "agent-control.db"))

@@ -772,6 +772,49 @@ def test_target_agent_wires_argocd_reconciler_mode(
     assert agent.reconciler.argo_observer.transport is transport
 
 
+@pytest.mark.parametrize(
+    ("status_code", "annotations", "expected_status"),
+    [
+        (200, {"opsia.dev/target-rbac-version": "2026-07-17.1"}, "current"),
+        (200, {"opsia.dev/target-rbac-version": "older"}, "admin_apply_required"),
+        (403, {}, "admin_apply_required"),
+    ],
+)
+def test_target_agent_reports_rbac_manifest_drift_without_self_escalation(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+    status_code: int,
+    annotations: dict[str, str],
+    expected_status: str,
+) -> None:
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    agent_module = load_agent_module()
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    requests: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url.path))
+        return httpx.Response(
+            status_code,
+            json={"metadata": {"annotations": annotations}},
+            request=request,
+        )
+
+    agent = target_agent_factory(
+        agent_module,
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    details = asyncio.run(agent.target_rbac_manifest_status())
+
+    assert details["status"] == expected_status
+    assert details["expected_version"] == "2026-07-17.1"
+    assert requests == [
+        ("GET", "/apis/rbac.authorization.k8s.io/v1/clusterroles/cluster-agent-read")
+    ]
+
+
 def test_oss_profile_blocks_direct_write_commands_before_kubernetes_call(
     monkeypatch: pytest.MonkeyPatch,
     target_agent_factory: Callable[..., Any],
