@@ -18,16 +18,16 @@ export const DeploymentBlueprintSidebar = memo(function DeploymentBlueprintSideb
   const { formatNumber, t } = useI18n();
 
   return (
-    <aside className="flex min-w-0 items-center gap-3 border-b bg-muted/20 px-4 py-2.5">
+    <aside className="flex min-w-0 items-center gap-3 border-b bg-muted/30 px-4 py-2.5 lg:px-5">
       <div className="flex shrink-0 items-center gap-2">
         <h4 className="text-xs font-semibold">{t("workflows.blueprint.library")}</h4>
-        <Badge variant="outline">{formatNumber(hiddenClusters.length)}</Badge>
+        <Badge className="bg-background" variant="outline">{formatNumber(hiddenClusters.length)}</Badge>
       </div>
 
       <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto">
         {hiddenClusters.length ? hiddenClusters.map((cluster) => (
           <button
-            className="group flex w-52 shrink-0 items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary/50 hover:bg-accent"
+            className="group flex w-52 shrink-0 items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 text-left shadow-xs transition-[border-color,background-color,box-shadow] hover:border-lime-500/40 hover:bg-lime-300/5 hover:shadow-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             key={cluster.id}
             onClick={() => onAddCluster(cluster.id)}
             type="button"
@@ -41,7 +41,7 @@ export const DeploymentBlueprintSidebar = memo(function DeploymentBlueprintSideb
                 {cluster.environment}
               </span>
             </span>
-            <Plus aria-hidden="true" className="ml-auto size-4 text-muted-foreground group-hover:text-primary" />
+            <Plus aria-hidden="true" className="ml-auto size-4 text-muted-foreground group-hover:text-lime-700" />
           </button>
         )) : (
           <p className="min-w-0 truncate text-[0.6875rem] text-muted-foreground">

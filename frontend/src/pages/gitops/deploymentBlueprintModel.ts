@@ -194,8 +194,8 @@ export function buildDeploymentBlueprint(
         target: deployment,
         targetHandle: "input",
         type: "default",
-        reconnectable: false,
-        style: { stroke: "var(--blueprint-connection)", strokeWidth: 2 },
+        reconnectable: "target",
+        style: { stroke: "var(--blueprint-connection)", strokeWidth: 3 },
       });
     }
     deploymentClusterIds(step, application).forEach((clusterId) => {
@@ -208,8 +208,8 @@ export function buildDeploymentBlueprint(
         target,
         targetHandle: "input",
         type: "default",
-        reconnectable: true,
-        style: { stroke: "var(--blueprint-connection)", strokeWidth: 2 },
+        reconnectable: "target",
+        style: { stroke: "var(--blueprint-connection)", strokeWidth: 3 },
       });
     });
   });

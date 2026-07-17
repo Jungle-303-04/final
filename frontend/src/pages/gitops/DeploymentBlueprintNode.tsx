@@ -1,15 +1,15 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { FileCode2, GitBranch, GitFork, Network, Server, Workflow } from "lucide-react";
+import { Code2, GitFork, Server } from "lucide-react";
 import { memo } from "react";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import type { DeploymentBlueprintNode } from "./deploymentBlueprintTypes";
 
 const blueprintPortClassName = cn(
-  "!size-6 !rounded-none !border-0 !bg-transparent !shadow-none",
-  "after:absolute after:left-1 after:top-[0.1875rem] after:h-[1.125rem] after:w-4 after:bg-slate-50 after:shadow-md after:content-['']",
-  "after:[clip-path:polygon(0_0,68%_0,100%_50%,68%_100%,0_100%)]",
-  "hover:after:brightness-110 focus-visible:!outline-none focus-visible:!ring-2 focus-visible:!ring-white/70",
+  "!size-3 !rounded-full !border-[3px] !border-zinc-900 !bg-white !shadow-[0_1px_2px_rgba(0,0,0,0.16)]",
+  "after:absolute after:-inset-2 after:rounded-full after:content-['']",
+  "transition-[background-color,box-shadow] duration-150 hover:!bg-zinc-100 hover:!shadow-[0_2px_4px_rgba(0,0,0,0.2)]",
+  "focus-visible:!outline-none focus-visible:!ring-2 focus-visible:!ring-zinc-900/30",
 );
 
 export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNodeCard({
@@ -22,6 +22,7 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
   const normalizedStatus = (data.connectionStatus || "").toLowerCase();
   const online = ["online", "connected", "ready"].includes(normalizedStatus);
   const critical = ["offline", "disconnected", "critical", "error"].includes(normalizedStatus);
+  const statusLabel = nodeStatusLabel(data, isRepository, isDeployment, online, t);
 
   return (
     <article
@@ -31,42 +32,55 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
           ? t("workflows.blueprint.deploymentNode", { name: data.title || t("workflows.blueprint.emptyDeployment") })
           : t("workflows.blueprint.clusterNode", { name: data.title || t("workflows.blueprint.emptyCluster") })}
       className={cn(
-        "relative w-72 overflow-visible rounded-xl border border-slate-700/80 bg-slate-900/95 text-slate-100 shadow-xl backdrop-blur-sm",
-        "transition-[border-color,box-shadow] duration-150",
-        selected && "border-slate-400 shadow-2xl ring-2 ring-white/10",
+        "relative w-72 overflow-visible rounded-2xl border p-1.5 font-sans text-zinc-950 shadow-[0_3px_10px_rgba(0,0,0,0.08)]",
+        "transition-[border-color,box-shadow] duration-150 hover:shadow-[0_5px_14px_rgba(0,0,0,0.11)]",
+        isRepository && "border-[#bfd2f1] bg-[#dce9fb]",
+        isDeployment && "border-[#efc8ad] bg-[#fce7d8]",
+        !isRepository && !isDeployment && "border-zinc-300 bg-[#e7e7e7]",
+        selected && "border-zinc-800/70 shadow-[0_5px_16px_rgba(0,0,0,0.13)] ring-1 ring-zinc-900/15",
         data.placeholder && "border-dashed opacity-70",
       )}
     >
-      <div className={cn(
-        "absolute inset-x-3 top-0 h-px",
-        isRepository ? "bg-sky-300/80" : isDeployment ? "bg-violet-300/80" : "bg-emerald-300/80",
-      )} />
-
-      <header className="flex items-center gap-3 px-3.5 py-3">
+      <header className="flex h-8 items-center gap-2 px-2">
         <span className={cn(
-          "grid size-9 shrink-0 place-items-center rounded-lg border bg-slate-950/50",
-          isRepository
-            ? "border-sky-400/20 text-sky-300"
-            : isDeployment
-              ? "border-violet-400/20 text-violet-300"
-              : "border-emerald-400/20 text-emerald-300",
+          "min-w-0 flex-1 truncate text-xs font-semibold",
+          isRepository ? "text-[#294f87]" : isDeployment ? "text-[#8b4b22]" : "text-zinc-800",
         )}>
           {isRepository
-            ? <GitFork aria-hidden="true" className="size-[1.125rem]" />
+            ? t("workflows.blueprint.source")
             : isDeployment
-              ? <Workflow aria-hidden="true" className="size-[1.125rem]" />
-              : <Server aria-hidden="true" className="size-[1.125rem]" />}
+              ? t("workflows.blueprint.deployment")
+              : t("workflows.blueprint.cluster")}
         </span>
 
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[0.625rem] font-medium uppercase tracking-[0.16em] text-slate-500">
+        {!isRepository && !isDeployment ? (
+          <span
+            aria-label={statusLabel}
+            className={cn(
+              "max-w-20 truncate rounded-full border bg-white/70 px-2 py-0.5 text-[0.625rem] font-semibold leading-4",
+              online
+                ? "border-emerald-200 text-emerald-700"
+                : critical
+                  ? "border-red-200 text-red-700"
+                  : "border-amber-200 text-amber-700",
+            )}
+            title={statusLabel}
+          >
+            {statusLabel}
+          </span>
+        ) : null}
+      </header>
+
+      <div className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+        <div className="flex h-9 items-center gap-2 border-b border-zinc-200 px-3">
+          <span className="grid size-4 shrink-0 place-items-center text-zinc-700">
             {isRepository
-              ? t("workflows.blueprint.source")
+              ? <GitFork aria-hidden="true" className="size-3.5" />
               : isDeployment
-                ? t("workflows.blueprint.deployment")
-                : t("workflows.blueprint.cluster")}
-          </p>
-          <h3 className="mt-0.5 truncate text-[0.8125rem] font-semibold tracking-tight text-slate-50">
+                ? <Code2 aria-hidden="true" className="size-3.5" />
+                : <Server aria-hidden="true" className="size-3.5" />}
+          </span>
+          <h3 className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold leading-5 tracking-[-0.015em] text-zinc-950">
             {data.title || (isRepository
               ? t("workflows.blueprint.emptySource")
               : isDeployment
@@ -75,79 +89,34 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
           </h3>
         </div>
 
-        <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-700/70 bg-slate-950/40 px-2 py-1 text-[0.5625rem] text-slate-400">
-          <span className={cn(
-            "size-1.5 rounded-full",
-            isRepository
-            ? data.connected ? "bg-sky-300" : "bg-slate-600"
+        <div className="px-3 py-1.5">
+          <NodeFact
+            label={isRepository
+              ? t("workflows.blueprint.repository")
               : isDeployment
-                ? data.connected ? "bg-violet-300" : "bg-slate-600"
-                : online ? "bg-emerald-400" : critical ? "bg-red-500" : "bg-amber-400",
-          )} />
-          {isRepository
-            ? data.connected
-              ? t("workflows.blueprint.connected")
-              : t("workflows.blueprint.unassigned")
-            : isDeployment
-              ? data.connected
+                ? t("workflows.blueprint.manifest")
+                : t("workflows.blueprint.clusterId")}
+            value={isDeployment ? data.manifestPath || data.subtitle : data.subtitle}
+          />
+          <NodeFact
+            label={isRepository
+              ? t("workflows.blueprint.branch")
+              : isDeployment
+                ? t("workflows.blueprint.targets")
+                : t("workflows.blueprint.environment")}
+            value={isRepository
+              ? data.branch || "main"
+              : isDeployment
                 ? t("workflows.blueprint.targetCount", { count: data.connectionCount || 0 })
-                : t("workflows.blueprint.unassigned")
-              : online ? t("workflows.blueprint.online") : data.connectionStatus || t("workflows.blueprint.unknown")}
-        </span>
-      </header>
-
-      <div className="divide-y divide-slate-800/80 border-y border-slate-800/80 px-3.5">
-        <NodeFact
-          icon={isRepository
-            ? <GitFork aria-hidden="true" />
-            : isDeployment
-              ? <FileCode2 aria-hidden="true" />
-              : <Network aria-hidden="true" />}
-          label={isRepository
-            ? t("workflows.blueprint.repository")
-            : isDeployment
-              ? t("workflows.blueprint.manifest")
-              : t("workflows.blueprint.clusterId")}
-          value={isDeployment ? data.manifestPath || data.subtitle : data.subtitle}
-        />
-        <NodeFact
-          icon={isRepository
-            ? <GitBranch aria-hidden="true" />
-            : isDeployment
-              ? <Network aria-hidden="true" />
-              : <Server aria-hidden="true" />}
-          label={isRepository
-            ? t("workflows.blueprint.branch")
-            : isDeployment
-              ? t("workflows.blueprint.targets")
-              : t("workflows.blueprint.environment")}
-          value={isRepository
-            ? data.branch || "main"
-            : isDeployment
-              ? t("workflows.blueprint.targetCount", { count: data.connectionCount || 0 })
-              : data.environment || "unknown"}
-        />
+                : data.environment || "unknown"}
+          />
+        </div>
       </div>
-
-      <footer className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-[0.625rem] text-slate-500">
-        <span>{isRepository
-          ? t("workflows.blueprint.dragSource")
-          : isDeployment
-            ? t("workflows.blueprint.routeDeployment")
-            : t("workflows.blueprint.dropTarget")}</span>
-        <span className="font-mono uppercase tracking-widest text-slate-400">
-          {isRepository
-            ? t("workflows.blueprint.portOut")
-            : isDeployment
-              ? t("workflows.blueprint.portInOut")
-              : t("workflows.blueprint.portIn")}
-        </span>
-      </footer>
 
       {data.kind !== "cluster" && !data.placeholder ? (
         <Handle
           aria-label={t("workflows.blueprint.deployPort")}
-          className={cn(blueprintPortClassName, "!right-[-0.25rem]")}
+          className={cn(blueprintPortClassName, "!right-[-0.375rem]")}
           id="output"
           position={Position.Right}
           title={t("workflows.blueprint.deployPort")}
@@ -157,7 +126,7 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
       {data.kind !== "repository" && !data.placeholder ? (
         <Handle
           aria-label={t("workflows.blueprint.targetPort")}
-          className={cn(blueprintPortClassName, "!left-[-0.25rem]")}
+          className={cn(blueprintPortClassName, "!left-[-0.375rem]")}
           id="input"
           position={Position.Left}
           title={t("workflows.blueprint.targetPort")}
@@ -171,19 +140,34 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
 DeploymentBlueprintNodeCard.displayName = "DeploymentBlueprintNodeCard";
 
 function NodeFact({
-  icon,
   label,
   value,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
 }) {
   return (
-    <div className="grid grid-cols-[1rem_4.25rem_minmax(0,1fr)] items-center gap-2 py-2 text-[0.6875rem]">
-      <span className="text-slate-600 [&>svg]:size-3">{icon}</span>
-      <span className="text-slate-500">{label}</span>
-      <span className="truncate font-mono text-[0.625rem] text-slate-300" title={value}>{value}</span>
+    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 py-1 text-xs leading-5">
+      <span className="font-sans font-semibold text-zinc-500">{label}</span>
+      <span className="truncate text-right font-sans font-semibold tracking-[-0.01em] text-zinc-950" title={value}>{value}</span>
     </div>
   );
+}
+
+function nodeStatusLabel(
+  data: DeploymentBlueprintNode["data"],
+  isRepository: boolean,
+  isDeployment: boolean,
+  online: boolean,
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (isRepository) {
+    return data.connected ? t("workflows.blueprint.connected") : t("workflows.blueprint.unassigned");
+  }
+  if (isDeployment) {
+    return data.connected
+      ? t("workflows.blueprint.targetCount", { count: data.connectionCount || 0 })
+      : t("workflows.blueprint.unassigned");
+  }
+  return online ? t("workflows.blueprint.online") : data.connectionStatus || t("workflows.blueprint.unknown");
 }

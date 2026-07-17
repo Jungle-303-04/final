@@ -65,12 +65,15 @@
   --product-floating-action-clearance: calc(
     var(--product-floating-action-size) + var(--product-floating-action-block-end)
   );
-  --blueprint-canvas: #0C1117;
-  --blueprint-connection: #F8FAFC;
-  --blueprint-grid: #1C2633;
-  --blueprint-grid-major: #263445;
-  --blueprint-minimap-mask: rgba(2, 6, 23, 0.72);
-  --blueprint-cluster: #6EE7B7;
+  --blueprint-canvas: #EFEFEE;
+  --blueprint-connection: #18181B;
+  --blueprint-grid: #FFFFFF;
+  --blueprint-grid-major: #FFFFFF;
+  --blueprint-minimap-mask: rgba(239, 239, 238, 0.82);
+  --blueprint-source: #52525B;
+  --blueprint-deployment: #71717A;
+  --blueprint-cluster: #3F3F46;
+  --blueprint-selection: #18181B;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
