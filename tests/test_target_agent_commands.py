@@ -228,6 +228,20 @@ class CronJobKubernetesClient(StubKubernetesClient):
         }
 
 
+class GitOpsKubernetesClient(StubKubernetesClient):
+    def __init__(self, root: dict[str, object], source: dict[str, object] | None = None) -> None:
+        super().__init__()
+        self.root = root
+        self.source = source
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        if kwargs.get("resource") == "gitrepositories" and self.source is not None:
+            return self.source
+        return self.root
+
+
 class WorkloadRollbackKubernetesClient(StubKubernetesClient):
     def __init__(self, *, workload_uid: str = "deployment-uid") -> None:
         super().__init__()
@@ -3086,3 +3100,135 @@ def test_exact_resource_delete_preserves_partial_failure_without_retargeting() -
             "error": "delete denied",
         },
     ]
+
+
+def test_gitops_flux_sync_with_source_revalidates_both_resources_before_patching() -> None:
+    module = load_agent_module()
+    root = {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+            "namespace": "flux-system",
+            "name": "storefront",
+            "uid": "root-uid",
+            "resourceVersion": "17",
+        },
+        "spec": {"sourceRef": {"kind": "GitRepository", "name": "storefront-source"}},
+    }
+    source = {
+        "apiVersion": "source.toolkit.fluxcd.io/v1",
+        "kind": "GitRepository",
+        "metadata": {
+            "namespace": "flux-system",
+            "name": "storefront-source",
+            "uid": "source-uid",
+            "resourceVersion": "9",
+        },
+    }
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = GitOpsKubernetesClient(root, source)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.GITOPS_RESOURCE_CONTROL_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "action": "sync_with_source",
+                    "requested_at": "2026-07-17T04:15:00Z",
+                    "resource_ref": {
+                        "api_group": "kustomize.toolkit.fluxcd.io",
+                        "version": "v1",
+                        "kind": "Kustomization",
+                        "namespace": "flux-system",
+                        "name": "storefront",
+                        "uid": "root-uid",
+                    },
+                    "resource_version": "17",
+                    "source_ref": {
+                        "api_group": "source.toolkit.fluxcd.io",
+                        "version": "v1",
+                        "kind": "GitRepository",
+                        "namespace": "flux-system",
+                        "name": "storefront-source",
+                        "uid": "source-uid",
+                    },
+                    "source_resource_version": "9",
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert [patch["resource"] for patch in agent.kubernetes.patches] == [
+        "gitrepositories",
+        "kustomizations",
+    ]
+    for patch in agent.kubernetes.patches:
+        assert patch["body"]["metadata"]["annotations"]["reconcile.fluxcd.io/requestedAt"] == (
+            "2026-07-17T04:15:00Z"
+        )
+
+
+def test_gitops_command_rejects_stale_uid_and_resource_version_without_patch() -> None:
+    module = load_agent_module()
+    root = {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "namespace": "argocd",
+            "name": "storefront",
+            "uid": "different-uid",
+            "resourceVersion": "18",
+        },
+    }
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = GitOpsKubernetesClient(root)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.GITOPS_RESOURCE_CONTROL_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "action": "refresh",
+                    "requested_at": "2026-07-17T04:15:00Z",
+                    "refresh_mode": "normal",
+                    "resource_ref": {
+                        "api_group": "argoproj.io",
+                        "version": "v1alpha1",
+                        "kind": "Application",
+                        "namespace": "argocd",
+                        "name": "storefront",
+                        "uid": "root-uid",
+                    },
+                    "resource_version": "17",
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "stale" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
+def test_gitops_capability_tracks_direct_command_policy() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.node_control_enabled = False
+    agent.direct_commands_enabled = True
+    assert module.Command.GITOPS_RESOURCE_CONTROL_CAPABILITY in agent.advertised_capabilities()
+
+    agent.direct_commands_enabled = False
+    assert module.Command.GITOPS_RESOURCE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
