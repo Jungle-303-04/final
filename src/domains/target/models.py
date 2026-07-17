@@ -15,6 +15,7 @@ from packages.storage.base import (
     text_column,
     updated_at_column,
 )
+from packages.storage.evidence_predicates import cost_evidence_predicate
 
 
 class EvidenceWindow(Base):
@@ -45,6 +46,16 @@ class EvidenceWindow(Base):
     payload: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
+
+
+Index(
+    "ix_evidence_windows_cost_workspace_cluster_updated",
+    EvidenceWindow.workspace_id,
+    EvidenceWindow.cluster_id,
+    EvidenceWindow.updated_at.desc(),
+    EvidenceWindow.evidence_key.desc(),
+    postgresql_where=cost_evidence_predicate(EvidenceWindow.payload),
+)
 
 
 class EvidenceJob(Base):

@@ -6,29 +6,15 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, or_, select, union_all
+from sqlalchemy import Select, select, union_all
 
 from domains.target.models import EvidenceWindow
 from packages.contracts.cost.observations import (
-    COST_NAMESPACE_HOURLY_METRIC,
-    COST_NAMESPACE_STORAGE_METRIC,
-    COST_POD_CPU_HOURLY_METRIC,
-    COST_POD_CPU_USE_METRIC,
-    COST_POD_MEMORY_HOURLY_METRIC,
-    COST_POD_MEMORY_USE_METRIC,
     MAX_COST_TREND_POINTS,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection
-
-COST_EVIDENCE_METRICS = (
-    COST_NAMESPACE_HOURLY_METRIC,
-    COST_NAMESPACE_STORAGE_METRIC,
-    COST_POD_CPU_HOURLY_METRIC,
-    COST_POD_MEMORY_HOURLY_METRIC,
-    COST_POD_CPU_USE_METRIC,
-    COST_POD_MEMORY_USE_METRIC,
-)
+from packages.storage.evidence_predicates import cost_evidence_predicate
 
 
 def _normalized_cluster_ids(cluster_ids: Collection[str] | None) -> tuple[str, ...]:
@@ -53,10 +39,7 @@ def cost_evidence_statement(
     """Use one index-bounded branch per cluster so noisy clusters cannot consume the batch."""
 
     table = EvidenceWindow.__table__
-    metric_results = table.c.payload["metrics"]["results"]
-    metric_filter = or_(
-        *(metric_results.has_key(metric) for metric in COST_EVIDENCE_METRICS)  # noqa: W601
-    )
+    metric_filter = cost_evidence_predicate(table.c.payload)
     branches = [
         select(
             table.c.evidence_key,
