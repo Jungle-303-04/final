@@ -22,11 +22,13 @@ from yaml.nodes import MappingNode, Node
 
 from packages.config.settings import env
 from packages.contracts.helm.sources import (
+    HELM_CHART_PROVIDER_MAX_CHARTS,
     HELM_CHART_VERSION_PAGE_MAX,
     HelmChartSource,
     HelmChartVersion,
     HelmChartVersionObservation,
     HelmChartVersionResolution,
+    HelmRepositoryRefreshResult,
 )
 from packages.security.outbound_url import (
     HostResolver,
@@ -185,6 +187,36 @@ class HelmChartVersionProvider:
             observed_at=observed_at,
             truncated=truncated,
             reason_codes=reasons,
+        )
+
+    async def refresh_repository(
+        self,
+        source: HelmChartSource,
+        *,
+        credential: HelmProviderCredential | None = None,
+    ) -> HelmRepositoryRefreshResult:
+        """Invalidate one exact source cache and fetch its index under existing bounds."""
+
+        if source.provider != "repository" or source.status != "active":
+            raise _HelmProviderFailure("helm_chart_source_provider_not_supported")
+        headers = _authorization_headers(credential)
+        fingerprint = hashlib.sha256(headers.get("Authorization", "").encode("utf-8")).hexdigest()
+        self._repository_index_tasks.pop(
+            (source.source_id, source.reference, fingerprint),
+            None,
+        )
+        entries = await self._repository_entries(source, credential)
+        count = sum(
+            1
+            for name, versions in entries.items()
+            if isinstance(name, str) and name.strip() and isinstance(versions, list)
+        )
+        if count > HELM_CHART_PROVIDER_MAX_CHARTS:
+            raise _HelmProviderFailure("helm_chart_source_response_too_large")
+        return HelmRepositoryRefreshResult(
+            source_id=source.source_id,
+            chart_count=count,
+            observed_at=datetime.now(UTC).isoformat(),
         )
 
     async def _repository_versions(

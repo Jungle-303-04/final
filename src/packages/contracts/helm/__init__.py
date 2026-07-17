@@ -65,6 +65,7 @@ from packages.contracts.helm.sources import (
     HelmChartVersion,
     HelmChartVersionObservation,
     HelmChartVersionResolution,
+    HelmRepositoryRefreshResult,
 )
 
 __all__ = [
@@ -94,6 +95,7 @@ __all__ = [
     "HelmChartVersion",
     "HelmChartVersionObservation",
     "HelmChartVersionResolution",
+    "HelmRepositoryRefreshResult",
     "HelmHookDiffItem",
     "HelmHooksDiff",
     "HelmFeatureAvailability",

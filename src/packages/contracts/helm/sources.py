@@ -10,6 +10,7 @@ from packages.contracts.gateway.base import StrictModel
 
 HELM_CHART_SOURCE_PAGE_MAX = 100
 HELM_CHART_VERSION_PAGE_MAX = 200
+HELM_CHART_PROVIDER_MAX_CHARTS = 50_000
 
 HelmChartSourceProvider = Literal["repository", "oci"]
 HelmChartSourceStatus = Literal["active", "disabled"]
@@ -137,3 +138,11 @@ class HelmChartVersionResolution(StrictModel):
         if self.truncated and "helm_chart_versions_truncated" not in self.reason_codes:
             raise ValueError("truncated Helm versions require the truncation reason")
         return self
+
+
+class HelmRepositoryRefreshResult(StrictModel):
+    """One real repository index fetch; chart identities remain server-side."""
+
+    source_id: str = Field(min_length=1, max_length=80)
+    chart_count: int = Field(ge=0, le=HELM_CHART_PROVIDER_MAX_CHARTS)
+    observed_at: str
