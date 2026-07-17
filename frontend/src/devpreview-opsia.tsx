@@ -18,7 +18,8 @@ const GithubIcon = ({ size = 14, style }: { size?: number; style?: React.CSSProp
 );
 
 const BLUE = "#0A6CFF";
-const HP = { ok: "#9FDDB2", warn: "#FFC069", crit: "#FF6B5E", pending: "#E3E6EB", ghost: "#F1F3F7" } as const;
+// 물 색: 정상=맑은 아쿠아 블루, 경고=앰버, 임계=코랄
+const HP = { ok: "#54A8FF", warn: "#FFB340", crit: "#FF5F55", pending: "#E3E6EB", ghost: "#F1F3F7" } as const;
 const SPRING = { type: "spring", bounce: 0.18, visualDuration: 0.45 } as const;
 const SOFT = { type: "spring", bounce: 0.14, visualDuration: 0.3 } as const;
 
@@ -104,10 +105,14 @@ function PodTile({ p, big, dim, lit, live, onClick }: { p: Pod; big: boolean; di
   const cpuV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.cpu + live));
   const c = healthColor(p);
   const seed = p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
-  const dur = 2.6 + (seed % 18) / 8; // 파드마다 출렁임 주기·위상이 다르게
-  const dur2 = 3.4 + (seed % 13) / 6; // 뒷물결은 다른 주기로 간섭
+  // CPU가 높을수록 빠르고 크게, 낮을수록 느리고 잔잔하게
+  const t = Math.min(1, p.cpu / 100);
+  const vary = 0.88 + (seed % 9) / 34; // 개체별 편차 (동기화 방지)
+  const dur = (6.2 - 4.9 * t) * vary; // 저부하 ~6s → 고부하 ~1.2s 회전
+  const dur2 = dur * 1.45; // 뒷물결은 다른 주기로 간섭
   const delay = -((seed % 37) / 7);
-  const bobDur = 2.2 + (seed % 11) / 9;
+  const bobDur = (3.4 - 2.5 * t) * vary; // 수면 오르내림도 CPU 비례
+  const bobAmp = 1 + 2.8 * t; // 진폭: 잔잔 1px → 격랑 ~3.8px
   const fillH = p.status === "Pending" ? 0 : Math.max(8, cpuV);
   return (
     <motion.button layout data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -117,24 +122,22 @@ function PodTile({ p, big, dim, lit, live, onClick }: { p: Pod; big: boolean; di
       className={isCrit(p) ? "tile crit" : "tile"}
       style={{
         aspectRatio: "1", border: "none", borderRadius: big ? 12 : 7, cursor: "pointer", position: "relative", overflow: "hidden",
-        background: `color-mix(in srgb, ${c} 20%, #fff)`,
-        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : `inset 0 0 0 1px color-mix(in srgb, ${c} 45%, #fff)`,
+        background: `color-mix(in srgb, ${c} 13%, #fff)`,
+        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : `inset 0 0 0 1px color-mix(in srgb, ${c} 32%, #fff)`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: big ? 2 : 0, padding: 0, minWidth: 0,
       }}>
       {/* 물 채움: 2겹 물결(반대 방향 회전) + 수면 전체가 숨쉬듯 오르내림 */}
       {fillH > 0 && (
-        <div className="waveWrap" style={{ animationDuration: `${bobDur}s`, animationDelay: `${delay}s` }}>
+        <div className="waveWrap" style={{ animationDuration: `${bobDur}s`, animationDelay: `${delay}s`, ["--bob" as string]: `${bobAmp}px` } as React.CSSProperties}>
           <div className="wave" style={{ top: `calc(${100 - fillH}% - 2px)`, background: c, opacity: 0.4, borderRadius: "47%", animationDuration: `${dur2}s`, animationDelay: `${delay * 1.7}s`, animationDirection: "reverse" }} />
           <div className="wave" style={{ top: `${100 - fillH}%`, background: c, animationDuration: `${dur}s`, animationDelay: `${delay}s` }} />
         </div>
       )}
-      {big ? (
+      {big && (
         <>
           <span style={{ position: "relative", zIndex: 1, fontSize: 11, fontWeight: 700, color: "rgba(10,14,20,0.78)", letterSpacing: "-0.01em", maxWidth: "92%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.svc}</span>
-          <span style={{ position: "relative", zIndex: 1, fontSize: 9.5, fontWeight: 700, color: "rgba(10,14,20,0.5)", fontVariantNumeric: "tabular-nums" }}>{p.status === "Running" ? `${cpuV}%` : p.status}</span>
+          {p.status !== "Running" && <span style={{ position: "relative", zIndex: 1, fontSize: 9.5, fontWeight: 700, color: "rgba(10,14,20,0.5)" }}>{p.status}</span>}
         </>
-      ) : (
-        <span style={{ position: "relative", zIndex: 1, fontSize: 8.5, fontWeight: 800, color: "rgba(10,14,20,0.6)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>{p.status === "Pending" ? "–" : cpuV}</span>
       )}
     </motion.button>
   );
@@ -305,7 +308,7 @@ function App() {
         .op { min-height: 100vh; background: #F2F4F8; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .op .tile.crit { animation: critp 1.2s ease-in-out infinite; }
         .op .waveWrap { position: absolute; inset: 0; animation-name: bob; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
-        @keyframes bob { from { transform: translateY(0); } to { transform: translateY(1.8px); } }
+        @keyframes bob { from { transform: translateY(calc(var(--bob, 1.8px) * -0.4)); } to { transform: translateY(var(--bob, 1.8px)); } }
         .op .wave { position: absolute; left: -50%; width: 200%; aspect-ratio: 1; border-radius: 44%; transition: top .9s cubic-bezier(.4,0,.2,1); animation-name: slosh; animation-timing-function: linear; animation-iteration-count: infinite; }
         @keyframes slosh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.14) saturate(1.2); } }
