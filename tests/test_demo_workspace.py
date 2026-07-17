@@ -33,13 +33,26 @@ from controller.demo_workspace import (
     reset_demo_workspace,
     seed_demo_workspace,
 )
+from domains.checks.observation_projection import checks_overview
+from domains.cost.node_projection import cost_node_page
+from domains.cost.observation_projection import cost_overview
+from domains.dashboard.fleet_router import current_warning_event_items, rollup_health
+from domains.dashboard.home_bands import compose_home_topology_preview
+from domains.dashboard.repository import timeline_update_from_event
 from domains.demo_workspace.policy import (
     DEMO_WORKSPACE_MUTATIONS_ENV,
     DEMO_WORKSPACE_MUTATIONS_OPT_IN,
 )
 from domains.demo_workspace.repository import DemoWorkspaceRepository
 from domains.inventory.events import InventorySnapshotRecordedBody
-from domains.inventory.repository import snapshot_resources
+from domains.inventory.kubernetes_events import KubernetesEventFactBatch
+from domains.inventory.repository import (
+    InventoryRepository,
+    inventory_timeline_events,
+    normalize_inventory_resource,
+    snapshot_resources,
+)
+from domains.inventory_filter.graph import build_resource_graph
 from domains.registry import Database
 from packages.contracts.demo_workspace import DEMO_SEED_MARKER_KEY, DemoWorkspaceDescriptor
 from packages.contracts.gateway.responses import (
@@ -290,6 +303,14 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
     assert descriptor.workspace.workspace_id != "default"
     assert descriptor.inventory.summary["resources_complete"] is True
     assert descriptor.inventory.summary["labels_complete"] is True
+    assert descriptor.inventory.summary["namespaces"] == ["demo-payments", "demo-shop"]
+    assert len(descriptor.inventory.resources) == 12
+    assert {resource.health for resource in descriptor.inventory.resources} >= {
+        "healthy",
+        "warning",
+        "critical",
+        "unknown",
+    }
     assert descriptor.gitops is not None
     assert descriptor.gitops.repo_ref == "jungle-303-04/yaml-demo"
     assert descriptor.gitops.revision == "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef"
@@ -427,7 +448,7 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert body.workspace_id == descriptor.workspace.workspace_id
     assert body.cluster_id == descriptor.cluster.cluster_id
     assert body.snapshot_id == "snapshot-demo-v1"
-    assert body.resource_count == 6
+    assert body.resource_count == 14
 
     repository = db.repository_writes[0]
     assert repository["repo_ref"] == "jungle-303-04/yaml-demo"
@@ -579,10 +600,169 @@ def test_seed_stages_inventory_event_through_gateway_outbox_contract() -> None:
             cluster_id=descriptor.cluster.cluster_id,
             snapshot_id="snapshot-demo-v1",
             agent_id=descriptor.cluster.agent_id,
-            resource_count=6,
-            resource_types=["health", "node", "pod", "service", "usage", "workload"],
+            resource_count=14,
+            resource_types=[
+                "endpoint",
+                "event",
+                "health",
+                "node",
+                "pod",
+                "service",
+                "usage",
+                "workload",
+            ],
         ).to_body()
     )
+    assert timeline_update_from_event(event) is None
+
+
+def test_seed_payload_drives_canonical_resources_home_and_timeline_projections() -> None:
+    descriptor, payload, observed_at = _seeded_inventory_payload()
+    normalized = _normalized_seed_resources(descriptor, payload, observed_at)
+    serialized = _serialized_resources(normalized)
+    graph = build_resource_graph(
+        [_graph_item(descriptor, resource) for resource in serialized],
+        snapshot_revision=1,
+        filter_fingerprint="demo-descriptor-v1",
+        source_complete=payload["summary"]["resources_complete"],
+        labels_complete=payload["summary"]["labels_complete"],
+        truncated=payload["summary"]["collection_limits"]["truncated"],
+    )
+
+    assert graph["relation_completeness"] == "exact"
+    assert graph["node_count"] == 14
+    assert graph["edge_count"] == 10
+    assert _edge_kind_counts(graph) == {
+        "owns": 2,
+        "routes_to": 2,
+        "runs_on": 2,
+        "selects": 4,
+    }
+    home = compose_home_topology_preview(
+        graph,
+        observed_at=observed_at.isoformat(),
+    )
+    assert home.coverage.availability == "available"
+    assert home.node_count == 14
+    assert home.edge_count == 10
+    assert (
+        rollup_health(
+            workloads_degraded=sum(
+                resource["resource_type"] == "workload" and resource["health"] == "degraded"
+                for resource in serialized
+            ),
+            nodes_ready=sum(
+                resource["resource_type"] == "node" and resource["status"] == "Ready"
+                for resource in serialized
+            ),
+            nodes_total=sum(resource["resource_type"] == "node" for resource in serialized),
+            restarts_recent=0,
+            open_incidents=0,
+        )
+        == "critical"
+    )
+
+    event_batch = KubernetesEventFactBatch.from_snapshot_summary(payload["summary"])
+    timeline = inventory_timeline_events(
+        workspace_id=descriptor.workspace.workspace_id,
+        cluster_id=descriptor.cluster.cluster_id,
+        observed_at=observed_at,
+        previous_rows=(),
+        current_rows=normalized,
+        resources_complete=True,
+        current_event_batch=event_batch,
+    )
+    assert len(timeline) == 12
+    assert {event.source for event in timeline} == {"inventory", "kubernetes_event"}
+    assert sum(event.source == "kubernetes_event" for event in timeline) == 1
+    assert next(event for event in timeline if event.source == "kubernetes_event").severity == (
+        "warning"
+    )
+
+    warning_items = current_warning_event_items(
+        [resource for resource in serialized if resource["resource_type"] == "event"],
+        pods=[resource for resource in serialized if resource["resource_type"] == "pod"],
+        workloads=[resource for resource in serialized if resource["resource_type"] == "workload"],
+        current_snapshot_id="snapshot-demo-v1",
+        limit=10,
+    )
+    assert len(warning_items) == 1
+    assert warning_items[0].involved_kind == "Deployment"
+    assert warning_items[0].involved_name == "payments-api"
+
+
+def test_seed_payload_drives_canonical_checks_and_cost_node_projections() -> None:
+    descriptor, payload, observed_at = _seeded_inventory_payload()
+    normalized = _normalized_seed_resources(descriptor, payload, observed_at)
+    serialized = _serialized_resources(normalized)
+    context = {
+        "snapshot_revision": 1,
+        "observed_at": observed_at.isoformat(),
+        "resources_complete": True,
+        "labels_complete": True,
+        "partial_reason_codes": [],
+    }
+    snapshot = {
+        "summary": {
+            "summary": payload["summary"],
+            "health": payload["health"],
+            "usage": payload["usage"],
+        }
+    }
+
+    checks = checks_overview(
+        workspace_id=descriptor.workspace.workspace_id,
+        contexts={descriptor.cluster.cluster_id: context},
+        snapshots={descriptor.cluster.cluster_id: snapshot},
+        namespace_refs=(),
+        selected_cluster_ids=(descriptor.cluster.cluster_id,),
+        now=observed_at,
+    )
+    assert checks.result_set.availability == "available"
+    assert checks.result_set.total_check_count == 3
+    assert checks.result_set.total_finding_count == 3
+    assert checks.result_set.checks is not None
+    assert {finding.severity for finding in checks.result_set.checks} == {
+        "danger",
+        "warning",
+    }
+
+    node_resources = [
+        _graph_item(descriptor, resource)
+        for resource in serialized
+        if resource["resource_type"] == "node"
+    ]
+    nodes = cost_node_page(
+        workspace_id=descriptor.workspace.workspace_id,
+        selected_cluster_ids=(descriptor.cluster.cluster_id,),
+        namespace_refs=(),
+        contexts={descriptor.cluster.cluster_id: context},
+        resource_page={"items": node_resources, "filtered_count": 2, "has_more": False},
+        metric_page={
+            "resources": [],
+            "samples_by_cluster": {
+                descriptor.cluster.cluster_id: [
+                    {"sampled_at": observed_at.isoformat(), "usage": payload["usage"]}
+                ]
+            },
+        },
+        snapshot_revision=1,
+        next_cursor=None,
+    )
+    assert nodes.count_completeness == "exact"
+    assert nodes.total == 2
+    assert {item.status for item in nodes.items} == {"NotReady", "Ready"}
+    assert all(item.usage.availability == "available" for item in nodes.items)
+    assert all(item.capacity.cpu_mcores == 3800.0 for item in nodes.items)
+    assert nodes.pricing_coverage.availability == "unavailable"
+
+    overview = cost_overview(
+        workspace_id=descriptor.workspace.workspace_id,
+        contexts={descriptor.cluster.cluster_id: context},
+        selected_cluster_ids=(descriptor.cluster.cluster_id,),
+    )
+    assert overview.observation.availability == "unavailable"
+    assert overview.observation.reason_codes == ("cost_observation_unavailable",)
 
 
 def test_reset_passes_exact_descriptor_marker_to_repository_boundary() -> None:
@@ -726,6 +906,68 @@ def test_sqlite_reset_marker_mismatch_rolls_back_without_deleting(
             ).scalar_one()
             == 2
         )
+
+
+def _seeded_inventory_payload() -> tuple[DemoWorkspaceDescriptor, dict[str, Any], datetime]:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+    observed_at = datetime(2026, 7, 17, 0, 0, tzinfo=UTC)
+    asyncio.run(
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=FakeEvents(),
+            discovery=FakeRepositoryDiscovery(),
+            observed_at=observed_at,
+        )
+    )
+    return descriptor, db.inventory_writes[0], observed_at
+
+
+def _normalized_seed_resources(
+    descriptor: DemoWorkspaceDescriptor,
+    payload: dict[str, Any],
+    observed_at: datetime,
+) -> list[dict[str, Any]]:
+    return [
+        normalize_inventory_resource(
+            resource,
+            workspace_id=descriptor.workspace.workspace_id,
+            cluster_id=descriptor.cluster.cluster_id,
+            snapshot_id="snapshot-demo-v1",
+            observed_at=observed_at,
+        )
+        for resource in snapshot_resources(payload)
+    ]
+
+
+def _serialized_resources(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    repository = object.__new__(InventoryRepository)
+    return [repository.serialize_inventory_resource(resource) for resource in resources]
+
+
+def _graph_item(
+    descriptor: DemoWorkspaceDescriptor,
+    resource: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "resource": resource,
+        "cluster": {
+            "cluster_id": descriptor.cluster.cluster_id,
+            "name": descriptor.cluster.name,
+            "provider": descriptor.cluster.settings["provider"],
+        },
+        "application_ids": [],
+        "application_binding_completeness": "exact",
+    }
+
+
+def _edge_kind_counts(graph: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for edge in graph["edges"]:
+        kind = str(edge["kind"])
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
 
 
 def _demo_reset_test_schema() -> MetaData:

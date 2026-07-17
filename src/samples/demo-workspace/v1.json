@@ -22,11 +22,16 @@
       "resources_complete": true,
       "labels_complete": true,
       "namespaces": [
+        "demo-payments",
         "demo-shop"
       ],
       "nodes": [
         {
           "name": "demo-worker-1",
+          "version": "v1.32.2"
+        },
+        {
+          "name": "demo-worker-2",
           "version": "v1.32.2"
         }
       ],
@@ -36,25 +41,149 @@
       "api_resource_discovery": {
         "completeness": "exact",
         "resources": []
+      },
+      "kubernetes_event_capture": {
+        "complete": true,
+        "truncated": false,
+        "reason": "complete",
+        "freshness": {
+          "observed_at": "2026-07-17T00:00:00Z",
+          "max_age_seconds": 172800
+        },
+        "coverage": {
+          "scope": "all_namespaces",
+          "pagination": "continue",
+          "event_count": 1
+        }
+      },
+      "kubernetes_event_facts": [
+        {
+          "uid": "demo-event-payments-backoff-v1",
+          "api_version": "v1",
+          "namespace": "demo-payments",
+          "name": "payments-api-backoff",
+          "type": "Warning",
+          "count": 12,
+          "last_occurrence_at": "2026-07-17T00:00:00Z"
+        }
+      ],
+      "checks_observation": {
+        "availability": "available",
+        "observed_at": "2026-07-17T00:00:00Z",
+        "namespaces": [],
+        "reason_codes": [],
+        "findings": [
+          {
+            "finding_id": "demo-shop-api-limits-v1",
+            "check_id": "workload-limits",
+            "category": "resources",
+            "severity": "warning",
+            "message": "The shop API demonstrates a warning finding for container limits.",
+            "resource": {
+              "api_group": "apps",
+              "version": "v1",
+              "kind": "Deployment",
+              "namespace": "demo-shop",
+              "name": "shop-api",
+              "uid": "demo-deployment-shop-api-v1"
+            }
+          },
+          {
+            "finding_id": "demo-payments-api-readiness-v1",
+            "check_id": "workload-readiness",
+            "category": "reliability",
+            "severity": "danger",
+            "message": "The payments API has no ready replicas and repeated restarts.",
+            "resource": {
+              "api_group": "apps",
+              "version": "v1",
+              "kind": "Deployment",
+              "namespace": "demo-payments",
+              "name": "payments-api",
+              "uid": "demo-deployment-payments-api-v1"
+            }
+          },
+          {
+            "finding_id": "demo-worker-2-readiness-v1",
+            "check_id": "node-readiness",
+            "category": "reliability",
+            "severity": "danger",
+            "message": "The second demo node is intentionally not ready.",
+            "resource": {
+              "api_group": "",
+              "version": "v1",
+              "kind": "Node",
+              "namespace": null,
+              "name": "demo-worker-2",
+              "uid": "demo-node-worker-2-v1"
+            }
+          }
+        ],
+        "catalog": [
+          {
+            "check_id": "node-readiness",
+            "title": "Node readiness",
+            "category": "reliability",
+            "severity": "danger",
+            "description": "Checks whether observed Nodes report Ready.",
+            "remediation": "Inspect node conditions before moving workloads."
+          },
+          {
+            "check_id": "workload-limits",
+            "title": "Workload limits",
+            "category": "resources",
+            "severity": "warning",
+            "description": "Checks whether workload containers declare resource limits.",
+            "remediation": "Set explicit CPU and memory limits."
+          },
+          {
+            "check_id": "workload-readiness",
+            "title": "Workload readiness",
+            "category": "reliability",
+            "severity": "danger",
+            "description": "Checks whether desired workload replicas are ready.",
+            "remediation": "Inspect pod state and recent Kubernetes events."
+          }
+        ],
+        "visibility": {
+          "state": "ok",
+          "namespace_scope": [],
+          "core": {
+            "deployments": "allowed",
+            "nodes": "allowed",
+            "pods": "allowed",
+            "services": "allowed"
+          },
+          "missing_optional_kinds": [
+            "Gateway"
+          ]
+        }
       }
     },
     "health": {
-      "status": "healthy",
-      "health": "healthy",
-      "message": "Descriptor-backed demo observation"
+      "status": "critical",
+      "health": "critical",
+      "message": "The demo includes healthy, warning, critical, and unknown inventory states."
     },
     "usage": {
       "status": "sampled",
-      "pod_total": 1,
-      "pod_running": 1,
+      "pod_total": 2,
+      "pod_running": 2,
       "pod_pending": 0,
       "pod_failed": 0,
-      "restart_total": 1,
-      "node_total": 1,
+      "restart_total": 13,
+      "node_total": 2,
       "node_ready": 1,
-      "cpu_pct": 24.0,
-      "mem_pct": 41.0,
+      "cpu_pct": 46.0,
+      "mem_pct": 58.0,
       "pods": {
+        "demo-payments/payments-api-7d4cb8bb8f-demo": {
+          "uid": "demo-pod-payments-api-v1",
+          "cpu_mcores": 740,
+          "mem_mib": 612,
+          "cpu_request_mcores": 500,
+          "mem_request_mib": 512
+        },
         "demo-shop/shop-api-6f87b7c95b-demo": {
           "uid": "demo-pod-shop-api-v1",
           "cpu_mcores": 120,
@@ -71,6 +200,14 @@
           "mem_ratio": 0.41,
           "cpu_pct": 24.0,
           "mem_pct": 41.0
+        },
+        "demo-worker-2": {
+          "cpu_mcores": 2720,
+          "mem_mib": 4751,
+          "cpu_ratio": 0.68,
+          "mem_ratio": 0.58,
+          "cpu_pct": 68.0,
+          "mem_pct": 58.0
         }
       }
     },
@@ -86,13 +223,33 @@
         "health": "healthy",
         "labels": {
           "kubernetes.io/hostname": "demo-worker-1",
-          "node.kubernetes.io/instance-type": "demo.medium"
+          "node.kubernetes.io/instance-type": "demo.medium",
+          "topology.kubernetes.io/zone": "demo-zone-a",
+          "karpenter.sh/capacity-type": "on-demand"
         },
         "summary": {
           "ready": true,
           "version": "v1.32.2",
-          "cpu_capacity": "4",
-          "memory_capacity": "8Gi"
+          "provider_id": "kind://opsia-ui-demo/demo-worker-1",
+          "capacity": {
+            "cpu": "4",
+            "memory": "8Gi",
+            "pods": "110"
+          },
+          "allocatable": {
+            "cpu": "3800m",
+            "memory": "7Gi",
+            "pods": "100"
+          },
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "True"
+            }
+          ],
+          "node_info": {
+            "kubeletVersion": "v1.32.2"
+          }
         },
         "raw": {
           "apiVersion": "v1",
@@ -102,7 +259,82 @@
             "uid": "demo-node-worker-1-v1",
             "resourceVersion": "1"
           },
+          "spec": {
+            "providerID": "kind://opsia-ui-demo/demo-worker-1"
+          },
           "status": {
+            "allocatable": {
+              "cpu": "3800m",
+              "memory": "7Gi",
+              "pods": "100"
+            },
+            "nodeInfo": {
+              "kubeletVersion": "v1.32.2"
+            }
+          }
+        }
+      },
+      {
+        "resource_type": "node",
+        "api_version": "v1",
+        "kind": "Node",
+        "name": "demo-worker-2",
+        "uid": "demo-node-worker-2-v1",
+        "resource_version": "2",
+        "status": "NotReady",
+        "health": "warning",
+        "labels": {
+          "kubernetes.io/hostname": "demo-worker-2",
+          "node.kubernetes.io/instance-type": "demo.medium",
+          "topology.kubernetes.io/zone": "demo-zone-b",
+          "karpenter.sh/capacity-type": "spot"
+        },
+        "summary": {
+          "ready": false,
+          "version": "v1.32.2",
+          "provider_id": "kind://opsia-ui-demo/demo-worker-2",
+          "capacity": {
+            "cpu": "4",
+            "memory": "8Gi",
+            "pods": "110"
+          },
+          "allocatable": {
+            "cpu": "3800m",
+            "memory": "7Gi",
+            "pods": "100"
+          },
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "False",
+              "reason": "KubeletNotReady"
+            },
+            {
+              "type": "MemoryPressure",
+              "status": "True"
+            }
+          ],
+          "node_info": {
+            "kubeletVersion": "v1.32.2"
+          }
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Node",
+          "metadata": {
+            "name": "demo-worker-2",
+            "uid": "demo-node-worker-2-v1",
+            "resourceVersion": "2"
+          },
+          "spec": {
+            "providerID": "kind://opsia-ui-demo/demo-worker-2"
+          },
+          "status": {
+            "allocatable": {
+              "cpu": "3800m",
+              "memory": "7Gi",
+              "pods": "100"
+            },
             "nodeInfo": {
               "kubeletVersion": "v1.32.2"
             }
@@ -126,7 +358,12 @@
         "summary": {
           "desired_replicas": 3,
           "ready_replicas": 3,
-          "available_replicas": 3
+          "available_replicas": 3,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/name": "shop-api"
+            }
+          }
         },
         "raw": {
           "apiVersion": "apps/v1",
@@ -189,8 +426,28 @@
           "phase": "Running",
           "ready": true,
           "restart_total": 1,
+          "node_name": "demo-worker-1",
           "owner_kind": "Deployment",
-          "owner_name": "shop-api"
+          "owner_name": "shop-api",
+          "owner_uid": "demo-deployment-shop-api-v1",
+          "owner_references_complete": true,
+          "labels": {
+            "app.kubernetes.io/name": "shop-api",
+            "app.kubernetes.io/part-of": "demo-shop"
+          },
+          "containers": [
+            {
+              "name": "api",
+              "ready": true,
+              "restart_count": 1
+            }
+          ],
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "True"
+            }
+          ]
         },
         "raw": {
           "apiVersion": "v1",
@@ -199,7 +456,16 @@
             "name": "shop-api-6f87b7c95b-demo",
             "namespace": "demo-shop",
             "uid": "demo-pod-shop-api-v1",
-            "resourceVersion": "12"
+            "resourceVersion": "12",
+            "ownerReferences": [
+              {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "shop-api",
+                "uid": "demo-deployment-shop-api-v1",
+                "controller": true
+              }
+            ]
           },
           "spec": {
             "nodeName": "demo-worker-1",
@@ -232,6 +498,9 @@
         "summary": {
           "type": "ClusterIP",
           "cluster_ip": "10.96.0.42",
+          "selector": {
+            "app.kubernetes.io/name": "shop-api"
+          },
           "ports": [
             {
               "name": "http",
@@ -264,6 +533,395 @@
                 "targetPort": 8080
               }
             ]
+          }
+        }
+      },
+      {
+        "resource_type": "endpoint",
+        "api_version": "discovery.k8s.io/v1",
+        "kind": "EndpointSlice",
+        "namespace": "demo-shop",
+        "name": "shop-api-demo",
+        "uid": "demo-endpoint-shop-api-v1",
+        "resource_version": "5",
+        "status": "Ready",
+        "health": "healthy",
+        "labels": {
+          "kubernetes.io/service-name": "shop-api"
+        },
+        "summary": {
+          "service_name": "shop-api",
+          "ready_addresses": 1,
+          "not_ready_addresses": 0
+        },
+        "raw": {
+          "apiVersion": "discovery.k8s.io/v1",
+          "kind": "EndpointSlice",
+          "metadata": {
+            "name": "shop-api-demo",
+            "namespace": "demo-shop",
+            "uid": "demo-endpoint-shop-api-v1",
+            "resourceVersion": "5",
+            "labels": {
+              "kubernetes.io/service-name": "shop-api"
+            }
+          },
+          "endpoints": [
+            {
+              "addresses": [
+                "10.244.0.21"
+              ],
+              "conditions": {
+                "ready": true
+              }
+            }
+          ]
+        }
+      },
+      {
+        "resource_type": "workload",
+        "api_version": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "demo-payments",
+        "name": "payments-api",
+        "uid": "demo-deployment-payments-api-v1",
+        "resource_version": "9",
+        "status": "0/2",
+        "health": "degraded",
+        "labels": {
+          "app.kubernetes.io/name": "payments-api",
+          "app.kubernetes.io/part-of": "demo-payments"
+        },
+        "summary": {
+          "desired_replicas": 2,
+          "ready_replicas": 0,
+          "available_replicas": 0,
+          "restart_total": 12,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/name": "payments-api"
+            }
+          }
+        },
+        "raw": {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "name": "payments-api",
+            "namespace": "demo-payments",
+            "uid": "demo-deployment-payments-api-v1",
+            "resourceVersion": "9",
+            "labels": {
+              "app.kubernetes.io/name": "payments-api",
+              "app.kubernetes.io/part-of": "demo-payments"
+            }
+          },
+          "spec": {
+            "replicas": 2,
+            "selector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "payments-api"
+              }
+            },
+            "template": {
+              "metadata": {
+                "labels": {
+                  "app.kubernetes.io/name": "payments-api"
+                }
+              },
+              "spec": {
+                "containers": [
+                  {
+                    "name": "api",
+                    "image": "ghcr.io/opsia/demo-payments-api@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  }
+                ]
+              }
+            }
+          },
+          "status": {
+            "replicas": 2,
+            "readyReplicas": 0,
+            "availableReplicas": 0
+          }
+        }
+      },
+      {
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "namespace": "demo-payments",
+        "name": "payments-api-7d4cb8bb8f-demo",
+        "uid": "demo-pod-payments-api-v1",
+        "resource_version": "18",
+        "status": "Running",
+        "health": "critical",
+        "labels": {
+          "app.kubernetes.io/name": "payments-api",
+          "app.kubernetes.io/part-of": "demo-payments"
+        },
+        "summary": {
+          "phase": "Running",
+          "ready": false,
+          "restart_total": 12,
+          "node_name": "demo-worker-2",
+          "owner_kind": "Deployment",
+          "owner_name": "payments-api",
+          "owner_uid": "demo-deployment-payments-api-v1",
+          "owner_references_complete": true,
+          "labels": {
+            "app.kubernetes.io/name": "payments-api",
+            "app.kubernetes.io/part-of": "demo-payments"
+          },
+          "containers": [
+            {
+              "name": "api",
+              "ready": false,
+              "restart_count": 12,
+              "state": "CrashLoopBackOff"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "False"
+            }
+          ]
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Pod",
+          "metadata": {
+            "name": "payments-api-7d4cb8bb8f-demo",
+            "namespace": "demo-payments",
+            "uid": "demo-pod-payments-api-v1",
+            "resourceVersion": "18",
+            "ownerReferences": [
+              {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "payments-api",
+                "uid": "demo-deployment-payments-api-v1",
+                "controller": true
+              }
+            ]
+          },
+          "spec": {
+            "nodeName": "demo-worker-2",
+            "containers": [
+              {
+                "name": "api",
+                "image": "ghcr.io/opsia/demo-payments-api@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            ]
+          },
+          "status": {
+            "phase": "Running",
+            "containerStatuses": [
+              {
+                "name": "api",
+                "ready": false,
+                "restartCount": 12,
+                "state": {
+                  "waiting": {
+                    "reason": "CrashLoopBackOff"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "resource_type": "service",
+        "api_version": "v1",
+        "kind": "Service",
+        "namespace": "demo-payments",
+        "name": "payments-api",
+        "uid": "demo-service-payments-api-v1",
+        "resource_version": "6",
+        "status": "Active",
+        "health": "warning",
+        "labels": {
+          "app.kubernetes.io/name": "payments-api",
+          "app.kubernetes.io/part-of": "demo-payments"
+        },
+        "summary": {
+          "type": "ClusterIP",
+          "cluster_ip": "10.96.0.84",
+          "selector": {
+            "app.kubernetes.io/name": "payments-api"
+          },
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP",
+              "target_port": 8080
+            }
+          ]
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Service",
+          "metadata": {
+            "name": "payments-api",
+            "namespace": "demo-payments",
+            "uid": "demo-service-payments-api-v1",
+            "resourceVersion": "6"
+          },
+          "spec": {
+            "type": "ClusterIP",
+            "clusterIP": "10.96.0.84",
+            "selector": {
+              "app.kubernetes.io/name": "payments-api"
+            },
+            "ports": [
+              {
+                "name": "http",
+                "port": 8080,
+                "protocol": "TCP",
+                "targetPort": 8080
+              }
+            ]
+          }
+        }
+      },
+      {
+        "resource_type": "endpoint",
+        "api_version": "discovery.k8s.io/v1",
+        "kind": "EndpointSlice",
+        "namespace": "demo-payments",
+        "name": "payments-api-demo",
+        "uid": "demo-endpoint-payments-api-v1",
+        "resource_version": "7",
+        "status": "NotReady",
+        "health": "warning",
+        "labels": {
+          "kubernetes.io/service-name": "payments-api"
+        },
+        "summary": {
+          "service_name": "payments-api",
+          "ready_addresses": 0,
+          "not_ready_addresses": 1
+        },
+        "raw": {
+          "apiVersion": "discovery.k8s.io/v1",
+          "kind": "EndpointSlice",
+          "metadata": {
+            "name": "payments-api-demo",
+            "namespace": "demo-payments",
+            "uid": "demo-endpoint-payments-api-v1",
+            "resourceVersion": "7",
+            "labels": {
+              "kubernetes.io/service-name": "payments-api"
+            }
+          },
+          "endpoints": [
+            {
+              "addresses": [
+                "10.244.0.44"
+              ],
+              "conditions": {
+                "ready": false
+              }
+            }
+          ]
+        }
+      },
+      {
+        "resource_type": "workload",
+        "api_version": "batch/v1",
+        "kind": "CronJob",
+        "namespace": "demo-payments",
+        "name": "nightly-reconciliation",
+        "uid": "demo-cronjob-reconciliation-v1",
+        "resource_version": "3",
+        "status": "NeverRun",
+        "health": "unknown",
+        "labels": {
+          "app.kubernetes.io/name": "nightly-reconciliation",
+          "app.kubernetes.io/part-of": "demo-payments"
+        },
+        "summary": {
+          "schedule": "0 2 * * *",
+          "suspend": false,
+          "last_schedule_time": null
+        },
+        "raw": {
+          "apiVersion": "batch/v1",
+          "kind": "CronJob",
+          "metadata": {
+            "name": "nightly-reconciliation",
+            "namespace": "demo-payments",
+            "uid": "demo-cronjob-reconciliation-v1",
+            "resourceVersion": "3"
+          },
+          "spec": {
+            "schedule": "0 2 * * *",
+            "suspend": false,
+            "jobTemplate": {
+              "spec": {
+                "template": {
+                  "spec": {
+                    "restartPolicy": "Never",
+                    "containers": [
+                      {
+                        "name": "reconcile",
+                        "image": "ghcr.io/opsia/demo-reconciliation@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "status": {}
+        }
+      },
+      {
+        "resource_type": "event",
+        "api_version": "v1",
+        "kind": "Event",
+        "namespace": "demo-payments",
+        "name": "payments-api-backoff",
+        "uid": "demo-event-payments-backoff-v1",
+        "resource_version": "12",
+        "status": "Warning",
+        "health": "warning",
+        "labels": {},
+        "summary": {
+          "type": "Warning",
+          "reason": "BackOff",
+          "message": "Back-off restarting failed container api.",
+          "count": 12,
+          "first_timestamp": "2026-07-16T23:45:00Z",
+          "last_timestamp": "2026-07-17T00:00:00Z",
+          "involved_kind": "Pod",
+          "involved_name": "payments-api-7d4cb8bb8f-demo",
+          "involved_uid": "demo-pod-payments-api-v1"
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Event",
+          "metadata": {
+            "name": "payments-api-backoff",
+            "namespace": "demo-payments",
+            "uid": "demo-event-payments-backoff-v1",
+            "resourceVersion": "12"
+          },
+          "type": "Warning",
+          "reason": "BackOff",
+          "message": "Back-off restarting failed container api.",
+          "count": 12,
+          "firstTimestamp": "2026-07-16T23:45:00Z",
+          "lastTimestamp": "2026-07-17T00:00:00Z",
+          "involvedObject": {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "namespace": "demo-payments",
+            "name": "payments-api-7d4cb8bb8f-demo",
+            "uid": "demo-pod-payments-api-v1"
           }
         }
       }

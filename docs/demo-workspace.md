@@ -78,3 +78,40 @@ export TRUSTED_PROXY_AUTH_WORKSPACE_ID='opsia-ui-demo-v1'
 ```
 
 The normal trusted-proxy secret/header configuration is still required.
+
+## Inventory-backed UI coverage
+
+The v1 descriptor contains two Nodes and two namespaces with healthy and degraded
+Deployments, ready and restarting Pods, Services, EndpointSlices, an unknown CronJob, a
+Warning Event, node and Pod usage, and a complete all-namespace Kubernetes Event capture. Its
+owner UIDs, selectors, node assignments, and Service names are sufficient for the canonical
+Resources graph to derive ownership, selection, placement, and routing edges without guessing
+from object names.
+
+The same persisted snapshot supplies these read paths:
+
+| Surface | Inventory-backed result |
+| --- | --- |
+| Home | Exact topology preview, critical fleet posture from the not-ready Node, warning Event rollup, and observed Checks findings. |
+| Resources | Two namespaces, multiple kinds and health states, exact labels, usage, and ten derived graph relationships. |
+| Timeline | Inventory additions plus one warning Kubernetes Event fact, appended through the durable Timeline ledger during ingestion. |
+| Checks | Three agent-shaped findings and their catalog/visibility evidence from `checks_observation`. |
+| Cost | Two Node rows with observed capacity and usage; pricing remains explicitly unavailable. |
+
+The descriptor intentionally does not fabricate evidence that belongs to another read model:
+
+- Issues remains empty because that surface reads incident/RCA projections, and an inventory
+  snapshot or Warning Event is not itself an incident.
+- Applications can list the five descriptor-owned Application and DeploymentBinding rows, but
+  workload runtime membership and rollout state remain unavailable until a successful
+  WorkflowRun and rendered ManifestArtifact provide that evidence.
+- Cost overview remains unavailable because monetary observations belong to bounded
+  `EvidenceWindow` records, not inventory usage.
+- GitOps can show the validated repository and source registrations, but it does not claim a
+  synchronization run or rendered deployment result. Helm release state, Traffic, and RCA/Issues
+  remain unavailable because their storage/controller/evidence contracts are separate from
+  inventory and source discovery.
+
+Those unavailable states are part of the fixture's evidence boundary. Extending them requires a
+separate descriptor-owned slice through their canonical write contracts; they must not be
+inferred from labels or inserted as frontend samples.
