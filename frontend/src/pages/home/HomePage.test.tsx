@@ -92,6 +92,34 @@ describe("HomePage", () => {
     expect(screen.queryByText("Connect your AI tool")).toBeNull();
   }, 15_000);
 
+  it("renders the Home live, explore, and posture bands from scoped server evidence", async () => {
+    renderHome(homePort(), ["/?clusters=cluster-1&applications=checkout"]);
+
+    const live = await screen.findByRole("region", { name: "라이브 관측" });
+    expect(within(live).getByText("리소스 관계")).toBeTruthy();
+    expect(within(live).getByText("12 리소스 · 9 관계")).toBeTruthy();
+    expect(within(live).getByRole("link", { name: "리소스 관계 열기" }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&applications=checkout&view=relations");
+    expect(within(live).getByText("BackOff")).toBeTruthy();
+    expect(within(live).getByRole("link", { name: "Timeline 열기" }).getAttribute("href"))
+      .toBe("/timeline?clusters=cluster-1&applications=checkout");
+
+    const explore = screen.getByRole("region", { name: "탐색" });
+    expect(within(explore).getByText("Helm 릴리스")).toBeTruthy();
+    expect(within(explore).queryByText("트래픽")).toBeNull();
+    expect(within(explore).queryByText("비용")).toBeNull();
+
+    const posture = screen.getByRole("region", { name: "보안 및 운영 상태" });
+    expect(within(posture).getByText("인증서 만료")).toBeTruthy();
+    expect(within(posture).getByText("GitOps 컨트롤러")).toBeTruthy();
+    expect(within(posture).getByText("감사 결과")).toBeTruthy();
+    expect(within(posture).queryByText("NetworkPolicy 적용률")).toBeNull();
+    expect(within(posture).getByRole("link", { name: "GitOps 열기" }).getAttribute("href"))
+      .toBe("/gitops?clusters=cluster-1&applications=checkout");
+    expect(within(posture).getByRole("link", { name: "Checks 열기" }).getAttribute("href"))
+      .toBe("/checks?clusters=cluster-1&applications=checkout");
+  });
+
   it("renders revisioned custom resource and Helm summaries with scoped navigation", async () => {
     renderHome(homePort(), ["/?clusters=cluster-1&applications=checkout"]);
 

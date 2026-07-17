@@ -201,6 +201,66 @@ describe("canonical Home adapter mapping", () => {
   it("maps bounded custom resource counts and Helm coverage without browser inference", async () => {
     await expect(createHomeAdapter(endpoints()).loadInsights("cluster-1")).resolves.toEqual({
       clusterId: "cluster-1",
+      topology: {
+        coverage: {
+          availability: "available",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: [],
+        },
+        nodeCount: 12,
+        edgeCount: 9,
+        omittedNodeCount: 0,
+        omittedEdgeCount: 0,
+        relationCompleteness: "exact",
+      },
+      explore: {
+        traffic: {
+          coverage: {
+            availability: "unavailable",
+            observedAt: null,
+            reasonCodes: ["traffic_observation_not_integrated"],
+          },
+        },
+        cost: {
+          coverage: {
+            availability: "unavailable",
+            observedAt: null,
+            reasonCodes: ["cost_observation_not_integrated"],
+          },
+        },
+      },
+      posture: {
+        networkPolicy: {
+          coverage: {
+            availability: "unavailable",
+            observedAt: null,
+            reasonCodes: ["network_policy_coverage_not_reported"],
+          },
+          totalPolicies: null,
+          coveredWorkloads: null,
+          totalWorkloads: null,
+        },
+        gitops: {
+          coverage: {
+            availability: "available",
+            observedAt: "2026-07-12T10:00:00.000Z",
+            reasonCodes: [],
+          },
+          controllerCount: 2,
+          providerCounts: { argo: 1, flux: 1 },
+          healthCounts: { healthy: 1, degraded: 1 },
+        },
+        audit: {
+          coverage: {
+            availability: "available",
+            observedAt: "2026-07-12T10:00:00.000Z",
+            reasonCodes: [],
+          },
+          totalCheckCount: 6,
+          totalFindingCount: 3,
+          severityCounts: { warning: 2, danger: 1 },
+        },
+      },
       customResources: {
         coverage: {
           availability: "available",
