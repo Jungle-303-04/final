@@ -6,6 +6,18 @@ from domains.command.policy import (
     DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
+)
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_ACTION,
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+)
 from packages.contracts.target import TARGET_NAMESPACE
 
 
@@ -28,7 +40,6 @@ class RolloutRestartCommand:
 @command.action(
     Command.APPLY_MANIFEST_ACTION,
     recovery_aliases=("apply_manifest",),
-    allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=True,
     supports_manual_retry=True,
     max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
@@ -36,6 +47,32 @@ class RolloutRestartCommand:
 )
 class ApplyManifestCommand:
     pass
+
+
+@command.action(
+    Command.CATALOG_HELM_INSTALL_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.CATALOG_HELM_INSTALL_CAPABILITY,
+)
+class CatalogHelmUpgradeCommand:
+    """Digest-pinned catalog execution reused for an observed release upgrade."""
+
+
+@command.action(
+    HELM_RELEASE_OPERATION_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=HELM_RELEASE_OPERATION_CAPABILITY,
+)
+class HelmReleaseOperationCommand:
+    """Revision-bound Helm rollback or uninstall command."""
 
 
 @command.action(
@@ -49,6 +86,205 @@ class ApplyManifestCommand:
 )
 class ScaleDeploymentCommand:
     pass
+
+
+@command.action(
+    Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+    requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+)
+class ScaleStatefulSetCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+    requires_approval_outside_sandbox=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+)
+class RestartStatefulSetCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+    requires_approval_outside_sandbox=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+)
+class RestartDaemonSetCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_CORDON_ACTION,
+    requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class CordonNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_UNCORDON_ACTION,
+    requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class UncordonNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DRAIN_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class DrainNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_POD_DEBUG_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_DEBUG_CAPABILITY,
+)
+class DebugPodCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DEBUG_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class DebugNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class CleanupNodeDebugCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+    requires_approval=False,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+)
+class TriggerCronJobCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+    requires_approval=False,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+)
+class SuspendCronJobCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+    requires_approval=False,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+)
+class ResumeCronJobCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY,
+)
+class DeleteResourceCommand:
+    """Exact UID/resourceVersion resource delete after a server-owned cascade preview."""
+
+
+@command.action(
+    Command.GITOPS_RESOURCE_CONTROL_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.GITOPS_RESOURCE_CONTROL_CAPABILITY,
+)
+class GitOpsResourceControlCommand:
+    """Exact controller resource action after server RBAC and capability confirmation."""
+
+
+@command.action(
+    Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+)
+class RollbackDeploymentCommand:
+    """Restore an exact observed ReplicaSet template with CAS revalidation."""
+
+
+@command.action(
+    Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+)
+class RollbackStatefulSetCommand:
+    """Restore an exact observed ControllerRevision template with CAS revalidation."""
+
+
+@command.action(
+    Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+)
+class RollbackDaemonSetCommand:
+    """Restore an exact observed ControllerRevision template with CAS revalidation."""
 
 
 @command.action(
@@ -76,3 +312,42 @@ class RcaTestScenarioCleanupCommand:
 )
 class ClusterAgentUninstallCommand:
     """관리자 연결 해제 요청에만 쓰이는 target agent 자가 정리 명령."""
+
+
+@command.action(
+    SERVICE_HTTP_REQUEST_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    read_only=True,
+    required_agent_capability=SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+)
+class ServiceHttpRequestCommand:
+    """One bounded, read-only HTTP GET resolved from an exact core/v1 Service."""
+
+
+@command.action(
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    read_only=True,
+    required_agent_capability=HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+)
+class HelmReleaseArtifactReadCommand:
+    """Read one revision-bound Helm artifact through the target agent."""
+
+
+@command.action(
+    HELM_VALUES_PREVIEW_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    read_only=True,
+    required_agent_capability=HELM_VALUES_PREVIEW_CAPABILITY,
+)
+class HelmValuesPreviewCommand:
+    """Render a revision-bound digest-pinned candidate without applying it."""

@@ -4,6 +4,7 @@ import {
   filterCountCompletenessSchema,
   rfc3339TimestampSchema,
 } from "./resource-filter-schemas";
+import { costWorkloadAllocationSchema } from "./cost-workload-schemas";
 
 const nullableTimestampSchema = rfc3339TimestampSchema.nullable();
 const nullableTextSchema = z.string().min(1).nullable();
@@ -528,7 +529,7 @@ const applicationWorkloadDetailSchema = z.strictObject({
   resource_counts_completeness: filterCountCompletenessSchema,
   topology: applicationTopologySchema,
   history: applicationUnavailableEvidenceSchema,
-  cost: applicationUnavailableEvidenceSchema,
+  cost: costWorkloadAllocationSchema,
   actions: applicationUnavailableEvidenceSchema,
 }).superRefine((detail, context) => {
   if (detail.resource_counts_completeness === "unavailable" && detail.resource_counts !== null) {

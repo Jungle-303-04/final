@@ -1,9 +1,12 @@
-export interface PodTerminalTarget {
-  workspaceId: string;
-  clusterId: string;
+export interface PodTerminalCoordinates {
   namespace: string;
   pod: string;
   container: string;
+}
+
+export interface PodTerminalTarget extends PodTerminalCoordinates {
+  workspaceId: string;
+  clusterId: string;
 }
 
 export type PodTerminalEvent =

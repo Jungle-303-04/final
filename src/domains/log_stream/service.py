@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import re
+import shlex
 import time
 import uuid
 from collections import deque
@@ -28,12 +29,18 @@ from packages.contracts.gateway.requests import AgentDebugQueryRequest
 from packages.contracts.identity import Permission
 from packages.contracts.log_stream import (
     LogStreamConnected,
+    LogStreamDiagnostic,
     LogStreamEnd,
     LogStreamError,
     LogStreamLog,
     LogStreamPodAdded,
     LogStreamPodRemoved,
+    LogStreamRecoveryCommand,
+    ScheduledRunLifecycleEvent,
+    ScheduledWorkloadRun,
+    ScheduledWorkloadRunCatalog,
 )
+from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.security.log_lines import redact_log_line, truncate_log_line
 
 WorkloadLogKind = Literal["deployments", "statefulsets", "daemonsets"]
@@ -60,14 +67,19 @@ KUBERNETES_CONTAINER_RE = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 
 @dataclass(frozen=True)
 class LogStreamTarget:
-    target_type: Literal["pod", "workload"]
+    target_type: Literal["pod", "workload", "scheduled_run"]
     cluster_id: str
     namespace: str
     name: str
     kind: str
     resource_type: str
     pods: tuple[str, ...]
+    containers: tuple[str, ...] = ()
     container: str | None = None
+    uid: str | None = None
+    owner_kind: str | None = None
+    owner_name: str | None = None
+    owner_uid: str | None = None
 
     def metadata(self) -> dict[str, Any]:
         return {
@@ -79,7 +91,12 @@ class LogStreamTarget:
             "kind": self.kind,
             "resource_type": self.resource_type,
             "pods": list(self.pods),
+            "containers": list(self.containers),
             "container": self.container,
+            "uid": self.uid,
+            "owner_kind": self.owner_kind,
+            "owner_name": self.owner_name,
+            "owner_uid": self.owner_uid,
         }
 
     def link(self) -> str:
@@ -145,7 +162,9 @@ def resolve_pod_target(
         kind="Pod",
         resource_type="pod",
         pods=(name,),
+        containers=_container_names(resource),
         container=container,
+        uid=str(resource.get("uid") or "") or None,
     )
 
 
@@ -204,7 +223,237 @@ def resolve_workload_target(
         kind=kubernetes_kind,
         resource_type="workload",
         pods=pod_names,
+        containers=tuple(
+            sorted({container for pod in pods for container in _container_names(pod)})
+        ),
         container=container,
+        uid=str(resource.get("uid") or "") or None,
+    )
+
+
+def scheduled_workload_run_catalog(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    owner_kind: str,
+    namespace: str,
+    owner_name: str,
+) -> ScheduledWorkloadRunCatalog:
+    """Return the retained, server-authoritative run catalog for one owner.
+
+    The repository performs two bounded queries for the entire catalog.  This
+    projection repeats every owner boundary check before exposing a run key so
+    a malformed collector payload cannot cross owner or cluster scope.
+    """
+
+    catalog, _targets = _scheduled_run_projection(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        owner_kind=owner_kind,
+        namespace=namespace,
+        owner_name=owner_name,
+        require_evidence=False,
+    )
+    return catalog
+
+
+def resolve_scheduled_run_target(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    owner_kind: str,
+    namespace: str,
+    owner_name: str,
+    run_key: str,
+) -> LogStreamTarget:
+    _catalog, targets = _scheduled_run_projection(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        owner_kind=owner_kind,
+        namespace=namespace,
+        owner_name=owner_name,
+        require_evidence=True,
+    )
+    target = targets.get(run_key)
+    if target is None:
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+    return target
+
+
+def _scheduled_run_projection(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    owner_kind: str,
+    namespace: str,
+    owner_name: str,
+    require_evidence: bool,
+) -> tuple[ScheduledWorkloadRunCatalog, dict[str, LogStreamTarget]]:
+    _require_inventory_access(db, current, workspace_id, cluster_id)
+    can_view_logs = _has_evidence_access(db, current, workspace_id, cluster_id)
+    if require_evidence and not can_view_logs:
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+    owner = _inventory_resource(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type="workload",
+        kind=owner_kind,
+        namespace=namespace,
+        name=owner_name,
+    )
+    owner_uid = str(owner.get("uid") or "") if owner else ""
+    owner_summary = owner.get("summary") if owner and isinstance(owner.get("summary"), dict) else {}
+    raw_run_kinds = owner_summary.get("scheduled_run_kinds")
+    run_kinds = tuple(
+        sorted(
+            {
+                str(kind)
+                for kind in (raw_run_kinds if isinstance(raw_run_kinds, list) else [])
+                if isinstance(kind, str) and kind
+            }
+        )
+    )
+    reader = getattr(db, "list_scheduled_run_inventory", None)
+    if owner is None or not owner_uid or not run_kinds or not callable(reader):
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+
+    raw = reader(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        owner_kind=owner_kind,
+        owner_name=owner_name,
+        owner_uid=owner_uid,
+        run_kinds=run_kinds,
+        limit=100,
+        pod_limit=1000,
+    )
+    rows = raw.get("runs") if isinstance(raw, dict) and isinstance(raw.get("runs"), list) else []
+    pod_rows = (
+        raw.get("pods") if isinstance(raw, dict) and isinstance(raw.get("pods"), list) else []
+    )
+    reasons: set[str] = set()
+    if bool(raw.get("runs_truncated")):
+        reasons.add("run_limit_reached")
+    if bool(raw.get("pods_truncated")):
+        reasons.add("pod_limit_reached")
+
+    runs: list[ScheduledWorkloadRun] = []
+    lifecycle: list[ScheduledRunLifecycleEvent] = []
+    targets: dict[str, LogStreamTarget] = {}
+    for row in rows:
+        if not isinstance(row, dict) or not _scheduled_run_belongs_to_owner(
+            row,
+            cluster_id=cluster_id,
+            namespace=namespace,
+            owner_kind=owner_kind,
+            owner_name=owner_name,
+            owner_uid=owner_uid,
+            run_kinds=run_kinds,
+        ):
+            reasons.add("invalid_run_excluded")
+            continue
+        run_uid = str(row.get("uid") or "")
+        run_name = str(row.get("name") or "")
+        run_kind = str(row.get("kind") or "")
+        matching_pods = tuple(
+            pod
+            for pod in pod_rows
+            if isinstance(pod, dict)
+            and str(pod.get("cluster_id") or "") == cluster_id
+            and str(pod.get("namespace") or "") == namespace
+            and _summary_owner_matches(pod, uid=run_uid, kind=run_kind, name=run_name)
+        )
+        pod_names = tuple(
+            sorted({str(pod.get("name") or "") for pod in matching_pods if pod.get("name")})
+        )
+        summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+        active_count = _non_negative_int(summary.get("active"))
+        succeeded_count = _non_negative_int(summary.get("succeeded"))
+        failed_count = _non_negative_int(summary.get("failed"))
+        desired = _optional_non_negative_int(summary.get("completions"))
+        phase = _scheduled_run_phase(
+            active=active_count,
+            succeeded=succeeded_count,
+            failed=failed_count,
+            desired=desired,
+        )
+        pod_succeeded = sum(_pod_phase(pod) == "succeeded" for pod in matching_pods)
+        pod_failed = sum(_pod_phase(pod) == "failed" for pod in matching_pods)
+        pod_running = sum(_pod_phase(pod) == "running" for pod in matching_pods)
+        run = ScheduledWorkloadRun(
+            run_key=run_uid,
+            resource=_resource_ref(row),
+            phase=phase,
+            active=active_count > 0,
+            scheduled_at=_optional_iso(summary.get("creation_timestamp")),
+            started_at=_optional_iso(summary.get("start_time")),
+            finished_at=_optional_iso(summary.get("completion_time")),
+            desired=desired,
+            succeeded=succeeded_count,
+            failed=failed_count,
+            pod_total=len(matching_pods),
+            pod_succeeded=pod_succeeded,
+            pod_failed=pod_failed,
+            pod_running=pod_running,
+            next_step=_scheduled_run_next_step(
+                phase=phase,
+                can_view_logs=can_view_logs,
+                has_container_outcome=(pod_succeeded + pod_failed + pod_running) > 0,
+            ),
+            observed_at=_optional_iso(row.get("observed_at")),
+        )
+        runs.append(run)
+        lifecycle.extend(_scheduled_run_lifecycle(run))
+        targets[run_uid] = LogStreamTarget(
+            target_type="scheduled_run",
+            cluster_id=cluster_id,
+            namespace=namespace,
+            name=run_name,
+            kind=run_kind,
+            resource_type="workload",
+            pods=pod_names,
+            containers=tuple(
+                sorted({container for pod in matching_pods for container in _container_names(pod)})
+            ),
+            uid=run_uid,
+            owner_kind=owner_kind,
+            owner_name=owner_name,
+            owner_uid=owner_uid,
+        )
+
+    default_run = next((run.run_key for run in runs if run.active), None)
+    if default_run is None and runs:
+        default_run = runs[0].run_key
+    return (
+        ScheduledWorkloadRunCatalog(
+            scope=ClusterScope(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                namespaces=(namespace,),
+                freshness="partial" if reasons else "live",
+            ),
+            owner=_resource_ref(owner),
+            runs=tuple(runs),
+            lifecycle=tuple(
+                sorted(lifecycle, key=lambda event: (event.occurred_at, event.event_id))
+            ),
+            default_run_key=default_run,
+            complete=not reasons,
+            reason_codes=tuple(sorted(reasons)),
+        ),
+        targets,
     )
 
 
@@ -267,17 +516,24 @@ async def stream_log_events(
     initial_target: LogStreamTarget,
     initial_query: QueuedDebugQuery,
 ):
-    yield LogStreamConnected(stream_id=initial_query.command_id)
+    yield LogStreamConnected(
+        stream_id=initial_query.command_id,
+        containers=initial_target.containers,
+    )
     known_pods = set(initial_target.pods)
     for pod in sorted(known_pods):
         yield LogStreamPodAdded(pod=pod)
     if not known_pods:
-        yield LogStreamEnd(reason="no_pods")
+        yield LogStreamEnd(
+            reason="no_pods",
+            diagnostic=empty_log_diagnostic(initial_target, reason="no_matching_pods"),
+        )
         return
 
     target = initial_target
     query = initial_query
     dedupe = BoundedDedupe()
+    emitted_line_count = 0
     for batch_index in range(LOG_STREAM_BATCH_LIMIT):
         if await _is_disconnected(request):
             return
@@ -306,15 +562,26 @@ async def stream_log_events(
 
         for evidence in extract_log_evidence(row, target=target, limit=1000):
             if dedupe.add(evidence.event.id):
+                emitted_line_count += 1
                 yield evidence.event
 
         if batch_index + 1 >= LOG_STREAM_BATCH_LIMIT:
-            yield LogStreamEnd(reason="window_complete")
+            yield LogStreamEnd(
+                reason="window_complete",
+                diagnostic=(
+                    empty_log_diagnostic(target, reason="no_log_lines")
+                    if emitted_line_count == 0
+                    else None
+                ),
+            )
             return
         if await _wait_or_disconnect(request, LOG_STREAM_BATCH_INTERVAL_SECONDS):
             return
         if not known_pods:
-            yield LogStreamEnd(reason="no_pods")
+            yield LogStreamEnd(
+                reason="no_pods",
+                diagnostic=empty_log_diagnostic(target, reason="no_matching_pods"),
+            )
             return
         try:
             target = _reresolve_target(db, current, workspace_id, target)
@@ -331,6 +598,63 @@ async def stream_log_events(
         except RuntimeError:
             yield LogStreamError(code="stream_unavailable", retryable=True)
             return
+
+
+def empty_log_diagnostic(
+    target: LogStreamTarget,
+    *,
+    reason: Literal["no_matching_pods", "no_log_lines"],
+) -> LogStreamDiagnostic:
+    """Build one target-bound read-only recovery command on the server.
+
+    Kubernetes identifiers have already crossed the strict target resolver, but
+    ``shlex.join`` still makes the copy boundary safe if that validation changes.
+    The command deliberately omits ``--context``: an Opsia cluster id is not a
+    local kubeconfig context.  The typed recovery carries the cluster id so the
+    UI can make that requirement explicit instead of silently targeting another
+    cluster.
+    """
+
+    argv: list[str]
+    if reason == "no_matching_pods":
+        if target.target_type == "pod":
+            argv = ["kubectl", "get", "pod", target.name, "--namespace", target.namespace]
+        else:
+            resource_name = {
+                "Deployment": "deployment",
+                "StatefulSet": "statefulset",
+                "DaemonSet": "daemonset",
+                "Job": "job",
+            }.get(target.kind)
+            if resource_name is None:
+                return LogStreamDiagnostic(code=reason)
+            argv = [
+                "kubectl",
+                "get",
+                resource_name,
+                target.name,
+                "--namespace",
+                target.namespace,
+            ]
+    elif len(target.pods) == 1:
+        argv = [
+            "kubectl",
+            "logs",
+            target.pods[0],
+            "--namespace",
+            target.namespace,
+            "--all-containers=true",
+            "--tail=100",
+        ]
+    else:
+        argv = ["kubectl", "get", "pods", "--namespace", target.namespace]
+    return LogStreamDiagnostic(
+        code=reason,
+        recovery=LogStreamRecoveryCommand(
+            command=shlex.join(argv),
+            cluster_id=target.cluster_id,
+        ),
+    )
 
 
 async def read_log_stream_evidence(
@@ -370,7 +694,7 @@ async def read_log_stream_evidence(
         return []
 
     logical_identity = _logical_target_identity(target)
-    if _logical_target_identity(current_target) != logical_identity:
+    if not _logical_target_matches(target, current_target):
         return []
     completed: list[tuple[dict[str, Any], LogStreamTarget]] = []
     command_ids: set[str] = set()
@@ -421,7 +745,30 @@ def _logical_target_identity(target: LogStreamTarget) -> tuple[str, ...]:
         target.kind,
         target.resource_type,
         target.container or "",
+        target.uid or "",
+        target.owner_kind if target.target_type == "scheduled_run" and target.owner_kind else "",
+        target.owner_name if target.target_type == "scheduled_run" and target.owner_name else "",
+        target.owner_uid if target.target_type == "scheduled_run" and target.owner_uid else "",
     )
+
+
+def _logical_target_matches(expected: LogStreamTarget, actual: LogStreamTarget) -> bool:
+    if expected.uid is None:
+        actual = LogStreamTarget(
+            target_type=actual.target_type,
+            cluster_id=actual.cluster_id,
+            namespace=actual.namespace,
+            name=actual.name,
+            kind=actual.kind,
+            resource_type=actual.resource_type,
+            pods=actual.pods,
+            container=actual.container,
+            uid=None,
+            owner_kind=actual.owner_kind,
+            owner_name=actual.owner_name,
+            owner_uid=actual.owner_uid,
+        )
+    return _logical_target_identity(expected) == _logical_target_identity(actual)
 
 
 def extract_log_evidence(
@@ -574,13 +921,18 @@ def _target_from_command(row: dict[str, Any]) -> LogStreamTarget | None:
     if not isinstance(value, dict) or value.get("protocol") != LOG_STREAM_PROTOCOL:
         return None
     target_type = value.get("target_type")
-    if target_type not in {"pod", "workload"}:
+    if target_type not in {"pod", "workload", "scheduled_run"}:
         return None
     if target_type == "pod" and (value.get("kind") != "Pod" or value.get("resource_type") != "pod"):
         return None
     if target_type == "workload" and (
         value.get("kind") not in set(WORKLOAD_KIND_NAMES.values())
         or value.get("resource_type") != "workload"
+    ):
+        return None
+    if target_type == "scheduled_run" and (
+        value.get("resource_type") != "workload"
+        or not all(value.get(key) for key in ("uid", "owner_kind", "owner_name", "owner_uid"))
     ):
         return None
     try:
@@ -592,7 +944,12 @@ def _target_from_command(row: dict[str, Any]) -> LogStreamTarget | None:
             kind=str(value["kind"]),
             resource_type=str(value["resource_type"]),
             pods=tuple(str(pod) for pod in value.get("pods") or ()),
+            containers=tuple(str(name) for name in value.get("containers") or ()),
             container=(str(value["container"]) if value.get("container") is not None else None),
+            uid=(str(value["uid"]) if value.get("uid") is not None else None),
+            owner_kind=(str(value["owner_kind"]) if value.get("owner_kind") is not None else None),
+            owner_name=(str(value["owner_name"]) if value.get("owner_name") is not None else None),
+            owner_uid=(str(value["owner_uid"]) if value.get("owner_uid") is not None else None),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -619,6 +976,12 @@ def _valid_persisted_target(target: LogStreamTarget) -> bool:
         or len(target.pods) > 1000
         or len(set(target.pods)) != len(target.pods)
         or any(len(pod) > 253 or KUBERNETES_NAME_RE.fullmatch(pod) is None for pod in target.pods)
+        or len(target.containers) > 1000
+        or tuple(sorted(set(target.containers))) != target.containers
+        or any(
+            len(container) > 63 or KUBERNETES_CONTAINER_RE.fullmatch(container) is None
+            for container in target.containers
+        )
         or (
             target.container is not None
             and (
@@ -626,9 +989,21 @@ def _valid_persisted_target(target: LogStreamTarget) -> bool:
                 or KUBERNETES_CONTAINER_RE.fullmatch(target.container) is None
             )
         )
+        or any(
+            value is not None and (not value or len(value) > 255)
+            for value in (target.uid, target.owner_uid)
+        )
+        or any(
+            value is not None and (len(value) > 253 or KUBERNETES_NAME_RE.fullmatch(value) is None)
+            for value in (target.owner_name,)
+        )
     ):
         return False
-    return target.target_type != "pod" or target.pods == (target.name,)
+    if target.target_type == "pod":
+        return target.pods == (target.name,)
+    if target.target_type == "scheduled_run":
+        return all((target.uid, target.owner_kind, target.owner_name, target.owner_uid))
+    return True
 
 
 def _command_query(row: dict[str, Any]) -> dict[str, Any]:
@@ -645,7 +1020,7 @@ def _reresolve_target(
     target: LogStreamTarget,
 ) -> LogStreamTarget:
     if target.target_type == "pod":
-        return resolve_pod_target(
+        resolved = resolve_pod_target(
             db,
             current=current,
             workspace_id=workspace_id,
@@ -654,13 +1029,30 @@ def _reresolve_target(
             name=target.name,
             container=target.container,
         )
+        return _same_inventory_generation(target, resolved)
+    if target.target_type == "scheduled_run":
+        if not target.owner_kind or not target.owner_name or not target.uid:
+            raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+        resolved = resolve_scheduled_run_target(
+            db,
+            current=current,
+            workspace_id=workspace_id,
+            cluster_id=target.cluster_id,
+            owner_kind=target.owner_kind,
+            namespace=target.namespace,
+            owner_name=target.owner_name,
+            run_key=target.uid,
+        )
+        if resolved.owner_uid != target.owner_uid:
+            raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+        return _same_inventory_generation(target, resolved)
     kind = next(
         (key for key, value in WORKLOAD_KIND_NAMES.items() if value == target.kind),
         None,
     )
     if kind is None:
         raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
-    return resolve_workload_target(
+    resolved = resolve_workload_target(
         db,
         current=current,
         workspace_id=workspace_id,
@@ -670,6 +1062,16 @@ def _reresolve_target(
         name=target.name,
         container=target.container,
     )
+    return _same_inventory_generation(target, resolved)
+
+
+def _same_inventory_generation(
+    expected: LogStreamTarget,
+    resolved: LogStreamTarget,
+) -> LogStreamTarget:
+    if expected.uid is not None and resolved.uid != expected.uid:
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+    return resolved
 
 
 def _inventory_resource(db: Any, **identity: Any) -> dict[str, Any] | None:
@@ -680,19 +1082,191 @@ def _inventory_resource(db: Any, **identity: Any) -> dict[str, Any] | None:
     return resource if isinstance(resource, dict) else None
 
 
+def _scheduled_run_belongs_to_owner(
+    row: dict[str, Any],
+    *,
+    cluster_id: str,
+    namespace: str,
+    owner_kind: str,
+    owner_name: str,
+    owner_uid: str,
+    run_kinds: tuple[str, ...],
+) -> bool:
+    return (
+        bool(row.get("uid"))
+        and bool(row.get("name"))
+        and str(row.get("cluster_id") or "") == cluster_id
+        and str(row.get("namespace") or "") == namespace
+        and str(row.get("resource_type") or "").lower() == "workload"
+        and str(row.get("kind") or "") in run_kinds
+        and _summary_owner_matches(
+            row,
+            uid=owner_uid,
+            kind=owner_kind,
+            name=owner_name,
+        )
+    )
+
+
+def _summary_owner_matches(row: dict[str, Any], *, uid: str, kind: str, name: str) -> bool:
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    return (
+        str(summary.get("owner_uid") or "") == uid
+        and str(summary.get("owner_kind") or "") == kind
+        and str(summary.get("owner_name") or "") == name
+    )
+
+
+def _resource_ref(row: dict[str, Any]) -> ResourceRef:
+    api_version = str(row.get("api_version") or "")
+    api_group, separator, version = api_version.partition("/")
+    if not separator:
+        version = api_group
+        api_group = ""
+    return ResourceRef(
+        api_group=api_group,
+        version=version,
+        kind=str(row.get("kind") or ""),
+        namespace=str(row.get("namespace")) if row.get("namespace") is not None else None,
+        name=str(row.get("name") or ""),
+        uid=str(row.get("uid") or ""),
+    )
+
+
+def _non_negative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _optional_non_negative_int(value: Any) -> int | None:
+    return None if value is None else _non_negative_int(value)
+
+
+def _scheduled_run_phase(
+    *, active: int, succeeded: int, failed: int, desired: int | None
+) -> Literal["pending", "running", "succeeded", "failed", "unknown"]:
+    if active > 0:
+        return "running"
+    if failed > 0:
+        return "failed"
+    if succeeded > 0 and (desired is None or succeeded >= desired):
+        return "succeeded"
+    if succeeded == 0 and failed == 0:
+        return "pending"
+    return "unknown"
+
+
+def _pod_phase(row: dict[str, Any]) -> str:
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    return str(summary.get("phase") or "").lower()
+
+
+def _scheduled_run_next_step(
+    *, phase: str, can_view_logs: bool, has_container_outcome: bool
+) -> Literal["logs", "timeline"] | None:
+    if phase != "failed":
+        return None
+    if can_view_logs and has_container_outcome:
+        return "logs"
+    return "timeline"
+
+
+def _scheduled_run_lifecycle(run: ScheduledWorkloadRun) -> list[ScheduledRunLifecycleEvent]:
+    events: list[ScheduledRunLifecycleEvent] = []
+    kind = run.resource.kind
+    if run.scheduled_at is not None:
+        events.append(
+            ScheduledRunLifecycleEvent(
+                event_id=f"{run.run_key}:scheduled",
+                run_key=run.run_key,
+                resource=run.resource,
+                stage="scheduled",
+                occurred_at=run.scheduled_at,
+                event_type="normal",
+                reason=f"{kind} scheduled",
+            )
+        )
+    if run.started_at is not None:
+        events.append(
+            ScheduledRunLifecycleEvent(
+                event_id=f"{run.run_key}:started",
+                run_key=run.run_key,
+                resource=run.resource,
+                stage="started",
+                occurred_at=run.started_at,
+                event_type="normal",
+                reason=f"{kind} started",
+            )
+        )
+    if run.finished_at is not None:
+        events.append(
+            ScheduledRunLifecycleEvent(
+                event_id=f"{run.run_key}:finished",
+                run_key=run.run_key,
+                resource=run.resource,
+                stage="finished",
+                occurred_at=run.finished_at,
+                event_type="warning" if run.phase == "failed" else "normal",
+                reason=f"{kind} {run.phase}",
+            )
+        )
+    return events
+
+
+def _optional_iso(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
 def _require_log_access(
     db: Any,
     current: Any,
     workspace_id: str,
     cluster_id: str,
 ) -> None:
+    _require_inventory_access(db, current, workspace_id, cluster_id)
+    if not _has_evidence_access(db, current, workspace_id, cluster_id):
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+
+
+def _require_inventory_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> None:
     try:
-        for permission in (Permission.INVENTORY_READ.value, Permission.EVIDENCE_READ.value):
-            require_cluster_access(db, current, workspace_id, cluster_id, permission)
+        require_cluster_access(
+            db, current, workspace_id, cluster_id, Permission.INVENTORY_READ.value
+        )
     except HTTPException as exc:
         if exc.status_code == 403:
             raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND) from exc
         raise
+
+
+def _has_evidence_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> bool:
+    try:
+        require_cluster_access(
+            db, current, workspace_id, cluster_id, Permission.EVIDENCE_READ.value
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
+    return True
 
 
 def _container_exists(resource: dict[str, Any], container: str | None) -> bool:
@@ -702,6 +1276,23 @@ def _container_exists(resource: dict[str, Any], container: str | None) -> bool:
     containers = summary.get("containers") if isinstance(summary.get("containers"), list) else []
     return any(
         isinstance(item, dict) and str(item.get("name") or "") == container for item in containers
+    )
+
+
+def _container_names(resource: dict[str, Any]) -> tuple[str, ...]:
+    summary = resource.get("summary") if isinstance(resource.get("summary"), dict) else {}
+    containers = summary.get("containers") if isinstance(summary.get("containers"), list) else []
+    return tuple(
+        sorted(
+            {
+                name
+                for item in containers
+                if isinstance(item, dict)
+                and (name := str(item.get("name") or ""))
+                and len(name) <= 63
+                and KUBERNETES_CONTAINER_RE.fullmatch(name)
+            }
+        )
     )
 
 

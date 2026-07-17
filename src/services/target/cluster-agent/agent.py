@@ -12,12 +12,40 @@ from commands import (
     AgentCommandRegistry,
     CommandContext,
     CommandResultOutbox,
+    GitOpsResourceCommandPayload,
     KubernetesApiClient,
+    KubernetesCronJobPayload,
+    KubernetesGetPayload,
+    KubernetesNodeDebugCleanupPayload,
+    KubernetesNodeDebugPayload,
+    KubernetesNodeDrainPayload,
+    KubernetesNodeSchedulingPayload,
     KubernetesPatchPayload,
+    KubernetesPodDebugPayload,
     KubernetesScalePayload,
+    KubernetesWorkloadRollbackPayload,
     command,
+    cronjob_job_body,
+    execute_gitops_resource_command,
+    rollback_template_from_revision,
+    validate_cronjob_resource_ref,
+    validate_exact_resource,
+    workload_template_sha256,
 )
-from commands.helm import run_catalog_helm_install
+from commands.helm import (
+    run_catalog_helm_install,
+    run_helm_artifact_query,
+    run_helm_release_operation,
+    run_helm_values_preview,
+    validate_catalog_helm_upgrade_secret,
+    validate_helm_release_operation_secret,
+    validate_helm_release_secret,
+)
+from commands.service_access import (
+    ServiceAccessExecutionError,
+    ServiceRequestCancelled,
+    execute_service_http_request,
+)
 from control import (
     AgentControlStore,
     AgentPolicySync,
@@ -41,6 +69,7 @@ from providers import (
     TelemetryProvider,
     TempoTracesProvider,
 )
+from pydantic import Field, model_validator
 from queries import (
     KubernetesSnapshotQuery,
     TelemetryQueryCommandPayload,
@@ -68,6 +97,7 @@ from config import (
     DEFAULT_EVIDENCE_FAILURE_POLICY,
     DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
     DEFAULT_EVIDENCE_PROVIDER_WORKERS,
+    DEFAULT_NODE_CONTROL_ENABLED,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
     DEFAULT_POLICY_SYNC_INTERVAL_SECONDS,
@@ -79,6 +109,7 @@ from config import (
     KUBERNETES_CONFIGMAP_PATCH_ACTION,
     KUBERNETES_DEPLOYMENT_PATCH_ACTION,
     KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+    NODE_CONTROL_ENABLED_ENV,
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
     POLICY_SYNC_INTERVAL_ENV,
@@ -94,6 +125,7 @@ from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
 from domains.catalog.install import CatalogHelmInstallPayload
+from domains.command.actions import command_action_spec
 from domains.rca.test_scenario_adapters import (
     RcaTestCleanupPlan,
     default_test_scenario_adapter_registry,
@@ -132,6 +164,7 @@ from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
     control_namespace_allowed,
 )
+from packages.config.environments import is_sandbox_environment, normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.security import RCA_TEST_RUNS_DISABLED_MESSAGE, rca_test_runs_enabled
 from packages.config.settings import env
@@ -148,8 +181,24 @@ from packages.contracts.gateway.requests import (
     StrictModel,
 )
 from packages.contracts.gitops import supported_kubernetes_resource
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_VALUES_PREVIEW_ACTION,
+    HelmArtifactCommandPayload,
+    HelmReleaseOperationCommandPayload,
+    HelmValuesPreviewCommandPayload,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_ACTION,
+    ServiceHttpRequestCommandPayload,
+)
+from packages.contracts.target import (
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RBAC_VERSION_ANNOTATION,
+)
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -215,6 +264,41 @@ class ClusterAgentUninstallPayload(StrictModel):
     contract_version: int
 
 
+class ExactResourceDeleteTarget(StrictModel):
+    api_group: str = Field(max_length=253)
+    version: str = Field(min_length=1, max_length=80)
+    kind: str = Field(min_length=1, max_length=120)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+    uid: str = Field(min_length=1, max_length=253)
+    resource_version: str = Field(min_length=1, max_length=253)
+    plural: str = Field(min_length=1, max_length=253, pattern=r"^[a-z0-9.-]+$")
+
+
+class ResourceDeleteCommandPayload(StrictModel):
+    resources: list[ExactResourceDeleteTarget] = Field(min_length=1, max_length=20)
+    propagation_policy: str = Field(pattern=r"^Foreground$")
+    request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    cascade: JsonObject = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_unique_targets(self) -> ResourceDeleteCommandPayload:
+        identities = [
+            (
+                item.api_group,
+                item.version,
+                item.kind.casefold(),
+                item.namespace,
+                item.name,
+                item.uid,
+            )
+            for item in self.resources
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("resource delete targets must be unique")
+        return self
+
+
 class AgentConfig:
     TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
@@ -235,12 +319,7 @@ class AgentConfig:
 
     HOSTNAME_ENV = "HOSTNAME"
     DEFAULT_AGENT_ID = "target-agent"
-    AGENT_CAPABILITIES = [
-        "collector",
-        "command_receiver",
-        "command_control.cancel.v1",
-        Command.CATALOG_HELM_INSTALL_CAPABILITY,
-    ]
+    AGENT_CAPABILITIES = list(agent_config.AGENT_CAPABILITIES)
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
     NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = (
         agent_config.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS
@@ -249,6 +328,7 @@ class AgentConfig:
     COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
     COMMAND_FAILED_STATUS = CommandStatus.FAILED
     APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
+    MANIFEST_CREATE_FIELD_MANAGER = "opsia-resource-create"
     ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
     COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
@@ -343,6 +423,7 @@ class HttpManagementPlaneClient:
         agent_id: str,
         attempt_id: str | None = None,
         observed_cancel_generation: int | None = None,
+        progress: JsonObject | None = None,
     ) -> JsonObject:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_heartbeat_path(command_id)}",
@@ -357,6 +438,7 @@ class HttpManagementPlaneClient:
                     if observed_cancel_generation is not None
                     else {}
                 ),
+                **({"progress": progress} if progress is not None else {}),
             },
             headers=self.headers,
         )
@@ -534,6 +616,10 @@ class TargetClusterAgent:
             AGENT_DIRECT_COMMANDS_ENABLED_ENV,
             DEFAULT_AGENT_DIRECT_COMMANDS_ENABLED,
         ).strip().lower() in {"1", "true", "yes", "on"}
+        self.node_control_enabled = env(
+            NODE_CONTROL_ENABLED_ENV,
+            DEFAULT_NODE_CONTROL_ENABLED,
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.client = client
         self.telemetry_transport = telemetry_transport
         self.kubernetes_transport = kubernetes_transport
@@ -577,6 +663,7 @@ class TargetClusterAgent:
             default_policy=self.default_policy,
             apply_policy=self.apply_policy,
             interval_seconds=self.policy_sync_interval_seconds,
+            status_details=self.policy_status_details,
         )
         self.reconciler = DesiredStateReconciler(
             cluster_id=self.cluster_id,
@@ -669,6 +756,47 @@ class TargetClusterAgent:
             "evidence_worker_counts": min_worker_counts,
             "registered_queries": registered_queries,
         }
+
+    async def policy_status_details(self) -> JsonObject:
+        return {"target_rbac_manifest": await self.target_rbac_manifest_status()}
+
+    async def target_rbac_manifest_status(self) -> JsonObject:
+        """Observe the administrator-owned role without ever attempting RBAC writes."""
+
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        result: JsonObject = {
+            "status": "admin_apply_required",
+            "actual_version": None,
+            "expected_version": TARGET_RBAC_MANIFEST_VERSION,
+        }
+        if self.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+            result["status"] = "not_applicable"
+            return result
+        if not base_url or not token:
+            result["probe"] = "kubernetes_api_unavailable"
+            return result
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            response = await client.get(
+                f"{base_url}/apis/rbac.authorization.k8s.io/v1/clusterroles/cluster-agent-read",
+                headers=kubernetes_headers(token),
+            )
+        if response.status_code != 200:
+            result["probe"] = "forbidden" if response.status_code == 403 else "unavailable"
+            return result
+        body = response.json()
+        metadata = body.get("metadata") if isinstance(body, dict) else None
+        annotations = metadata.get("annotations") if isinstance(metadata, dict) else None
+        actual = (
+            annotations.get(TARGET_RBAC_VERSION_ANNOTATION)
+            if isinstance(annotations, dict)
+            else None
+        )
+        if isinstance(actual, str) and actual:
+            result["actual_version"] = actual
+        if actual == TARGET_RBAC_MANIFEST_VERSION:
+            result["status"] = "current"
+        return result
 
     def register_policy_queries(
         self,
@@ -781,7 +909,7 @@ class TargetClusterAgent:
                 await client.register_agent(
                     self.cluster_id,
                     self.agent_id,
-                    AgentConfig.AGENT_CAPABILITIES,
+                    self.advertised_capabilities(),
                 )
                 return
             except Exception as exc:
@@ -796,6 +924,21 @@ class TargetClusterAgent:
                     },
                 )
                 await asyncio.sleep(AgentConfig.REGISTER_RETRY_DELAY_SECONDS)
+
+    def advertised_capabilities(self) -> list[str]:
+        """Advertise executable features only for the current runtime policy."""
+
+        capabilities = list(AgentConfig.AGENT_CAPABILITIES)
+        direct_commands_enabled = getattr(self, "direct_commands_enabled", True)
+        if not direct_commands_enabled:
+            capabilities.remove(Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY)
+            capabilities.remove(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
+            capabilities.remove(Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY)
+            capabilities.remove(Command.GITOPS_RESOURCE_CONTROL_CAPABILITY)
+            capabilities.remove(Command.KUBERNETES_DEBUG_CAPABILITY)
+        if direct_commands_enabled and getattr(self, "node_control_enabled", False):
+            capabilities.append(Command.KUBERNETES_NODE_CONTROL_CAPABILITY)
+        return capabilities
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -968,7 +1111,23 @@ class TargetClusterAgent:
             # The server never kills a local process.  Handlers may observe this
             # event at safe checkpoints; already-running side effects finish and
             # report their actual result so completion/cancel races are honest.
-            return await self.execute_command(command, cancel_requested=cancel_requested)
+            async def report_progress(progress: JsonObject) -> None:
+                await client.heartbeat_command(
+                    command_id,
+                    self.cluster_id,
+                    workspace_id,
+                    lease_id,
+                    self.agent_id,
+                    attempt_id,
+                    None,
+                    progress,
+                )
+
+            return await self.execute_command(
+                command,
+                cancel_requested=cancel_requested,
+                operation_progress_reporter=report_progress,
+            )
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):
@@ -1059,6 +1218,7 @@ class TargetClusterAgent:
         command: CommandRecord,
         *,
         cancel_requested: asyncio.Event | None = None,
+        operation_progress_reporter: object = None,
     ) -> JsonObject:
         if cancel_requested is not None and cancel_requested.is_set():
             return {
@@ -1075,11 +1235,21 @@ class TargetClusterAgent:
         payload = self.command_payload(command)
         if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
             return self.command_result(False, RCA_TEST_RUNS_DISABLED_MESSAGE)
-        if not getattr(self, "direct_commands_enabled", True) and action not in {
-            QUERY_RUN_ACTION,
-            Command.CLUSTER_AGENT_UNINSTALL_ACTION,
-        }:
+        action_spec = command_action_spec(action)
+        if (
+            not getattr(self, "direct_commands_enabled", True)
+            and action not in {QUERY_RUN_ACTION, Command.CLUSTER_AGENT_UNINSTALL_ACTION}
+            and not bool(action_spec and action_spec.read_only)
+        ):
             return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
+        if action in {
+            Command.KUBERNETES_NODE_CORDON_ACTION,
+            Command.KUBERNETES_NODE_UNCORDON_ACTION,
+            Command.KUBERNETES_NODE_DRAIN_ACTION,
+            Command.KUBERNETES_NODE_DEBUG_ACTION,
+            Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        } and not getattr(self, "node_control_enabled", False):
+            return self.command_result(False, "node control is disabled by agent profile")
         direct_execution = self.direct_execution_requested(command)
         if self.management_write_blocked(action, direct_execution=direct_execution):
             LOGGER.warning(
@@ -1121,6 +1291,7 @@ class TargetClusterAgent:
                     ),
                     Gateway.DIRECT_EXECUTION: direct_execution,
                     "cooperative_cancel_requested": cancel_requested,
+                    "operation_progress_reporter": operation_progress_reporter,
                 },
             )
         except Exception as exc:
@@ -1131,11 +1302,22 @@ class TargetClusterAgent:
         action: str,
         command: CommandRecord,
     ) -> bool:
-        if action == AgentConfig.ROLLOUT_RESTART_ACTION:
-            return self.command_namespace_value(command).strip().lower() != Sandbox.NAMESPACE
+        if action in {
+            AgentConfig.ROLLOUT_RESTART_ACTION,
+            Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+            Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        }:
+            return not is_sandbox_environment(self.command_namespace_value(command))
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+            Command.KUBERNETES_NODE_CORDON_ACTION,
+            Command.KUBERNETES_NODE_UNCORDON_ACTION,
+            Command.KUBERNETES_NODE_DRAIN_ACTION,
+            Command.KUBERNETES_POD_DEBUG_ACTION,
+            Command.KUBERNETES_NODE_DEBUG_ACTION,
+            Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
         }
 
     def direct_execution_requested(self, command: CommandRecord) -> bool:
@@ -1149,10 +1331,27 @@ class TargetClusterAgent:
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             Command.CATALOG_HELM_INSTALL_ACTION,
+            HELM_RELEASE_OPERATION_ACTION,
             AgentConfig.ROLLOUT_RESTART_ACTION,
             KUBERNETES_CONFIGMAP_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+            Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+            Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+            Command.KUBERNETES_NODE_CORDON_ACTION,
+            Command.KUBERNETES_NODE_UNCORDON_ACTION,
+            Command.KUBERNETES_NODE_DRAIN_ACTION,
+            Command.KUBERNETES_POD_DEBUG_ACTION,
+            Command.KUBERNETES_NODE_DEBUG_ACTION,
+            Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+            Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+            Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+            Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+            Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+            Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+            Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+            Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
             Command.RCA_TEST_SCENARIO_INJECT_ACTION,
             Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
             Command.CLUSTER_AGENT_UNINSTALL_ACTION,
@@ -1177,18 +1376,24 @@ class TargetClusterAgent:
         """
         actions = {
             item.strip()
-            for item in env("AGENT_AUTO_APPROVE_ACTIONS", KUBERNETES_DEPLOYMENT_SCALE_ACTION).split(
-                ","
-            )
+            for item in env(
+                "AGENT_AUTO_APPROVE_ACTIONS",
+                ",".join(
+                    (
+                        KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+                    )
+                ),
+            ).split(",")
             if item.strip()
         }
         environments = {
-            item.strip().lower()
+            normalize_environment(item)
             for item in env("AGENT_AUTO_APPROVE_ENVIRONMENTS", "sandbox").split(",")
             if item.strip()
         }
-        environment = self.command_metadata_value(command, "environment").strip().lower()
-        namespace = self.command_namespace_value(command).strip().lower()
+        environment = normalize_environment(self.command_metadata_value(command, "environment"))
+        namespace = normalize_environment(self.command_namespace_value(command))
         return (
             action in actions
             and environment in environments
@@ -1251,6 +1456,123 @@ class TargetClusterAgent:
         )
 
     @command.handler(
+        HELM_RELEASE_ARTIFACT_READ_ACTION,
+        payload_model=HelmArtifactCommandPayload,
+    )
+    async def helm_release_artifact_read_command(
+        self,
+        ctx: CommandContext[HelmArtifactCommandPayload],
+    ) -> JsonObject:
+        result = await asyncio.to_thread(run_helm_artifact_query, ctx.payload)
+        if not result.succeeded or result.artifact is None:
+            return ctx.fail(
+                "Helm artifact read failed",
+                error_code=result.error_code or "helm_artifact_read_failed",
+                retryable=False,
+            )
+        return ctx.ok(
+            "Helm artifact read completed",
+            artifact=result.artifact.model_dump(mode="json", exclude_none=True),
+        )
+
+    @command.handler(
+        HELM_VALUES_PREVIEW_ACTION,
+        payload_model=HelmValuesPreviewCommandPayload,
+    )
+    async def helm_values_preview_command(
+        self,
+        ctx: CommandContext[HelmValuesPreviewCommandPayload],
+    ) -> JsonObject:
+        try:
+            live_storage = await ctx.kubernetes.get_namespaced_resource(
+                api_group="core",
+                version="v1",
+                namespace=ctx.payload.namespace,
+                resource="secrets",
+                name=ctx.payload.guard.storage.name,
+            )
+            validate_helm_release_secret(
+                live_storage,
+                namespace=ctx.payload.namespace,
+                release_name=ctx.payload.release_name,
+                guard=ctx.payload.guard,
+            )
+        except ValueError:
+            return ctx.fail(
+                "Helm values preview rejected stale release evidence",
+                error_code="helm_release_guard_stale",
+                retryable=False,
+            )
+        except Exception:
+            return ctx.fail(
+                "Helm values preview could not verify release evidence",
+                error_code="helm_release_guard_unavailable",
+                retryable=False,
+            )
+        result = await asyncio.to_thread(run_helm_values_preview, ctx.payload)
+        if not result.succeeded or result.preview is None:
+            return ctx.fail(
+                "Helm values preview failed",
+                error_code=result.error_code or "helm_values_preview_failed",
+                retryable=False,
+                returncode=result.returncode,
+            )
+        return ctx.ok(
+            "Helm values preview completed",
+            preview=result.preview.model_dump(mode="json", exclude_none=True),
+        )
+
+    @command.handler(
+        Command.GITOPS_RESOURCE_CONTROL_ACTION,
+        payload_model=GitOpsResourceCommandPayload,
+    )
+    async def gitops_resource_control_command(
+        self,
+        ctx: CommandContext[GitOpsResourceCommandPayload],
+    ) -> JsonObject:
+        return await execute_gitops_resource_command(ctx)
+
+    @command.k8s(
+        SERVICE_HTTP_REQUEST_ACTION,
+        api_group="core",
+        version="v1",
+        resource="services",
+        verb="get",
+        scope="service-access",
+        payload_model=ServiceHttpRequestCommandPayload,
+    )
+    async def service_http_request_command(
+        self,
+        ctx: CommandContext[ServiceHttpRequestCommandPayload],
+    ) -> JsonObject:
+        try:
+            result = await execute_service_http_request(
+                ctx,
+                transport=getattr(self, "service_http_transport", None),
+            )
+        except ServiceRequestCancelled:
+            return {
+                Gateway.STATUS: CommandStatus.CANCELLED,
+                Gateway.CLUSTER_ID: self.cluster_id,
+                Gateway.APPLIED: False,
+                Gateway.MESSAGE: "service request cancelled",
+                Gateway.RETRYABLE: False,
+                Gateway.RESOURCES: [],
+                Gateway.STDOUT: "",
+                Gateway.STDERR: "",
+            }
+        except ServiceAccessExecutionError as error:
+            return ctx.fail(
+                str(error),
+                error_code=error.code,
+                retryable=False,
+            )
+        return ctx.ok(
+            "service request completed",
+            service_request=result.model_dump(),
+        )
+
+    @command.handler(
         Command.CATALOG_HELM_INSTALL_ACTION,
         payload_model=CatalogHelmInstallPayload,
     )
@@ -1262,6 +1584,29 @@ class TargetClusterAgent:
             ctx.metadata.get(Gateway.DIRECT_EXECUTION)
         ):
             return ctx.fail(MANAGEMENT_READONLY_CODE)
+        if ctx.payload.upgrade_guard is not None:
+            guard = ctx.payload.upgrade_guard
+            try:
+                live_storage = await ctx.kubernetes.get_namespaced_resource(
+                    api_group="core",
+                    version="v1",
+                    namespace=ctx.payload.namespace,
+                    resource="secrets",
+                    name=guard.storage.name,
+                )
+                validate_catalog_helm_upgrade_secret(live_storage, ctx.payload)
+            except ValueError:
+                return ctx.fail(
+                    "catalog Helm upgrade guard rejected stale release evidence",
+                    error_code="helm_release_guard_stale",
+                    retryable=False,
+                )
+            except Exception:
+                return ctx.fail(
+                    "catalog Helm upgrade guard could not verify release evidence",
+                    error_code="helm_release_guard_unavailable",
+                    retryable=False,
+                )
         result = await asyncio.to_thread(run_catalog_helm_install, ctx.payload)
         fields = {
             "catalog_item_id": ctx.payload.catalog_item_id,
@@ -1276,6 +1621,52 @@ class TargetClusterAgent:
                 **fields,
             )
         return ctx.ok("catalog Helm install completed", applied=True, **fields)
+
+    @command.handler(
+        HELM_RELEASE_OPERATION_ACTION,
+        payload_model=HelmReleaseOperationCommandPayload,
+    )
+    async def helm_release_operation_command(
+        self,
+        ctx: CommandContext[HelmReleaseOperationCommandPayload],
+    ) -> JsonObject:
+        try:
+            live_storage = await ctx.kubernetes.get_namespaced_resource(
+                api_group="core",
+                version="v1",
+                namespace=ctx.payload.namespace,
+                resource="secrets",
+                name=ctx.payload.guard.storage.name,
+            )
+            validate_helm_release_operation_secret(live_storage, ctx.payload)
+        except ValueError:
+            return ctx.fail(
+                "Helm release operation rejected stale release evidence",
+                error_code="helm_release_guard_stale",
+                retryable=False,
+            )
+        except Exception:
+            return ctx.fail(
+                "Helm release operation could not verify release evidence",
+                error_code="helm_release_guard_unavailable",
+                retryable=False,
+            )
+        result = await asyncio.to_thread(run_helm_release_operation, ctx.payload)
+        fields = {
+            "operation": ctx.payload.operation,
+            "release_name": ctx.payload.release_name,
+            "expected_revision": ctx.payload.guard.expected_revision,
+            "rollback_revision": ctx.payload.rollback_revision,
+            "returncode": result.returncode,
+        }
+        if not result.succeeded:
+            return ctx.fail(
+                f"Helm release operation failed: {result.error_code}",
+                error_code=result.error_code,
+                retryable=False,
+                **fields,
+            )
+        return ctx.ok("Helm release operation completed", applied=True, **fields)
 
     @command.k8s(
         KUBERNETES_DEPLOYMENT_PATCH_ACTION,
@@ -1313,6 +1704,29 @@ class TargetClusterAgent:
         self,
         ctx: CommandContext[KubernetesScalePayload],
     ) -> JsonObject:
+        return await self.scale_workload_command(ctx, label="deployment")
+
+    @command.k8s(
+        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="statefulsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesScalePayload,
+    )
+    async def scale_statefulset_command(
+        self,
+        ctx: CommandContext[KubernetesScalePayload],
+    ) -> JsonObject:
+        return await self.scale_workload_command(ctx, label="StatefulSet")
+
+    async def scale_workload_command(
+        self,
+        ctx: CommandContext[KubernetesScalePayload],
+        *,
+        label: str,
+    ) -> JsonObject:
         spec = ctx.kubernetes_spec
         result = await ctx.kubernetes.patch_namespaced_resource(
             api_group=spec.api_group,
@@ -1324,11 +1738,872 @@ class TargetClusterAgent:
             subresource="scale",
         )
         return ctx.ok(
-            "kubernetes deployment scaled",
+            f"kubernetes {label} scaled",
             applied=True,
             replicas=ctx.payload.replicas,
             result=result,
         )
+
+    @command.k8s(
+        Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="statefulsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesGetPayload,
+    )
+    async def restart_statefulset_command(
+        self,
+        ctx: CommandContext[KubernetesGetPayload],
+    ) -> JsonObject:
+        return await self.restart_workload_command(ctx, label="StatefulSet")
+
+    @command.k8s(
+        Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="daemonsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesGetPayload,
+    )
+    async def restart_daemonset_command(
+        self,
+        ctx: CommandContext[KubernetesGetPayload],
+    ) -> JsonObject:
+        return await self.restart_workload_command(ctx, label="DaemonSet")
+
+    async def restart_workload_command(
+        self,
+        ctx: CommandContext[KubernetesGetPayload],
+        *,
+        label: str,
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=ctx.payload.namespace,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body=build_rollout_restart_patch(),
+        )
+        return ctx.ok(
+            f"kubernetes {label} restarted",
+            applied=True,
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="deployments",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesWorkloadRollbackPayload,
+    )
+    async def rollback_deployment_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+    ) -> JsonObject:
+        return await self.rollback_workload_command(ctx, revision_resource="replicasets")
+
+    @command.k8s(
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="statefulsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesWorkloadRollbackPayload,
+    )
+    async def rollback_statefulset_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+    ) -> JsonObject:
+        return await self.rollback_workload_command(ctx, revision_resource="controllerrevisions")
+
+    @command.k8s(
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="daemonsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesWorkloadRollbackPayload,
+    )
+    async def rollback_daemonset_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+    ) -> JsonObject:
+        return await self.rollback_workload_command(ctx, revision_resource="controllerrevisions")
+
+    async def rollback_workload_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+        *,
+        revision_resource: str,
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        payload = ctx.payload
+        workload = await ctx.kubernetes.get_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=payload.namespace,
+            resource=spec.resource,
+            name=payload.name,
+        )
+        validate_exact_resource(
+            workload,
+            payload.workload_ref,
+            payload.workload_resource_version,
+        )
+        target = await ctx.kubernetes.get_namespaced_resource(
+            api_group="apps",
+            version="v1",
+            namespace=payload.namespace,
+            resource=revision_resource,
+            name=payload.target_revision_ref.name,
+        )
+        validate_exact_resource(
+            target,
+            payload.target_revision_ref,
+            payload.target_revision_resource_version,
+        )
+        template = rollback_template_from_revision(
+            target,
+            workload=payload.workload_ref,
+            expected_revision=payload.target_revision,
+        )
+        if (
+            workload_template_sha256(template) != payload.target_template_sha256
+            or template != payload.target_template
+        ):
+            raise ValueError("selected workload revision template is stale")
+        workload_spec = workload.get("spec")
+        current_template = (
+            workload_spec.get("template") if isinstance(workload_spec, dict) else None
+        )
+        if (
+            isinstance(current_template, dict)
+            and workload_template_sha256(current_template) == payload.target_template_sha256
+        ):
+            raise ValueError("selected workload revision is already current")
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=payload.namespace,
+            resource=spec.resource,
+            name=payload.name,
+            body={
+                "metadata": {"resourceVersion": payload.workload_resource_version},
+                "spec": {"template": template},
+            },
+        )
+        return ctx.ok(
+            "kubernetes workload revision restored",
+            applied=True,
+            revision=payload.target_revision,
+            partial_failure=False,
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        api_group="core",
+        version="v1",
+        resource="nodes",
+        verb="patch",
+        scope="cluster-workload",
+        payload_model=KubernetesNodeSchedulingPayload,
+    )
+    async def cordon_node_command(
+        self,
+        ctx: CommandContext[KubernetesNodeSchedulingPayload],
+    ) -> JsonObject:
+        return await self.set_node_unschedulable(ctx, expected=True)
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        api_group="core",
+        version="v1",
+        resource="nodes",
+        verb="patch",
+        scope="cluster-workload",
+        payload_model=KubernetesNodeSchedulingPayload,
+    )
+    async def uncordon_node_command(
+        self,
+        ctx: CommandContext[KubernetesNodeSchedulingPayload],
+    ) -> JsonObject:
+        return await self.set_node_unschedulable(ctx, expected=False)
+
+    async def set_node_unschedulable(
+        self,
+        ctx: CommandContext[KubernetesNodeSchedulingPayload],
+        *,
+        expected: bool,
+    ) -> JsonObject:
+        if ctx.payload.unschedulable is not expected:
+            return ctx.fail("node scheduling action does not match requested state")
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_cluster_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body={"spec": {"unschedulable": expected}},
+        )
+        state = "cordoned" if expected else "uncordoned"
+        return ctx.ok(
+            f"kubernetes node {state}",
+            applied=True,
+            unschedulable=expected,
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        api_group="core",
+        version="v1",
+        resource="nodes",
+        verb="patch",
+        scope="resource-maintenance",
+        payload_model=KubernetesNodeDrainPayload,
+    )
+    async def drain_node_command(
+        self,
+        ctx: CommandContext[KubernetesNodeDrainPayload],
+    ) -> JsonObject:
+        node = await ctx.kubernetes.get_cluster_resource(
+            api_group="core",
+            version="v1",
+            resource="nodes",
+            name=ctx.payload.name,
+        )
+        validate_exact_resource(node, ctx.payload.node_ref, ctx.payload.node_resource_version)
+        cancel_requested = ctx.metadata.get("cooperative_cancel_requested")
+        if isinstance(cancel_requested, asyncio.Event) and cancel_requested.is_set():
+            return self.resource_maintenance_cancelled("node drain cancelled before cordon")
+        pod_page = await ctx.kubernetes.list_cluster_resources(
+            api_group="core",
+            version="v1",
+            resource="pods",
+            query={
+                "fieldSelector": f"spec.nodeName={ctx.payload.name}",
+                "limit": str(ctx.payload.max_pods + 1),
+            },
+        )
+        raw_items = pod_page.get("items")
+        items = (
+            [item for item in raw_items if isinstance(item, dict)]
+            if isinstance(raw_items, list)
+            else []
+        )
+        metadata = pod_page.get("metadata")
+        continuation = metadata.get("continue") if isinstance(metadata, dict) else None
+        if continuation or len(items) > ctx.payload.max_pods:
+            return ctx.fail("node drain pod set exceeds the bounded operation limit")
+        eligible: list[JsonObject] = []
+        skipped: list[JsonObject] = []
+        for pod in items:
+            reason = self.node_drain_skip_reason(
+                pod,
+                force=ctx.payload.force,
+                delete_empty_dir_data=ctx.payload.delete_empty_dir_data,
+            )
+            identity = self.pod_operation_identity(pod)
+            if reason is None:
+                eligible.append(pod)
+            else:
+                skipped.append({**identity, "reason": reason})
+        await ctx.kubernetes.patch_cluster_resource(
+            api_group="core",
+            version="v1",
+            resource="nodes",
+            name=ctx.payload.name,
+            body={
+                "metadata": {"resourceVersion": ctx.payload.node_resource_version},
+                "spec": {"unschedulable": True},
+            },
+        )
+        results: list[JsonObject] = []
+        try:
+            cancelled_during_eviction = await asyncio.wait_for(
+                self.evict_node_pods_until_cancel(ctx, eligible, cancel_requested, results),
+                timeout=ctx.payload.timeout_seconds,
+            )
+        except TimeoutError:
+            self.mark_pending_node_drain_results(
+                eligible,
+                results,
+                status="failed",
+                error="TimeoutError",
+            )
+            await self.report_node_drain_progress(ctx, results, total=len(eligible))
+            evicted = sum(item.get("status") == "evicted" for item in results)
+            failed = sum(item.get("status") == "failed" for item in results)
+            return ctx.fail(
+                "node drain timed out after cordon",
+                applied=True,
+                evicted=evicted,
+                failed=failed,
+                skipped=len(skipped),
+                partial_failure=True,
+                resources=[*skipped, *results],
+            )
+        await self.report_node_drain_progress(ctx, results, total=len(eligible))
+        evicted = sum(item.get("status") == "evicted" for item in results)
+        failed = sum(item.get("status") == "failed" for item in results)
+        resources = [*skipped, *results]
+        if cancelled_during_eviction:
+            return {
+                **self.resource_maintenance_cancelled(
+                    "node drain cancelled during eviction",
+                    applied=True,
+                ),
+                Gateway.RESOURCES: resources,
+                "evicted": evicted,
+                "failed": failed,
+                "skipped": len(skipped),
+                "partial_failure": True,
+            }
+        if failed:
+            return ctx.fail(
+                "kubernetes node drain completed with failed evictions",
+                applied=True,
+                resources=resources,
+                evicted=evicted,
+                failed=failed,
+                skipped=len(skipped),
+                partial_failure=True,
+            )
+        return ctx.ok(
+            "kubernetes node drain completed",
+            applied=True,
+            resources=resources,
+            evicted=evicted,
+            failed=failed,
+            skipped=len(skipped),
+            partial_failure=failed > 0,
+        )
+
+    async def evict_node_pods_until_cancel(
+        self,
+        ctx: CommandContext[KubernetesNodeDrainPayload],
+        pods: list[JsonObject],
+        cancel_requested: object,
+        results: list[JsonObject],
+    ) -> bool:
+        eviction_task = asyncio.create_task(
+            self.evict_node_pods(ctx, pods, cancel_requested, results)
+        )
+        cancel_task: asyncio.Task[bool] | None = None
+        try:
+            if not isinstance(cancel_requested, asyncio.Event):
+                await eviction_task
+                return False
+            cancel_task = asyncio.create_task(cancel_requested.wait())
+            done, _pending = await asyncio.wait(
+                {eviction_task, cancel_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if eviction_task in done:
+                await eviction_task
+                return False
+            eviction_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await eviction_task
+            self.mark_pending_node_drain_results(
+                pods,
+                results,
+                status="cancelled",
+            )
+            return True
+        finally:
+            if not eviction_task.done():
+                eviction_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await eviction_task
+            if cancel_task is not None and not cancel_task.done():
+                cancel_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await cancel_task
+
+    async def evict_node_pods(
+        self,
+        ctx: CommandContext[KubernetesNodeDrainPayload],
+        pods: list[JsonObject],
+        cancel_requested: object,
+        results: list[JsonObject],
+    ) -> None:
+        semaphore = asyncio.Semaphore(ctx.payload.max_parallel)
+
+        async def evict(pod: JsonObject) -> None:
+            identity = self.pod_operation_identity(pod)
+            async with semaphore:
+                if isinstance(cancel_requested, asyncio.Event) and cancel_requested.is_set():
+                    results.append({**identity, "status": "cancelled"})
+                    return
+                try:
+                    await ctx.kubernetes.create_namespaced_subresource(
+                        api_group="core",
+                        version="v1",
+                        namespace=str(identity["namespace"]),
+                        resource="pods",
+                        name=str(identity["name"]),
+                        subresource="eviction",
+                        body={
+                            "apiVersion": "policy/v1",
+                            "kind": "Eviction",
+                            "metadata": {
+                                "namespace": identity["namespace"],
+                                "name": identity["name"],
+                            },
+                            "deleteOptions": {
+                                "preconditions": {
+                                    "uid": identity["uid"],
+                                    "resourceVersion": identity["resource_version"],
+                                }
+                            },
+                        },
+                    )
+                    results.append({**identity, "status": "evicted"})
+                except Exception as exc:
+                    results.append({**identity, "status": "failed", "error": type(exc).__name__})
+
+        await asyncio.gather(*(evict(pod) for pod in pods))
+        results.sort(key=lambda item: (str(item.get("namespace")), str(item.get("name"))))
+
+    def mark_pending_node_drain_results(
+        self,
+        pods: list[JsonObject],
+        results: list[JsonObject],
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        completed = {(item.get("namespace"), item.get("name"), item.get("uid")) for item in results}
+        for pod in pods:
+            identity = self.pod_operation_identity(pod)
+            key = (identity.get("namespace"), identity.get("name"), identity.get("uid"))
+            if key in completed:
+                continue
+            result = {**identity, "status": status}
+            if error is not None:
+                result["error"] = error
+            results.append(result)
+        results.sort(key=lambda item: (str(item.get("namespace")), str(item.get("name"))))
+
+    async def report_node_drain_progress(
+        self,
+        ctx: CommandContext[KubernetesNodeDrainPayload],
+        results: list[JsonObject],
+        *,
+        total: int,
+    ) -> None:
+        reporter = ctx.metadata.get("operation_progress_reporter")
+        if not callable(reporter):
+            return
+        for batch_index, offset in enumerate(range(0, len(results), 64), start=1):
+            resources = [
+                {
+                    "namespace": str(item["namespace"]),
+                    "name": str(item["name"]),
+                    "uid": str(item["uid"]),
+                    "resource_version": str(item["resource_version"]),
+                    "status": str(item["status"]),
+                    "error_code": (str(item["error"]) if item.get("error") is not None else None),
+                }
+                for item in results[offset : offset + 64]
+            ]
+            progress: JsonObject = {
+                "progress_id": f"node-drain-batch-{batch_index}",
+                "phase": "node_drain_evictions",
+                "completed": min(offset + len(resources), total),
+                "total": total,
+                "resources": resources,
+            }
+            for attempt in range(3):
+                try:
+                    await reporter(progress)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0)
+
+    @command.k8s(
+        Command.KUBERNETES_POD_DEBUG_ACTION,
+        api_group="core",
+        version="v1",
+        resource="pods",
+        verb="patch",
+        scope="resource-maintenance",
+        payload_model=KubernetesPodDebugPayload,
+    )
+    async def debug_pod_command(
+        self,
+        ctx: CommandContext[KubernetesPodDebugPayload],
+    ) -> JsonObject:
+        pod = await ctx.kubernetes.get_namespaced_resource(
+            api_group="core",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="pods",
+            name=ctx.payload.name,
+        )
+        validate_exact_resource(pod, ctx.payload.pod_ref, ctx.payload.pod_resource_version)
+        spec = pod.get("spec")
+        if not isinstance(spec, dict):
+            return ctx.fail("selected Pod spec is unavailable")
+        containers = spec.get("containers")
+        if not isinstance(containers, list) or ctx.payload.target_container not in {
+            str(item.get("name")) for item in containers if isinstance(item, dict)
+        }:
+            return ctx.fail("selected Pod target container is stale")
+        all_lists = (containers, spec.get("initContainers"), spec.get("ephemeralContainers"))
+        names = {
+            str(item.get("name"))
+            for values in all_lists
+            if isinstance(values, list)
+            for item in values
+            if isinstance(item, dict)
+        }
+        if ctx.payload.container_name in names:
+            return ctx.fail("debug container identity already exists")
+        existing = spec.get("ephemeralContainers")
+        ephemeral = list(existing) if isinstance(existing, list) else []
+        ephemeral.append(
+            {
+                "name": ctx.payload.container_name,
+                "image": ctx.payload.image,
+                "targetContainerName": ctx.payload.target_container,
+                "stdin": True,
+                "tty": True,
+            }
+        )
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group="core",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="pods",
+            name=ctx.payload.name,
+            subresource="ephemeralcontainers",
+            body={
+                "metadata": {"resourceVersion": ctx.payload.pod_resource_version},
+                "spec": {"ephemeralContainers": ephemeral},
+            },
+        )
+        return ctx.ok(
+            "ephemeral debug container attached",
+            applied=True,
+            namespace=ctx.payload.namespace,
+            pod=ctx.payload.name,
+            container_name=ctx.payload.container_name,
+            target_container=ctx.payload.target_container,
+            terminal={
+                "namespace": ctx.payload.namespace,
+                "pod": ctx.payload.name,
+                "container": ctx.payload.container_name,
+            },
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        api_group="core",
+        version="v1",
+        resource="pods",
+        verb="create",
+        scope="resource-maintenance",
+        payload_model=KubernetesNodeDebugPayload,
+    )
+    async def debug_node_command(
+        self,
+        ctx: CommandContext[KubernetesNodeDebugPayload],
+    ) -> JsonObject:
+        await self.require_exact_debug_node(ctx)
+        result = await ctx.kubernetes.create_namespaced_resource(
+            api_group="core",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="pods",
+            body=self.node_debug_pod_manifest(ctx.payload),
+        )
+        return ctx.ok(
+            "node debug pod created",
+            applied=True,
+            namespace=ctx.payload.namespace,
+            pod=ctx.payload.debug_pod_name,
+            container_name="debugger",
+            session_id=ctx.payload.session_id,
+            terminal={
+                "namespace": ctx.payload.namespace,
+                "pod": ctx.payload.debug_pod_name,
+                "container": "debugger",
+            },
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        api_group="core",
+        version="v1",
+        resource="pods",
+        verb="delete",
+        scope="resource-maintenance",
+        payload_model=KubernetesNodeDebugCleanupPayload,
+    )
+    async def cleanup_node_debug_command(
+        self,
+        ctx: CommandContext[KubernetesNodeDebugCleanupPayload],
+    ) -> JsonObject:
+        await self.require_exact_debug_node(ctx)
+        pod = await ctx.kubernetes.get_namespaced_resource(
+            api_group="core",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="pods",
+            name=ctx.payload.debug_pod_name,
+        )
+        metadata = pod.get("metadata")
+        labels = metadata.get("labels") if isinstance(metadata, dict) else None
+        spec = pod.get("spec")
+        if (
+            not isinstance(metadata, dict)
+            or not isinstance(labels, dict)
+            or not isinstance(spec, dict)
+            or labels.get("opsia.io/debug-session") != ctx.payload.session_id
+            or labels.get("opsia.io/node-uid") != ctx.payload.node_ref.uid
+            or spec.get("nodeName") != ctx.payload.name
+        ):
+            return ctx.fail("node debug pod ownership is stale")
+        uid = str(metadata.get("uid") or "")
+        resource_version = str(metadata.get("resourceVersion") or "")
+        if not uid or not resource_version:
+            return ctx.fail("node debug pod identity is incomplete")
+        await ctx.kubernetes.delete_namespaced_resource(
+            api_group="core",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="pods",
+            name=ctx.payload.debug_pod_name,
+            preconditions={"uid": uid, "resourceVersion": resource_version},
+            propagation_policy="Background",
+        )
+        return ctx.ok(
+            "node debug pod cleaned up",
+            applied=True,
+            namespace=ctx.payload.namespace,
+            pod=ctx.payload.debug_pod_name,
+            session_id=ctx.payload.session_id,
+        )
+
+    async def require_exact_debug_node(
+        self,
+        ctx: CommandContext[KubernetesNodeDebugPayload | KubernetesNodeDebugCleanupPayload],
+    ) -> JsonObject:
+        node = await ctx.kubernetes.get_cluster_resource(
+            api_group="core",
+            version="v1",
+            resource="nodes",
+            name=ctx.payload.name,
+        )
+        validate_exact_resource(node, ctx.payload.node_ref, ctx.payload.node_resource_version)
+        return node
+
+    @staticmethod
+    def node_debug_pod_manifest(payload: KubernetesNodeDebugPayload) -> JsonObject:
+        return {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": payload.debug_pod_name,
+                "namespace": payload.namespace,
+                "labels": {
+                    "opsia.io/debug-session": payload.session_id,
+                    "opsia.io/node-uid": payload.node_ref.uid,
+                },
+            },
+            "spec": {
+                "nodeName": payload.name,
+                "restartPolicy": "Never",
+                "hostPID": True,
+                "hostNetwork": True,
+                "tolerations": [{"operator": "Exists"}],
+                "containers": [
+                    {
+                        "name": "debugger",
+                        "image": payload.image,
+                        "stdin": True,
+                        "tty": True,
+                        "securityContext": {"privileged": True},
+                        "volumeMounts": [{"name": "host-root", "mountPath": "/host"}],
+                    }
+                ],
+                "volumes": [{"name": "host-root", "hostPath": {"path": "/"}}],
+            },
+        }
+
+    @staticmethod
+    def pod_operation_identity(pod: JsonObject) -> JsonObject:
+        metadata = pod.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("drain Pod metadata is unavailable")
+        identity = {
+            "namespace": str(metadata.get("namespace") or ""),
+            "name": str(metadata.get("name") or ""),
+            "uid": str(metadata.get("uid") or ""),
+            "resource_version": str(metadata.get("resourceVersion") or ""),
+        }
+        if not all(identity.values()):
+            raise ValueError("drain Pod identity is incomplete")
+        return identity
+
+    @staticmethod
+    def node_drain_skip_reason(
+        pod: JsonObject,
+        *,
+        force: bool,
+        delete_empty_dir_data: bool,
+    ) -> str | None:
+        metadata = pod.get("metadata")
+        spec = pod.get("spec")
+        status = pod.get("status")
+        if not isinstance(metadata, dict) or not isinstance(spec, dict):
+            return "identity-incomplete"
+        owners = metadata.get("ownerReferences")
+        owner_kinds = (
+            {str(item.get("kind") or "").casefold() for item in owners if isinstance(item, dict)}
+            if isinstance(owners, list)
+            else set()
+        )
+        annotations = metadata.get("annotations")
+        if "daemonset" in owner_kinds:
+            return "daemonset"
+        if isinstance(annotations, dict) and "kubernetes.io/config.mirror" in annotations:
+            return "static-pod"
+        if not owners and not force:
+            return "unmanaged"
+        volumes = spec.get("volumes")
+        if (
+            not delete_empty_dir_data
+            and isinstance(volumes, list)
+            and any(isinstance(item, dict) and "emptyDir" in item for item in volumes)
+        ):
+            return "empty-dir"
+        if isinstance(status, dict) and status.get("phase") in {"Succeeded", "Failed"}:
+            return "terminal"
+        return None
+
+    def resource_maintenance_cancelled(
+        self,
+        message: str,
+        *,
+        applied: bool = False,
+    ) -> JsonObject:
+        return {
+            Gateway.STATUS: CommandStatus.CANCELLED,
+            Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.APPLIED: applied,
+            Gateway.MESSAGE: message,
+            Gateway.RETRYABLE: False,
+            Gateway.RESOURCES: [],
+            Gateway.STDOUT: "",
+            Gateway.STDERR: "",
+        }
+
+    @command.k8s(
+        Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        api_group="batch",
+        version="v1",
+        resource="jobs",
+        verb="create",
+        scope="user-workload",
+        payload_model=KubernetesCronJobPayload,
+    )
+    async def trigger_cronjob_command(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+    ) -> JsonObject:
+        cronjob = await ctx.kubernetes.get_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="cronjobs",
+            name=ctx.payload.name,
+        )
+        validate_cronjob_resource_ref(cronjob, ctx.payload.resource_ref)
+        result = await ctx.kubernetes.create_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="jobs",
+            body=cronjob_job_body(
+                cronjob,
+                namespace=ctx.payload.namespace,
+                name=ctx.payload.name,
+            ),
+        )
+        return ctx.ok("CronJob triggered", applied=True, result=result)
+
+    @command.k8s(
+        Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        api_group="batch",
+        version="v1",
+        resource="cronjobs",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesCronJobPayload,
+    )
+    async def suspend_cronjob_command(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+    ) -> JsonObject:
+        return await self.set_cronjob_suspended(ctx, suspended=True)
+
+    @command.k8s(
+        Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        api_group="batch",
+        version="v1",
+        resource="cronjobs",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesCronJobPayload,
+    )
+    async def resume_cronjob_command(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+    ) -> JsonObject:
+        return await self.set_cronjob_suspended(ctx, suspended=False)
+
+    async def set_cronjob_suspended(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+        *,
+        suspended: bool,
+    ) -> JsonObject:
+        cronjob = await ctx.kubernetes.get_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="cronjobs",
+            name=ctx.payload.name,
+        )
+        validate_cronjob_resource_ref(cronjob, ctx.payload.resource_ref)
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="cronjobs",
+            name=ctx.payload.name,
+            body={"spec": {"suspend": suspended}},
+        )
+        state = "suspended" if suspended else "resumed"
+        return ctx.ok(f"CronJob {state}", applied=True, result=result)
 
     @command.k8s(
         KUBERNETES_CONFIGMAP_PATCH_ACTION,
@@ -1468,10 +2743,169 @@ class TargetClusterAgent:
                 return self.query_registry.get(source, name)
         return TelemetryQueryDefinition.from_mapping(query)
 
+    @command.handler(
+        Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        payload_model=ResourceDeleteCommandPayload,
+    )
+    async def delete_resource_command(
+        self,
+        ctx: CommandContext[ResourceDeleteCommandPayload],
+    ) -> JsonObject:
+        results: list[JsonObject] = []
+        successes = 0
+        cancel_requested = ctx.metadata.get("cooperative_cancel_requested")
+        for target in ctx.payload.resources:
+            if isinstance(cancel_requested, asyncio.Event) and cancel_requested.is_set():
+                return {
+                    Gateway.STATUS: CommandStatus.CANCELLED,
+                    Gateway.CLUSTER_ID: self.cluster_id,
+                    Gateway.APPLIED: successes > 0,
+                    Gateway.MESSAGE: "resource delete cancelled at a safe target boundary",
+                    Gateway.RETRYABLE: False,
+                    Gateway.RESOURCES: results,
+                    Gateway.STDOUT: "",
+                    Gateway.STDERR: "",
+                    "completeness": "partial" if results else "unavailable",
+                    "request_fingerprint": ctx.payload.request_fingerprint,
+                }
+            try:
+                current = await self.get_exact_delete_target(target)
+                self.require_exact_delete_target(current, target)
+                preconditions = {
+                    "uid": target.uid,
+                    "resourceVersion": target.resource_version,
+                }
+                if target.namespace is None:
+                    await ctx.kubernetes.delete_cluster_resource(
+                        api_group=target.api_group,
+                        version=target.version,
+                        resource=target.plural,
+                        name=target.name,
+                        preconditions=preconditions,
+                        propagation_policy=ctx.payload.propagation_policy,
+                    )
+                else:
+                    await ctx.kubernetes.delete_namespaced_resource(
+                        api_group=target.api_group,
+                        version=target.version,
+                        namespace=target.namespace,
+                        resource=target.plural,
+                        name=target.name,
+                        preconditions=preconditions,
+                        propagation_policy=ctx.payload.propagation_policy,
+                    )
+                successes += 1
+                results.append(self.delete_target_result(target, status="deleted"))
+            except Exception as exc:
+                results.append(
+                    self.delete_target_result(
+                        target,
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+        if successes != len(ctx.payload.resources):
+            return ctx.fail(
+                f"resource delete failed for {len(ctx.payload.resources) - successes} target(s)",
+                applied=successes > 0,
+                resources=results,
+                completeness="partial" if successes else "unavailable",
+                request_fingerprint=ctx.payload.request_fingerprint,
+            )
+        return ctx.ok(
+            f"resource delete completed for {successes} target(s)",
+            applied=True,
+            resources=results,
+            completeness="exact",
+            request_fingerprint=ctx.payload.request_fingerprint,
+        )
+
+    async def get_exact_delete_target(
+        self,
+        target: ExactResourceDeleteTarget,
+    ) -> JsonObject:
+        if target.namespace is None:
+            return await self.kubernetes.get_cluster_resource(
+                api_group=target.api_group,
+                version=target.version,
+                resource=target.plural,
+                name=target.name,
+            )
+        return await self.kubernetes.get_namespaced_resource(
+            api_group=target.api_group,
+            version=target.version,
+            namespace=target.namespace,
+            resource=target.plural,
+            name=target.name,
+        )
+
+    @staticmethod
+    def require_exact_delete_target(
+        current: JsonObject,
+        target: ExactResourceDeleteTarget,
+    ) -> None:
+        metadata = current.get("metadata")
+        meta = metadata if isinstance(metadata, dict) else {}
+        expected_api_version = (
+            f"{target.api_group}/{target.version}" if target.api_group else target.version
+        )
+        exact = (
+            str(current.get("apiVersion") or "") == expected_api_version
+            and str(current.get("kind") or "").casefold() == target.kind.casefold()
+            and str(meta.get("namespace") or "") == (target.namespace or "")
+            and str(meta.get("name") or "") == target.name
+            and str(meta.get("uid") or "") == target.uid
+            and str(meta.get("resourceVersion") or "") == target.resource_version
+        )
+        if not exact:
+            raise RuntimeError("resource identity changed before delete")
+
+    @staticmethod
+    def delete_target_result(
+        target: ExactResourceDeleteTarget,
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> JsonObject:
+        result: JsonObject = {
+            "kind": target.kind,
+            "namespace": target.namespace,
+            "name": target.name,
+            "uid": target.uid,
+            "status": status,
+        }
+        if error is not None:
+            result["error"] = error
+        return result
+
     @command.handler(AgentConfig.APPLY_MANIFEST_ACTION)
     async def apply_manifest_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
+        nested = ctx.raw_payload.get("payload") if isinstance(ctx.raw_payload, dict) else None
+        desired_documents = nested.get("desired_documents") if isinstance(nested, dict) else None
+        resource_ref = nested.get("resource_ref") if isinstance(nested, dict) else None
+        create_mode = nested.get("create_mode") is True if isinstance(nested, dict) else False
+        dry_run = nested.get("dry_run") is True if isinstance(nested, dict) else False
+        force = nested.get("force") is True if isinstance(nested, dict) else False
+        force_confirmation = (
+            nested.get("force_confirmation") is True if isinstance(nested, dict) else False
+        )
+        field_manager = str(nested.get("field_manager") or "") if isinstance(nested, dict) else ""
+        desired_sha256 = str(nested.get("desired_sha256") or "") if isinstance(nested, dict) else ""
+        if isinstance(desired_documents, list):
+            return await self.apply_manifest_documents(
+                desired_documents,
+                resource_ref if isinstance(resource_ref, dict) else {},
+                namespace,
+                create_mode=create_mode,
+                dry_run=dry_run,
+                force=force,
+                force_confirmation=force_confirmation,
+                field_manager=field_manager,
+                desired_sha256=desired_sha256,
+                cancel_requested=ctx.metadata.get("cooperative_cancel_requested"),
+            )
         desired_manifest = diff.get("desired_manifest")
         if isinstance(desired_manifest, dict) and desired_manifest:
             applied, message, rollout = await self.apply_kubernetes_manifest(
@@ -1507,6 +2941,188 @@ class TargetClusterAgent:
             resource=str(diff.get("resource", "")),
             rollout=rollout,
         )
+
+    async def apply_manifest_documents(
+        self,
+        desired_documents: list[object],
+        resource_ref: JsonObject,
+        fallback_namespace: str,
+        *,
+        create_mode: bool = False,
+        dry_run: bool = False,
+        force: bool = False,
+        force_confirmation: bool = False,
+        field_manager: str = "",
+        desired_sha256: str = "",
+        cancel_requested: object = None,
+    ) -> JsonObject:
+        if not desired_documents or len(desired_documents) > 100:
+            return self.command_result(False, "apply_manifest desired_documents is invalid")
+        expected_uid = str(resource_ref.get("uid") or "")
+        expected_kind = str(resource_ref.get("kind") or "")
+        expected_name = str(resource_ref.get("name") or "")
+        expected_namespace = str(resource_ref.get("namespace") or fallback_namespace)
+        if create_mode and force and not force_confirmation:
+            return self.command_result(False, "force create requires explicit confirmation")
+        if create_mode and field_manager != AgentConfig.MANIFEST_CREATE_FIELD_MANAGER:
+            return self.command_result(False, "create field manager is invalid")
+        if create_mode and not desired_sha256.startswith("sha256:"):
+            return self.command_result(False, "create desired manifest hash is invalid")
+        if not create_mode and (not expected_uid or not expected_kind or not expected_name):
+            return self.command_result(False, "apply_manifest resource identity is incomplete")
+
+        prepared: list[tuple[JsonObject, KubernetesManifestResource, str | None]] = []
+        identities: set[tuple[str, str, str, str]] = set()
+        selected_count = 0
+        try:
+            for value in desired_documents:
+                if not isinstance(value, dict):
+                    raise ValueError("every desired document must be an object")
+                manifest = dict(value)
+                resource = kubernetes_manifest_resource(manifest, fallback_namespace)
+                if not control_namespace_allowed(resource.namespace):
+                    raise ValueError(AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)
+                identity = (
+                    resource.api_version,
+                    resource.kind.casefold(),
+                    resource.namespace,
+                    resource.name,
+                )
+                if identity in identities:
+                    raise ValueError("desired_documents contains duplicate resource identities")
+                identities.add(identity)
+                selected = not create_mode and (
+                    resource.kind.casefold() == expected_kind.casefold()
+                    and resource.namespace == expected_namespace
+                    and resource.name == expected_name
+                )
+                selected_count += int(selected)
+                prepared.append((resource.manifest, resource, expected_uid if selected else None))
+        except ValueError as exc:
+            return self.command_result(False, str(exc))
+        if not create_mode and selected_count != 1:
+            return self.command_result(
+                False,
+                "desired_documents must contain the exact selected resource once",
+            )
+
+        resources: list[JsonObject] = []
+        successes = 0
+        for manifest, resource, document_uid in prepared:
+            if isinstance(cancel_requested, asyncio.Event) and cancel_requested.is_set():
+                return {
+                    Gateway.STATUS: CommandStatus.CANCELLED,
+                    Gateway.CLUSTER_ID: self.cluster_id,
+                    Gateway.APPLIED: successes > 0 and not dry_run,
+                    Gateway.MESSAGE: "manifest create cancelled at a safe document boundary",
+                    Gateway.RETRYABLE: False,
+                    Gateway.RESOURCES: resources,
+                    Gateway.STDOUT: "",
+                    Gateway.STDERR: "",
+                    "completeness": "partial" if successes else "unavailable",
+                    "dry_run": dry_run,
+                    "force": force,
+                    "desired_sha256": desired_sha256,
+                }
+            if create_mode:
+                succeeded, message, rollout = await self.create_kubernetes_manifest(
+                    manifest,
+                    resource.namespace,
+                    dry_run=dry_run,
+                    force=force,
+                    field_manager=field_manager,
+                )
+            else:
+                succeeded, message, rollout = await self.apply_kubernetes_manifest(
+                    manifest,
+                    resource.namespace,
+                    expected_uid=document_uid,
+                )
+            successes += int(succeeded)
+            applied = succeeded and not dry_run
+            resources.append(
+                {
+                    "resource": f"{resource.kind}/{resource.name}",
+                    "namespace": resource.namespace,
+                    "status": (
+                        AgentConfig.COMMAND_COMPLETED_STATUS
+                        if succeeded
+                        else AgentConfig.COMMAND_FAILED_STATUS
+                    ),
+                    "applied": applied,
+                    "retryable": not succeeded,
+                    "message": message,
+                    "stdout": sanitize_command_output(message if succeeded else ""),
+                    "stderr": sanitize_command_output("" if succeeded else message),
+                    "rollout": rollout,
+                }
+            )
+        failures = len(resources) - successes
+        completeness = "exact" if failures == 0 else "partial" if successes else "unavailable"
+        status = (
+            AgentConfig.COMMAND_COMPLETED_STATUS
+            if failures == 0
+            else AgentConfig.COMMAND_FAILED_STATUS
+        )
+        return {
+            Gateway.STATUS: status,
+            Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.APPLIED: successes > 0 and not dry_run,
+            Gateway.MESSAGE: (
+                "all manifest documents applied"
+                if failures == 0
+                else f"{successes} of {len(resources)} manifest documents applied"
+            ),
+            Gateway.RETRYABLE: failures > 0,
+            Gateway.RESOURCES: resources,
+            Gateway.STDOUT: "",
+            Gateway.STDERR: "" if failures == 0 else "one or more manifest documents failed",
+            "completeness": completeness,
+            "dry_run": dry_run,
+            "force": force,
+            "desired_sha256": desired_sha256,
+        }
+
+    async def create_kubernetes_manifest(
+        self,
+        manifest: JsonObject,
+        fallback_namespace: str,
+        *,
+        dry_run: bool,
+        force: bool,
+        field_manager: str,
+    ) -> tuple[bool, str, JsonObject]:
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            return False, "kubernetes api not configured", {}
+        try:
+            resource = kubernetes_manifest_resource(manifest, fallback_namespace)
+        except ValueError as exc:
+            return False, str(exc), {}
+        if not control_namespace_allowed(resource.namespace):
+            return False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE, {}
+        query = "fieldValidation=Strict"
+        if dry_run:
+            query = f"{query}&dryRun=All"
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            if force:
+                response = await client.patch(
+                    f"{resource.resource_url(base_url)}?fieldManager={field_manager}&force=true&{query}",
+                    json=resource.manifest,
+                    headers=kubernetes_headers(token, "application/apply-patch+yaml"),
+                )
+                operation = "server dry-run apply" if dry_run else "server-side apply"
+            else:
+                response = await client.post(
+                    f"{resource.collection_url(base_url)}?{query}",
+                    json=resource.manifest,
+                    headers=kubernetes_headers(token, "application/json"),
+                )
+                operation = "server dry-run create" if dry_run else "create"
+        if response.is_error:
+            return False, kubernetes_failure_message(operation, response), {}
+        return True, f"Kubernetes {operation} accepted", {}
 
     @command.handler(Command.RCA_TEST_SCENARIO_INJECT_ACTION)
     async def rca_test_scenario_inject_command(
@@ -1973,7 +3589,11 @@ class TargetClusterAgent:
         )
 
     async def apply_kubernetes_manifest(
-        self, manifest: JsonObject, fallback_namespace: str
+        self,
+        manifest: JsonObject,
+        fallback_namespace: str,
+        *,
+        expected_uid: str | None = None,
     ) -> tuple[bool, str, JsonObject]:
         base_url = kubernetes_api_base_url()
         token = service_account_token()
@@ -1992,6 +3612,8 @@ class TargetClusterAgent:
                 resource.resource_url(base_url), headers=kubernetes_headers(token)
             )
             if current.status_code == 404:
+                if expected_uid:
+                    return False, "selected resource identity is stale", {}
                 created = await client.post(
                     resource.collection_url(base_url),
                     json=resource.manifest,
@@ -2009,6 +3631,18 @@ class TargetClusterAgent:
 
             if current.is_error:
                 return False, kubernetes_failure_message("get", current), {}
+            if expected_uid:
+                current_body = current.json()
+                current_metadata = (
+                    current_body.get("metadata") if isinstance(current_body, dict) else None
+                )
+                current_uid = (
+                    str(current_metadata.get("uid") or "")
+                    if isinstance(current_metadata, dict)
+                    else ""
+                )
+                if current_uid != expected_uid:
+                    return False, "selected resource identity is stale", {}
             patched = await client.patch(
                 resource.resource_url(base_url),
                 json=resource.manifest,

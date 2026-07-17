@@ -89,6 +89,14 @@ class RcaTimeline(Base):
             "id",
         ),
         Index(
+            "ix_rca_timeline_issue_category",
+            "workspace_id",
+            "category",
+            "updated_at",
+            "id",
+            postgresql_where=text("category_complete is true"),
+        ),
+        Index(
             "ix_rca_timeline_issue_environment",
             "workspace_id",
             "environment",
@@ -118,10 +126,16 @@ class RcaTimeline(Base):
     incident_symptom: Mapped[str | None] = mapped_column(Text, nullable=True)
     incident_logical_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     severity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(Text, nullable=True)
     environment: Mapped[str | None] = mapped_column(Text, nullable=True)
     application_ids: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     labels: Mapped[dict[str, str] | None] = mapped_column(JSONB, nullable=True)
     severity_complete: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
+    category_complete: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         server_default=text("false"),

@@ -11,12 +11,15 @@ import {
   type GitOpsResourceRef,
   type GitOpsSource,
   type GitOpsSyncTarget,
+  type GitOpsResourceInsights,
+  type GitOpsResourceTree,
   type ReleaseApplication,
   type ReleaseCluster,
 } from "./gitOpsContract";
 import type {
   GitOpsApplicationDetailEndpoint,
   GitOpsEndpointDependencies,
+  GitOpsOverviewItemEndpoint,
 } from "./gitOpsEndpointContract";
 
 export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitOpsPort {
@@ -26,23 +29,70 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
         (await endpoints.getApplicationDetail(applicationId, signal)).application,
       ));
     },
+    async getResourceTree(locator, signal) {
+      const endpoint = endpoints.getResourceTree;
+      if (!endpoint) throw new GitOpsPortFailure("not-found");
+      return withPortFailure(async () => toResourceTree(
+        await endpoint(locator, signal),
+      ));
+    },
+    async getResourceInsights(locator, signal) {
+      const endpoint = endpoints.getResourceInsights;
+      if (!endpoint) throw new GitOpsPortFailure("not-found");
+      return withPortFailure(async () => toResourceInsights(
+        (await endpoint(locator, signal)).insights,
+      ));
+    },
+    async executeResourceAction(locator, input, signal) {
+      const endpoint = endpoints.executeResourceAction;
+      if (!endpoint) throw new GitOpsPortFailure("not-found");
+      return withPortFailure(async () => {
+        const response = await endpoint(locator, {
+          cluster_id: locator.clusterId,
+          resource: toEndpointResourceRef(input.insights.resource),
+          resource_version: input.insights.resourceVersion,
+          capability_revision: input.insights.capabilities.revision,
+          action: input.action,
+          confirmation: input.confirmation,
+          reason: input.reason,
+          ...(input.refreshMode ? { refresh_mode: input.refreshMode } : {}),
+          ...(input.options ? {
+            options: {
+              revision: input.options.revision,
+              prune: input.options.prune,
+              dry_run: input.options.dryRun,
+              force: input.options.force,
+              apply_only: input.options.applyOnly,
+              sync_options: input.options.syncOptions,
+              resources: input.options.resources.map((resource) => ({
+                api_group: resource.apiGroup,
+                kind: resource.kind,
+                namespace: resource.namespace,
+                name: resource.name,
+              })),
+            },
+          } : {}),
+        }, input.idempotencyKey, signal);
+        return {
+          accepted: response.accepted,
+          commandId: response.command_id,
+          eventId: response.event_id,
+          auditEventId: response.audit_event_id,
+          correlationId: response.correlation_id,
+          status: response.status,
+        };
+      });
+    },
     async listApplications(signal) {
       return withPortFailure(async () => {
         const response = await endpoints.listApplications(signal);
         return response.applications.map(toApplication).filter((item): item is ReleaseApplication => item !== null);
       });
     },
-    async listSyncTargets(signal) {
+    async listSyncTargets(signal, query) {
       return withPortFailure(async () => {
-        const response = await endpoints.listApplications(signal);
-        const applications = response.applications
-          .map(toApplication)
-          .filter((item): item is ReleaseApplication => item !== null);
-        const groups = await Promise.all(applications.map(async (application) => {
-          const deployments = await endpoints.listApplicationDeployments(application.id, { signal });
-          return deployments.deployments.map((deployment) => toSyncTarget(application, deployment));
-        }));
-        return groups.flat().sort(compareSyncTargets);
+        const response = await endpoints.listOverview(query ?? {}, signal);
+        return response.items.map(toOverviewSyncTarget).sort(compareSyncTargets);
       });
     },
     async listClusters(signal) {
@@ -75,6 +125,119 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.submitSafePr(plan, stepIndex, signal)),
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
+  };
+}
+
+function toOverviewSyncTarget(
+  item: GitOpsOverviewItemEndpoint,
+): GitOpsSyncTarget {
+  if (!item.id || !item.display_name || !item.scope.cluster_id) {
+    throw new GitOpsPortFailure("invalid-response");
+  }
+  if (item.authority === "controller" && item.resource === null) {
+    throw new GitOpsPortFailure("invalid-response");
+  }
+  const resourceLocator = item.resource?.namespace
+    ? {
+      clusterId: item.scope.cluster_id,
+      apiVersion: item.resource.api_group
+        ? `${item.resource.api_group}/${item.resource.version}`
+        : item.resource.version,
+      kind: item.resource.kind,
+      namespace: item.resource.namespace,
+      name: item.resource.name,
+    }
+    : null;
+  return {
+    id: item.id,
+    applicationId: item.application_ids[0]
+      ?? item.resource?.uid
+      ?? item.binding_id
+      ?? item.id,
+    applicationName: item.display_name,
+    clusterId: item.scope.cluster_id,
+    namespace: item.resource?.namespace ?? item.scope.namespaces[0] ?? null,
+    environment: item.environment,
+    syncStatus: item.status,
+    revision: item.revision,
+    observedAt: item.observed_at,
+    authority: item.authority,
+    provider: item.provider,
+    kind: item.resource?.kind ?? null,
+    health: item.health,
+    resourceLocator,
+    freshness: item.scope.freshness,
+    partialReasonCodes: item.partial_reason_codes,
+  };
+}
+
+function toResourceTree(
+  value: import("./gitOpsEndpointContract").GitOpsResourceTreeEndpoint,
+): GitOpsResourceTree {
+  return {
+    scope: toClusterScope(value.scope),
+    root: toResourceRef(value.root),
+    nodes: value.nodes.map((node) => ({
+      id: node.id,
+      resource: toResourceRef(node.resource),
+      role: node.role,
+      status: node.status,
+      health: node.health,
+    })),
+    edges: value.edges,
+    coverage: {
+      state: value.coverage.state,
+      reasonCodes: value.coverage.reason_codes,
+      observedCount: value.coverage.observed_count,
+      returnedCount: value.coverage.returned_count,
+    },
+  };
+}
+
+function toResourceInsights(
+  value: import("./gitOpsEndpointContract").GitOpsResourceInsightsEndpoint["insights"],
+): GitOpsResourceInsights {
+  return {
+    scope: toClusterScope(value.scope),
+    resource: toResourceRef(value.resource),
+    resourceVersion: value.resource_version,
+    provider: value.provider,
+    status: value.status,
+    health: value.health,
+    revision: value.revision,
+    source: value.source ? toResourceRef(value.source) : null,
+    conditions: value.conditions.map((condition) => ({
+      type: condition.type,
+      status: condition.status,
+      reason: condition.reason,
+      message: condition.message,
+      observedAt: condition.observed_at,
+    })),
+    history: value.history.map((entry) => ({
+      id: entry.id,
+      revision: entry.revision,
+      deployedAt: entry.deployed_at,
+      phase: entry.phase,
+      message: entry.message,
+      initiatedBy: entry.initiated_by,
+    })),
+    capabilities: {
+      scope: toClusterScope(value.capabilities.scope),
+      resource: toResourceRef(value.capabilities.resource),
+      revision: value.capabilities.revision,
+      actions: value.capabilities.actions,
+    },
+  };
+}
+
+function toEndpointResourceRef(value: GitOpsResourceRef) {
+  return {
+    api_group: value.apiGroup,
+    version: value.version,
+    kind: value.kind,
+    namespace: value.namespace,
+    name: value.name,
+    uid: value.uid,
   };
 }
 
@@ -174,26 +337,6 @@ function toCapability(
   };
 }
 
-function toSyncTarget(
-  application: ReleaseApplication,
-  value: Record<string, unknown>,
-): GitOpsSyncTarget {
-  const bindingId = stringValue(value.binding_id);
-  if (!bindingId) throw new GitOpsPortFailure("invalid-response");
-  const poll = mapValue(value.gitops_poll);
-  return {
-    id: `${application.id}:${bindingId}`,
-    applicationId: application.id,
-    applicationName: application.name,
-    clusterId: nullableStringValue(value.cluster_id),
-    namespace: nullableStringValue(value.namespace),
-    environment: nullableStringValue(value.environment),
-    syncStatus: poll ? nullableStringValue(poll.status) : null,
-    revision: poll ? nullableStringValue(poll.last_seen_commit_sha) : null,
-    observedAt: poll ? nullableStringValue(poll.last_polled_at) : null,
-  };
-}
-
 function compareSyncTargets(left: GitOpsSyncTarget, right: GitOpsSyncTarget): number {
   return left.applicationName.localeCompare(right.applicationName) ||
     (left.clusterId ?? "").localeCompare(right.clusterId ?? "") ||
@@ -237,17 +380,6 @@ function firstStringValue(value: Record<string, unknown>, keys: readonly string[
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function nullableStringValue(value: unknown): string | null {
-  const normalized = stringValue(value).trim();
-  return normalized || null;
-}
-
-function mapValue(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
 }
 
 async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {

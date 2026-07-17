@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ClusterScopeFailure } from "../../features/cluster-scope/clusterScopeContract";
 import { IssuesSurface } from "../../features/issues/IssuesSurface";
 import type {
@@ -22,6 +23,7 @@ import {
   type EvidenceCountKind,
 } from "../../features/issues/issueEvidencePresentation";
 import { useI18n } from "../../shared/i18n";
+import { ISSUE_STATUS_MESSAGE } from "../../features/issues/issuePresentation";
 import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -37,38 +39,6 @@ const FAILURE_MESSAGE: Record<IssuesFailureCode, MessageKey> = {
   "rate-limited": "issues.surface.failure.rateLimited",
   unavailable: "issues.surface.failure.unavailable",
   error: "issues.surface.failure.error",
-};
-
-const STATUS_MESSAGE: Record<string, MessageKey> = {
-  investigating: "issues.status.investigating",
-  incident_detected: "issues.status.incidentDetected",
-  evidence_bundled: "issues.status.incidentDetected",
-  rule_missing: "issues.status.analysisRequired",
-  backlog_created: "issues.status.analysisRequired",
-  ai_fallback_requested: "issues.status.analysisRequired",
-  followup_required: "issues.status.analysisRequired",
-  action_required: "issues.status.analysisRequired",
-  rca_planned: "issues.status.analysisInProgress",
-  rca_evaluated: "issues.status.analysisInProgress",
-  rca_completed: "issues.status.rcaCompleted",
-  recovery_planned: "issues.status.recoveryPlanned",
-  selection_required: "issues.status.selectionRequested",
-  selection_requested: "issues.status.selectionRequested",
-  recovery_selected: "issues.status.approvalRecommended",
-  approval_recommended: "issues.status.approvalRecommended",
-  command_requested: "issues.status.recoveryInProgress",
-  command_dispatched: "issues.status.recoveryInProgress",
-  command_queued: "issues.status.recoveryInProgress",
-  command_completed: "issues.status.recoveryCompleted",
-  command_rejected: "issues.status.commandRejected",
-  pr_requested: "issues.status.changeInProgress",
-  pr_patch_prepared: "issues.status.changeInProgress",
-  pr_diff_explained: "issues.status.changeInProgress",
-  pr_ready_for_creation: "issues.status.changeInProgress",
-  pr_created: "issues.status.changeCompleted",
-  pr_failed: "issues.status.changeFailed",
-  incident_resolved: "issues.status.resolved",
-  resolved: "issues.status.resolved",
 };
 
 const CAUSE_MESSAGE: Record<string, MessageKey> = {
@@ -87,10 +57,29 @@ const CAUSE_MESSAGE: Record<string, MessageKey> = {
 
 export function IssuesPage({ port }: { port: IssuesPort }) {
   const scope = useClusterScope();
+  const filters = useUnifiedFilter();
   const { formatDate, formatNumber, t } = useI18n();
   const copy = useMemo(
     () => createIssuesCopy(t, formatNumber, formatDate),
     [formatDate, formatNumber, t],
+  );
+  const issueFilters = useMemo(
+    () => ({
+      namespaces: filters.state.common.namespaces.map(
+        (item) => `${item.clusterId}/${item.namespace}`,
+      ),
+      severities: filters.state.issues.severity.filter(
+        (value): value is "critical" | "warning" => (
+          value === "critical" || value === "warning"
+        ),
+      ),
+      categories: filters.state.issues.category,
+    }),
+    [
+      filters.state.common.namespaces,
+      filters.state.issues.category,
+      filters.state.issues.severity,
+    ],
   );
 
   if (scope.selection.kind === "resolving") {
@@ -138,6 +127,7 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
       <IssuesSurface
         clusterId={clusterId}
         copy={copy}
+        filters={issueFilters}
         port={port}
         recoverySelection={{ state: "enabled" }}
       />
@@ -155,6 +145,13 @@ function createIssuesCopy(
     listEmpty: t("issues.surface.listEmpty"),
     listLoading: t("issues.surface.listLoading"),
     listCount: (count) => formatNumber(count),
+    listMatchedCount: (returned, matched) => t("issues.surface.matchedCount", {
+      returned: formatNumber(returned),
+      matched: formatNumber(matched),
+    }),
+    visibilityLabel: t("issues.surface.visibility.label"),
+    visibilityPartial: t("issues.surface.visibility.partial"),
+    visibilityRestricted: t("issues.surface.visibility.restricted"),
     listBrowseResources: t("issues.empty.resources"),
     listBrowseAlerts: t("issues.empty.alerts"),
     detailLabel: t("issues.surface.detail"),
@@ -206,7 +203,12 @@ function createIssuesCopy(
     recoveryUnavailable: t("issues.surface.recoveryUnavailable"),
     refresh: t("common.action.refresh"),
     status: t("issues.surface.status"),
-    statusLabel: (status) => translateOperationalValue(status, STATUS_MESSAGE, t),
+    statusLabel: (status) => translateOperationalValue(status, ISSUE_STATUS_MESSAGE, t),
+    severityLabel: (severity) => t(
+      severity === "critical"
+        ? "issues.severity.critical"
+        : "issues.severity.warning",
+    ),
     causeLabel: (cause) => translateOperationalValue(cause, CAUSE_MESSAGE, t),
     target: t("issues.table.target"),
     updated: t("issues.table.updated"),

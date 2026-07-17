@@ -40,9 +40,14 @@ export function createResourcesAdapter(
     async loadCatalog(clusterId, signal) {
       return withCanonicalFailure(async () => {
         const canonicalClusterId = canonicalClusterRequest(clusterId);
+        const [inventory, apiResources] = await Promise.all([
+          endpoints.getInventorySummary(canonicalClusterId, signal),
+          endpoints.getKubernetesApiResources(canonicalClusterId, signal),
+        ]);
         return toResourceCatalog(
           canonicalClusterId,
-          await endpoints.getInventorySummary(canonicalClusterId, signal),
+          inventory,
+          apiResources,
         );
       });
     },

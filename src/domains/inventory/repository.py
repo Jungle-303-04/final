@@ -5,14 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.inventory.change_correlation import correlate_inventory_timeline_events
 from domains.inventory.kubernetes_events import (
     EVENT_CAPTURE_REASON_COMPLETE,
     EVENT_CAPTURE_SUMMARY_KEY,
@@ -37,6 +38,8 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 # 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한.
 # (파라미터 수 제한과 단일 트랜잭션 락 시간 사이의 절충값, env 아님: 계약이 아니라 내부 상수)
 INVENTORY_UPSERT_CHUNK = 500
+TIMELINE_COVERAGE_READ_CHUNK = 128
+TIMELINE_COVERAGE_RESPONSE_LIMIT = 256
 
 SYNTHETIC_NAMESPACE = None
 HEALTH_RESOURCE_TYPE = "health"
@@ -48,6 +51,8 @@ POD_RESOURCE_TYPE = "pod"
 NODE_RESOURCE_TYPE = "node"
 WORKLOAD_RESOURCE_TYPE = "workload"
 EVENT_RESOURCE_TYPE = "event"
+TLS_SECRET_TYPE = "kubernetes.io/tls"
+CERT_MANAGER_API_GROUP = "cert-manager.io"
 FLEET_ROLLUP_RESOURCE_TYPES = (POD_RESOURCE_TYPE, NODE_RESOURCE_TYPE, WORKLOAD_RESOURCE_TYPE)
 POD_RUNNING_STATUS = "Running"
 NODE_READY_STATUS = "Ready"
@@ -138,13 +143,58 @@ def inventory_resource_key(
     workspace_id: str,
     cluster_id: str,
     resource_type: str,
+    api_version: str,
     namespace: str | None,
     kind: str,
     name: str,
 ) -> str:
-    identity = [workspace_id, cluster_id, resource_type, namespace or "", kind, name]
+    identity = [
+        workspace_id,
+        cluster_id,
+        resource_type,
+        api_version,
+        namespace or "",
+        kind,
+        name,
+    ]
     raw = json.dumps(identity, ensure_ascii=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def inventory_resource_identity(resource: Mapping[str, object]) -> tuple[str, ...]:
+    """Return the complete identity encoded by ``inventory_resource_key``."""
+    namespace = resource.get("namespace")
+    return (
+        str(resource.get("workspace_id") or ""),
+        str(resource.get("cluster_id") or ""),
+        str(resource.get("resource_type") or ""),
+        str(resource.get("api_version") or ""),
+        str(namespace) if namespace is not None else "",
+        str(resource.get("kind") or ""),
+        str(resource.get("name") or ""),
+    )
+
+
+def preserve_existing_inventory_keys(
+    current_rows: Sequence[JsonObject],
+    previous_rows: Sequence[Mapping[str, object]],
+) -> list[JsonObject]:
+    """Preserve history keys only when the complete Kubernetes identity is unchanged."""
+    existing_keys = {
+        inventory_resource_identity(row): str(row["inventory_key"])
+        for row in previous_rows
+        if row.get("inventory_key")
+    }
+    preserved = [
+        {
+            **row,
+            "inventory_key": existing_keys.get(
+                inventory_resource_identity(row), row["inventory_key"]
+            ),
+        }
+        for row in current_rows
+    ]
+    return dedupe_inventory_rows(preserved)
 
 
 def resource_type_of(resource: JsonObject) -> str:
@@ -160,6 +210,7 @@ def normalize_inventory_resource(
     observed_at: datetime,
 ) -> JsonObject:
     resource_type = resource_type_of(resource)
+    api_version = str(resource.get("api_version") or "")
     kind = str(resource.get("kind") or resource_type)
     namespace = resource.get("namespace")
     name = str(resource.get("name") or resource.get("uid") or f"{resource_type}-resource")
@@ -174,6 +225,7 @@ def normalize_inventory_resource(
             workspace_id,
             cluster_id,
             resource_type,
+            api_version,
             str(namespace) if namespace is not None else None,
             kind,
             name,
@@ -182,7 +234,7 @@ def normalize_inventory_resource(
         "workspace_id": workspace_id,
         "cluster_id": cluster_id,
         "resource_type": resource_type,
-        "api_version": str(resource.get("api_version") or ""),
+        "api_version": api_version,
         "kind": kind,
         "namespace": str(namespace) if namespace is not None else None,
         "name": name,
@@ -250,6 +302,41 @@ def snapshot_resources(payload: JsonObject) -> list[JsonObject]:
             }
         )
     return resources
+
+
+def _certificate_observation(row: Mapping[str, Any]) -> JsonObject:
+    secret = {
+        "inventory_key": str(row["secret_inventory_key"]),
+        "api_version": str(row["secret_api_version"]),
+        "kind": str(row["secret_kind"]),
+        "namespace": (
+            str(row["secret_namespace"]) if row.get("secret_namespace") is not None else None
+        ),
+        "name": str(row["secret_name"]),
+        "uid": str(row["secret_uid"]) if row.get("secret_uid") is not None else None,
+        "observed_at": iso_or_none(row.get("secret_observed_at")),
+    }
+    if row.get("certificate_inventory_key") is None:
+        return {"secret": secret, "certificate": None}
+    return {
+        "secret": secret,
+        "certificate": {
+            "inventory_key": str(row["certificate_inventory_key"]),
+            "api_version": str(row["certificate_api_version"]),
+            "kind": str(row["certificate_kind"]),
+            "namespace": (
+                str(row["certificate_namespace"])
+                if row.get("certificate_namespace") is not None
+                else None
+            ),
+            "name": str(row["certificate_name"]),
+            "uid": (
+                str(row["certificate_uid"]) if row.get("certificate_uid") is not None else None
+            ),
+            "raw": dict(row.get("certificate_raw") or {}),
+            "observed_at": iso_or_none(row.get("certificate_observed_at")),
+        },
+    }
 
 
 def snapshot_summary(payload: JsonObject) -> JsonObject:
@@ -446,6 +533,29 @@ def inventory_timeline_source_key(
     return f"inventory:{event_type}:{inventory_key}:{fingerprint}"
 
 
+def _timeline_coverage_snapshot_rows(
+    partitions: Iterable[Sequence[Mapping[str, object]]],
+    *,
+    cancelled: Callable[[], bool] | None,
+) -> Iterator[dict[str, object]]:
+    """Rebuild the projector's narrow input without retaining DB partitions."""
+    for partition in partitions:
+        if cancelled is not None and cancelled():
+            return
+        for row in partition:
+            if cancelled is not None and cancelled():
+                return
+            yield {
+                "cluster_id": row.get("cluster_id"),
+                "status": row.get("status"),
+                "summary": {
+                    "summary": {
+                        EVENT_CAPTURE_SUMMARY_KEY: row.get("event_capture"),
+                    }
+                },
+            }
+
+
 def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
     """K8s 리소스 raw/summary 에서 첫 컨테이너 이미지를 찾음(workload → pod → summary 순)."""
     for path in (("spec", "template", "spec", "containers"), ("spec", "containers")):
@@ -469,12 +579,16 @@ class InventoryRepository(DatabaseConnection):
         read_scope: Any,
         *,
         window: TimelineWindow,
+        cancelled: Callable[[], bool] | None = None,
     ) -> tuple[TimelineCoverage, ...]:
         """Read durable global Event capture evidence for an authorized Timeline scope.
 
         Snapshot evidence, rather than the Timeline event ledger, is the source
         of completeness.  The pure projector proves both failure and recovery
-        bounds and emits no coverage where either bound is unknown.
+        bounds and emits no coverage where either bound is unknown.  This read
+        projects only the small capture proof from each snapshot and streams it
+        in fixed-size partitions.  Full inventory summaries can contain every
+        resource and must never be materialized for Timeline coverage.
         """
         cluster_ids = frozenset(
             str(cluster_id).strip()
@@ -487,16 +601,19 @@ class InventoryRepository(DatabaseConnection):
         if not workspace_id:
             return ()
         snapshots = ClusterInventorySnapshotRecord.__table__
+        event_capture = snapshots.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
         statement = (
             select(
                 snapshots.c.cluster_id,
                 snapshots.c.status,
-                snapshots.c.summary,
+                event_capture.label("event_capture"),
             )
             .where(
                 snapshots.c.workspace_id == workspace_id,
                 snapshots.c.cluster_id.in_(tuple(sorted(cluster_ids))),
                 snapshots.c.status != "ignored_stale",
+                snapshots.c.collected_at < datetime.fromtimestamp(window.to_ms / 1_000, tz=UTC),
+                event_capture.is_not(None),
             )
             .order_by(
                 snapshots.c.cluster_id.asc(),
@@ -506,12 +623,20 @@ class InventoryRepository(DatabaseConnection):
             )
         )
         with self.connection() as conn:
-            rows = tuple(dict(row) for row in conn.execute(statement).mappings())
-        return project_kubernetes_event_capture_coverage(
-            read_scope,
-            window=window,
-            snapshots=rows,
-        )
+            rows = conn.execution_options(
+                stream_results=True,
+                max_row_buffer=TIMELINE_COVERAGE_READ_CHUNK,
+            ).execute(statement)
+            return project_kubernetes_event_capture_coverage(
+                read_scope,
+                window=window,
+                snapshots=_timeline_coverage_snapshot_rows(
+                    rows.mappings().partitions(TIMELINE_COVERAGE_READ_CHUNK),
+                    cancelled=cancelled,
+                ),
+                snapshots_ordered=True,
+                max_intervals=TIMELINE_COVERAGE_RESPONSE_LIMIT,
+            )
 
     def save_live_cluster_usage_sample(
         self,
@@ -679,6 +804,7 @@ class InventoryRepository(DatabaseConnection):
                 .mappings()
                 .all()
             ]
+            normalized = preserve_existing_inventory_keys(normalized, previous_rows)
             # A non-authoritative cut cannot emit Event Timeline entries, so avoid
             # reading an older fact batch that it must never compare or append from.
             previous_event_batch = (
@@ -782,7 +908,7 @@ class InventoryRepository(DatabaseConnection):
                 )
                 marked_deleted = int(result.rowcount or 0)
 
-            sync_inventory_filter_projection(
+            projection = sync_inventory_filter_projection(
                 conn,
                 workspace_id=workspace_id,
                 cluster_id=cluster_id,
@@ -791,6 +917,11 @@ class InventoryRepository(DatabaseConnection):
                 labels_complete=labels_complete,
                 resources_complete=resources_complete,
                 partial_reason_codes=partial_reason_codes,
+            )
+            timeline_events = correlate_inventory_timeline_events(
+                timeline_events,
+                source_snapshot_id=snapshot_id,
+                projection=projection,
             )
 
         return InventorySnapshotMutation(
@@ -834,6 +965,120 @@ class InventoryRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [self.serialize_inventory_resource(dict(row)) for row in rows]
+
+    def list_tls_secret_certificate_observations(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        limit: int,
+    ) -> JsonObject:
+        """Read TLS Secret identities with at most one matching cert-manager observation.
+
+        Secret ``raw`` and ``data`` columns are deliberately absent from the
+        selected response. Only the Certificate object is retained for the
+        existing redacted provider-detail projector.
+        """
+
+        effective_limit = max(1, min(limit, 500))
+        table = ClusterInventoryResourceRecord.__table__
+        secret = table.alias("certificate_expiry_secret")
+        certificate = table.alias("certificate_expiry_certificate")
+        certificate_secret_name = certificate.c.raw["spec"]["secretName"].astext
+        ranked_certificates = (
+            select(
+                certificate.c.inventory_key,
+                certificate.c.api_version,
+                certificate.c.kind,
+                certificate.c.namespace,
+                certificate.c.name,
+                certificate.c.uid,
+                certificate.c.raw,
+                certificate.c.observed_at,
+                certificate_secret_name.label("secret_name"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        certificate.c.workspace_id,
+                        certificate.c.cluster_id,
+                        certificate.c.namespace,
+                        certificate_secret_name,
+                    ),
+                    order_by=(
+                        certificate.c.observed_at.desc(),
+                        certificate.c.inventory_key.desc(),
+                    ),
+                )
+                .label("rank"),
+            )
+            .where(
+                certificate.c.workspace_id == workspace_id,
+                certificate.c.cluster_id == cluster_id,
+                func.split_part(certificate.c.api_version, "/", 1) == CERT_MANAGER_API_GROUP,
+                func.lower(certificate.c.kind) == "certificate",
+                certificate.c.deleted_at.is_(None),
+                certificate_secret_name.is_not(None),
+                certificate_secret_name != "",
+            )
+            .cte("ranked_certificate_expiry_sources")
+        )
+        latest_certificate = (
+            select(ranked_certificates)
+            .where(ranked_certificates.c.rank == 1)
+            .cte("latest_certificate_expiry_sources")
+        )
+        secret_type = func.coalesce(
+            secret.c.raw["type"].astext,
+            secret.c.summary["type"].astext,
+            "",
+        )
+        statement = (
+            select(
+                secret.c.inventory_key.label("secret_inventory_key"),
+                secret.c.api_version.label("secret_api_version"),
+                secret.c.kind.label("secret_kind"),
+                secret.c.namespace.label("secret_namespace"),
+                secret.c.name.label("secret_name"),
+                secret.c.uid.label("secret_uid"),
+                secret.c.observed_at.label("secret_observed_at"),
+                latest_certificate.c.inventory_key.label("certificate_inventory_key"),
+                latest_certificate.c.api_version.label("certificate_api_version"),
+                latest_certificate.c.kind.label("certificate_kind"),
+                latest_certificate.c.namespace.label("certificate_namespace"),
+                latest_certificate.c.name.label("certificate_name"),
+                latest_certificate.c.uid.label("certificate_uid"),
+                latest_certificate.c.raw.label("certificate_raw"),
+                latest_certificate.c.observed_at.label("certificate_observed_at"),
+            )
+            .select_from(
+                secret.outerjoin(
+                    latest_certificate,
+                    and_(
+                        latest_certificate.c.namespace == secret.c.namespace,
+                        latest_certificate.c.secret_name == secret.c.name,
+                    ),
+                )
+            )
+            .where(
+                secret.c.workspace_id == workspace_id,
+                secret.c.cluster_id == cluster_id,
+                func.lower(secret.c.kind) == "secret",
+                secret.c.deleted_at.is_(None),
+                secret_type == TLS_SECRET_TYPE,
+            )
+            .order_by(
+                secret.c.namespace.nullsfirst(),
+                secret.c.name,
+                secret.c.inventory_key,
+            )
+            .limit(effective_limit + 1)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+        return {
+            "items": [_certificate_observation(row) for row in rows[:effective_limit]],
+            "has_more": len(rows) > effective_limit,
+        }
 
     def get_inventory_resource(
         self,
@@ -964,6 +1209,104 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_resource(dict(row)) if row else None
 
+    def read_inventory_cascade(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: JsonObject,
+        limit: int = 200,
+    ) -> JsonObject:
+        """Read a bounded, same-snapshot owner-UID cascade without kind/name guesses."""
+
+        effective_limit = max(1, min(limit, 200))
+        snapshot = self.latest_inventory_snapshot(workspace_id, cluster_id)
+        snapshot_id = str((snapshot or {}).get("snapshot_id") or "")
+        snapshot_envelope = (snapshot or {}).get("summary")
+        source_summary = (
+            snapshot_envelope.get("summary") if isinstance(snapshot_envelope, Mapping) else None
+        )
+        resources_complete = bool(
+            isinstance(source_summary, Mapping) and source_summary.get("resources_complete") is True
+        )
+        root_uid = str(resource.get("uid") or "")
+        if not snapshot_id or str(resource.get("snapshot_id") or "") != snapshot_id or not root_uid:
+            return {
+                "snapshot_id": snapshot_id,
+                "resources_complete": False,
+                "truncated": False,
+                "dependents": [],
+            }
+        if not resources_complete:
+            return {
+                "snapshot_id": snapshot_id,
+                "resources_complete": False,
+                "truncated": False,
+                "dependents": [],
+            }
+
+        table = ClusterInventoryResourceRecord.__table__
+        frontier = {root_uid}
+        visited = {root_uid}
+        dependents: list[JsonObject] = []
+        truncated = False
+        with self.connection() as conn:
+            while frontier:
+                remaining = effective_limit - len(dependents)
+                if remaining <= 0:
+                    truncated = True
+                    break
+                rows = (
+                    conn.execute(
+                        select(table)
+                        .where(
+                            table.c.workspace_id == workspace_id,
+                            table.c.cluster_id == cluster_id,
+                            table.c.snapshot_id == snapshot_id,
+                            table.c.deleted_at.is_(None),
+                            table.c.summary["owner_uid"].astext.in_(tuple(sorted(frontier))),
+                        )
+                        .order_by(
+                            table.c.kind,
+                            table.c.namespace.nullsfirst(),
+                            table.c.name,
+                            table.c.inventory_key,
+                        )
+                        .limit(remaining + 1)
+                    )
+                    .mappings()
+                    .all()
+                )
+                if len(rows) > remaining:
+                    rows = rows[:remaining]
+                    truncated = True
+                next_frontier: set[str] = set()
+                for row in rows:
+                    item = self.serialize_inventory_resource(dict(row))
+                    summary = item.get("summary")
+                    if (
+                        not isinstance(summary, Mapping)
+                        or summary.get("owner_references_complete") is not True
+                    ):
+                        resources_complete = False
+                        continue
+                    uid = str(item.get("uid") or "")
+                    if not uid or uid in visited:
+                        resources_complete = False
+                        continue
+                    visited.add(uid)
+                    next_frontier.add(uid)
+                    dependents.append(item)
+                if truncated:
+                    break
+                frontier = next_frontier
+        return {
+            "snapshot_id": snapshot_id,
+            "resources_complete": resources_complete,
+            "truncated": truncated,
+            "dependents": dependents,
+        }
+
     def list_related_inventory_resources(
         self,
         *,
@@ -1033,6 +1376,95 @@ class InventoryRepository(DatabaseConnection):
             return related
 
         return related
+
+    def list_scheduled_run_inventory(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        owner_kind: str,
+        owner_name: str,
+        owner_uid: str,
+        run_kinds: Sequence[str],
+        limit: int = 100,
+        pod_limit: int = 1000,
+    ) -> JsonObject:
+        """Read retained scheduled runs and their Pods with two bounded queries.
+
+        Owner UID is mandatory so a recreated CronJob-like object cannot inherit
+        runs from an older object with the same name.  Pods are fetched in one
+        batch for all returned runs; no per-run query is issued.
+        """
+
+        effective_limit = max(1, min(limit, 100))
+        effective_pod_limit = max(1, min(pod_limit, 1000))
+        normalized_run_kinds = tuple(sorted({kind for kind in run_kinds if kind}))
+        if not owner_uid or not normalized_run_kinds:
+            return {
+                "runs": [],
+                "pods": [],
+                "runs_truncated": False,
+                "pods_truncated": False,
+            }
+
+        table = ClusterInventoryResourceRecord.__table__
+        runs_statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.namespace == namespace,
+                table.c.resource_type == WORKLOAD_RESOURCE_TYPE,
+                table.c.kind.in_(normalized_run_kinds),
+                table.c.deleted_at.is_(None),
+                table.c.summary["owner_uid"].astext == owner_uid,
+                table.c.summary["owner_kind"].astext == owner_kind,
+                table.c.summary["owner_name"].astext == owner_name,
+            )
+            .order_by(
+                table.c.summary["creation_timestamp"].astext.desc().nullslast(),
+                table.c.last_seen_at.desc(),
+                table.c.inventory_key.desc(),
+            )
+            .limit(effective_limit + 1)
+        )
+        with self.connection() as conn:
+            run_rows = [dict(row) for row in conn.execute(runs_statement).mappings().all()]
+            selected_runs = run_rows[:effective_limit]
+            run_owners = [
+                and_(
+                    table.c.summary["owner_uid"].astext == str(row["uid"]),
+                    table.c.summary["owner_kind"].astext == str(row["kind"]),
+                    table.c.summary["owner_name"].astext == str(row["name"]),
+                )
+                for row in selected_runs
+                if row.get("uid")
+            ]
+            pod_rows: list[JsonObject] = []
+            if run_owners:
+                pods_statement = (
+                    select(table)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.cluster_id == cluster_id,
+                        table.c.namespace == namespace,
+                        table.c.resource_type == POD_RESOURCE_TYPE,
+                        table.c.deleted_at.is_(None),
+                        or_(*run_owners),
+                    )
+                    .order_by(table.c.last_seen_at.desc(), table.c.inventory_key.desc())
+                    .limit(effective_pod_limit + 1)
+                )
+                pod_rows = [dict(row) for row in conn.execute(pods_statement).mappings().all()]
+        return {
+            "runs": [self.serialize_inventory_resource(row) for row in selected_runs],
+            "pods": [
+                self.serialize_inventory_resource(row) for row in pod_rows[:effective_pod_limit]
+            ],
+            "runs_truncated": len(run_rows) > effective_limit,
+            "pods_truncated": len(pod_rows) > effective_pod_limit,
+        }
 
     def list_resource_events(
         self,

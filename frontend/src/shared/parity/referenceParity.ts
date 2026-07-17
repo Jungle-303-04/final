@@ -50,6 +50,13 @@ export interface CommandReceipt {
     | "cancelled";
 }
 
+/** Receipt for an immediate configuration mutation backed by a durable audit event. */
+export interface ConfigMutationReceipt {
+  accepted: true;
+  eventId: string;
+  correlationId: string;
+}
+
 export interface OperationEvent {
   commandId: string;
   sequence: number;

@@ -17,6 +17,10 @@ export interface IssuesSurfaceCopy {
   listEmpty: string;
   listLoading: string;
   listCount: (count: number) => string;
+  listMatchedCount: (returned: number, matched: number) => string;
+  visibilityLabel: string;
+  visibilityPartial: string;
+  visibilityRestricted: string;
   listBrowseResources: string;
   listBrowseAlerts: string;
   detailLabel: string;
@@ -62,6 +66,7 @@ export interface IssuesSurfaceCopy {
   refresh: string;
   status: string;
   statusLabel: (status: string) => string;
+  severityLabel: (severity: "critical" | "warning") => string;
   causeLabel: (cause: string) => string;
   target: string;
   updated: string;

@@ -28,7 +28,11 @@ def _event(subject: str, payload: dict[str, object]) -> EventEnvelope:
     )
 
 
-def _incident_payload(*, severity: str | None = "critical") -> dict[str, object]:
+def _incident_payload(
+    *,
+    severity: str | None = "critical",
+    category: str | None = "container_restart",
+) -> dict[str, object]:
     incident: dict[str, object] = {
         "incident_id": "incident-1",
         "cluster_id": "cluster-1",
@@ -46,6 +50,8 @@ def _incident_payload(*, severity: str | None = "critical") -> dict[str, object]
     if severity is not None:
         payload["severity"] = severity
         incident["severity"] = severity
+    if category is not None:
+        incident["category"] = category
     return payload
 
 
@@ -71,13 +77,14 @@ def _extract_issue_evidence_labels(
 def test_rca_timeline_model_adds_nullable_issue_axes_and_honest_completeness() -> None:
     table = RcaTimeline.__table__
 
-    for name in ("severity", "environment", "application_ids", "labels"):
+    for name in ("severity", "category", "environment", "application_ids", "labels"):
         assert table.c[name].nullable is True
     assert isinstance(table.c.application_ids.type, JSONB)
     assert isinstance(table.c.labels.type, JSONB)
 
     for name in (
         "severity_complete",
+        "category_complete",
         "environment_complete",
         "application_ids_complete",
         "labels_complete",
@@ -95,6 +102,8 @@ def test_incident_event_projects_only_authoritative_issue_axes() -> None:
     assert row is not None
     assert row["severity"] == "critical"
     assert row["severity_complete"] is True
+    assert row["category"] == "container_restart"
+    assert row["category_complete"] is True
     assert row["environment"] is None
     assert row["environment_complete"] is False
     assert row["application_ids"] is None
@@ -103,12 +112,16 @@ def test_incident_event_projects_only_authoritative_issue_axes() -> None:
     assert row["labels_complete"] is False
 
 
-def test_legacy_incident_without_severity_is_explicitly_incomplete() -> None:
-    row = timeline_update_from_event(_event("incident.detected", _incident_payload(severity=None)))
+def test_legacy_incident_without_severity_or_category_is_explicitly_incomplete() -> None:
+    row = timeline_update_from_event(
+        _event("incident.detected", _incident_payload(severity=None, category=None))
+    )
 
     assert row is not None
     assert row["severity"] is None
     assert row["severity_complete"] is False
+    assert row["category"] is None
+    assert row["category_complete"] is False
 
 
 class _Result:
@@ -153,7 +166,7 @@ def test_followup_event_upsert_preserves_projection_value_and_completeness_atomi
 
     compiled = connection.statements[0].compile(dialect=postgresql.dialect())
     sql = " ".join(str(compiled).lower().split())
-    for name in ("severity", "environment", "application_ids", "labels"):
+    for name in ("severity", "category", "environment", "application_ids", "labels"):
         assert f"{name} = case when" in sql
         assert f"rca_timeline.{name}_complete is true" in sql
         assert f"then rca_timeline.{name}" in sql

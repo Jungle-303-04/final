@@ -8,14 +8,18 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 import domains.inventory.repository as inventory_repository
+from domains.dashboard.ready_stream import InMemoryDashboardReadyFanout
 from domains.identity.dependencies import ClusterAgentIdentity
-from domains.inventory.ingest import ingest_inventory_snapshot
+from domains.inventory.change_correlation import correlate_inventory_timeline_events
+from domains.inventory.ingest import append_inventory_timeline_events, ingest_inventory_snapshot
 from domains.inventory.repository import (
     InventoryRepository,
     InventorySnapshotMutation,
+    inventory_resource_key,
     inventory_timeline_events,
 )
 from domains.inventory.router import record_inventory_snapshot
+from domains.inventory_filter.repository import InventoryFilterProjectionMutation
 from domains.target.router import evidence_job_result
 from domains.timeline.repository import TimelineLedgerAppend
 from packages.contracts.gateway.requests import (
@@ -129,6 +133,136 @@ def test_incomplete_or_semantically_identical_inventory_snapshot_emits_no_timeli
     assert identical == ()
 
 
+def test_same_timestamp_inventory_cuts_keep_exact_snapshot_revision_and_version_ids() -> None:
+    observed_at = datetime(2026, 7, 15, tzinfo=UTC)
+    before = _resource(inventory_key="pod-1", name="checkout", resource_version="1")
+    after = _resource(inventory_key="pod-1", name="checkout", resource_version="2")
+    added = inventory_timeline_events(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        observed_at=observed_at,
+        previous_rows=[],
+        current_rows=[before],
+        resources_complete=True,
+    )
+    updated = inventory_timeline_events(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        observed_at=observed_at,
+        previous_rows=[before],
+        current_rows=[after],
+        resources_complete=True,
+    )
+
+    first = correlate_inventory_timeline_events(
+        added,
+        source_snapshot_id="snapshot-a",
+        projection=InventoryFilterProjectionMutation(
+            revision_id=10,
+            version_ids_by_inventory_key={"pod-1": 100},
+        ),
+    )[0]
+    second = correlate_inventory_timeline_events(
+        updated,
+        source_snapshot_id="snapshot-b",
+        projection=InventoryFilterProjectionMutation(
+            revision_id=11,
+            version_ids_by_inventory_key={"pod-1": 101},
+        ),
+    )[0]
+
+    assert first.occurred_at == second.occurred_at
+    assert first.metadata == {
+        "source_snapshot_id": "snapshot-a",
+        "revision_id": 10,
+        "version_id": 100,
+    }
+    assert second.metadata == {
+        "source_snapshot_id": "snapshot-b",
+        "revision_id": 11,
+        "version_id": 101,
+    }
+    assert first.source_key != second.source_key
+    assert first.event_id == first.source_key
+    assert second.event_id == second.source_key
+
+
+def test_repeated_a_b_a_b_inventory_transitions_keep_every_exact_cut() -> None:
+    state_a = _resource(inventory_key="pod-1", name="checkout", resource_version="a")
+    state_b = _resource(inventory_key="pod-1", name="checkout", resource_version="b")
+    cuts = (
+        ([], [state_a], "snapshot-1", 1, 101),
+        ([state_a], [state_b], "snapshot-2", 2, 102),
+        ([state_b], [state_a], "snapshot-3", 3, 103),
+        ([state_a], [state_b], "snapshot-4", 4, 104),
+    )
+
+    events = tuple(
+        correlate_inventory_timeline_events(
+            inventory_timeline_events(
+                workspace_id="workspace-1",
+                cluster_id="cluster-1",
+                observed_at=datetime(2026, 7, 15, revision_id, tzinfo=UTC),
+                previous_rows=previous,
+                current_rows=current,
+                resources_complete=True,
+            ),
+            source_snapshot_id=snapshot_id,
+            projection=InventoryFilterProjectionMutation(
+                revision_id=revision_id,
+                version_ids_by_inventory_key={"pod-1": version_id},
+            ),
+        )[0]
+        for previous, current, snapshot_id, revision_id, version_id in cuts
+    )
+
+    assert [event.event_type for event in events] == ["add", "update", "update", "update"]
+    assert len({event.source_key for event in events}) == 4
+    assert events[1].source_key != events[3].source_key
+    assert [event.metadata["revision_id"] for event in events] == [1, 2, 3, 4]
+
+
+def test_large_inventory_mutation_uses_one_bulk_ledger_append() -> None:
+    template = _mutation_with_add().timeline_events[0]
+    events = tuple(
+        template.model_copy(
+            update={
+                "event_id": f"event-{index}",
+                "source_key": f"inventory:event-{index}",
+                "native_id": f"pod-{index}",
+            }
+        )
+        for index in range(5_000)
+    )
+    mutation = InventorySnapshotMutation(
+        result=_mutation_with_add().result,
+        timeline_events=events,
+    )
+
+    class BulkDb:
+        def __init__(self) -> None:
+            self.bulk_calls = 0
+
+        def append_timeline_events(
+            self, batch: tuple[object, ...]
+        ) -> tuple[TimelineLedgerAppend, ...]:
+            self.bulk_calls += 1
+            assert len(batch) == 5_000
+            return tuple(
+                TimelineLedgerAppend(event=event, sequence=index, inserted=True)
+                for index, event in enumerate(batch, start=1)
+            )
+
+        def append_timeline_event(self, _event: object) -> TimelineLedgerAppend:
+            raise AssertionError("large inventory append must not use the per-event path")
+
+    db = BulkDb()
+    appends = append_inventory_timeline_events(db, mutation)
+
+    assert db.bulk_calls == 1
+    assert len(appends) == 5_000
+
+
 def test_derived_health_and_usage_rollups_do_not_become_inventory_timeline_facts() -> None:
     health = {
         **_resource(inventory_key="health", name="cluster", uid=None),
@@ -200,7 +334,22 @@ def test_snapshot_mutation_reads_prestate_under_inventory_lock_before_building_e
     repository = object.__new__(InventoryRepository)
     repository.connection = connect
     monkeypatch.setattr(
-        inventory_repository, "sync_inventory_filter_projection", lambda *_args, **_kwargs: None
+        inventory_repository,
+        "sync_inventory_filter_projection",
+        lambda *_args, **_kwargs: InventoryFilterProjectionMutation(
+            revision_id=7,
+            version_ids_by_inventory_key={
+                inventory_resource_key(
+                    "workspace-1",
+                    "cluster-1",
+                    "pod",
+                    "v1",
+                    "payments",
+                    "Pod",
+                    "checkout",
+                ): 19
+            },
+        ),
     )
 
     mutation = repository.save_inventory_snapshot_mutation(
@@ -241,6 +390,11 @@ def test_snapshot_mutation_reads_prestate_under_inventory_lock_before_building_e
     assert lock_index < prestate_index
     assert mutation.result["accepted"] is True
     assert [event.event_type for event in mutation.timeline_events] == ["add"]
+    assert mutation.timeline_events[0].metadata == {
+        "source_snapshot_id": mutation.result["snapshot_id"],
+        "revision_id": 7,
+        "version_id": 19,
+    }
 
 
 def test_stale_inventory_snapshot_creates_no_timeline_facts(
@@ -373,6 +527,61 @@ def test_ingest_announces_only_after_the_unit_of_work_commits() -> None:
     asyncio.run(run())
 
 
+def test_ingest_announces_dashboard_ready_after_commit_even_without_timeline_changes() -> None:
+    async def run() -> None:
+        mutation = InventorySnapshotMutation(
+            result={
+                "accepted": True,
+                "snapshot_id": "snapshot-same-state",
+                "cluster_id": "cluster-1",
+                "resource_count": 1,
+                "marked_deleted": 0,
+                "resource_types": ["pod"],
+            }
+        )
+        db = _TransactionDb(mutation)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
+
+        await ingest_inventory_snapshot(
+            db=db,
+            workspace_id="workspace-1",
+            cluster_id="cluster-1",
+            agent_id="agent-1",
+            payload={},
+            ready_fanout=ready_fanout,
+        )
+
+        event = await asyncio.wait_for(subscription.next(), timeout=0.1)
+        assert event.workspace_id == "workspace-1"
+        assert event.cluster_id == "cluster-1"
+        assert event.snapshot_id == "snapshot-same-state"
+        assert db.steps == ["begin", "mutation", "commit"]
+
+    asyncio.run(run())
+
+
+def test_ingest_never_announces_dashboard_ready_for_a_stale_snapshot() -> None:
+    async def run() -> None:
+        db = _TransactionDb(_stale_mutation())
+        ready_fanout = InMemoryDashboardReadyFanout()
+        subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
+
+        await ingest_inventory_snapshot(
+            db=db,
+            workspace_id="workspace-1",
+            cluster_id="cluster-1",
+            agent_id="agent-1",
+            payload={},
+            ready_fanout=ready_fanout,
+        )
+
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(subscription.next(), timeout=0.01)
+
+    asyncio.run(run())
+
+
 def test_ingest_rollback_never_announces_a_timeline_append() -> None:
     async def fail_after_persist(_result: dict[str, object]) -> None:
         raise RuntimeError("outbox staging failed")
@@ -413,6 +622,8 @@ def test_agent_snapshot_route_keeps_outbox_staging_inside_the_timeline_transacti
         db = _TransactionDb(_mutation_with_add())
         events = _InventoryEvents(db.steps)
         fanout = _Fanout(db.steps)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        ready_subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
 
         response = await record_inventory_snapshot(
             InventorySnapshotRequest(
@@ -431,11 +642,13 @@ def test_agent_snapshot_route_keeps_outbox_staging_inside_the_timeline_transacti
             db=db,
             events=events,
             timeline_fanout=fanout,
+            dashboard_ready_fanout=ready_fanout,
         )
 
         assert response.snapshot_id == "snapshot-1"
         assert len(events.recorded) == 1
         assert db.steps == ["begin", "mutation", "append", "outbox", "commit", "fanout"]
+        assert (await ready_subscription.next()).snapshot_id == "snapshot-1"
 
     asyncio.run(run())
 
@@ -445,6 +658,8 @@ def test_agent_stale_snapshot_does_not_stage_a_recorded_outbox_event() -> None:
         db = _TransactionDb(_stale_mutation())
         events = _InventoryEvents(db.steps)
         fanout = _Fanout(db.steps)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        ready_subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
 
         response = await record_inventory_snapshot(
             InventorySnapshotRequest(cluster_id="cluster-1", agent_id="agent-1"),
@@ -452,11 +667,14 @@ def test_agent_stale_snapshot_does_not_stage_a_recorded_outbox_event() -> None:
             db=db,
             events=events,
             timeline_fanout=fanout,
+            dashboard_ready_fanout=ready_fanout,
         )
 
         assert response.accepted is False
         assert events.recorded == []
         assert db.steps == ["begin", "mutation", "commit"]
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(ready_subscription.next(), timeout=0.01)
 
     asyncio.run(run())
 
@@ -501,6 +719,8 @@ def test_target_evidence_uses_the_common_ingest_boundary_without_partial_timelin
         )
         db = _TargetEvidenceInventoryDb(mutation)
         fanout = _Fanout(db.steps)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        ready_subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
 
         response = await evidence_job_result(
             "job-kubernetes",
@@ -519,11 +739,13 @@ def test_target_evidence_uses_the_common_ingest_boundary_without_partial_timelin
             db,
             object(),
             fanout,
+            ready_fanout,
         )
 
         assert response.accepted is True
         assert db.inventory_payloads[0]["replace"] is False
         assert db.steps == ["begin", "mutation", "commit"]
         assert fanout.published == []
+        assert (await ready_subscription.next()).snapshot_id == "snapshot-partial"
 
     asyncio.run(run())

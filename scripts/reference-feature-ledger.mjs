@@ -5,6 +5,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import {
+  assertFeatureSourceAuthority,
+  validateFeatureSourceAuthority,
+} from "./reference-feature-source-identity.mjs";
+
+export { validateFeatureSourceAuthority };
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, "..");
 const DEFAULT_SOURCE = path.join(
@@ -34,6 +41,25 @@ const DEFAULT_SOURCE_KEY_ALIASES = path.join(
   "migration",
   "reference-feature-source-aliases.json",
 );
+const DEFAULT_SOURCE_IDENTITIES = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-feature-source-identities.json",
+);
+const DEFAULT_DELTA_CLASSIFICATIONS = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-ui-delta-classifications.json",
+);
+const DEFAULT_SOURCE_LEDGER = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-source-ledger.json",
+);
+const DEFAULT_FROZEN_SOURCE = path.join(REPOSITORY_ROOT, "references", "upstream");
 const DEFAULT_REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
 const DELIVERY_STATUSES = new Set([
   "implemented",
@@ -43,7 +69,12 @@ const DELIVERY_STATUSES = new Set([
   "not_applicable",
 ]);
 const NON_PRODUCT_DELIVERY_STATUSES = new Set(["reference_only", "not_applicable"]);
+const RELEASE_SURFACES = new Set(["all", "web"]);
+const RELEASE_PHASES = new Set(["baseline", "post_parity"]);
+const RELEASE_PHASE_FILTERS = new Set(["all", ...RELEASE_PHASES]);
 const SOURCE_KEY = /^upstream-ui:[a-z0-9-]+:[a-z0-9-]+:[a-z0-9-]+:v[1-9][0-9]*$/;
+const DESKTOP_ONLY_ENDPOINT =
+  /^(?:(?:GET|POST|PUT|PATCH|DELETE)\s+\/desktop(?:[/?]|$)|WS\s+\/local-terminal(?:[/?]|$))/;
 
 function tableCells(line) {
   return line
@@ -99,6 +130,12 @@ function featurePortMap(portMap, section, contractId) {
   const port = { ...sectionPort, ...override };
   if (!DELIVERY_STATUSES.has(port.deliveryStatus)) {
     throw new Error(`알 수 없는 이식 상태입니다: ${contractId} (${port.deliveryStatus})`);
+  }
+  if (port.releasePhase !== undefined && !RELEASE_PHASES.has(port.releasePhase)) {
+    throw new Error(`알 수 없는 출하 단계입니다: ${contractId} (${port.releasePhase})`);
+  }
+  if (port.streaming !== undefined && typeof port.streaming !== "boolean") {
+    throw new Error(`실시간 이식 증거는 boolean이어야 합니다: ${contractId}`);
   }
   return port;
 }
@@ -178,8 +215,8 @@ export function parseReferenceInventory(markdown, sourceRevision, portMap, sourc
     const number = String(features.length + 1).padStart(3, "0");
     const contractId = `reference.feature.${number}`;
     const sourceKey = sourceKeyFor(sourceKeyAliases, contractId);
-    const streaming = endpoints.some(isStreamingEndpoint);
     const port = featurePortMap(portMap, section, contractId);
+    const streaming = port.streaming ?? endpoints.some(isStreamingEndpoint);
     features.push({
       id: `reference-feature-${number}`,
       contractId,
@@ -192,6 +229,7 @@ export function parseReferenceInventory(markdown, sourceRevision, portMap, sourc
       endpoints,
       streaming,
       area: port.area,
+      releasePhase: port.releasePhase ?? "baseline",
       deliveryStatus: port.deliveryStatus,
       backendContract: port.backendContract,
       frontendContract: port.frontendContract,
@@ -247,8 +285,14 @@ export function validateFeatureLedger(ledger) {
     if (!Array.isArray(feature.endpoints)) errors.push(`${id}: endpoints must be an array`);
     if (typeof feature.streaming !== "boolean") errors.push(`${id}: streaming must be boolean`);
     if (!feature.area) errors.push(`${id}: area is required`);
+    if (!RELEASE_PHASES.has(feature.releasePhase)) {
+      errors.push(`${id}: releasePhase must be baseline or post_parity`);
+    }
     if (!DELIVERY_STATUSES.has(feature.deliveryStatus)) {
       errors.push(`${id}: deliveryStatus must be a supported value`);
+    }
+    if (feature.deliveryStatus === "implemented" && !feature.sourceKey) {
+      errors.push(`${id}: implemented source identity is required`);
     }
     if (!feature.backendContract) errors.push(`${id}: backendContract is required`);
     if (!feature.frontendContract) errors.push(`${id}: frontendContract is required`);
@@ -281,27 +325,40 @@ export function validateFeatureLedger(ledger) {
   return errors;
 }
 
-export function assertFeatureDeliveryComplete(ledger) {
+export function assertFeatureDeliveryComplete(
+  ledger,
+  { surface = "all", phase = "all" } = {},
+) {
   const validationErrors = validateFeatureLedger(ledger);
   if (validationErrors.length > 0) {
     throw new Error(`기능 ledger validation failed:\n${validationErrors.join("\n")}`);
   }
+  if (!RELEASE_SURFACES.has(surface)) {
+    throw new Error(`지원하지 않는 release surface입니다: ${surface}`);
+  }
+  if (!RELEASE_PHASE_FILTERS.has(phase)) {
+    throw new Error(`지원하지 않는 release phase입니다: ${phase}`);
+  }
   const incomplete = [];
   for (const feature of ledger.features) {
     if (NON_PRODUCT_DELIVERY_STATUSES.has(feature.deliveryStatus)) continue;
-    if (feature.deliveryStatus !== "implemented") {
+    if (phase !== "all" && feature.releasePhase !== phase) continue;
+    if (surface === "web" && isDesktopOnlyFeature(feature)) continue;
+    if (surface === "all" && feature.deliveryStatus !== "implemented") {
       incomplete.push(`${feature.contractId}: ${feature.deliveryStatus}`);
       continue;
     }
     const coverage = feature.coverage;
     for (const boundary of ["backend", "frontend"]) {
-      if (!coverage[boundary]) incomplete.push(`${feature.contractId}: missing ${boundary} coverage`);
+      if (!isReadyCoverage(coverage[boundary])) {
+        incomplete.push(`${feature.contractId}: incomplete ${boundary} coverage`);
+      }
     }
-    if (feature.desktopContract && !coverage.desktop) {
-      incomplete.push(`${feature.contractId}: missing desktop coverage`);
+    if (surface === "all" && feature.desktopContract && !isReadyCoverage(coverage.desktop)) {
+      incomplete.push(`${feature.contractId}: incomplete desktop coverage`);
     }
-    if (feature.streaming && !coverage.realtime) {
-      incomplete.push(`${feature.contractId}: missing realtime coverage`);
+    if (feature.streaming && !isReadyCoverage(coverage.realtime)) {
+      incomplete.push(`${feature.contractId}: incomplete realtime coverage`);
     }
     if (!feature.sourceKey) {
       incomplete.push(`${feature.contractId}: missing immutable sourceKey`);
@@ -314,6 +371,19 @@ export function assertFeatureDeliveryComplete(ledger) {
   }
 }
 
+function isReadyCoverage(coverage) {
+  return Boolean(
+    coverage
+      && typeof coverage === "object"
+      && !Array.isArray(coverage)
+      && ["implemented", "not_required"].includes(coverage.state),
+  );
+}
+
+function isDesktopOnlyFeature(feature) {
+  return feature.endpoints.length > 0 && feature.endpoints.every((endpoint) => DESKTOP_ONLY_ENDPOINT.test(endpoint));
+}
+
 function parseArguments(argv) {
   const values = {
     source: DEFAULT_SOURCE,
@@ -321,9 +391,15 @@ function parseArguments(argv) {
     contractsOutput: DEFAULT_CONTRACTS_OUTPUT,
     portMap: DEFAULT_PORT_MAP,
     sourceKeyAliases: DEFAULT_SOURCE_KEY_ALIASES,
+    sourceIdentities: DEFAULT_SOURCE_IDENTITIES,
+    deltaClassifications: DEFAULT_DELTA_CLASSIFICATIONS,
+    sourceLedger: DEFAULT_SOURCE_LEDGER,
+    frozenSource: DEFAULT_FROZEN_SOURCE,
     sourceRevision: DEFAULT_REVISION,
     check: false,
     requireComplete: false,
+    releaseSurface: "all",
+    releasePhase: "all",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -335,8 +411,29 @@ function parseArguments(argv) {
       values.requireComplete = true;
       continue;
     }
+    if (flag === "--surface" && argv[index + 1]) {
+      values.releaseSurface = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (flag === "--phase" && argv[index + 1]) {
+      values.releasePhase = argv[index + 1];
+      index += 1;
+      continue;
+    }
     if (
-      !["--source", "--output", "--contracts-output", "--port-map", "--source-key-aliases", "--revision"].includes(flag)
+      ![
+        "--source",
+        "--output",
+        "--contracts-output",
+        "--port-map",
+        "--source-key-aliases",
+        "--source-identities",
+        "--delta-classifications",
+        "--source-ledger",
+        "--frozen-source",
+        "--revision",
+      ].includes(flag)
       || !argv[index + 1]
     ) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`);
@@ -346,6 +443,11 @@ function parseArguments(argv) {
     else if (flag === "--contracts-output") values.contractsOutput = path.resolve(value);
     else if (flag === "--port-map") values.portMap = path.resolve(value);
     else if (flag === "--source-key-aliases") values.sourceKeyAliases = path.resolve(value);
+    else if (flag === "--source-identities") values.sourceIdentities = path.resolve(value);
+    else if (flag === "--delta-classifications") {
+      values.deltaClassifications = path.resolve(value);
+    } else if (flag === "--source-ledger") values.sourceLedger = path.resolve(value);
+    else if (flag === "--frozen-source") values.frozenSource = path.resolve(value);
     else values[flag.slice(2)] = path.resolve(value);
     index += 1;
   }
@@ -368,6 +470,7 @@ function contractCatalog(ledger) {
         endpoints,
         streaming,
         area,
+        releasePhase,
         deliveryStatus,
         backendContract,
         frontendContract,
@@ -384,6 +487,7 @@ function contractCatalog(ledger) {
         endpoints,
         streaming,
         area,
+        releasePhase,
         deliveryStatus,
         backendContract,
         frontendContract,
@@ -401,9 +505,15 @@ export async function writeFeatureLedger({
   contractsOutput = DEFAULT_CONTRACTS_OUTPUT,
   portMap = DEFAULT_PORT_MAP,
   sourceKeyAliases = DEFAULT_SOURCE_KEY_ALIASES,
+  sourceIdentities = null,
+  deltaClassifications = null,
+  sourceLedger = null,
+  frozenSource = null,
   sourceRevision,
   check = false,
   requireComplete = false,
+  releaseSurface = "all",
+  releasePhase = "all",
 }) {
   const markdown = await readFile(source, "utf8");
   const loadedPortMap =
@@ -415,9 +525,38 @@ export async function writeFeatureLedger({
       ? validateSourceKeyAliasManifest(JSON.parse(await readFile(sourceKeyAliases, "utf8")))
       : { sourceRevision: null, aliases: sourceKeyAliases };
   const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap, sourceKeyAliasManifest.aliases);
+  const authorityInputs = [
+    sourceIdentities,
+    deltaClassifications,
+    sourceLedger,
+    frozenSource,
+  ];
+  if (authorityInputs.some(Boolean) && !authorityInputs.every(Boolean)) {
+    throw new Error("feature source authority inputs must be provided together");
+  }
+  if (authorityInputs.every(Boolean)) {
+    const [loadedSourceIdentities, loadedDeltaClassifications, loadedSourceLedger] =
+      await Promise.all([
+        readFile(sourceIdentities, "utf8").then(JSON.parse),
+        readFile(deltaClassifications, "utf8").then(JSON.parse),
+        readFile(sourceLedger, "utf8").then(JSON.parse),
+      ]);
+    await assertFeatureSourceAuthority({
+      sourceRevision,
+      aliases: sourceKeyAliasManifest,
+      deltaClassifications: loadedDeltaClassifications,
+      snapshotIdentities: loadedSourceIdentities,
+      featureLedger: ledger,
+      sourceLedger: loadedSourceLedger,
+      frozenSource,
+    });
+  }
   if (requireComplete) {
     assertSourceKeyAliasManifestRevisionMatchesTarget(sourceKeyAliasManifest, sourceRevision);
-    assertFeatureDeliveryComplete(ledger);
+    assertFeatureDeliveryComplete(ledger, {
+      surface: releaseSurface,
+      phase: releasePhase,
+    });
   }
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`;
   const serializedContracts = `${JSON.stringify(contractCatalog(ledger), null, 2)}\n`;

@@ -32,9 +32,27 @@ export const resourcesShortcutDefinitions: readonly ShortcutDefinition[] = [
     sequence: ["d"],
   },
   {
+    id: "resources:open-yaml",
+    labelKey: "shell.shortcut.resources.openYaml",
+    group: "context",
+    sequence: ["y"],
+  },
+  {
     id: "resources:open-logs",
     labelKey: "shell.shortcut.resources.openLogs",
     group: "context",
     sequence: ["l"],
+  },
+  {
+    id: "resources:previous-kind",
+    labelKey: "shell.shortcut.resources.previousKind",
+    group: "context",
+    sequence: ["["],
+  },
+  {
+    id: "resources:next-kind",
+    labelKey: "shell.shortcut.resources.nextKind",
+    group: "context",
+    sequence: ["]"],
   },
 ];

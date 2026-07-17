@@ -260,6 +260,46 @@ class StubApplicationsDb:
         assert kwargs["application_id"] == "app-1"
         return {"complete": True, "open_count": 0, "items": []}
 
+    def get_application_catalog_states(
+        self,
+        *,
+        workspace_id: str,
+        application_ids: list[str],
+        allowed_cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert application_ids == ["app-1"]
+        assert allowed_cluster_ids == {"cluster-1"}
+        return {
+            "app-1": {
+                "bindings": self.list_application_deployment_bindings(
+                    workspace_id,
+                    "app-1",
+                    limit=500,
+                ),
+                "runs": self.list_application_workflow_runs(
+                    workspace_id,
+                    "app-1",
+                    limit=100,
+                ),
+                "inventory_rows": self.get_application_inventory_evidence(
+                    workspace_id=workspace_id,
+                    application_id="app-1",
+                    allowed_cluster_ids=allowed_cluster_ids,
+                ),
+                "inventory_context": self.filter_snapshot_context(
+                    workspace_id,
+                    allowed_cluster_ids,
+                ),
+                "incident_evidence": self.get_application_incident_evidence(
+                    workspace_id=workspace_id,
+                    application_id="app-1",
+                    allowed_cluster_ids=allowed_cluster_ids,
+                    limit=3,
+                ),
+            }
+        }
+
     def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
         self.registration_calls.append("watch")
         self.registered_watch_targets.append(payload)
@@ -269,6 +309,84 @@ class StubApplicationsDb:
         self.registration_calls.append("binding")
         self.registered_bindings.append(payload)
         return {**payload, "binding_id": "binding-1"}
+
+
+class BulkCatalogApplicationsDb(StubApplicationsDb):
+    def __init__(self) -> None:
+        super().__init__()
+        self.application_ids = [f"app-{index:03d}" for index in range(200)]
+        self.catalog_calls: list[dict[str, object]] = []
+
+    def accessible_resource_ids(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        resource_type: str,
+        _permission: str,
+    ) -> set[str]:
+        if resource_type == "cluster":
+            return {"cluster-1"}
+        if resource_type == "application":
+            return set(self.application_ids)
+        return set()
+
+    def list_filtered_applications(self, **kwargs: object) -> dict[str, object]:
+        assert kwargs["allowed_application_ids"] == set(self.application_ids)
+        return {
+            "items": [
+                {"application_id": application_id} for application_id in self.application_ids
+            ],
+            "has_more": False,
+        }
+
+    def list_applications(
+        self,
+        workspace_id: str,
+        *,
+        application_ids: set[str] | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert application_ids == set(self.application_ids)
+        assert limit == 200
+        return [
+            {
+                **self.application,
+                "application_id": application_id,
+                "name": f"application-{index:03d}",
+            }
+            for index, application_id in enumerate(self.application_ids)
+        ]
+
+    def get_application_catalog_states(
+        self,
+        *,
+        workspace_id: str,
+        application_ids: list[str],
+        allowed_cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        self.catalog_calls.append(
+            {
+                "workspace_id": workspace_id,
+                "application_ids": list(application_ids),
+                "allowed_cluster_ids": set(allowed_cluster_ids),
+            }
+        )
+        state = {
+            "bindings": [],
+            "runs": [],
+            "inventory_rows": [],
+            "inventory_context": {
+                "snapshot_revision": 0,
+                "observed_at": None,
+                "labels_complete": True,
+                "resources_complete": True,
+                "application_bindings_complete": True,
+                "partial_reason_codes": [],
+            },
+            "incident_evidence": {"complete": True, "open_count": 0, "items": []},
+        }
+        return {application_id: dict(state) for application_id in application_ids}
 
 
 def current_session() -> SimpleNamespace:
@@ -315,6 +433,34 @@ def test_list_applications_uses_accessible_application_ids() -> None:
     assert response.applications[0].id == "app-1"
     assert response.applications[0].repository_ref is None
     assert response.applications[0].resource_counts[0].kind == "Pod"
+
+
+def test_list_applications_projects_200_cards_with_one_catalog_batch() -> None:
+    db = BulkCatalogApplicationsDb()
+
+    response = asyncio.run(
+        list_applications(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            labels=None,
+            applications_environment=None,
+            applications_status=None,
+            applications_pending_promotion=None,
+            applications_q=None,
+            limit=200,
+            current=current_session(),
+            db=db,
+        )
+    )
+
+    assert len(response.applications) == 200
+    assert len(db.catalog_calls) == 1
+    assert db.catalog_calls[0] == {
+        "workspace_id": "ws-1",
+        "application_ids": db.application_ids,
+        "allowed_cluster_ids": {"cluster-1"},
+    }
 
 
 def test_upsert_application_registers_repository_when_repo_ref_is_present() -> None:

@@ -1,21 +1,100 @@
 import {
-  HelmPortFailure,
+  type HelmArtifactReceipt,
+  type ArtifactHubChart,
+  type HelmArtifactResult,
   type HelmClusterScope,
-  type HelmFailureCode,
   type HelmObservationCoverage,
+  type HelmOwnedResourceObservation,
   type HelmPort,
   type HelmRelease,
+  type HelmReleaseCommands,
   type HelmReleaseDetail,
   type HelmReleaseHistoryEntry,
+  type HelmReleaseUpgradeInfo,
+  type HelmReleaseVersionList,
   type HelmResourceRef,
+  type HelmResourceHealth,
   type HelmUnavailableFeature,
+  type HelmValuesPreviewResult,
 } from "./helmContract";
+import { recordValue, withHelmPortFailure } from "./helmAdapterRuntime";
+import {
+  helmArtifactResultSchema,
+  helmValuesPreviewResultSchema,
+} from "./helmArtifactSchemas";
+import { createHelmChartSourcesPort, toChartSource } from "./createHelmChartSourcesPort";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
   return {
+    ...createHelmChartSourcesPort(endpoints),
+    async listInstallTargets(signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.listHelmInstallTargets(signal);
+        return {
+          namespace: value.namespace,
+          targets: value.targets.map((target) => ({
+            itemId: target.item_id,
+            name: target.name,
+            version: target.version,
+            chartVersion: target.chart_version,
+            inputs: target.inputs.map((input) => ({
+              name: input.name,
+              valueType: input.value_type,
+              required: input.required,
+              defaultValue: input.default,
+              allowedValues: input.allowed_values,
+            })),
+          })),
+        };
+      });
+    },
+    async installRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseInstall(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm install audit identity is invalid");
+        }
+        return {
+          accepted: receipt.accepted,
+          eventId: receipt.event_id,
+          auditEventId: receipt.audit_event_id,
+          commandId: receipt.command_id,
+          correlationId: receipt.correlation_id,
+          status: receipt.status,
+        };
+      });
+    },
+    async searchArtifactHub(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.searchArtifactHubCharts(request, signal);
+        return {
+          items: value.items.map(toArtifactHubChart),
+          total: value.total,
+          offset: value.offset,
+          limit: value.limit,
+          hasMore: value.has_more,
+          observedAt: value.observed_at,
+        };
+      });
+    },
+    async getArtifactHubChart(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.getArtifactHubChart(request, signal);
+        return {
+          chart: toArtifactHubChart(value.chart),
+          readme: value.readme,
+          availableVersions: value.available_versions.map((item) => ({
+            version: item.version,
+            appVersion: item.app_version,
+          })),
+          versionsTruncated: value.versions_truncated,
+          observedAt: value.observed_at,
+        };
+      });
+    },
     async listReleases(request, signal) {
-      return withPortFailure(async () => {
+      return withHelmPortFailure(async () => {
         const response = await endpoints.listHelmReleases({
           clusterIds: request.clusterIds,
           namespaces: request.namespaces,
@@ -23,12 +102,277 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         return {
           releases: response.releases.map(toRelease),
           coverage: toCoverage(response.coverage),
+          refreshAfterSeconds: response.refresh_after_seconds,
+          postMutationRefreshAfterSeconds: response.post_mutation_refresh_after_seconds,
         };
       });
     },
     async getRelease(request, signal) {
-      return withPortFailure(async () => toDetail(await endpoints.getHelmRelease(request, signal)));
+      return withHelmPortFailure(async () => toDetail(await endpoints.getHelmRelease(request, signal)));
     },
+    async getReleaseUpgradeInfo(request, signal) {
+      return withHelmPortFailure(async () => toUpgradeInfo(
+        await endpoints.getHelmReleaseUpgradeInfo(request, signal),
+      ));
+    },
+    async listReleaseVersions(request, signal) {
+      return withHelmPortFailure(async () => toVersionList(
+        await endpoints.listHelmReleaseVersions(request, signal),
+      ));
+    },
+    async checkReleaseUpgrades(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.checkHelmReleaseUpgrades({
+          clusterIds: request.clusterIds,
+          namespaces: request.namespaces,
+        }, signal);
+        return {
+          releases: Object.fromEntries(
+            Object.entries(value.releases).map(([key, item]) => [key, toUpgradeInfo(item)]),
+          ),
+          coverage: toCoverage(value.coverage),
+          truncated: value.truncated,
+          reasonCodes: value.reason_codes,
+          refreshAfterSeconds: value.refresh_after_seconds,
+        };
+      });
+    },
+    async readArtifact(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmArtifactRead(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm artifact audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async upgradeRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseUpgrade(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm upgrade audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async previewReleaseValues(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseValuesPreview(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm preview audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async rollbackRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseRollback(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm rollback audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async uninstallRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseUninstall(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm uninstall audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+  };
+}
+
+function toArtifactHubChart(value: {
+  package_id: string;
+  name: string;
+  version: string;
+  app_version: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verified_publisher: boolean;
+  };
+}): ArtifactHubChart {
+  return {
+    packageId: value.package_id,
+    name: value.name,
+    version: value.version,
+    appVersion: value.app_version,
+    description: value.description,
+    stars: value.stars,
+    deprecated: value.deprecated,
+    signed: value.signed,
+    repository: {
+      name: value.repository.name,
+      url: value.repository.url,
+      official: value.repository.official,
+      verifiedPublisher: value.repository.verified_publisher,
+    },
+  };
+}
+
+export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResult | null {
+  const payload = recordValue(value);
+  const result = recordValue(payload?.result);
+  const parsed = helmArtifactResultSchema.safeParse(result?.artifact);
+  if (!parsed.success) return null;
+  const artifact = parsed.data;
+  const common = {
+    artifact: artifact.artifact,
+    namespace: artifact.namespace,
+    releaseName: artifact.release_name,
+    revision: artifact.revision,
+    comparisonRevision: artifact.comparison_revision,
+    allValues: artifact.all_values,
+    sourceBytes: artifact.source_bytes,
+    redactionApplied: artifact.redaction_applied,
+    truncated: artifact.truncated,
+  } as const;
+  if (artifact.artifact === "hooks_diff") {
+    return {
+      ...common,
+      artifact: artifact.artifact,
+      format: artifact.format,
+      projectionSha256: artifact.projection_sha256,
+      projectionBytes: artifact.projection_bytes,
+      hooksDiff: {
+        revision1: artifact.hooks_diff.revision1,
+        revision2: artifact.hooks_diff.revision2,
+        added: artifact.hooks_diff.added.map(toHookDiffItem),
+        removed: artifact.hooks_diff.removed.map(toHookDiffItem),
+        modified: artifact.hooks_diff.modified.map(toHookDiffItem),
+        unchanged: artifact.hooks_diff.unchanged.map(toHookDiffItem),
+        parseErrorCount: artifact.hooks_diff.parse_error_count,
+      },
+    };
+  }
+  if (artifact.artifact === "resources_diff") {
+    return {
+      ...common,
+      artifact: artifact.artifact,
+      format: artifact.format,
+      projectionSha256: artifact.projection_sha256,
+      projectionBytes: artifact.projection_bytes,
+      resourcesDiff: {
+        revision1: artifact.resources_diff.revision1,
+        revision2: artifact.resources_diff.revision2,
+        added: artifact.resources_diff.added.map(toRenderedResourceRef),
+        removed: artifact.resources_diff.removed.map(toRenderedResourceRef),
+        modified: artifact.resources_diff.modified.map(toRenderedResourceChange),
+        unchanged: artifact.resources_diff.unchanged.map(toRenderedResourceRef),
+        parseErrorCount: artifact.resources_diff.parse_error_count,
+      },
+    };
+  }
+  return {
+    ...common,
+    artifact: artifact.artifact,
+    format: artifact.format === "unified_diff" ? "unified-diff" : "yaml",
+    content: artifact.content,
+    contentSha256: artifact.content_sha256,
+    contentBytes: artifact.content_bytes,
+  };
+}
+
+export function toHelmValuesPreviewOperationResult(
+  value: unknown,
+): HelmValuesPreviewResult | null {
+  const payload = recordValue(value);
+  const result = recordValue(payload?.result);
+  const parsed = helmValuesPreviewResultSchema.safeParse(result?.preview);
+  if (!parsed.success) return null;
+  const preview = parsed.data;
+  return {
+    namespace: preview.namespace,
+    releaseName: preview.release_name,
+    expectedRevision: preview.expected_revision,
+    catalogItemId: preview.catalog_item_id,
+    catalogVersion: preview.catalog_version,
+    chartName: preview.chart_name,
+    chartVersion: preview.chart_version,
+    resources: {
+      added: preview.resources.added.map(toRenderedResourceRef),
+      removed: preview.resources.removed.map(toRenderedResourceRef),
+      modified: preview.resources.modified.map(toRenderedResourceChange),
+      unchanged: preview.resources.unchanged.map(toRenderedResourceRef),
+      parseErrorCount: preview.resources.parse_error_count,
+    },
+    projectionSha256: preview.projection_sha256,
+    projectionBytes: preview.projection_bytes,
+    sourceBytes: preview.source_bytes,
+    redactionApplied: preview.redaction_applied,
+    truncated: preview.truncated,
+  };
+}
+
+function toHookDiffItem(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  events: string[];
+  weight: number;
+  delete_policies: string[];
+  output_log_policies: string[];
+  manifest_changed: boolean;
+}) {
+  return {
+    apiVersion: value.api_version,
+    kind: value.kind,
+    name: value.name,
+    namespace: value.namespace,
+    events: value.events,
+    weight: value.weight,
+    deletePolicies: value.delete_policies,
+    outputLogPolicies: value.output_log_policies,
+    manifestChanged: value.manifest_changed,
+  };
+}
+
+function toRenderedResourceRef(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+}) {
+  return {
+    apiVersion: value.api_version,
+    kind: value.kind,
+    name: value.name,
+    namespace: value.namespace,
+  };
+}
+
+function toRenderedResourceChange(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  summary: string;
+  field_count: number;
+  fields: Array<{
+    path: string;
+    old_value: string | number | boolean | null;
+    new_value: string | number | boolean | null;
+  }>;
+}) {
+  return {
+    ...toRenderedResourceRef(value),
+    summary: value.summary,
+    fieldCount: value.field_count,
+    fields: value.fields.map((field) => ({
+      path: field.path,
+      oldValue: field.old_value,
+      newValue: field.new_value,
+    })),
   };
 }
 
@@ -38,8 +382,10 @@ function toDetail(value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRel
     history: value.detail.history.map(toHistory),
     manifest: toUnavailable(value.detail.manifest),
     values: toUnavailable(value.detail.values),
-    ownedResources: toUnavailable(value.detail.owned_resources),
-    commands: toUnavailable(value.detail.commands),
+    ownedResources: toOwnedResources(value.detail.owned_resources),
+    commands: toCommands(value.detail.commands),
+    refreshAfterSeconds: value.refresh_after_seconds,
+    postMutationRefreshAfterSeconds: value.post_mutation_refresh_after_seconds,
   };
 }
 
@@ -49,15 +395,51 @@ function toRelease(value: Awaited<ReturnType<HelmEndpointDependencies["listHelmR
     name: value.name,
     storageNamespace: value.storage_namespace,
     storage: toResourceRef(value.storage),
+    storageResourceVersion: value.storage_resource_version,
     chart: value.chart,
+    chartVersion: value.chart_version,
+    chartReasonCodes: value.chart_reason_codes,
     appVersion: value.app_version,
     status: value.status,
     revision: value.revision,
     observedAt: value.observed_at,
-    resourceHealth: {
-      ...toUnavailable(value.resource_health),
-      health: value.resource_health.health,
-    },
+    resourceHealth: toResourceHealth(value.resource_health),
+  };
+}
+
+function toUpgradeInfo(
+  value: Awaited<ReturnType<HelmEndpointDependencies["getHelmReleaseUpgradeInfo"]>>,
+): HelmReleaseUpgradeInfo {
+  return {
+    availability: value.availability,
+    chartName: value.chart_name,
+    currentVersion: value.current_version,
+    latestVersion: value.latest_version,
+    updateAvailable: value.update_available,
+    source: value.source ? toChartSource(value.source) : null,
+    observedAt: value.observed_at,
+    reasonCodes: value.reason_codes,
+    refreshAfterSeconds: value.refresh_after_seconds,
+  };
+}
+
+function toVersionList(
+  value: Awaited<ReturnType<HelmEndpointDependencies["listHelmReleaseVersions"]>>,
+): HelmReleaseVersionList {
+  return {
+    availability: value.availability,
+    chartName: value.chart_name,
+    currentVersion: value.current_version,
+    source: value.source ? toChartSource(value.source) : null,
+    versions: value.versions.map((item) => ({
+      version: item.version,
+      appVersion: item.app_version,
+      deprecated: item.deprecated,
+    })),
+    observedAt: value.observed_at,
+    truncated: value.truncated,
+    reasonCodes: value.reason_codes,
+    refreshAfterSeconds: value.refresh_after_seconds,
   };
 }
 
@@ -74,6 +456,39 @@ function toCoverage(value: Awaited<ReturnType<HelmEndpointDependencies["listHelm
   return {
     availability: value.availability,
     observedAt: value.observed_at,
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toResourceHealth(
+  value: Awaited<ReturnType<HelmEndpointDependencies["listHelmReleases"]>>["releases"][number]["resource_health"],
+): HelmResourceHealth {
+  if (value.availability === "unavailable") {
+    return { ...toUnavailable(value), health: value.health };
+  }
+  return {
+    availability: value.availability,
+    health: value.health,
+    resourceCount: value.resource_count,
+    observedAt: value.observed_at,
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toOwnedResources(
+  value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRelease"]>>["detail"]["owned_resources"],
+): HelmUnavailableFeature | HelmOwnedResourceObservation {
+  if (value.availability === "unavailable") return toUnavailable(value);
+  return {
+    availability: value.availability,
+    items: value.items.map((item) => ({
+      resource: toResourceRef(item.resource),
+      status: item.status,
+      health: item.health,
+      observedAt: item.observed_at,
+    })),
+    observedAt: value.observed_at,
+    truncated: value.truncated,
     reasonCodes: value.reason_codes,
   };
 }
@@ -102,49 +517,44 @@ function toUnavailable(value: { availability: "unavailable"; reason_code: string
   return { availability: value.availability, reasonCode: value.reason_code };
 }
 
-async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (isAbortError(error) || error instanceof HelmPortFailure) throw error;
-    throw toPortFailure(error);
-  }
-}
-
-function toPortFailure(error: unknown): HelmPortFailure {
-  const kinds: Record<string, HelmFailureCode> = {
-    unauthorized: "unauthorized",
-    forbidden: "forbidden",
-    "invalid-request": "invalid-request",
-    "invalid-payload": "invalid-response",
-    "not-found": "not-found",
-    network: "offline",
-    "rate-limited": "rate-limited",
+function toCommands(
+  value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRelease"]>>["detail"]["commands"],
+): HelmUnavailableFeature | HelmReleaseCommands {
+  if (value.availability === "unavailable") return toUnavailable(value);
+  return {
+    availability: value.availability,
+    actions: value.actions,
+    confirmationRequired: value.confirmation_required,
+    realtime: value.realtime,
+    upgradeTargets: value.upgrade_targets.map((target) => ({
+      itemId: target.item_id,
+      name: target.name,
+      version: target.version,
+      chartVersion: target.chart_version,
+      inputs: target.inputs.map((input) => ({
+        name: input.name,
+        valueType: input.value_type,
+        required: input.required,
+        defaultValue: input.default,
+        allowedValues: input.allowed_values,
+      })),
+    })),
   };
-  const kind = stringField(error, "kind");
-  const retryAfter = numberField(error, "retryAfter");
-  const code = Object.prototype.hasOwnProperty.call(kinds, kind)
-    ? kinds[kind as keyof typeof kinds]
-    : "error";
-  return new HelmPortFailure(code, retryAfter);
 }
 
-function stringField(value: unknown, key: string): string {
-  const record = recordValue(value);
-  return record && typeof record[key] === "string" ? record[key] : "";
-}
-
-function numberField(value: unknown, key: string): number | null {
-  const record = recordValue(value);
-  return record && typeof record[key] === "number" ? record[key] : null;
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+function toArtifactReceipt(
+  value:
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmArtifactRead"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUpgrade"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseRollback"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUninstall"]>>,
+): HelmArtifactReceipt {
+  return {
+    accepted: value.accepted,
+    eventId: value.event_id,
+    auditEventId: value.audit_event_id,
+    correlationId: value.correlation_id,
+    commandId: value.command_id,
+    status: value.status,
+  };
 }

@@ -8,6 +8,7 @@ import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import { I18nProvider } from "../shared/i18n";
 import type { AuthPort } from "../features/auth/authContract";
+import type { GlobalFilterSuggestion } from "../features/global-filter/globalFilterContract";
 import {
   installMatchMedia,
   renderShell,
@@ -46,7 +47,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(dialog.textContent).toContain("홈 화면 열기");
     expect(dialog.textContent).toContain("인시던트 화면 열기");
-    expect(dialog.textContent).toContain("토폴로지 화면 열기");
+    expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
     expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await user.keyboard("{Escape}");
@@ -117,7 +118,93 @@ describe("ProductShell keyboard and help interaction", () => {
     expect((input as HTMLInputElement).value).toBe("gi?");
   });
 
-  it("opens the descriptor-backed command palette from Cmd/Ctrl+K and gives honest feedback for an unavailable route", async () => {
+  it("opens authenticated runtime diagnostics from Ctrl+Shift+D while an input owns focus", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const input = screen.getByRole("textbox", { name: "화면 입력" });
+
+    await user.click(input);
+    await user.keyboard("{Control>}{Shift>}d{/Shift}{/Control}");
+
+    expect(await screen.findByRole("dialog", { name: "런타임 진단" })).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe("");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(
+      screen.queryByRole("dialog", { name: "런타임 진단" }),
+    ).toBeNull());
+  });
+
+  it("opens namespace and cluster switchers from their single-key global shortcuts", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    });
+    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
+    const user = userEvent.setup();
+    try {
+      renderShell({
+        globalFilterPort: {
+          search: vi.fn(async (): Promise<readonly GlobalFilterSuggestion[]> => [
+            {
+              type: "cluster",
+              id: "cluster-1",
+              label: "cluster-1",
+              count: 1,
+              count_completeness: "exact",
+            },
+            {
+              type: "namespace",
+              id: "cluster-1/shop",
+              label: "shop",
+              clusterId: "cluster-1",
+              count: 3,
+              count_completeness: "exact",
+            },
+          ]),
+        },
+      });
+
+      await user.keyboard("n");
+      expect(await screen.findByText("네임스페이스")).toBeTruthy();
+      expect(screen.queryByText("클러스터")).toBeNull();
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      document.getElementById("product-main")?.focus();
+
+      await user.keyboard("c");
+      expect(await screen.findByText("클러스터")).toBeTruthy();
+      expect(screen.queryByText("네임스페이스")).toBeNull();
+    } finally {
+      restoreScrollIntoView();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("focuses the current screen search with slash", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    });
+    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
+    const user = userEvent.setup();
+    try {
+      renderShell();
+
+      await user.keyboard("/");
+
+      const input = screen.getByRole("textbox", {
+        name: "클러스터, 앱, 라벨, 리소스 필터",
+      });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+    } finally {
+      restoreScrollIntoView();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("opens the descriptor-backed command palette and excludes the removed Topology route", async () => {
     vi.stubGlobal("ResizeObserver", class {
       disconnect() {}
       observe() {}
@@ -130,7 +217,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
       await user.keyboard("{Meta>}k{/Meta}");
       const dialog = await screen.findByRole("dialog", { name: "명령 팔레트" });
-      expect(dialog.textContent).toContain("토폴로지");
+      expect(dialog.textContent).not.toContain("토폴로지");
       expect(dialog.textContent).toContain("준비되지 않음");
       await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
       await user.keyboard("{Escape}");
@@ -142,7 +229,8 @@ describe("ProductShell keyboard and help interaction", () => {
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
 
       await user.keyboard("gt");
-      expect(await screen.findByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeTruthy();
+      expect(screen.getByText("Home content")).toBeTruthy();
+      expect(screen.queryByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeNull();
     } finally {
       restoreScrollIntoView();
       vi.unstubAllGlobals();
@@ -271,6 +359,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
     expect(tabOrder).toEqual([
       "모바일 사이드바 열기",
+      "런타임 진단 열기",
       "키보드 단축키",
       "현재 언어: 한국어",
       "클러스터, 앱, 라벨, 리소스 필터",

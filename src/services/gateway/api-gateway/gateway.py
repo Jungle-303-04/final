@@ -28,14 +28,19 @@ from domains.command.router import router as command_router
 from domains.compare.router import router as compare_router
 from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import router as fleet_router
+from domains.dashboard.ready_stream import InMemoryDashboardReadyFanout
 from domains.dashboard.router import router as dashboard_router
+from domains.diagnose.router import router as diagnose_router
+from domains.diagnose.stream import InMemoryDiagnoseEventStream
 from domains.diagnostics.router import router as diagnostics_router
 from domains.gitops.detail_router import router as gitops_detail_router
+from domains.gitops.overview_router import router as gitops_overview_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.gitops_filter.router import router as gitops_filter_router
 from domains.helm.release_router import router as helm_release_router
+from domains.helm.source_router import router as helm_source_router
 from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -43,6 +48,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
+from domains.inventory.deletion import router as resource_deletion_router
 from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
@@ -56,6 +62,9 @@ from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.rca_bundle.router import router as rca_bundle_router
 from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
+from domains.resource_access.router import router as resource_access_router
+from domains.service_access.router import router as service_access_router
+from domains.shell_state.router import router as shell_state_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
@@ -147,6 +156,8 @@ class ApiGateway:
             self.db,
         )
         self.timeline_fanout = InMemoryTimelineEventFanout()
+        self.dashboard_ready_fanout = InMemoryDashboardReadyFanout()
+        self.diagnose_events = InMemoryDiagnoseEventStream()
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
@@ -163,6 +174,8 @@ class ApiGateway:
         self.app.state.events = self.events
         self.app.state.operation_events = self.operation_events
         self.app.state.timeline_fanout = self.timeline_fanout
+        self.app.state.dashboard_ready_fanout = self.dashboard_ready_fanout
+        self.app.state.diagnose_events = self.diagnose_events
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
@@ -303,6 +316,7 @@ class ApiGateway:
         try:
             yield
         finally:
+            await self.dashboard_ready_fanout.close()
             await self.timeline_fanout.close()
             await self.operation_events.close()
             await WAKEUP.stop()
@@ -330,6 +344,7 @@ class ApiGateway:
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
+        app.include_router(diagnose_router)  # durable resource investigation + replayable SSE
         app.include_router(identity_admin_router)  # 관리 콘솔: 조직/그룹/멤버/권한(admin 세션)
         app.include_router(repository_discovery_router)  # repo 연결 전 branch/manifest 탐색
         # 정적 filter 경로는 /applications/{application_id}보다 먼저 등록해야 한다.
@@ -338,10 +353,14 @@ class ApiGateway:
         app.include_router(gitops_filter_router)  # workspace GitOps 변경·승인 필터·facet
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
+        app.include_router(gitops_overview_router)  # mixed registered/controller fleet overview
         app.include_router(gitops_detail_router)  # browser GitOps detail (session + RBAC)
         app.include_router(
             helm_release_router
         )  # browser Helm storage metadata (session + inventory RBAC)
+        app.include_router(
+            helm_source_router
+        )  # workspace Helm chart sources (session/admin + per-source RBAC)
         app.include_router(
             traffic_router
         )  # browser Traffic availability (session + inventory RBAC)
@@ -354,7 +373,10 @@ class ApiGateway:
         app.include_router(
             inventory_router
         )  # agent inventory snapshot -> multi-cluster read model 투영
+        app.include_router(resource_access_router)  # retained RBAC reverse index (session + RBAC)
+        app.include_router(resource_deletion_router)  # exact cascade preview + audited delete
         app.include_router(inventory_filter_router)  # workspace Resources 필터·facet 서버 집계
+        app.include_router(shell_state_router)  # user namespace scope + durable UI preferences
         app.include_router(
             manifest_editor_router
         )  # exact resource -> Git source -> approved Safe PR
@@ -371,6 +393,7 @@ class ApiGateway:
         app.include_router(rca_bundle_router)  # RCA/recovery read projection bundle
         app.include_router(rca_changes_router)  # incident workload 최근 GitOps 변경
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
+        app.include_router(service_access_router)  # exact Service GET command session
         app.include_router(audit_router)  # workspace-scoped correlation 감사 타임라인
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         app.include_router(fleet_router)  # fleet 롤업 + 클러스터 드릴다운(콘솔 루트 화면)

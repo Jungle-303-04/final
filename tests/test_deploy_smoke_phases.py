@@ -12,6 +12,33 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def test_cluster_curl_normalizes_attach_fallback_duplicate_response() -> None:
+    source = ROOT / "scripts/lib/cluster-curl.sh"
+    marker = "__OPSIA_HTTP_STATUS__="
+    duplicated = f'{{"status":"ok"}}\n{marker}200\n{{"status":"ok"}}\n{marker}200\n'
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{source}"; _normalize_cluster_curl_response',
+        ],
+        input=duplicated,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == '{"status":"ok"}\n200\n'
+    script = source.read_text(encoding="utf-8")
+    assert "--rm -i --restart=Never" not in script
+    assert "--pod-running-timeout=30s" in script
+    assert "--follow" in script
+    assert "_wait_for_cluster_curl_container" in script
+    assert "_delete_cluster_curl_pod" in script
+
+
 def test_pre_deploy_smoke_uses_only_legacy_safe_health_frontend_and_database_checks() -> None:
     source = read("scripts/pre-deploy-smoke.sh")
 
@@ -43,7 +70,20 @@ def _write_fake_pre_deploy_commands(tmp_path: Path) -> Path:
     fake_kubectl.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-url="${!#}"
+command="${1:-}"
+if [ "${command}" = "--context" ]; then command="${5:-}"; fi
+if [ "${command}" = "run" ]; then
+  printf '%s' "${!#}" >"${FAKE_CLUSTER_CURL_URL}"
+  exit 0
+fi
+if [ "${command}" = "delete" ]; then
+  exit 0
+fi
+if [ "${command}" != "logs" ]; then
+  printf '1\\n'
+  exit 0
+fi
+url="$(cat "${FAKE_CLUSTER_CURL_URL}")"
 if [[ "${url}" == */api/healthz ]]; then
   count=0
   if [ -f "${FAKE_CURL_COUNT}" ]; then count="$(cat "${FAKE_CURL_COUNT}")"; fi
@@ -57,7 +97,7 @@ if [[ "${url}" == */api/healthz ]]; then
 elif [[ "${url}" == http://console-dev.* ]]; then
   printf '%s\n%s\n' '<script src="/assets/index-newBundle.js"></script>' '200'
 else
-  printf '1\n'
+  exit 1
 fi
 """,
         encoding="utf-8",
@@ -77,6 +117,7 @@ def _run_fake_pre_deploy(
         "MGMT_CONTEXT": "opsia-dev",
         "MGMT_NS": "management",
         "FAKE_CURL_COUNT": str(count_file),
+        "FAKE_CLUSTER_CURL_URL": str(tmp_path / "cluster-curl-url"),
         "FAKE_HEALTH_ALWAYS_FAIL": "1" if always_fail else "0",
         "PRE_DEPLOY_HEALTH_MAX_ATTEMPTS": "3",
         "PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS": "0",
@@ -145,14 +186,22 @@ def _write_post_deploy_read_fakes(
         'printf \'%s\\n\' "$*" >>"${CURL_LOG}"\n'
         'url=""\n'
         'output=""\n'
+        'cookie_jar=""\n'
         'previous=""\n'
         'for argument in "$@"; do\n'
         '  if [ "${previous}" = "--output" ]; then output="${argument}"; fi\n'
+        '  if [ "${previous}" = "-c" ]; then cookie_jar="${argument}"; fi\n'
         '  case "${argument}" in http://*|https://*) url="${argument}" ;; esac\n'
         '  previous="${argument}"\n'
         "done\n"
         + (
-            'if [[ "${url}" == */auth/login ]]; then exit 0; fi\n'
+            'if [[ "${url}" == */auth/login ]]; then\n'
+            '  test -n "${cookie_jar}"\n'
+            "  printf '%s\\n' '# Netscape HTTP Cookie File' "
+            "'#HttpOnly_127.0.0.1\\tFALSE\\t/\\tTRUE\\t0\\topsia_session\\tsession-token' "
+            '> "${cookie_jar}"\n'
+            "  exit 0\n"
+            "fi\n"
             if login_ok
             else 'if [[ "${url}" == */auth/login ]]; then echo login-denied >&2; exit 22; fi\n'
         )
@@ -190,6 +239,7 @@ def _write_post_deploy_read_fakes(
         "AUTH_PASSWORD": "not-a-real-secret",
         "AUTH_LOGIN_ATTEMPTS": "1",
         "AUTH_LOGIN_RETRY_INTERVAL_SECONDS": "0",
+        "AUTH_COOKIE_JAR_OUT": str(tmp_path / "auth-cookie.jar"),
         "REAL_PYTHON": sys.executable,
         "STRICT_EXIT_CODE": "0",
         "STRICT_LOG": str(strict_log),
@@ -225,6 +275,11 @@ def test_post_deploy_read_smoke_logs_in_and_reads_current_catalogs(tmp_path: Pat
     assert "/auth/login" in curl_calls[0]
     assert "/clusters?limit=100" in curl_calls[1]
     assert "/resources?limit=1" in curl_calls[2]
+    handoff = tmp_path / "auth-cookie.jar"
+    assert handoff.stat().st_mode & 0o777 == 0o600
+    assert "session-token" in handoff.read_text(encoding="utf-8")
+    assert "session-token" not in result.stdout
+    assert "session-token" not in result.stderr
     assert not any(
         endpoint in curl_calls[0]
         for endpoint in ("/github/webhook", "/commands", "/recovery-actions")
@@ -238,6 +293,7 @@ def test_post_deploy_read_smoke_stops_when_login_fails(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "login failed after 1 attempts" in result.stderr
+    assert not (tmp_path / "auth-cookie.jar").exists()
     assert not strict_log.exists()
     assert "/auth/login" in curl_log.read_text(encoding="utf-8")
 
@@ -248,5 +304,6 @@ def test_post_deploy_read_smoke_rejects_invalid_read_contract(tmp_path: Path) ->
     )
 
     assert result.returncode != 0
+    assert not (tmp_path / "auth-cookie.jar").exists()
     assert not strict_log.exists()
     assert "/auth/login" in curl_log.read_text(encoding="utf-8")

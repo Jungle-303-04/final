@@ -84,6 +84,7 @@ export interface HomeEndpointNode {
   name: string;
   ready: boolean;
   health: string;
+  kubernetes_version: string | null;
   pods_running: number;
   pods_capacity: number;
   cpu_pct: number | null;
@@ -95,6 +96,61 @@ export interface HomeEndpointNode {
 export interface HomeEndpointNodeCollection {
   cluster_id: string;
   nodes: HomeEndpointNode[];
+}
+
+export interface HomeEndpointInsightCoverage {
+  availability: "available" | "partial" | "unavailable";
+  observed_at: string | null;
+  reason_codes: string[];
+}
+
+export interface HomeEndpointInsights {
+  cluster_id: string;
+  custom_resources: {
+    coverage: HomeEndpointInsightCoverage;
+    items: Array<{
+      api_group: string;
+      version: string;
+      kind: string;
+      count: number;
+    }>;
+    total_kinds: number | null;
+    total_resources: number | null;
+    has_more: boolean;
+  };
+  helm: {
+    coverage: HomeEndpointInsightCoverage;
+    release_count: number | null;
+    status_counts: Record<string, number>;
+  };
+  certificate_expiry: {
+    coverage: HomeEndpointInsightCoverage;
+    items: Array<{
+      secret: HomeEndpointResourceRef;
+      source_certificate: HomeEndpointResourceRef;
+      not_after: string;
+      status: "valid" | "expiring" | "expired";
+      seconds_remaining: number;
+      observed_at: string | null;
+    }>;
+    tls_secret_count: number | null;
+    observed_expiry_count: number | null;
+    expiring_count: number | null;
+    expired_count: number | null;
+    earliest_expiry: string | null;
+    warning_before_seconds: number;
+    has_more: boolean;
+  };
+  refresh_after_seconds: number;
+}
+
+export interface HomeEndpointResourceRef {
+  api_group: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
 }
 
 export interface HomeEndpointPod {
@@ -126,6 +182,10 @@ export interface HomeEndpointDependencies {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointClusterOverview>;
+  getHomeInsights(
+    clusterId: string,
+    signal?: AbortSignal,
+  ): Promise<HomeEndpointInsights>;
   getClusterNodesSummary(
     clusterId: string,
     signal?: AbortSignal,
@@ -135,4 +195,27 @@ export interface HomeEndpointDependencies {
     nodeName: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointPodCollection>;
+  subscribeHomeDashboardEvents(
+    clusterId: string,
+    options?: HomeEndpointDashboardEventSubscription,
+  ): AsyncIterable<HomeEndpointDashboardEvent>;
+}
+
+export interface HomeEndpointDashboardEventSubscription {
+  after?: string;
+  signal?: AbortSignal;
+}
+
+export interface HomeEndpointDashboardEvent {
+  kind: "connected" | "deferred_ready" | "heartbeat";
+  cursor: string;
+  scope: {
+    workspace_id: string;
+    cluster_id: string;
+    namespaces: readonly string[];
+    freshness: "live" | "stale" | "partial" | "disconnected";
+  };
+  reconnect_after_ms: number;
+  snapshot_id?: string;
+  occurred_at?: string;
 }

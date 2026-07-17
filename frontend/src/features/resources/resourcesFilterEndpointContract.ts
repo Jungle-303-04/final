@@ -93,7 +93,41 @@ export interface ResourcesFilterEndpointResourceItem {
   };
   application_ids: string[];
   application_binding_completeness: ResourcesFilterEndpointCompleteness;
+  metrics?: ResourcesFilterEndpointTableMetrics | null;
 }
+
+interface ResourcesFilterEndpointMetricEvidence {
+  resource_uid: string | null;
+  source_snapshot_id: string;
+  observed_at: string | null;
+  measurement_window: string | null;
+  cpu_mcores: number | null;
+  memory_mib: number | null;
+  completeness: ResourcesFilterEndpointCompleteness;
+  reason_codes: string[];
+}
+
+export interface ResourcesFilterEndpointPodMetrics
+  extends ResourcesFilterEndpointMetricEvidence {
+  kind: "pod";
+  cpu_request_mcores: number | null;
+  cpu_limit_mcores: number | null;
+  memory_request_mib: number | null;
+  memory_limit_mib: number | null;
+}
+
+export interface ResourcesFilterEndpointNodeMetrics
+  extends ResourcesFilterEndpointMetricEvidence {
+  kind: "node";
+  cpu_allocatable_mcores: number | null;
+  memory_allocatable_mib: number | null;
+  pod_count: number | null;
+  pod_allocatable: number | null;
+}
+
+export type ResourcesFilterEndpointTableMetrics =
+  | ResourcesFilterEndpointPodMetrics
+  | ResourcesFilterEndpointNodeMetrics;
 
 export interface ResourcesFilterEndpointResourcePage {
   items: ResourcesFilterEndpointResourceItem[];

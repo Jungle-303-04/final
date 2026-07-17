@@ -30,6 +30,16 @@ const issue: IssueSummary = {
 
 export function issuesPort(overrides: Partial<IssuesPort> = {}): IssuesPort {
   return {
+    loadIssuesAuditRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 60,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     listIssues: vi.fn().mockResolvedValue({
       clusterId: "cluster-1",
       completeness: "unknown",
@@ -39,6 +49,18 @@ export function issuesPort(overrides: Partial<IssuesPort> = {}): IssuesPort {
       limit: 50,
       limitReached: false,
       returned: 1,
+      total: 1,
+      totalMatched: 1,
+      filters: { namespaces: [], severities: [], categories: [] },
+      visibility: {
+        state: "complete",
+        completeness: "exact",
+        authorizedClusterCount: 1,
+        requestedNamespaces: [],
+        reasonCodes: [],
+      },
+      facets: { namespaces: [], severities: [], categories: [] },
+      recentChanges: [],
     }),
     loadIssue: vi.fn().mockResolvedValue({
       ...issue,
@@ -185,6 +207,10 @@ export const COPY: IssuesSurfaceCopy = {
   listEmpty: "No incidents",
   listLoading: "Loading incidents",
   listCount: (count) => String(count),
+  listMatchedCount: (returned, matched) => `${returned} of ${matched}`,
+  visibilityLabel: "Limited issue visibility",
+  visibilityPartial: "Some issue evidence is unavailable.",
+  visibilityRestricted: "You do not have access to this issue scope.",
   listBrowseResources: "Browse resources",
   listBrowseAlerts: "Review alerts",
   detailLabel: "Incident detail",
@@ -230,6 +256,7 @@ export const COPY: IssuesSurfaceCopy = {
   refresh: "Refresh",
   status: "Status",
   statusLabel: (status) => status,
+  severityLabel: (severity) => severity,
   causeLabel: (cause) => cause,
   target: "Target",
   updated: "Updated",

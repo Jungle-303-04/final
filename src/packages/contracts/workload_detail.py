@@ -15,6 +15,7 @@ from pydantic import Field, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.parity import CapabilitySet, ClusterScope, ResourceRef
+from packages.contracts.rightsizing import RightsizingWorkloadEvidence
 
 WorkloadAvailability = Literal["available", "partial", "unavailable"]
 WorkloadFeatureName = Literal[
@@ -31,6 +32,8 @@ WorkloadFeatureName = Literal[
     "operations",
     "yaml",
     "compare",
+    "execution",
+    "rightsizing",
 ]
 WorkloadLogStreamKind = Literal["deployments", "statefulsets", "daemonsets"]
 
@@ -139,6 +142,7 @@ class WorkloadDetail(StrictModel):
     pods: WorkloadPodCollection
     events: WorkloadEventCollection
     log_stream: WorkloadLogStreamCapability
+    rightsizing: RightsizingWorkloadEvidence
     capabilities: CapabilitySet
     features: tuple[WorkloadFeatureAvailability, ...]
 

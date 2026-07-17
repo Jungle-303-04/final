@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
+import time
 from datetime import UTC, datetime
+from threading import Event
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -293,6 +297,49 @@ def test_timeline_snapshot_reports_server_limit_without_a_partial_success() -> N
 
     assert response.status_code == 422
     assert response.json()["detail"] == "timeline snapshot exceeds the server event limit"
+
+
+def test_timeline_coverage_read_signals_the_db_stream_when_the_client_disconnects() -> None:
+    module = importlib.import_module("domains.timeline.router")
+    reader_started = Event()
+    reader_stopped = Event()
+
+    def coverage_reader(
+        _read_scope: object,
+        *,
+        window: TimelineWindow,
+        cancelled: object,
+    ) -> tuple[TimelineCoverage, ...]:
+        assert window == _query().window
+        assert callable(cancelled)
+        reader_started.set()
+        while not cancelled():
+            time.sleep(0.001)
+        reader_stopped.set()
+        return ()
+
+    class DisconnectedRequest:
+        async def is_disconnected(self) -> bool:
+            return reader_started.is_set()
+
+    resolution = SimpleNamespace(
+        read_scope=object(),
+        query=_query(),
+    )
+
+    async def run() -> None:
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(
+                module._read_timeline_coverage(
+                    coverage_reader,
+                    resolution,
+                    request=DisconnectedRequest(),
+                ),
+                timeout=1,
+            )
+        assert await asyncio.to_thread(reader_stopped.wait, 1)
+
+    asyncio.run(run())
 
 
 def test_timeline_stream_reuses_snapshot_cursor_as_sse_resume_state() -> None:

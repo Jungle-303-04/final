@@ -1,29 +1,59 @@
 import {
   Activity,
+  Anchor,
+  ArrowRightLeft,
+  BookOpen,
   Box,
   Boxes,
+  Clock,
   Clock3,
+  Container,
+  Copy,
   Cpu,
   Cylinder,
   Database,
+  DatabaseZap,
+  DoorOpen,
+  FileSearch,
   FileSliders,
+  FolderGit2,
+  FolderOpen,
   FolderTree,
   Gauge,
+  GitBranch,
+  Globe,
   HardDrive,
   HeartPulse,
   KeyRound,
+  Layers,
+  Link,
+  Lock,
   Network,
   Package,
   Play,
+  Plug,
   PlugZap,
   Puzzle,
   Radio,
   Rocket,
+  Rows3,
   Route,
+  Scaling,
   Server,
+  Settings,
   Settings2,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  SlidersHorizontal,
+  Split,
+  Timer,
+  UserCog,
+  Zap,
   type LucideIcon,
+  type LucideProps,
 } from "lucide-react";
+import { createElement, type ReactElement } from "react";
 import type { MessageKey } from "../../shared/i18n";
 
 export interface ResourceCategoryPresentation {
@@ -75,23 +105,190 @@ const PRESENTATIONS: Record<string, {
   usage: { labelKey: "resources.type.usage", category: "activity", icon: Gauge, order: 30 },
 };
 
+/**
+ * One product-owned icon registry for every topology and resource catalog.
+ * Unknown CRDs intentionally use the same neutral fallback instead of growing
+ * a second surface-local map or a CSS selector per source kind.
+ */
+const RESOURCE_KIND_ICON_GROUPS = [
+  [Box, ["pod"]],
+  [Rocket, ["deployment", "rollout"]],
+  [Rows3, ["daemonset"]],
+  [DatabaseZap, ["statefulset"]],
+  [Copy, ["replicaset"]],
+  [Play, ["job"]],
+  [Timer, ["cronjob"]],
+  [Plug, ["service"]],
+  [DoorOpen, ["ingress", "gateway"]],
+  [
+    ShieldCheck,
+    [
+      "networkpolicy",
+      "ciliumnetworkpolicy",
+      "ciliumclusterwidenetworkpolicy",
+      "clusternetworkpolicy",
+      "role",
+      "clusterrole",
+      "rolebinding",
+      "clusterrolebinding",
+      "certificate",
+      "certificaterequest",
+      "clusterissuer",
+      "poddisruptionbudget",
+      "configauditreport",
+    ],
+  ],
+  [
+    Radio,
+    [
+      "endpoint",
+      "endpoints",
+      "endpointslice",
+      "servicemonitor",
+      "podmonitor",
+      "broker",
+      "channel",
+    ],
+  ],
+  [
+    Globe,
+    [
+      "httproute",
+      "grpcroute",
+      "tcproute",
+      "tlsroute",
+      "ingressroute",
+      "ingressroutetcp",
+      "ingressrouteudp",
+      "httpproxy",
+      "internet",
+    ],
+  ],
+  [FileSliders, ["configmap"]],
+  [KeyRound, ["secret", "sealedsecret", "triggerauthentication", "clustertriggerauthentication"]],
+  [HardDrive, ["persistentvolumeclaim", "pvc"]],
+  [Cylinder, ["persistentvolume"]],
+  [Database, ["storageclass"]],
+  [
+    Cpu,
+    [
+      "node",
+      "machine",
+      "awsmachine",
+      "awsmachinetemplate",
+      "gcpmachine",
+      "gcpmachinetemplate",
+      "azuremachine",
+      "azuremachinetemplate",
+    ],
+  ],
+  [FolderOpen, ["namespace"]],
+  [UserCog, ["serviceaccount"]],
+  [Activity, ["event", "workflow", "cronworkflow", "workflowtemplate", "clusterworkflowtemplate"]],
+  [Scaling, ["horizontalpodautoscaler", "hpa", "scaledobject", "scaledjob"]],
+  [GitBranch, ["application", "applicationset", "knativerevision"]],
+  [
+    Layers,
+    [
+      "kustomization",
+      "knativeservice",
+      "machinedeployment",
+      "machineset",
+      "machinepool",
+      "awsmanagedmachinepool",
+      "gcpmanagedmachinepool",
+      "azuremanagedmachinepool",
+    ],
+  ],
+  [Anchor, ["helmrelease", "helmrepository"]],
+  [FolderGit2, ["gitrepository", "ocirepository"]],
+  [
+    Server,
+    [
+      "nodepool",
+      "nodeclaim",
+      "ec2nodeclass",
+      "aksnodeclass",
+      "gcenodeclass",
+      "capicluster",
+      "awsmanagedcluster",
+      "gcpmanagedcluster",
+      "azuremanagedcluster",
+      "apiserversource",
+    ],
+  ],
+  [ShieldAlert, ["prometheusrule", "alertmanager", "exposedsecretreport"]],
+  [Settings, ["knativeconfiguration"]],
+  [Route, ["knativeroute"]],
+  [Zap, ["trigger"]],
+  [Clock, ["pingsource"]],
+  [Container, ["containersource"]],
+  [Link, ["sinkbinding"]],
+  [SlidersHorizontal, ["middleware", "middlewaretcp"]],
+  [Split, ["traefikservice"]],
+  [ArrowRightLeft, ["serverstransport", "serverstransporttcp"]],
+  [Lock, ["tlsoption", "tlsstore"]],
+  [
+    Shield,
+    [
+      "kubeadmcontrolplane",
+      "awsmanagedcontrolplane",
+      "gcpmanagedcontrolplane",
+      "azuremanagedcontrolplane",
+      "vulnerabilityreport",
+    ],
+  ],
+  [BookOpen, ["clusterclass"]],
+  [HeartPulse, ["machinehealthcheck"]],
+  [FileSearch, ["sbomreport"]],
+  [Boxes, ["podgroup"]],
+] as const satisfies ReadonlyArray<readonly [LucideIcon, readonly string[]]>;
+
+const TOPOLOGY_KIND_ICONS = buildResourceKindIconMap(RESOURCE_KIND_ICON_GROUPS);
+
 export function resourceTypePresentation(resourceType: string): ResourceTypePresentation {
   const known = PRESENTATIONS[resourceType.toLowerCase()];
   return known
     ? {
-        fallbackLabel: resourceType,
-        labelKey: known.labelKey,
-        category: CATEGORIES[known.category],
-        icon: known.icon,
-        order: known.order,
-      }
+      fallbackLabel: resourceType,
+      labelKey: known.labelKey,
+      category: CATEGORIES[known.category],
+      icon: resourceKindIcon(resourceType),
+      order: known.order,
+    }
     : {
         fallbackLabel: resourceType,
         labelKey: null,
         category: CATEGORIES.other,
-        icon: Puzzle,
+        icon: resourceKindIcon(resourceType),
         order: 999,
       };
+}
+
+export function resourceKindIcon(kind: string): LucideIcon {
+  const normalized = normalizeResourceKind(kind);
+  return TOPOLOGY_KIND_ICONS[normalized] ?? PRESENTATIONS[normalized]?.icon ?? Puzzle;
+}
+
+export function renderResourceKindIcon(kind: string, props: LucideProps): ReactElement {
+  return createElement(resourceKindIcon(kind), props);
+}
+
+export function normalizeResourceKind(kind: string): string {
+  return kind.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function buildResourceKindIconMap(
+  groups: ReadonlyArray<readonly [LucideIcon, readonly string[]]>,
+): Readonly<Record<string, LucideIcon>> {
+  const result: Record<string, LucideIcon> = {};
+  for (const [icon, kinds] of groups) {
+    for (const kind of kinds) {
+      if (result[kind]) throw new Error(`Duplicate resource icon registration: ${kind}`);
+      result[kind] = icon;
+    }
+  }
+  return Object.freeze(result);
 }
 
 function category(

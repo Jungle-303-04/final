@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, Integer, Text
+from sqlalchemy import BigInteger, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +48,20 @@ class ClusterInventoryResourceRecord(Base):
         ),
         Index("ix_inventory_resources_health", "workspace_id", "cluster_id", "health"),
         Index("ix_inventory_resources_deleted", "workspace_id", "cluster_id", "deleted_at"),
+        Index(
+            "ix_inventory_resources_helm_ownership",
+            "workspace_id",
+            "cluster_id",
+            "namespace",
+            text("(annotations ->> 'meta.helm.sh/release-name')"),
+            text("(annotations ->> 'meta.helm.sh/release-namespace')"),
+            postgresql_where=text(
+                "deleted_at IS NULL "
+                "AND labels ->> 'app.kubernetes.io/managed-by' = 'Helm' "
+                "AND annotations ? 'meta.helm.sh/release-name' "
+                "AND annotations ? 'meta.helm.sh/release-namespace'"
+            ),
+        ),
     )
 
     inventory_key: Mapped[str] = mapped_column(Text, primary_key=True)

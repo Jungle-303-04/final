@@ -5,6 +5,36 @@ export * from "./barrels/gitops";
 export * from "./barrels/metrics";
 export * from "./barrels/rca";
 export * from "./barrels/workloads";
+export {
+  getKubernetesApiResources,
+} from "./api-resource-discovery";
+export {
+  apiResourceDescriptorSchema,
+  apiResourceDiscoveryObservationSchema,
+  kubernetesApiResourcesSchema,
+  type ApiResourceDescriptorEndpoint,
+  type ApiResourceDiscoveryObservationEndpoint,
+  type KubernetesApiResourcesEndpoint,
+} from "./api-resource-discovery-schemas";
+export {
+  addDiagnoseTurn,
+  clearDiagnoseHistory,
+  createDiagnoseRun,
+  getDiagnoseCapabilities,
+  grantDiagnoseConsent,
+  listDiagnoseRuns,
+  stopDiagnoseRun,
+  subscribeDiagnoseEvents,
+} from "./diagnose";
+export {
+  diagnoseCapabilitiesSchema,
+  diagnoseConsentGrantSchema,
+  diagnoseEventSchema,
+  diagnoseHistoryClearSchema,
+  diagnoseLaunchResultSchema,
+  diagnoseRunListSchema,
+  diagnoseRunSchema,
+} from "./diagnose-schemas";
 
 export {
   ApiError,
@@ -16,6 +46,45 @@ export {
   type ApiErrorKind,
   type ApiPath,
 } from "./client";
+export {
+  getNamespaceScope,
+  getUiPreferences,
+  searchResourceIdentities,
+  updateNamespaceScope,
+  updateUiPreferences,
+} from "./shell-state";
+export {
+  getBrowserRefreshPolicies,
+  REFRESH_POLICIES_PATH,
+} from "./refresh-policies";
+export {
+  getRuntimeDiagnostics,
+  getVersionCheck,
+  RUNTIME_DIAGNOSTICS_PATH,
+  VERSION_CHECK_PATH,
+} from "./bootstrap-status";
+export {
+  runtimeDiagnosticsSchema,
+  versionCheckSchema,
+  type RuntimeDiagnosticsEndpoint,
+  type VersionCheckEndpoint,
+} from "./bootstrap-status-schemas";
+export {
+  browserRefreshPoliciesSchema,
+  browserRefreshPolicySchema,
+  refreshPolicyKeys,
+  type BrowserRefreshPoliciesEndpoint,
+  type BrowserRefreshPolicyEndpoint,
+  type RefreshPolicyKey,
+} from "./refresh-policies-schemas";
+export {
+  getSettingsAccessProfile,
+  SETTINGS_ACCESS_PATH,
+} from "./settings-access";
+export {
+  settingsAccessProfileSchema,
+  type SettingsAccessProfileEndpoint,
+} from "./settings-access-schemas";
 export {
   getTimelineCapabilities,
   getTimelineOverview,
@@ -34,20 +103,83 @@ export {
   type TimelineStreamSubscription,
 } from "./timeline";
 export {
+  checkHelmReleaseUpgrades,
+  applyHelmReleaseValues,
   getHelmRelease,
+  getHelmReleaseUpgradeInfo,
+  HELM_RELEASE_ARTIFACT_PATH,
+  HELM_INSTALL_TARGETS_PATH,
+  HELM_RELEASE_INSTALL_STREAM_PATH,
   HELM_RELEASE_PATH,
+  HELM_RELEASE_ROLLBACK_STREAM_PATH,
+  HELM_RELEASE_VALUES_PATH,
+  HELM_RELEASE_VALUES_PREVIEW_PATH,
   HELM_RELEASES_PATH,
+  HELM_RELEASE_UPGRADE_PATH,
+  HELM_RELEASE_UPGRADE_INFO_PATH,
+  HELM_RELEASE_VERSIONS_PATH,
+  HELM_UPGRADE_CHECK_PATH,
+  listHelmReleaseVersions,
+  listHelmInstallTargets,
   listHelmReleases,
+  startHelmArtifactRead,
+  startHelmReleaseUpgrade,
+  startHelmReleaseValuesPreview,
+  startHelmReleaseRollback,
+  startHelmReleaseUninstall,
+  startHelmReleaseInstall,
   type HelmReleaseListQuery,
 } from "./helm-releases";
 export {
   helmReleaseDetailSchema,
   helmReleaseHistoryEntrySchema,
   helmReleaseListSchema,
+  helmReleaseUpgradeBatchSchema,
+  helmReleaseUpgradeInfoSchema,
+  helmReleaseVersionListSchema,
   helmReleaseSchema,
   type HelmReleaseDetailEndpoint,
   type HelmReleaseListEndpoint,
+  type HelmReleaseUpgradeBatchEndpoint,
+  type HelmReleaseUpgradeInfoEndpoint,
+  type HelmReleaseVersionListEndpoint,
 } from "./helm-releases-schemas";
+export {
+  getArtifactHubChart,
+  HELM_ARTIFACTHUB_CHART_PATH,
+  HELM_ARTIFACTHUB_SEARCH_PATH,
+  searchArtifactHubCharts,
+  type ArtifactHubSearchQuery,
+} from "./helm-artifacthub";
+export {
+  artifactHubChartDetailSchema,
+  artifactHubChartSchema,
+  artifactHubSearchPageSchema,
+  type ArtifactHubChartDetailEndpoint,
+  type ArtifactHubChartEndpoint,
+  type ArtifactHubSearchPageEndpoint,
+} from "./helm-artifacthub-schemas";
+export {
+  HELM_CHART_SOURCES_PATH,
+  HELM_REPOSITORY_UPDATE_PATH,
+  deleteHelmChartSource,
+  listHelmChartSources,
+  registerHelmChartSource,
+  refreshHelmRepository,
+  type HelmChartSourceCredentialRequest,
+  type HelmChartSourceDeleteRequest,
+  type HelmChartSourceListQuery,
+  type HelmChartSourceProviderEndpoint,
+  type HelmChartSourceRegisterRequest,
+} from "./helm-chart-sources";
+export {
+  helmChartSourcePageSchema,
+  helmChartSourceSchema,
+  helmRepositoryRefreshSchema,
+  type HelmChartSourceEndpoint,
+  type HelmChartSourcePageEndpoint,
+  type HelmRepositoryRefreshEndpoint,
+} from "./helm-chart-sources-schemas";
 export {
   getTrafficOverview,
   TRAFFIC_OVERVIEW_PATH,
@@ -67,6 +199,15 @@ export {
   COST_OVERVIEW_PATH,
   type CostOverviewQuery,
 } from "./cost-overview";
+export {
+  COST_NODES_PATH,
+  getCostNodes,
+  type CostNodesQuery,
+} from "./cost-nodes";
+export {
+  costNodePageSchema,
+  type CostNodePageEndpoint,
+} from "./cost-nodes-schemas";
 export {
   costClusterScopeSchema,
   costObservationStatusSchema,
@@ -149,6 +290,19 @@ export {
   workloadDetailResourceRefSchema,
   type WorkloadDetailEndpoint,
 } from "./workload-detail-schemas";
+export {
+  canonicalNamespaces,
+  getRightsizingScan,
+  RIGHTSIZING_SCAN_LIMIT,
+  RIGHTSIZING_SCAN_PATH,
+  type RightsizingScanQuery,
+} from "./rightsizing";
+export {
+  rightsizingObservedWorkloadSchema,
+  rightsizingScanSchema,
+  rightsizingWorkloadEvidenceSchema,
+  type RightsizingScanEndpoint,
+} from "./rightsizing-schemas";
 export {
   COMPARE_CANDIDATES_PATH,
   COMPARE_DESCRIPTORS_PATH,
@@ -253,6 +407,23 @@ export {
   RESOURCE_CAPABILITIES_PATH,
 } from "./resource-capabilities";
 export { executeResourceCapability } from "./resource-capability-actions";
+export { getResourceDeletionPreview } from "./resource-deletions";
+export { getWorkloadRollbackPreview } from "./workload-rollbacks";
+export {
+  workloadRollbackPreviewSchema,
+  type WorkloadRollbackPreviewEndpoint,
+} from "./workload-rollbacks-schemas";
+export {
+  resourceDeletionPreviewSchema,
+  resourceDeletionRefSchema,
+  type ResourceDeletionPreviewEndpoint,
+} from "./resource-deletions-schemas";
+export {
+  resolveServiceAccess,
+  startServiceRequest,
+  SERVICE_ACCESS_CAPABILITIES_PATH,
+  SERVICE_REQUESTS_PATH,
+} from "./service-access";
 export {
   resourceActionAcceptedSchema,
   type ResourceActionAccepted,
@@ -323,8 +494,17 @@ export {
 export {
   getClusterSummary,
   getClusterNodesSummary,
+  getHomeInsights,
   getNodePodsSummary,
 } from "./cluster-summary";
+export {
+  subscribeHomeDashboardEvents,
+  type HomeDashboardEventSubscriptionEndpoint,
+} from "./home-dashboard-events";
+export {
+  homeDashboardEventFrameSchema,
+  type HomeDashboardEventFrameEndpoint,
+} from "./home-dashboard-events-schemas";
 export {
   connectRealtime,
   createRealtimeClient,
@@ -344,6 +524,13 @@ export {
   type InventoryResourceIdentity,
   type InventoryResourceQuery,
 } from "./inventory";
+export {
+  getResourceIssues,
+  RESOURCE_ISSUES_DEFAULT_LIMIT,
+  RESOURCE_ISSUES_MAX_LIMIT,
+  RESOURCE_ISSUES_PATH,
+  type ResourceIssuesQuery,
+} from "./resource-issues";
 export {
   FILTERED_RESOURCES_PATH,
   RESOURCES_FILTER_FACETS_PATH,
@@ -420,9 +607,11 @@ export {
 export {
   clusterSummaryDetailSchema,
   clusterNodesSummarySchema,
+  homeInsightsSchema,
   nodePodsSummarySchema,
   type ClusterSummaryDetail,
   type ClusterNodesSummary,
+  type HomeInsightsEndpoint,
   type NodePodsSummary,
   type ClusterWorkloadHealthItem,
   type NodeSummaryItem,

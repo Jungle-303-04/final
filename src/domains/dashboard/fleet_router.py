@@ -19,18 +19,36 @@ health 판정 규칙(결정적, 단위 테스트로 고정):
 from __future__ import annotations
 
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
+from domains.dashboard.ready_stream import (
+    DashboardReadyCursorBinding,
+    DashboardReadyCursorCodec,
+    DashboardReadyFanoutClosed,
+    DashboardReadySnapshot,
+    dashboard_ready_heartbeat_seconds,
+    dashboard_ready_reconnect_after_ms,
+)
+from domains.helm.release_projection import helm_release_list
 from domains.identity.dependencies import require_cluster_access, require_session
+from domains.inventory.certificate_expiry import certificate_expiry_summary
+from domains.inventory_filter.cursor import FilterCursorCodec, authorization_revision
 from domains.target.router import (
     BLOCKED_TEST_CLUSTER_IDS,
     BLOCKED_TEST_CLUSTER_NAME_PARTS,
     cluster_connection_status,
 )
+from packages.config.certificate_expiry import certificate_expiry_warning_seconds
+from packages.config.refresh_policies import integral_refresh_after_seconds
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.freshness import HomeDashboardEventFrame
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     ClusterNodesSummaryResponse,
@@ -42,12 +60,18 @@ from packages.contracts.gateway.responses import (
     FleetClusterSummaryItem,
     FleetSummaryResponse,
     FleetTotals,
+    HomeCustomResourceCount,
+    HomeCustomResourceSummary,
+    HomeHelmSummary,
+    HomeInsightCoverage,
+    HomeInsightsResponse,
     NodePodsSummaryResponse,
     NodeSummaryItem,
     PodSummaryItem,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
-from packages.runtime.dependencies import get_db
+from packages.contracts.parity import ClusterScope
+from packages.runtime.dependencies import get_dashboard_ready_fanout, get_db
 
 # health 롤업 상수 — degraded workload 가 이 값을 초과하면 critical(0 = 1개라도 있으면).
 FLEET_DEGRADED_WORKLOAD_THRESHOLD = 0
@@ -65,7 +89,14 @@ WARNING_EVENT_SCAN_LIMIT = 100
 OPEN_INCIDENT_LIMIT = 20
 NODE_LIMIT = 1000
 POD_LIMIT = 1000
+HOME_CUSTOM_RESOURCE_LIMIT = 8
+HOME_CERTIFICATE_SCAN_LIMIT = 500
 NOT_FOUND_CODE = 404
+DASHBOARD_READY_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
+DASHBOARD_READY_CURSOR_UNAVAILABLE = "dashboard ready cursor is unavailable"
+DASHBOARD_READY_CURSOR_INVALID = "dashboard ready cursor is invalid"
+DASHBOARD_READY_STREAM_UNAVAILABLE = "dashboard ready stream is unavailable"
+DASHBOARD_READY_REPLAY_LIMIT = 100
 OBSERVABILITY_SYSTEM_NAMESPACES = {
     "cert-manager",
     "kube-node-lease",
@@ -125,6 +156,236 @@ async def cluster_summary_detail(
     if detail is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
     return detail
+
+
+@router.get(
+    gateway_routes.CLUSTER_HOME_INSIGHTS_PATH,
+    response_model=HomeInsightsResponse,
+)
+async def cluster_home_insights(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> HomeInsightsResponse:
+    """Return bounded Home discovery summaries from one authorized inventory scope."""
+
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.INVENTORY_READ.value,
+    )
+    if await asyncio.to_thread(db.get_cluster_registration, workspace_id, cluster_id) is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
+    return await asyncio.to_thread(build_home_insights, db, workspace_id, cluster_id)
+
+
+@router.get(gateway_routes.CLUSTER_HOME_EVENTS_PATH)
+async def stream_cluster_home_events(
+    cluster_id: str,
+    request: Request,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    dashboard_ready_fanout: Any = Depends(get_dashboard_ready_fanout),
+) -> StreamingResponse:
+    """Stream only committed snapshot completions for one authorized Home scope."""
+
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.CLUSTER_READ.value,
+    )
+    binding = _dashboard_ready_binding(current, workspace_id, cluster_id)
+    cursor_codec = DashboardReadyCursorCodec(_dashboard_ready_cursor_codec(request))
+    subscribe = getattr(dashboard_ready_fanout, "subscribe", None)
+    replay_reader = getattr(db, "list_dashboard_ready_snapshots", None)
+    latest_reader = getattr(db, "latest_dashboard_ready_snapshot", None)
+    if not callable(subscribe) or not callable(replay_reader) or not callable(latest_reader):
+        raise HTTPException(status_code=503, detail=DASHBOARD_READY_STREAM_UNAVAILABLE)
+    try:
+        subscription = await subscribe(workspace_id, cluster_id)
+    except DashboardReadyFanoutClosed as exc:
+        raise HTTPException(status_code=503, detail=DASHBOARD_READY_STREAM_UNAVAILABLE) from exc
+    try:
+        if last_event_id:
+            after = cursor_codec.decode(last_event_id, binding=binding)
+            emit_initial = False
+        else:
+            after = await asyncio.to_thread(
+                latest_reader,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+            )
+            if after is not None and not isinstance(after, DashboardReadySnapshot):
+                raise TypeError("dashboard ready latest reader returned an invalid result")
+            emit_initial = after is not None
+    except (TypeError, ValueError) as exc:
+        await subscription.close()
+        raise HTTPException(status_code=422, detail=DASHBOARD_READY_CURSOR_INVALID) from exc
+    return StreamingResponse(
+        _home_dashboard_sse_body(
+            replay_reader=replay_reader,
+            subscription=subscription,
+            binding=binding,
+            cursor_codec=cursor_codec,
+            after=after,
+            reconnect_after_ms=dashboard_ready_reconnect_after_ms(),
+            heartbeat_seconds=dashboard_ready_heartbeat_seconds(),
+            emit_initial=emit_initial,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _home_dashboard_sse_body(
+    *,
+    replay_reader: Any,
+    subscription: Any,
+    binding: DashboardReadyCursorBinding,
+    cursor_codec: DashboardReadyCursorCodec,
+    after: DashboardReadySnapshot | None,
+    reconnect_after_ms: int,
+    heartbeat_seconds: float,
+    emit_initial: bool = False,
+) -> AsyncIterator[str]:
+    position = after
+    try:
+        yield _dashboard_ready_sse_frame(
+            HomeDashboardEventFrame(
+                kind="connected",
+                cursor=cursor_codec.encode(position, binding=binding),
+                scope=ClusterScope(
+                    workspace_id=binding.workspace_id,
+                    cluster_id=binding.cluster_id,
+                ),
+                reconnect_after_ms=reconnect_after_ms,
+            )
+        )
+        if emit_initial and position is not None:
+            yield _dashboard_ready_sse_frame(
+                HomeDashboardEventFrame(
+                    kind="deferred_ready",
+                    cursor=cursor_codec.encode(position, binding=binding),
+                    scope=ClusterScope(
+                        workspace_id=binding.workspace_id,
+                        cluster_id=binding.cluster_id,
+                    ),
+                    reconnect_after_ms=reconnect_after_ms,
+                    snapshot_id=position.snapshot_id,
+                    occurred_at=position.created_at,
+                )
+            )
+        while True:
+            records = await asyncio.to_thread(
+                replay_reader,
+                workspace_id=binding.workspace_id,
+                cluster_id=binding.cluster_id,
+                after=position or _dashboard_ready_origin_for_replay(),
+                limit=DASHBOARD_READY_REPLAY_LIMIT,
+            )
+            if not isinstance(records, (list, tuple)) or any(
+                not isinstance(record, DashboardReadySnapshot) for record in records
+            ):
+                raise TypeError("dashboard ready replay reader returned an invalid result")
+            for record in records:
+                position = record
+                yield _dashboard_ready_sse_frame(
+                    HomeDashboardEventFrame(
+                        kind="deferred_ready",
+                        cursor=cursor_codec.encode(position, binding=binding),
+                        scope=ClusterScope(
+                            workspace_id=binding.workspace_id,
+                            cluster_id=binding.cluster_id,
+                        ),
+                        reconnect_after_ms=reconnect_after_ms,
+                        snapshot_id=record.snapshot_id,
+                        occurred_at=record.created_at,
+                    )
+                )
+            if len(records) >= DASHBOARD_READY_REPLAY_LIMIT:
+                continue
+            try:
+                await asyncio.wait_for(subscription.next(), timeout=heartbeat_seconds)
+            except TimeoutError:
+                yield _dashboard_ready_sse_frame(
+                    HomeDashboardEventFrame(
+                        kind="heartbeat",
+                        cursor=cursor_codec.encode(position, binding=binding),
+                        scope=ClusterScope(
+                            workspace_id=binding.workspace_id,
+                            cluster_id=binding.cluster_id,
+                        ),
+                        reconnect_after_ms=reconnect_after_ms,
+                    )
+                )
+            except DashboardReadyFanoutClosed:
+                return
+    finally:
+        await subscription.close()
+
+
+def _dashboard_ready_sse_frame(frame: HomeDashboardEventFrame) -> str:
+    payload = json.dumps(
+        frame.model_dump(mode="json", exclude_none=True),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return (
+        f"id: {frame.cursor}\n"
+        f"event: {frame.kind}\n"
+        f"retry: {frame.reconnect_after_ms}\n"
+        f"data: {payload}\n\n"
+    )
+
+
+def _dashboard_ready_origin_for_replay() -> DashboardReadySnapshot:
+    from domains.dashboard.ready_stream import dashboard_ready_origin
+
+    return dashboard_ready_origin()
+
+
+def _dashboard_ready_binding(
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> DashboardReadyCursorBinding:
+    user_id = str(getattr(current, "user_id", "") or "").strip()
+    roles = tuple(str(role) for role in (getattr(current, "roles", ()) or ()))
+    if not user_id:
+        raise HTTPException(status_code=404, detail="cluster not found")
+    return DashboardReadyCursorBinding(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        user_id=user_id,
+        authorization_revision=authorization_revision(
+            user_id=user_id,
+            workspace_id=workspace_id,
+            roles=roles,
+            allowed_cluster_ids=(cluster_id,),
+            allowed_application_ids=(),
+        ),
+    )
+
+
+def _dashboard_ready_cursor_codec(request: Request) -> FilterCursorCodec:
+    configured = getattr(request.app.state, "dashboard_ready_cursor_codec", None)
+    if isinstance(configured, FilterCursorCodec):
+        return configured
+    try:
+        return FilterCursorCodec(env(DASHBOARD_READY_CURSOR_SIGNING_KEY_ENV, "").strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=DASHBOARD_READY_CURSOR_UNAVAILABLE) from exc
 
 
 @router.get(
@@ -309,6 +570,134 @@ def build_cluster_summary_detail(
         warning_events=warning_events,
         open_incidents=open_incidents,
         usage=usage_snapshot(samples[-1] if samples else None),
+    )
+
+
+def build_home_insights(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> HomeInsightsResponse:
+    contexts = db.filter_snapshot_contexts(workspace_id, (cluster_id,))
+    context = contexts.get(cluster_id)
+    custom_resources = _home_custom_resource_summary(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        context=context,
+    )
+    certificate_observations = (
+        db.list_tls_secret_certificate_observations(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            limit=HOME_CERTIFICATE_SCAN_LIMIT,
+        )
+        if int((context or {}).get("snapshot_revision") or 0) > 0
+        else {"items": [], "has_more": False}
+    )
+    certificate_expiry = certificate_expiry_summary(
+        certificate_observations.get("items", ()),
+        cluster_id=cluster_id,
+        context=context,
+        scan_truncated=bool(certificate_observations.get("has_more")),
+        warning_before_seconds=certificate_expiry_warning_seconds(),
+    )
+    helm_contexts = db.helm_release_observation_contexts(
+        workspace_id=workspace_id,
+        cluster_ids=(cluster_id,),
+    )
+    helm_response = helm_release_list(
+        db.list_helm_storage_observations(
+            workspace_id=workspace_id,
+            cluster_ids=(cluster_id,),
+            namespaces=(),
+        ),
+        contexts=helm_contexts,
+        agent_statuses=db.latest_cluster_agent_statuses(workspace_id, {cluster_id}),
+        selected_cluster_ids=(cluster_id,),
+    )
+    helm_coverage = HomeInsightCoverage(
+        availability=helm_response.coverage.availability,
+        observed_at=helm_response.coverage.observed_at,
+        reason_codes=helm_response.coverage.reason_codes,
+    )
+    status_counts: dict[str, int] = {}
+    if helm_coverage.availability != "unavailable":
+        for release in helm_response.releases:
+            if release.status:
+                status_counts[release.status] = status_counts.get(release.status, 0) + 1
+    return HomeInsightsResponse(
+        cluster_id=cluster_id,
+        custom_resources=custom_resources,
+        helm=HomeHelmSummary(
+            coverage=helm_coverage,
+            release_count=(
+                None if helm_coverage.availability == "unavailable" else len(helm_response.releases)
+            ),
+            status_counts=status_counts,
+        ),
+        certificate_expiry=certificate_expiry,
+        refresh_after_seconds=integral_refresh_after_seconds("dashboard"),
+    )
+
+
+def _home_custom_resource_summary(
+    db: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    context: JsonObject | None,
+) -> HomeCustomResourceSummary:
+    revision = int((context or {}).get("snapshot_revision") or 0)
+    if revision <= 0:
+        return HomeCustomResourceSummary(
+            coverage=HomeInsightCoverage(
+                availability="unavailable",
+                observed_at=_optional_text((context or {}).get("observed_at")),
+                reason_codes=(f"inventory_snapshot_unavailable:{cluster_id}",),
+            )
+        )
+    reasons = {
+        str(reason)
+        for reason in (context or {}).get("partial_reason_codes", ())
+        if str(reason).strip()
+    }
+    if not bool((context or {}).get("resources_complete")):
+        reasons.add("source_resources_incomplete")
+    counts = db.list_home_custom_resource_counts(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        snapshot_revision=revision,
+        limit=HOME_CUSTOM_RESOURCE_LIMIT,
+    )
+    items = tuple(_home_custom_resource_count(item) for item in counts.get("items", ()))
+    return HomeCustomResourceSummary(
+        coverage=HomeInsightCoverage(
+            availability="partial" if reasons else "available",
+            observed_at=_optional_text((context or {}).get("observed_at")),
+            reason_codes=tuple(sorted(reasons)),
+        ),
+        items=items,
+        total_kinds=int(counts.get("total_kinds") or 0),
+        total_resources=int(counts.get("total_resources") or 0),
+        has_more=int(counts.get("total_kinds") or 0) > len(items),
+    )
+
+
+def _split_api_version(value: str) -> tuple[str, str]:
+    group, separator, version = value.partition("/")
+    if not separator:
+        return ("core", group or "unknown")
+    return (group or "unknown", version or "unknown")
+
+
+def _home_custom_resource_count(item: JsonObject) -> HomeCustomResourceCount:
+    api_group, version = _split_api_version(str(item["api_version"]))
+    return HomeCustomResourceCount(
+        api_group=api_group,
+        version=version,
+        kind=str(item["kind"]),
+        count=int(item["count"]),
     )
 
 
@@ -782,12 +1171,16 @@ def node_summary_item(
     latest_usage: JsonObject,
 ) -> NodeSummaryItem:
     summary = _summary(node)
+    node_info = summary.get("node_info")
     name = str(node.get("name") or "")
     running = sum(1 for pod in pods if str(pod.get("status") or "") == "Running")
     return NodeSummaryItem(
         name=name,
         ready=bool(summary.get("ready")) or str(node.get("status") or "") == "Ready",
         health=str(node.get("health") or HEALTH_UNKNOWN),
+        kubernetes_version=_optional_text(
+            node_info.get("kubeletVersion") if isinstance(node_info, dict) else None
+        ),
         pods_running=running,
         pods_capacity=pod_capacity(summary),
         cpu_pct=resource_usage_pct(

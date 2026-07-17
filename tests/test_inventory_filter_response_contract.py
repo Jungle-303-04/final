@@ -214,6 +214,66 @@ def test_filtered_resource_page_reuses_strict_resource_and_exposes_counts() -> N
         )
 
 
+def test_filtered_resource_metric_evidence_rejects_cross_snapshot_or_uid_join() -> None:
+    resource = {
+        **_resource(),
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "uid": "uid-checkout",
+        "summary": {"phase": "Running"},
+    }
+    metrics = {
+        "kind": "pod",
+        "resource_uid": "uid-checkout",
+        "source_snapshot_id": "snapshot-42",
+        "observed_at": "2026-07-17T01:00:00Z",
+        "measurement_window": "30s",
+        "cpu_mcores": 250,
+        "memory_mib": 192,
+        "cpu_request_mcores": 150,
+        "cpu_limit_mcores": 600,
+        "memory_request_mib": 192,
+        "memory_limit_mib": 384,
+        "completeness": "exact",
+        "reason_codes": [],
+    }
+
+    def payload(candidate: dict[str, object]) -> dict[str, object]:
+        return {
+            "items": [
+                {
+                    "resource": resource,
+                    "cluster": {"cluster_id": "cluster-a", "name": "prod", "provider": "eks"},
+                    "application_ids": [],
+                    "application_binding_completeness": "exact",
+                    "metrics": candidate,
+                }
+            ],
+            "next_cursor": None,
+            "has_more": False,
+            "counts": {
+                "filtered_count": 1,
+                "unfiltered_count": 1,
+                "filtered_count_completeness": "exact",
+                "unfiltered_count_completeness": "exact",
+            },
+            "snapshot": _snapshot(),
+        }
+
+    parsed = FilteredInventoryResourceListResponse.model_validate(payload(metrics))
+    assert parsed.items[0].metrics.cpu_limit_mcores == 600
+
+    with pytest.raises(ValidationError):
+        FilteredInventoryResourceListResponse.model_validate(
+            payload({**metrics, "resource_uid": "uid-other"})
+        )
+    with pytest.raises(ValidationError):
+        FilteredInventoryResourceListResponse.model_validate(
+            payload({**metrics, "source_snapshot_id": "snapshot-other"})
+        )
+
+
 def test_label_facet_page_models_and_counts_selected_labels() -> None:
     response = LabelFacetPageResponse.model_validate(
         {

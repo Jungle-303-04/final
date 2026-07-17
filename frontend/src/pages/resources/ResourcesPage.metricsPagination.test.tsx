@@ -21,6 +21,7 @@ afterEach(() => {
 describe("ResourcesPage metrics and pagination", () => {
   it("loads visible pod histories in one snapshot-pinned batch", async () => {
     const loadResourceMetricsHistory = vi.fn().mockResolvedValue({
+      refreshPolicyKey: "metrics_kubernetes",
       series: [],
       completeness: "unavailable",
       partialReasonCodes: ["metrics_history_unavailable"],

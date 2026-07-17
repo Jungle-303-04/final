@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { commandAcceptedSchema } from "./commands-schemas";
 
 export const resourceManifestSourceChoiceSchema = z.strictObject({
   application_id: z.string(),
@@ -29,6 +30,15 @@ export const resourceManifestPreviewSchema = z.strictObject({
   diff: z.string(),
   errors: z.array(z.string()),
   warnings: z.array(z.string()),
+  apply_availability: z.enum(["available", "unavailable"]),
+  apply_reason_codes: z.array(z.string()),
+  impact: z.array(z.strictObject({
+    api_version: z.string().min(1),
+    kind: z.string().min(1),
+    namespace: z.string().nullable(),
+    name: z.string().min(1),
+    selected: z.boolean(),
+  })),
 });
 
 export const resourceManifestApproveSchema = z.strictObject({
@@ -43,3 +53,24 @@ export const resourceManifestApproveSchema = z.strictObject({
 export type ResourceManifestSourceEndpoint = z.infer<typeof resourceManifestSourceSchema>;
 export type ResourceManifestPreviewEndpoint = z.infer<typeof resourceManifestPreviewSchema>;
 export type ResourceManifestApproveEndpoint = z.infer<typeof resourceManifestApproveSchema>;
+export const resourceManifestApplySchema = commandAcceptedSchema;
+export type ResourceManifestApplyEndpoint = z.infer<typeof resourceManifestApplySchema>;
+
+export const resourceManifestCreateCapabilitySchema = z.strictObject({
+  cluster_id: z.string().min(1),
+  namespace: z.string().min(1),
+  snapshot_id: z.string().min(1).nullable(),
+  available: z.boolean(),
+  reason_codes: z.array(z.string()),
+  max_documents: z.number().int().positive(),
+  max_bytes: z.number().int().positive(),
+  resources: z.array(z.strictObject({
+    api_version: z.string().min(1),
+    kind: z.string().min(1),
+    resource: z.string().min(1),
+    force_supported: z.boolean(),
+  })),
+});
+export type ResourceManifestCreateCapabilityEndpoint = z.infer<
+  typeof resourceManifestCreateCapabilitySchema
+>;

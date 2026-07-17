@@ -18,6 +18,7 @@ from packages.contracts.gateway.requests import (
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
 )
+from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
 
 
 @pytest.fixture(autouse=True)
@@ -679,22 +680,65 @@ def test_target_agent_sanitizes_command_output() -> None:
 
 def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
     manager_module = load_node_collector_manager_module()
+    image = f"registry.example/opsia/node-collector@sha256:{'3' * 64}"
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
     monkeypatch.setattr(manager_module, "service_account_token", lambda: "token")
 
     async def run_with_get_status(status_code: int) -> list[str]:
         methods: list[str] = []
+        desired = manager_module.NodeCollectorManager(
+            enabled=True,
+            image=image,
+            namespace="target",
+        ).daemonset()
+        desired["metadata"]["generation"] = 1
+        desired["status"] = {
+            "observedGeneration": 1,
+            "desiredNumberScheduled": 1,
+            "updatedNumberScheduled": 1,
+            "numberReady": 1,
+            "numberUnavailable": 0,
+        }
 
         def handler(request: httpx.Request) -> httpx.Response:
             methods.append(request.method)
+            if request.url.path.endswith("/pods"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {
+                                "spec": {
+                                    "containers": [
+                                        {
+                                            "name": "node-collector",
+                                            "image": image,
+                                        }
+                                    ]
+                                },
+                                "status": {
+                                    "containerStatuses": [
+                                        {
+                                            "name": "node-collector",
+                                            "ready": True,
+                                            "image": f"sha256:{'9' * 64}",
+                                            "imageID": f"containerd://{image.rsplit('@', 1)[1]}",
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                    request=request,
+                )
             if request.method == "GET":
-                return httpx.Response(status_code, request=request)
-            return httpx.Response(200, json={"ok": True}, request=request)
+                return httpx.Response(status_code, json=desired, request=request)
+            return httpx.Response(200, json=desired, request=request)
 
         manager = manager_module.NodeCollectorManager(
             enabled=True,
-            image="service:local",
+            image=image,
             namespace="target",
             transport=getattr(httpx, "Mo" + "ckTransport")(handler),
         )
@@ -703,7 +747,7 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
         return methods
 
     body = manager_module.NodeCollectorManager(
-        enabled=True, image="service:local", namespace="target"
+        enabled=True, image=image, namespace="target"
     ).daemonset()
 
     assert body["kind"] == "DaemonSet"
@@ -712,8 +756,201 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
         "python",
         "src/services/target/node-collector/app.py",
     ]
-    assert asyncio.run(run_with_get_status(404)) == ["GET", "POST"]
-    assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH"]
+    assert asyncio.run(run_with_get_status(404)) == ["GET", "POST", "GET"]
+    assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH", "GET"]
+
+
+def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(
+    monkeypatch,
+) -> None:
+    manager_module = load_node_collector_manager_module()
+    old_image = f"registry.example/opsia/target-agent@sha256:{'1' * 64}"
+    new_image = f"registry.example/opsia/target-agent@sha256:{'2' * 64}"
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setenv("NODE_COLLECTOR_IMAGE", new_image)
+    monkeypatch.setattr(manager_module, "service_account_token", lambda: "token")
+
+    requested_images: list[str] = []
+    rollout_image = old_image
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal rollout_image
+        if request.method == "GET" and request.url.path.endswith("/pods"):
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "name": "node-collector",
+                                        "image": rollout_image,
+                                    }
+                                ]
+                            },
+                            "status": {
+                                "containerStatuses": [
+                                    {
+                                        "name": "node-collector",
+                                        "ready": True,
+                                        "image": f"sha256:{'8' * 64}",
+                                        "imageID": (
+                                            "docker-pullable://registry.example/opsia/"
+                                            f"target-agent@{rollout_image.rsplit('@', 1)[1]}"
+                                        ),
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                },
+                request=request,
+            )
+        if request.method == "PATCH":
+            payload = json.loads(request.content)
+            image = payload["spec"]["template"]["spec"]["containers"][0]["image"]
+            requested_images.append(image)
+            body = payload
+            body["metadata"] = {**body["metadata"], "generation": 26}
+            body["status"] = {
+                "observedGeneration": 26,
+                "desiredNumberScheduled": 1,
+                "updatedNumberScheduled": 1,
+                "numberReady": 1,
+                "numberUnavailable": 0,
+            }
+            return httpx.Response(200, json=body, request=request)
+        return httpx.Response(
+            200,
+            json={"metadata": {"generation": 25}},
+            request=request,
+        )
+
+    manager = manager_module.NodeCollectorManager.from_env(
+        getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
+
+    first_applied, first_message = asyncio.run(manager.reconcile())
+    assert first_applied is False
+    assert first_message == manager_module.NodeCollectorManagerConfig.NODE_COLLECTOR_PENDING_MESSAGE
+
+    rollout_image = new_image
+    second_applied, second_message = asyncio.run(manager.reconcile())
+    assert second_applied is True
+    assert (
+        second_message == manager_module.NodeCollectorManagerConfig.NODE_COLLECTOR_PATCHED_MESSAGE
+    )
+    assert manager.image == new_image
+    assert requested_images == [new_image, new_image]
+
+
+def test_node_collector_pod_accepts_kubernetes_normalized_status_image() -> None:
+    manager_module = load_node_collector_manager_module()
+    expected = f"registry.example/opsia/node-collector@sha256:{'9' * 64}"
+    pod = {
+        "spec": {
+            "containers": [
+                {
+                    "name": "node-collector",
+                    "image": expected,
+                }
+            ]
+        },
+        "status": {
+            "containerStatuses": [
+                {
+                    "name": "node-collector",
+                    "ready": True,
+                    "image": f"sha256:{'8' * 64}",
+                    "imageID": f"containerd://sha256:{'9' * 64}",
+                }
+            ]
+        },
+    }
+
+    assert manager_module.pod_uses_exact_image(pod, expected) is True
+
+
+@pytest.mark.parametrize(
+    ("spec_name", "spec_image", "status_name", "ready", "image_id"),
+    (
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'1' * 64}",
+            "node-collector",
+            True,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "node-collector",
+            True,
+            f"containerd://sha256:{'1' * 64}",
+        ),
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "node-collector",
+            False,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+        (
+            "other-container",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "node-collector",
+            True,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "other-container",
+            True,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+    ),
+    ids=(
+        "spec-image-wrong",
+        "image-id-wrong",
+        "container-not-ready",
+        "spec-container-mismatch",
+        "status-container-mismatch",
+    ),
+)
+def test_node_collector_pod_rejects_non_exact_runtime_evidence(
+    spec_name: str,
+    spec_image: str,
+    status_name: str,
+    ready: bool,
+    image_id: str,
+) -> None:
+    manager_module = load_node_collector_manager_module()
+    expected = f"registry.example/opsia/node-collector@sha256:{'9' * 64}"
+    pod = {
+        "spec": {
+            "containers": [
+                {
+                    "name": spec_name,
+                    "image": spec_image,
+                }
+            ]
+        },
+        "status": {
+            "containerStatuses": [
+                {
+                    "name": status_name,
+                    "ready": ready,
+                    "image": f"sha256:{'8' * 64}",
+                    "imageID": image_id,
+                }
+            ]
+        },
+    }
+
+    assert manager_module.pod_uses_exact_image(pod, expected) is False
 
 
 def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
@@ -770,6 +1007,49 @@ def test_target_agent_wires_argocd_reconciler_mode(
     assert agent.reconciler.reconciler_mode == "argocd"
     assert agent.reconciler.argo_observer is not None
     assert agent.reconciler.argo_observer.transport is transport
+
+
+@pytest.mark.parametrize(
+    ("status_code", "annotations", "expected_status"),
+    [
+        (200, {"opsia.dev/target-rbac-version": TARGET_RBAC_MANIFEST_VERSION}, "current"),
+        (200, {"opsia.dev/target-rbac-version": "older"}, "admin_apply_required"),
+        (403, {}, "admin_apply_required"),
+    ],
+)
+def test_target_agent_reports_rbac_manifest_drift_without_self_escalation(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+    status_code: int,
+    annotations: dict[str, str],
+    expected_status: str,
+) -> None:
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    agent_module = load_agent_module()
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    requests: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url.path))
+        return httpx.Response(
+            status_code,
+            json={"metadata": {"annotations": annotations}},
+            request=request,
+        )
+
+    agent = target_agent_factory(
+        agent_module,
+        kubernetes_transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    details = asyncio.run(agent.target_rbac_manifest_status())
+
+    assert details["status"] == expected_status
+    assert details["expected_version"] == TARGET_RBAC_MANIFEST_VERSION
+    assert requests == [
+        ("GET", "/apis/rbac.authorization.k8s.io/v1/clusterroles/cluster-agent-read")
+    ]
 
 
 def test_oss_profile_blocks_direct_write_commands_before_kubernetes_call(

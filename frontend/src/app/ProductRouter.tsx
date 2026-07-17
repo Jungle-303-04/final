@@ -12,6 +12,7 @@ import type { ProductComposition } from "./productComposition";
 import { RouteSurface } from "./RouteSurface";
 import { WorkloadDetailRoute } from "../pages/workload-detail/WorkloadDetailRoute";
 import { CompareRoute } from "../pages/compare/CompareRoute";
+import { DiagnoseSessionProvider } from "../features/diagnose/DiagnoseSessionContext";
 import {
   landingProductRouteForReleasedSurfaces,
   PRODUCT_ROUTE_CATALOG,
@@ -20,6 +21,7 @@ import {
   type ProductRouteDefinition,
 } from "./productRoutes";
 import { navLabelKeys } from "./ProductShellNavigation";
+import { UiPreferencesSync } from "../features/preferences/UiPreferencesSync";
 
 export function ProductRouter({
   auth,
@@ -43,13 +45,15 @@ export function ProductRouter({
 
   return (
     <OperationStatusStoreProvider store={composition.operationStatusStore}>
-      <UnifiedFilterProvider>
-        <ClusterScopeProvider
-          authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
-          port={composition.clusterScope}
-        >
-          <DesktopRuntimeSync />
-          <Routes>
+      <DiagnoseSessionProvider port={composition.diagnose}>
+        <UnifiedFilterProvider>
+          <ClusterScopeProvider
+            authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
+            port={composition.clusterScope}
+          >
+            <UiPreferencesSync port={composition.shellState} />
+            <DesktopRuntimeSync />
+            <Routes>
           <Route element={(
             <ProductShell
               auth={auth}
@@ -57,6 +61,9 @@ export function ProductRouter({
               aiAssistantPort={composition.aiAssistant}
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
+              shellStatePort={composition.shellState}
+              runtimeStatusPort={composition.runtimeStatus}
+              portForwardSessions={composition.portForwardSessions}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>
@@ -66,7 +73,7 @@ export function ProductRouter({
               const routeDefinition = routeDefinitionForSurface(id);
               return [
                 <Route
-                  element={<RouteSurface registration={registration} />}
+                  element={<RouteSurface key={id} registration={registration} />}
                   key={id}
                   path={routePathForDefinition(routeDefinition, routeDefinition.path)}
                 />,
@@ -95,9 +102,10 @@ export function ProductRouter({
             <Route element={<CompareRoute port={composition.compare} />} path="/compare" />
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
-          </Routes>
-        </ClusterScopeProvider>
-      </UnifiedFilterProvider>
+            </Routes>
+          </ClusterScopeProvider>
+        </UnifiedFilterProvider>
+      </DiagnoseSessionProvider>
     </OperationStatusStoreProvider>
   );
 }

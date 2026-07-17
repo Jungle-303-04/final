@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from threading import Event
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -74,6 +75,7 @@ STREAM_UNAVAILABLE_DETAIL = "timeline stream is unavailable"
 COVERAGE_UNAVAILABLE_DETAIL = "timeline coverage is unavailable"
 OVERVIEW_UNAVAILABLE_DETAIL = "timeline overview is unavailable"
 PIN_REVISION_CONFLICT_DETAIL = "timeline pins revision conflicts with the current set"
+TIMELINE_CLIENT_DISCONNECT_POLL_SECONDS = 0.05
 
 router = APIRouter()
 
@@ -158,6 +160,7 @@ async def remove_persistent_timeline_pin(
 async def read_timeline_overview(
     body: TimelineOverviewRequest,
     response: Response,
+    request: Request,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> TimelineOverview:
@@ -189,7 +192,11 @@ async def read_timeline_overview(
     except Exception as exc:
         raise HTTPException(status_code=503, detail=OVERVIEW_UNAVAILABLE_DETAIL) from exc
     try:
-        coverage = await _read_timeline_coverage(coverage_reader, resolution)
+        coverage = await _read_timeline_coverage(
+            coverage_reader,
+            resolution,
+            request=request,
+        )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=COVERAGE_UNAVAILABLE_DETAIL) from exc
     try:
@@ -230,7 +237,11 @@ async def read_timeline_snapshot(
     except TimelineSnapshotLimitExceeded as exc:
         raise HTTPException(status_code=422, detail=SNAPSHOT_LIMIT_DETAIL) from exc
     try:
-        coverage = await _read_timeline_coverage(coverage_reader, resolution)
+        coverage = await _read_timeline_coverage(
+            coverage_reader,
+            resolution,
+            request=request,
+        )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=COVERAGE_UNAVAILABLE_DETAIL) from exc
     cursor = TimelineReplayCursorCodec(_cursor_codec(request)).encode(
@@ -298,6 +309,7 @@ async def stream_timeline_events(
             resolution=resolution,
             cursor_codec=cursor_codec,
             after_sequence=after_sequence,
+            request=request,
         ),
         media_type="text/event-stream",
         headers={
@@ -316,11 +328,16 @@ async def _timeline_sse_body(
     resolution: TimelineReadResolution,
     cursor_codec: TimelineReplayCursorCodec,
     after_sequence: int,
+    request: Request | None = None,
 ) -> AsyncIterator[str]:
     """Emit only durable facts; local fan-out is a wake-up optimization."""
     delivered = after_sequence
     try:
-        delivered_coverage = await _read_timeline_coverage(coverage_reader, resolution)
+        delivered_coverage = await _read_timeline_coverage(
+            coverage_reader,
+            resolution,
+            request=request,
+        )
     except Exception:
         yield encode_sse_frame(
             TimelineStreamFrame(
@@ -371,7 +388,11 @@ async def _timeline_sse_body(
                     )
                 )
             try:
-                observed_coverage = await _read_timeline_coverage(coverage_reader, resolution)
+                observed_coverage = await _read_timeline_coverage(
+                    coverage_reader,
+                    resolution,
+                    request=request,
+                )
             except Exception:
                 yield encode_sse_frame(
                     TimelineStreamFrame(
@@ -438,12 +459,14 @@ def _cursor_at(
 async def _read_timeline_coverage(
     coverage_reader: Any,
     resolution: TimelineReadResolution,
+    *,
+    request: Request | None = None,
 ) -> tuple[TimelineCoverage, ...]:
     """Read only durable coverage and apply the same source/query boundary as events."""
-    raw_coverage = await asyncio.to_thread(
+    raw_coverage = await _run_cancellable_timeline_coverage_read(
         coverage_reader,
-        resolution.read_scope,
-        window=resolution.query.window,
+        resolution,
+        request=request,
     )
     if not isinstance(raw_coverage, (list, tuple)):
         raise TypeError("timeline coverage reader returned an invalid result")
@@ -454,6 +477,52 @@ async def _read_timeline_coverage(
         window=resolution.query.window,
         coverage=raw_coverage,
     )
+
+
+async def _run_cancellable_timeline_coverage_read(
+    coverage_reader: Any,
+    resolution: TimelineReadResolution,
+    *,
+    request: Request | None,
+) -> object:
+    """Bound a sync coverage scan and signal its DB cursor when the HTTP read disappears."""
+    if request is None:
+        return await asyncio.to_thread(
+            coverage_reader,
+            resolution.read_scope,
+            window=resolution.query.window,
+        )
+    cancelled = Event()
+    worker = asyncio.create_task(
+        asyncio.to_thread(
+            coverage_reader,
+            resolution.read_scope,
+            window=resolution.query.window,
+            cancelled=cancelled.is_set,
+        )
+    )
+    try:
+        while not worker.done():
+            if request is not None and await request.is_disconnected():
+                cancelled.set()
+                worker.add_done_callback(_consume_timeline_worker_result)
+                raise asyncio.CancelledError
+            await asyncio.wait(
+                {worker},
+                timeout=TIMELINE_CLIENT_DISCONNECT_POLL_SECONDS,
+            )
+        return worker.result()
+    except asyncio.CancelledError:
+        cancelled.set()
+        if not worker.done():
+            worker.add_done_callback(_consume_timeline_worker_result)
+        raise
+
+
+def _consume_timeline_worker_result(worker: asyncio.Task[object]) -> None:
+    """Observe a detached sync-reader exception after its client has already gone."""
+    if not worker.cancelled():
+        worker.exception()
 
 
 def _timeline_overview_response(

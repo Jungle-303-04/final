@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
+import json
 import time
+from collections.abc import Mapping
 from typing import Annotated, Any, cast
 from uuid import uuid4
 
@@ -36,6 +40,10 @@ from domains.command.repository import (
     stage_command_operation_event_in_transaction,
     stage_logical_command_acceptance_in_transaction,
 )
+from domains.command.scoped_metrics import (
+    build_scoped_metric_plans,
+    resolve_scoped_metric_identity,
+)
 from domains.gitops.events import Diff
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
@@ -44,6 +52,9 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.inventory.action_catalog import resource_action_capability_id
+from domains.inventory.capabilities import resource_capabilities_response
+from domains.inventory.workload_revisions import workload_revision_selection
 from domains.target.management_guard import (
     cluster_role_from_policy,
     is_management_registration,
@@ -66,8 +77,15 @@ from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
+    ConfirmedResourceActionRequest,
+    CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
+    NodeDebugCleanupRequest,
+    NodeDebugRequest,
+    NodeDrainRequest,
+    PodDebugRequest,
+    WorkloadRollbackRequest,
 )
 from packages.contracts.gateway.responses import (
     AgentCommandPollResponse,
@@ -78,7 +96,18 @@ from packages.contracts.gateway.responses import (
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
-from packages.contracts.parity import CommandControlReceipt, CommandReceipt, OperationEvent
+from packages.contracts.parity import (
+    CommandControlReceipt,
+    CommandReceipt,
+    OperationEvent,
+    ResourceRef,
+)
+from packages.contracts.scoped_metrics import (
+    ScopedMetricCoverage,
+    ScopedMetricQueryReceipt,
+    ScopedMetricQueryRequest,
+    ScopedMetricQueryResponse,
+)
 from packages.runtime.command_wakeup import WAKEUP
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.retry import async_retry_db_conflict
@@ -109,6 +138,24 @@ CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
 OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
+CRONJOB_RESOURCE_STALE = "selected CronJob capability is stale"
+CRONJOB_IDEMPOTENCY_REUSED = "cronjob_idempotency_key_reused"
+WORKLOAD_ROLLBACK_STALE = "workload_rollback_stale"
+WORKLOAD_ROLLBACK_IDEMPOTENCY_REUSED = "workload_rollback_idempotency_key_reused"
+WORKLOAD_RESTART_ACTIONS = {
+    "deployment": Command.DEFAULT_ACTION,
+    "statefulset": Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+    "daemonset": Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+}
+WORKLOAD_SCALE_ACTIONS = {
+    "deployment": Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+    "statefulset": Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+}
+WORKLOAD_ROLLBACK_ACTIONS = {
+    "deployment": Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+    "statefulset": Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+    "daemonset": Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+}
 
 # `/commands` carries only an inspected diff. Actions that need a typed target
 # payload (replicas, Helm values, uninstall contract, and similar) must use their
@@ -144,6 +191,7 @@ async def accept_command_with_receipt_stage(
     command: CommandRequestedBody,
     *,
     actor: Actor,
+    max_active_per_action: int | None = None,
 ) -> tuple[Any, OperationEvent | None]:
     """Accept a command and stage its browser receipt in the same event outbox UoW."""
     staged: list[OperationEvent | None] = []
@@ -155,6 +203,7 @@ async def accept_command_with_receipt_stage(
             correlation_id=accepted_event.correlation_id,
             plan=plan.to_body(),
             confirmation_event_id=str(accepted_event.event_id),
+            max_active_per_action=max_active_per_action,
         )
         staged.append(
             stage_command_operation_event_in_transaction(
@@ -351,19 +400,20 @@ def require_not_management_cluster(
         raise HTTPException(status_code=400, detail=management_readonly_detail())
 
 
-def deployment_control_diff(
+def resource_control_diff(
     *,
     workspace_id: str,
     cluster_id: str,
     namespace: str,
-    deployment: str,
+    resource_kind: str,
+    resource_name: str,
     action: str,
     basis: JsonObject,
 ) -> Diff:
     return Diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
-        resource=f"deployment/{deployment}",
+        resource=f"{resource_kind}/{resource_name}",
         namespace=namespace,
         desired_image="",
         actual_image="resource-not-inspected",
@@ -373,11 +423,12 @@ def deployment_control_diff(
     )
 
 
-async def accept_deployment_control(
+async def accept_resource_control(
     *,
     cluster_id: str,
-    namespace: str,
-    deployment: str,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
     action: str,
     reason: str,
     payload: JsonObject,
@@ -388,28 +439,32 @@ async def accept_deployment_control(
     current: Any,
     db: Any,
     events: Any,
+    command_id: str | None = None,
+    diff_basis: JsonObject | None = None,
 ) -> CommandReceipt:
-    validate_control_namespace(namespace)
+    if namespace is not None:
+        validate_control_namespace(namespace)
     require_direct_execution_confirmation(execution_request)
     direct_execution = direct_execution_from_confirmation(execution_request)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, cluster_id)
     require_not_management_cluster(db, workspace_id, cluster_id, direct_execution=direct_execution)
-    diff = deployment_control_diff(
+    diff = resource_control_diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
-        namespace=namespace,
-        deployment=deployment,
+        namespace=namespace or "",
+        resource_kind=resource_kind,
+        resource_name=resource_name,
         action=action,
-        basis=payload,
+        basis=diff_basis if diff_basis is not None else payload,
     )
     command = CommandRequestedBody(
         cluster_id=cluster_id,
         action=action,
-        namespace=namespace,
+        namespace=namespace or "",
         reason=reason,
         diff=diff,
-        command_id=new_command_id(),
+        command_id=command_id or new_command_id(),
         payload=payload,
         workspace_id=workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
@@ -430,6 +485,42 @@ async def accept_deployment_control(
     ):
         await publish_accepted_operation(operation_events, command, response)
     return response
+
+
+async def accept_node_control(
+    *,
+    cluster_id: str,
+    node: str,
+    action: str,
+    reason: str,
+    unschedulable: bool,
+    payload: ConfirmedResourceActionRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    if payload.confirmation is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        action=action,
+        reason=payload.reason or reason,
+        payload={"name": node, "unschedulable": unschedulable},
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
@@ -527,6 +618,84 @@ async def commands(
     return response
 
 
+def workload_action(actions: dict[str, str], kind: str) -> tuple[str, str]:
+    normalized_kind = kind.strip().casefold()
+    action = actions.get(normalized_kind)
+    if action is None:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=f"unsupported workload kind: {kind}",
+        )
+    return normalized_kind, action
+
+
+async def accept_workload_scale(
+    *,
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentScaleRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    resource_kind, action = workload_action(WORKLOAD_SCALE_ACTIONS, kind)
+    command_payload = {
+        "namespace": namespace,
+        "name": workload,
+        "replicas": payload.replicas,
+    }
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=workload,
+        action=action,
+        reason=payload.reason or f"scale {resource_kind}/{workload}",
+        payload=command_payload,
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
+async def accept_workload_restart(
+    *,
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentRestartRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    resource_kind, action = workload_action(WORKLOAD_RESTART_ACTIONS, kind)
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=workload,
+        action=action,
+        reason=payload.reason or f"restart {resource_kind}/{workload}",
+        payload={"namespace": namespace, "name": workload},
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
 @router.post(
     gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH,
     response_model=CommandReceipt,
@@ -542,25 +711,45 @@ async def scale_deployment(
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
 ) -> CommandReceipt:
-    command_payload = {
-        "namespace": namespace,
-        "name": deployment,
-        "replicas": payload.replicas,
-    }
-    return await accept_deployment_control(
+    return await accept_workload_scale(
         cluster_id=cluster_id,
         namespace=namespace,
-        deployment=deployment,
-        action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-        reason=payload.reason or f"scale deployment/{deployment}",
-        payload=command_payload,
-        approval_ref=payload.approval_ref,
-        policy_decision_ref=payload.policy_decision_ref,
-        execution_request=payload,
-        operation_events=operation_events,
+        kind="deployment",
+        workload=deployment,
+        payload=payload,
         current=current,
         db=db,
         events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_WORKLOAD_SCALE_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def scale_workload(
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentScaleRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_workload_scale(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        kind=kind,
+        workload=workload,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
     )
 
 
@@ -579,24 +768,906 @@ async def restart_deployment(
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
 ) -> CommandReceipt:
-    command_payload = {
-        "namespace": namespace,
-        "name": deployment,
-    }
-    return await accept_deployment_control(
+    return await accept_workload_restart(
         cluster_id=cluster_id,
         namespace=namespace,
-        deployment=deployment,
-        action=Command.DEFAULT_ACTION,
-        reason=payload.reason or f"restart deployment/{deployment}",
-        payload=command_payload,
-        approval_ref=payload.approval_ref,
-        policy_decision_ref=payload.policy_decision_ref,
+        kind="deployment",
+        workload=deployment,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_WORKLOAD_RESTART_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def restart_workload(
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentRestartRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_workload_restart(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        kind=kind,
+        workload=workload,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_CORDON_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def cordon_node(
+    cluster_id: str,
+    node: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_node_control(
+        cluster_id=cluster_id,
+        node=node,
+        action=Command.KUBERNETES_NODE_CORDON_ACTION,
+        reason=f"cordon node/{node}",
+        unschedulable=True,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_UNCORDON_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def uncordon_node(
+    cluster_id: str,
+    node: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_node_control(
+        cluster_id=cluster_id,
+        node=node,
+        action=Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        reason=f"uncordon node/{node}",
+        unschedulable=False,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_DRAIN_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def drain_node(
+    cluster_id: str,
+    node: str,
+    payload: NodeDrainRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        capability_id="node.drain",
+        action=Command.KUBERNETES_NODE_DRAIN_ACTION,
+        reason=payload.reason or f"drain node/{node}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "timeout_seconds": payload.timeout_seconds,
+            "max_parallel": payload.max_parallel,
+            "max_pods": payload.max_pods,
+            "force": payload.force,
+            "delete_empty_dir_data": payload.delete_empty_dir_data,
+        },
+        resource_ref_key="node_ref",
+        resource_version_key="node_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_POD_DEBUG_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def debug_pod(
+    cluster_id: str,
+    namespace: str,
+    pod: str,
+    payload: PodDebugRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    suffix = hashlib.sha256(idempotency_key.encode()).hexdigest()[:16]
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind="pod",
+        resource_name=pod,
+        capability_id="pod.debug",
+        action=Command.KUBERNETES_POD_DEBUG_ACTION,
+        reason=payload.reason or f"debug pod/{namespace}/{pod}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "target_container": payload.target_container,
+            "container_name": f"opsia-debug-{suffix}",
+            "image": payload.image,
+        },
+        resource_ref_key="pod_ref",
+        resource_version_key="pod_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_DEBUG_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def debug_node(
+    cluster_id: str,
+    node: str,
+    payload: NodeDebugRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    validate_control_namespace(payload.namespace)
+    suffix = hashlib.sha256(idempotency_key.encode()).hexdigest()[:16]
+    session_id = f"debug-session-{suffix}"
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        capability_id="node.debug",
+        action=Command.KUBERNETES_NODE_DEBUG_ACTION,
+        reason=payload.reason or f"debug node/{node}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "namespace": payload.namespace,
+            "session_id": session_id,
+            "debug_pod_name": f"opsia-node-debug-{suffix}",
+            "image": payload.image,
+        },
+        resource_ref_key="node_ref",
+        resource_version_key="node_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_DEBUG_CLEANUP_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def cleanup_node_debug(
+    cluster_id: str,
+    node: str,
+    payload: NodeDebugCleanupRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    validate_control_namespace(payload.namespace)
+    session_suffix = payload.session_id.removeprefix("debug-session-")
+    if not session_suffix or len(session_suffix) != 16:
+        raise HTTPException(status_code=422, detail="debug session identity is invalid")
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        capability_id="node.debug.cleanup",
+        action=Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        reason=payload.reason or f"cleanup debug node/{node}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "namespace": payload.namespace,
+            "session_id": payload.session_id,
+            "debug_pod_name": f"opsia-node-debug-{session_suffix}",
+        },
+        resource_ref_key="node_ref",
+        resource_version_key="node_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+async def accept_exact_resource_action(
+    *,
+    cluster_id: str,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
+    capability_id: str,
+    action: str,
+    reason: str,
+    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+    idempotency_key: str,
+    command_payload: JsonObject,
+    resource_ref_key: str,
+    resource_version_key: str,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    if payload.confirmation is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    inventory_resource, current_resource = exact_action_capability_resource(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        capability_id=capability_id,
+        payload=payload,
+    )
+    resource_version = str(inventory_resource.get("resource_version") or "")
+    if not resource_version:
+        raise HTTPException(status_code=409, detail="resource action identity is stale")
+    fingerprint = exact_action_request_fingerprint(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        action=action,
+        reason=reason,
+        payload=payload,
+        command_payload=command_payload,
+    )
+    command_id = resource_action_command_id(workspace_id, str(current.user_id), idempotency_key)
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=fingerprint,
+    )
+    if replay is not None:
+        return replay
+    execution_payload = {
+        "name": resource_name,
+        resource_ref_key: current_resource.model_dump(),
+        resource_version_key: resource_version,
+    }
+    if namespace is not None:
+        execution_payload["namespace"] = namespace
+    execution_payload.update(command_payload)
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        action=action,
+        reason=reason,
+        payload=execution_payload,
+        approval_ref=None,
+        policy_decision_ref=None,
         execution_request=payload,
         operation_events=operation_events,
         current=current,
         db=db,
         events=events,
+        command_id=command_id,
+        diff_basis={
+            "resource_id": payload.resource_id,
+            "capability_snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "capability_id": capability_id,
+            "resource_ref": current_resource.model_dump(),
+            "inventory_resource_version": resource_version,
+            "request_fingerprint": fingerprint,
+            "options": command_payload,
+        },
+    )
+
+
+def exact_action_capability_resource(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
+    capability_id: str,
+    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+) -> tuple[dict[str, Any], ResourceRef]:
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    resource = (
+        reader(workspace_id=workspace_id, inventory_key=payload.resource_id)
+        if callable(reader)
+        else None
+    )
+    if not isinstance(resource, dict):
+        raise HTTPException(status_code=409, detail="resource action identity is stale")
+    current_resource = inventory_resource_ref(resource)
+    if (
+        str(resource.get("snapshot_id") or "") != payload.snapshot_id
+        or current_resource != payload.resource
+        or current_resource.kind.casefold() != resource_kind.casefold()
+        or current_resource.namespace != namespace
+        or current_resource.name != resource_name
+        or str(resource.get("cluster_id") or "") != cluster_id
+    ):
+        raise HTTPException(status_code=409, detail="resource action identity is stale")
+    decision = resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=resource,
+    )
+    if decision.revision != payload.capability_revision or capability_id not in {
+        item.capability_id for item in decision.capabilities
+    }:
+        raise HTTPException(status_code=409, detail="resource action capability is stale")
+    return resource, current_resource
+
+
+def exact_action_request_fingerprint(
+    *,
+    workspace_id: str,
+    user_id: str,
+    action: str,
+    reason: str,
+    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+    command_payload: JsonObject,
+) -> str:
+    encoded = json.dumps(
+        {
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            "action": action,
+            "reason": reason,
+            "resource_id": payload.resource_id,
+            "snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "resource": payload.resource.model_dump(),
+            "options": command_payload,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+async def accept_cronjob_control(
+    *,
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    action: str,
+    reason: str,
+    payload: CronJobControlRequest,
+    idempotency_key: str,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    if payload.confirmation is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    capability_id = resource_action_capability_id(action)
+    if capability_id is None:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    inventory_resource, current_resource = exact_cronjob_capability_resource(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        capability_id=capability_id,
+        payload=payload,
+    )
+    request_fingerprint = cronjob_request_fingerprint(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        action=action,
+        reason=payload.reason or reason,
+        payload=payload,
+    )
+    command_id = resource_action_command_id(
+        workspace_id,
+        str(current.user_id),
+        idempotency_key,
+    )
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=request_fingerprint,
+    )
+    if replay is not None:
+        return replay
+    diff_basis = {
+        "resource_id": payload.resource_id,
+        "capability_snapshot_id": payload.snapshot_id,
+        "capability_revision": payload.capability_revision,
+        "capability_id": capability_id,
+        "resource_ref": current_resource.model_dump(),
+        "inventory_resource_version": str(inventory_resource.get("resource_version") or ""),
+        "request_fingerprint": request_fingerprint,
+    }
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind="cronjob",
+        resource_name=cronjob,
+        action=action,
+        reason=payload.reason or reason,
+        payload={
+            "namespace": namespace,
+            "name": cronjob,
+            "resource_ref": current_resource.model_dump(),
+        },
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+        command_id=command_id,
+        diff_basis=diff_basis,
+    )
+
+
+def exact_cronjob_capability_resource(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    capability_id: str,
+    payload: CronJobControlRequest,
+) -> tuple[dict[str, Any], ResourceRef]:
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    if not callable(reader):
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    resource = reader(workspace_id=workspace_id, inventory_key=payload.resource_id)
+    if not isinstance(resource, dict):
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    current_resource = inventory_resource_ref(resource)
+    if (
+        str(resource.get("snapshot_id") or "") != payload.snapshot_id
+        or current_resource != payload.resource
+        or current_resource.api_group != "batch"
+        or current_resource.version != "v1"
+        or current_resource.kind.casefold() != "cronjob"
+        or current_resource.namespace != namespace
+        or current_resource.name != cronjob
+        or str(resource.get("cluster_id") or "") != cluster_id
+    ):
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    decision = resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=resource,
+    )
+    enabled = {item.capability_id for item in decision.capabilities}
+    if decision.revision != payload.capability_revision or capability_id not in enabled:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    return resource, current_resource
+
+
+def inventory_resource_ref(resource: Mapping[str, object]) -> ResourceRef:
+    api_version = str(resource.get("api_version") or "").strip().strip("/")
+    segments = api_version.split("/") if api_version else []
+    if len(segments) == 1:
+        api_group, version = "", segments[0]
+    elif len(segments) == 2:
+        api_group, version = segments
+    else:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    uid = str(resource.get("uid") or "")
+    namespace = resource.get("namespace")
+    try:
+        return ResourceRef(
+            api_group=api_group,
+            version=version,
+            kind=str(resource.get("kind") or ""),
+            namespace=str(namespace) if namespace is not None else None,
+            name=str(resource.get("name") or ""),
+            uid=uid,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE) from exc
+
+
+def cronjob_request_fingerprint(
+    *,
+    workspace_id: str,
+    user_id: str,
+    action: str,
+    reason: str,
+    payload: CronJobControlRequest,
+) -> str:
+    encoded = json.dumps(
+        {
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            "action": action,
+            "reason": reason,
+            "resource_id": payload.resource_id,
+            "snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "resource": payload.resource.model_dump(),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def resource_action_command_id(workspace_id: str, user_id: str, idempotency_key: str) -> str:
+    authority = "\0".join((workspace_id, user_id, idempotency_key))
+    return f"cmd-resource-{hashlib.sha256(authority.encode()).hexdigest()[:24]}"
+
+
+async def replay_resource_action_receipt(
+    db: Any,
+    *,
+    workspace_id: str,
+    command_id: str,
+    request_fingerprint: str,
+    idempotency_reused_code: str = CRONJOB_IDEMPOTENCY_REUSED,
+) -> CommandReceipt | None:
+    reader = getattr(db, "get_agent_command", None)
+    if not callable(reader):
+        return None
+    existing = reader(command_id, workspace_id)
+    if inspect.isawaitable(existing):
+        existing = await existing
+    if not isinstance(existing, Mapping):
+        return None
+    plan = existing.get("payload")
+    diff = plan.get("diff") if isinstance(plan, Mapping) else None
+    basis = diff.get("basis") if isinstance(diff, Mapping) else None
+    if not isinstance(basis, Mapping) or basis.get("request_fingerprint") != request_fingerprint:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": idempotency_reused_code,
+                "detail": "Idempotency-Key was already used for another resource action.",
+            },
+        )
+    event_id = str(existing.get("confirmation_event_id") or "")
+    correlation_id = str(existing.get("correlation_id") or "")
+    if not event_id or not correlation_id:
+        raise HTTPException(status_code=409, detail="resource action receipt is incomplete")
+    return CommandReceipt(
+        command_id=command_id,
+        event_id=event_id,
+        audit_event_id=event_id,
+        correlation_id=correlation_id,
+        status=str(existing.get("status") or CommandStatus.QUEUED),
+    )
+
+
+@router.post(
+    gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def rollback_workload(
+    resource_id: str,
+    payload: WorkloadRollbackRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    if resource_id != payload.resource_id:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    resource = (
+        reader(workspace_id=workspace_id, inventory_key=resource_id) if callable(reader) else None
+    )
+    if not isinstance(resource, Mapping):
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    try:
+        current_ref = inventory_resource_ref(resource)
+    except HTTPException as exc:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE) from exc
+    kind = current_ref.kind.casefold()
+    action = WORKLOAD_ROLLBACK_ACTIONS.get(kind)
+    cluster_id = str(resource.get("cluster_id") or "")
+    namespace = current_ref.namespace
+    if (
+        action is None
+        or namespace is None
+        or str(resource.get("snapshot_id") or "") != payload.snapshot_id
+        or str(resource.get("resource_version") or "") != payload.workload_resource_version
+        or current_ref != payload.workload
+    ):
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    decision = resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=dict(resource),
+    )
+    enabled = {item.capability_id for item in decision.capabilities}
+    if decision.revision != payload.capability_revision or "workload.rollback" not in enabled:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    selected = workload_revision_selection(
+        db,
+        workspace_id=workspace_id,
+        resource=resource,
+        uid=payload.target_revision.uid,
+        resource_version=payload.target_resource_version,
+    )
+    if selected is None:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    revision, target_template = selected
+    if (
+        revision.resource != payload.target_revision
+        or revision.preview_revision != payload.preview_revision
+    ):
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+
+    request_fingerprint = workload_rollback_request_fingerprint(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        payload=payload,
+    )
+    command_id = resource_action_command_id(workspace_id, str(current.user_id), idempotency_key)
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=request_fingerprint,
+        idempotency_reused_code=WORKLOAD_ROLLBACK_IDEMPOTENCY_REUSED,
+    )
+    if replay is not None:
+        return replay
+    diff_basis = {
+        "request_fingerprint": request_fingerprint,
+        "resource_id": resource_id,
+        "snapshot_id": payload.snapshot_id,
+        "capability_revision": payload.capability_revision,
+        "workload": current_ref.model_dump(),
+        "workload_resource_version": payload.workload_resource_version,
+        "target_revision": revision.resource.model_dump(),
+        "target_resource_version": revision.resource_version,
+        "revision": revision.revision,
+        "preview_revision": revision.preview_revision,
+        "changes": [item.model_dump() for item in revision.changes],
+    }
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=kind,
+        resource_name=current_ref.name,
+        action=action,
+        reason=payload.reason,
+        payload={
+            "namespace": namespace,
+            "name": current_ref.name,
+            "workload_ref": current_ref.model_dump(),
+            "workload_resource_version": payload.workload_resource_version,
+            "target_revision_ref": revision.resource.model_dump(),
+            "target_revision_resource_version": revision.resource_version,
+            "target_revision": revision.revision,
+            "target_template_sha256": revision.template_sha256,
+            "target_template": target_template,
+        },
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+        command_id=command_id,
+        diff_basis=diff_basis,
+    )
+
+
+def workload_rollback_request_fingerprint(
+    *,
+    workspace_id: str,
+    user_id: str,
+    payload: WorkloadRollbackRequest,
+) -> str:
+    encoded = json.dumps(
+        {
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            **payload.model_dump(mode="json"),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+@router.post(
+    gateway_routes.CLUSTER_CRONJOB_TRIGGER_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def trigger_cronjob(
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    payload: CronJobControlRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_cronjob_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        reason=f"trigger cronjob/{cronjob}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CRONJOB_SUSPEND_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def suspend_cronjob(
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    payload: CronJobControlRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_cronjob_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        reason=f"suspend cronjob/{cronjob}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CRONJOB_RESUME_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def resume_cronjob(
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    payload: CronJobControlRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_cronjob_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        reason=f"resume cronjob/{cronjob}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
     )
 
 
@@ -623,6 +1694,92 @@ async def agent_debug_query(
         accepted=True,
         command_id=queued.command_id,
         correlation_id=queued.correlation_id,
+    )
+
+
+@router.post(
+    gateway_routes.SCOPED_RESOURCE_METRICS_QUERY_PATH,
+    response_model=ScopedMetricQueryResponse,
+)
+async def scoped_resource_metrics_query(
+    payload: ScopedMetricQueryRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ScopedMetricQueryResponse:
+    """Queue bounded server-owned PromQL for a typed resource/namespace/cluster scope."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_read_access(db, current, workspace_id, payload.cluster_id)
+    resource_row: dict[str, Any] | None = None
+    if payload.subject.kind in {"resource", "pvc"}:
+        resource_row = await asyncio.to_thread(
+            db.get_inventory_resource_by_key,
+            workspace_id=workspace_id,
+            inventory_key=payload.subject.resource_id,
+        )
+    try:
+        identity = resolve_scoped_metric_identity(
+            payload,
+            workspace_id=workspace_id,
+            inventory_resource=resource_row,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="metric subject not found") from exc
+
+    if not identity.supported:
+        return ScopedMetricQueryResponse(
+            availability="unavailable",
+            refresh_policy_key=identity.refresh_policy_key,
+            scope=identity.scope,
+            resource=identity.resource,
+            coverage=ScopedMetricCoverage(
+                requested=len(payload.categories),
+                queued=0,
+                unsupported=len(payload.categories),
+            ),
+            reason_codes=(identity.unavailable_reason or "metric_source_unavailable",),
+        )
+
+    plans, unsupported = build_scoped_metric_plans(payload, identity)
+    receipts: list[ScopedMetricQueryReceipt] = []
+    for plan in plans:
+        queued = await asyncio.to_thread(
+            queue_debug_query,
+            db,
+            plan.payload,
+            workspace_id=workspace_id,
+            requested_by=current.user_id,
+        )
+        receipts.append(
+            ScopedMetricQueryReceipt(
+                category=plan.category,
+                unit=plan.unit,
+                query_name=str(plan.payload.query["name"]),
+                command_id=queued.command_id,
+                correlation_id=queued.correlation_id,
+            )
+        )
+    coverage = ScopedMetricCoverage(
+        requested=len(payload.categories),
+        queued=len(receipts),
+        unsupported=len(unsupported),
+    )
+    if not receipts:
+        availability = "unavailable"
+        reasons = ("metric_category_unsupported",)
+    elif unsupported:
+        availability = "partial"
+        reasons = ("metric_category_partial",)
+    else:
+        availability = "queued"
+        reasons = ()
+    return ScopedMetricQueryResponse(
+        availability=availability,
+        refresh_policy_key=identity.refresh_policy_key,
+        scope=identity.scope,
+        resource=identity.resource,
+        queries=tuple(receipts),
+        coverage=coverage,
+        reason_codes=reasons,
     )
 
 
@@ -1142,6 +2299,23 @@ async def command_heartbeat(
         getattr(correlation_id, "operation_event", None),
         workspace_id=identity.workspace_id,
     )
+    if payload.progress is not None:
+        progress_event = await db.append_command_operation_event(
+            identity.workspace_id,
+            command_id,
+            "progress",
+            {
+                "cluster_id": identity.cluster_id,
+                "correlation_id": correlation,
+                "status": CommandStatus.RUNNING,
+                "progress": payload.progress.model_dump(),
+            },
+        )
+        await announce_staged_operation_event(
+            operation_events,
+            progress_event,
+            workspace_id=identity.workspace_id,
+        )
     return CommandHeartbeatResponse(
         accepted=True,
         correlation_id=correlation,

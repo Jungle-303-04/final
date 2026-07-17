@@ -1,4 +1,7 @@
-import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
+import type {
+  ResourceApiDiscovery,
+  ResourceCatalogItem,
+} from "../../features/resources/resourcesContract";
 import { ListTree } from "lucide-react";
 import { useState } from "react";
 import { useI18n } from "../../shared/i18n";
@@ -15,10 +18,12 @@ import {
 import { ResourcesCatalog } from "./ResourcesCatalogCore";
 
 export function ResourcesCatalogMobile({
+  discovery,
   items,
   onSelect,
   selectedResourceType,
 }: {
+  discovery?: ResourceApiDiscovery;
   items: ResourceCatalogItem[];
   onSelect: (resourceType: string) => void;
   selectedResourceType: string | null;
@@ -45,6 +50,7 @@ export function ResourcesCatalogMobile({
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-hidden p-3">
             <ResourcesCatalog
+              discovery={discovery}
               items={items}
               onSelect={(resourceType) => {
                 onSelect(resourceType);

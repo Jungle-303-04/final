@@ -1,4 +1,6 @@
 import { CircleAlert } from "lucide-react";
+import { routeDefinitionForSurface } from "../../app/productRoutes";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
@@ -7,13 +9,16 @@ import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
+import { clusterResourcesHref } from "../clusters/clusterNavigation";
 import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeIssuesRail } from "./HomeIssuesRail";
+import { HomeInsightsBand } from "./HomeInsightsBand";
 import { HomeLiveBand } from "./HomeLiveBand";
 import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({ port }: { port: HomePort }) {
   const state = useHomePageState(port);
+  const filter = useUnifiedFilter();
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -31,20 +36,22 @@ export function HomePage({ port }: { port: HomePort }) {
   if (state.clusterAccess.kind === "forbidden") {
     return <HomeFailureScreen failure={state.clusterAccess.failure} onRetry={state.refresh} />;
   }
-  const refreshing = [state.choices, state.overview, state.nodes, state.pods].some(
+  const refreshing = [state.choices, state.overview, state.insights, state.nodes, state.pods].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
 
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
-        <PollingFreshness
-          connectionState={homeConnectionState(state)}
-          dataUpdatedAt={state.dataUpdatedAt}
-          intervalSeconds={state.selectedNodeName ? 5 : 10}
-          isFetching={refreshing}
-          onRefresh={state.refresh}
-        />
+        {state.refreshIntervalSeconds === null ? null : (
+          <PollingFreshness
+            connectionState={homeConnectionState(state)}
+            dataUpdatedAt={state.dataUpdatedAt}
+            intervalSeconds={state.refreshIntervalSeconds}
+            isFetching={refreshing}
+            onRefresh={state.refresh}
+          />
+        )}
       </header>
       {!state.selectedClusterExists ? (
         state.clusterSelection.kind === "unfiltered" ? (
@@ -61,9 +68,23 @@ export function HomePage({ port }: { port: HomePort }) {
             <div className="grid min-w-0 content-start gap-4">
               <HomeClusterHealth
                 cluster={selectedCluster ?? null}
+                links={{
+                  incidents: filter.navigationHref(routeDefinitionForSurface("issues").path),
+                  nodes: clusterResourcesHref(filter.state, state.selectedClusterId!, "node"),
+                  pods: clusterResourcesHref(filter.state, state.selectedClusterId!, "pod"),
+                  restarts: clusterResourcesHref(filter.state, state.selectedClusterId!, "pod"),
+                  warnings: filter.navigationHref(routeDefinitionForSurface("timeline").path),
+                  workloads: clusterResourcesHref(
+                    filter.state,
+                    state.selectedClusterId!,
+                    "workload",
+                  ),
+                }}
+                nodes={state.nodes}
                 onRefresh={state.refresh}
                 overview={state.overview}
               />
+              <HomeInsightsBand insights={state.insights} onRefresh={state.refresh} />
               <HomeLiveBand state={state} />
             </div>
             <HomeIssuesRail
@@ -79,7 +100,7 @@ export function HomePage({ port }: { port: HomePort }) {
 }
 
 function homeConnectionState(state: ReturnType<typeof useHomePageState>) {
-  const resources = [state.choices, state.overview, state.nodes, state.pods];
+  const resources = [state.choices, state.overview, state.insights, state.nodes, state.pods];
   return resources.some((resource) =>
     resource.phase === "failed" ||
     (resource.phase === "ready" && resource.refreshFailure !== null)
@@ -129,7 +150,7 @@ function UnknownCluster({ clusterId }: { clusterId: string | null }) {
 
 function PartialFailureBanner({ state }: { state: ReturnType<typeof useHomePageState> }) {
   const { t } = useI18n();
-  const failures = [state.overview, state.nodes].filter(
+  const failures = [state.overview, state.insights, state.nodes].filter(
     (section) => section.phase === "failed" ||
       (section.phase === "ready" && section.refreshFailure !== null),
   );

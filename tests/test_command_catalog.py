@@ -12,6 +12,14 @@ from domains.command.actions import (
     registered_command_actions,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+)
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_ACTION,
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+)
 from packages.contracts.target import TARGET_NAMESPACE
 
 
@@ -22,15 +30,108 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.DEFAULT_ACTION,
         Command.APPLY_MANIFEST_ACTION,
         Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+        Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        Command.KUBERNETES_POD_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        Command.GITOPS_RESOURCE_CONTROL_ACTION,
+        HELM_RELEASE_ARTIFACT_READ_ACTION,
+    }
+    cronjob_actions = {
+        Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+    }
+    dynamic_workload_actions = {
+        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+        Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        Command.KUBERNETES_POD_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        Command.APPLY_MANIFEST_ACTION,
+        Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        Command.GITOPS_RESOURCE_CONTROL_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
             expected = (TARGET_NAMESPACE,)
+        elif spec.action in {
+            SERVICE_HTTP_REQUEST_ACTION,
+            HELM_RELEASE_ARTIFACT_READ_ACTION,
+        }:
+            expected = ()
+        elif spec.action in cronjob_actions | dynamic_workload_actions:
+            expected = ()
         elif spec.action == Command.DEFAULT_ACTION:
             expected = (Sandbox.NAMESPACE, "color-turf")
         else:
             expected = (Sandbox.NAMESPACE,)
         assert spec.allowed_namespaces == expected
+    service = command_action_spec(SERVICE_HTTP_REQUEST_ACTION)
+    assert service is not None
+    assert service.read_only is True
+    assert service.enforce_control_namespace is False
+    assert service.required_agent_capability == SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
+    helm_artifact = command_action_spec(HELM_RELEASE_ARTIFACT_READ_ACTION)
+    assert helm_artifact is not None
+    assert helm_artifact.allowed_namespaces == ()
+    assert helm_artifact.read_only is True
+    assert helm_artifact.enforce_control_namespace is False
+    assert helm_artifact.required_agent_capability == HELM_RELEASE_ARTIFACT_READ_CAPABILITY
+    for action in cronjob_actions:
+        cronjob = command_action_spec(action)
+        assert cronjob is not None
+        assert cronjob.allowed_namespaces == ()
+        assert cronjob.enforce_control_namespace is True
+        assert cronjob.required_agent_capability == Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY
+    for action in (
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+    ):
+        node = command_action_spec(action)
+        assert node is not None
+        assert node.enforce_control_namespace is False
+        assert node.required_agent_capability == Command.KUBERNETES_NODE_CONTROL_CAPABILITY
+    pod_debug = command_action_spec(Command.KUBERNETES_POD_DEBUG_ACTION)
+    assert pod_debug is not None
+    assert pod_debug.supports_cancel is True
+    assert pod_debug.required_agent_capability == Command.KUBERNETES_DEBUG_CAPABILITY
+    for action in (
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+    ):
+        rollback = command_action_spec(action)
+        assert rollback is not None
+        assert rollback.supports_cancel is True
+        assert rollback.required_agent_capability == Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY
+    gitops = command_action_spec(Command.GITOPS_RESOURCE_CONTROL_ACTION)
+    assert gitops is not None
+    assert gitops.allowed_namespaces == ()
+    assert gitops.enforce_control_namespace is False
+    assert gitops.required_agent_capability == Command.GITOPS_RESOURCE_CONTROL_CAPABILITY
 
 
 def test_spec_lookup_and_namespace_policy() -> None:

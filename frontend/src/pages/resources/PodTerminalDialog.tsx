@@ -1,10 +1,11 @@
 import { SquareTerminal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalConnection,
+  type PodTerminalCoordinates,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ResourceCapabilities } from "../../features/resources/resourceCapabilitiesContract";
@@ -23,6 +24,7 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
+import { subscribeNamespaceScopeInvalidation } from "../../features/namespace-scope/namespaceScopeInvalidation";
 
 type TerminalStatus = "idle" | "connecting" | "connected" | "ended" | "failed";
 
@@ -30,22 +32,64 @@ export function PodTerminalDialog({
   capabilities,
   detail,
   port = EMPTY_POD_TERMINAL_PORT,
+  preferredContainer = null,
+  preferredTarget = null,
+  onPreferredContainerHandled,
+  onPreferredTargetHandled,
 }: {
   capabilities: ResourceCapabilitiesFrame;
   detail: ResourceDetail;
   port?: PodTerminalPort;
+  preferredContainer?: string | null;
+  preferredTarget?: PodTerminalCoordinates | null;
+  onPreferredContainerHandled?: () => void;
+  onPreferredTargetHandled?: () => void;
 }) {
   const { t } = useI18n();
   const session = useOptionalProductSession();
-  const containers = detail.resource.facts.type === "pod"
-    ? detail.resource.facts.containerNames ?? []
-    : [];
+  const observedContainers = useMemo(
+    () => detail.resource.facts.type === "pod"
+      ? detail.resource.facts.containerNames ?? []
+      : [],
+    [detail.resource.facts],
+  );
+  const resolvedPreferredTarget = useMemo(
+    () => preferredTarget ?? (
+      preferredContainer
+      && observedContainers.includes(preferredContainer)
+      && detail.identity.namespace
+        ? {
+            namespace: detail.identity.namespace,
+            pod: detail.identity.name,
+            container: preferredContainer,
+          }
+        : null
+    ),
+    [
+      detail.identity.name,
+      detail.identity.namespace,
+      observedContainers,
+      preferredContainer,
+      preferredTarget,
+    ],
+  );
+  const containers = resolvedPreferredTarget === null
+    ? observedContainers
+    : [resolvedPreferredTarget.container];
   const authorized = capabilities.phase === "ready"
     && exactCapabilitySubject(capabilities.data, detail)
     && capabilities.data.capabilities.some((capability) => (
-      capability.execution === "terminal"
-      && capability.method === "WEBSOCKET"
-      && capability.realtime
+      capability.realtime
+      && (
+        (
+          capability.execution === "terminal"
+          && capability.method === "WEBSOCKET"
+        )
+        || (
+          resolvedPreferredTarget !== null
+          && capability.resultIntent === "terminal-session"
+        )
+      )
     ));
   const [open, setOpen] = useState(false);
   const [container, setContainer] = useState(containers[0] ?? "");
@@ -56,21 +100,53 @@ export function PodTerminalDialog({
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [failure, setFailure] = useState("");
   const connectionRef = useRef<PodTerminalConnection | null>(null);
+  const selectedContainer = resolvedPreferredTarget?.container
+    ?? (containers.includes(container) ? container : containers[0] ?? "");
   const target = useMemo(() => {
-    const namespace = detail.identity.namespace;
-    if (!session || !namespace || !container) return null;
+    const namespace = resolvedPreferredTarget?.namespace ?? detail.identity.namespace;
+    if (!session || !namespace || !selectedContainer) return null;
     return {
       workspaceId: session.workspaceId,
       clusterId: detail.clusterId,
       namespace,
-      pod: detail.identity.name,
-      container,
+      pod: resolvedPreferredTarget?.pod ?? detail.identity.name,
+      container: selectedContainer,
     };
-  }, [container, detail, session]);
+  }, [
+    detail.clusterId,
+    detail.identity.name,
+    detail.identity.namespace,
+    resolvedPreferredTarget,
+    selectedContainer,
+    session,
+  ]);
+  const handlePreferredTarget = useCallback(() => {
+    onPreferredContainerHandled?.();
+    onPreferredTargetHandled?.();
+  }, [onPreferredContainerHandled, onPreferredTargetHandled]);
 
   useEffect(() => () => connectionRef.current?.close(), []);
+  useEffect(() => subscribeNamespaceScopeInvalidation((invalidation) => {
+    const namespace = target?.namespace ?? detail.identity.namespace;
+    if (
+      invalidation.clusterId !== detail.clusterId ||
+      namespace === null ||
+      invalidation.allowedNamespaces.length === 0 ||
+      invalidation.allowedNamespaces.includes(namespace)
+    ) return;
+    connectionRef.current?.close();
+    connectionRef.current = null;
+    setStatus("ended");
+    setOpen(false);
+    handlePreferredTarget();
+  }), [
+    detail.clusterId,
+    detail.identity.namespace,
+    handlePreferredTarget,
+    target?.namespace,
+  ]);
 
-  if (!authorized || !session || containers.length === 0 || detail.identity.namespace === null) {
+  if (!authorized || !session || containers.length === 0 || target === null) {
     return null;
   }
 
@@ -150,14 +226,17 @@ export function PodTerminalDialog({
       </Button>
       <Dialog
         onOpenChange={(next) => {
-          if (!next) stop();
+          if (!next) {
+            stop();
+            handlePreferredTarget();
+          }
           setOpen(next);
         }}
-        open={open}
+        open={open || resolvedPreferredTarget !== null}
       >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{t("resources.detail.terminal.title", { name: detail.identity.name })}</DialogTitle>
+            <DialogTitle>{t("resources.detail.terminal.title", { name: target.pod })}</DialogTitle>
             <DialogDescription>
               {t("resources.detail.terminal.description")}
             </DialogDescription>
@@ -170,8 +249,11 @@ export function PodTerminalDialog({
                   className="h-9 rounded-md border bg-background px-3 text-sm"
                   disabled={status === "connecting" || status === "connected"}
                   id="pod-terminal-container"
-                  onChange={(event) => setContainer(event.currentTarget.value)}
-                  value={container}
+                  onChange={(event) => {
+                    handlePreferredTarget();
+                    setContainer(event.currentTarget.value);
+                  }}
+                  value={selectedContainer}
                 >
                   {containers.map((name) => <option key={name}>{name}</option>)}
                 </select>
@@ -230,7 +312,15 @@ export function PodTerminalDialog({
             <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>
           ) : null}
           <DialogFooter>
-            <Button onClick={() => setOpen(false)} type="button" variant="outline">
+            <Button
+              onClick={() => {
+                stop();
+                setOpen(false);
+                handlePreferredTarget();
+              }}
+              type="button"
+              variant="outline"
+            >
               {t("common.action.close")}
             </Button>
           </DialogFooter>

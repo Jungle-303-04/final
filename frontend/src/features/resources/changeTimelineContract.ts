@@ -1,4 +1,5 @@
 import type { UnifiedFilterState } from "../filters/filterContract";
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type ChangeTimelineEventKind = "inventory_event" | "incident" | "deployment" | "gitops_change";
 export type ChangeTimelineSeverity = "info" | "warning" | "critical" | "unknown";
@@ -16,6 +17,7 @@ export interface ChangeTimelineSnapshot {
     severity: ChangeTimelineSeverity;
   }>;
   gaps: Array<{ from: number; to: number }>;
+  freshnessPolicy: BrowserRefreshPolicy;
 }
 
 export interface ChangeTimelineOptions {

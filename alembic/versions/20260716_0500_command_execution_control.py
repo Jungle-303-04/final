@@ -150,7 +150,7 @@ def upgrade() -> None:
             completed_at, result, created_at, updated_at
         )
         select
-            'legacy:' || command_id || ':1',
+            'legacy:' || command_id || ':' || '1',
             command_id,
             workspace_id,
             cluster_id,
@@ -176,7 +176,7 @@ def upgrade() -> None:
             attempt_count = greatest(attempt_count, 1),
             active_attempt_id = case
                 when status in ('queued', 'leased', 'running')
-                    then 'legacy:' || command_id || ':1'
+                    then 'legacy:' || command_id || ':' || '1'
                 else active_attempt_id
             end,
             direct_execution = direct_execution

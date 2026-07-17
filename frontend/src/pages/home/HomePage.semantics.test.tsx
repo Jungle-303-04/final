@@ -58,6 +58,22 @@ describe("HomePage data semantics", () => {
     expect(screen.queryByRole("link", { name: /Restart loop/u })).toBeNull();
   }, 15_000);
 
+  it("opens a stable incident in the scoped Issues screen", async () => {
+    renderHome(homePort(), ["/?clusters=cluster-1"]);
+
+    const incident = await screen.findByRole("link", { name: /Restart loop/u });
+    expect(incident.getAttribute("href")).toBe("/issues?clusters=cluster-1");
+  });
+
+  it("opens a warning with an observed resource identity in the resource drawer", async () => {
+    renderHome(homePort(), ["/?clusters=cluster-1"]);
+
+    const warning = await screen.findByRole("link", { name: /BackOff/u });
+    expect(warning.getAttribute("href")).toBe(
+      "/resources?clusters=cluster-1&resources.types=pod&detail=Pod%2Fshop%2Fcheckout-api-0",
+    );
+  });
+
   it("does not turn an unknown-completeness empty slice into authoritative zero claims", async () => {
     renderHome(homePort({
       loadClusterOverview: vi.fn().mockResolvedValue({
@@ -184,6 +200,18 @@ describe("HomePage data semantics", () => {
       .toBeTruthy();
     expect(screen.queryByRole("button", { name: /worker-a/u })).toBeNull();
     expect(screen.queryByRole("region", { name: "Node와 Pod" })).toBeNull();
+  });
+
+  it("keeps an inventory-only insights denial inside the Home insights section", async () => {
+    renderHome(homePort({
+      loadInsights: vi.fn().mockRejectedValue(new HomePortFailure("forbidden")),
+    }), ["/?clusters=cluster-1"]);
+
+    const insights = await screen.findByRole("region", { name: "클러스터 인사이트" });
+    expect(await within(insights).findByText("조회 권한이 없습니다")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /worker-a/u })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
+      .toBeNull();
   });
 });
 

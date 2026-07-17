@@ -283,6 +283,115 @@ class RcaChangesRepository(DatabaseConnection):
         with self.connection() as conn:
             return [dict(row) for row in conn.execute(statement).mappings().all()]
 
+    def list_recent_workload_changes_for_incidents(
+        self,
+        workspace_id: str,
+        incident_ids: tuple[str, ...],
+        allowed_cluster_ids: set[str],
+        *,
+        limit: int = 10,
+    ) -> list[JsonObject]:
+        """Read one globally bounded change sample for an authorized issue page."""
+        bounded_incidents = tuple(sorted({value for value in incident_ids if value}))[:100]
+        clusters = tuple(sorted({value for value in allowed_cluster_ids if value}))
+        if not workspace_id or not bounded_incidents or not clusters:
+            return []
+        timeline = RcaTimeline.__table__
+        audit = AuditLog.__table__
+        change = WorkloadChange.__table__
+        reference = WorkflowPrReference.__table__
+        resource_kind = func.lower(timeline.c.incident_resource_kind).label("resource_kind")
+        grouped_scopes = (
+            select(
+                timeline.c.incident_id,
+                timeline.c.cluster_id,
+                timeline.c.incident_namespace.label("namespace"),
+                resource_kind,
+                timeline.c.incident_resource_name.label("resource_name"),
+                func.min(audit.c.event_created_at).label("incident_at"),
+            )
+            .select_from(
+                timeline.join(
+                    audit,
+                    and_(
+                        audit.c.workspace_id == timeline.c.workspace_id,
+                        audit.c.correlation_id == timeline.c.correlation_id,
+                        audit.c.subject == EventSubject.INCIDENT_DETECTED.value,
+                        audit.c.event_created_at.is_not(None),
+                    ),
+                )
+            )
+            .where(
+                timeline.c.workspace_id == workspace_id,
+                timeline.c.incident_id.in_(bounded_incidents),
+                timeline.c.cluster_id.in_(clusters),
+                timeline.c.incident_namespace.is_not(None),
+                timeline.c.incident_resource_kind.is_not(None),
+                timeline.c.incident_resource_name.is_not(None),
+            )
+            .group_by(
+                timeline.c.incident_id,
+                timeline.c.cluster_id,
+                timeline.c.incident_namespace,
+                resource_kind,
+                timeline.c.incident_resource_name,
+            )
+            .cte("issue_queue_change_scopes")
+        )
+        ranked_scopes = select(
+            grouped_scopes,
+            func.count().over(partition_by=grouped_scopes.c.incident_id).label("scope_count"),
+        ).cte("ranked_issue_queue_change_scopes")
+        valid_scopes = (
+            select(ranked_scopes)
+            .where(ranked_scopes.c.scope_count == 1)
+            .cte("valid_issue_queue_change_scopes")
+        )
+        statement = (
+            select(
+                valid_scopes.c.incident_id,
+                change.c.event_id,
+                change.c.changed_at,
+                change.c.image_before,
+                change.c.image_after,
+                reference.c.pr_url,
+                change.c.commit_sha,
+                change.c.repository_id,
+                change.c.repo_ref,
+                change.c.workflow_run_id,
+                change.c.namespace,
+                change.c.resource_kind,
+                change.c.resource_name,
+            )
+            .select_from(
+                valid_scopes.join(
+                    change,
+                    and_(
+                        change.c.workspace_id == workspace_id,
+                        change.c.cluster_id == valid_scopes.c.cluster_id,
+                        change.c.namespace == valid_scopes.c.namespace,
+                        change.c.resource_kind == valid_scopes.c.resource_kind,
+                        change.c.resource_name == valid_scopes.c.resource_name,
+                        change.c.changed_at <= valid_scopes.c.incident_at,
+                    ),
+                ).outerjoin(
+                    reference,
+                    and_(
+                        reference.c.workspace_id == change.c.workspace_id,
+                        reference.c.repository_id == change.c.repository_id,
+                        reference.c.binding_id == change.c.binding_id,
+                        reference.c.workflow_run_id == change.c.workflow_run_id,
+                        reference.c.commit_sha == change.c.commit_sha,
+                        reference.c.manifest_path == change.c.manifest_path,
+                    ),
+                )
+            )
+            .order_by(change.c.changed_at.desc(), change.c.event_id.desc())
+            .limit(max(1, min(int(limit), 50)))
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings().all()]
+
     def list_recent_workload_changes_for_evidence(
         self,
         workspace_id: str,

@@ -26,7 +26,7 @@ TABLES = (
     "inventory_resource_label_versions",
     "inventory_resource_application_versions",
 )
-INDEXES = {
+BASELINE_INDEXES = {
     "ix_inventory_filter_revisions_scope",
     "ix_inventory_filter_revisions_cluster",
     "ux_inventory_versions_active_key",
@@ -38,6 +38,9 @@ INDEXES = {
     "ix_inventory_label_versions_facet",
     "ix_inventory_label_versions_selector",
     "ix_inventory_application_versions_lookup",
+}
+MODEL_INDEXES = BASELINE_INDEXES | {
+    "ix_inventory_filter_revisions_change_coverage",
 }
 
 
@@ -72,6 +75,7 @@ def test_inventory_filter_model_shape_matches_projection_contract() -> None:
         "labels_complete",
         "resources_complete",
         "application_bindings_complete",
+        "change_ledger_epoch",
         "partial_reason_codes",
         "created_at",
     )
@@ -109,7 +113,7 @@ def test_inventory_filter_model_shape_matches_projection_contract() -> None:
     )
     assert {
         index.name for table in (revision, version, label, application) for index in table.indexes
-    } == INDEXES
+    } == MODEL_INDEXES
 
 
 def test_inventory_filter_upgrade_backfills_honest_baseline(monkeypatch) -> None:
@@ -140,7 +144,7 @@ def test_inventory_filter_upgrade_backfills_honest_baseline(monkeypatch) -> None
     assert "search_text" in sql
     assert "lower(label.label_key || '=' || label.label_value)" in sql
 
-    for name in INDEXES:
+    for name in BASELINE_INDEXES:
         assert f"index {name}" in sql
     assert "index concurrently" not in sql
 

@@ -1,4 +1,5 @@
 import type { ResourcesFilterEndpointQuery } from "./resourcesFilterEndpointContract";
+import type { ResourceMetricFreshness } from "./resourceMetricsHistoryContract";
 
 type Completeness = "exact" | "partial" | "unavailable";
 
@@ -10,6 +11,11 @@ export interface ResourceMetricsHistoryEndpointQuery extends ResourcesFilterEndp
 }
 
 export interface ResourceMetricsHistoryEndpointResponse {
+  refresh_policy_key:
+    | "metrics_kubernetes"
+    | "metrics_prometheus"
+    | "metrics_pvc"
+    | "metrics_rightsizing";
   series: Array<{
     resource_id: string;
     cluster_id: string;
@@ -21,6 +27,30 @@ export interface ResourceMetricsHistoryEndpointResponse {
       cpu_mcores: number | null;
       mem_mib: number | null;
     }>;
+    current_observation?: {
+      observed_at: string;
+      measurement_window: string;
+      cpu_mcores: number | null;
+      mem_mib: number | null;
+      containers: Array<{
+        name: string;
+        cpu_mcores: number | null;
+        mem_mib: number | null;
+      }>;
+      container_metrics_complete: boolean;
+    } | null;
+    container_series: Array<{
+      name: string;
+      points: Array<{
+        observed_at: string;
+        cpu_mcores: number | null;
+        mem_mib: number | null;
+      }>;
+      completeness: Completeness;
+      partial_reason_codes: string[];
+    }>;
+    container_history_completeness: Completeness;
+    container_history_reason_codes: string[];
     has_sparkline_points: boolean;
     completeness: Completeness;
     partial_reason_codes: string[];
@@ -42,4 +72,55 @@ export interface ResourceMetricsHistoryEndpointDependencies {
     query: ResourceMetricsHistoryEndpointQuery,
     signal?: AbortSignal,
   ): Promise<ResourceMetricsHistoryEndpointResponse>;
+  runScopedMetricQuery?(
+    request: ScopedMetricEndpointRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<ScopedMetricEndpointRun>;
+}
+
+type ScopedMetricCategory =
+  | "cpu"
+  | "memory"
+  | "network_rx"
+  | "network_tx"
+  | "filesystem"
+  | "restarts"
+  | "volume_usage"
+  | "hpa_current_replicas"
+  | "hpa_desired_replicas";
+
+export interface ScopedMetricEndpointRequest {
+  cluster_id: string;
+  subject:
+    | { kind: "resource"; resource_id: string }
+    | { kind: "pvc"; resource_id: string }
+    | { kind: "namespace"; namespace: string }
+    | { kind: "cluster" };
+  categories: ScopedMetricCategory[];
+  range: "15m" | "1h" | "6h" | "24h";
+}
+
+export interface ScopedMetricEndpointRun {
+  endpoint: {
+    refresh_policy_key: "metrics_prometheus" | "metrics_pvc";
+    scope: {
+      cluster_id: string;
+      freshness: ResourceMetricFreshness;
+    };
+    resource: {
+      kind: string;
+      namespace: string | null;
+      name: string;
+    } | null;
+  };
+  completeness: "exact" | "partial" | "unavailable";
+  reasonCodes: string[];
+  observations: Array<{
+    category: ScopedMetricCategory;
+    result: {
+      series: Array<{
+        values: Array<{ timestamp: number | null; value: number | null }>;
+      }>;
+    };
+  }>;
 }

@@ -17,6 +17,7 @@ IssueFacetAxis = Literal[
     "namespaces",
     "applications",
     "severity",
+    "category",
     "status",
     "environment",
 ]
@@ -28,6 +29,7 @@ class IssueFilters:
     namespaces: tuple[tuple[str, str], ...]
     applications: tuple[str, ...]
     severities: tuple[str, ...]
+    categories: tuple[str, ...]
     statuses: tuple[str, ...]
     environments: tuple[str, ...]
     labels: tuple[tuple[str, str], ...]
@@ -44,6 +46,7 @@ def parse_issue_filters(
     environments: str | None,
     labels: str | None,
     query: str | None,
+    categories: str | None = None,
 ) -> IssueFilters:
     common = parse_resource_filters(
         clusters=clusters,
@@ -60,6 +63,7 @@ def parse_issue_filters(
         namespaces=common.namespaces,
         applications=common.applications,
         severities=_issue_axis(severities),
+        categories=_issue_axis(categories),
         statuses=_issue_axis(statuses),
         environments=_issue_axis(environments),
         labels=common.labels,
@@ -74,6 +78,7 @@ def issue_filter_fingerprint(filters: IssueFilters) -> str:
             "namespaces": filters.namespaces,
             "applications": filters.applications,
             "severities": filters.severities,
+            "categories": filters.categories,
             "statuses": filters.statuses,
             "environments": filters.environments,
             "labels": filters.labels,
@@ -93,6 +98,7 @@ def without_facet_axis(filters: IssueFilters, axis: IssueFacetAxis) -> IssueFilt
         "namespaces": "namespaces",
         "applications": "applications",
         "severity": "severities",
+        "category": "categories",
         "status": "statuses",
         "environment": "environments",
     }[axis]
@@ -108,6 +114,8 @@ def selected_facet_values(filters: IssueFilters, axis: IssueFacetAxis) -> tuple[
         return filters.applications
     if axis == "severity":
         return filters.severities
+    if axis == "category":
+        return filters.categories
     if axis == "status":
         return filters.statuses
     return filters.environments

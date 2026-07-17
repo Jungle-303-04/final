@@ -22,6 +22,7 @@ from domains.gitops.models import (
     WorkflowRunStep,
     WorkspaceCredential,
 )
+from domains.gitops.overview_repository import GitOpsOverviewRepository
 from domains.gitops.repository_discovery import (
     RepositoryDiscoveryError,
     normalize_github_repo_ref,
@@ -59,7 +60,7 @@ from packages.contracts.identity import (
     Permission,
     ResourceRole,
 )
-from packages.storage.engine import DatabaseConnection, iso_or_none, row_dict
+from packages.storage.engine import iso_or_none, row_dict
 
 LOGGER = get_logger(__name__)
 GITHUB_REPOSITORY_CREDENTIAL_SCOPE_PREFIX = "repository"
@@ -207,7 +208,7 @@ def watch_target_settings(payload: JsonObject) -> JsonObject:
     return settings
 
 
-class RepoChangeRepository(DatabaseConnection):
+class RepoChangeRepository(GitOpsOverviewRepository):
     def lock_repository_identity(self, workspace_id: str, repo_ref: str) -> None:
         lock_key = repository_identity_lock_key(workspace_id, repo_ref)
         with self.connection() as conn:
@@ -267,6 +268,24 @@ class RepoChangeRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
+
+    def delete_workspace_credential(self, workspace_id: str, provider: str, scope: str) -> bool:
+        """Delete one exact workspace credential scope without reading its secret value."""
+
+        if not workspace_id or not provider or not scope:
+            return False
+        table = WorkspaceCredential.__table__
+        statement = (
+            table.delete()
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.provider == provider,
+                table.c.scope == scope,
+            )
+            .returning(table.c.credential_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).scalar_one_or_none() is not None
 
     def get_repository_by_ref(self, workspace_id: str, repo_ref: str) -> JsonObject | None:
         if not workspace_id or not repo_ref:

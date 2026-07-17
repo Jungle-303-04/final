@@ -210,7 +210,7 @@ function validateOpsiaPort(port, label, errors, { knownOpsiaDestinations = null,
   if (Array.isArray(port.destinations)) {
     port.destinations.forEach((destination, index) => {
       validatePath(destination, `${label}: opsiaPort.destinations[${index}]`, errors)
-      if (!/^(?:frontend|src|tests)\//.test(destination ?? '')) {
+      if (!/^(?:desktop|frontend|src|tests)\//.test(destination ?? '')) {
         errors.push(`${label}: opsiaPort.destinations[${index}]: must target a current Opsia product or test path`)
       }
       if (knownOpsiaDestinations && !knownOpsiaDestinations.has(destination)) {
@@ -571,7 +571,7 @@ function runGit(repository, args, input = null) {
 }
 
 async function readKnownOpsiaDestinations() {
-  const output = await runGit(REPOSITORY_ROOT, ['ls-files', '-z', '--', 'frontend', 'src', 'tests'])
+  const output = await runGit(REPOSITORY_ROOT, ['ls-files', '-z', '--', 'desktop', 'frontend', 'src', 'tests'])
   return new Set(output.toString('utf8').split('\0').filter(Boolean).map(normalizedPath))
 }
 

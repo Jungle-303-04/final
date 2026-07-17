@@ -20,6 +20,7 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
     assert len({feature.contract_id for feature in catalog.features}) == catalog.feature_count
     assert len({feature.id for feature in catalog.features}) == catalog.feature_count
     assert all(feature.area for feature in catalog.features)
+    assert all(feature.release_phase in {"baseline", "post_parity"} for feature in catalog.features)
     assert all(feature.backend_contract for feature in catalog.features)
     assert all(feature.frontend_contract for feature in catalog.features)
     assert all(feature.verification for feature in catalog.features)
@@ -34,7 +35,17 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
         "reference_only",
         "not_applicable",
     }
-    assert all(feature.delivery_status != "implemented" for feature in catalog.features)
+    implemented = [
+        feature for feature in catalog.features if feature.delivery_status == "implemented"
+    ]
+    assert implemented
+    assert all(feature.source_key for feature in implemented)
+    assert all(feature.coverage.backend is not None for feature in implemented)
+    assert all(feature.coverage.frontend is not None for feature in implemented)
+    assert all(
+        feature.coverage.realtime != "not_required" or not feature.streaming
+        for feature in implemented
+    )
     assert all(feature.delivery_status == "not_applicable" for feature in catalog.features[:3])
     assert any(feature.desktop_contract == "desktop" for feature in catalog.features)
     assert any(feature.streaming for feature in catalog.features)
@@ -52,6 +63,21 @@ def test_feature_contract_lookup_is_catalog_driven() -> None:
     assert feature_contract(first.contract_id) == first
     with pytest.raises(KeyError, match="unknown feature contract"):
         feature_contract("reference.feature.unknown")
+
+
+def test_resource_maintenance_contracts_keep_source_identity_and_realtime_evidence() -> None:
+    expected = {
+        "reference.feature.174": "upstream-ui:nodes:drain:confirm-and-progress:v1",
+        "reference.feature.175": ("upstream-ui:pods:debug-terminal:ephemeral-container:v1"),
+        "reference.feature.176": ("upstream-ui:nodes:debug-terminal:session-lifecycle:v1"),
+    }
+    for contract_id, source_key in expected.items():
+        feature = feature_contract(contract_id)
+        assert feature.source_key == source_key
+        assert feature.identity_status == "source-key"
+        assert feature.streaming is True
+        assert feature.coverage.realtime != "not_required"
+        assert feature.coverage.realtime["state"] == "implemented"
 
 
 def test_feature_contract_rejects_inconsistent_generated_identity_lineage() -> None:

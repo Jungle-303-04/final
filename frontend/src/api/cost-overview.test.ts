@@ -8,14 +8,65 @@ describe("Cost overview API", () => {
   it("serializes scope and preserves unavailable cost evidence as null", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(overview()));
 
-    await expect(getCostOverview({ clusterIds: ["cluster-b", "cluster-a", "cluster-a"] })).resolves.toMatchObject({
+    await expect(getCostOverview({
+      clusterIds: ["cluster-b", "cluster-a", "cluster-a"],
+      namespaces: ["cluster-a/shop"],
+      timeRange: "7d",
+    })).resolves.toMatchObject({
       observation: { currency: null, data_window: null },
       summary: { hourly_cost: null, monthly_projection: null, savings_recommendations: null },
+      trend: { availability: "unavailable", range: "7d", series: [] },
       refresh_after_seconds: 60,
+      trend_refresh_after_seconds: 120,
+      nodes_refresh_after_seconds: 120,
     });
 
     expect(COST_OVERVIEW_PATH).toBe("/api/cost/overview");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b&namespaces=cluster-a%2Fshop&range=7d");
+  });
+
+  it("accepts bounded observed trend series and rejects oversized responses", async () => {
+    const fixture = overview();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      ...fixture,
+      trend: {
+        availability: "available",
+        range: "24h",
+        currency: "KRW",
+        reason_codes: [],
+        series: [{
+          key: "namespace/shop",
+          label: "shop",
+          points: [
+            { timestamp: 1_721_100_000, rate_micros: 1_000_000 },
+            { timestamp: 1_721_100_300, rate_micros: 2_000_000 },
+          ],
+        }],
+      },
+    }));
+
+    await expect(getCostOverview()).resolves.toMatchObject({
+      trend: { availability: "available", currency: "KRW" },
+    });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      ...fixture,
+      trend: {
+        availability: "available",
+        range: "24h",
+        currency: "KRW",
+        reason_codes: [],
+        series: [{
+          key: "namespace/shop",
+          label: "shop",
+          points: Array.from({ length: 481 }, (_, index) => ({
+            timestamp: 1_721_100_000 + index,
+            rate_micros: index,
+          })),
+        }],
+      },
+    }));
+    await expect(getCostOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
 
   it("fails closed if unavailable cost has a numeric amount, currency, or recommendation", async () => {
@@ -64,7 +115,16 @@ function overview() {
       savings_recommendations: null,
       reason_codes: ["cost_observation_not_integrated"],
     },
+    trend: {
+      availability: "unavailable",
+      range: "7d",
+      currency: null,
+      series: [],
+      reason_codes: ["cost_observation_not_integrated"],
+    },
     refresh_after_seconds: 60,
+    trend_refresh_after_seconds: 120,
+    nodes_refresh_after_seconds: 120,
   };
 }
 

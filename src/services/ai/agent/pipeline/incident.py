@@ -21,6 +21,7 @@ from services.ai.agent.pipeline.symptom import (
     SYMPTOM_INGRESS_5XX,
     UNKNOWN_SYMPTOM,
     derive_symptom,
+    incident_category_for_signal,
     resolve_resource,
 )
 
@@ -138,6 +139,10 @@ class IncidentDetector:
             symptom = derived.symptom
             secondary_symptoms = derived.secondary_symptoms
         severity = str(evidence.kubernetes.get("severity", "medium"))
+        explicit_category = str(evidence.kubernetes.get("category") or "").strip().casefold()
+        category = explicit_category or incident_category_for_signal(derived.signal)
+        if log_signal is not None:
+            category = "application_runtime"
         return IncidentRecord(
             incident_id=incident_id,
             cluster_id=evidence.cluster_id,
@@ -146,6 +151,7 @@ class IncidentDetector:
             namespace=namespace,
             symptom=symptom,
             severity=severity,
+            category=category,
             first_seen_at=evidence.kubernetes.get("first_seen_at"),
             summary=f"{resource_kind} {resource_name} has {symptom}",
             workspace_id=evidence.workspace_id,

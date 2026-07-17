@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import { I18nProvider } from "../../shared/i18n";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
-import { gitOpsPort } from "./GitOpsPage.testSupport";
+import { gitOpsPort, gitOpsRefreshPolicies } from "./GitOpsPage.testSupport";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("GitOpsSyncTableView", () => {
   it("shows compact observed data and expands one row without fetching invented details", async () => {
@@ -43,6 +47,41 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.queryByLabelText("Checkout API Details")).toBeNull();
   });
 
+  it("links controller evidence to the canonical resource detail route", async () => {
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([{
+      id: "controller:cluster-a:application-uid",
+      applicationId: "application-uid",
+      applicationName: "storefront",
+      clusterId: "cluster-a",
+      namespace: "argocd",
+      environment: null,
+      syncStatus: "Synced",
+      revision: "abc123",
+      observedAt: "2026-07-17T01:02:03Z",
+      authority: "controller",
+      provider: "argo",
+      kind: "Application",
+      health: "Healthy",
+      resourceLocator: {
+        clusterId: "cluster-a",
+        apiVersion: "argoproj.io/v1alpha1",
+        kind: "Application",
+        namespace: "argocd",
+        name: "storefront",
+      },
+      freshness: "partial",
+      partialReasonCodes: ["crd_discovery_forbidden"],
+    }]);
+    renderView(port);
+
+    const link = await screen.findByRole("link", { name: "storefront" });
+    expect(link.getAttribute("href")).toBe(
+      "/gitops/resource?cluster=cluster-a&apiVersion=argoproj.io%2Fv1alpha1&kind=Application&namespace=argocd&name=storefront",
+    );
+    expect(screen.getByText("crd_discovery_forbidden")).toBeTruthy();
+  });
+
   it("keeps the no-target state informative and offers the real registration action", async () => {
     const port = gitOpsPort();
     vi.mocked(port.listSyncTargets).mockResolvedValue([]);
@@ -53,12 +92,95 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.getByRole("button", { name: "New deployment target" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
   });
+
+  it("filters the authorized projection and clears an empty result without another request", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([{
+      id: "checkout-api:production",
+      applicationId: "checkout-api",
+      applicationName: "Checkout API",
+      clusterId: "production-east",
+      namespace: "checkout",
+      environment: "production",
+      syncStatus: "out_of_sync",
+      revision: "abc123",
+      observedAt: "2026-07-15T01:02:03Z",
+    }, {
+      id: "inventory-api:staging",
+      applicationId: "inventory-api",
+      applicationName: "Inventory API",
+      clusterId: "staging-east",
+      namespace: "inventory",
+      environment: "staging",
+      syncStatus: "synced",
+      revision: "def456",
+      observedAt: "2026-07-15T01:02:03Z",
+    }]);
+    renderView(port);
+
+    const search = await screen.findByRole("searchbox", { name: "Search deployments" });
+    await user.type(search, "production");
+    expect(screen.getByText("Checkout API")).toBeTruthy();
+    expect(screen.queryByText("Inventory API")).toBeNull();
+
+    await user.clear(search);
+    await user.type(search, "missing");
+    expect(screen.getByText("No matching deployments")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
+
+    expect(screen.getByText("Checkout API")).toBeTruthy();
+    expect(screen.getByText("Inventory API")).toBeTruthy();
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares server-owned row retries and count cadence without a browser fallback", async () => {
+    vi.useFakeTimers();
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([]);
+    const refreshPolicies = gitOpsRefreshPolicies();
+    renderView(port, refreshPolicies);
+
+    await act(async () => undefined);
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+    expect(refreshPolicies.getPolicy).toHaveBeenCalledWith("gitops_rows", expect.any(AbortSignal));
+    expect(refreshPolicies.getPolicy).toHaveBeenCalledWith("gitops_counts", expect.any(AbortSignal));
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await act(async () => vi.advanceTimersByTimeAsync(2_000));
+      expect(port.listSyncTargets).toHaveBeenCalledTimes(attempt + 2);
+    }
+
+    await act(async () => vi.advanceTimersByTimeAsync(59_999));
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(5);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(6);
+  });
+
+  it("stays manual when the server policy inventory is unavailable", async () => {
+    vi.useFakeTimers();
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([]);
+    const refreshPolicies = gitOpsRefreshPolicies();
+    vi.mocked(refreshPolicies.getPolicy).mockRejectedValue(new Error("policy unavailable"));
+
+    renderView(port, refreshPolicies);
+    await act(async () => undefined);
+    await act(async () => vi.advanceTimersByTimeAsync(3_600_000));
+
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+  });
 });
 
-function renderView(port: ReturnType<typeof gitOpsPort>) {
+function renderView(
+  port: ReturnType<typeof gitOpsPort>,
+  refreshPolicies = gitOpsRefreshPolicies(),
+) {
   return render(
-    <I18nProvider navigatorLanguage="en-US" storage={null}>
-      <GitOpsSyncTableView port={port} />
-    </I18nProvider>,
+    <MemoryRouter>
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} />
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }

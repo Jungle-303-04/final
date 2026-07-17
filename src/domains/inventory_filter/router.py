@@ -28,6 +28,7 @@ from domains.inventory_filter.query import (
     parse_facet_values,
     parse_resource_filters,
 )
+from domains.inventory_filter.resource_table_metrics import attach_resource_table_metrics
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -40,9 +41,11 @@ from packages.contracts.gateway.responses import (
     RelationsTopologyResponse,
     ResourceFilterFacetPageResponse,
     ResourceGraphSnapshotResponse,
+    ResourceIdentitySearchResponse,
     ResourceMetricsHistoryResponse,
 )
 from packages.contracts.identity import Permission
+from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.runtime.dependencies import get_db
 
 DEFAULT_PAGE_LIMIT = 50
@@ -133,6 +136,127 @@ async def list_global_filter_facets(
     )
     return GlobalFilterFacetsResponse.model_validate(
         _global_facets_with_completeness(result, context)
+    )
+
+
+@router.get(
+    gateway_routes.RESOURCE_SEARCH_PATH,
+    response_model=ResourceIdentitySearchResponse,
+)
+async def search_resource_identities(
+    q: str = Query(min_length=2, max_length=200),
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    applications: str | None = Query(default=None),
+    resources_types: str | None = Query(default=None, alias="resources.types"),
+    labels: str | None = Query(default=None),
+    include: Literal["none", "resources"] = Query(default="none"),
+    context: Literal["summary", "none"] = Query(default="summary"),
+    global_ns: bool = Query(default=True, alias="globalNs"),
+    limit: int = Query(default=12, ge=1, le=50),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ResourceIdentitySearchResponse:
+    # Source-compatible discovery controls are explicit contract inputs. Resource
+    # identity is currently the only supported include and the server always owns
+    # workspace/namespace authorization, irrespective of the caller's context label.
+    _ = include, context
+    filters = _parse_filters(
+        clusters=clusters,
+        namespaces=None if global_ns else namespaces,
+        applications=applications,
+        resource_types=resources_types,
+        health=None,
+        labels=labels,
+        query=None,
+        include_deleted=False,
+    )
+    authorized = await _authorized_scope(db, current)
+    _require_requested_scope(authorized, filters)
+    fingerprint = filter_fingerprint(filters)
+    if not authorized.cluster_ids:
+        return ResourceIdentitySearchResponse(
+            scopes=[],
+            hits=[],
+            total=0,
+            total_completeness="unavailable",
+            snapshot=_empty_snapshot_meta(authorized, fingerprint),
+        )
+    snapshot_context = await _snapshot_context(db, authorized)
+    result = await asyncio.to_thread(
+        db.search_resource_identities,
+        workspace_id=authorized.workspace_id,
+        allowed_cluster_ids=set(authorized.cluster_ids),
+        allowed_application_ids=set(authorized.application_ids),
+        filters=filters,
+        snapshot_revision=int(snapshot_context.get("snapshot_revision") or 0),
+        query=q,
+        limit=limit,
+    )
+    selected_cluster_ids = (
+        tuple(filters.clusters) if filters.clusters else tuple(sorted(authorized.cluster_ids))
+    )
+    namespaces_by_cluster: dict[str, list[str]] = {
+        cluster_id: [] for cluster_id in selected_cluster_ids
+    }
+    for cluster_id, namespace in filters.namespaces:
+        namespaces_by_cluster.setdefault(cluster_id, []).append(namespace)
+    hits = []
+    for row in result.get("items") or []:
+        api_group, version = _split_api_version(str(row["api_version"]))
+        observed_at = row.get("observed_at")
+        hits.append(
+            {
+                "id": str(row["id"]),
+                "cluster_id": str(row["cluster_id"]),
+                "resource_type": str(row["resource_type"]),
+                "resource": ResourceRef(
+                    api_group=api_group,
+                    version=version,
+                    kind=str(row["kind"]),
+                    namespace=(str(row["namespace"]) if row.get("namespace") is not None else None),
+                    name=str(row["name"]),
+                    uid=str(row["uid"]),
+                ),
+                "matched_fields": list(row.get("matched_fields") or ()),
+                "observed_at": (
+                    observed_at.isoformat() if hasattr(observed_at, "isoformat") else None
+                ),
+            }
+        )
+    snapshot_revision = int(snapshot_context.get("snapshot_revision") or 0)
+    completeness = _filtered_completeness(
+        snapshot_context,
+        filters=filters,
+        require_labels=bool(filters.labels),
+    )
+    return ResourceIdentitySearchResponse(
+        scopes=[
+            ClusterScope(
+                workspace_id=authorized.workspace_id,
+                cluster_id=cluster_id,
+                namespaces=tuple(namespaces_by_cluster.get(cluster_id, ())),
+                freshness=(
+                    "live"
+                    if completeness == "exact"
+                    else "partial"
+                    if snapshot_revision > 0
+                    else "stale"
+                ),
+            )
+            for cluster_id in selected_cluster_ids
+        ],
+        hits=hits,
+        total=int(result.get("total") or 0),
+        total_completeness=completeness,
+        snapshot=FilterSnapshotMeta(
+            snapshot_revision=snapshot_revision,
+            authorization_revision=authorized.authorization_revision,
+            filter_fingerprint=fingerprint,
+            observed_at=snapshot_context.get("observed_at"),
+            stale=False,
+            partial_reason_codes=list(snapshot_context.get("partial_reason_codes") or ()),
+        ),
     )
 
 
@@ -559,7 +683,7 @@ async def list_filtered_resources(
         require_labels=bool(filters.labels),
     )
     return FilteredInventoryResourceListResponse(
-        items=result["items"],
+        items=attach_resource_table_metrics(result["items"]),
         next_cursor=next_cursor,
         has_more=bool(result["has_more"]),
         counts=counts,
@@ -659,6 +783,7 @@ async def get_resource_metrics_history(
     }
     fingerprint = filter_fingerprint(filters)
     return ResourceMetricsHistoryResponse(
+        refresh_policy_key="metrics_kubernetes",
         series=history["series"],
         completeness=history["completeness"],
         partial_reason_codes=sorted(reasons),
@@ -1126,6 +1251,13 @@ def _coalesce_bool(canonical: bool | None, compatibility: bool | None) -> bool:
         raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
     value = canonical if canonical is not None else compatibility
     return bool(value)
+
+
+def _split_api_version(api_version: str) -> tuple[str, str]:
+    if "/" not in api_version:
+        return "", api_version
+    api_group, version = api_version.split("/", 1)
+    return api_group, version
 
 
 def _require_requested_scope(

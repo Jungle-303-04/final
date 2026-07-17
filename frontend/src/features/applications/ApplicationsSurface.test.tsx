@@ -12,7 +12,14 @@ import {
 } from "./ApplicationsSurface.testSupport";
 import type { ApplicationCardModel, ApplicationsPort } from "./applicationsContract";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "visible",
+  });
+});
 
 describe("S10 Applications surface", () => {
   it("forwards the canonical unified filter state and switches the same result set to table view", async () => {
@@ -143,6 +150,53 @@ describe("S10 Applications surface", () => {
     expect(refreshSignal?.aborted).toBe(true);
   });
 
+  it("refreshes the visible catalog on the shared application cadence and resumes after visibility", async () => {
+    vi.useFakeTimers();
+    const listApplications = vi.fn<ApplicationsPort["listApplications"]>()
+      .mockResolvedValue([APPLICATION_CARD]);
+    const loadApplicationsRefreshPolicy = vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 7,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    });
+    renderApplications(applicationsPort({ listApplications, loadApplicationsRefreshPolicy }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText("checkout-api")).toBeTruthy();
+    expect(listApplications).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7_000);
+    });
+    expect(listApplications).toHaveBeenCalledTimes(2);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70_000);
+    });
+    expect(listApplications).toHaveBeenCalledTimes(2);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    expect(listApplications).toHaveBeenCalledTimes(3);
+  });
+
   it("opens URL-backed detail and keeps overview evidence honest", async () => {
     const user = userEvent.setup();
     const port = applicationsPort();
@@ -183,8 +237,8 @@ describe("S10 Applications surface", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Deployment instance scope" }));
-    expect(screen.getByRole("option", { name: /stage.*Connection delayed/i })).toBeTruthy();
-    await user.click(screen.getByRole("option", { name: /prod.*Live connection/i }));
+    expect(await screen.findByRole("option", { name: /stage.*Connection delayed/i })).toBeTruthy();
+    await user.click(await screen.findByRole("option", { name: /prod.*Live connection/i }));
     await waitFor(() => expect(screen.getByTestId("location").textContent)
       .toContain("instance=binding-prod"));
     await waitFor(() => expect(getApplication).toHaveBeenCalledWith(
@@ -321,7 +375,7 @@ describe("S10 Applications surface", () => {
       "workload-a",
     );
     const tabs = screen.getByRole("tablist", { name: "View details" });
-    expect(within(tabs).getAllByRole("tab")).toHaveLength(3);
+    expect(within(tabs).getAllByRole("tab")).toHaveLength(4);
     expect(within(tabs).queryByRole("tab", { name: "Deployments" })).toBeNull();
     expect(screen.queryByText("v2.4.1 deployed")).toBeNull();
 

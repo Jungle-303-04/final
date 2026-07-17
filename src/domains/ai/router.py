@@ -18,8 +18,16 @@ from domains.ai.context_facade import (
     suggestions_for_context,
 )
 from domains.ai.events import AiMessageReceivedBody
-from domains.ai.repository import ROLE_USER, STATUS_WAITING
+from domains.ai.repository import (
+    ROLE_USER,
+    STATUS_WAITING,
+)
 from domains.identity.dependencies import require_session
+from packages.contracts.ai_conversation import (
+    BOUNDED_MESSAGE_HISTORY_REASON,
+    DEFAULT_CONVERSATION_MESSAGE_LIMIT,
+    MAX_CONVERSATION_MESSAGE_LIMIT,
+)
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
@@ -38,7 +46,14 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db, get_events
+from packages.runtime.keyset_cursor import (
+    INVALID_KEYSET_CURSOR,
+    MAX_KEYSET_CURSOR_LENGTH,
+    decode_keyset_cursor,
+    encode_keyset_cursor,
+)
 from packages.storage.engine import unit_of_work_or_null
+from packages.storage.retry import to_thread_db_retry
 
 router = APIRouter()
 DEFAULT_AGENT = "operations-chat"
@@ -303,15 +318,65 @@ async def list_conversations(
 )
 async def get_conversation(
     conversation_id: str,
+    limit: int = Query(
+        default=DEFAULT_CONVERSATION_MESSAGE_LIMIT,
+        ge=1,
+        le=MAX_CONVERSATION_MESSAGE_LIMIT,
+    ),
+    cursor: str | None = Query(default=None, max_length=MAX_KEYSET_CURSOR_LENGTH),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> AiConversationResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    conversation = db.get_ai_conversation(workspace_id, conversation_id, user_id=current.user_id)
-    if conversation is None:
+    cursor_scope = _conversation_cursor_scope(
+        workspace_id,
+        str(current.user_id),
+        conversation_id,
+    )
+    try:
+        decoded_cursor = (
+            decode_keyset_cursor(cursor, expected_scope=cursor_scope)
+            if cursor is not None
+            else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=INVALID_KEYSET_CURSOR) from exc
+    page = await to_thread_db_retry(
+        db.get_ai_conversation_page,
+        workspace_id,
+        conversation_id,
+        user_id=current.user_id,
+        limit=limit,
+        before=(
+            (decoded_cursor.ordered_at, decoded_cursor.tie_breaker)
+            if decoded_cursor is not None
+            else None
+        ),
+    )
+    if page is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
-    messages = db.list_ai_messages(workspace_id, conversation_id)
-    return AiConversationResponse(conversation=conversation, messages=messages)
+    has_more = bool(page["has_more"])
+    next_position = page.get("next_position")
+    next_cursor = None
+    if has_more and isinstance(next_position, dict):
+        next_cursor = encode_keyset_cursor(
+            scope=cursor_scope,
+            ordered_at=next_position["ordered_at"],
+            tie_breaker=str(next_position["tie_breaker"]),
+        )
+    return AiConversationResponse(
+        conversation=page["conversation"],
+        messages=page["messages"],
+        limit=int(page["limit"]),
+        has_more=has_more,
+        next_cursor=next_cursor,
+        messages_completeness="partial" if has_more else "complete",
+        partial_reason_codes=[BOUNDED_MESSAGE_HISTORY_REASON] if has_more else [],
+    )
+
+
+def _conversation_cursor_scope(workspace_id: str, user_id: str, conversation_id: str) -> str:
+    return f"ai-conversation-messages:{workspace_id}:{user_id}:{conversation_id}"
 
 
 @router.delete(gateway_routes.AI_CONVERSATION_PATH, status_code=204)

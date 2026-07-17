@@ -15,6 +15,11 @@ from packages.contracts.gateway.requests import (
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
 )
+from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
+    TARGET_AGENT_IMAGE_KEY,
+    TARGET_RUNTIME_CONFIG_NAME,
+)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
@@ -83,6 +88,13 @@ class FailsOnceApplier(StubApplier):
             self.failed = True
             raise RuntimeError("temporary apply failure")
         await super().apply(resource)
+
+
+class FailsRuntimeConfigApplier(StubApplier):
+    async def apply(self, resource: DesiredResource) -> None:
+        self.applied.append(resource.resource_id)
+        if resource.name == "target-runtime-config":
+            raise PermissionError("runtime config RBAC upgrade required")
 
 
 class StubArgoObserver:
@@ -202,6 +214,34 @@ def test_policy_sync_reports_failed_payload_generation(tmp_path: Path) -> None:
     assert client.policy_statuses[0]["status"] == "failed"
 
 
+def test_policy_sync_merges_runtime_drift_details_for_unchanged_policy(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    store.save_policy(AgentPolicy(cluster_id="cluster-1", generation=3))
+
+    async def status_details() -> dict[str, object]:
+        return {
+            "target_rbac_manifest": {
+                "status": "admin_apply_required",
+                "actual_version": None,
+                "expected_version": "2026-07-17.1",
+            }
+        }
+
+    sync = control.AgentPolicySync(
+        cluster_id="cluster-1",
+        store=store,
+        default_policy=AgentPolicy(cluster_id="cluster-1"),
+        apply_policy=lambda _policy: {},
+        interval_seconds=10,
+        status_details=status_details,
+    )
+    client = StubPolicyClient(None)
+
+    assert asyncio.run(sync.sync_once(client)) == "unchanged"
+    assert client.policy_statuses[0]["details"] == asyncio.run(status_details())
+
+
 def test_reconciler_rejects_user_workload_until_scope_is_enabled(tmp_path: Path) -> None:
     control = load_control_module()
     store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
@@ -269,6 +309,105 @@ def test_reconciler_applies_target_agent_owned_configmap(tmp_path: Path) -> None
     assert report["status"] == "applied"
     assert applier.applied == ["target-agent-policy"]
     assert observer.calls == 0
+
+
+def test_reconciler_blocks_agent_rollout_when_runtime_config_patch_fails(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    image = "registry.example.com/opsia@sha256:" + ("3" * 64)
+    resources = [
+        DesiredResource(
+            resource_id="target-runtime-config-images",
+            scope="target-agent",
+            kind="ConfigMap",
+            namespace="target",
+            name=TARGET_RUNTIME_CONFIG_NAME,
+            action="apply",
+            state={
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": TARGET_RUNTIME_CONFIG_NAME, "namespace": "target"},
+                "data": {
+                    TARGET_AGENT_IMAGE_KEY: image,
+                    NODE_COLLECTOR_IMAGE_KEY: image,
+                },
+            },
+        ),
+        DesiredResource(
+            resource_id="target-agent-deployment",
+            scope="target-agent",
+            kind="Deployment",
+            namespace="target",
+            name="cluster-agent",
+            action="apply",
+            state={"spec": {"template": {"metadata": {"annotations": {"rollout": "new"}}}}},
+        ),
+    ]
+    store.save_policy(
+        AgentPolicy(
+            cluster_id="cluster-1",
+            desired_state=DesiredStatePolicy(resources=resources),
+        )
+    )
+    applier = FailsRuntimeConfigApplier()
+    reconciler = control.DesiredStateReconciler(
+        cluster_id="cluster-1",
+        cluster_role="target",
+        store=store,
+        interval_seconds=30,
+        resource_applier=applier,
+    )
+
+    report = asyncio.run(reconciler.reconcile_once())
+
+    assert report["status"] == "failed"
+    assert applier.applied == ["target-runtime-config-images"]
+    assert len(report["details"]["resources"]) == 1
+    assert "RBAC upgrade required" in report["details"]["resources"][0]["message"]
+
+
+def test_reconciler_rejects_runtime_config_keys_outside_image_contract(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    image = "registry.example.com/opsia@sha256:" + ("4" * 64)
+    resource = DesiredResource(
+        resource_id="target-runtime-config-images",
+        scope="target-agent",
+        kind="ConfigMap",
+        namespace="target",
+        name=TARGET_RUNTIME_CONFIG_NAME,
+        action="apply",
+        state={
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": TARGET_RUNTIME_CONFIG_NAME, "namespace": "target"},
+            "data": {
+                TARGET_AGENT_IMAGE_KEY: image,
+                NODE_COLLECTOR_IMAGE_KEY: image,
+                "CONTROL_ALLOWED_NAMESPACES": "*",
+            },
+        },
+    )
+    store.save_policy(
+        AgentPolicy(
+            cluster_id="cluster-1",
+            desired_state=DesiredStatePolicy(resources=[resource]),
+        )
+    )
+    applier = StubApplier()
+    reconciler = control.DesiredStateReconciler(
+        cluster_id="cluster-1",
+        cluster_role="target",
+        store=store,
+        interval_seconds=30,
+        resource_applier=applier,
+    )
+
+    report = asyncio.run(reconciler.reconcile_once())
+
+    assert report["status"] == "failed"
+    assert applier.applied == []
+    assert "image-leaf scoped" in report["details"]["resources"][0]["message"]
 
 
 def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path) -> None:

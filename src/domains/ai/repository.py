@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from datetime import datetime
+
+from sqlalchemy import and_, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.ai.models import AiConversation, AiConversationMessage, AiLlmInvocationMetric
 from packages.ai.metrics import LlmInvocationMetric
+from packages.contracts.ai_conversation import (
+    DEFAULT_CONVERSATION_MESSAGE_LIMIT,
+    MAX_CONVERSATION_MESSAGE_LIMIT,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection, row_dict
 
@@ -120,7 +126,7 @@ class AiConversationRepository(DatabaseConnection):
         statement = (
             select(table.c.conversation_id, table.c.title, table.c.status, table.c.updated_at)
             .where(*predicates)
-            .order_by(table.c.updated_at.desc())
+            .order_by(table.c.updated_at.desc(), table.c.conversation_id.desc())
             .limit(max(1, min(limit, 200)))
         )
         with self.connection() as conn:
@@ -140,6 +146,72 @@ class AiConversationRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
+
+    def get_ai_conversation_page(
+        self,
+        workspace_id: str,
+        conversation_id: str,
+        *,
+        user_id: str,
+        limit: int = DEFAULT_CONVERSATION_MESSAGE_LIMIT,
+        before: tuple[datetime, str] | None = None,
+    ) -> JsonObject | None:
+        """Read one authorized conversation and a newest-first keyset window in one transaction."""
+        effective_limit = max(1, min(int(limit), MAX_CONVERSATION_MESSAGE_LIMIT))
+        conversation = self.conversation_table
+        message = self.message_table
+        conversation_scope = (
+            conversation.c.workspace_id == workspace_id,
+            conversation.c.conversation_id == conversation_id,
+            conversation.c.user_id == user_id,
+        )
+        conversation_statement = select(conversation).where(*conversation_scope).limit(1)
+        message_statement = (
+            select(message)
+            .select_from(
+                message.join(
+                    conversation,
+                    and_(
+                        conversation.c.workspace_id == message.c.workspace_id,
+                        conversation.c.conversation_id == message.c.conversation_id,
+                    ),
+                )
+            )
+            .where(
+                *conversation_scope,
+                message.c.workspace_id == workspace_id,
+                message.c.conversation_id == conversation_id,
+            )
+            .order_by(message.c.created_at.desc(), message.c.message_id.desc())
+            .limit(effective_limit + 1)
+        )
+        if before is not None:
+            message_statement = message_statement.where(
+                tuple_(message.c.created_at, message.c.message_id) < tuple_(before[0], before[1])
+            )
+        with self.connection() as conn:
+            conversation_row = conn.execute(conversation_statement).mappings().first()
+            if conversation_row is None:
+                return None
+            rows = [row_dict(row) for row in conn.execute(message_statement).mappings().all()]
+        has_more = len(rows) > effective_limit
+        selected = rows[:effective_limit]
+        messages = list(reversed(selected))
+        oldest = messages[0] if has_more and messages else None
+        return {
+            "conversation": row_dict(conversation_row),
+            "messages": messages,
+            "limit": effective_limit,
+            "has_more": has_more,
+            "next_position": (
+                {
+                    "ordered_at": oldest["created_at"],
+                    "tie_breaker": str(oldest["message_id"]),
+                }
+                if oldest is not None
+                else None
+            ),
+        }
 
     def delete_ai_conversation(
         self, workspace_id: str, conversation_id: str, *, user_id: str | None = None

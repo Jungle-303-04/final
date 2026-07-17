@@ -42,6 +42,7 @@ DiagnoseEventKind = Literal[
 ]
 DiagnoseReplayState = Literal["available", "resync_required"]
 DiagnoseConsentSurface = Literal["browser", "desktop"]
+DiagnoseHistoryStatus = Literal["available", "degraded"]
 
 _TARGET_KEY_VERSION = "diagnose-target-v1"
 
@@ -71,6 +72,21 @@ class DiagnoseAgentSelection(StrictModel):
 class DiagnoseRunCreateRequest(StrictModel):
     target: DiagnoseTarget
     agent: DiagnoseAgentSelection
+
+
+class DiagnoseResourceRunRequest(StrictModel):
+    """Browser request; Python re-resolves this identity before building a target."""
+
+    cluster_id: str = Field(min_length=1, max_length=512)
+    resource_type: str = Field(min_length=1, max_length=80)
+    api_group: str = Field(default="", max_length=253)
+    api_version: str = Field(min_length=1, max_length=63)
+    kind: str = Field(min_length=1, max_length=120)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+    uid: str = Field(min_length=1, max_length=253)
+    agent: DiagnoseAgentSelection
+    disclosure_revision: str = Field(min_length=1, max_length=120)
 
 
 class DiagnoseConsentRequest(StrictModel):
@@ -281,6 +297,52 @@ class DiagnoseRunLaunchResult(StrictModel):
     def validate_creation_flags(self) -> Self:
         if self.created == self.deduplicated:
             raise ValueError("exactly one of created or deduplicated must be true")
+        return self
+
+
+class DiagnoseRunList(StrictModel):
+    runs: tuple[DiagnoseRun, ...] = ()
+    complete: bool
+    history_status: DiagnoseHistoryStatus = "available"
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_history_status(self) -> Self:
+        if (not self.complete or self.history_status == "degraded") and not self.reason_codes:
+            raise ValueError("partial or degraded Diagnose history requires reasons")
+        return self
+
+
+class DiagnoseTurnRequest(StrictModel):
+    question: str = Field(min_length=1, max_length=16_000)
+
+    @model_validator(mode="after")
+    def normalize_question(self) -> Self:
+        normalized = self.question.strip()
+        if not normalized:
+            raise ValueError("Diagnose question must not be blank")
+        self.question = normalized
+        return self
+
+
+class DiagnoseHistoryClearResult(StrictModel):
+    deleted_runs: int = Field(ge=0)
+
+
+class DiagnoseCapabilities(StrictModel):
+    enabled: bool
+    agent: DiagnoseAgentSelection
+    label: str = Field(min_length=1, max_length=120)
+    disclosure_revision: str = Field(min_length=1, max_length=120)
+    consented: bool
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_enabled_reason(self) -> Self:
+        if not self.enabled and not self.reason_codes:
+            raise ValueError("disabled Diagnose capability requires reasons")
+        if self.enabled and self.reason_codes:
+            raise ValueError("enabled Diagnose capability cannot carry unavailable reasons")
         return self
 
 

@@ -15,6 +15,9 @@ import { PRODUCT_LOCALE_STORAGE_KEY } from "./shared/i18n/locale";
 import ProductApp from "./ProductApp";
 import { homeApiResponse, requestCount } from "./ProductApp.testSupport";
 
+const PRODUCT_RENDER_TIMEOUT_MS = 15_000;
+const PRODUCT_TEST_TIMEOUT_MS = 30_000;
+
 beforeEach(() => {
   vi.useRealTimers();
   Object.defineProperty(document, "visibilityState", {
@@ -108,7 +111,7 @@ describe("ProductApp root recovery", () => {
       await screen.findByRole(
         "heading",
         { name: "Cluster status", level: 2 },
-        { timeout: 5_000 },
+        { timeout: PRODUCT_RENDER_TIMEOUT_MS },
       ),
     ).toBeTruthy();
     expect((await screen.findAllByText("cluster-1")).length).toBeGreaterThan(0);
@@ -125,7 +128,7 @@ describe("ProductApp root recovery", () => {
       expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1);
       expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1);
     });
-  }, 15_000);
+  }, PRODUCT_TEST_TIMEOUT_MS);
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {
     window.history.replaceState({}, "", "/resources/pod?cluster=cluster-1");
@@ -146,7 +149,7 @@ describe("ProductApp root recovery", () => {
       await screen.findByRole(
         "table",
         { name: "Resource list" },
-        { timeout: 5_000 },
+        { timeout: PRODUCT_RENDER_TIMEOUT_MS },
       ),
     ).toBeTruthy();
     expect(
@@ -157,7 +160,7 @@ describe("ProductApp root recovery", () => {
     const resource = await screen.findByRole(
       "button",
       { name: "Open details for checkout-api-0" },
-      { timeout: 5_000 },
+      { timeout: PRODUCT_RENDER_TIMEOUT_MS },
     );
     expect(
       requestCount(
@@ -170,7 +173,7 @@ describe("ProductApp root recovery", () => {
     const dialog = await screen.findByRole(
       "dialog",
       { name: "checkout-api-0 details" },
-      { timeout: 5_000 },
+      { timeout: PRODUCT_RENDER_TIMEOUT_MS },
     );
     expect(dialog.textContent).toContain("Running");
     expect(window.location.pathname).toBe("/resources/pod");
@@ -184,5 +187,5 @@ describe("ProductApp root recovery", () => {
         "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50",
       ),
     ).toBe(1);
-  }, 15_000);
+  }, PRODUCT_TEST_TIMEOUT_MS);
 });

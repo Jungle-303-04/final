@@ -6,9 +6,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import Field
+
 from domains.catalog.repository import BOOTSTRAP_CATALOG_ITEMS
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.parity import ResourceRef
 
 DNS_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 HELM_RELEASE_PATTERN = DNS_LABEL_PATTERN
@@ -26,6 +29,30 @@ class CatalogRecipeUnsupported(ValueError):
     pass
 
 
+class CatalogHelmUpgradeGuard(StrictModel):
+    expected_revision: int = Field(ge=1)
+    storage: ResourceRef
+    storage_resource_version: str = Field(min_length=1, max_length=253)
+    chart_name: str = Field(min_length=1, max_length=512)
+    chart_version: str = Field(min_length=1, max_length=256)
+
+    def validate_target(self, *, namespace: str, release_name: str) -> None:
+        if (
+            self.expected_revision < 1
+            or not self.storage_resource_version
+            or not self.chart_name
+            or not self.chart_version
+            or self.storage.api_group
+            or self.storage.version != "v1"
+            or self.storage.kind.casefold() != "secret"
+            or self.storage.namespace != namespace
+            or not self.storage.name
+            or not self.storage.uid
+            or not release_name
+        ):
+            raise CatalogInstallValidationError("Helm upgrade guard is invalid")
+
+
 class CatalogHelmInstallPayload(StrictModel):
     catalog_item_id: str
     catalog_version: str
@@ -33,11 +60,13 @@ class CatalogHelmInstallPayload(StrictModel):
     application_name: str
     release_name: str
     values: dict[str, Any]
+    upgrade_guard: CatalogHelmUpgradeGuard | None = None
 
 
 @dataclass(frozen=True)
 class ServerHelmRecipe:
     item_id: str
+    display_name: str
     version: str
     package_ref: str
     chart_version: str
@@ -49,14 +78,26 @@ class ServerHelmRecipe:
     def digest_reference(self) -> str:
         return f"{self.package_ref}@{self.chart_digest}"
 
+    @property
+    def chart_name(self) -> str:
+        """Return the exact OCI chart segment owned by this server recipe."""
+
+        return self.package_ref.rsplit("/", maxsplit=1)[-1]
+
 
 def server_helm_recipe(item_id: str, version: str) -> ServerHelmRecipe:
+    for recipe in server_helm_recipes():
+        if recipe.item_id == item_id and recipe.version == version:
+            return recipe
+    raise CatalogRecipeUnsupported("catalog recipe is not executable by the target Agent")
+
+
+def server_helm_recipes() -> tuple[ServerHelmRecipe, ...]:
+    """Return the exact bounded recipes executable by the target Agent."""
+
+    recipes: list[ServerHelmRecipe] = []
     for item in BOOTSTRAP_CATALOG_ITEMS:
-        if item["item_id"] != item_id:
-            continue
         for candidate in item.get("versions", []):
-            if candidate.get("version") != version:
-                continue
             template = candidate.get("template")
             package_ref = candidate.get("package_ref")
             if (
@@ -66,23 +107,26 @@ def server_helm_recipe(item_id: str, version: str) -> ServerHelmRecipe:
                 or not isinstance(package_ref, str)
                 or not package_ref.startswith(SERVER_HELM_REGISTRY_PREFIX)
             ):
-                break
+                continue
             chart_version = template.get("chart_version")
             chart_digest = template.get("chart_digest")
             if not isinstance(chart_version, str) or not chart_version:
-                break
+                continue
             if not isinstance(chart_digest, str) or not OCI_DIGEST_PATTERN.fullmatch(chart_digest):
-                break
-            return ServerHelmRecipe(
-                item_id=item_id,
-                version=version,
-                package_ref=package_ref,
-                chart_version=chart_version,
-                chart_digest=chart_digest,
-                values_schema=dict(candidate.get("values_schema") or {}),
-                fixed_values=dict(template.get("fixed_values") or {}),
+                continue
+            recipes.append(
+                ServerHelmRecipe(
+                    item_id=str(item["item_id"]),
+                    display_name=str(item.get("name") or item["item_id"]),
+                    version=str(candidate["version"]),
+                    package_ref=package_ref,
+                    chart_version=chart_version,
+                    chart_digest=chart_digest,
+                    values_schema=dict(candidate.get("values_schema") or {}),
+                    fixed_values=dict(template.get("fixed_values") or {}),
+                )
             )
-    raise CatalogRecipeUnsupported("catalog recipe is not executable by the target Agent")
+    return tuple(sorted(recipes, key=lambda item: (item.display_name, item.version)))
 
 
 def validate_install_name(field: str, value: str, *, max_length: int) -> None:

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { I18nProvider } from "../../shared/i18n/I18nProvider";
 import { HomeClusterHealth } from "./HomeClusterHealth";
-import { CLUSTERS, OVERVIEW } from "./HomePage.testSupport";
+import { CLUSTERS, NODES, OVERVIEW } from "./HomePage.testSupport";
 import type { HomeResourceState } from "./useHomePageState";
 
 afterEach(cleanup);
@@ -88,6 +88,21 @@ function healthElement(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <HomeClusterHealth
         cluster={cluster}
+        links={{
+          incidents: "/issues?clusters=cluster-1",
+          nodes: "/resources?clusters=cluster-1&resources.types=node",
+          pods: "/resources?clusters=cluster-1&resources.types=pod",
+          restarts: "/resources?clusters=cluster-1&resources.types=pod",
+          warnings: "/timeline?clusters=cluster-1",
+          workloads: "/resources?clusters=cluster-1&resources.types=workload",
+        }}
+        nodes={{
+          phase: "ready",
+          data: NODES,
+          failure: null,
+          refreshing: false,
+          refreshFailure: null,
+        }}
         onRefresh={vi.fn()}
         overview={overview}
       />

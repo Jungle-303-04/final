@@ -1,19 +1,47 @@
 import { ArrowLeft, PackageSearch } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import {
+  parseHelmArtifactUrlState,
+  writeHelmArtifactSearchParams,
+  type HelmArtifactUrlState,
+} from "../../features/filters/helmArtifactUrlState";
+import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type {
+  HelmArtifactKind,
   HelmFailureCode,
+  HelmHookDiffItem,
+  HelmOwnedResources,
   HelmPort,
   HelmPortFailure,
   HelmRelease,
+  HelmReleaseDetail,
+  HelmReleaseUpgradeInfo,
+  HelmResourceHealth,
   HelmUnavailableFeature,
 } from "../../features/helm/helmContract";
+import { toHelmArtifactOperationResult } from "../../features/helm/createHelmAdapter";
 import { HELM_COPY } from "../../features/helm/helmCopy";
+import {
+  type OperationStatusSnapshot,
+  useOptionalOperationStatus,
+  useOptionalOperationStatusStore,
+} from "../../features/operations/OperationStatusStore";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
@@ -26,12 +54,23 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
-import { useHelmReleaseDetail, useHelmReleaseList } from "./useHelmReleaseData";
+import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
+import { HelmArtifactHubPanel } from "./HelmArtifactHubPanel";
+import { HelmReleaseInstallDialog } from "./HelmReleaseInstallDialog";
+import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
+import { HelmReleaseOperationDialogs } from "./HelmReleaseOperationDialogs";
+import { HelmResourcesDiffView, StructuredParseNotice } from "./HelmResourcesDiffView";
+import {
+  useHelmReleaseDetail,
+  useHelmReleaseList,
+  type HelmReleaseDetailView,
+} from "./useHelmReleaseData";
 
 const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
   helm_manifest_provider_not_integrated: HELM_COPY.manifestUnavailable,
   helm_values_provider_not_integrated: HELM_COPY.valuesUnavailable,
   owned_resources_not_correlated: HELM_COPY.resourceHealthUnavailable,
+  owned_resources_snapshot_unavailable: HELM_COPY.resourceSnapshotUnavailable,
   agent_helm_executor_not_integrated: HELM_COPY.commandsUnavailable,
 };
 
@@ -49,6 +88,16 @@ const FAILURE_DETAIL_COPY = {
 export function HelmPage({ port }: { port: HelmPort }) {
   const detailMatch = useMatch(HELM_RELEASE_DETAIL_MATCH);
   const navigate = useNavigate();
+  const searchParams = useFilterSearchParams();
+  const artifactUrlState = useMemo(
+    () => parseHelmArtifactUrlState(searchParams),
+    [searchParams],
+  );
+  const updateArtifactUrlState = useCallback((next: HelmArtifactUrlState) => {
+    const params = writeHelmArtifactSearchParams(searchParams, next);
+    const nextSearch = params.toString();
+    navigate({ search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+  }, [navigate, searchParams]);
   const identity = detailMatch?.params.clusterId && detailMatch.params.namespace && detailMatch.params.releaseName
     ? {
       clusterId: detailMatch.params.clusterId,
@@ -58,7 +107,15 @@ export function HelmPage({ port }: { port: HelmPort }) {
     : null;
 
   if (identity) {
-    return <HelmReleaseDetailPage identity={identity} onBack={() => navigate("/helm")} port={port} />;
+    return (
+      <HelmReleaseDetailPage
+        artifactUrlState={artifactUrlState}
+        identity={identity}
+        onArtifactUrlStateChange={updateArtifactUrlState}
+        onBack={() => navigate("/helm")}
+        port={port}
+      />
+    );
   }
   return <HelmReleaseListPage onOpen={(release) => navigate(helmReleaseDetailHref({
     clusterId: release.scope.clusterId,
@@ -88,9 +145,14 @@ function HelmReleaseListPage({
 
   return (
     <ProductPageFrame className="gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{HELM_COPY.title}</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{HELM_COPY.description}</p>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="grid min-w-0 gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{HELM_COPY.title}</h1>
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{HELM_COPY.description}</p>
+        </div>
+        {scopeResolution.clusterIds.length === 1 ? (
+          <HelmReleaseInstallDialog clusterId={scopeResolution.clusterIds[0] as string} port={port} />
+        ) : null}
       </header>
       <HelmListBoundary
         frame={data.frame}
@@ -100,6 +162,8 @@ function HelmReleaseListPage({
         searchInputRef={searchInputRef}
         setQuery={setQuery}
       />
+      <HelmChartSourcesPanel port={port} />
+      <HelmArtifactHubPanel port={port} />
     </ProductPageFrame>
   );
 }
@@ -124,7 +188,7 @@ function HelmListBoundary({
   }
   if (frame.phase === "failed") return <HelmFailureScreen failure={frame.failure} onRefresh={onRefresh} />;
 
-  const { coverage, releases } = frame.data;
+  const { coverage, releases, upgrades } = frame.data;
   return (
     <section aria-labelledby="helm-release-list-title" className="grid min-w-0 gap-3">
       <CoverageNotice availability={coverage.availability} reasons={coverage.reasonCodes} />
@@ -151,6 +215,7 @@ function HelmListBoundary({
         query={query}
         releases={releases}
         searchInputRef={searchInputRef}
+        upgrades={upgrades.releases}
       />
     </section>
   );
@@ -161,17 +226,19 @@ function HelmReleaseTable({
   query,
   releases,
   searchInputRef,
+  upgrades,
 }: {
   onOpen: (release: HelmRelease) => void;
   query: string;
   releases: readonly HelmRelease[];
   searchInputRef: RefObject<HTMLInputElement | null>;
+  upgrades: Readonly<Record<string, HelmReleaseUpgradeInfo>>;
 }) {
   const filtered = useMemo(() => releases.filter((release) => matchesRelease(release, query)), [query, releases]);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const activeIndex = Math.min(highlightedIndex, Math.max(filtered.length - 1, 0));
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (isSearchShortcutExcluded(event)) return;
       if (event.key === "/") {
@@ -210,6 +277,8 @@ function HelmReleaseTable({
           <TableHead>{HELM_COPY.namespace}</TableHead>
           <TableHead>{HELM_COPY.chart}</TableHead>
           <TableHead>{HELM_COPY.status}</TableHead>
+          <TableHead>{HELM_COPY.resourceHealth}</TableHead>
+          <TableHead>{HELM_COPY.upgradeAvailability}</TableHead>
           <TableHead>{HELM_COPY.revision}</TableHead>
           <TableHead>{HELM_COPY.observed}</TableHead>
         </TableRow>
@@ -222,6 +291,7 @@ function HelmReleaseTable({
             onOpen={() => onOpen(release)}
             onPointerEnter={() => setHighlightedIndex(index)}
             release={release}
+            upgrade={upgrades[releaseUpgradeKey(release)] ?? null}
           />
         ))}
       </TableBody>
@@ -234,11 +304,13 @@ function ReleaseRow({
   onOpen,
   onPointerEnter,
   release,
+  upgrade,
 }: {
   highlighted: boolean;
   onOpen: () => void;
   onPointerEnter: () => void;
   release: HelmRelease;
+  upgrade: HelmReleaseUpgradeInfo | null;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -259,8 +331,10 @@ function ReleaseRow({
       <TableCell className="max-w-56 truncate font-medium">{release.name}</TableCell>
       <TableCell className="max-w-40 truncate text-muted-foreground">{release.scope.clusterId}</TableCell>
       <TableCell className="max-w-40 truncate text-muted-foreground">{release.storageNamespace}</TableCell>
-      <TableCell className="text-muted-foreground">{HELM_COPY.unavailableValue}</TableCell>
+      <TableCell className="text-muted-foreground">{chartText(release)}</TableCell>
       <TableCell><StatusBadge status={release.status} /></TableCell>
+      <TableCell><ResourceHealthBadge health={release.resourceHealth} /></TableCell>
+      <TableCell><UpgradeAvailability info={upgrade} /></TableCell>
       <TableCell className="text-muted-foreground">{release.revision ?? HELM_COPY.unavailableValue}</TableCell>
       <TableCell className="text-muted-foreground">{formatObservedAt(release.observedAt)}</TableCell>
     </TableRow>
@@ -268,11 +342,15 @@ function ReleaseRow({
 }
 
 function HelmReleaseDetailPage({
+  artifactUrlState,
   identity,
+  onArtifactUrlStateChange,
   onBack,
   port,
 }: {
+  artifactUrlState: HelmArtifactUrlState;
   identity: { clusterId: string; namespace: string; releaseName: string };
+  onArtifactUrlStateChange: (next: HelmArtifactUrlState) => void;
   onBack: () => void;
   port: HelmPort;
 }) {
@@ -282,17 +360,32 @@ function HelmReleaseDetailPage({
       <Button className="w-fit" onClick={onBack} size="sm" type="button" variant="ghost">
         <ArrowLeft aria-hidden="true" />{HELM_COPY.backToReleases}
       </Button>
-      <HelmDetailBoundary frame={data.frame} onRefresh={data.refresh} />
+      <HelmDetailBoundary
+        artifactUrlState={artifactUrlState}
+        frame={data.frame}
+        onArtifactUrlStateChange={onArtifactUrlStateChange}
+        onMutationAccepted={data.refreshAfterMutation}
+        onRefresh={data.refresh}
+        port={port}
+      />
     </ProductPageFrame>
   );
 }
 
 function HelmDetailBoundary({
+  artifactUrlState,
   frame,
+  onArtifactUrlStateChange,
+  onMutationAccepted,
   onRefresh,
+  port,
 }: {
+  artifactUrlState: HelmArtifactUrlState;
   frame: ReturnType<typeof useHelmReleaseDetail>["frame"];
+  onArtifactUrlStateChange: (next: HelmArtifactUrlState) => void;
+  onMutationAccepted: () => void;
   onRefresh: () => void;
+  port: HelmPort;
 }) {
   if (frame.phase === "idle" || frame.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -307,12 +400,30 @@ function HelmDetailBoundary({
           <h1 className="truncate text-2xl font-semibold tracking-tight" id="helm-release-detail-title">{detail.release.name}</h1>
           <p className="mt-1 break-words text-sm text-muted-foreground">{scopeText(detail.release)}</p>
         </div>
-        <HelmRefreshAction
-          hasFailed={frame.refreshFailure !== null}
-          isRefreshing={frame.refreshing}
-          onRefresh={onRefresh}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {detail.commands.availability === "available" ? (
+            <>
+              <HelmReleaseUpgradeDialog
+                availableVersions={detail.availableVersions}
+                detail={detail}
+                onAccepted={onMutationAccepted}
+                port={port}
+              />
+              <HelmReleaseOperationDialogs
+                detail={detail}
+                onAccepted={onMutationAccepted}
+                port={port}
+              />
+            </>
+          ) : null}
+          <HelmRefreshAction
+            hasFailed={frame.refreshFailure !== null}
+            isRefreshing={frame.refreshing}
+            onRefresh={onRefresh}
+          />
+        </div>
       </header>
+      <HelmUpgradeEvidence detail={detail} />
       <dl className="grid min-w-0 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4">
         <Fact label={HELM_COPY.status} value={<StatusBadge status={detail.release.status} />} />
         <Fact label={HELM_COPY.revision} value={detail.release.revision ?? HELM_COPY.unavailableValue} />
@@ -334,19 +445,434 @@ function HelmDetailBoundary({
           </ul>
         )}
       </section>
+      <HelmArtifactsPanel
+        detail={detail}
+        onUrlStateChange={onArtifactUrlStateChange}
+        port={port}
+        urlState={artifactUrlState}
+      />
       <section className="grid gap-2" aria-labelledby="helm-release-integrations-title">
         <h2 className="text-base font-semibold" id="helm-release-integrations-title">{HELM_COPY.integrations}</h2>
         <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-          <UnavailableFact feature={detail.release.resourceHealth} label={HELM_COPY.resourceHealth} />
+          <ResourceHealthFact health={detail.release.resourceHealth} />
           <UnavailableFact feature={detail.manifest} label={HELM_COPY.manifest} />
           <UnavailableFact feature={detail.values} label={HELM_COPY.values} />
-          <UnavailableFact feature={detail.ownedResources} label={HELM_COPY.ownedResources} />
-          <UnavailableFact feature={detail.commands} label={HELM_COPY.commands} />
+          <OwnedResourcesFact ownedResources={detail.ownedResources} />
+          {detail.commands.availability === "unavailable" ? (
+            <UnavailableFact feature={detail.commands} label={HELM_COPY.commands} />
+          ) : (
+            <Fact label={HELM_COPY.commands} value={detail.commands.actions.join(", ")} />
+          )}
         </dl>
       </section>
+      <OwnedResourcesPanel ownedResources={detail.ownedResources} />
     </section>
   );
 }
+
+function HelmUpgradeEvidence({ detail }: { detail: HelmReleaseDetailView }) {
+  const { availableVersions, upgradeInfo } = detail;
+  const transition = upgradeInfo.currentVersion !== null && upgradeInfo.latestVersion !== null
+    ? `${upgradeInfo.currentVersion} → ${upgradeInfo.latestVersion}`
+    : HELM_COPY.unavailableValue;
+  const source = upgradeInfo.source ?? availableVersions.source;
+  const versions = availableVersions.versions.map((item) => item.version).join(", ");
+
+  return (
+    <section aria-labelledby="helm-release-upgrade-evidence-title" className="grid min-w-0 gap-2 rounded-lg border bg-card p-3">
+      <h2 className="text-base font-semibold" id="helm-release-upgrade-evidence-title">
+        {HELM_COPY.upgradeAvailability}
+      </h2>
+      <dl className="grid min-w-0 gap-2 sm:grid-cols-3">
+        <Fact label={HELM_COPY.upgradeVersionTransition} value={transition} />
+        <Fact
+          label={HELM_COPY.upgradeSource}
+          value={source ? `${source.name} · ${source.provider}` : HELM_COPY.upgradeSourceUnavailable}
+        />
+        <Fact
+          label={HELM_COPY.upgradeVersions}
+          value={versions || HELM_COPY.unavailableValue}
+        />
+      </dl>
+      {availableVersions.truncated ? (
+        <p className="text-xs text-muted-foreground">{HELM_COPY.upgradeVersionsTruncated}</p>
+      ) : null}
+    </section>
+  );
+}
+
+const ARTIFACT_ACTION_COPY: Readonly<Record<HelmArtifactKind, string>> = {
+  manifest: HELM_COPY.manifestAction,
+  values: HELM_COPY.valuesAction,
+  manifest_diff: HELM_COPY.manifestDiffAction,
+  values_diff: HELM_COPY.valuesDiffAction,
+  notes_diff: HELM_COPY.notesDiffAction,
+  hooks_diff: HELM_COPY.hooksDiffAction,
+  resources_diff: HELM_COPY.resourcesDiffAction,
+};
+
+function HelmArtifactsPanel({
+  detail,
+  onUrlStateChange,
+  port,
+  urlState,
+}: {
+  detail: HelmReleaseDetail;
+  onUrlStateChange: (next: HelmArtifactUrlState) => void;
+  port: HelmPort;
+  urlState: HelmArtifactUrlState;
+}) {
+  const revisions = useMemo(() => Array.from(new Set(
+    detail.history
+      .map((entry) => entry.revision)
+      .filter((revision): revision is number => revision !== null),
+  )).sort((left, right) => right - left), [detail.history]);
+  const revision = urlState.revision !== null && revisions.includes(urlState.revision)
+    ? urlState.revision
+    : detail.release.revision ?? revisions[0] ?? null;
+  const comparisonRevision = (
+    urlState.comparisonRevision !== null
+    && urlState.comparisonRevision !== revision
+    && revisions.includes(urlState.comparisonRevision)
+  )
+    ? urlState.comparisonRevision
+    : revisions.find((candidate) => candidate !== revision) ?? null;
+  const allValues = urlState.allValues;
+  const commandId = urlState.commandId ?? "";
+  const [submitting, setSubmitting] = useState(false);
+  const [submitFailure, setSubmitFailure] = useState<string | null>(null);
+  const resumedCommandRef = useRef("");
+  const operationStore = useOptionalOperationStatusStore();
+  const snapshot = useOptionalOperationStatus(commandId);
+  const artifact = snapshot?.event
+    ? toHelmArtifactOperationResult(snapshot.event.payload)
+    : null;
+  const pending = submitting || (
+    snapshot !== null
+    && ["connecting", "running", "reconnecting"].includes(snapshot.status)
+  );
+
+  useEffect(() => {
+    const comparisonRequired = urlState.artifact?.endsWith("_diff") === true;
+    const normalized: HelmArtifactUrlState = {
+      ...urlState,
+      revision,
+      comparisonRevision,
+      commandId:
+        urlState.commandId !== null
+        && urlState.revision === revision
+        && (!comparisonRequired || urlState.comparisonRevision === comparisonRevision)
+          ? urlState.commandId
+          : null,
+    };
+    if (!sameArtifactUrlState(normalized, urlState)) onUrlStateChange(normalized);
+  }, [comparisonRevision, onUrlStateChange, revision, urlState]);
+
+  useEffect(() => {
+    if (!operationStore || commandId === "" || resumedCommandRef.current === commandId) return;
+    resumedCommandRef.current = commandId;
+    operationStore.start(commandId);
+  }, [commandId, operationStore]);
+
+  const selectRevision = (next: number) => {
+    onUrlStateChange({
+      revision: next,
+      comparisonRevision:
+        comparisonRevision === next
+          ? revisions.find((candidate) => candidate !== next) ?? null
+          : comparisonRevision,
+      artifact: null,
+      commandId: null,
+      allValues,
+    });
+  };
+
+  const startRead = async (kind: HelmArtifactKind) => {
+    if (revision === null) return;
+    const isDiff = kind.endsWith("_diff");
+    if (isDiff && comparisonRevision === null) return;
+    setSubmitFailure(null);
+    setSubmitting(true);
+    onUrlStateChange({
+      revision,
+      comparisonRevision: isDiff ? comparisonRevision : null,
+      artifact: kind,
+      commandId: null,
+      allValues: kind === "values" || kind === "values_diff" ? allValues : false,
+    });
+    try {
+      const receipt = await port.readArtifact({
+        clusterId: detail.release.scope.clusterId,
+        namespace: detail.release.storageNamespace,
+        releaseName: detail.release.name,
+        artifact: kind,
+        revision,
+        comparisonRevision: isDiff ? comparisonRevision ?? undefined : undefined,
+        allValues: kind === "values" || kind === "values_diff" ? allValues : false,
+      });
+      resumedCommandRef.current = receipt.commandId;
+      if (operationStore) operationStore.start(receipt.commandId);
+      else setSubmitFailure(HELM_COPY.artifactStreamUnavailable);
+      onUrlStateChange({
+        revision,
+        comparisonRevision: isDiff ? comparisonRevision : null,
+        artifact: kind,
+        commandId: receipt.commandId,
+        allValues: kind === "values" || kind === "values_diff" ? allValues : false,
+      });
+    } catch {
+      setSubmitFailure(HELM_COPY.artifactFailed);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="helm-artifacts-title" className="grid min-w-0 gap-3 rounded-lg border bg-card p-3">
+      <div className="grid min-w-0 gap-1">
+        <h2 className="text-base font-semibold" id="helm-artifacts-title">{HELM_COPY.artifacts}</h2>
+        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactDescription}</p>
+      </div>
+      {revisions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{HELM_COPY.unavailableValue}</p>
+      ) : (
+        <>
+          <div className="flex min-w-0 flex-wrap items-end gap-3">
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              {HELM_COPY.primaryRevision}
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+                onChange={(event) => selectRevision(Number(event.target.value))}
+                value={revision ?? ""}
+              >
+                {revisions.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              {HELM_COPY.comparisonRevision}
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+                disabled={revisions.length < 2}
+                onChange={(event) => onUrlStateChange({
+                  ...urlState,
+                  revision,
+                  comparisonRevision: Number(event.target.value),
+                  artifact: null,
+                  commandId: null,
+                })}
+                value={comparisonRevision ?? ""}
+              >
+                {revisions
+                  .filter((candidate) => candidate !== revision)
+                  .map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
+              </select>
+            </label>
+            <label className="flex h-9 items-center gap-2 text-sm">
+              <input
+                checked={allValues}
+                onChange={(event) => onUrlStateChange({
+                  ...urlState,
+                  revision,
+                  comparisonRevision,
+                  artifact: null,
+                  commandId: null,
+                  allValues: event.target.checked,
+                })}
+                type="checkbox"
+              />
+              {HELM_COPY.allValues}
+            </label>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {(Object.keys(ARTIFACT_ACTION_COPY) as HelmArtifactKind[]).map((kind) => (
+              <Button
+                disabled={pending || (kind.endsWith("_diff") && comparisonRevision === null)}
+                key={kind}
+                onClick={() => void startRead(kind)}
+                size="sm"
+                type="button"
+                variant={kind.endsWith("_diff") ? "outline" : "secondary"}
+              >
+                {ARTIFACT_ACTION_COPY[kind]}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
+      <HelmArtifactOperationResult
+        artifact={artifact}
+        failure={
+          submitFailure
+          ?? (commandId !== "" && !operationStore ? HELM_COPY.artifactStreamUnavailable : null)
+        }
+        snapshot={snapshot}
+      />
+    </section>
+  );
+}
+
+function HelmArtifactOperationResult({
+  artifact,
+  failure,
+  snapshot,
+}: {
+  artifact: ReturnType<typeof toHelmArtifactOperationResult>;
+  failure: string | null;
+  snapshot: OperationStatusSnapshot | null;
+}) {
+  if (failure) {
+    return <p className="text-sm text-destructive" role="alert">{failure}</p>;
+  }
+  if (snapshot === null || snapshot.status === "idle") return null;
+  if (["connecting", "running", "reconnecting"].includes(snapshot.status)) {
+    return <p className="text-sm text-muted-foreground" role="status">{HELM_COPY.artifactReading}</p>;
+  }
+  if (snapshot.status !== "completed" || artifact === null) {
+    return <p className="text-sm text-destructive" role="alert">{HELM_COPY.artifactFailed}</p>;
+  }
+  let result: React.ReactNode;
+  if (artifact.artifact === "hooks_diff") {
+    result = <HelmHooksDiffResult artifact={artifact} />;
+  } else if (artifact.artifact === "resources_diff") {
+    result = <HelmResourcesDiffResult artifact={artifact} />;
+  } else if (artifact.content === "") {
+    result = <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>;
+  } else if (artifact.format === "unified-diff") {
+    result = (
+      <UnifiedDiff
+        aria-label={ARTIFACT_ACTION_COPY[artifact.artifact]}
+        className="max-h-[32rem] rounded-md border bg-background"
+        diff={artifact.content}
+        numbered
+      />
+    );
+  } else {
+    result = (
+      <pre className="max-h-[32rem] min-w-0 overflow-auto rounded-md border bg-background p-3 font-mono text-xs leading-5">
+        <code>{artifact.content}</code>
+      </pre>
+    );
+  }
+  return (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="secondary">{ARTIFACT_ACTION_COPY[artifact.artifact]}</Badge>
+        <span>{HELM_COPY.artifactRedacted}</span>
+        {artifact.truncated ? <span className="text-amber-600">{HELM_COPY.artifactTruncated}</span> : null}
+      </div>
+      {result}
+    </div>
+  );
+}
+
+function sameArtifactUrlState(left: HelmArtifactUrlState, right: HelmArtifactUrlState): boolean {
+  return left.revision === right.revision
+    && left.comparisonRevision === right.comparisonRevision
+    && left.artifact === right.artifact
+    && left.commandId === right.commandId
+    && left.allValues === right.allValues;
+}
+
+function HelmHooksDiffResult({
+  artifact,
+}: {
+  artifact: Extract<
+    NonNullable<ReturnType<typeof toHelmArtifactOperationResult>>,
+    { artifact: "hooks_diff" }
+  >;
+}) {
+  const diff = artifact.hooksDiff;
+  const sections = [
+    { heading: HELM_COPY.hooksAdded, items: diff.added },
+    { heading: HELM_COPY.hooksRemoved, items: diff.removed },
+    { heading: HELM_COPY.hooksModified, items: diff.modified },
+  ] as const;
+  return (
+    <div className="grid min-w-0 gap-3">
+      <StructuredParseNotice
+        count={diff.parseErrorCount}
+        singular={HELM_COPY.hookParseError}
+        plural={HELM_COPY.hookParseErrors}
+      />
+      {sections.map((section) => (
+        section.items.length > 0 ? (
+          <section className="grid min-w-0 gap-2" key={section.heading}>
+            <h3 className="text-sm font-semibold">{section.heading}</h3>
+            <ul className="grid min-w-0 gap-2">
+              {section.items.map((item) => (
+                <HelmHookDiffItemCard
+                  item={item}
+                  key={`${item.apiVersion}:${item.kind}:${item.namespace}:${item.name}`}
+                />
+              ))}
+            </ul>
+          </section>
+        ) : null
+      ))}
+      {diff.added.length + diff.removed.length + diff.modified.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>
+      ) : null}
+      {diff.unchanged.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {HELM_COPY.hooksUnchanged}: {diff.unchanged.length}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function HelmHookDiffItemCard({ item }: { item: HelmHookDiffItem }) {
+  return (
+    <li className="grid min-w-0 gap-2 rounded-md border bg-background p-3 text-xs">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-mono font-medium">{item.kind}/{item.name}</span>
+        {item.manifestChanged ? (
+          <Badge variant="outline">{HELM_COPY.hookManifestChanged}</Badge>
+        ) : null}
+      </div>
+      <dl className="grid min-w-0 gap-1 text-muted-foreground sm:grid-cols-2">
+        <StructuredFact
+          label={HELM_COPY.namespace}
+          value={item.namespace || HELM_COPY.unavailableValue}
+        />
+        <StructuredFact
+          label={HELM_COPY.events}
+          value={item.events.join(", ") || HELM_COPY.unavailableValue}
+        />
+        <StructuredFact label={HELM_COPY.weight} value={String(item.weight)} />
+        <StructuredFact
+          label={HELM_COPY.deletePolicies}
+          value={item.deletePolicies.join(", ") || HELM_COPY.unavailableValue}
+        />
+        <StructuredFact
+          label={HELM_COPY.outputLogPolicies}
+          value={item.outputLogPolicies.join(", ") || HELM_COPY.unavailableValue}
+        />
+      </dl>
+    </li>
+  );
+}
+
+function HelmResourcesDiffResult({
+  artifact,
+}: {
+  artifact: Extract<
+    NonNullable<ReturnType<typeof toHelmArtifactOperationResult>>,
+    { artifact: "resources_diff" }
+  >;
+}) {
+  return <HelmResourcesDiffView diff={artifact.resourcesDiff} />;
+}
+
+function StructuredFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-0.5">
+      <dt className="font-medium text-foreground">{label}</dt>
+      <dd className="m-0 break-words">{value}</dd>
+    </div>
+  );
+}
+
 
 function CoverageNotice({
   availability,
@@ -426,6 +952,82 @@ function UnavailableFact({ feature, label }: { feature: HelmUnavailableFeature; 
   return <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2"><dt className="text-sm font-medium">{label}</dt><dd className="m-0 break-words text-xs text-muted-foreground">{featureReasonCopy(feature.reasonCode)}</dd></div>;
 }
 
+function ResourceHealthFact({ health }: { health: HelmResourceHealth }) {
+  if (health.availability === "unavailable") {
+    return <UnavailableFact feature={health} label={HELM_COPY.resourceHealth} />;
+  }
+  return (
+    <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2">
+      <dt className="text-sm font-medium">{HELM_COPY.resourceHealth}</dt>
+      <dd className="m-0 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <HealthBadge health={health.health} />
+        <span>{HELM_COPY.resourceCount}: {health.resourceCount}</span>
+        {health.availability === "partial" ? <span>{HELM_COPY.ownedResourcesPartial}</span> : null}
+      </dd>
+    </div>
+  );
+}
+
+function OwnedResourcesFact({ ownedResources }: { ownedResources: HelmOwnedResources }) {
+  if (ownedResources.availability === "unavailable") {
+    return <UnavailableFact feature={ownedResources} label={HELM_COPY.ownedResources} />;
+  }
+  return (
+    <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2">
+      <dt className="text-sm font-medium">{HELM_COPY.ownedResources}</dt>
+      <dd className="m-0 break-words text-xs text-muted-foreground">
+        {HELM_COPY.resourceCount}: {ownedResources.items.length}
+        {ownedResources.availability === "partial" ? ` · ${HELM_COPY.ownedResourcesPartial}` : ""}
+      </dd>
+    </div>
+  );
+}
+
+function OwnedResourcesPanel({ ownedResources }: { ownedResources: HelmOwnedResources }) {
+  if (ownedResources.availability === "unavailable") return null;
+  return (
+    <section aria-labelledby="helm-owned-resources-title" className="grid min-w-0 gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold" id="helm-owned-resources-title">{HELM_COPY.ownedResources}</h2>
+        <span className="text-xs text-muted-foreground">{HELM_COPY.resourceCount}: {ownedResources.items.length}</span>
+      </div>
+      {ownedResources.availability === "partial" ? (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground" role="status">
+          {ownedResources.truncated ? HELM_COPY.ownedResourcesTruncated : HELM_COPY.ownedResourcesPartial}
+        </div>
+      ) : null}
+      {ownedResources.items.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{HELM_COPY.ownedResourcesEmpty}</p>
+      ) : (
+        <Table scrollAreaLabel={HELM_COPY.ownedResources}>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{HELM_COPY.resourceKind}</TableHead>
+              <TableHead>{HELM_COPY.resourceName}</TableHead>
+              <TableHead>{HELM_COPY.namespace}</TableHead>
+              <TableHead>{HELM_COPY.status}</TableHead>
+              <TableHead>{HELM_COPY.health}</TableHead>
+              <TableHead>{HELM_COPY.observed}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {ownedResources.items.map((item) => (
+              <TableRow key={item.resource.uid}>
+                <TableCell>{item.resource.kind}</TableCell>
+                <TableCell className="max-w-56 truncate font-medium">{item.resource.name}</TableCell>
+                <TableCell className="max-w-40 truncate text-muted-foreground">{item.resource.namespace ?? HELM_COPY.unavailableValue}</TableCell>
+                <TableCell><StatusBadge status={item.status} /></TableCell>
+                <TableCell><HealthBadge health={item.health} /></TableCell>
+                <TableCell className="text-muted-foreground">{formatObservedAt(item.observedAt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </section>
+  );
+}
+
 function coverageReasonCopy(reasonCodes: readonly string[]): readonly string[] {
   const messages = new Set<string>();
   for (const reasonCode of reasonCodes) {
@@ -447,6 +1049,36 @@ function featureReasonCopy(reasonCode: string): string {
 
 function StatusBadge({ status }: { status: string | null }) {
   return <Badge variant={status?.toLowerCase() === "deployed" ? "secondary" : "outline"}>{status ?? HELM_COPY.unavailableValue}</Badge>;
+}
+
+function ResourceHealthBadge({ health }: { health: HelmResourceHealth }) {
+  if (health.availability === "unavailable") {
+    return <span className="text-muted-foreground">{HELM_COPY.unavailableValue}</span>;
+  }
+  return <HealthBadge health={health.health} />;
+}
+
+function HealthBadge({ health }: { health: string }) {
+  return <Badge variant={health.toLowerCase() === "healthy" ? "secondary" : "outline"}>{health}</Badge>;
+}
+
+function UpgradeAvailability({ info }: { info: HelmReleaseUpgradeInfo | null }) {
+  if (info?.availability === "available" && info.updateAvailable === true && info.latestVersion) {
+    return <Badge variant="secondary">{info.latestVersion} {HELM_COPY.upgradeAvailableSuffix}</Badge>;
+  }
+  if (info?.availability === "available" && info.updateAvailable === false) {
+    return <span className="text-muted-foreground">{HELM_COPY.upgradeUpToDate}</span>;
+  }
+  return <span className="text-muted-foreground">{HELM_COPY.unavailableValue}</span>;
+}
+
+function chartText(release: HelmRelease): string {
+  if (release.chart === null || release.chartVersion === null) return HELM_COPY.unavailableValue;
+  return `${release.chart} ${release.chartVersion}`;
+}
+
+function releaseUpgradeKey(release: HelmRelease): string {
+  return [release.scope.clusterId, release.storageNamespace, release.name].join("/");
 }
 
 function matchesRelease(release: HelmRelease, query: string): boolean {

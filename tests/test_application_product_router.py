@@ -185,6 +185,54 @@ class ProductApplicationsDb:
             ],
         }
 
+    def get_application_catalog_states(
+        self,
+        *,
+        workspace_id: str,
+        application_ids: list[str],
+        allowed_cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        assert workspace_id == "workspace-a"
+        assert application_ids == ["app-a"]
+        assert allowed_cluster_ids == {"cluster-a"}
+        return {
+            "app-a": {
+                "bindings": [
+                    binding
+                    for binding in self.list_application_deployment_bindings(
+                        workspace_id,
+                        "app-a",
+                        limit=500,
+                    )
+                    if binding["cluster_id"] in allowed_cluster_ids
+                ],
+                "runs": [
+                    run
+                    for run in self.list_application_workflow_runs(
+                        workspace_id,
+                        "app-a",
+                        limit=100,
+                    )
+                    if run["cluster_id"] in allowed_cluster_ids
+                ],
+                "inventory_rows": self.get_application_inventory_evidence(
+                    workspace_id=workspace_id,
+                    application_id="app-a",
+                    allowed_cluster_ids=allowed_cluster_ids,
+                ),
+                "inventory_context": self.filter_snapshot_context(
+                    workspace_id,
+                    allowed_cluster_ids,
+                ),
+                "incident_evidence": self.get_application_incident_evidence(
+                    workspace_id=workspace_id,
+                    application_id="app-a",
+                    allowed_cluster_ids=allowed_cluster_ids,
+                    limit=3,
+                ),
+            }
+        }
+
     @staticmethod
     def _application() -> dict[str, object]:
         return {

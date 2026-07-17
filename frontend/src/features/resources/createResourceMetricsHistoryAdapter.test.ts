@@ -8,6 +8,7 @@ function endpointResponse(
   overrides: Partial<ResourceMetricsHistoryEndpointResponse> = {},
 ): ResourceMetricsHistoryEndpointResponse {
   return {
+    refresh_policy_key: "metrics_kubernetes",
     series: [{
       resource_id: "inventory-pod-1",
       cluster_id: "cluster-a",
@@ -18,6 +19,16 @@ function endpointResponse(
         { observed_at: "2026-07-14T00:00:00Z", cpu_mcores: 10, mem_mib: null },
         { observed_at: "2026-07-14T00:01:00Z", cpu_mcores: null, mem_mib: 64 },
       ],
+      container_series: [{
+        name: "app",
+        points: [
+          { observed_at: "2026-07-14T00:00:00Z", cpu_mcores: 10, mem_mib: 64 },
+        ],
+        completeness: "partial",
+        partial_reason_codes: ["container_metrics_history_partial"],
+      }],
+      container_history_completeness: "partial",
+      container_history_reason_codes: ["container_metrics_history_partial"],
       has_sparkline_points: true,
       completeness: "partial",
       partial_reason_codes: ["sample_gap"],
@@ -58,6 +69,65 @@ describe("Resource metrics history adapter", () => {
       { observedAt: "2026-07-14T00:00:00Z", cpuMillicores: 10, memoryMebibytes: null },
       { observedAt: "2026-07-14T00:01:00Z", cpuMillicores: null, memoryMebibytes: 64 },
     ]);
+    expect(result.series[0]?.containerSeries).toEqual([{
+      name: "app",
+      points: [{
+        observedAt: "2026-07-14T00:00:00Z",
+        cpuMillicores: 10,
+        memoryMebibytes: 64,
+      }],
+      completeness: "partial",
+      partialReasonCodes: ["container_metrics_history_partial"],
+    }]);
+  });
+
+  it("preserves the server-observed current Node timestamp and measurement window", async () => {
+    const getResourceMetricsHistory = vi.fn().mockResolvedValue(endpointResponse({
+      completeness: "exact",
+      partial_reason_codes: [],
+      series: [{
+        resource_id: "node-a",
+        cluster_id: "cluster-a",
+        resource_type: "node",
+        namespace: null,
+        name: "worker-a",
+        points: [{
+          observed_at: "2026-07-15T05:00:00Z",
+          cpu_mcores: 640.5,
+          mem_mib: 4096,
+        }],
+        current_observation: {
+          observed_at: "2026-07-15T04:59:58Z",
+          measurement_window: "30s",
+          cpu_mcores: 640.5,
+          mem_mib: 4096,
+          container_metrics_complete: false,
+          containers: [],
+        },
+        container_series: [],
+        container_history_completeness: "unavailable",
+        container_history_reason_codes: ["container_metrics_not_applicable"],
+        has_sparkline_points: true,
+        completeness: "exact",
+        partial_reason_codes: [],
+      }],
+    }));
+    const port = createResourceMetricsHistoryAdapter({ getResourceMetricsHistory });
+
+    const result = await port.loadResourceMetricsHistory(
+      createEmptyUnifiedFilterState(),
+      ["node-a"],
+      { snapshotRevision: 42 },
+    );
+
+    expect(result.series[0]?.currentObservation).toEqual({
+      observedAt: "2026-07-15T04:59:58Z",
+      measurementWindow: "30s",
+      cpuMillicores: 640.5,
+      memoryMebibytes: 4096,
+      containerMetricsComplete: false,
+      containers: [],
+    });
   });
 
   it.each([
@@ -76,4 +146,294 @@ describe("Resource metrics history adapter", () => {
       { snapshotRevision: 42 },
     )).rejects.toMatchObject({ code: "invalid-response" });
   });
+
+  it("maps the server-owned Prometheus batch and exposes its refresh policy key", async () => {
+    const runScopedMetricQuery = vi.fn().mockResolvedValue({
+      endpoint: {
+        availability: "queued",
+        source: "prometheus",
+        refresh_policy_key: "metrics_prometheus",
+        scope: {
+          workspace_id: "workspace-a",
+          cluster_id: "cluster-1",
+          namespaces: ["shop"],
+          freshness: "live",
+        },
+        resource: {
+          api_group: "",
+          version: "v1",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-0",
+          uid: "pod-uid-1",
+        },
+        queries: [],
+        coverage: { requested: 2, queued: 2, unsupported: 0 },
+        reason_codes: [],
+      },
+      completeness: "exact",
+      reasonCodes: [],
+      observations: [
+        {
+          category: "cpu",
+          unit: "cores",
+          queryName: "cpu_query",
+          command: {},
+          result: {
+            query: "sum(cpu)",
+            query_mode: "range",
+            range_seconds: 3600,
+            step_seconds: 120,
+            result_type: "matrix",
+            series: [{ metric: {}, values: [{ timestamp: 10, value: 0.25 }] }],
+            point_count: 1,
+          },
+        },
+        {
+          category: "memory",
+          unit: "bytes",
+          queryName: "memory_query",
+          command: {},
+          result: {
+            query: "sum(memory)",
+            query_mode: "range",
+            range_seconds: 3600,
+            step_seconds: 120,
+            result_type: "matrix",
+            series: [{ metric: {}, values: [{ timestamp: 10, value: 2 * 1024 * 1024 }] }],
+            point_count: 1,
+          },
+        },
+        {
+          category: "network_rx",
+          result: { series: [{ values: [{ timestamp: 10, value: 1_024 }] }] },
+        },
+        {
+          category: "network_tx",
+          result: { series: [{ values: [{ timestamp: 10, value: 2_048 }] }] },
+        },
+        {
+          category: "filesystem",
+          result: { series: [{ values: [{ timestamp: 10, value: 4_096 }] }] },
+        },
+        {
+          category: "restarts",
+          result: { series: [{ values: [{ timestamp: 10, value: 3 }] }] },
+        },
+      ],
+    });
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery,
+    });
+
+    const result = await port.loadScopedResourceMetrics!({
+      id: "pod-1",
+      identityStability: "uid",
+      inventoryKey: "pod:shop/checkout-api-0",
+      uid: "pod-uid-1",
+      clusterId: "cluster-1",
+      resourceType: "generic",
+      apiVersion: "v1",
+      kind: "Pod",
+      namespace: "shop",
+      name: "checkout-api-0",
+      status: "Running",
+      health: "healthy",
+      healthStatus: "healthy",
+      facts: { type: "generic" },
+      tableMetrics: {
+        kind: "pod",
+        resourceUid: "pod-uid-1",
+        sourceSnapshotId: "snapshot-1",
+        observedAt: "2026-07-17T00:00:10Z",
+        measurementWindow: "5m",
+        cpuMillicores: 250,
+        memoryMebibytes: 2,
+        cpuRequestMillicores: 200,
+        cpuLimitMillicores: 500,
+        memoryRequestMebibytes: 1,
+        memoryLimitMebibytes: 4,
+        completeness: "exact",
+        reasonCodes: [],
+      },
+      observedAt: null,
+      firstSeenAt: null,
+      lastSeenAt: null,
+      deletedAt: null,
+    }, "1h");
+
+    expect(result.series?.points[0]).toMatchObject({
+      cpuMillicores: 250,
+      memoryMebibytes: 2,
+      networkReceiveBytesPerSecond: 1_024,
+      networkTransmitBytesPerSecond: 2_048,
+      filesystemBytes: 4_096,
+      restartCount: 3,
+    });
+    expect(runScopedMetricQuery).toHaveBeenCalledWith({
+      cluster_id: "cluster-1",
+      subject: { kind: "resource", resource_id: "pod:shop/checkout-api-0" },
+      categories: ["cpu", "memory", "network_rx", "network_tx", "filesystem", "restarts"],
+      range: "1h",
+    }, { signal: undefined });
+    expect(result.refreshPolicyKey).toBe("metrics_prometheus");
+    expect(result.series?.references).toEqual({
+      cpuRequestMillicores: 200,
+      cpuLimitMillicores: 500,
+      memoryRequestMebibytes: 1,
+      memoryLimitMebibytes: 4,
+    });
+  });
+
+  it("maps network, filesystem, restart, and HPA observations without browser PromQL", async () => {
+    const runScopedMetricQuery = vi.fn().mockResolvedValue({
+      endpoint: {
+        refresh_policy_key: "metrics_prometheus",
+        scope: { cluster_id: "cluster-1", freshness: "live" },
+        resource: {
+          kind: "HorizontalPodAutoscaler",
+          namespace: "shop",
+          name: "checkout-api",
+        },
+      },
+      completeness: "exact",
+      reasonCodes: [],
+      observations: [
+        { category: "hpa_current_replicas", result: { series: [{ values: [{ timestamp: 10, value: 2 }] }] } },
+        { category: "hpa_desired_replicas", result: { series: [{ values: [{ timestamp: 10, value: 4 }] }] } },
+      ],
+    });
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery,
+    });
+
+    const result = await port.loadScopedResourceMetrics!({
+      id: "hpa-1",
+      identityStability: "uid",
+      inventoryKey: "hpa:shop/checkout-api",
+      uid: "hpa-uid-1",
+      clusterId: "cluster-1",
+      resourceType: "horizontalpodautoscaler",
+      apiVersion: "autoscaling/v2",
+      kind: "HorizontalPodAutoscaler",
+      namespace: "shop",
+      name: "checkout-api",
+      status: "Active",
+      health: "healthy",
+      healthStatus: "healthy",
+      facts: { type: "generic" },
+      observedAt: null,
+      firstSeenAt: null,
+      lastSeenAt: null,
+      deletedAt: null,
+    }, "1h");
+
+    expect(runScopedMetricQuery).toHaveBeenCalledWith({
+      cluster_id: "cluster-1",
+      subject: { kind: "resource", resource_id: "hpa:shop/checkout-api" },
+      categories: ["hpa_current_replicas", "hpa_desired_replicas"],
+      range: "1h",
+    }, { signal: undefined });
+    expect(result.series?.points).toEqual([expect.objectContaining({
+      hpaCurrentReplicas: 2,
+      hpaDesiredReplicas: 4,
+    })]);
+  });
+
+  it("maps exact PVC ratio evidence without deriving usage from capacity", async () => {
+    const runScopedMetricQuery = vi.fn().mockResolvedValue({
+      endpoint: {
+        refresh_policy_key: "metrics_pvc",
+        scope: { cluster_id: "cluster-1", freshness: "live" },
+        resource: {
+          kind: "PersistentVolumeClaim",
+          namespace: "shop",
+          name: "cache",
+        },
+      },
+      completeness: "exact",
+      reasonCodes: [],
+      observations: [{
+        category: "volume_usage",
+        result: {
+          series: [{ values: [{ timestamp: 10, value: 0.75 }] }],
+        },
+      }],
+    });
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery,
+    });
+
+    const result = await port.loadScopedResourceMetrics!(pvcResource(), "15m");
+
+    expect(runScopedMetricQuery).toHaveBeenCalledWith({
+      cluster_id: "cluster-1",
+      subject: { kind: "pvc", resource_id: "pvc:shop/cache" },
+      categories: ["volume_usage"],
+      range: "15m",
+    }, { signal: undefined });
+    expect(result.series).toMatchObject({
+      resourceId: "pvc:shop/cache",
+      resourceType: "pvc",
+      source: "prometheus",
+      freshness: "live",
+      points: [{ volumeUsagePercent: 75 }],
+    });
+  });
+
+  it("preserves unavailable PVC provenance, freshness, and coverage reasons", async () => {
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery: vi.fn().mockResolvedValue({
+        endpoint: {
+          refresh_policy_key: "metrics_pvc",
+          scope: { cluster_id: "cluster-1", freshness: "disconnected" },
+          resource: {
+            kind: "PersistentVolumeClaim",
+            namespace: "shop",
+            name: "cache",
+          },
+        },
+        completeness: "unavailable",
+        reasonCodes: ["prometheus_unavailable"],
+        observations: [],
+      }),
+    });
+
+    const result = await port.loadScopedResourceMetrics!(pvcResource(), "15m");
+
+    expect(result).toMatchObject({
+      series: null,
+      completeness: "unavailable",
+      partialReasonCodes: ["prometheus_unavailable"],
+      source: "prometheus",
+      freshness: "disconnected",
+    });
+  });
 });
+
+function pvcResource() {
+  return {
+    id: "pvc-1",
+    identityStability: "uid" as const,
+    inventoryKey: "pvc:shop/cache",
+    uid: "pvc-uid-1",
+    clusterId: "cluster-1",
+    resourceType: "pvc",
+    apiVersion: "v1",
+    kind: "PersistentVolumeClaim",
+    namespace: "shop",
+    name: "cache",
+    status: "Bound",
+    health: "healthy" as const,
+    healthStatus: "healthy",
+    facts: { type: "generic" as const },
+    observedAt: "2026-07-17T00:01:00.000Z",
+    firstSeenAt: null,
+    lastSeenAt: "2026-07-17T00:01:00.000Z",
+    deletedAt: null,
+  };
+}

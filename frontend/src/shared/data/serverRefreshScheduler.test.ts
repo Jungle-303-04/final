@@ -48,6 +48,32 @@ describe("server refresh scheduler", () => {
     expect(harness.timerCount()).toBe(0);
   });
 
+  it("coalesces repeated event invalidations into one in-flight refresh", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+
+    scheduler.complete({ refreshAfterSeconds: 15 });
+    scheduler.invalidate();
+    scheduler.invalidate();
+
+    expect(harness.refreshCount).toBe(1);
+    expect(scheduler.isRefreshInFlight()).toBe(true);
+    expect(harness.timerCount()).toBe(0);
+  });
+
+  it("defers an event invalidation until a hidden tab becomes visible", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+
+    scheduler.complete({ refreshAfterSeconds: 15 });
+    harness.setVisible(false);
+    scheduler.invalidate();
+    expect(harness.refreshCount).toBe(0);
+
+    harness.setVisible(true);
+    expect(harness.refreshCount).toBe(1);
+  });
+
   it("does not create an uncontrolled retry after a background failure", () => {
     const harness = schedulerHarness();
     const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
@@ -74,6 +100,52 @@ describe("server refresh scheduler", () => {
 
     expect(harness.delays()).toEqual([22_000]);
     expect(harness.timerCount()).toBe(1);
+  });
+
+  it("bounds server-declared cold-empty retries before returning to the normal cadence", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+    const policy = {
+      refreshAfterSeconds: 120,
+      retryAfterSeconds: 2,
+      retryLimit: 4,
+    };
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      scheduler.complete(policy, { coldEmpty: true });
+      expect(harness.delays()).toEqual([2_000]);
+      harness.fireNextTimer();
+    }
+
+    scheduler.complete(policy, { coldEmpty: true });
+    expect(harness.delays()).toEqual([120_000]);
+    expect(harness.refreshCount).toBe(4);
+  });
+
+  it("never treats a later empty projection as a cold-start retry", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+    const policy = {
+      refreshAfterSeconds: 120,
+      retryAfterSeconds: 2,
+      retryLimit: 4,
+    };
+
+    scheduler.complete(policy, { coldEmpty: false });
+    scheduler.complete(policy, { coldEmpty: true });
+
+    expect(harness.delays()).toEqual([120_000]);
+  });
+
+  it("rejects incomplete bounded retry policy instead of inventing its missing half", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+
+    expect(() => scheduler.complete({
+      refreshAfterSeconds: 120,
+      retryAfterSeconds: 2,
+    }, { coldEmpty: true })).toThrow(RangeError);
+    expect(harness.timerCount()).toBe(0);
   });
 
   it("rejects invalid server policy instead of substituting a client default", () => {

@@ -1,14 +1,20 @@
 import type { ComponentType } from "react";
 import {
   approveResourceManifestEdit,
-  createRealtimeClient,
+  applyResourceManifestNow,
+  createResourceManifest,
+  dryRunResourceManifestCreate,
+  getResourceManifestCreateCapability,
+  cancelCommand,
   executeResourceCapability,
   getChangeTimeline,
+  getKubernetesApiResources,
   getInventoryResourceDetail,
   getInventorySummary,
-  getPhysicalTopology,
-  getRelationTopology,
+  getResourceIssues,
   getResourceCapabilities,
+  getResourceDeletionPreview,
+  getWorkloadRollbackPreview,
   getResourceManifestSource,
   getResourceMetricsHistory,
   listFilteredResources,
@@ -17,46 +23,38 @@ import {
   listResourceLabelFacets,
   openPodTerminal,
   previewResourceManifestEdit,
+  resolveServiceAccess,
+  runScopedMetricQuery,
+  startServiceRequest,
 } from "../../../api";
 import type { HomePort } from "../../../features/home/homeContract";
 import { createPodTerminalAdapter } from "../../../features/pod-terminal/createPodTerminalAdapter";
 import { createChangeTimelineAdapter } from "../../../features/resources/createChangeTimelineAdapter";
-import { createPhysicalTopologyAdapter } from "../../../features/resources/createPhysicalTopologyAdapter";
-import { createRelationTopologyAdapter } from "../../../features/resources/createRelationTopologyAdapter";
 import { createResourceActionsAdapter } from "../../../features/resources/createResourceActionsAdapter";
 import { createResourceCapabilitiesAdapter } from "../../../features/resources/createResourceCapabilitiesAdapter";
 import { createResourceManifestAdapter } from "../../../features/resources/createResourceManifestAdapter";
 import { createResourceMetricsHistoryAdapter } from "../../../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourcesAdapter } from "../../../features/resources/createResourcesAdapter";
 import { createResourcesFilterAdapter } from "../../../features/resources/createResourcesFilterAdapter";
-import type {
-  PhysicalTopologyRealtimePort,
-  PhysicalTopologyRealtimeStreamPolicy,
-} from "../../../features/resources/physicalTopologyRealtimeContract";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
+import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
+import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
+import { createTopologyPorts } from "../topologyPorts";
+import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
+import type { ResourcesRefreshPolicyKey } from "../../../features/resources/resourceMetricsHistoryContract";
+import type { TimelinePort } from "../../../features/timeline/timelineContract";
+import type { PortForwardSessionPort } from "../../../features/service-access/portForwardSessionContract";
 
-export function loadResourcesSurface(homePort: HomePort): ComponentType {
-  const physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = {
-    connect(subscription, handlers) {
-      const client = createRealtimeClient({
-        subscription,
-        reconnect: { baseDelayMs: 3_000, maxDelayMs: 30_000 },
-        onMessage: (message) => {
-          if (message.type === "hello") {
-            handlers.onPolicy(toPhysicalTopologyStreamPolicy(message.stream_policy));
-            return;
-          }
-          // Keep protocol keepalives outside the topology state reducer.
-          if (message.type !== "ping") handlers.onMessage(message);
-        },
-        onStateChange: (state) => handlers.onStatusChange(state.status),
-      });
-      client.connect();
-      return () => client.close();
-    },
-  };
+export function loadResourcesSurface(
+  homePort: HomePort,
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey | "port_sessions">,
+  timelinePort: TimelinePort,
+  portForwardSessions: PortForwardSessionPort,
+): ComponentType {
+  const topologyPorts = createTopologyPorts();
   return createResourcesSurface(
     createResourcesAdapter({
+      getKubernetesApiResources,
       getInventoryResourceDetail,
       getInventorySummary,
       listInventoryResourcesByType,
@@ -66,37 +64,43 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
       listResourceFilterFacets,
       listResourceLabelFacets,
     }),
-    createPhysicalTopologyAdapter({ getPhysicalTopology }),
-    physicalTopologyRealtimePort,
+    topologyPorts.physical,
+    topologyPorts.realtime,
     homePort,
-    createRelationTopologyAdapter({ getRelationTopology }),
-    createChangeTimelineAdapter({ getChangeTimeline }),
-    createResourceMetricsHistoryAdapter({ getResourceMetricsHistory }),
+    topologyPorts.relation,
+    createChangeTimelineAdapter({ getChangeTimeline, refreshPolicies }),
+    timelinePort,
+    createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory,
+      runScopedMetricQuery,
+    }),
+    refreshPolicies,
     createResourceCapabilitiesAdapter({ getResourceCapabilities }),
     createResourceActionsAdapter({
-      executeResourceCapability(capability, values, signal) {
-        return executeResourceCapability(capability.path, values, signal);
+      getResourceDeletionPreview,
+      getWorkloadRollbackPreview,
+      executeResourceCapability(capability, values, context, signal) {
+        return executeResourceCapability(capability.path, values, context, signal);
       },
     }),
     createPodTerminalAdapter({ openPodTerminal }),
     createResourceManifestAdapter({
       approveResourceManifestEdit,
+      applyResourceManifestNow,
+      createResourceManifest,
+      dryRunResourceManifestCreate,
       getResourceManifestSource,
+      getResourceManifestCreateCapability,
       previewResourceManifestEdit,
     }),
+    createResourceIssuesAdapter({ getResourceIssues }),
+    createServiceAccessAdapter({
+      resolveServiceAccess,
+      startServiceRequest,
+      cancelCommand(input, signal) {
+        return cancelCommand(input, { signal });
+      },
+    }),
+    portForwardSessions,
   );
-}
-
-function toPhysicalTopologyStreamPolicy(policy: {
-  revision: number;
-  max_frames_per_second: number;
-  hidden_tab: "coalesce";
-  max_pending_messages: number;
-}): PhysicalTopologyRealtimeStreamPolicy {
-  return {
-    revision: policy.revision,
-    maxFramesPerSecond: policy.max_frames_per_second,
-    hiddenTab: policy.hidden_tab,
-    maxPendingMessages: policy.max_pending_messages,
-  };
 }

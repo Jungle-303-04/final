@@ -110,6 +110,71 @@ def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> N
     )
 
 
+def test_home_custom_resource_counts_are_revision_scoped_and_bounded() -> None:
+    rows = [
+        {
+            "api_version": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "count": 7,
+            "total_kinds": 2,
+            "total_resources": 10,
+        },
+        {
+            "api_version": "monitoring.coreos.com/v1",
+            "kind": "ServiceMonitor",
+            "count": 3,
+            "total_kinds": 2,
+            "total_resources": 10,
+        },
+    ]
+
+    class Connection:
+        def __init__(self) -> None:
+            self.statement: Any | None = None
+
+        def execute(self, statement: Any) -> _MappedResult:
+            self.statement = statement
+            return _MappedResult(rows)
+
+    connection_instance = Connection()
+
+    @contextmanager
+    def connection() -> Iterator[Connection]:
+        yield connection_instance
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+
+    result = repository.list_home_custom_resource_counts(
+        workspace_id="workspace-a",
+        cluster_id="cluster-a",
+        snapshot_revision=42,
+        limit=8,
+    )
+
+    assert result == {
+        "items": [
+            {
+                "api_version": "argoproj.io/v1alpha1",
+                "kind": "Application",
+                "count": 7,
+            },
+            {
+                "api_version": "monitoring.coreos.com/v1",
+                "kind": "ServiceMonitor",
+                "count": 3,
+            },
+        ],
+        "total_kinds": 2,
+        "total_resources": 10,
+    }
+    sql = _sql(connection_instance.statement)
+    assert "inventory_resource_versions.workspace_id = 'workspace-a'" in sql
+    assert "inventory_filter_revisions.revision_id <= 42" in sql
+    assert "resource_type = 'custom_resource'" in sql
+    assert "limit 8" in sql
+
+
 def test_resolve_filter_clusters_returns_complete_response_identity() -> None:
     class Connection:
         def execute(self, _statement: Any) -> _MappedResult:
@@ -381,3 +446,54 @@ def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(
         "inventory_resource_application_versions.application_id in ('app-a', 'app-b')"
         in sql_by_group[4]
     )
+
+
+def test_resource_identity_search_is_snapshot_scoped_bounded_and_uid_backed() -> None:
+    class ScalarResult:
+        def scalar_one(self) -> int:
+            return 0
+
+    class Connection:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
+        def execute(self, statement: Any) -> Any:
+            self.statements.append(statement)
+            return _MappedResult([]) if len(self.statements) == 1 else ScalarResult()
+
+    connection_instance = Connection()
+
+    @contextmanager
+    def connection() -> Iterator[Connection]:
+        yield connection_instance
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+
+    result = repository.search_resource_identities(
+        workspace_id="workspace-a",
+        allowed_cluster_ids={"cluster-a"},
+        allowed_application_ids={"app-a"},
+        filters=_filters(
+            clusters="cluster-a",
+            namespaces="cluster-a/shop",
+            applications="app-a",
+            query=None,
+        ),
+        snapshot_revision=42,
+        query="checkout",
+        limit=500,
+    )
+
+    assert result == {"items": [], "total": 0}
+    search_sql = _sql(connection_instance.statements[0])
+    count_sql = _sql(connection_instance.statements[1])
+    for sql in (search_sql, count_sql):
+        assert "workspace_id = 'workspace-a'" in sql
+        assert "cluster_id in ('cluster-a')" in sql
+        assert "revision_id <= 42" in sql
+        assert "uid is not null" in sql
+        assert "uid != ''" in sql
+        assert "search_text like '%%checkout%%'" in sql
+        assert "application_id in ('app-a')" in sql
+    assert "limit 50" in search_sql

@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2, ScrollText, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type {
@@ -18,15 +18,23 @@ import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
-import { ResourceManifestEditor } from "./ResourceManifestEditor";
+import {
+  ResourceManifestEditor,
+  type ResourceManifestEditorHandle,
+} from "./ResourceManifestEditor";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
+import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
 import {
   EMPTY_POD_TERMINAL_PORT,
+  type PodTerminalCoordinates,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import { PodTerminalDialog } from "./PodTerminalDialog";
+import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
+import { ServiceAccessActions } from "./ServiceAccessActions";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -38,10 +46,15 @@ export function ResourceDetailWorkspace({
   onTabChange,
   full,
   metricHistory,
+  resourceIssues,
   manifestPort,
   onUnauthorized,
+  onNavigateResource,
+  onResourceActionInvalidation,
   tab,
   terminalPort = EMPTY_POD_TERMINAL_PORT,
+  serviceAccessPort,
+  portForwardSessions,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
@@ -52,19 +65,29 @@ export function ResourceDetailWorkspace({
   onTabChange: (tab: string) => void;
   full: boolean;
   metricHistory: ResourceMetricsHistoryFrame;
+  resourceIssues: ResourceIssuesFrame;
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
+  onNavigateResource: (identity: ResourceIdentity) => void;
+  onResourceActionInvalidation?: () => void;
   tab: string;
   terminalPort?: PodTerminalPort;
+  serviceAccessPort?: ServiceAccessPort;
+  portForwardSessions?: PortForwardSessionPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
   const filter = useUnifiedFilter();
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
+  const manifestEditorRef = useRef<ResourceManifestEditorHandle>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
+  const [preferredTerminalTarget, setPreferredTerminalTarget] = useState<PodTerminalCoordinates | null>(null);
+  const clearPreferredTerminalTarget = useCallback(() => {
+    setPreferredTerminalTarget(null);
+  }, []);
   const title = identity
     ? t("resources.detail.title", { name: identity.name })
     : t("resources.detail.errorTitle");
@@ -77,6 +100,11 @@ export function ResourceDetailWorkspace({
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     };
   }, []);
+  useEffect(() => {
+    if (tab !== "manifest" || detail.phase !== "ready" || !manifestPort) return;
+    manifestEditorRef.current?.open();
+    onTabChange("overview");
+  }, [detail.phase, manifestPort, onTabChange, tab]);
 
   const requestClose = () => {
     if (closing) return;
@@ -99,6 +127,16 @@ export function ResourceDetailWorkspace({
         if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {
           event.preventDefault();
           dock.openLogs(logTarget);
+          return;
+        }
+        if (
+          event.key.toLowerCase() === "y" &&
+          !isEditingElement(event.target) &&
+          detail.phase === "ready" &&
+          manifestPort
+        ) {
+          event.preventDefault();
+          manifestEditorRef.current?.open();
           return;
         }
         if (event.key === "Escape") {
@@ -180,17 +218,29 @@ export function ResourceDetailWorkspace({
               capabilities={capabilities}
               detail={detail.data}
               port={terminalPort}
+              preferredTarget={preferredTerminalTarget}
+              onPreferredTargetHandled={clearPreferredTerminalTarget}
             />
+            {serviceAccessPort ? (
+              <ServiceAccessActions
+                detail={detail.data}
+                port={serviceAccessPort}
+                portForwardSessions={portForwardSessions}
+              />
+            ) : null}
             <ResourceDetailActions
               actionsPort={actionsPort}
               capabilities={capabilities}
               detail={detail.data}
+              onInvalidate={onResourceActionInvalidation}
+              onTerminalReady={setPreferredTerminalTarget}
             />
             {manifestPort ? (
               <ResourceManifestEditor
                 detail={detail.data}
                 onUnauthorized={onUnauthorized}
                 port={manifestPort}
+                ref={manifestEditorRef}
               />
             ) : null}
           </div>
@@ -202,6 +252,16 @@ export function ResourceDetailWorkspace({
           full={full}
           identity={identity}
           metricHistory={metricHistory}
+          metricRange={filter.detail.timeRange ?? "1h"}
+          onMetricRangeChange={(range) => filter.updateDetail(
+            (current) => ({
+              ...current,
+              timeRange: range === "1h" ? undefined : range,
+            }),
+            "time-range",
+          )}
+          onNavigateResource={onNavigateResource}
+          resourceIssues={resourceIssues}
           onTabChange={onTabChange}
           tab={tab}
         />

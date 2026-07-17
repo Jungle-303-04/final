@@ -49,6 +49,7 @@ def pod_resource(name: str = POD_NAME) -> dict[str, Any]:
         "kind": "Pod",
         "namespace": NAMESPACE,
         "name": name,
+        "uid": f"uid-{name}",
         "summary": {"containers": [{"name": CONTAINER}]},
     }
 
@@ -62,8 +63,63 @@ def workload_resource() -> dict[str, Any]:
         "kind": "Deployment",
         "namespace": NAMESPACE,
         "name": "checkout-api",
+        "uid": "uid-checkout-api",
         "summary": {},
     }
+
+
+def cronjob_resource() -> dict[str, Any]:
+    return {
+        "inventory_key": "cronjob-nightly",
+        "workspace_id": WORKSPACE_ID,
+        "cluster_id": CLUSTER_ID,
+        "resource_type": "workload",
+        "api_version": "batch/v1",
+        "kind": "CronJob",
+        "namespace": NAMESPACE,
+        "name": "nightly",
+        "uid": "uid-nightly",
+        "summary": {"scheduled_run_kinds": ["Job"]},
+    }
+
+
+def job_resource() -> dict[str, Any]:
+    return {
+        "inventory_key": "job-nightly-101",
+        "workspace_id": WORKSPACE_ID,
+        "cluster_id": CLUSTER_ID,
+        "resource_type": "workload",
+        "api_version": "batch/v1",
+        "kind": "Job",
+        "namespace": NAMESPACE,
+        "name": "nightly-101",
+        "uid": "uid-nightly-101",
+        "observed_at": "2026-07-16T04:00:00+00:00",
+        "summary": {
+            "owner_uid": "uid-nightly",
+            "owner_kind": "CronJob",
+            "owner_name": "nightly",
+            "creation_timestamp": "2026-07-16T03:59:00+00:00",
+            "start_time": "2026-07-16T04:00:00+00:00",
+            "active": 1,
+            "succeeded": 0,
+            "failed": 0,
+            "completions": 1,
+        },
+    }
+
+
+def scheduled_pod_resource() -> dict[str, Any]:
+    resource = pod_resource("nightly-101-x7k2")
+    resource["summary"].update(
+        {
+            "owner_uid": "uid-nightly-101",
+            "owner_kind": "Job",
+            "owner_name": "nightly-101",
+            "phase": "Running",
+        }
+    )
+    return resource
 
 
 class StubLogDb:
@@ -72,6 +128,7 @@ class StubLogDb:
         self.resources = [workload_resource()]
         if include_pod:
             self.resources.append(pod_resource())
+        self.resources.extend((cronjob_resource(), job_resource(), scheduled_pod_resource()))
         self.access_calls: list[tuple[str, str]] = []
         self.queued: dict[str, dict[str, Any]] = {}
         self.correlations: dict[str, str] = {}
@@ -100,8 +157,29 @@ class StubLogDb:
         return None
 
     def list_related_inventory_resources(self, **identity: Any) -> dict[str, Any]:
-        del identity
-        return {"pods": [deepcopy(item) for item in self.resources if item["kind"] == "Pod"]}
+        resource = identity["resource"]
+        names = {
+            "checkout-api": {POD_NAME},
+            "nightly-101": {"nightly-101-x7k2"},
+        }.get(resource["name"], set())
+        return {
+            "pods": [
+                deepcopy(item)
+                for item in self.resources
+                if item["kind"] == "Pod" and item["name"] in names
+            ]
+        }
+
+    def list_scheduled_run_inventory(self, **identity: Any) -> dict[str, Any]:
+        assert identity["limit"] == 100
+        assert identity["pod_limit"] == 1000
+        assert identity["owner_uid"] == "uid-nightly"
+        return {
+            "runs": [deepcopy(job_resource())],
+            "pods": [deepcopy(scheduled_pod_resource())],
+            "runs_truncated": False,
+            "pods_truncated": False,
+        }
 
     def queue_agent_command(
         self,
@@ -232,6 +310,7 @@ def test_pod_sse_is_default_message_strict_redacted_bounded_and_deduped(
         "end",
     ]
     assert messages[0]["stream_id"] in db.queued
+    assert messages[0]["containers"] == [CONTAINER]
     logs = [message for message in messages if message["type"] == "log"]
     assert len(logs) == 1
     assert "top-secret" not in logs[0]["line"]
@@ -264,7 +343,11 @@ def test_followup_batches_keep_first_handle_and_share_one_correlation(
     command_ids = list(db.queued)
     assert len(command_ids) == 2
     assert command_ids[0] != command_ids[1]
-    assert messages[0] == {"type": "connected", "stream_id": command_ids[0]}
+    assert messages[0] == {
+        "type": "connected",
+        "stream_id": command_ids[0],
+        "containers": [CONTAINER],
+    }
     assert {db.correlations[command_id] for command_id in command_ids} == {
         db.correlations[command_ids[0]]
     }
@@ -325,6 +408,144 @@ def test_workload_selector_is_server_built_and_no_user_logql_is_accepted(
     persisted_query = plan["payload"]["query"]["query"]
     assert persisted_query == '{k8s_namespace_name="shop",k8s_pod_name="checkout-api-0"}'
     assert 'namespace=~".*"' not in persisted_query
+
+
+def test_scheduled_catalog_and_stream_use_server_run_uid_and_exact_owned_pods(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("domains.log_stream.service.LOG_STREAM_BATCH_LIMIT", 1)
+    db = StubLogDb()
+    client = TestClient(app_for(db))
+
+    catalog = client.get(
+        f"/workloads/scheduled/CronJob/{NAMESPACE}/nightly/runs",
+        params={"cluster_id": CLUSTER_ID},
+    )
+    stream = client.get(
+        f"/workloads/scheduled/CronJob/{NAMESPACE}/nightly/runs/uid-nightly-101/logs/stream",
+        params={"cluster_id": CLUSTER_ID},
+    )
+
+    assert catalog.status_code == 200
+    assert catalog.json()["default_run_key"] == "uid-nightly-101"
+    assert catalog.json()["runs"] == [
+        {
+            "run_key": "uid-nightly-101",
+            "resource": {
+                "api_group": "batch",
+                "version": "v1",
+                "kind": "Job",
+                "namespace": NAMESPACE,
+                "name": "nightly-101",
+                "uid": "uid-nightly-101",
+            },
+            "phase": "running",
+            "active": True,
+            "scheduled_at": "2026-07-16T03:59:00Z",
+            "started_at": "2026-07-16T04:00:00Z",
+            "finished_at": None,
+            "desired": 1,
+            "succeeded": 0,
+            "failed": 0,
+            "pod_total": 1,
+            "pod_succeeded": 0,
+            "pod_failed": 0,
+            "pod_running": 1,
+            "next_step": None,
+            "observed_at": "2026-07-16T04:00:00Z",
+        }
+    ]
+    assert catalog.json()["lifecycle"] == [
+        {
+            "event_id": "uid-nightly-101:scheduled",
+            "run_key": "uid-nightly-101",
+            "resource": catalog.json()["runs"][0]["resource"],
+            "stage": "scheduled",
+            "occurred_at": "2026-07-16T03:59:00Z",
+            "event_type": "normal",
+            "reason": "Job scheduled",
+        },
+        {
+            "event_id": "uid-nightly-101:started",
+            "run_key": "uid-nightly-101",
+            "resource": catalog.json()["runs"][0]["resource"],
+            "stage": "started",
+            "occurred_at": "2026-07-16T04:00:00Z",
+            "event_type": "normal",
+            "reason": "Job started",
+        },
+    ]
+    assert stream.status_code == 200
+    target = next(iter(db.queued.values()))["payload"]["query"]["log_stream"]
+    assert target["target_type"] == "scheduled_run"
+    assert target["uid"] == "uid-nightly-101"
+    assert target["owner_uid"] == "uid-nightly"
+    assert target["pods"] == ["nightly-101-x7k2"]
+
+
+def test_scheduled_catalog_keeps_inventory_history_without_log_permission() -> None:
+    class InventoryOnlyDb(StubLogDb):
+        def user_has_resource_access(
+            self,
+            user_id: str,
+            workspace_id: str,
+            resource_type: str,
+            resource_id: str,
+            action: str,
+        ) -> bool:
+            del user_id, resource_type
+            self.access_calls.append((resource_id, action))
+            return (
+                workspace_id == WORKSPACE_ID
+                and resource_id == CLUSTER_ID
+                and action == "inventory.read"
+            )
+
+        def list_scheduled_run_inventory(self, **identity: Any) -> dict[str, Any]:
+            raw = super().list_scheduled_run_inventory(**identity)
+            raw["runs"][0]["summary"].update({"active": 0, "failed": 1})
+            raw["pods"][0]["summary"]["phase"] = "Failed"
+            return raw
+
+    db = InventoryOnlyDb()
+    client = TestClient(app_for(db))
+
+    catalog = client.get(
+        f"/workloads/scheduled/CronJob/{NAMESPACE}/nightly/runs",
+        params={"cluster_id": CLUSTER_ID},
+    )
+    stream = client.get(
+        f"/workloads/scheduled/CronJob/{NAMESPACE}/nightly/runs/uid-nightly-101/logs/stream",
+        params={"cluster_id": CLUSTER_ID},
+    )
+
+    assert catalog.status_code == 200
+    assert catalog.json()["runs"][0]["next_step"] == "timeline"
+    assert catalog.json()["lifecycle"][0]["run_key"] == "uid-nightly-101"
+    assert stream.status_code == 404
+
+
+def test_empty_stream_end_exposes_copy_only_read_only_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("domains.log_stream.service.LOG_STREAM_BATCH_LIMIT", 1)
+    db = StubLogDb()
+    db.redaction_applied = False
+
+    response = TestClient(app_for(db)).get(
+        f"/pods/{NAMESPACE}/{POD_NAME}/logs/stream",
+        params={"cluster_id": CLUSTER_ID},
+    )
+
+    terminal = data_envelopes(response.text)[-1]
+    assert terminal["type"] == "end"
+    assert terminal["diagnostic"]["code"] == "no_log_lines"
+    assert terminal["diagnostic"]["recovery"] == {
+        "kind": "copy_command",
+        "command": f"kubectl logs {POD_NAME} --namespace {NAMESPACE} --all-containers=true --tail=100",
+        "cluster_id": CLUSTER_ID,
+        "read_only": True,
+    }
 
 
 def test_unredacted_agent_result_never_crosses_browser_boundary(
@@ -533,6 +754,7 @@ def test_log_stream_contract_is_strict_and_openapi_is_sse() -> None:
     for path in (
         "/pods/{namespace}/{name}/logs/stream",
         "/workloads/{kind}/{namespace}/{name}/logs/stream",
+        "/workloads/scheduled/{kind}/{namespace}/{name}/runs/{run_key}/logs/stream",
     ):
         assert "text/event-stream" in schema["paths"][path]["get"]["responses"]["200"]["content"]
     assert LOG_STREAM_PROTOCOL == "log-stream.v1"

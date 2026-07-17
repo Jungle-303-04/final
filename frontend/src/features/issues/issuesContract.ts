@@ -15,6 +15,7 @@ import type {
   IssueRecoverySelectionResult,
 } from "./issuesRecoveryContract";
 import type { IssueRecentChanges } from "./issuesRecentChangesContract";
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export interface IssuesEndpointTimelineItem {
   workspace_id: unknown;
@@ -37,10 +38,57 @@ export interface IssuesEndpointTimelineItem {
   pr_url: unknown;
   error_reason: unknown;
   updated_at: unknown;
+  issue_severity?: unknown;
+  severity_availability?: unknown;
+  severity_reason_code?: unknown;
+  category?: unknown;
+  category_availability?: unknown;
+  category_reason_code?: unknown;
 }
 
 export interface IssuesEndpointTimelineResponse {
   items: IssuesEndpointTimelineItem[];
+  total?: number;
+  total_matched?: number;
+  count_completeness?: "exact";
+  recent_changes?: IssuesEndpointQueueRecentChange[];
+  visibility?: IssuesEndpointQueueVisibility;
+  facets?: IssuesEndpointQueueFacets;
+}
+
+export interface IssuesEndpointQueueRecentChange {
+  incident_id: string;
+  event_id: string;
+  changed_at: string;
+  namespace: string;
+  resource_kind: string;
+  resource_name: string;
+  image_before: string | null;
+  image_after: string | null;
+  pr_url: string | null;
+  commit_sha: string;
+  repository_id: string;
+  repo_ref: string;
+  workflow_run_id: string;
+}
+
+export interface IssuesEndpointQueueVisibility {
+  state: "complete" | "partial" | "restricted";
+  completeness: "exact" | "partial" | "unavailable";
+  authorized_cluster_count: number;
+  requested_namespaces: string[];
+  reason_codes: string[];
+}
+
+export interface IssueQueueFacet {
+  value: string;
+  count: number;
+}
+
+export interface IssuesEndpointQueueFacets {
+  namespaces: IssueQueueFacet[];
+  severities: IssueQueueFacet[];
+  categories: IssueQueueFacet[];
 }
 
 export interface IssueDataQualityWarning {
@@ -65,6 +113,11 @@ export interface IssueSummary {
   symptom: string | null;
   currentSubject: string;
   status: string;
+  /** Server-normalized two-tier queue severity; never inferred by the browser. */
+  severity?: IssuePresentationSeverity | null;
+  severityAvailability?: IssueSeverityAvailability;
+  category?: string | null;
+  categoryAvailability?: IssueCategoryAvailability;
   rootCause: string | null;
   confidence: number | null;
   supportingEvidence: readonly string[] | null;
@@ -77,6 +130,16 @@ export interface IssueSummary {
   updatedAt: string | null;
 }
 
+export type IssuePresentationSeverity = "critical" | "warning";
+export type IssueSeverityAvailability = "available" | "unavailable";
+export type IssueCategoryAvailability = "available" | "unavailable";
+
+export interface IssueQueueFilters {
+  namespaces: readonly string[];
+  severities: readonly IssuePresentationSeverity[];
+  categories: readonly string[];
+}
+
 export interface IssueDetail extends Omit<IssueSummary, "missingEvidence" | "supportingEvidence"> {
   requestedClusterId: string | null;
   requestedIncidentId: string;
@@ -87,6 +150,7 @@ export interface IssueDetail extends Omit<IssueSummary, "missingEvidence" | "sup
 
 export interface IssueListRequest {
   clusterId: string | null;
+  filters: IssueQueueFilters;
   limit: number;
 }
 
@@ -97,13 +161,25 @@ export interface IssueDetailRequest {
 
 export interface IssueList {
   clusterId: string | null;
-  completeness: "unknown";
+  completeness: "exact" | "partial" | "unavailable" | "unknown";
   dataQualityWarnings: IssueDataQualityWarning[];
   excludedCount: number;
   items: IssueSummary[];
   limit: number;
   limitReached: boolean;
   returned: number;
+  total: number;
+  totalMatched: number;
+  filters: IssueQueueFilters;
+  visibility: {
+    state: "complete" | "partial" | "restricted" | "unknown";
+    completeness: "exact" | "partial" | "unavailable" | "unknown";
+    authorizedClusterCount: number | null;
+    requestedNamespaces: readonly string[];
+    reasonCodes: readonly string[];
+  };
+  facets: IssuesEndpointQueueFacets;
+  recentChanges: readonly IssuesEndpointQueueRecentChange[];
 }
 
 export type IssuesFailureCode =
@@ -144,10 +220,12 @@ export class IssuesPortFailure extends Error {
 }
 
 export interface IssuesPort {
+  loadIssuesAuditRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listIssues(
     clusterId: string | null,
     limit?: number,
     signal?: AbortSignal,
+    filters?: IssueQueueFilters,
   ): Promise<IssueList>;
   loadIssue(
     incidentId: string,

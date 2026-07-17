@@ -39,7 +39,6 @@ from domains.target.connectivity import (
 from domains.target.events import (
     ClusterDesiredStateChangedBody,
     EvidenceJobUpdatedBody,
-    TargetDesiredComponent,
 )
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
@@ -52,7 +51,11 @@ from domains.target.evidence_policy import (
     enabled_provider_keys,
     provider_policy_snapshots,
 )
-from domains.target.install_manifest import agent_namespace, target_install_manifest
+from domains.target.install_manifest import (
+    agent_namespace,
+    target_install_manifest,
+    target_rbac_manifest,
+)
 from domains.target.management_guard import (
     MANAGEMENT_CLUSTER_ROLE,
     freeze_management_policy,
@@ -61,6 +64,7 @@ from domains.target.management_guard import (
     management_policy_update_is_forbidden,
     management_readonly_detail,
 )
+from domains.target.policy_upgrade import target_desired_components
 from domains.target.reconciler import desired_state_version
 from domains.target.uninstall import (
     SELF_CLEANUP_RESIDUALS,
@@ -86,6 +90,7 @@ from packages.contracts.gateway.requests import (
     SchedulingPolicy,
     TargetPreflightRequest,
     TargetRegisterRequest,
+    normalize_control_namespaces,
 )
 from packages.contracts.gateway.responses import (
     BootstrapStep,
@@ -110,9 +115,14 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     Permission,
 )
-from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
+from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_RBAC_MANIFEST_VERSION
 from packages.events.envelope import event
-from packages.runtime.dependencies import get_db, get_events, get_timeline_fanout
+from packages.runtime.dependencies import (
+    get_dashboard_ready_fanout,
+    get_db,
+    get_events,
+    get_timeline_fanout,
+)
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
 
@@ -186,42 +196,6 @@ TEST_FIXTURE_PURGE_UNSUPPORTED_CODE = "test_fixture_purge_unsupported"
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
 agent_router = APIRouter()
-
-
-def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesiredComponent]:
-    """등록 요청을 target cluster desired-state 컴포넌트로 정규화함.
-
-    Secret 원문(agent token)은 desired-state에 저장하지 않음. 운영 구현에서는
-    이 spec을 Helm/Kustomize/CRD desired state로 확장함.
-    """
-
-    return [
-        TargetDesiredComponent(
-            component=TargetComponent.CLUSTER_AGENT.value,
-            namespace=TARGET_NAMESPACE,
-            version=payload.image,
-            spec={
-                "deployment": "cluster-agent",
-                "management_base_url": payload.management_base_url,
-                "cluster_role": payload.cluster_role,
-                "evidence_interval_seconds": payload.evidence_interval_seconds,
-                "prometheus_base_url": payload.prometheus_base_url,
-                "loki_base_url": payload.loki_base_url,
-                "tempo_base_url": payload.tempo_base_url,
-                "otel_traces_endpoint": payload.otel_traces_endpoint,
-            },
-        ),
-        TargetDesiredComponent(
-            component=TargetComponent.NODE_COLLECTOR.value,
-            namespace=TARGET_NAMESPACE,
-            version=payload.image,
-            spec={
-                "enabled": payload.install_node_collector,
-                "daemonset": "optional-node-collector",
-                "managed_by": TargetComponent.CLUSTER_AGENT.value,
-            },
-        ),
-    ]
 
 
 def allowed_kube_contexts() -> set[str]:
@@ -352,12 +326,12 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
     if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE and not payload.control_namespaces.strip():
         default_control_namespaces = env(TARGET_DEFAULT_CONTROL_NAMESPACES_ENV, "").strip()
         if default_control_namespaces:
-            updates["control_namespaces"] = default_control_namespaces
+            updates["control_namespaces"] = normalize_control_namespaces(default_control_namespaces)
 
     if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE:
         updates["install_node_collector"] = False
         updates["install_sample_workload"] = False
-        updates["control_namespaces"] = ""
+        updates["control_namespaces"] = payload.control_namespaces or SANDBOX_NAMESPACE
         for telemetry_field in (
             "prometheus_base_url",
             "loki_base_url",
@@ -1313,6 +1287,31 @@ async def install_manifest_by_token(
     )
 
 
+@router.get(gateway_routes.TARGET_RBAC_MANIFEST_PATH, include_in_schema=True)
+async def target_rbac_manifest_for_admin(
+    cluster_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> PlainTextResponse:
+    """Return an RBAC-only artifact that requires an external cluster administrator."""
+
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        raise HTTPException(status_code=404, detail=CLUSTER_NOT_FOUND)
+    if is_management_registration(registration):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    payload = target_register_payload_from_settings(registration.get("settings") or {})
+    return PlainTextResponse(
+        target_rbac_manifest(payload),
+        media_type="text/yaml",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Target-RBAC-Manifest-Version": TARGET_RBAC_MANIFEST_VERSION,
+        },
+    )
+
+
 @router.get(gateway_routes.CLUSTERS_PATH, response_model=ClusterListResponse)
 async def list_clusters(
     limit: int = 100,
@@ -1432,16 +1431,27 @@ async def get_cluster_connection_status(
     latest_snapshot = (
         snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
     )
+    connection_status = registration_connection_status(registration, latest_agent)
+    connection_stage = cluster_connection_stage(registration, latest_agent, latest_snapshot)
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
-        connection_status=registration_connection_status(registration, latest_agent),
-        connection_stage=cluster_connection_stage(registration, latest_agent, latest_snapshot),
+        connection_status=connection_status,
+        connection_stage=connection_stage,
+        refresh_after_seconds=connection_refresh_after_seconds(connection_stage),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         agents=agents,
         connect_timeout_seconds=registration_connect_timeout(registration),
         connect_expires_at=registration_connect_expires_at(registration),
     )
+
+
+def connection_refresh_after_seconds(connection_stage: str | None) -> float | None:
+    """Return the server-owned connect polling policy for the current stage."""
+
+    if connection_stage in {"expired", "error"}:
+        return None
+    return 0.5
 
 
 @router.get(
@@ -1923,6 +1933,7 @@ async def evidence_job_result(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     timeline_fanout: Any = Depends(get_timeline_fanout),
+    dashboard_ready_fanout: Any = Depends(get_dashboard_ready_fanout),
 ) -> EvidenceJobResultResponse:
     result = await db_call(
         db.complete_evidence_job,
@@ -1971,6 +1982,7 @@ async def evidence_job_result(
                 agent_id=payload.agent_id,
             ),
             fanout=timeline_fanout,
+            ready_fanout=dashboard_ready_fanout,
         )
 
     evidence_key = str(result["evidence_key"])

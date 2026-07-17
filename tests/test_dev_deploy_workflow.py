@@ -170,6 +170,120 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     )
 
 
+def test_deploy_upgrades_existing_target_policy_after_smoke_and_before_release_record() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    upgrade = steps["Upgrade existing target agent policies"]
+    source = upgrade["run"]
+
+    assert upgrade["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert upgrade["env"]["DEPLOY_IMAGE"] == "${{ steps.image.outputs.image }}"
+    assert "deploy/management/target-policy-upgrade-job.yaml" in source
+    assert 'upgrade="${DEPLOY_IMAGE}"' in source
+    assert "delete job target-policy-upgrade" in source
+    assert "wait --for=condition=complete job/target-policy-upgrade" in source
+    assert "logs job/target-policy-upgrade" in source
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Upgrade existing target agent policies"
+    )
+    assert names.index("Upgrade existing target agent policies") < names.index(
+        "Record successful dev SHA in cluster"
+    )
+
+
+def test_target_policy_upgrade_job_has_bounded_non_privileged_database_authority() -> None:
+    manifest = yaml.safe_load(
+        (ROOT / "deploy/management/target-policy-upgrade-job.yaml").read_text(encoding="utf-8")
+    )
+    pod_spec = manifest["spec"]["template"]["spec"]
+    container = pod_spec["containers"][0]
+
+    assert manifest["kind"] == "Job"
+    assert manifest["metadata"]["name"] == "target-policy-upgrade"
+    assert manifest["spec"]["backoffLimit"] == 0
+    assert manifest["spec"]["activeDeadlineSeconds"] == 300
+    assert pod_spec["automountServiceAccountToken"] is False
+    assert pod_spec["restartPolicy"] == "Never"
+    assert container["command"] == ["python", "-m", "domains.target.policy_upgrade"]
+    assert container["args"] == ["--apply"]
+    assert container["securityContext"]["allowPrivilegeEscalation"] is False
+    assert container["securityContext"]["capabilities"]["drop"] == ["ALL"]
+    env = {item["name"]: item["valueFrom"] for item in container["env"]}
+    assert env["DATABASE_URL"]["secretKeyRef"] == {
+        "name": "management-runtime-secret",
+        "key": "COMMAND_NOTIFY_DATABASE_URL",
+    }
+    assert env["TARGET_AGENT_IMAGE"]["configMapKeyRef"] == {
+        "name": "management-runtime-config",
+        "key": "TARGET_AGENT_IMAGE",
+    }
+
+
+def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    install = steps["Install authenticated browser smoke dependencies"]
+    smoke = steps["Run authenticated browser route smoke"]
+    post_smoke = steps["Run post-deploy smoke"]
+    cleanup = steps["Remove browser authentication handoff"]
+    package = yaml.safe_load((ROOT / "frontend/package.json").read_text(encoding="utf-8"))
+    script = (ROOT / "frontend/scripts/post-deploy-route-smoke.mjs").read_text(encoding="utf-8")
+
+    assert install["run"] == (
+        "npm ci --prefix frontend\n"
+        "npm --prefix frontend exec -- playwright install --with-deps chromium\n"
+    )
+    handoff = "${{ runner.temp }}/browser-auth-cookie.jar"
+    assert smoke["env"] == {
+        "AUTH_COOKIE_JAR": handoff,
+        "ROUTE_SMOKE_BASE_URL": "http://127.0.0.1:18080",
+    }
+    assert "port-forward service/console-dev 18080:80" in smoke["run"]
+    assert "trap cleanup_route_smoke_forward EXIT" in smoke["run"]
+    assert '"${ROUTE_SMOKE_BASE_URL}/"' in smoke["run"]
+    assert (
+        'BASE_URL="${ROUTE_SMOKE_BASE_URL}" npm --prefix frontend run smoke:routes' in smoke["run"]
+    )
+    assert post_smoke["env"]["AUTH_COOKIE_JAR_OUT"] == handoff
+    assert cleanup["if"] == "always()"
+    assert cleanup["run"] == 'rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"'
+    assert package["scripts"]["smoke:routes"] == ("node scripts/post-deploy-route-smoke.mjs")
+    assert package["scripts"]["lint"] == "eslint src scripts/*.mjs --max-warnings 0"
+    assert "SIDEBAR_SELECTOR = 'aside[data-slot=\"sidebar\"]'" in script
+    assert "NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`" in script
+    assert "PRODUCT_ROUTE_CATALOG" not in script
+    assert 'page.on("pageerror"' in script
+    assert 'page.on("requestfailed"' in script
+    assert "isChangeTimelineLimitResponse(response.status(), response.url())" in script
+    assert 'requiredEnvironment("AUTH_PASSWORD", { trim: false })' in script
+    assert 'new URL("/api/auth/login", baseUrl).href' in script
+    assert "page.request.post" in script
+    assert 'headers: { "x-service-csrf": "same-origin" }' in script
+    assert "AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000" in script
+    assert 'page.goto(directUrl.href, { waitUntil: "domcontentloaded" })' in script
+    assert "data-product-state" in script
+    assert "diagnostics.apiErrors" in script
+    assert "parseNetscapeSessionCookie" in script
+    assert "page.context().addCookies" in script
+    assert 'input[name="email"]' not in script
+    assert 'input[name="password"]' not in script
+    assert names.index("Run post-deploy smoke") < names.index(
+        "Run authenticated browser route smoke"
+    )
+    assert names.index("Run post-deploy console smoke") < names.index(
+        "Run authenticated browser route smoke"
+    )
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Remove browser authentication handoff"
+    )
+    assert names.index("Remove browser authentication handoff") < names.index(
+        "Record successful dev SHA in cluster"
+    )
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Record successful console SHA in cluster"
+    )
+
+
 def test_workflow_sets_and_verifies_live_auth_bypass_without_manual_mutation() -> None:
     step = steps_by_name()["Enforce live auth bypass zero"]["run"]
 
@@ -195,6 +309,39 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     assert rollback["run"].count("revert_image_digests.py") == 2
     assert "database_cutover_config.py" not in rollback["run"]
     assert "database_writer_freeze.py" not in rollback["run"]
+
+
+def test_browser_smoke_failure_captures_bounded_service_crash_evidence_before_rollback() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    browser_smoke = steps["Run authenticated browser route smoke"]
+    diagnostics = steps["Capture service crash diagnostics"]
+    rollback = steps["Restore previous release after failure"]
+    source = diagnostics["run"]
+
+    assert browser_smoke["id"] == "browser_smoke"
+    assert diagnostics["if"] == (
+        "failure() && steps.browser_smoke.outcome == 'failure' && env.DEPLOYMENT_SCOPE == 'FULL'"
+    )
+    assert "get pods --selector app=api-gateway --output json" in source
+    assert "restartCount" in source
+    assert "lastState" in source
+    assert "reason" in source
+    assert 'describe pod "${pod_name}"' in source
+    assert 'logs pod/"${pod_name}" --all-containers=true --previous' in source
+    assert 'logs pod/"${pod_name}" --all-containers=true --tail=500' in source
+    assert "involvedObject.uid=${pod_uid}" in source
+    assert "rollout status deployment/api-gateway" in source
+    assert "scripts/redact_diagnostic_stream.py" in source
+    assert "get secret" not in source
+    assert "describe secret" not in source
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Capture service crash diagnostics"
+    )
+    assert names.index("Capture service crash diagnostics") < names.index(
+        "Restore previous release after failure"
+    )
+    assert rollback["run"].count("revert_image_digests.py") == 2
 
 
 def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgrade() -> None:
@@ -316,7 +463,7 @@ def test_full_deploy_pins_agent_runtime_config_before_consumers_restart() -> Non
     assert {"configMapRef": {"name": "management-runtime-config"}} in gateway_env_from
 
 
-def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety() -> None:
+def test_console_rollouts_record_the_source_sha_for_full_and_console_scopes() -> None:
     steps = steps_by_name()
     validation = steps["Validate non-secret deployment inputs"]["run"]
     smoke = steps["Run post-deploy console smoke"]
@@ -328,7 +475,7 @@ def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety
     assert smoke["run"] == "bash scripts/post-deploy-console-smoke.sh"
     assert "steps.console_image.outputs.image" in smoke["env"]["EXPECTED_CONSOLE_IMAGE"]
     assert steps["Record successful console SHA in cluster"]["if"] == (
-        "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+        "env.DEPLOYMENT_SCOPE == 'FULL' || env.DEPLOYMENT_SCOPE == 'CONSOLE'"
     )
     assert "opsia-console-deploy-status" in steps["Record successful console SHA in cluster"]["run"]
     assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]' in rollback

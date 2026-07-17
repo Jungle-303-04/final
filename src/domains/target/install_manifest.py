@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
+from packages.config.environments import normalize_environment
 from packages.config.realtime import derive_realtime_gateway_url
 from packages.config.security import (
     RCA_TEST_RUNS_ENABLED_ENV,
@@ -16,7 +19,14 @@ from packages.config.security import (
     rca_test_runs_enabled,
 )
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
-from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
+from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
+    SANDBOX_NAMESPACE,
+    TARGET_AGENT_IMAGE_KEY,
+    TARGET_NAMESPACE,
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RBAC_VERSION_ANNOTATION,
+)
 
 CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
@@ -46,16 +56,36 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
             priority_class_manifest(),
             service_account_manifest(namespace),
-            cluster_read_rbac_manifest(namespace),
-            cluster_uninstall_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            catalog_install_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            target_rbac_manifest(payload),
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token, namespace),
             sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
             cluster_agent_manifest(payload),
         ]
+        if block.strip()
+    )
+
+
+def target_rbac_manifest(payload: TargetRegisterRequest) -> str:
+    """Render the single RBAC source used by install and admin upgrades."""
+
+    namespace = agent_namespace(payload)
+    role = payload.cluster_role
+    return "\n---\n".join(
+        block.strip()
+        for block in (
+            cluster_read_rbac_manifest(namespace),
+            gitops_control_rbac_manifest(namespace),
+            node_control_rbac_manifest(namespace),
+            resource_debug_rbac_manifest(payload, namespace),
+            cronjob_control_rbac_manifest(payload, namespace)
+            if role != MANAGEMENT_CLUSTER_ROLE
+            else "",
+            cluster_uninstall_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            catalog_install_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+        )
         if block.strip()
     )
 
@@ -111,9 +141,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: cluster-agent-read
+  annotations:
+    {TARGET_RBAC_VERSION_ANNOTATION}: {yaml_string(TARGET_RBAC_MANIFEST_VERSION)}
 rules:
   - apiGroups: [""]
-    resources: ["pods", "events", "nodes", "services", "endpoints"]
+    resources: ["pods", "events", "nodes", "services", "endpoints", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   # Kubernetes RBAC cannot resourceName-scope create on pods/exec. Runtime
   # authorization therefore requires exact inventory target, pod.exec, and
@@ -125,10 +157,25 @@ rules:
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    resources: ["deployments", "replicasets", "controllerrevisions", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]
+    verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories", "ocirepositories", "helmrepositories", "buckets", "helmcharts"]
     verbs: ["get", "list"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
@@ -145,6 +192,43 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def gitops_control_rbac_manifest(namespace: str) -> str:
+    """Controller-only patches; the agent still validates UID/resourceVersion before use."""
+
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-gitops-control
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories", "ocirepositories", "helmrepositories", "buckets", "helmcharts"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-gitops-control
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-gitops-control
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
@@ -188,20 +272,20 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles"]
     resourceNames:
-      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install"]
+      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install", "cluster-agent-cronjob-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["rolebindings"]
     resourceNames:
-      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install"]
+      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install", "cluster-agent-cronjob-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
-    resourceNames: ["cluster-agent-read"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterrolebindings"]
-    resourceNames: ["cluster-agent-read"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control"]
     verbs: ["delete"]
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
@@ -223,6 +307,155 @@ subjects:
 """
 
 
+def node_control_rbac_manifest(namespace: str) -> str:
+    """Cluster-scoped scheduling permission isolated from the read role."""
+
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-node-control
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-node-control
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-node-control
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def resource_debug_rbac_manifest(
+    payload: TargetRegisterRequest,
+    agent_namespace: str,
+) -> str:
+    """Debug mutations are isolated to configured control namespaces."""
+
+    documents: list[dict[str, object]] = []
+    for control_namespace in configured_control_namespaces(payload):
+        documents.extend(
+            [
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "Role",
+                    "metadata": {
+                        "name": "cluster-agent-resource-debug",
+                        "namespace": control_namespace,
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["pods"],
+                            "verbs": ["get", "create", "delete"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["pods/ephemeralcontainers"],
+                            "verbs": ["get", "patch"],
+                        },
+                    ],
+                },
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "RoleBinding",
+                    "metadata": {
+                        "name": "cluster-agent-resource-debug",
+                        "namespace": control_namespace,
+                    },
+                    "roleRef": {
+                        "apiGroup": "rbac.authorization.k8s.io",
+                        "kind": "Role",
+                        "name": "cluster-agent-resource-debug",
+                    },
+                    "subjects": [
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "cluster-agent",
+                            "namespace": agent_namespace,
+                        }
+                    ],
+                },
+            ]
+        )
+    return render_yaml_documents(documents)
+
+
+def configured_control_namespaces(payload: TargetRegisterRequest) -> tuple[str, ...]:
+    return tuple((payload.control_namespaces.strip() or SANDBOX_NAMESPACE).split(","))
+
+
+def cronjob_control_rbac_manifest(payload: TargetRegisterRequest, agent_namespace: str) -> str:
+    """Project CronJob writes only into the configured control namespaces."""
+
+    documents: list[dict[str, object]] = []
+    for control_namespace in configured_control_namespaces(payload):
+        documents.extend(
+            [
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "Role",
+                    "metadata": {
+                        "name": "cluster-agent-cronjob-control",
+                        "namespace": control_namespace,
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": ["batch"],
+                            "resources": ["jobs"],
+                            "verbs": ["create"],
+                        },
+                        {
+                            "apiGroups": ["batch"],
+                            "resources": ["cronjobs"],
+                            "verbs": ["patch"],
+                        },
+                    ],
+                },
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "RoleBinding",
+                    "metadata": {
+                        "name": "cluster-agent-cronjob-control",
+                        "namespace": control_namespace,
+                    },
+                    "roleRef": {
+                        "apiGroup": "rbac.authorization.k8s.io",
+                        "kind": "Role",
+                        "name": "cluster-agent-cronjob-control",
+                    },
+                    "subjects": [
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "cluster-agent",
+                            "namespace": agent_namespace,
+                        }
+                    ],
+                },
+            ]
+        )
+    return render_yaml_documents(documents)
+
+
+def render_yaml_documents(documents: list[dict[str, object]]) -> str:
+    return yaml.safe_dump_all(documents, sort_keys=False).strip()
+
+
 def target_write_rbac_manifest(namespace: str) -> str:
     return f"""
 apiVersion: rbac.authorization.k8s.io/v1
@@ -233,7 +466,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
-    resourceNames: ["target-agent-policy"]
+    resourceNames: ["target-agent-policy", "target-runtime-config"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -356,16 +589,21 @@ def control_namespaces_line(payload: TargetRegisterRequest) -> str:
     value = payload.control_namespaces.strip()
     if not value:
         return ""
-    return f"\n  CONTROL_ALLOWED_NAMESPACES: {yaml_string(value)}"
+    return render_config_map_entry("CONTROL_ALLOWED_NAMESPACES", value)
 
 
 def pod_exec_namespaces_line(payload: TargetRegisterRequest) -> str:
     value = payload.control_namespaces.strip() or SANDBOX_NAMESPACE
-    return f"\n  POD_EXEC_ALLOWED_NAMESPACES: {yaml_string(value)}"
+    return render_config_map_entry("POD_EXEC_ALLOWED_NAMESPACES", value)
+
+
+def render_config_map_entry(name: str, value: str) -> str:
+    rendered = yaml.safe_dump({name: value}, sort_keys=False).rstrip()
+    return "\n" + "\n".join(f"  {line}" for line in rendered.splitlines())
 
 
 def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
-    registration_environment = payload.environment.strip().lower()
+    registration_environment = normalize_environment(payload.environment)
     if (
         payload.cluster_role == MANAGEMENT_CLUSTER_ROLE
         or registration_environment not in RCA_TEST_TARGET_ENVIRONMENTS
@@ -400,7 +638,9 @@ data:
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}{pod_exec_namespaces_line(payload)}
-  NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
+  NODE_CONTROL_ENABLED: {yaml_string("true")}
+  {TARGET_AGENT_IMAGE_KEY}: {yaml_string(payload.image)}
+  {NODE_COLLECTOR_IMAGE_KEY}: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(namespace)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
   COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"

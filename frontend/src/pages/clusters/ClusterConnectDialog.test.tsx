@@ -106,6 +106,7 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.loadConnection).mockResolvedValue({
       status: "connected",
       stage: "ready",
+      refreshAfterSeconds: 0.5,
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -126,6 +127,7 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.loadConnection).mockResolvedValue({
       status: "waiting",
       stage: "agent_connected",
+      refreshAfterSeconds: 0.5,
       agentVersion: "2026.07.15",
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -168,12 +170,14 @@ describe("ClusterConnectDialog", () => {
       .mockResolvedValueOnce({
         status: "expired",
         stage: "expired",
+        refreshAfterSeconds: null,
         agentVersion: null,
         lastSeenAt: null,
       })
       .mockResolvedValue({
         status: "waiting",
         stage: "awaiting_install",
+        refreshAfterSeconds: 0.5,
         agentVersion: null,
         lastSeenAt: null,
       });
@@ -212,6 +216,7 @@ describe("ClusterConnectDialog", () => {
     const connected = {
       status: "connected" as const,
       stage: "ready" as const,
+      refreshAfterSeconds: 0.5,
       agentVersion: "2026.07.15",
       lastSeenAt: "2026-07-15T01:02:03Z",
     };
@@ -244,6 +249,7 @@ function waitingPort(): ClustersPort {
     loadConnection: vi.fn(async () => ({
       status: "waiting" as const,
       stage: "awaiting_install" as const,
+      refreshAfterSeconds: 0.5,
       agentVersion: null,
       lastSeenAt: null,
     })),

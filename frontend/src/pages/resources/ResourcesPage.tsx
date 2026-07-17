@@ -1,5 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { cn } from "@/shared/lib/cn";
+import {
+  isProductContextShortcutId,
+  PRODUCT_SHORTCUT_EVENT,
+  type ProductShortcutEventDetail,
+} from "../../app/shortcutRegistry";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type { HomePort } from "../../features/home/homeContract";
@@ -10,12 +15,19 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceMetricsHistoryPort,
+  ResourcesRefreshPolicyKey,
+} from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
-import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
+import type {
+  ResourceManifestCreatePort,
+  ResourceManifestPort,
+} from "../../features/resources/resourceManifestContract";
+import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -40,16 +52,22 @@ import { ResourcesListSurface } from "./ResourcesListSurface";
 import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
 import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
 import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
+import { useResourceIssuesDataFrame } from "./useResourceIssuesDataFrame";
 import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
 import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
 import { ResourcesLiveStatus } from "./ResourcesLiveStatus";
+import { ResourceManifestCreateDialog } from "./ResourceManifestCreateDialog";
 import { selectResourceMetricIds } from "./resourceMetricSelection";
 import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
+import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
+import type { TimelinePort } from "../../features/timeline/timelineContract";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function ResourcesPage({
   filterPort,
@@ -58,11 +76,16 @@ export function ResourcesPage({
   nodePodsPort,
   relationTopologyPort,
   changeTimelinePort,
+  timelinePort,
   resourceMetricsHistoryPort,
+  refreshPolicies,
   resourceCapabilitiesPort,
   resourceActionsPort,
   podTerminalPort = EMPTY_POD_TERMINAL_PORT,
+  serviceAccessPort,
+  portForwardSessions,
   resourceManifestPort,
+  resourceIssuesPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
@@ -71,18 +94,23 @@ export function ResourcesPage({
   nodePodsPort: Pick<HomePort, "loadNodePods">;
   relationTopologyPort: RelationTopologyPort;
   changeTimelinePort: ChangeTimelinePort;
+  timelinePort?: TimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
   podTerminalPort?: PodTerminalPort;
+  serviceAccessPort?: ServiceAccessPort;
+  portForwardSessions?: PortForwardSessionPort;
   resourceManifestPort?: ResourceManifestPort;
+  resourceIssuesPort?: ResourceIssuesPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
-  const state = useResourcesPageState(port);
+  const state = useResourcesPageState(port, refreshPolicies);
   const topology = useResourceTopologyViewController();
   const authorityKey = session
     ? `${session.workspaceId}:${session.userId}`
@@ -93,6 +121,7 @@ export function ResourcesPage({
       filter.state.common.clusters.length === 1,
     filterState: filter.state,
     port: physicalTopologyPort,
+    refreshPolicies,
     reportUnauthorized,
     revision: state.podRevision,
   });
@@ -112,18 +141,6 @@ export function ResourcesPage({
     filter.state.common.labels.length > 0 ||
     filter.state.resources.health.length > 0 ||
     filter.state.resources.query.trim().length > 0;
-  const changeTimeline = useChangeTimelineDataFrame({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      timelineReadBounded,
-    authorityKey,
-    filterState: filter.state,
-    port: changeTimelinePort,
-    range: filter.detail.timeRange ?? "1h",
-    reportUnauthorized,
-    revision: state.revision,
-  });
   const filtered = useResourcesFilterDataFrame({
     active:
       state.selectedClusterExists &&
@@ -155,6 +172,22 @@ export function ResourcesPage({
     replayAtMs: filter.detail.timeAt,
     rows: currentResourceRows,
     workspaceId: session?.workspaceId ?? null,
+    onResourceDelta: state.requestResourceEventInvalidation,
+  });
+  const changeTimeline = useChangeTimelineDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1 &&
+      timelineReadBounded,
+    authorityKey,
+    filterState: filter.state,
+    onResourceInvalidation: state.requestResourceEventInvalidation,
+    port: changeTimelinePort,
+    range: filter.detail.timeRange ?? "1h",
+    reportUnauthorized,
+    revision: state.revision,
+    timelinePort,
+    workspaceId: session?.workspaceId ?? null,
   });
   const physicalTopology = physicalRealtime.frame;
   const detailResource = state.detail.phase === "ready"
@@ -166,14 +199,18 @@ export function ResourcesPage({
     [currentResourceRows, detailResource],
   );
   const metricHistory = useResourceMetricsHistoryDataFrame({
-    active: metricResourceIds.length > 0,
+    active: metricResourceIds.length > 0 || detailResource !== null,
     authorityKey,
     filterState: filter.state,
     port: resourceMetricsHistoryPort,
+    range: filter.detail.timeRange ?? "1h",
+    refreshPolicies,
     reportUnauthorized,
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
     liveSeries: physicalRealtime.metricSeries,
+    observedResource: detailResource,
+    scopeSnapshot: filteredPage?.snapshot ?? null,
   });
   const resourceCapabilities = useResourceCapabilitiesDataFrame({
     active: state.detailRequested && detailResourceId !== null,
@@ -181,6 +218,17 @@ export function ResourcesPage({
     port: resourceCapabilitiesPort,
     reportUnauthorized,
     resourceId: detailResourceId,
+  });
+  const resourceIssues = useResourceIssuesDataFrame({
+    active: resourceIssuesPort !== undefined && state.detailRequested && state.detailIdentity !== null,
+    authorityKey,
+    clusterId: state.detail.phase === "ready"
+      ? state.detail.data.clusterId
+      : state.selectedClusterId,
+    identity: state.detailIdentity,
+    port: resourceIssuesPort ?? INACTIVE_RESOURCE_ISSUES_PORT,
+    reportUnauthorized,
+    revision: state.revision,
   });
   const detailNavigationItems = useMemo(
     () => (filteredPage?.items ?? []).map((item) => item.resource),
@@ -197,6 +245,16 @@ export function ResourcesPage({
   useEffect(() => {
     if (resourcesView === "graph") setResourcesView("table");
   }, [resourcesView, setResourcesView]);
+  useEffect(() => {
+    const handleShortcut = (event: Event) => {
+      const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;
+      if (!detail || !isProductContextShortcutId(detail.id)) return;
+      if (detail.id === "resources:previous-kind") state.cycleResourceType(-1);
+      if (detail.id === "resources:next-kind") state.cycleResourceType(1);
+    };
+    window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+    return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+  }, [state]);
   if (state.choices.phase === "idle" || state.choices.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
@@ -216,27 +274,45 @@ export function ResourcesPage({
     [state.choices, state.catalog, state.list, state.detail].some(
       (resource) => resource.phase === "ready" && resource.refreshing,
     ) || filtered.list.refreshing;
+  const createNamespace = filter.state.common.namespaces.length === 1
+    && filter.state.common.namespaces[0].clusterId === state.selectedClusterId
+    ? filter.state.common.namespaces[0].namespace
+    : null;
   return (
     <div
       className="flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
       data-detail-layout={state.detailRequested ? (state.detailFull ? "full" : "peek") : "closed"}
     >
       <div
+        aria-hidden={state.detailFull}
         className={state.detailRequested
           ? state.detailFull
             ? "hidden min-w-0 overflow-y-auto lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
             : "hidden min-w-0 flex-1 overflow-y-auto lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
           : "min-w-0 flex-1 overflow-y-auto"}
         data-slot="resources-list-column"
+        inert={state.detailFull}
       >
         <ProductPageFrame>
           <header className="flex min-w-0 justify-end">
             <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
+              {isResourceManifestCreatePort(resourceManifestPort)
+                && state.selectedClusterExists
+                && state.selectedClusterId !== null
+                && createNamespace !== null ? (
+                  <ResourceManifestCreateDialog
+                    clusterId={state.selectedClusterId}
+                    namespace={createNamespace}
+                    onInvalidate={state.refresh}
+                    onUnauthorized={reportUnauthorized}
+                    port={resourceManifestPort}
+                  />
+                ) : null}
               {state.automaticRefreshPaused ? (
                 <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
               ) : null}
               <ResourcesLiveStatus state={physicalRealtime.live} />
-              {physicalRealtime.live.status === "connected" ? null : (
+              {physicalRealtime.live.status === "connected" || state.refreshAfterSeconds === null ? null : (
                 <PollingFreshness
                   connectionState={
                     physicalTopology.phase === "ready" && physicalTopology.refreshFailure
@@ -244,7 +320,7 @@ export function ResourcesPage({
                       : "connected"
                   }
                   dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-                  intervalSeconds={5}
+                  intervalSeconds={state.refreshAfterSeconds}
                   isFetching={refreshing || physicalTopology.refreshing}
                   onRefresh={state.refresh}
                 />
@@ -331,16 +407,33 @@ export function ResourcesPage({
             full={state.detailFull}
             identity={state.detailIdentity}
             metricHistory={metricHistory}
+            resourceIssues={resourceIssues}
             manifestPort={resourceManifestPort}
             onUnauthorized={reportUnauthorized}
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
+            onNavigateResource={state.navigateDetail}
+            onResourceActionInvalidation={state.requestResourceEventInvalidation}
             onTabChange={state.setDetailTab}
             tab={state.detailTab}
             terminalPort={podTerminalPort}
+            serviceAccessPort={serviceAccessPort}
+            portForwardSessions={portForwardSessions}
           />
         </div>
       ) : null}
     </div>
   );
+}
+
+const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
+  loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
+};
+
+function isResourceManifestCreatePort(
+  port: ResourceManifestPort | undefined,
+): port is ResourceManifestPort & ResourceManifestCreatePort {
+  return typeof port?.loadCreateCapability === "function"
+    && typeof port.dryRunCreate === "function"
+    && typeof port.createResources === "function";
 }

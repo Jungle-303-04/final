@@ -9,9 +9,23 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from packages.storage.engine import has_active_connection
+
+
+async def run_sync_with_uow_affinity[T](
+    function: Callable[..., T],
+    *args: Any,
+    thread_runner: Callable[..., Awaitable[T]] | None = None,
+    **kwargs: Any,
+) -> T:
+    """Run sync DB work without moving an active SQLAlchemy connection across threads."""
+    if has_active_connection():
+        return function(*args, **kwargs)
+    runner = thread_runner or asyncio.to_thread
+    return await runner(function, *args, **kwargs)
 
 
 class AsyncDb:
@@ -24,8 +38,6 @@ class AsyncDb:
             return attr
 
         async def call(*args: Any, **kwargs: Any) -> Any:
-            if has_active_connection():
-                return attr(*args, **kwargs)
-            return await asyncio.to_thread(attr, *args, **kwargs)
+            return await run_sync_with_uow_affinity(attr, *args, **kwargs)
 
         return call

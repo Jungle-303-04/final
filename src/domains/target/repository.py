@@ -5,11 +5,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import cast, delete, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.identity.models import ClusterRegistration
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
     DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
@@ -35,9 +37,13 @@ from domains.target.models import (
 )
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
-from packages.contracts.target import TargetDesiredStateStatus
+from packages.contracts.identity import ClusterRegistrationStatus
+from packages.contracts.target import TargetComponent, TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
 from packages.storage.schema import EventModel, OutboxModel
+
+if TYPE_CHECKING:
+    from domains.target.policy_upgrade import TargetUpgradePlan
 
 AGENT_STATUS_RETENTION_SECONDS_ENV = "AGENT_STATUS_RETENTION_SECONDS"
 DEFAULT_AGENT_STATUS_RETENTION_SECONDS = 3600
@@ -58,6 +64,201 @@ def agent_status_retention_seconds() -> int:
 
 
 class TargetAgentRepository(DatabaseConnection):
+    def list_target_runtime_upgrade_candidates(
+        self,
+        *,
+        after_id: int,
+        limit: int,
+    ) -> list[JsonObject]:
+        """Read one keyset page with policy, desired state, and latest RBAC proof.
+
+        The fixed query count avoids a per-cluster policy/status lookup while keeping
+        memory bounded for installations with many workspaces.
+        """
+
+        registration = ClusterRegistration.__table__
+        page_size = max(1, min(limit, 500))
+        registration_statement = (
+            select(
+                registration.c.id,
+                registration.c.workspace_id,
+                registration.c.cluster_id,
+                registration.c.name,
+                registration.c.environment,
+                registration.c.status,
+                registration.c.settings,
+            )
+            .where(
+                registration.c.id > after_id,
+                registration.c.status.in_(
+                    (
+                        ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.REGISTERED.value,
+                    )
+                ),
+            )
+            .order_by(registration.c.id)
+            .limit(page_size)
+        )
+        with self.connection() as conn:
+            registrations = [dict(row) for row in conn.execute(registration_statement).mappings()]
+            if not registrations:
+                return []
+
+            identities = [
+                (str(item["workspace_id"]), str(item["cluster_id"])) for item in registrations
+            ]
+            policy = AgentPolicyRecord.__table__
+            policies = {
+                (str(row["workspace_id"]), str(row["cluster_id"])): dict(row["policy"])
+                for row in conn.execute(
+                    select(
+                        policy.c.workspace_id,
+                        policy.c.cluster_id,
+                        policy.c.policy,
+                    ).where(tuple_(policy.c.workspace_id, policy.c.cluster_id).in_(identities))
+                ).mappings()
+            }
+
+            desired = TargetDesiredState.__table__
+            desired_by_cluster: dict[tuple[str, str], list[JsonObject]] = {}
+            for row in conn.execute(
+                select(
+                    desired.c.workspace_id,
+                    desired.c.cluster_id,
+                    desired.c.component,
+                    desired.c.namespace,
+                    desired.c.version,
+                    desired.c.status,
+                    desired.c.updated_by,
+                    desired.c.spec,
+                )
+                .where(tuple_(desired.c.workspace_id, desired.c.cluster_id).in_(identities))
+                .order_by(desired.c.workspace_id, desired.c.cluster_id, desired.c.component)
+            ).mappings():
+                identity = (str(row["workspace_id"]), str(row["cluster_id"]))
+                desired_by_cluster.setdefault(identity, []).append(dict(row))
+
+            status = AgentPolicyStatusRecord.__table__
+            ranked_status = (
+                select(
+                    status.c.workspace_id,
+                    status.c.cluster_id,
+                    status.c.generation,
+                    status.c.status,
+                    status.c.details,
+                    func.row_number()
+                    .over(
+                        partition_by=(status.c.workspace_id, status.c.cluster_id),
+                        order_by=status.c.id.desc(),
+                    )
+                    .label("position"),
+                )
+                .where(tuple_(status.c.workspace_id, status.c.cluster_id).in_(identities))
+                .subquery("latest_target_policy_status")
+            )
+            statuses = {
+                (str(row["workspace_id"]), str(row["cluster_id"])): dict(row)
+                for row in conn.execute(
+                    select(ranked_status).where(ranked_status.c.position == 1)
+                ).mappings()
+            }
+
+        results: list[JsonObject] = []
+        for item in registrations:
+            identity = (str(item["workspace_id"]), str(item["cluster_id"]))
+            results.append(
+                {
+                    "registration": item,
+                    "policy": policies.get(identity),
+                    "desired_states": desired_by_cluster.get(identity, []),
+                    "policy_status": statuses.get(identity),
+                }
+            )
+        return results
+
+    def apply_target_runtime_upgrade(self, plan: TargetUpgradePlan) -> None:
+        """Apply one planned upgrade with policy generation compare-and-swap."""
+
+        from domains.target.policy_upgrade import UPGRADE_ACTOR
+
+        if not plan.changed or plan.policy is None:
+            return
+        policy = AgentPolicyRecord.__table__
+        registration = ClusterRegistration.__table__
+        with self.connection() as conn:
+            if plan.next_generation > plan.current_generation:
+                values = {
+                    "generation": plan.next_generation,
+                    "policy": plan.policy.model_dump(),
+                    "updated_at": func.now(),
+                }
+                if plan.policy_existed:
+                    changed = conn.execute(
+                        update(policy)
+                        .where(
+                            policy.c.workspace_id == plan.workspace_id,
+                            policy.c.cluster_id == plan.cluster_id,
+                            policy.c.generation == plan.current_generation,
+                        )
+                        .values(**values)
+                        .returning(policy.c.generation)
+                    ).scalar_one_or_none()
+                else:
+                    changed = conn.execute(
+                        pg_insert(policy)
+                        .values(
+                            workspace_id=plan.workspace_id,
+                            cluster_id=plan.cluster_id,
+                            **values,
+                        )
+                        .on_conflict_do_nothing(
+                            index_elements=[policy.c.workspace_id, policy.c.cluster_id]
+                        )
+                        .returning(policy.c.generation)
+                    ).scalar_one_or_none()
+                if changed != plan.next_generation:
+                    raise RuntimeError("target policy generation changed during upgrade")
+
+            if plan.settings_patch:
+                updated_registration = conn.execute(
+                    update(registration)
+                    .where(
+                        registration.c.id == plan.registration_id,
+                        registration.c.workspace_id == plan.workspace_id,
+                        registration.c.cluster_id == plan.cluster_id,
+                        registration.c.status.in_(
+                            (
+                                ClusterRegistrationStatus.PENDING_INSTALL.value,
+                                ClusterRegistrationStatus.REGISTERED.value,
+                            )
+                        ),
+                    )
+                    .values(
+                        settings=registration.c.settings.op("||")(cast(plan.settings_patch, JSONB)),
+                        updated_at=func.now(),
+                    )
+                    .returning(registration.c.id)
+                ).scalar_one_or_none()
+                if updated_registration != plan.registration_id:
+                    raise RuntimeError("target registration changed during upgrade")
+
+            self.upsert_target_desired_states(
+                plan.workspace_id,
+                plan.cluster_id,
+                [
+                    item
+                    for item in plan.desired_states
+                    if item.get("component")
+                    in {
+                        TargetComponent.CLUSTER_AGENT.value,
+                        TargetComponent.NODE_COLLECTOR.value,
+                    }
+                ],
+                UPGRADE_ACTOR,
+                preserve_spec=True,
+            )
+
     def save_cluster_agent_status(
         self,
         *,
@@ -242,11 +443,22 @@ class TargetAgentRepository(DatabaseConnection):
         cluster_id: str,
         components: list[JsonObject],
         updated_by: str | None,
+        *,
+        preserve_spec: bool = False,
     ) -> list[JsonObject]:
         table = TargetDesiredState.__table__
         records: list[JsonObject] = []
         with self.connection() as conn:
             for component in components:
+                update_values: dict[str, Any] = {
+                    "namespace": component["namespace"],
+                    "version": component["version"],
+                    "status": TargetDesiredStateStatus.ACTIVE.value,
+                    "updated_by": updated_by,
+                    "updated_at": func.now(),
+                }
+                if not preserve_spec:
+                    update_values["spec"] = component["spec"]
                 statement = (
                     pg_insert(table)
                     .values(
@@ -266,14 +478,7 @@ class TargetAgentRepository(DatabaseConnection):
                             table.c.cluster_id,
                             table.c.component,
                         ],
-                        set_={
-                            "namespace": component["namespace"],
-                            "version": component["version"],
-                            "status": TargetDesiredStateStatus.ACTIVE.value,
-                            "updated_by": updated_by,
-                            "spec": component["spec"],
-                            "updated_at": func.now(),
-                        },
+                        set_=update_values,
                     )
                     .returning(
                         table.c.workspace_id,

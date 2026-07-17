@@ -62,6 +62,9 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(screen.getByText(
       "The current filters work better as a relationship graph.",
     )).toBeTruthy();
+    expect(document.querySelector('[data-slot="topology-overlay-bar"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="resources-graph-auto-hint"]')?.className)
+      .toContain("motion-topology-overlay");
     await waitFor(() => expect(vi.mocked(window.setTimeout)).toHaveBeenCalledWith(
       expect.any(Function),
       6_000,
@@ -257,8 +260,30 @@ function relationSnapshot(): RelationTopologySnapshot {
     graphRevision: "graph-test",
     refreshAfterSeconds: 60,
     nodes: [
-      { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
-      { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
+      {
+        id: "deployment:shop/checkout-api",
+        identity: {
+          resourceType: "workload",
+          kind: "Deployment",
+          namespace: "shop",
+          name: "checkout-api",
+        },
+        kind: "Deployment",
+        name: "checkout-api",
+        status: "Ready",
+      },
+      {
+        id: "pod:shop/checkout-api-0",
+        identity: {
+          resourceType: "pod",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-0",
+        },
+        kind: "Pod",
+        name: "checkout-api-0",
+        status: "CrashLoopBackOff",
+      },
     ],
     edges: [
       { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },

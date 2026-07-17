@@ -2,9 +2,11 @@ import type {
   HomeClusterChoice,
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeCertificateResourceRef,
   HomeDataQualityWarning,
   HomeNodeCollection,
   HomeNodeSummary,
+  HomeInsights,
   HomePodCollection,
   HomePodOwner,
   HomePodReadiness,
@@ -15,6 +17,9 @@ import type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointClusterSummary,
+  HomeEndpointInsightCoverage,
+  HomeEndpointInsights,
+  HomeEndpointResourceRef,
   HomeEndpointNode,
   HomeEndpointNodeCollection,
   HomeEndpointPod,
@@ -129,6 +134,178 @@ export function toClusterOverview(
   };
 }
 
+export function toHomeInsights(
+  requestedClusterId: string,
+  wire: HomeEndpointInsights,
+): HomeInsights {
+  const clusterId = canonicalIdentity(requestedClusterId);
+  assertSameIdentity(wire.cluster_id, clusterId);
+  const customCoverage = toInsightCoverage(wire.custom_resources.coverage);
+  const customItems = wire.custom_resources.items.map((item) => {
+    const count = nonNegativeInteger(item.count);
+    if (count === 0) invalidResponse();
+    return {
+      apiGroup: canonicalIdentity(item.api_group),
+      version: canonicalIdentity(item.version),
+      kind: canonicalIdentity(item.kind),
+      count,
+    };
+  });
+  assertUnique(customItems.map((item) =>
+    `${item.apiGroup}/${item.version}/${item.kind}`
+  ));
+  const totalKinds = nullableNonNegativeInteger(wire.custom_resources.total_kinds);
+  const totalResources = nullableNonNegativeInteger(wire.custom_resources.total_resources);
+  const customUnavailable = customCoverage.availability === "unavailable";
+  if (
+    customUnavailable !== (totalKinds === null) ||
+    customUnavailable !== (totalResources === null) ||
+    (customUnavailable && (customItems.length > 0 || wire.custom_resources.has_more)) ||
+    (totalKinds !== null && totalKinds < customItems.length) ||
+    (totalResources !== null &&
+      totalResources < customItems.reduce((total, item) => total + item.count, 0)) ||
+    wire.custom_resources.has_more !== (
+      totalKinds !== null && totalKinds > customItems.length
+    )
+  ) {
+    invalidResponse();
+  }
+  const helmCoverage = toInsightCoverage(wire.helm.coverage);
+  const releaseCount = nullableNonNegativeInteger(wire.helm.release_count);
+  if (Object.keys(wire.helm.status_counts).length > 20) invalidResponse();
+  const statusCounts = Object.fromEntries(
+    Object.entries(wire.helm.status_counts).map(([status, count]) => {
+      const normalized = canonicalIdentity(status);
+      if (normalized.length > 120) invalidResponse();
+      const normalizedCount = nonNegativeInteger(count);
+      if (normalizedCount === 0) invalidResponse();
+      return [normalized, normalizedCount];
+    }),
+  );
+  const helmUnavailable = helmCoverage.availability === "unavailable";
+  if (
+    helmUnavailable !== (releaseCount === null) ||
+    (helmUnavailable && Object.keys(statusCounts).length > 0) ||
+    (releaseCount !== null &&
+      Object.values(statusCounts).reduce((total, count) => total + count, 0) > releaseCount)
+  ) {
+    invalidResponse();
+  }
+  const certificateCoverage = toInsightCoverage(wire.certificate_expiry.coverage);
+  const certificateItems = wire.certificate_expiry.items.map((item) => {
+    const secret = toInsightResourceRef(item.secret);
+    const sourceCertificate = toInsightResourceRef(item.source_certificate);
+    if (secret.kind !== "Secret" || sourceCertificate.kind !== "Certificate") invalidResponse();
+    if (!["valid", "expiring", "expired"].includes(item.status)) invalidResponse();
+    const notAfter = canonicalTimestamp(item.not_after);
+    if (notAfter === null || !Number.isSafeInteger(item.seconds_remaining)) invalidResponse();
+    return {
+      secret,
+      sourceCertificate,
+      notAfter,
+      status: item.status,
+      secondsRemaining: item.seconds_remaining,
+      observedAt: canonicalTimestamp(item.observed_at),
+    };
+  });
+  assertUnique(certificateItems.map((item) => item.secret.uid));
+  const tlsSecretCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.tls_secret_count,
+  );
+  const observedExpiryCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.observed_expiry_count,
+  );
+  const expiringCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.expiring_count,
+  );
+  const expiredCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.expired_count,
+  );
+  const earliestExpiry = canonicalTimestamp(wire.certificate_expiry.earliest_expiry);
+  const certificateUnavailable = certificateCoverage.availability === "unavailable";
+  const certificateCounts = [
+    tlsSecretCount,
+    observedExpiryCount,
+    expiringCount,
+    expiredCount,
+  ];
+  if (
+    (certificateUnavailable && (
+      certificateCounts.some((count) => count !== null) ||
+      certificateItems.length > 0 ||
+      earliestExpiry !== null ||
+      wire.certificate_expiry.has_more
+    )) ||
+    (!certificateUnavailable && certificateCounts.some((count) => count === null)) ||
+    (tlsSecretCount !== null && observedExpiryCount !== null &&
+      observedExpiryCount > tlsSecretCount) ||
+    (observedExpiryCount !== null && expiringCount !== null && expiredCount !== null &&
+      expiringCount + expiredCount > observedExpiryCount) ||
+    (!certificateUnavailable && (observedExpiryCount === 0 || earliestExpiry === null)) ||
+    wire.certificate_expiry.has_more !== (
+      observedExpiryCount !== null && observedExpiryCount > certificateItems.length
+    )
+  ) {
+    invalidResponse();
+  }
+  const warningBeforeSeconds = nonNegativeInteger(
+    wire.certificate_expiry.warning_before_seconds,
+  );
+  if (warningBeforeSeconds < 1 || warningBeforeSeconds > 315_360_000) invalidResponse();
+  const refreshAfterSeconds = nonNegativeInteger(wire.refresh_after_seconds);
+  if (refreshAfterSeconds < 1 || refreshAfterSeconds > 3600) invalidResponse();
+  return {
+    clusterId,
+    customResources: {
+      coverage: customCoverage,
+      items: customItems,
+      totalKinds,
+      totalResources,
+      hasMore: wire.custom_resources.has_more,
+    },
+    helm: {
+      coverage: helmCoverage,
+      releaseCount,
+      statusCounts,
+    },
+    certificateExpiry: {
+      coverage: certificateCoverage,
+      items: certificateItems,
+      tlsSecretCount,
+      observedExpiryCount,
+      expiringCount,
+      expiredCount,
+      earliestExpiry,
+      warningBeforeSeconds,
+      hasMore: wire.certificate_expiry.has_more,
+    },
+    refreshAfterSeconds,
+  };
+}
+
+function toInsightCoverage(wire: HomeEndpointInsightCoverage) {
+  if (wire.availability !== "available" && wire.reason_codes.length === 0) invalidResponse();
+  const reasonCodes = wire.reason_codes.map(canonicalIdentity);
+  assertUnique(reasonCodes);
+  return {
+    availability: wire.availability,
+    observedAt: canonicalTimestamp(wire.observed_at),
+    reasonCodes,
+  };
+}
+
+function toInsightResourceRef(wire: HomeEndpointResourceRef): HomeCertificateResourceRef {
+  if (wire.api_group !== wire.api_group.trim()) invalidResponse();
+  return {
+    apiGroup: wire.api_group,
+    version: canonicalIdentity(wire.version),
+    kind: canonicalIdentity(wire.kind),
+    namespace: canonicalOptionalIdentity(wire.namespace),
+    name: canonicalIdentity(wire.name),
+    uid: canonicalIdentity(wire.uid),
+  };
+}
+
 export function toNodeCollection(
   requestedClusterId: string,
   wire: HomeEndpointNodeCollection,
@@ -150,6 +327,7 @@ function toNode(clusterId: string, wire: HomeEndpointNode): HomeNodeSummary {
     id: ephemeralId("node", clusterId, name),
     identityStability: "ephemeral",
     name,
+    kubernetesVersion: canonicalOptionalIdentity(wire.kubernetes_version),
     ready: wire.ready,
     health: healthTone(wire.health),
     podsRunning,

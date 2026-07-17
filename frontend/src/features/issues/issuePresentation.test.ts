@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { IssueSummary } from "./issuesContract";
-import { issueEvidenceCount } from "./issuePresentation";
+import {
+  issueEvidenceCount,
+  issueSeverityTone,
+  sortIssuesForQueue,
+} from "./issuePresentation";
 
 const ISSUE = {
   id: "issue:workspace-1/correlation-1",
@@ -44,5 +48,20 @@ describe("issueEvidenceCount", () => {
       supportingEvidence: [],
       evidenceRef: null,
     })).toBeNull();
+  });
+});
+
+describe("issue severity presentation", () => {
+  it("uses only the typed server tier and keeps equal-tier server order", () => {
+    const warning = { ...ISSUE, id: "warning", severity: "warning" as const };
+    const criticalFirst = { ...ISSUE, id: "critical-a", severity: "critical" as const };
+    const criticalSecond = { ...ISSUE, id: "critical-b", severity: "critical" as const };
+    const unavailable = { ...ISSUE, id: "unavailable", severity: null };
+
+    expect(sortIssuesForQueue([warning, criticalFirst, unavailable, criticalSecond]).map(({ id }) => id))
+      .toEqual(["critical-a", "critical-b", "warning", "unavailable"]);
+    expect(issueSeverityTone("critical")).toBe("critical");
+    expect(issueSeverityTone("warning")).toBe("warning");
+    expect(issueSeverityTone(null)).toBeNull();
   });
 });

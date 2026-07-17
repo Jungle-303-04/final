@@ -7,13 +7,16 @@ export {
   MAX_AI_MESSAGE_LENGTH,
   type AiConversationContext,
   type AiConversationCreateInput,
+  type AiConversationPageInput,
   type AiMessageInput,
 } from "../ai-conversations";
 export {
   aiConversationAcceptedSchema,
+  BOUNDED_AI_MESSAGE_HISTORY_REASON,
   aiConversationDetailSchema,
   aiConversationListSchema,
   aiConversationSummarySchema,
+  MAX_AI_CONVERSATION_PAGE_LIMIT,
   type AiConversationAccepted,
   type AiConversationDetail,
   type AiConversationList,

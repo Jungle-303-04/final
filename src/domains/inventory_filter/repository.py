@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
 from domains.identity.models import ClusterRegistration
+from domains.inventory.change_correlation import INVENTORY_CHANGE_LEDGER_EPOCH
 from domains.inventory.models import ClusterInventoryResourceRecord, ClusterUsageSampleRecord
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
@@ -34,6 +35,28 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 PROJECTION_WRITE_CHUNK = 500
 UNKNOWN_PROVIDER = "unknown"
 KNOWN_PROVIDERS = frozenset({"eks", "gke", "aks", "onprem", "kind", UNKNOWN_PROVIDER})
+PHYSICAL_TOPOLOGY_PODS_PER_SERVER = 12
+RESOURCE_SEARCH_TEXT_VERSION = 2
+
+
+@dataclass(frozen=True)
+class InventoryFilterProjectionMutation:
+    """Exact revision and version identities created or retained by one snapshot."""
+
+    revision_id: int
+    version_ids_by_inventory_key: Mapping[str, int]
+
+    def __post_init__(self) -> None:
+        if self.revision_id < 1:
+            raise ValueError("inventory filter revision must be positive")
+        normalized = {
+            str(key): int(value)
+            for key, value in self.version_ids_by_inventory_key.items()
+            if str(key) and int(value) > 0
+        }
+        if len(normalized) != len(self.version_ids_by_inventory_key):
+            raise ValueError("inventory filter version correlation is invalid")
+        object.__setattr__(self, "version_ids_by_inventory_key", normalized)
 
 
 def inventory_snapshot_lock_key(workspace_id: str, cluster_id: str) -> int:
@@ -56,7 +79,7 @@ def sync_inventory_filter_projection(
     labels_complete: bool,
     resources_complete: bool,
     partial_reason_codes: Sequence[str],
-) -> int:
+) -> InventoryFilterProjectionMutation:
     """Advance one cluster's immutable filter revision in the snapshot transaction."""
     revision_table = InventoryFilterRevision.__table__
     version_table = InventoryResourceVersion.__table__
@@ -81,6 +104,7 @@ def sync_inventory_filter_projection(
                 labels_complete=labels_complete,
                 resources_complete=resources_complete,
                 application_bindings_complete=False,
+                change_ledger_epoch=INVENTORY_CHANGE_LEDGER_EPOCH,
                 partial_reason_codes=sorted(set(partial_reason_codes)),
             )
             .returning(revision_table.c.revision_id)
@@ -134,6 +158,9 @@ def sync_inventory_filter_projection(
     desired_applications: dict[str, tuple[str, ...]] = {}
     current_keys: set[str] = set()
     close_ids: set[int] = set()
+    version_ids_by_inventory_key = {
+        inventory_key: int(row["version_id"]) for inventory_key, row in active_rows.items()
+    }
 
     for resource in current_rows:
         inventory_key = str(resource["inventory_key"])
@@ -186,6 +213,7 @@ def sync_inventory_filter_projection(
         application_rows: list[JsonObject] = []
         for version_id, inventory_key_value in inserted:
             inventory_key = str(inventory_key_value)
+            version_ids_by_inventory_key[inventory_key] = int(version_id)
             for key, value in desired_labels[inventory_key].items():
                 label_rows.append(
                     {
@@ -210,7 +238,10 @@ def sync_inventory_filter_projection(
             conn.execute(pg_insert(label_table).values(label_rows))
         if application_rows:
             conn.execute(pg_insert(application_table).values(application_rows))
-    return revision_id
+    return InventoryFilterProjectionMutation(
+        revision_id=revision_id,
+        version_ids_by_inventory_key=version_ids_by_inventory_key,
+    )
 
 
 def _application_ids_by_resource_identity(
@@ -344,6 +375,23 @@ def _normalized_labels(value: object) -> dict[str, str]:
     }
 
 
+def _resource_search_matched_fields(
+    row: Mapping[str, Any],
+    query: str,
+) -> list[str]:
+    candidates = (
+        ("name", row.get("name")),
+        ("kind", row.get("kind")),
+        ("namespace", row.get("namespace")),
+        ("api_version", row.get("api_version")),
+        ("resource_type", row.get("resource_type")),
+        ("uid", row.get("uid")),
+    )
+    return [
+        field for field, value in candidates if value is not None and query in str(value).casefold()
+    ]
+
+
 def _version_row(
     resource: Mapping[str, Any],
     *,
@@ -368,6 +416,7 @@ def _version_row(
         "summary": dict(resource.get("summary") or {}),
         "application_ids": application_ids,
         "application_binding_complete": application_binding_complete,
+        "search_text_version": RESOURCE_SEARCH_TEXT_VERSION,
     }
     encoded = json.dumps(
         meaningful,
@@ -382,6 +431,8 @@ def _version_row(
         str(resource.get("kind") or ""),
         str(namespace or ""),
         str(resource.get("resource_type") or ""),
+        str(resource.get("api_version") or ""),
+        str(resource.get("uid") or ""),
     )
     return {
         "inventory_key": str(resource["inventory_key"]),
@@ -530,36 +581,7 @@ class InventoryFilterRepository(DatabaseConnection):
             cluster_ids,
             at_revision=at_revision,
         )
-        reasons = {
-            str(reason)
-            for context in contexts.values()
-            for reason in (context.get("partial_reason_codes") or [])
-        }
-        observed = max(
-            (
-                context.get("observed_at")
-                for context in contexts.values()
-                if context.get("observed_at")
-            ),
-            default=None,
-        )
-        return {
-            "snapshot_revision": max(
-                (int(context.get("snapshot_revision") or 0) for context in contexts.values()),
-                default=0,
-            ),
-            "observed_at": iso_or_none(observed),
-            "labels_complete": all(
-                bool(context.get("labels_complete")) for context in contexts.values()
-            ),
-            "resources_complete": all(
-                bool(context.get("resources_complete")) for context in contexts.values()
-            ),
-            "application_bindings_complete": all(
-                bool(context.get("application_bindings_complete")) for context in contexts.values()
-            ),
-            "partial_reason_codes": sorted(reasons),
-        }
+        return aggregate_snapshot_contexts(contexts, cluster_ids)
 
     def filter_snapshot_contexts(
         self,
@@ -732,6 +754,73 @@ class InventoryFilterRepository(DatabaseConnection):
                 else None
             ),
         }
+
+    def list_authorized_namespace_catalog(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        snapshot_revision: int,
+        limit: int,
+    ) -> JsonObject:
+        """Return a bounded catalog plus an exact total for one authorized cluster."""
+        if not workspace_id or not cluster_id or snapshot_revision <= 0:
+            return {"items": [], "total": 0, "complete": True}
+        effective_limit = max(1, min(limit, 1000))
+        current = _current_versions(
+            workspace_id,
+            (cluster_id,),
+            snapshot_revision,
+            include_deleted=False,
+        )
+        namespaces = (
+            select(current.c.namespace)
+            .where(current.c.rank == 1, current.c.namespace.is_not(None))
+            .distinct()
+            .cte("authorized_namespace_catalog")
+        )
+        statement = (
+            select(namespaces.c.namespace)
+            .order_by(namespaces.c.namespace)
+            .limit(effective_limit + 1)
+        )
+        with self.connection() as conn:
+            rows = [str(value) for value in conn.execute(statement).scalars().all()]
+            total = int(conn.execute(select(func.count()).select_from(namespaces)).scalar_one())
+        return {
+            "items": rows[:effective_limit],
+            "total": total,
+            "complete": len(rows) <= effective_limit,
+        }
+
+    def resolve_authorized_namespaces(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        snapshot_revision: int,
+        namespaces: Collection[str],
+    ) -> set[str]:
+        """Resolve requested namespaces against the current authorized inventory snapshot."""
+        requested = tuple(sorted({value for value in namespaces if value}))
+        if not workspace_id or not cluster_id or snapshot_revision <= 0 or not requested:
+            return set()
+        current = _current_versions(
+            workspace_id,
+            (cluster_id,),
+            snapshot_revision,
+            include_deleted=False,
+        )
+        statement = (
+            select(current.c.namespace)
+            .where(
+                current.c.rank == 1,
+                current.c.namespace.in_(requested),
+            )
+            .distinct()
+        )
+        with self.connection() as conn:
+            return {str(value) for value in conn.execute(statement).scalars().all()}
 
     def list_global_filter_facets(
         self,
@@ -976,6 +1065,149 @@ class InventoryFilterRepository(DatabaseConnection):
                 for row in labels
             ],
             "resources": _serialize_global_facets(resources),
+        }
+
+    def list_home_custom_resource_counts(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        snapshot_revision: int,
+        limit: int,
+    ) -> JsonObject:
+        """Count observed custom resource kinds at one exact inventory revision."""
+
+        if not workspace_id or not cluster_id or snapshot_revision <= 0:
+            return {"items": [], "total_kinds": 0, "total_resources": 0}
+        effective_limit = max(1, min(limit, 20))
+        current = _current_versions(
+            workspace_id,
+            (cluster_id,),
+            snapshot_revision,
+            include_deleted=False,
+        )
+        grouped = (
+            select(
+                current.c.api_version,
+                current.c.kind,
+                func.count(func.distinct(current.c.version_id)).label("count"),
+            )
+            .where(
+                current.c.rank == 1,
+                current.c.resource_type == "custom_resource",
+            )
+            .group_by(current.c.api_version, current.c.kind)
+            .cte("home_custom_resource_counts")
+        )
+        statement = (
+            select(
+                grouped.c.api_version,
+                grouped.c.kind,
+                grouped.c.count,
+                func.count().over().label("total_kinds"),
+                func.sum(grouped.c.count).over().label("total_resources"),
+            )
+            .order_by(grouped.c.count.desc(), grouped.c.api_version, grouped.c.kind)
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+        return {
+            "items": [
+                {
+                    "api_version": str(row["api_version"]),
+                    "kind": str(row["kind"]),
+                    "count": int(row["count"]),
+                }
+                for row in rows
+            ],
+            "total_kinds": int(rows[0]["total_kinds"]) if rows else 0,
+            "total_resources": int(rows[0]["total_resources"]) if rows else 0,
+        }
+
+    def search_resource_identities(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+        query: str,
+        limit: int,
+    ) -> JsonObject:
+        """Search exact Kubernetes identities without client-side resource fan-out."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        normalized_query = query.strip().casefold()
+        if not workspace_id or not cluster_ids or snapshot_revision <= 0 or not normalized_query:
+            return {"items": [], "total": 0}
+        effective_limit = max(1, min(limit, 50))
+        current = _current_versions(
+            workspace_id,
+            cluster_ids,
+            snapshot_revision,
+            include_deleted=False,
+        )
+        base = (
+            select(current)
+            .where(
+                current.c.rank == 1,
+                current.c.uid.is_not(None),
+                current.c.uid != "",
+            )
+            .cte("resource_identity_search_base")
+        )
+        selected = _apply_resource_filters(
+            base,
+            filters=replace(filters, query=None, include_deleted=False),
+            allowed_application_ids=application_ids,
+        ).cte("resource_identity_search_scope")
+        pattern = f"%{_escape_like(normalized_query)}%"
+        matches = (
+            select(selected)
+            .where(selected.c.search_text.like(pattern, escape="\\"))
+            .cte("resource_identity_search_matches")
+        )
+        statement = (
+            select(
+                matches.c.inventory_key.label("id"),
+                matches.c.cluster_id,
+                matches.c.api_version,
+                matches.c.kind,
+                matches.c.namespace,
+                matches.c.name,
+                matches.c.uid,
+                matches.c.resource_type,
+                matches.c.observed_at,
+            )
+            .order_by(
+                case(
+                    (func.lower(matches.c.name) == normalized_query, 0),
+                    (func.lower(matches.c.name).like(f"{_escape_like(normalized_query)}%"), 1),
+                    else_=2,
+                ),
+                matches.c.name,
+                matches.c.kind,
+                matches.c.inventory_key,
+            )
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+            total = int(conn.execute(select(func.count()).select_from(matches)).scalar_one())
+        return {
+            "items": [
+                {
+                    **row,
+                    "matched_fields": _resource_search_matched_fields(
+                        row,
+                        normalized_query,
+                    ),
+                }
+                for row in rows
+            ],
+            "total": total,
         }
 
     def list_filtered_resources(
@@ -1412,6 +1644,23 @@ def _current_versions(
     )
 
 
+def current_inventory_versions(
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    snapshot_revision: int,
+    *,
+    include_deleted: bool,
+) -> Any:
+    """Public reusable temporal selector for bounded domain-specific projections."""
+
+    return _current_versions(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=include_deleted,
+    )
+
+
 def _apply_resource_filters(
     table: Any,
     *,
@@ -1633,6 +1882,7 @@ def _resource_metric_history_statements(
             filtered.c.resource_type,
             filtered.c.namespace,
             filtered.c.name,
+            filtered.c.uid,
         )
         .where(
             filtered.c.inventory_key.in_(resource_ids),
@@ -1871,6 +2121,48 @@ def _snapshot_context_by_cluster(row: Mapping[str, Any] | None) -> JsonObject:
         "partial_reason_codes": sorted(
             {str(reason) for reason in (row.get("partial_reason_codes") or [])}
         ),
+    }
+
+
+def aggregate_snapshot_contexts(
+    contexts: Mapping[str, Mapping[str, Any]],
+    cluster_ids: Collection[str],
+) -> JsonObject:
+    """Aggregate already-loaded cluster contexts without another database round trip."""
+    selected = [
+        contexts.get(cluster_id, _snapshot_context_by_cluster(None))
+        for cluster_id in _ids(cluster_ids)
+    ]
+    if not selected:
+        return {
+            "snapshot_revision": 0,
+            "observed_at": None,
+            "labels_complete": True,
+            "resources_complete": True,
+            "application_bindings_complete": True,
+            "partial_reason_codes": [],
+        }
+    reasons = {
+        str(reason)
+        for context in selected
+        for reason in (context.get("partial_reason_codes") or [])
+    }
+    observed = max(
+        (context.get("observed_at") for context in selected if context.get("observed_at")),
+        default=None,
+    )
+    return {
+        "snapshot_revision": max(
+            (int(context.get("snapshot_revision") or 0) for context in selected),
+            default=0,
+        ),
+        "observed_at": iso_or_none(observed),
+        "labels_complete": all(bool(context.get("labels_complete")) for context in selected),
+        "resources_complete": all(bool(context.get("resources_complete")) for context in selected),
+        "application_bindings_complete": all(
+            bool(context.get("application_bindings_complete")) for context in selected
+        ),
+        "partial_reason_codes": sorted(reasons),
     }
 
 

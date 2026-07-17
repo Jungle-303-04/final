@@ -75,7 +75,11 @@ describe("bottom dock reducer", () => {
       batches: [{
         id: "pod:checkout",
         events: [
-          { type: "connected", streamId: "stream-1" },
+          {
+            type: "connected",
+            streamId: "stream-1",
+            containers: ["app", "sidecar"],
+          },
           line("line-1"),
           line("line-2"),
           line("line-1"),
@@ -84,6 +88,7 @@ describe("bottom dock reducer", () => {
     });
 
     expect(state.tabs[0]?.status).toBe("streaming");
+    expect(state.tabs[0]?.containers).toEqual(["app", "sidecar"]);
     expect(state.tabs[0]?.lines.map((entry) => entry.id)).toEqual(["line-1", "line-2"]);
     expect(state.tabs[0]?.received).toBe(2);
 
@@ -174,7 +179,7 @@ describe("bottom dock reducer", () => {
     state = bottomDockReducer(state, {
       type: "event",
       id: "two",
-      event: { type: "end", reason: "complete" },
+      event: { type: "end", reason: "complete", diagnostic: null },
     });
     expect(state.tabs[1]).toMatchObject({
       status: "ended",

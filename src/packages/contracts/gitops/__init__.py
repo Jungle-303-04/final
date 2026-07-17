@@ -146,6 +146,12 @@ class KubernetesResourceContract:
 
 
 SUPPORTED_KUBERNETES_RESOURCES: dict[tuple[str, str], KubernetesResourceContract] = {
+    ("v1", "Pod"): KubernetesResourceContract(
+        api_version="v1",
+        kind="Pod",
+        api_prefix="/api/v1",
+        plural="pods",
+    ),
     ("apps/v1", "Deployment"): KubernetesResourceContract(
         api_version="apps/v1",
         kind="Deployment",
@@ -163,6 +169,66 @@ SUPPORTED_KUBERNETES_RESOURCES: dict[tuple[str, str], KubernetesResourceContract
         kind="ConfigMap",
         api_prefix="/api/v1",
         plural="configmaps",
+    ),
+    ("v1", "ServiceAccount"): KubernetesResourceContract(
+        api_version="v1",
+        kind="ServiceAccount",
+        api_prefix="/api/v1",
+        plural="serviceaccounts",
+    ),
+    ("v1", "PersistentVolumeClaim"): KubernetesResourceContract(
+        api_version="v1",
+        kind="PersistentVolumeClaim",
+        api_prefix="/api/v1",
+        plural="persistentvolumeclaims",
+    ),
+    ("apps/v1", "StatefulSet"): KubernetesResourceContract(
+        api_version="apps/v1",
+        kind="StatefulSet",
+        api_prefix="/apis/apps/v1",
+        plural="statefulsets",
+    ),
+    ("apps/v1", "DaemonSet"): KubernetesResourceContract(
+        api_version="apps/v1",
+        kind="DaemonSet",
+        api_prefix="/apis/apps/v1",
+        plural="daemonsets",
+    ),
+    ("batch/v1", "Job"): KubernetesResourceContract(
+        api_version="batch/v1",
+        kind="Job",
+        api_prefix="/apis/batch/v1",
+        plural="jobs",
+    ),
+    ("batch/v1", "CronJob"): KubernetesResourceContract(
+        api_version="batch/v1",
+        kind="CronJob",
+        api_prefix="/apis/batch/v1",
+        plural="cronjobs",
+    ),
+    ("autoscaling/v2", "HorizontalPodAutoscaler"): KubernetesResourceContract(
+        api_version="autoscaling/v2",
+        kind="HorizontalPodAutoscaler",
+        api_prefix="/apis/autoscaling/v2",
+        plural="horizontalpodautoscalers",
+    ),
+    ("networking.k8s.io/v1", "Ingress"): KubernetesResourceContract(
+        api_version="networking.k8s.io/v1",
+        kind="Ingress",
+        api_prefix="/apis/networking.k8s.io/v1",
+        plural="ingresses",
+    ),
+    ("networking.k8s.io/v1", "NetworkPolicy"): KubernetesResourceContract(
+        api_version="networking.k8s.io/v1",
+        kind="NetworkPolicy",
+        api_prefix="/apis/networking.k8s.io/v1",
+        plural="networkpolicies",
+    ),
+    ("policy/v1", "PodDisruptionBudget"): KubernetesResourceContract(
+        api_version="policy/v1",
+        kind="PodDisruptionBudget",
+        api_prefix="/apis/policy/v1",
+        plural="poddisruptionbudgets",
     ),
 }
 

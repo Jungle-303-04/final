@@ -48,7 +48,34 @@ describe("LogStreamTab", () => {
 
     expect(screen.getByText("스트림 종료: window_complete")).toBeTruthy();
     expect(screen.getByText("파드 1개: checkout")).toBeTruthy();
+    expect(screen.getByText("컨테이너 2개: app, sidecar")).toBeTruthy();
     expect(screen.getByText("request complete")).toBeTruthy();
+  });
+
+  it("renders a server diagnostic as a copy-only recovery action", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderTab(tab({
+      status: "ended",
+      endReason: "no_pods",
+      lines: [],
+      diagnostic: {
+        code: "no_matching_pods",
+        recovery: {
+          kind: "copy-command",
+          command: "kubectl get deployment checkout --namespace shop",
+          clusterId: "cluster-1",
+          readOnly: true,
+        },
+      },
+    }));
+
+    expect(screen.getByText("이 대상과 일치하는 Pod가 관측되지 않았습니다.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "읽기 전용 진단 명령 복사" }));
+    expect(writeText).toHaveBeenCalledWith("kubectl get deployment checkout --namespace shop");
   });
 });
 
@@ -79,7 +106,9 @@ function tab(overrides: Partial<BottomDockTab>): BottomDockTab {
     dropped: 0,
     unseen: 0,
     pods: ["checkout"],
+    containers: ["app", "sidecar"],
     endReason: null,
+    diagnostic: null,
     failureCode: null,
     retryable: false,
     ...overrides,

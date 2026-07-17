@@ -177,6 +177,16 @@ export const APPLICATION_DETAIL: ApplicationDetailModel = {
 
 export function applicationsPort(overrides: Partial<ApplicationsPort> = {}): ApplicationsPort {
   return {
+    loadApplicationsRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 60,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     listApplications: vi.fn().mockResolvedValue([APPLICATION_CARD]),
     getApplication: vi.fn().mockResolvedValue(APPLICATION_DETAIL),
     listDeployments: vi.fn().mockResolvedValue([{

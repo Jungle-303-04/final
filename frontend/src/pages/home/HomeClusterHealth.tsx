@@ -1,7 +1,8 @@
-import { Boxes, Cpu, MemoryStick } from "lucide-react";
+import { Boxes, Cpu, MemoryStick, ServerCog, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
   HomeClusterChoice,
+  HomeNodeCollection,
   HomeClusterOverview,
 } from "../../features/home/homeContract";
 import { ClusterProviderIcon } from "../../features/cluster-scope/ClusterProviderIcon";
@@ -24,10 +25,14 @@ const HEALTH_META_CLASS_NAME =
 
 export function HomeClusterHealth({
   cluster,
+  links,
+  nodes,
   overview,
   onRefresh,
 }: {
   cluster: HomeClusterChoice | null;
+  links: HomeClusterHealthLinks;
+  nodes: HomeResourceState<HomeNodeCollection>;
   overview: HomeResourceState<HomeClusterOverview>;
   onRefresh: () => void;
 }) {
@@ -71,22 +76,47 @@ export function HomeClusterHealth({
             label={t("home.section.clusterSummary")}
             onRetry={onRefresh}
           />
-          <HealthContent cluster={cluster} overview={overview.data} />
+          <HealthContent
+            cluster={cluster}
+            links={links}
+            nodes={nodes}
+            overview={overview.data}
+          />
         </>
       )}
     </Surface>
   );
 }
 
+export interface HomeClusterHealthLinks {
+  incidents: string;
+  nodes: string;
+  pods: string;
+  restarts: string;
+  warnings: string;
+  workloads: string;
+}
+
 function HealthContent({
   cluster,
+  links,
+  nodes,
   overview,
 }: {
   cluster: HomeClusterChoice | null;
+  links: HomeClusterHealthLinks;
+  nodes: HomeResourceState<HomeNodeCollection>;
   overview: HomeClusterOverview;
 }) {
   const { formatNumber, t } = useI18n();
   const usage = overview.usage;
+  const kubernetesVersions = nodes.phase === "ready"
+    ? Array.from(new Set(
+      nodes.data.nodes
+        .map((node) => node.kubernetesVersion)
+        .filter((version): version is string => version !== null),
+    )).sort((left, right) => left.localeCompare(right))
+    : [];
   return (
     <div
       className={HEALTH_BODY_CLASS_NAME}
@@ -96,46 +126,54 @@ function HealthContent({
         className={HEALTH_METRICS_CLASS_NAME}
         data-slot="home-cluster-health-metrics"
       >
-        <Metric
-          label={t("home.metric.pods")}
-          unavailableLabel={t("common.value.unavailable")}
-          value={usage
-            ? t("home.metric.podValue", {
-              running: formatNumber(usage.podsRunning),
-              total: formatNumber(usage.podsTotal),
-            })
-            : cluster?.podCount == null
+        <MetricLink href={links.pods}>
+          <Metric
+            label={t("home.metric.pods")}
+            unavailableLabel={t("common.value.unavailable")}
+            value={usage
+              ? t("home.metric.podValue", {
+                running: formatNumber(usage.podsRunning),
+                total: formatNumber(usage.podsTotal),
+              })
+              : cluster?.podCount == null
+                ? null
+                : formatNumber(cluster.podCount)}
+          />
+        </MetricLink>
+        <MetricLink href={links.nodes}>
+          <Metric
+            label={t("home.metric.nodes")}
+            unavailableLabel={t("common.value.unavailable")}
+            value={usage
+              ? t("home.metric.nodeValue", {
+                ready: formatNumber(usage.nodesReady),
+                total: formatNumber(usage.nodesTotal),
+              })
+              : cluster?.nodeCount == null
+                ? null
+                : formatNumber(cluster.nodeCount)}
+          />
+        </MetricLink>
+        <MetricLink href={links.restarts}>
+          <Metric
+            label={t("home.metric.recentRestarts")}
+            unavailableLabel={t("common.value.unavailable")}
+            value={usage === null ? null : formatNumber(usage.restartCount)}
+          />
+        </MetricLink>
+        <MetricLink href={links.incidents}>
+          <Metric
+            label={t("home.metric.activeIncidents")}
+            note={t("home.metric.displayedWarnings", {
+              warnings: formatNumber(overview.warnings.length),
+            })}
+            tone={(cluster?.incidentCount ?? 0) > 0 ? "critical" : "neutral"}
+            unavailableLabel={t("common.value.unavailable")}
+            value={cluster?.incidentCount == null
               ? null
-              : formatNumber(cluster.podCount)}
-        />
-        <Metric
-          label={t("home.metric.nodes")}
-          unavailableLabel={t("common.value.unavailable")}
-          value={usage
-            ? t("home.metric.nodeValue", {
-              ready: formatNumber(usage.nodesReady),
-              total: formatNumber(usage.nodesTotal),
-            })
-            : cluster?.nodeCount == null
-              ? null
-              : formatNumber(cluster.nodeCount)}
-        />
-        <Metric
-          label={t("home.metric.recentRestarts")}
-          unavailableLabel={t("common.value.unavailable")}
-          value={usage === null ? null : formatNumber(usage.restartCount)}
-        />
-        <Metric
-          label={t("home.metric.activeIncidents")}
-          note={t("home.metric.displayedWarnings", {
-            warnings: formatNumber(overview.warnings.length),
-          })}
-          tone={(cluster?.incidentCount ?? 0) > 0 ? "critical" : "neutral"}
-          unavailableLabel={t("common.value.unavailable")}
-          value={cluster?.incidentCount == null
-            ? null
-            : formatNumber(cluster.incidentCount)}
-        />
+              : formatNumber(cluster.incidentCount)}
+          />
+        </MetricLink>
       </div>
       <div className={HEALTH_USAGE_CLASS_NAME} data-slot="home-cluster-health-usage">
         <UsageProgress
@@ -150,12 +188,42 @@ function HealthContent({
         />
       </div>
       <div className={HEALTH_META_CLASS_NAME} data-slot="home-cluster-health-meta">
-        <span className="inline-flex items-center gap-1.5">
+        <a className="inline-flex items-center gap-1.5 hover:text-foreground" href={links.workloads}>
           <Boxes aria-hidden="true" className="size-3.5" />
           {t("home.metric.workloads", { count: formatNumber(overview.workloads.length) })}
+        </a>
+        <a className="inline-flex items-center gap-1.5 hover:text-foreground" href={links.warnings}>
+          <TriangleAlert aria-hidden="true" className="size-3.5" />
+          {t("home.metric.displayedWarnings", {
+            warnings: formatNumber(overview.warnings.length),
+          })}
+        </a>
+        <span
+          className="inline-flex min-w-0 items-center gap-1.5"
+          title={kubernetesVersions.join(", ") || undefined}
+        >
+          <ServerCog aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="truncate">
+            {kubernetesVersions.length === 0
+              ? t("home.metric.kubernetesVersionsUnavailable")
+              : t("home.metric.kubernetesVersions", {
+                versions: kubernetesVersions.join(", "),
+              })}
+          </span>
         </span>
       </div>
     </div>
+  );
+}
+
+function MetricLink({ children, href }: { children: ReactNode; href: string }) {
+  return (
+    <a
+      className="min-w-0 rounded-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      href={href}
+    >
+      {children}
+    </a>
   );
 }
 

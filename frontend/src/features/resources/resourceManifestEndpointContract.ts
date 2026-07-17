@@ -1,4 +1,5 @@
 import type { ResourceManifestEditInput } from "./resourceManifestContract";
+import type { ResourceActionStatus } from "./resourceCapabilitiesContract";
 
 export interface ResourceManifestSourceChoiceEndpoint {
   application_id: string;
@@ -29,6 +30,40 @@ export interface ResourceManifestPreviewEndpoint {
   diff: string;
   errors: string[];
   warnings: string[];
+  apply_availability: "available" | "unavailable";
+  apply_reason_codes: string[];
+  impact: Array<{
+    api_version: string;
+    kind: string;
+    namespace: string | null;
+    name: string;
+    selected: boolean;
+  }>;
+}
+
+export interface ResourceManifestApplyEndpoint {
+  accepted: true;
+  event_id: string;
+  audit_event_id: string;
+  correlation_id: string;
+  command_id: string;
+  status: ResourceActionStatus;
+}
+
+export interface ResourceManifestCreateCapabilityEndpoint {
+  cluster_id: string;
+  namespace: string;
+  snapshot_id: string | null;
+  available: boolean;
+  reason_codes: string[];
+  max_documents: number;
+  max_bytes: number;
+  resources: Array<{
+    api_version: string;
+    kind: string;
+    resource: string;
+    force_supported: boolean;
+  }>;
 }
 
 export interface ResourceManifestApproveEndpoint {
@@ -56,4 +91,44 @@ export interface ResourceManifestEndpointDependencies {
     input: ResourceManifestEditInput & { confirmed: true; reason: string },
     signal?: AbortSignal,
   ): Promise<ResourceManifestApproveEndpoint>;
+  applyResourceManifestNow(
+    resourceId: string,
+    input: ResourceManifestEditInput & {
+      expectedDesiredSha256: string;
+      confirmation: true;
+      reason: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestApplyEndpoint>;
+  getResourceManifestCreateCapability(
+    clusterId: string,
+    namespace: string,
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestCreateCapabilityEndpoint>;
+  dryRunResourceManifestCreate(
+    input: {
+      clusterId: string;
+      namespace: string;
+      snapshotId: string;
+      editedYaml: string;
+      force: boolean;
+      reason: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestApplyEndpoint>;
+  createResourceManifest(
+    input: {
+      clusterId: string;
+      namespace: string;
+      snapshotId: string;
+      editedYaml: string;
+      desiredSha256: string;
+      dryRunCommandId: string;
+      confirmation: true;
+      force: boolean;
+      forceConfirmation: boolean;
+      reason: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestApplyEndpoint>;
 }

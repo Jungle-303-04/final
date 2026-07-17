@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from sqlalchemy.exc import OperationalError
 
 from domains.target.events import AgentConnectedBody
@@ -14,6 +17,7 @@ from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.events.bus import NATS_MSG_ID_HEADER, NatsEventBus, consumer_config
 from packages.events.envelope import event
+from packages.runtime import async_db
 from packages.runtime.gateway import ApiEventGateway
 
 
@@ -53,6 +57,93 @@ class DurableRecorder(MemoryRecorder):
 
     def stage_events(self, _conn: Any, events: list[EventEnvelope]) -> None:
         self.staged.extend(events)
+
+
+class ThreadBoundTransactionalRecorder(DurableRecorder):
+    def __init__(self) -> None:
+        super().__init__()
+        self._active: ContextVar[bool] = ContextVar("test_gateway_uow_active", default=False)
+        self.connection = object()
+        self.thread_ids: list[int] = []
+
+    @property
+    def active(self) -> bool:
+        return self._active.get()
+
+    @contextmanager
+    def unit_of_work(self):
+        if self.active:
+            yield self.connection
+            return
+        events_before = list(self.events)
+        staged_before = list(self.staged)
+        token = self._active.set(True)
+        try:
+            yield self.connection
+        except Exception:
+            self.events = events_before
+            self.staged = staged_before
+            raise
+        finally:
+            self._active.reset(token)
+
+    def record_event(self, evt: EventEnvelope) -> None:
+        self.thread_ids.append(threading.get_ident())
+        super().record_event(evt)
+
+    def stage_events(self, conn: Any, events: list[EventEnvelope]) -> None:
+        assert conn is self.connection
+        self.thread_ids.append(threading.get_ident())
+        super().stage_events(conn, events)
+
+
+def test_api_event_gateway_keeps_active_uow_connection_on_caller_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = ThreadBoundTransactionalRecorder()
+    gateway = ApiEventGateway(MemoryPublisher(), recorder, "api-gateway")
+    caller_thread = threading.get_ident()
+    transaction_threads: list[int] = []
+    monkeypatch.setattr(async_db, "has_active_connection", lambda: recorder.active)
+
+    with recorder.unit_of_work():
+        accepted = asyncio.run(
+            gateway.accept_body(
+                AgentConnectedBody(cluster_id="c1", agent_id="a1"),
+                transactional_stage=lambda _conn, _evt: transaction_threads.append(
+                    threading.get_ident()
+                ),
+            )
+        )
+
+    assert recorder.events == [accepted.event]
+    assert recorder.staged == [accepted.event]
+    assert recorder.thread_ids == [caller_thread, caller_thread]
+    assert transaction_threads == [caller_thread]
+
+
+def test_api_event_gateway_rolls_back_record_and_outbox_when_transactional_stage_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = ThreadBoundTransactionalRecorder()
+    gateway = ApiEventGateway(MemoryPublisher(), recorder, "api-gateway")
+    monkeypatch.setattr(async_db, "has_active_connection", lambda: recorder.active)
+
+    def fail_stage(_conn: Any, _evt: EventEnvelope) -> None:
+        raise RuntimeError("transactional stage failed")
+
+    with pytest.raises(RuntimeError, match="transactional stage failed"):
+        with recorder.unit_of_work():
+            asyncio.run(
+                gateway.accept_body(
+                    AgentConnectedBody(cluster_id="c1", agent_id="a1"),
+                    transactional_stage=fail_stage,
+                )
+            )
+
+    assert recorder.events == []
+    assert recorder.staged == []
+    assert recorder.active is False
 
 
 def test_api_event_gateway_stages_lifecycle_hook_in_the_same_outbox_unit_of_work() -> None:

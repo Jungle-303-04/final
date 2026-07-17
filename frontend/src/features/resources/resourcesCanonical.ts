@@ -1,5 +1,6 @@
 import type {
   ResourceCatalog,
+  ResourceApiDiscovery,
   ResourceDataQualityWarning,
   ResourceDetail,
   ResourceHealthCounts,
@@ -9,6 +10,7 @@ import type {
   ResourceSummary,
 } from "./resourcesContract";
 import type {
+  KubernetesApiResourcesEndpoint,
   ResourcesEndpointInventorySummary,
   ResourcesEndpointResourceDetail,
   ResourcesEndpointResourceList,
@@ -36,12 +38,16 @@ import {
   responseTimestamp,
   safeAdd,
 } from "./resourcesValidation";
+import { toProviderResourceDetail } from "./providerResourceCanonical";
+import { toResourceAccessDetail } from "./resourceAccessContract";
 
 export function toResourceCatalog(
   requestedClusterId: string,
   wire: ResourcesEndpointInventorySummary,
+  apiWire: KubernetesApiResourcesEndpoint,
 ): ResourceCatalog {
   assertSameIdentity(wire.cluster_id, requestedClusterId);
+  assertSameIdentity(apiWire.cluster_id, requestedClusterId);
   const byResourceType = new Map<string, ResourceHealthCounts>();
   for (const rawCount of wire.counts) {
     const record = responseRecord(rawCount);
@@ -63,6 +69,38 @@ export function toResourceCatalog(
     completeness: "unknown",
     observedAt: catalogObservedAt(wire.latest_snapshot),
     items,
+    apiDiscovery: toApiResourceDiscovery(apiWire),
+  };
+}
+
+function toApiResourceDiscovery(
+  wire: KubernetesApiResourcesEndpoint,
+): ResourceApiDiscovery {
+  if (wire.discovery === null) {
+    if (!wire.unavailable_reason) invalidResponse();
+    return {
+      completeness: "unavailable",
+      observedAt: null,
+      reasonCodes: [wire.unavailable_reason],
+      resources: [],
+    };
+  }
+  if (wire.unavailable_reason !== null) invalidResponse();
+  return {
+    completeness: wire.discovery.completeness,
+    observedAt: responseTimestamp(wire.discovery.observed_at),
+    reasonCodes: [...wire.discovery.reason_codes],
+    resources: wire.discovery.resources.map((resource) => ({
+      apiVersion: responseIdentity(resource.api_version),
+      group: resource.group,
+      version: responseIdentity(resource.version),
+      pluralName: responseIdentity(resource.name),
+      singularName: resource.singular_name,
+      kind: responseIdentity(resource.kind),
+      namespaced: resource.namespaced,
+      isCrd: resource.is_crd,
+      verbs: [...resource.verbs],
+    })),
   };
 }
 
@@ -166,6 +204,8 @@ export function toResourceDetail(
     clusterId: requestedClusterId,
     identity: requestedIdentity,
     resource,
+    providerDetail: toProviderResourceDetail(wire.provider_detail),
+    access: toResourceAccessDetail(wire.access),
     relatedCompleteness: "unknown",
     related,
     relatedExcludedCount,

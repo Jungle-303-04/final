@@ -27,6 +27,69 @@ afterEach(() => {
 });
 
 describe("useHomePageState refresh authority", () => {
+  it("coalesces scoped deferred-ready invalidations behind the successful dashboard read", async () => {
+    const api = homeApi();
+    renderHomeState(api.port, "/?clusters=cluster-a");
+    await waitFor(() => expect(api.dashboardStreams).toHaveLength(1));
+    await waitFor(() => expect(api.overview).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      api.dashboardStreams[0]?.emit("snapshot-2");
+      api.dashboardStreams[0]?.emit("snapshot-3");
+    });
+
+    await waitFor(() => expect(api.overview).toHaveBeenCalledTimes(2));
+    expect(api.nodes).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not subscribe when the server disables dashboard event invalidation", async () => {
+    const api = homeApi();
+    api.port.loadDashboardRefreshPolicy = vi.fn().mockResolvedValue({
+      staleAfterSeconds: 15,
+      refreshAfterSeconds: 30,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    });
+
+    renderHomeState(api.port, "/?clusters=cluster-a");
+    await waitFor(() => expect(api.port.loadDashboardRefreshPolicy).toHaveBeenCalled());
+    expect(api.port.subscribeDashboardInvalidations).not.toHaveBeenCalled();
+  });
+
+  it("aborts a hidden or obsolete scope stream and reconnects only for the visible active scope", async () => {
+    setVisibility("visible");
+    const api = homeApi();
+    const { result, unmount } = renderHomeState(api.port, "/?clusters=cluster-a");
+    await waitFor(() => expect(api.dashboardStreams).toHaveLength(1));
+    expect(api.dashboardStreams[0]?.clusterId).toBe("cluster-a");
+
+    act(() => {
+      setVisibility("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(api.dashboardStreams[0]?.signal?.aborted).toBe(true));
+
+    act(() => {
+      setVisibility("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(api.dashboardStreams).toHaveLength(2));
+    expect(api.dashboardStreams[1]?.clusterId).toBe("cluster-a");
+
+    act(() => result.current.selectCluster("cluster-b"));
+    await waitFor(() => expect(api.dashboardStreams).toHaveLength(3));
+    expect(api.dashboardStreams[1]?.signal?.aborted).toBe(true);
+    expect(api.dashboardStreams[2]?.clusterId).toBe("cluster-b");
+
+    unmount();
+    expect(api.dashboardStreams[2]?.signal?.aborted).toBe(true);
+  });
+
   it.each(["overview", "nodes", "pods"] as const)(
     "promotes a cluster.read 403 from %s and clears every cached cluster frame",
     async (deniedSection) => {
@@ -60,18 +123,19 @@ describe("useHomePageState refresh authority", () => {
     },
   );
 
-  it("polls cluster summaries every 10 seconds only while visible", async () => {
+  it("refreshes every dashboard section on the exact server cadence only while visible", async () => {
     vi.useFakeTimers();
     setVisibility("visible");
-    const api = homeApi();
-    const { result } = renderHomeState(api.port, "/?clusters=cluster-a");
+    const api = homeApi(7);
+    const { result } = renderHomeState(api.port, "/?clusters=cluster-a&node=worker-a");
     await flushEffects();
     expect(api.list).toHaveBeenCalledTimes(1);
     expect(api.overview).toHaveBeenCalledTimes(1);
     expect(api.nodes).toHaveBeenCalledTimes(1);
+    expect(api.pods).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(6_999);
       await flushPromises();
     });
     expect(api.list).toHaveBeenCalledTimes(1);
@@ -79,12 +143,13 @@ describe("useHomePageState refresh authority", () => {
     expect(api.nodes).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(1);
       await flushPromises();
     });
     expect(api.list).toHaveBeenCalledTimes(2);
     expect(api.overview).toHaveBeenCalledTimes(2);
     expect(api.nodes).toHaveBeenCalledTimes(2);
+    expect(api.pods).toHaveBeenCalledTimes(2);
 
     act(() => {
       setVisibility("hidden");
@@ -102,6 +167,7 @@ describe("useHomePageState refresh authority", () => {
     });
     expect(api.list).toHaveBeenCalledTimes(3);
     expect(api.overview).toHaveBeenCalledTimes(3);
+    expect(api.pods).toHaveBeenCalledTimes(3);
 
     await act(async () => {
       result.current.refresh();
@@ -109,23 +175,28 @@ describe("useHomePageState refresh authority", () => {
     });
     expect(api.list).toHaveBeenCalledTimes(4);
     expect(api.overview).toHaveBeenCalledTimes(4);
+    expect(api.pods).toHaveBeenCalledTimes(4);
   });
 
-  it("polls the selected node pods every 5 seconds", async () => {
+  it("uses the server-declared Home insights cadence instead of the summary poll", async () => {
     vi.useFakeTimers();
     setVisibility("visible");
     const api = homeApi();
-    renderHomeState(api.port, "/?clusters=cluster-a&node=worker-a");
+    renderHomeState(api.port, "/?clusters=cluster-a");
     await flushEffects();
-    expect(api.pods).toHaveBeenCalledOnce();
+    expect(api.insights).toHaveBeenCalledOnce();
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(29_999);
       await flushPromises();
     });
-    expect(api.pods).toHaveBeenCalledTimes(2);
-    expect(api.overview).toHaveBeenCalledOnce();
-    expect(api.nodes).toHaveBeenCalledOnce();
+    expect(api.insights).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await flushPromises();
+    });
+    expect(api.insights).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the last success and exposes a background refresh failure", async () => {
@@ -153,6 +224,27 @@ describe("useHomePageState refresh authority", () => {
       expect(result.current.overview.phase).toBe("ready");
       if (result.current.overview.phase === "ready") {
         expect(result.current.overview.refreshing).toBe(false);
+        expect(result.current.overview.data.name).toBe("last-success");
+        expect(result.current.overview.refreshFailure?.code).toBe("offline");
+      }
+    });
+  });
+
+  it("keeps the last success when a deferred-ready refresh fails", async () => {
+    const api = homeApi();
+    api.overview
+      .mockResolvedValueOnce(overview("cluster-a", "last-success"))
+      .mockRejectedValueOnce(new HomePortFailure("offline"));
+    const { result } = renderHomeState(api.port, "/?clusters=cluster-a");
+    await waitFor(() => expect(api.dashboardStreams).toHaveLength(1));
+    await waitFor(() => expect(result.current.overview.phase).toBe("ready"));
+
+    act(() => api.dashboardStreams[0]?.emit("snapshot-after-sync"));
+
+    await waitFor(() => expect(api.overview).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(result.current.overview.phase).toBe("ready");
+      if (result.current.overview.phase === "ready") {
         expect(result.current.overview.data.name).toBe("last-success");
         expect(result.current.overview.refreshFailure?.code).toBe("offline");
       }

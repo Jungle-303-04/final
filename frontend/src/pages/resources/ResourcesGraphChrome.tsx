@@ -46,17 +46,27 @@ export function PhysicalGraphBreadcrumb({
       >
         {t("resources.graph.breadcrumb.all")}
       </button>
-      {items.map((item) => (
+      {items.map((item, index) => (
         <span className="flex min-w-0 items-center gap-1" key={item.id}>
           <span aria-hidden="true">›</span>
-          <button
-            className="max-w-36 truncate rounded-sm px-1 py-0.5 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={item.onSelect}
-            title={item.label}
-            type="button"
-          >
-            {item.label}
-          </button>
+          {index === items.length - 1 ? (
+            <span
+              aria-current="location"
+              className="max-w-36 truncate rounded-sm border bg-background/80 px-1.5 py-0.5 font-medium text-foreground backdrop-blur"
+              title={item.label}
+            >
+              {item.label}
+            </span>
+          ) : (
+            <button
+              className="max-w-36 truncate rounded-sm px-1 py-0.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+              onClick={item.onSelect}
+              title={item.label}
+              type="button"
+            >
+              {item.label}
+            </button>
+          )}
         </span>
       ))}
     </nav>

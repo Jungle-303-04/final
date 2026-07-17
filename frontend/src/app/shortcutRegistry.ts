@@ -16,7 +16,10 @@ export type ProductContextShortcutId =
   | "resources:first-row"
   | "resources:last-row"
   | "resources:open-row"
-  | "resources:open-logs";
+  | "resources:open-yaml"
+  | "resources:open-logs"
+  | "resources:previous-kind"
+  | "resources:next-kind";
 
 export interface ProductShortcutEventDetail {
   id: ProductContextShortcutId;
@@ -64,7 +67,6 @@ const shortcutRouteLabelKeys = {
   issues: "shell.shortcut.route.issues",
   alerts: "settings.section.alerts",
   resources: "shell.shortcut.route.resources",
-  topology: "shell.shortcut.route.topology",
   timeline: "shell.shortcut.route.timeline",
   traffic: "shell.shortcut.route.traffic",
   helm: "shell.shortcut.route.helm",
@@ -100,6 +102,32 @@ export function shellShortcutDefinitions(
       sequence: ["k"],
       modifier: "meta-or-control",
       allowInInputs: true,
+    },
+    {
+      id: "diagnostics",
+      labelKey: "shell.diagnostics.open",
+      group: "global",
+      sequence: ["shift+d"],
+      modifier: "meta-or-control",
+      allowInInputs: true,
+    },
+    {
+      id: "namespace",
+      labelKey: "shell.filter.group.namespace",
+      group: "global",
+      sequence: ["n"],
+    },
+    {
+      id: "context",
+      labelKey: "shell.filter.group.cluster",
+      group: "global",
+      sequence: ["c"],
+    },
+    {
+      id: "search",
+      labelKey: "shell.shortcut.search",
+      group: "global",
+      sequence: ["/"],
     },
     {
       id: "theme",
@@ -300,12 +328,12 @@ function isEditableCandidate(candidate: unknown): boolean {
 
 function normalizeDefinitionKey(key: string): string {
   const normalized = key.toLocaleLowerCase("en-US");
-  if (/^(?:[a-z0-9?]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
+  if (/^(?:[a-z0-9?/]|\[|\]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
   throw new Error(`invalid shortcut key: ${key}`);
 }
 
 function normalizeEventKey(key: string, shiftKey: boolean): string | null {
-  if (key === "?") return key;
+  if (key === "?" || key === "/" || key === "[" || key === "]") return key;
   if (key.length !== 1) return null;
   const normalized = key.toLocaleLowerCase("en-US");
   if (!/^[a-z0-9]$/u.test(normalized)) return null;

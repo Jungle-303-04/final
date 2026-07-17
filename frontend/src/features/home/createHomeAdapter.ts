@@ -2,22 +2,35 @@ import { HomePortFailure, type HomeFailureCode, type HomePort } from "./homeCont
 import {
   toClusterChoices,
   toClusterOverview,
+  toHomeInsights,
   toNodeCollection,
   toPodCollection,
 } from "./homeCanonical";
 import type { HomeEndpointDependencies } from "./homeEndpointContract";
 import { isHomeCanonicalError } from "./homeValidation";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointDependencies,
+  HomeEndpointInsights,
   HomeEndpointNodeCollection,
   HomeEndpointPodCollection,
 } from "./homeEndpointContract";
 
-export function createHomeAdapter(endpoints: HomeEndpointDependencies): HomePort {
+export function createHomeAdapter(
+  endpoints: HomeEndpointDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"dashboard">,
+): HomePort {
   return {
+    loadDashboardRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "dashboard", signal);
+    },
+
     async listClusterChoices(signal) {
       return withCanonicalFailure(async () =>
         toClusterChoices(await endpoints.listClusters({}, signal))
@@ -30,6 +43,12 @@ export function createHomeAdapter(endpoints: HomeEndpointDependencies): HomePort
           clusterId,
           await endpoints.getClusterSummary(clusterId, signal),
         )
+      );
+    },
+
+    async loadInsights(clusterId, signal) {
+      return withCanonicalFailure(async () =>
+        toHomeInsights(clusterId, await endpoints.getHomeInsights(clusterId, signal))
       );
     },
 
@@ -51,7 +70,55 @@ export function createHomeAdapter(endpoints: HomeEndpointDependencies): HomePort
         )
       );
     },
+
+    async *subscribeDashboardInvalidations(clusterId, subscription) {
+      let cursor: string | undefined;
+      let reconnectAfterMs: number | null = null;
+      const signal = subscription?.signal;
+      while (!signal?.aborted) {
+        try {
+          for await (const frame of endpoints.subscribeHomeDashboardEvents(clusterId, {
+            after: cursor,
+            signal,
+          })) {
+            if (frame.scope.cluster_id !== clusterId) {
+              throw new HomePortFailure("invalid-response");
+            }
+            cursor = frame.cursor;
+            reconnectAfterMs = frame.reconnect_after_ms;
+            if (frame.kind === "deferred_ready") {
+              if (!frame.snapshot_id) throw new HomePortFailure("invalid-response");
+              yield { snapshotId: frame.snapshot_id };
+            }
+          }
+          if (signal?.aborted || reconnectAfterMs === null) return;
+        } catch (error) {
+          if (isAbortError(error) || signal?.aborted) return;
+          const failure = error instanceof HomePortFailure ? error : toPortFailure(error);
+          if (!isRetryableStreamFailure(failure) || reconnectAfterMs === null) throw failure;
+        }
+        await waitForServerReconnect(reconnectAfterMs, signal);
+      }
+    },
   };
+}
+
+function isRetryableStreamFailure(failure: HomePortFailure): boolean {
+  return failure.code === "offline" || failure.code === "rate-limited" || failure.code === "error";
+}
+
+function waitForServerReconnect(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, delayMs);
+    const abort = () => done();
+    signal?.addEventListener("abort", abort, { once: true });
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }
+  });
 }
 
 async function withCanonicalFailure<T>(operation: () => Promise<T>): Promise<T> {

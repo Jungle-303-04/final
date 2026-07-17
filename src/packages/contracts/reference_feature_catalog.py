@@ -52,6 +52,11 @@ class ReferenceFeatureContract(StrictModel):
     endpoints: tuple[str, ...] = ()
     streaming: bool
     area: str = Field(min_length=1)
+    release_phase: Literal["baseline", "post_parity"] = Field(
+        default="baseline",
+        validation_alias="releasePhase",
+        serialization_alias="releasePhase",
+    )
     delivery_status: Literal[
         "implemented",
         "in_progress",

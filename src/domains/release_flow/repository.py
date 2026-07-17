@@ -170,13 +170,13 @@ class ReleaseFlowRepository(DatabaseConnection):
                     step_table.c.plan_id == plan_id,
                 )
             )
-            for index, raw_step in enumerate(payload.get("steps", [])):
-                if isinstance(raw_step, Mapping):
-                    conn.execute(
-                        pg_insert(ReleasePlanStep.__table__).values(
-                            **release_step_values(workspace_id, plan_id, raw_step, index)
-                        )
-                    )
+            step_values = [
+                release_step_values(workspace_id, plan_id, raw_step, index)
+                for index, raw_step in enumerate(payload.get("steps", []))
+                if isinstance(raw_step, Mapping)
+            ]
+            if step_values:
+                conn.execute(pg_insert(step_table).values(step_values))
         return self.get_release_plan(workspace_id, plan_id) or {
             **payload,
             "workspace_id": workspace_id,
@@ -524,8 +524,27 @@ class ReleaseFlowRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
-            for step in release_run_steps_from_plan(workspace_id, run_id, plan, preview):
-                conn.execute(pg_insert(ReleaseRunStep.__table__).values(**step))
+            run_step_values = release_run_steps_from_plan(workspace_id, run_id, plan, preview)
+            if run_step_values:
+                step_table = ReleaseRunStep.__table__
+                step_insert = pg_insert(step_table).values(run_step_values)
+                conn.execute(
+                    step_insert.on_conflict_do_update(
+                        index_elements=[step_table.c.run_step_id],
+                        set_={
+                            "step_id": step_insert.excluded.step_id,
+                            "name": step_insert.excluded.name,
+                            "wave": step_insert.excluded.wave,
+                            "rollback": step_insert.excluded.rollback,
+                            "details": step_insert.excluded.details,
+                        },
+                        where=and_(
+                            step_table.c.workspace_id == step_insert.excluded.workspace_id,
+                            step_table.c.run_id == step_insert.excluded.run_id,
+                            step_table.c.application_id == step_insert.excluded.application_id,
+                        ),
+                    )
+                )
             conn.execute(
                 pg_insert(ReleaseRunEvent.__table__).values(
                     **release_run_event_values(

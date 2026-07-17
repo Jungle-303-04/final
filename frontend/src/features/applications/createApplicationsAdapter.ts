@@ -8,11 +8,20 @@ import {
   type ApplicationsFailureCode,
   type ApplicationsPort,
 } from "./applicationsContract";
+import { toCostWorkloadAllocation } from "../cost/costWorkloadAdapter";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function createApplicationsAdapter(
   api: ApplicationsApiDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"applications">,
 ): ApplicationsPort {
   return {
+    loadApplicationsRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "applications", signal);
+    },
     listApplications: (filter, signal) => withFailure(async () => {
       const response = await api.listApplicationCatalog(filter, signal);
       return sortApplicationsByAttention(response.applications.map(toCard));
@@ -264,10 +273,7 @@ function toDetail(item: ApplicationDetailEndpointItem): ApplicationDetailModel {
         availability: item.workload.history.availability,
         reasonCodes: [...item.workload.history.reason_codes],
       },
-      cost: {
-        availability: item.workload.cost.availability,
-        reasonCodes: [...item.workload.cost.reason_codes],
-      },
+      cost: toCostWorkloadAllocation(item.workload.cost),
       actions: {
         availability: item.workload.actions.availability,
         reasonCodes: [...item.workload.actions.reason_codes],

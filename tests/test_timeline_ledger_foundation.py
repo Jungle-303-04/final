@@ -20,12 +20,14 @@ from domains.timeline.cursor import (
 from domains.timeline.mapping import inventory_timeline_event
 from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import (
+    TIMELINE_APPEND_CHUNK,
     TimelineLedgerReadScope,
     TimelineLedgerRecord,
     TimelineLedgerRepository,
     TimelineLedgerSnapshot,
     TimelineReplayResult,
     TimelineSnapshotLimitExceeded,
+    _event_values,
     _timeline_events_statement,
     replay_result,
 )
@@ -317,9 +319,15 @@ def test_scoped_replay_keeps_internal_sequences_for_opaque_event_cursors_across_
 
 def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_cursor_lock() -> None:
     class Result:
-        def __init__(self, row: dict[str, Any] | None = None, scalar: int | None = None) -> None:
+        def __init__(
+            self,
+            row: dict[str, Any] | None = None,
+            scalar: int | None = None,
+            rows: list[dict[str, Any]] | None = None,
+        ) -> None:
             self.row = row
             self.scalar = scalar
+            self.rows = rows or ([] if row is None else [row])
 
         def mappings(self) -> Result:
             return self
@@ -330,6 +338,9 @@ def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_curso
 
         def one_or_none(self) -> dict[str, Any] | None:
             return self.row
+
+        def all(self) -> list[dict[str, Any]]:
+            return self.rows
 
         def scalar_one(self) -> int:
             assert self.scalar is not None
@@ -348,17 +359,24 @@ def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_curso
             if table_name == "timeline_event_cursors" and statement.is_insert:
                 return Result()
             if table_name == "timeline_event_cursors" and statement.is_update:
-                self.last_sequence = int(params["last_sequence"])
+                increment = next(
+                    int(value) for key, value in params.items() if "last_sequence" in key
+                )
+                self.last_sequence += increment
                 return Result(scalar=self.last_sequence)
             if table_name == "timeline_events" and statement.is_insert:
-                row = dict(params)
+                row = {
+                    (key[:-3] if key.endswith("_m0") else key): value
+                    for key, value in params.items()
+                }
                 self.rows[str(row["source_key"])] = row
                 return Result(row=row)
 
             columns = statement.selected_columns.keys()
             if "source_key" in columns:
-                source_key = str(params["source_key_1"])
-                return Result(row=self.rows.get(source_key))
+                source_keys = tuple(params["source_key_1"])
+                rows = [self.rows[key] for key in source_keys if key in self.rows]
+                return Result(rows=rows)
             self.lock_count += 1
             return Result(row={"last_sequence": self.last_sequence, "retained_from_sequence": 1})
 
@@ -384,6 +402,82 @@ def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_curso
     assert connection.last_sequence == 1
     assert len(connection.rows) == 1
     assert connection.lock_count == 2
+
+
+def test_ledger_repository_bulk_appends_five_thousand_events_with_bounded_sql() -> None:
+    events = tuple(
+        _resource_event(f"inventory:{index}", f"event-{index}") for index in range(5_000)
+    )
+
+    class Result:
+        def __init__(
+            self,
+            *,
+            row: dict[str, Any] | None = None,
+            rows: list[dict[str, Any]] | None = None,
+            scalar: int | None = None,
+        ) -> None:
+            self.row = row
+            self.rows = rows or []
+            self.scalar = scalar
+
+        def mappings(self) -> Result:
+            return self
+
+        def one(self) -> dict[str, Any]:
+            assert self.row is not None
+            return self.row
+
+        def all(self) -> list[dict[str, Any]]:
+            return self.rows
+
+        def scalar_one(self) -> int:
+            assert self.scalar is not None
+            return self.scalar
+
+    class BulkConnection:
+        def __init__(self) -> None:
+            self.execute_count = 0
+            self.ledger_insert_count = 0
+            self.inserted_count = 0
+
+        def execute(self, statement: Any) -> Result:
+            self.execute_count += 1
+            table = getattr(statement, "table", None)
+            table_name = getattr(table, "name", None)
+            if table_name == "timeline_event_cursors" and statement.is_insert:
+                return Result()
+            if table_name == "timeline_event_cursors" and statement.is_update:
+                return Result(scalar=len(events))
+            if table_name == "timeline_events" and statement.is_insert:
+                self.ledger_insert_count += 1
+                chunk = events[self.inserted_count : self.inserted_count + TIMELINE_APPEND_CHUNK]
+                rows = [
+                    _event_values(event, sequence=self.inserted_count + index)
+                    for index, event in enumerate(chunk, start=1)
+                ]
+                self.inserted_count += len(chunk)
+                return Result(rows=rows)
+            columns = statement.selected_columns.keys()
+            if "source_key" in columns:
+                return Result(rows=[])
+            return Result(row={"last_sequence": 0, "retained_from_sequence": 1})
+
+    connection = BulkConnection()
+
+    @contextmanager
+    def transaction() -> Iterator[BulkConnection]:
+        yield connection
+
+    repository = object.__new__(TimelineLedgerRepository)
+    repository.connection = transaction
+    appends = repository.append_timeline_events(events)
+
+    assert len(appends) == 5_000
+    assert [append.sequence for append in appends] == list(range(1, 5_001))
+    assert all(append.inserted for append in appends)
+    assert connection.ledger_insert_count == 5
+    assert connection.execute_count == 9
 
 
 def test_application_timeline_sources_require_a_real_application_workflow_subject() -> None:

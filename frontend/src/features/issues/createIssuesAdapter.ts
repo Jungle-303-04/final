@@ -1,5 +1,6 @@
 import {
   IssuesRequestError,
+  type IssuesEndpointTimelineResponse,
   type IssuesPort,
 } from "./issuesContract";
 import {
@@ -12,7 +13,9 @@ import {
   toIssueEvidencePage,
   toIssueRcaReportPage,
 } from "./issuesEvidenceCanonical";
-import type { IssuesEndpointDependencies } from "./issuesEndpointContract";
+import type {
+  IssuesEndpointDependencies,
+} from "./issuesEndpointContract";
 import {
   toIssueRecoveryPlan,
   toIssueRecoveryReceipt,
@@ -23,6 +26,10 @@ import {
   canonicalIssueDetailRequest,
   canonicalIssueListRequest,
 } from "./issuesValidation";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type { IssuesEndpointDependencies } from "./issuesEndpointContract";
 
@@ -30,15 +37,26 @@ const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 200;
 const MAX_SELECTION_REASON_LENGTH = 500;
 
-export function createIssuesAdapter(endpoints: IssuesEndpointDependencies): IssuesPort {
+export function createIssuesAdapter(
+  endpoints: IssuesEndpointDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"issues_audit">,
+): IssuesPort {
+  const loadIssueProjection = createIssueProjectionLoader(endpoints);
   return {
-    async listIssues(clusterId, limit = 50, signal) {
+    loadIssuesAuditRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "issues_audit", signal);
+    },
+
+    async listIssues(clusterId, limit = 50, signal, filters) {
       return withCanonicalFailure(async () => {
-        const request = canonicalIssueListRequest(clusterId, limit);
+        const request = canonicalIssueListRequest(clusterId, limit, filters);
         return toIssueList(
           request,
-          await endpoints.listRcaTimeline({
+          await loadIssueProjection({
             clusterId: request.clusterId ?? undefined,
+            namespaces: request.filters.namespaces,
+            severities: request.filters.severities,
+            categories: request.filters.categories,
             limit: request.limit,
             signal,
           }),
@@ -159,6 +177,39 @@ export function createIssuesAdapter(endpoints: IssuesEndpointDependencies): Issu
       });
     },
   };
+}
+
+function createIssueProjectionLoader(
+  endpoints: IssuesEndpointDependencies,
+): (options: Parameters<IssuesEndpointDependencies["listRcaTimeline"]>[0]) => Promise<IssuesEndpointTimelineResponse> {
+  let legacyFallbackAvailable = true;
+  return async (options) => {
+    if (endpoints.listRcaIssues === undefined) {
+      return endpoints.listRcaTimeline(options);
+    }
+    try {
+      return await endpoints.listRcaIssues(options);
+    } catch (error: unknown) {
+      // A new web bundle can temporarily reach a still-old backend. The one
+      // read-only fallback is intentionally bounded: it keeps an in-flight
+      // rollout from blanking the queue, but cannot silently conceal a missing
+      // additive contract across subsequent refreshes.
+      if (!legacyFallbackAvailable || !isMissingIssueProjection(error)) throw error;
+      legacyFallbackAvailable = false;
+      return endpoints.listRcaTimeline(options);
+    }
+  };
+}
+
+function isMissingIssueProjection(error: unknown): boolean {
+  return (
+    typeof error === "object"
+    && error !== null
+    && "kind" in error
+    && error.kind === "not-found"
+    && "status" in error
+    && error.status === 404
+  );
 }
 
 function auditTimelineQuery(query: {

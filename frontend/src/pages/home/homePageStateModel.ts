@@ -1,6 +1,7 @@
 import {
   HomePortFailure,
   type HomeClusterOverview,
+  type HomeInsights,
   type HomeNodeCollection,
   type HomePodCollection,
 } from "../../features/home/homeContract";
@@ -32,6 +33,7 @@ export interface HomeClusterFrame {
   revision: number;
   clusterAccess: HomeClusterAccess;
   overview: HomeResourceState<HomeClusterOverview>;
+  insights: HomeResourceState<HomeInsights>;
   nodes: HomeResourceState<HomeNodeCollection>;
   podKey: string | null;
   pods: HomeResourceState<HomePodCollection>;
@@ -46,6 +48,7 @@ export const EMPTY_HOME_FRAME: HomeClusterFrame = {
   revision: 0,
   clusterAccess: HOME_ALLOWED,
   overview: HOME_IDLE,
+  insights: HOME_IDLE,
   nodes: HOME_IDLE,
   podKey: null,
   pods: HOME_IDLE,
@@ -62,6 +65,7 @@ export function startClusterFrame(
     revision,
     clusterAccess: HOME_ALLOWED,
     overview: preserve ? startResource(previous.overview) : HOME_LOADING,
+    insights: preserve ? previous.insights : HOME_LOADING,
     nodes: preserve ? startResource(previous.nodes) : HOME_LOADING,
     podKey: preserve ? previous.podKey : null,
     pods: preserve && previous.podKey ? startResource(previous.pods) : HOME_IDLE,
@@ -92,6 +96,7 @@ export function forbidClusterFrame(
     ...current,
     clusterAccess: { kind: "forbidden", failure },
     overview: denied,
+    insights: denied,
     nodes: denied,
     podKey: null,
     pods: denied,

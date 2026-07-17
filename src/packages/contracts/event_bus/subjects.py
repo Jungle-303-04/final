@@ -90,6 +90,14 @@ class EventSubject(StrEnum):
     AI_MESSAGE_RESPONDED = "ai.message.responded"  # agent 응답 생성
     AI_MESSAGE_FAILED = "ai.message.failed"  # agent 응답 실패
 
+    # --- 사용자별 웹 셸 상태 ---
+    NAMESPACE_SCOPE_UPDATED = "namespace.scope.updated"
+    UI_PREFERENCES_UPDATED = "ui.preferences.updated"
+
+    # --- Helm workspace configuration ---
+    HELM_CHART_SOURCE_DELETED = "helm.chart_source.deleted"
+    HELM_CHART_SOURCE_REFRESHED = "helm.chart_source.refreshed"
+
     # --- GitOps 제품 상태(workflow-controller): 이벤트 흐름을 사용자 실행 객체로 투영 ---
     WORKFLOW_CREATED = "workflow.created"  # 앱/바인딩/커밋 기준 실행 객체 생성 요청
     WORKFLOW_RUN_STARTED = "workflow.run.started"  # 실행 객체 시작/재개

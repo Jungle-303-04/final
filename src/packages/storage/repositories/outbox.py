@@ -39,25 +39,31 @@ def event_log_context(evt: EventEnvelope) -> dict[str, object]:
 class OutboxRepository(DatabaseConnection):
     def stage_events(self, conn: Connection, events: list[EventEnvelope]) -> None:
         """UoW 트랜잭션 안에서 outbox 적재(같은 커넥션). [완전판 3단계]"""
+        if not events:
+            return
         table = OutboxModel.__table__
+        values = [
+            {
+                "event_id": evt.event_id,
+                "subject": evt.subject,
+                "source": evt.source,
+                "correlation_id": evt.correlation_id,
+                "causation_id": evt.causation_id,
+                "workspace_id": evt.workspace_id,
+                "occurred_at": evt.created_at,
+                "payload": evt.payload,
+                "schema_version": evt.schema_version,
+                "lease_id": None,
+                "leased_until": None,
+            }
+            for evt in events
+        ]
+        conn.execute(
+            pg_insert(table)
+            .values(values)
+            .on_conflict_do_nothing(index_elements=[table.c.event_id])
+        )
         for evt in events:
-            conn.execute(
-                pg_insert(table)
-                .values(
-                    event_id=evt.event_id,
-                    subject=evt.subject,
-                    source=evt.source,
-                    correlation_id=evt.correlation_id,
-                    causation_id=evt.causation_id,
-                    workspace_id=evt.workspace_id,
-                    occurred_at=evt.created_at,
-                    payload=evt.payload,
-                    schema_version=evt.schema_version,
-                    lease_id=None,
-                    leased_until=None,
-                )
-                .on_conflict_do_nothing(index_elements=[table.c.event_id])
-            )
             LOGGER.info("db_outbox_event_staged", extra={CONTEXT_KEY: event_log_context(evt)})
 
     async def unsent_events(self, limit: int, source: str | None) -> list[EventEnvelope]:

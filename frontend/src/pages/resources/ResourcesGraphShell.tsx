@@ -6,6 +6,7 @@ import type { TimelineRange } from "../../features/filters/filterContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
+import { TopologyOverlayBar } from "../../shared/ui/TopologyOverlayBar";
 import { cn } from "../../shared/lib/cn";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
@@ -224,25 +225,27 @@ export function ResourcesGraphShell({
               />
             )}
             {autoHintVisible ? (
-              <div
-                className="pointer-events-none absolute right-3 top-3 z-30 flex max-w-sm items-center gap-2 rounded-lg border bg-background/40 px-3 py-2 text-xs shadow-sm backdrop-blur"
-                data-slot="resources-graph-auto-hint"
-                role="status"
-              >
-                <span>{t("resources.graph.autoHint")}</span>
-                <Button
-                  className="pointer-events-auto"
-                  onClick={() => {
-                    setAutoHintVisible(false);
-                    changeTopologyView("physical");
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
+              <TopologyOverlayBar className="items-end">
+                <div
+                  className="motion-topology-overlay flex max-w-sm items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs shadow-sm backdrop-blur"
+                  data-slot="resources-graph-auto-hint"
+                  role="status"
                 >
-                  {t("resources.graph.autoHint.revert")}
-                </Button>
-              </div>
+                  <span>{t("resources.graph.autoHint")}</span>
+                  <Button
+                    className="pointer-events-auto"
+                    onClick={() => {
+                      setAutoHintVisible(false);
+                      changeTopologyView("physical");
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {t("resources.graph.autoHint.revert")}
+                  </Button>
+                </div>
+              </TopologyOverlayBar>
             ) : null}
           </div>
 

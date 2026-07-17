@@ -65,15 +65,22 @@ export function toIssueList(
     dataQualityWarnings.push(...projected.warnings);
   });
 
+  const metadata = queueMetadata(response, items.length);
   return {
     clusterId: request.clusterId,
-    completeness: "unknown",
+    completeness: metadata.visibility.completeness,
     dataQualityWarnings,
     excludedCount,
     items,
     limit: request.limit,
     limitReached: items.length === request.limit,
     returned: items.length,
+    total: metadata.total,
+    totalMatched: metadata.totalMatched,
+    filters: request.filters,
+    visibility: metadata.visibility,
+    facets: metadata.facets,
+    recentChanges: metadata.recentChanges,
   };
 }
 
@@ -125,6 +132,8 @@ function projectIssue(
   }
 
   const warnings: IssueDataQualityWarning[] = [];
+  const severityProjection = projectIssueSeverity(item, rowIndex, warnings);
+  const categoryProjection = projectIssueCategory(item, rowIndex, warnings);
   const issue: IssueSummary = {
     id: issueStableId(workspaceId, correlationId),
     incidentId: incidentId(item.incident_id, rowIndex, warnings, options.requireIncidentId),
@@ -152,6 +161,8 @@ function projectIssue(
     symptom: optionalString(item.incident_symptom, "incident_symptom", rowIndex, warnings),
     currentSubject,
     status,
+    ...severityProjection,
+    ...categoryProjection,
     rootCause: optionalString(item.root_cause, "root_cause", rowIndex, warnings),
     confidence: confidence(item.confidence, rowIndex, warnings),
     supportingEvidence: optionalStringList(
@@ -176,6 +187,117 @@ function projectIssue(
 
   if (options.requireIncidentId && issue.incidentId === null) return null;
   return { issue, warnings };
+}
+
+function projectIssueCategory(
+  item: IssuesEndpointTimelineItem,
+  rowIndex: number,
+  warnings: IssueDataQualityWarning[],
+): Pick<IssueSummary, "category" | "categoryAvailability"> {
+  const availability = item.category_availability;
+  const category = item.category;
+  const reason = item.category_reason_code;
+  if (availability === undefined && category === undefined && reason === undefined) return {};
+  if (
+    availability === "available"
+    && typeof category === "string"
+    && category.trim()
+    && reason === null
+  ) {
+    return { category: category.trim(), categoryAvailability: "available" };
+  }
+  if (availability === "unavailable" && category === null && reason === "source_incomplete") {
+    return { category: null, categoryAvailability: "unavailable" };
+  }
+  warnings.push({ code: "optional-field-unavailable", field: "category", rowIndex });
+  return {};
+}
+
+function queueMetadata(response: IssuesEndpointTimelineResponse, returned: number): Pick<
+  IssueList,
+  "total" | "totalMatched" | "visibility" | "facets" | "recentChanges"
+> {
+  const legacy = response.total === undefined
+    && response.total_matched === undefined
+    && response.visibility === undefined
+    && response.facets === undefined
+    && response.recent_changes === undefined;
+  if (legacy) {
+    return {
+      total: returned,
+      totalMatched: returned,
+      visibility: {
+        state: "unknown",
+        completeness: "unknown",
+        authorizedClusterCount: null,
+        requestedNamespaces: [],
+        reasonCodes: [],
+      },
+      facets: { namespaces: [], severities: [], categories: [] },
+      recentChanges: [],
+    };
+  }
+  if (
+    response.total === undefined
+    || response.total_matched === undefined
+    || response.count_completeness !== "exact"
+    || response.visibility === undefined
+    || response.facets === undefined
+    || response.recent_changes === undefined
+    || response.total !== response.items.length
+    || response.total > response.total_matched
+  ) {
+    throw new IssuesCanonicalError("Issues queue metadata is invalid");
+  }
+  return {
+    total: response.total,
+    totalMatched: response.total_matched,
+    visibility: {
+      state: response.visibility.state,
+      completeness: response.visibility.completeness,
+      authorizedClusterCount: response.visibility.authorized_cluster_count,
+      requestedNamespaces: response.visibility.requested_namespaces,
+      reasonCodes: response.visibility.reason_codes,
+    },
+    facets: response.facets,
+    recentChanges: response.recent_changes,
+  };
+}
+
+function projectIssueSeverity(
+  item: IssuesEndpointTimelineItem,
+  rowIndex: number,
+  warnings: IssueDataQualityWarning[],
+): Pick<IssueSummary, "severity" | "severityAvailability"> {
+  const availability = item.severity_availability;
+  const severity = item.issue_severity;
+  const reason = item.severity_reason_code;
+  // The legacy timeline intentionally has none of these additive fields. It
+  // remains a read-only rollout fallback rather than a claim that severity is
+  // unavailable in the underlying incident.
+  if (availability === undefined && severity === undefined && reason === undefined) {
+    return {};
+  }
+  if (
+    availability === "available"
+    && (severity === "critical" || severity === "warning")
+    && reason === null
+  ) {
+    return { severity, severityAvailability: "available" };
+  }
+  if (
+    availability === "unavailable"
+    && severity === null
+    && (reason === "source_incomplete" || reason === "outside_two_tier_scale")
+  ) {
+    return { severity: null, severityAvailability: "unavailable" };
+  }
+  warnings.push({
+    code: "optional-field-unavailable",
+    field: "issue_severity",
+    rowIndex,
+  });
+  return {};
 }
 
 function requiredString(value: unknown): string | null {

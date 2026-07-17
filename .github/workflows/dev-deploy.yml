@@ -100,11 +100,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: ".python-version"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
+          version: "0.9.17"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
@@ -116,11 +117,16 @@ jobs:
       - name: Install deployment dependencies
         run: uv sync --frozen
 
+      - name: Install authenticated browser smoke dependencies
+        run: |
+          npm ci --prefix frontend
+          npm --prefix frontend exec -- playwright install --with-deps chromium
+
       - name: Prepare approved upstream delta evidence
         run: make reference-upstream-prepare
 
-      - name: Run strict release governance
-        run: make release-governance
+      - name: Run incremental web patch governance
+        run: make release-governance-web-patch
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -511,6 +517,7 @@ jobs:
           EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
           SERVICE_ROLLBACK_PLAN: ${{ runner.temp }}/service-rollback-plan.json
           CONSOLE_ROLLBACK_PLAN: ${{ runner.temp }}/console-rollback-plan.json
+          AUTH_COOKIE_JAR_OUT: ${{ runner.temp }}/browser-auth-cookie.jar
         run: |
           set -euo pipefail
           export EXPECTED_ALEMBIC_HEAD="$(uv run alembic heads | awk '{print $1}')"
@@ -524,6 +531,246 @@ jobs:
           EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
           CONSOLE_ROLLBACK_PLAN: ${{ runner.temp }}/console-rollback-plan.json
         run: bash scripts/post-deploy-console-smoke.sh
+
+      - name: Run authenticated browser route smoke
+        id: browser_smoke
+        env:
+          AUTH_COOKIE_JAR: ${{ runner.temp }}/browser-auth-cookie.jar
+          ROUTE_SMOKE_BASE_URL: http://127.0.0.1:18080
+        shell: bash
+        run: |
+          set -euo pipefail
+          forward_log="${RUNNER_TEMP}/console-route-smoke-port-forward.log"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            port-forward service/console-dev 18080:80 \
+            --address=127.0.0.1 >"${forward_log}" 2>&1 &
+          forward_pid=$!
+          cleanup_route_smoke_forward() {
+            kill "${forward_pid}" 2>/dev/null || true
+            wait "${forward_pid}" 2>/dev/null || true
+            rm -f -- "${forward_log}"
+          }
+          trap cleanup_route_smoke_forward EXIT
+
+          ready=0
+          for _attempt in $(seq 1 40); do
+            if curl --fail --silent --show-error --output /dev/null \
+              "${ROUTE_SMOKE_BASE_URL}/"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "${forward_pid}" 2>/dev/null; then
+              cat "${forward_log}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if [[ "${ready}" != "1" ]]; then
+            cat "${forward_log}" >&2
+            echo "console route-smoke port-forward did not become ready" >&2
+            exit 1
+          fi
+
+          BASE_URL="${ROUTE_SMOKE_BASE_URL}" npm --prefix frontend run smoke:routes
+
+      - name: Capture service crash diagnostics
+        if: failure() && steps.browser_smoke.outcome == 'failure' && env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        run: |
+          set -uo pipefail
+          redact_diagnostics() {
+            uv run python scripts/redact_diagnostic_stream.py
+          }
+
+          pods_json="$(
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get pods --selector app=api-gateway --output json 2>/dev/null
+          )" || pods_json='{"items":[]}'
+          mapfile -t pod_rows < <(
+            jq -r '.items[] | [.metadata.name, .metadata.uid] | @tsv' <<<"${pods_json}"
+          )
+
+          echo "::group::api-gateway rollout state"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get deployment api-gateway --output json 2>&1 \
+            | jq -c '{
+                metadata: {
+                  name: .metadata.name,
+                  generation: .metadata.generation,
+                  observedGeneration: .status.observedGeneration
+                },
+                spec: {
+                  replicas: .spec.replicas,
+                  strategy: .spec.strategy
+                },
+                status: {
+                  availableReplicas: .status.availableReplicas,
+                  readyReplicas: .status.readyReplicas,
+                  replicas: .status.replicas,
+                  unavailableReplicas: .status.unavailableReplicas,
+                  updatedReplicas: .status.updatedReplicas,
+                  conditions: [
+                    .status.conditions[]? | {
+                      type,
+                      status,
+                      reason,
+                      lastTransitionTime
+                    }
+                  ]
+                }
+              }' \
+            | redact_diagnostics || true
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            rollout status deployment/api-gateway --timeout=5s 2>&1 \
+            | redact_diagnostics || true
+          echo "::endgroup::"
+
+          if (( ${#pod_rows[@]} == 0 )); then
+            echo "api-gateway diagnostics: no matching pods"
+          fi
+
+          for pod_row in "${pod_rows[@]}"; do
+            IFS=$'\t' read -r pod_name pod_uid <<<"${pod_row}"
+            [[ "${pod_name}" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]] || continue
+            [[ "${pod_uid}" =~ ^[0-9a-f-]{36}$ ]] || continue
+
+            echo "::group::api-gateway pod ${pod_name} state"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get pod "${pod_name}" --output json 2>&1 \
+              | jq -c '{
+                  metadata: {
+                    name: .metadata.name,
+                    uid: .metadata.uid,
+                    creationTimestamp: .metadata.creationTimestamp
+                  },
+                  status: {
+                    phase: .status.phase,
+                    reason: (.status.reason // null),
+                    containerStatuses: [
+                      .status.containerStatuses[]? | {
+                        name,
+                        ready,
+                        restartCount,
+                        state: {
+                          waiting: (
+                            if .state.waiting
+                            then {reason: .state.waiting.reason}
+                            else null
+                            end
+                          ),
+                          terminated: (
+                            if .state.terminated
+                            then {
+                              reason: .state.terminated.reason,
+                              exitCode: .state.terminated.exitCode,
+                              signal: .state.terminated.signal,
+                              startedAt: .state.terminated.startedAt,
+                              finishedAt: .state.terminated.finishedAt
+                            }
+                            else null
+                            end
+                          ),
+                          running: (
+                            if .state.running
+                            then {startedAt: .state.running.startedAt}
+                            else null
+                            end
+                          )
+                        },
+                        lastState: {
+                          terminated: (
+                            if .lastState.terminated
+                            then {
+                              reason: .lastState.terminated.reason,
+                              exitCode: .lastState.terminated.exitCode,
+                              signal: .lastState.terminated.signal,
+                              startedAt: .lastState.terminated.startedAt,
+                              finishedAt: .lastState.terminated.finishedAt
+                            }
+                            else null
+                            end
+                          )
+                        }
+                      }
+                    ]
+                  }
+                }' \
+              | redact_diagnostics || true
+            echo "::endgroup::"
+
+            echo "::group::api-gateway pod ${pod_name} describe"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              describe pod "${pod_name}" 2>&1 \
+              | redact_diagnostics || true
+            echo "::endgroup::"
+
+            echo "::group::api-gateway pod ${pod_name} previous logs"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs pod/"${pod_name}" --all-containers=true --previous \
+              --tail=500 --timestamps=true 2>&1 \
+              | redact_diagnostics || true
+            echo "::endgroup::"
+
+            echo "::group::api-gateway pod ${pod_name} current logs"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs pod/"${pod_name}" --all-containers=true --tail=500 \
+              --timestamps=true 2>&1 \
+              | redact_diagnostics || true
+            echo "::endgroup::"
+
+            echo "::group::api-gateway pod ${pod_name} related events"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get events \
+              --field-selector "involvedObject.uid=${pod_uid}" \
+              --sort-by=.lastTimestamp --output json 2>&1 \
+              | jq -c '{
+                  items: [
+                    .items[]? | {
+                      type,
+                      reason,
+                      message,
+                      firstTimestamp,
+                      lastTimestamp,
+                      count,
+                      source: .source.component
+                    }
+                  ]
+                }' \
+              | redact_diagnostics || true
+            echo "::endgroup::"
+          done
+          unset pods_json pod_rows pod_row pod_name pod_uid
+
+      - name: Remove browser authentication handoff
+        if: always()
+        run: rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"
+
+      - name: Upgrade existing target agent policies
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          kubectl set image \
+            --filename deploy/management/target-policy-upgrade-job.yaml \
+            upgrade="${DEPLOY_IMAGE}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/target-policy-upgrade-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            delete job target-policy-upgrade --ignore-not-found --wait=true
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --filename "${RUNNER_TEMP}/target-policy-upgrade-job.yaml"
+          if ! kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            wait --for=condition=complete job/target-policy-upgrade --timeout=300s; then
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs job/target-policy-upgrade --all-containers --tail=500 || true
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              describe job target-policy-upgrade || true
+            exit 1
+          fi
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            logs job/target-policy-upgrade --all-containers --tail=500
 
       - name: Record successful dev SHA in cluster
         if: env.DEPLOYMENT_SCOPE == 'FULL'
@@ -539,7 +786,7 @@ jobs:
             | kubectl --context "${MGMT_CONTEXT}" apply --filename -
 
       - name: Record successful console SHA in cluster
-        if: env.DEPLOYMENT_SCOPE == 'CONSOLE'
+        if: env.DEPLOYMENT_SCOPE == 'FULL' || env.DEPLOYMENT_SCOPE == 'CONSOLE'
         id: console_status
         shell: bash
         run: |

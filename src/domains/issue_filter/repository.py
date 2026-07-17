@@ -10,7 +10,11 @@ from sqlalchemy import Select, and_, case, false, func, literal, or_, select, tr
 from sqlalchemy.dialects.postgresql import JSONB
 
 from domains.dashboard.models import RcaTimeline
-from domains.dashboard.repository import OPEN_INCIDENT_STATUSES
+from domains.dashboard.repository import (
+    OPEN_INCIDENT_STATUSES,
+    issue_severity_projection,
+    serialize_timeline_row,
+)
 from domains.gitops.models import Application
 from domains.identity.models import ClusterRegistration
 from domains.issue_filter.query import IssueFacetAxis, IssueFilters, without_facet_axis
@@ -18,10 +22,80 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 MAX_PAGE_LIMIT = 200
+MAX_QUEUE_FACETS = 100
 
 
 class IssueFilterRepository(DatabaseConnection):
     """Read-only, tenant-scoped projection queries used by the Issues surface."""
+
+    def list_rca_issue_queue(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        *,
+        namespaces: tuple[tuple[str, str], ...],
+        severities: tuple[str, ...],
+        categories: tuple[str, ...],
+        limit: int,
+        permission_scope_limited: bool = False,
+    ) -> JsonObject:
+        """Return one bounded queue page with exact statement-local matched counts."""
+        clusters = _ids(allowed_cluster_ids)
+        requested_namespaces = tuple(sorted(set(namespaces)))
+        if not workspace_id or not clusters:
+            return _empty_rca_issue_queue(requested_namespaces)
+        filters = IssueFilters(
+            clusters=(),
+            namespaces=requested_namespaces,
+            applications=(),
+            severities=tuple(sorted(set(severities))),
+            categories=tuple(sorted(set(categories))),
+            statuses=(),
+            environments=(),
+            labels=(),
+            query=None,
+        )
+        effective_limit = max(1, min(int(limit), 100))
+        authorized = _authorized_issues(workspace_id, clusters).cte("authorized_issue_queue")
+        filtered = _apply_issue_filters(
+            authorized,
+            filters=filters,
+            allowed_application_ids=set(),
+        ).cte("filtered_issue_queue")
+        matched_count = select(func.count()).select_from(filtered).scalar_subquery()
+        page = (
+            select(filtered, matched_count.label("queue_total_matched"))
+            .order_by(filtered.c.updated_at.desc(), filtered.c.id.desc())
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(page).mappings().all()]
+            total_matched = (
+                int(rows[0]["queue_total_matched"])
+                if rows
+                else int(conn.execute(select(matched_count)).scalar_one())
+            )
+            visibility = _queue_visibility(
+                conn,
+                authorized,
+                requested_namespaces=requested_namespaces,
+                filters=filters,
+                authorized_cluster_count=len(clusters),
+                permission_scope_limited=permission_scope_limited,
+            )
+            facets, facets_truncated = _queue_facets(conn, filtered)
+        if facets_truncated:
+            visibility["state"] = "partial"
+            visibility["completeness"] = "partial"
+            visibility["reason_codes"] = sorted(
+                {*visibility["reason_codes"], "issue_filter_facets_truncated"}
+            )
+        return {
+            "items": [_serialize_queue_issue(row) for row in rows],
+            "total_matched": total_matched,
+            "visibility": visibility,
+            "facets": facets,
+        }
 
     def list_filtered_issues(
         self,
@@ -251,6 +325,11 @@ class IssueFilterRepository(DatabaseConnection):
 
 def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
     table = RcaTimeline.__table__
+    presentation_severity = case(
+        (func.lower(table.c.severity).in_(("critical", "high")), literal("critical")),
+        (func.lower(table.c.severity).in_(("warning", "medium")), literal("warning")),
+        else_=None,
+    ).label("severity")
     issue_id = case(
         (
             and_(table.c.cluster_id.is_not(None), table.c.incident_id.is_not(None)),
@@ -266,6 +345,7 @@ def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
     ranked = (
         select(
             table.c.id,
+            table.c.workspace_id,
             issue_id,
             table.c.incident_id.label("detail_id"),
             table.c.correlation_id,
@@ -274,8 +354,10 @@ def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
             table.c.incident_resource_kind.label("resource_kind"),
             table.c.incident_resource_name.label("resource_name"),
             table.c.incident_symptom.label("symptom"),
-            table.c.severity,
+            presentation_severity,
             table.c.severity_complete,
+            table.c.category,
+            table.c.category_complete,
             issue_state,
             table.c.current_subject,
             table.c.status.label("pipeline_status"),
@@ -287,6 +369,13 @@ def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
             table.c.labels_complete,
             table.c.root_cause,
             table.c.confidence,
+            table.c.evidence_ref,
+            table.c.supporting_evidence,
+            table.c.missing_evidence,
+            table.c.action_route,
+            table.c.command_id,
+            table.c.pr_url,
+            table.c.error_reason,
             table.c.updated_at,
             func.row_number()
             .over(
@@ -342,6 +431,11 @@ def _apply_issue_filters(
         statement = statement.where(
             source.c.severity_complete.is_(True),
             source.c.severity.in_(filters.severities),
+        )
+    if filters.categories:
+        statement = statement.where(
+            source.c.category_complete.is_(True),
+            source.c.category.in_(filters.categories),
         )
     if filters.statuses:
         statement = statement.where(source.c.issue_state.in_(filters.statuses))
@@ -439,6 +533,18 @@ def _axis_availability(
                     case(
                         (
                             and_(
+                                authorized.c.category_complete.is_(True),
+                                authorized.c.category.is_not(None),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("category"),
+                func.sum(
+                    case(
+                        (
+                            and_(
                                 authorized.c.environment_complete.is_(True),
                                 authorized.c.environment.is_not(None),
                             ),
@@ -491,6 +597,7 @@ def _axis_availability(
         "namespaces": _availability(total, int(row["namespaces"] or 0)),
         "applications": application_availability,
         "severity": _availability(total, int(row["severity"] or 0)),
+        "category": _availability(total, int(row["category"] or 0)),
         "status": "available",
         "environment": _availability(total, int(row["environment"] or 0)),
         "labels": _availability(total, int(row["labels"] or 0)),
@@ -535,6 +642,8 @@ def _filters_available(filters: IssueFilters, availability: Mapping[str, str]) -
         required.append("applications")
     if filters.severities:
         required.append("severity")
+    if filters.categories:
+        required.append("category")
     if filters.statuses:
         required.append("status")
     if filters.environments:
@@ -551,7 +660,14 @@ def _partial_reasons(
     reasons: set[str] = set()
     if filters.labels and availability.get("labels") == "unavailable":
         reasons.add("issue_label_projection_unavailable")
-    for axis in ("namespaces", "severity", "environment", "applications", "labels"):
+    for axis in (
+        "namespaces",
+        "severity",
+        "category",
+        "environment",
+        "applications",
+        "labels",
+    ):
         state = availability.get(axis)
         if state and state != "available":
             reasons.add(f"issue_{axis}_projection_{state}")
@@ -595,6 +711,12 @@ def _facet_statement(
         base = select(value.label("value"), func.count().label("match_count")).where(
             source.c.severity_complete.is_(True),
             source.c.severity.is_not(None),
+        )
+    elif axis == "category":
+        value = source.c.category
+        base = select(value.label("value"), func.count().label("match_count")).where(
+            source.c.category_complete.is_(True),
+            source.c.category.is_not(None),
         )
     elif axis == "status":
         value = source.c.issue_state
@@ -723,6 +845,7 @@ def _selected_label_match_counts(
         namespaces=filters.namespaces,
         applications=filters.applications,
         severities=filters.severities,
+        categories=filters.categories,
         statuses=filters.statuses,
         environments=filters.environments,
         labels=(),
@@ -795,6 +918,8 @@ def _serialize_issue(
         "resource_name": str(row["resource_name"]) if row.get("resource_name") else None,
         "symptom": str(row["symptom"]) if row.get("symptom") else None,
         "severity": str(row["severity"]) if row.get("severity") else None,
+        "category": str(row["category"]) if row.get("category") else None,
+        "category_completeness": ("exact" if bool(row.get("category_complete")) else "unavailable"),
         "issue_state": str(row["issue_state"]),
         "current_subject": str(row["current_subject"]),
         "pipeline_status": str(row["pipeline_status"]),
@@ -810,6 +935,146 @@ def _serialize_issue(
         "root_cause": str(row["root_cause"]) if row.get("root_cause") else None,
         "confidence": float(row["confidence"]) if row.get("confidence") is not None else None,
         "updated_at": iso_or_none(row.get("updated_at")) or str(row.get("updated_at")),
+    }
+
+
+def _serialize_queue_issue(row: Mapping[str, Any]) -> JsonObject:
+    item = serialize_timeline_row(row)
+    item.update(
+        incident_id=row.get("detail_id"),
+        incident_namespace=row.get("namespace"),
+        incident_resource_kind=row.get("resource_kind"),
+        incident_resource_name=row.get("resource_name"),
+        incident_symptom=row.get("symptom"),
+        status=row.get("pipeline_status"),
+    )
+    item.update(issue_severity_projection(row))
+    category = str(row.get("category") or "").strip()
+    category_complete = row.get("category_complete") is True
+    item.update(
+        category=category if category_complete and category else None,
+        category_availability=("available" if category_complete and category else "unavailable"),
+        category_reason_code=(None if category_complete and category else "source_incomplete"),
+    )
+    item.pop("queue_total_matched", None)
+    return item
+
+
+def _queue_visibility(
+    conn: Any,
+    authorized: Any,
+    *,
+    requested_namespaces: tuple[tuple[str, str], ...],
+    filters: IssueFilters,
+    authorized_cluster_count: int,
+    permission_scope_limited: bool,
+) -> JsonObject:
+    row = (
+        conn.execute(
+            select(
+                func.count().label("total"),
+                func.sum(case((authorized.c.namespace.is_not(None), 1), else_=0)).label(
+                    "namespaces_complete"
+                ),
+                func.sum(case((authorized.c.severity_complete.is_(True), 1), else_=0)).label(
+                    "severity_complete"
+                ),
+                func.sum(case((authorized.c.category_complete.is_(True), 1), else_=0)).label(
+                    "category_complete"
+                ),
+            ).select_from(authorized)
+        )
+        .mappings()
+        .one()
+    )
+    total = int(row["total"] or 0)
+    availability = {
+        "namespaces": _availability(total, int(row["namespaces_complete"] or 0)),
+        "severity": _availability(total, int(row["severity_complete"] or 0)),
+        "category": _availability(total, int(row["category_complete"] or 0)),
+    }
+    reasons = {
+        f"legacy_{axis}_projection_incomplete"
+        for axis, value in availability.items()
+        if total > 0 and value != "available"
+    }
+    if permission_scope_limited:
+        reasons.add("cluster_scope_permission_limited")
+    required_unavailable = (
+        (bool(filters.namespaces) and availability["namespaces"] == "unavailable")
+        or (bool(filters.severities) and availability["severity"] == "unavailable")
+        or (bool(filters.categories) and availability["category"] == "unavailable")
+    )
+    if required_unavailable:
+        completeness = "unavailable"
+    elif reasons:
+        completeness = "partial"
+    else:
+        completeness = "exact"
+    return {
+        "state": "complete" if not reasons else "partial",
+        "completeness": completeness,
+        "authorized_cluster_count": authorized_cluster_count,
+        "requested_namespaces": [
+            f"{cluster_id}/{namespace}" for cluster_id, namespace in requested_namespaces
+        ],
+        "reason_codes": sorted(reasons),
+    }
+
+
+def _queue_facets(conn: Any, filtered: Any) -> tuple[JsonObject, bool]:
+    axes = {
+        "namespaces": (
+            filtered.c.cluster_id + literal("/") + filtered.c.namespace,
+            filtered.c.namespace.is_not(None),
+        ),
+        "severities": (
+            filtered.c.severity,
+            and_(filtered.c.severity_complete.is_(True), filtered.c.severity.is_not(None)),
+        ),
+        "categories": (
+            filtered.c.category,
+            and_(filtered.c.category_complete.is_(True), filtered.c.category.is_not(None)),
+        ),
+    }
+    facets: JsonObject = {}
+    truncated = False
+    for axis, (value, predicate) in axes.items():
+        rows = (
+            conn.execute(
+                select(value.label("value"), func.count().label("count"))
+                .select_from(filtered)
+                .where(predicate)
+                .group_by(value)
+                .order_by(value)
+                .limit(MAX_QUEUE_FACETS + 1)
+            )
+            .mappings()
+            .all()
+        )
+        if len(rows) > MAX_QUEUE_FACETS:
+            truncated = True
+            rows = rows[:MAX_QUEUE_FACETS]
+        facets[axis] = [{"value": str(item["value"]), "count": int(item["count"])} for item in rows]
+    return facets, truncated
+
+
+def _empty_rca_issue_queue(
+    requested_namespaces: tuple[tuple[str, str], ...],
+) -> JsonObject:
+    return {
+        "items": [],
+        "total_matched": 0,
+        "visibility": {
+            "state": "restricted",
+            "completeness": "unavailable",
+            "authorized_cluster_count": 0,
+            "requested_namespaces": [
+                f"{cluster_id}/{namespace}" for cluster_id, namespace in requested_namespaces
+            ],
+            "reason_codes": ["no_authorized_clusters"],
+        },
+        "facets": {"namespaces": [], "severities": [], "categories": []},
     }
 
 

@@ -1,7 +1,7 @@
 import type { WorkloadDetailRequest, WorkloadDetailTab } from "../../features/workload-detail/workloadDetailContract";
 import { serializeRouteSearch } from "../../features/filters/routeSearchAdapter";
 
-const VALID_TABS = new Set<WorkloadDetailTab>(["overview", "pods", "events", "logs"]);
+const VALID_TABS = new Set<WorkloadDetailTab>(["overview", "pods", "events", "logs", "execution"]);
 
 export interface WorkloadDetailRouteIdentity extends WorkloadDetailRequest {
   tab: WorkloadDetailTab;

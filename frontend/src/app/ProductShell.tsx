@@ -1,5 +1,5 @@
 import { Activity, Settings } from "lucide-react";
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
@@ -26,7 +26,10 @@ import { useProductTheme } from "../shared/ui/useProductTheme";
 import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
-import { UnifiedFilterBar } from "../features/global-filter/UnifiedFilterBar";
+import {
+  UnifiedFilterBar,
+  type UnifiedFilterBarHandle,
+} from "../features/global-filter/UnifiedFilterBar";
 import {
   EMPTY_GLOBAL_FILTER_PORT,
   type GlobalFilterPort,
@@ -62,6 +65,27 @@ import {
 } from "../features/alerts/alertEventsContract";
 import type { ProductRouteDefinition } from "./productRoutes";
 import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
+import { useOptionalDiagnoseSession } from "../features/diagnose/DiagnoseSessionContext";
+import { NamespaceScopeSync } from "../features/namespace-scope/NamespaceScopeSync";
+import {
+  EMPTY_SHELL_STATE_PORT,
+  type ShellStatePort,
+} from "../features/shell-state/shellStateContract";
+import {
+  EMPTY_RUNTIME_STATUS_PORT,
+  type RuntimeStatusPort,
+} from "../features/runtime-status/runtimeStatusContract";
+import {
+  RuntimeDiagnosticsDialog,
+  type RuntimeDiagnosticsDialogHandle,
+} from "../features/runtime-status/RuntimeDiagnosticsDialog";
+import { VersionUpdateNotice } from "../features/runtime-status/VersionUpdateNotice";
+import {
+  EMPTY_PORT_FORWARD_SESSION_PORT,
+  type PortForwardSessionPort,
+} from "../features/service-access/portForwardSessionContract";
+import { PortForwardSessionsProvider } from "../features/service-access/PortForwardSessionsProvider";
+import { PortForwardSessionIndicator } from "./PortForwardSessionIndicator";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -75,6 +99,9 @@ interface ProductShellProps {
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
   alertEventsPort?: AlertEventsPort;
+  shellStatePort?: ShellStatePort;
+  runtimeStatusPort?: RuntimeStatusPort;
+  portForwardSessions?: PortForwardSessionPort;
 }
 
 export function ProductShell({
@@ -85,21 +112,28 @@ export function ProductShell({
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  shellStatePort = EMPTY_SHELL_STATE_PORT,
+  runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
+  portForwardSessions = EMPTY_PORT_FORWARD_SESSION_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-          <BottomDockProvider port={logStreamPort}>
-            <AlertEventsProvider port={alertEventsPort}>
-              <ProductShellFrame
-                auth={auth}
-                aiAssistantPort={aiAssistantPort}
-                globalFilterPort={globalFilterPort}
-                releasedSurfaceIds={releasedSurfaceIds}
-              />
-            </AlertEventsProvider>
-          </BottomDockProvider>
+          <PortForwardSessionsProvider port={portForwardSessions}>
+            <BottomDockProvider port={logStreamPort}>
+              <AlertEventsProvider port={alertEventsPort}>
+                <ProductShellFrame
+                  auth={auth}
+                  aiAssistantPort={aiAssistantPort}
+                  globalFilterPort={globalFilterPort}
+                  releasedSurfaceIds={releasedSurfaceIds}
+                  shellStatePort={shellStatePort}
+                  runtimeStatusPort={runtimeStatusPort}
+                />
+              </AlertEventsProvider>
+            </BottomDockProvider>
+          </PortForwardSessionsProvider>
         </SidebarProvider>
       </TooltipProvider>
     </ProductSessionProvider>
@@ -111,10 +145,14 @@ function ProductShellFrame({
   auth,
   releasedSurfaceIds,
   globalFilterPort,
-}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
+  shellStatePort = EMPTY_SHELL_STATE_PORT,
+  runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
+}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "runtimeStatusPort" | "shellStatePort">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
+  const diagnosticsDialogRef = useRef<RuntimeDiagnosticsDialogHandle>(null);
+  const unifiedFilterRef = useRef<UnifiedFilterBarHandle>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
@@ -123,6 +161,7 @@ function ProductShellFrame({
   const { t } = useI18n();
   const themeController = useProductTheme();
   const alertEvents = useAlertEvents();
+  const diagnose = useOptionalDiagnoseSession();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
   const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
@@ -169,8 +208,12 @@ function ProductShellFrame({
     isCommandPaletteOpen,
     isHelpOpen: isShortcutHelpOpen,
     onCommandPaletteOpen: () => setCommandPaletteOpen(true),
+    onContextOpen: () => unifiedFilterRef.current?.openGroup("cluster"),
+    onDiagnosticsOpen: () => diagnosticsDialogRef.current?.open(),
     onHelpToggle: toggleShortcutHelp,
+    onNamespaceOpen: () => unifiedFilterRef.current?.openGroup("namespace"),
     onRouteSelect: selectProductRoute,
+    onSearchFocus: () => unifiedFilterRef.current?.focus(),
     onThemeToggle: themeController.toggle,
   });
   if (!currentRoute) {
@@ -191,11 +234,13 @@ function ProductShellFrame({
       }), "detail-close");
       toast.info(t("shell.ai.narrowDetailClosed"));
     }
+    if (!next) diagnose?.closeRun();
     setAiOpen(next);
   };
 
   return (
     <>
+      <NamespaceScopeSync port={shellStatePort} />
       <a
         className="fixed left-3 top-3 z-50 -translate-y-20 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-transform focus:translate-y-0 motion-reduce:transition-none"
         href="#product-main"
@@ -297,6 +342,11 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
+            <PortForwardSessionIndicator
+              resourcesAvailable={releasedSurfaceIds.has("resources")}
+            />
+            <VersionUpdateNotice port={runtimeStatusPort} />
+            <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}
@@ -317,7 +367,10 @@ function ProductShellFrame({
             <LocaleToggle />
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
+            <UnifiedFilterBar
+              port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
+              ref={unifiedFilterRef}
+            />
           </div>
         </header>
 
@@ -333,7 +386,7 @@ function ProductShellFrame({
             <AiAssistantPanel
               context={aiContext}
               onOpenChange={changeAiOpen}
-              open={isAiOpen}
+              open={isAiOpen || Boolean(diagnose?.activeRunId)}
               port={aiAssistantPort}
             />
           </div>

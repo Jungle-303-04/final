@@ -10,6 +10,7 @@ from packages.contracts.gateway.base import StrictModel
 
 TERMINAL_PROTOCOL = "terminal.v1"
 BROWSER_TERMINAL_PATH = "/live/terminal"
+POD_EXEC_AGENT_CAPABILITY = "pod_exec_stream"
 
 MAX_TERMINAL_COMMAND_LENGTH = 1_024
 MAX_TERMINAL_INPUT_LENGTH = 4_096

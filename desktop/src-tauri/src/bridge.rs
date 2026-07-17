@@ -31,6 +31,7 @@ pub struct DesktopCapabilitySet {
     pub external_url: CapabilityAvailability,
     pub safe_file: CapabilityAvailability,
     pub local_terminal: CapabilityAvailability,
+    pub port_forward_sessions: CapabilityAvailability,
     pub updater: CapabilityAvailability,
 }
 
@@ -46,6 +47,8 @@ impl DesktopCapabilitySet {
             // The PTY is constructed and owned only by the local Tauri process.
             // It does not traverse the Python gateway or receive server-held credentials.
             local_terminal: CapabilityAvailability::available(),
+            // The registry and listener handles remain inside this Tauri process.
+            port_forward_sessions: CapabilityAvailability::available(),
             updater: CapabilityAvailability::unsupported(UPDATER_BLOCKER),
         }
     }

@@ -12,7 +12,9 @@ from domains.target.connectivity import (
     AGENT_STATUS_STALE,
     cluster_connection_status,
 )
+from domains.workload_detail.rightsizing_projection import workload_rightsizing_evidence
 from packages.contracts.parity import CapabilitySet, ClusterScope, ResourceRef
+from packages.contracts.rightsizing import RightsizingWorkloadEvidence
 from packages.contracts.workload_detail import (
     WorkloadDetail,
     WorkloadEventCollection,
@@ -153,6 +155,12 @@ def workload_detail_projection(
     )
     events, event_excluded = project_events(event_rows)
     log_stream = log_stream_capability(resource, connection)
+    rightsizing = workload_rightsizing_evidence(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource=resource_ref,
+    )
 
     return WorkloadDetail(
         scope=scope,
@@ -177,13 +185,19 @@ def workload_detail_projection(
             reason_codes=("direct_event_relationship_is_bounded",),
         ),
         log_stream=log_stream,
+        rightsizing=rightsizing,
         capabilities=CapabilitySet(
             scope=scope,
             resource=resource_ref,
             revision=observation_snapshot_id,
             actions=(),
         ),
-        features=feature_availability(coverage_availability, log_stream),
+        features=feature_availability(
+            coverage_availability,
+            log_stream,
+            rightsizing,
+            resource,
+        ),
     )
 
 
@@ -320,6 +334,8 @@ def log_stream_capability(
 def feature_availability(
     coverage: str,
     log_stream: WorkloadLogStreamCapability,
+    rightsizing: RightsizingWorkloadEvidence,
+    resource: Mapping[str, Any],
 ) -> tuple[WorkloadFeatureAvailability, ...]:
     covered = "available" if coverage == "available" else "partial"
     covered_reasons = () if covered == "available" else ("inventory_coverage_partial",)
@@ -333,6 +349,10 @@ def feature_availability(
         ("operations", "workload_operations_not_integrated"),
         ("yaml", "safe_manifest_projection_not_integrated"),
         ("compare", "safe_comparable_manifest_not_integrated"),
+    )
+    run_kinds = mapping(resource.get("summary")).get("scheduled_run_kinds")
+    execution_available = isinstance(run_kinds, list) and any(
+        isinstance(kind, str) and bool(kind) for kind in run_kinds
     )
     return (
         WorkloadFeatureAvailability(
@@ -352,6 +372,20 @@ def feature_availability(
             name="logs",
             availability=log_stream.availability,
             reason_codes=log_stream.reason_codes,
+        ),
+        WorkloadFeatureAvailability(
+            name="execution",
+            availability=covered if execution_available else "unavailable",
+            reason_codes=(
+                covered_reasons
+                if execution_available
+                else ("scheduled_run_projection_not_available",)
+            ),
+        ),
+        WorkloadFeatureAvailability(
+            name="rightsizing",
+            availability=rightsizing.availability,
+            reason_codes=rightsizing.reason_codes,
         ),
         *(
             WorkloadFeatureAvailability(

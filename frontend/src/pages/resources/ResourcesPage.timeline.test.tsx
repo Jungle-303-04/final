@@ -70,6 +70,16 @@ describe("ResourcesPage S11 timeline strip", () => {
             from: occurredMs - options.bucketMs,
             to: occurredMs,
           }],
+          freshnessPolicy: {
+            staleAfterSeconds: 5,
+            refreshAfterSeconds: 15,
+            keepLastSuccess: true,
+            pauseWhenHidden: true,
+            eventInvalidation: true,
+            retryAfterSeconds: null,
+            retryLimit: null,
+            postMutationRefreshAfterSeconds: null,
+          },
         });
       }),
     });

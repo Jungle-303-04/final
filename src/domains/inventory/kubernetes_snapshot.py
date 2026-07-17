@@ -19,9 +19,12 @@ def kubernetes_evidence_to_inventory_snapshot(
     collected_at = cluster.get("collected_at")
     resources = [
         *(_workload_resource(item) for item in _items(kubernetes, "workloads")),
+        *(_workload_revision_resource(item) for item in _items(kubernetes, "workload_revisions")),
         *(_pod_resource(item) for item in _items(kubernetes, "pods")),
         *(_node_resource(item, _items(kubernetes, "pods")) for item in _items(kubernetes, "nodes")),
         *(_service_resource(item) for item in _items(kubernetes, "services")),
+        *(_resource_quota_resource(item) for item in _items(kubernetes, "resourcequotas")),
+        *(_custom_resource(item) for item in _items(kubernetes, "custom_resources")),
         *(
             _event_resource(item, collected_at=collected_at)
             for item in _items(kubernetes, "events")
@@ -92,10 +95,30 @@ def _pod_usage(pods: list[JsonObject]) -> JsonObject:
         if not name:
             continue
         payload: JsonObject = {}
-        for source_key, target_key in (("cpu_mcores", "cpu_mcores"), ("mem_mib", "mem_mib")):
+        uid = pod.get("uid")
+        if isinstance(uid, str) and uid.strip():
+            payload["uid"] = uid
+        for source_key, target_key in (
+            ("cpu_mcores", "cpu_mcores"),
+            ("mem_mib", "mem_mib"),
+            ("cpu_request_mcores", "cpu_request_mcores"),
+            ("cpu_limit_mcores", "cpu_limit_mcores"),
+            ("mem_request_mib", "mem_request_mib"),
+            ("mem_limit_mib", "mem_limit_mib"),
+        ):
             value = _float_or_none(pod.get(source_key))
             if value is not None:
                 payload[target_key] = value
+        for key in ("metrics_observed_at", "metrics_window"):
+            value = pod.get(key)
+            if isinstance(value, str) and value.strip():
+                payload[key] = value
+        container_metrics = pod.get("container_metrics")
+        if isinstance(container_metrics, list) and all(
+            isinstance(item, dict) for item in container_metrics
+        ):
+            payload["container_metrics"] = [dict(item) for item in container_metrics]
+            payload["container_metrics_complete"] = pod.get("container_metrics_complete") is True
         if payload:
             usage[f"{namespace}/{name}"] = payload
     return usage
@@ -117,6 +140,10 @@ def _node_usage(nodes: list[JsonObject]) -> JsonObject:
             value = _float_or_none(node.get(source_key))
             if value is not None:
                 payload[target_key] = value
+        for key in ("metrics_observed_at", "metrics_window"):
+            value = node.get(key)
+            if isinstance(value, str) and value.strip():
+                payload[key] = value
         if payload:
             if "cpu_ratio" in payload:
                 payload["cpu_pct"] = round(float(payload["cpu_ratio"]) * 100, 1)
@@ -170,18 +197,57 @@ def _workload_resource(item: JsonObject) -> JsonObject:
     desired = int(item.get("desired_replicas") or 0)
     ready = int(item.get("ready_replicas") or 0)
     kind = _text(item.get("kind"), "Workload")
+    failed = int(item.get("failed") or 0)
+    succeeded = int(item.get("succeeded") or 0)
+    active = int(item.get("active") or 0)
+    completions = max(1, int(item.get("completions") or 1))
+    if kind == "Job":
+        status = (
+            "Running"
+            if active > 0
+            else "Failed"
+            if failed > 0
+            else ("Succeeded" if succeeded >= completions else "Pending")
+        )
+        healthy = failed == 0
+    else:
+        status = f"{ready}/{desired}"
+        healthy = desired == 0 or ready >= desired
     return {
         "resource_type": "workload",
-        "api_version": "apps/v1",
+        "api_version": _text(item.get("api_version"), "apps/v1"),
         "kind": kind,
         "namespace": _text(item.get("namespace"), "default"),
         "name": _text(item.get("name"), kind.lower()),
         "uid": item.get("uid"),
         "resource_version": item.get("resource_version"),
-        "status": f"{ready}/{desired}",
-        "health": _health(desired == 0 or ready >= desired),
+        "status": status,
+        "health": _health(healthy),
         "labels": _labels(item),
         "summary": item,
+        "raw": item,
+    }
+
+
+def _workload_revision_resource(item: JsonObject) -> JsonObject:
+    return {
+        "resource_type": "workload_revision",
+        "api_version": _text(item.get("api_version"), "apps/v1"),
+        "kind": _text(item.get("kind"), "ControllerRevision"),
+        "namespace": _text(item.get("namespace"), "default"),
+        "name": _text(item.get("name"), "revision"),
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
+        "status": _text(item.get("revision"), "observed"),
+        "health": "healthy",
+        "labels": {},
+        "summary": {
+            "owner_kind": item.get("owner_kind"),
+            "owner_name": item.get("owner_name"),
+            "owner_uid": item.get("owner_uid"),
+            "revision": item.get("revision"),
+            "created_at": item.get("created_at"),
+        },
         "raw": item,
     }
 
@@ -235,7 +301,7 @@ def _node_resource(item: JsonObject, pods: list[JsonObject]) -> JsonObject:
         "labels": _labels(item),
         "summary": {
             **item,
-            "pod_count": sum(1 for pod in pods if pod.get("node_name") == name),
+            "pod_count": _scheduled_pod_count(pods, name),
         },
         "raw": item,
     }
@@ -255,6 +321,62 @@ def _service_resource(item: JsonObject) -> JsonObject:
         "labels": _labels(item),
         "summary": item,
         "raw": item,
+    }
+
+
+def _resource_quota_resource(item: JsonObject) -> JsonObject:
+    return {
+        "resource_type": "resourcequota",
+        "api_version": "v1",
+        "kind": "ResourceQuota",
+        "namespace": _text(item.get("namespace")),
+        "name": _text(item.get("name")),
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
+        "status": "Observed",
+        "health": "healthy",
+        "labels": _labels(item),
+        "summary": {
+            "hard": _mapping(item.get("hard")),
+            "used": _mapping(item.get("used")),
+        },
+        "raw": item,
+    }
+
+
+def _custom_resource(item: JsonObject) -> JsonObject:
+    raw = _mapping(item.get("raw"))
+    raw_status = _mapping(raw.get("status"))
+    sync = _mapping(raw_status.get("sync"))
+    provider_health = _mapping(raw_status.get("health"))
+    status_value = (
+        _text(sync.get("status"))
+        or _text(raw_status.get("phase"))
+        or _text(provider_health.get("status"))
+        or "Observed"
+    )
+    health_value = _text(provider_health.get("status")).casefold()
+    health = (
+        "healthy"
+        if health_value in {"healthy", "ready", "succeeded", "true"}
+        else "degraded"
+        if health_value
+        else "unknown"
+    )
+    return {
+        "resource_type": "custom_resource",
+        "api_version": _text(item.get("api_version")),
+        "kind": _text(item.get("kind")),
+        "namespace": item.get("namespace"),
+        "name": _text(item.get("name")),
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
+        "status": status_value,
+        "health": health,
+        "labels": _labels(item),
+        "annotations": _mapping(item.get("annotations")),
+        "summary": {key: value for key, value in item.items() if key != "raw"},
+        "raw": raw,
     }
 
 
@@ -316,14 +438,31 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     namespaces = sorted(
         {
             _text(item.get("namespace"))
-            for key in ("pods", "workloads", "services", "events", "endpoints")
+            for key in (
+                "pods",
+                "workloads",
+                "services",
+                "events",
+                "endpoints",
+                "resourcequotas",
+                "custom_resources",
+            )
             for item in _items(kubernetes, key)
             if item.get("namespace")
         }
     )
     label_sources = [
         item
-        for key in ("pods", "workloads", "nodes", "services", "events", "endpoints")
+        for key in (
+            "pods",
+            "workloads",
+            "nodes",
+            "services",
+            "events",
+            "endpoints",
+            "resourcequotas",
+            "custom_resources",
+        )
         for item in _items(kubernetes, key)
     ]
     collection_scopes = _items(kubernetes, "collection_scopes")
@@ -335,7 +474,7 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
             {
                 "name": _text(node.get("name"), "node"),
                 "ready": bool(node.get("ready")),
-                "pod_count": sum(1 for pod in pods if pod.get("node_name") == node.get("name")),
+                "pod_count": _scheduled_pod_count(pods, _text(node.get("name"), "node")),
                 "version": _text(_mapping(node.get("node_info")).get("kubeletVersion")),
             }
             for node in nodes
@@ -360,7 +499,25 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     detected_provider = normalized_detected_provider(kubernetes.get("detected_provider"))
     if detected_provider is not None:
         summary["detected_provider"] = detected_provider
+    api_resource_discovery = _mapping(kubernetes.get("api_resource_discovery"))
+    if api_resource_discovery:
+        summary["api_resource_discovery"] = api_resource_discovery
+    resource_access = _mapping(kubernetes.get("resource_access"))
+    if resource_access:
+        summary["resource_access"] = resource_access
+    dynamic_collections = _items(kubernetes, "dynamic_resource_collections")
+    if dynamic_collections:
+        summary["dynamic_resource_collections"] = dynamic_collections
     return summary
+
+
+def _scheduled_pod_count(pods: list[JsonObject], node_name: str) -> int:
+    return sum(
+        1
+        for pod in pods
+        if _text(pod.get("node_name")) == node_name
+        and _text(pod.get("phase")) not in {"Succeeded", "Failed"}
+    )
 
 
 def _resources_complete(_kubernetes: JsonObject) -> bool:

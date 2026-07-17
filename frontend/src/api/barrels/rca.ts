@@ -6,6 +6,12 @@ export {
   type ListRcaTimelineOptions,
 } from "../rca-list";
 export {
+  listRcaIssues,
+  RCA_ISSUES_DEFAULT_LIMIT,
+  RCA_ISSUES_MAX_LIMIT,
+  type ListRcaIssuesOptions,
+} from "../rca-issues";
+export {
   getRcaIncident,
   type GetRcaIncidentOptions,
 } from "../rca-detail";
@@ -46,8 +52,12 @@ export {
 export {
   rcaTimelineItemSchema,
   rcaTimelineSchema,
+  rcaIssueItemSchema,
+  rcaIssueListSchema,
   type RcaTimeline,
   type RcaTimelineItem,
+  type RcaIssueItem,
+  type RcaIssueList,
 } from "../schemas";
 export {
   rcaListSchema,

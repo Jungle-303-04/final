@@ -206,6 +206,16 @@ def test_projection_allowlists_observations_and_uses_existing_sse_kind() -> None
         "reason_codes": [],
     }
     assert detail["capabilities"]["actions"] == []
+    assert detail["rightsizing"] == {
+        "availability": "unavailable",
+        "reason_codes": ["rightsizing_observation_not_integrated"],
+    }
+    assert (
+        next(feature for feature in detail["features"] if feature["name"] == "rightsizing")[
+            "availability"
+        ]
+        == "unavailable"
+    )
     assert {feature["name"] for feature in detail["features"]} >= {"yaml", "compare"}
     assert "raw" not in str(detail)
     assert "status" not in detail["observation"]
@@ -237,6 +247,26 @@ def test_projection_uses_exact_api_version_query_for_same_kind_collision() -> No
             "name": NAME,
         }
     ]
+
+
+def test_projection_exposes_execution_only_from_collected_run_kind_evidence() -> None:
+    db = WorkloadDetailDb()
+    db.rows[0]["summary"]["scheduled_run_kinds"] = ["Job"]
+
+    detail = workload_detail_projection(
+        db,
+        workspace_id=WORKSPACE_ID,
+        cluster_id=CLUSTER_ID,
+        api_group="apps",
+        api_version="v1",
+        kind="Deployment",
+        namespace=NAMESPACE,
+        name=NAME,
+    )
+
+    execution = next(feature for feature in detail.features if feature.name == "execution")
+    assert execution.availability == "available"
+    assert execution.reason_codes == ()
 
 
 def test_route_preserves_camel_case_reference_queries_and_rbac() -> None:

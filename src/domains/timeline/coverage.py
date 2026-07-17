@@ -24,6 +24,10 @@ from packages.contracts.parity import ClusterScope
 from packages.contracts.timeline import TimelineCoverage, TimelineQuery, TimelineWindow
 
 
+class TimelineCoverageLimitExceeded(ValueError):
+    """The retained coverage response cannot be represented within its server limit."""
+
+
 @dataclass(frozen=True)
 class KubernetesEventCaptureObservation:
     """One normalized global Event capture state from a durable snapshot."""
@@ -38,6 +42,8 @@ def project_kubernetes_event_capture_coverage(
     *,
     window: TimelineWindow,
     snapshots: Iterable[Mapping[str, object]],
+    snapshots_ordered: bool = False,
+    max_intervals: int | None = None,
 ) -> tuple[TimelineCoverage, ...]:
     """Project closed, proven global Event capture gaps for one authorized window.
 
@@ -46,6 +52,13 @@ def project_kubernetes_event_capture_coverage(
     that was never observed by the collector.
     """
     scopes_by_cluster = _authorized_scopes_by_cluster(read_scope)
+    if snapshots_ordered:
+        return _project_ordered_capture_coverage(
+            scopes_by_cluster,
+            window=window,
+            snapshots=snapshots,
+            max_intervals=max_intervals,
+        )
     observations_by_cluster: dict[str, list[KubernetesEventCaptureObservation]] = {}
     for snapshot in snapshots:
         observation = _capture_observation(snapshot, scopes_by_cluster, window=window)
@@ -64,18 +77,78 @@ def project_kubernetes_event_capture_coverage(
             from_ms = _milliseconds(opened_at)
             to_ms = _milliseconds(observation.observed_at)
             if _intersects_window(from_ms, to_ms, window):
-                projected.extend(
-                    TimelineCoverage(
-                        scope=scope,
-                        source="kubernetes_event",
-                        from_ms=from_ms,
-                        to_ms=to_ms,
-                        reason="collection_gap",
-                    )
-                    for scope in scopes_by_cluster[cluster_id]
+                _append_coverage_intervals(
+                    projected,
+                    scopes=scopes_by_cluster[cluster_id],
+                    from_ms=from_ms,
+                    to_ms=to_ms,
+                    max_intervals=max_intervals,
                 )
             opened_at = None
     return tuple(sorted(projected, key=_coverage_sort_key))
+
+
+def _project_ordered_capture_coverage(
+    scopes_by_cluster: Mapping[str, tuple[ClusterScope, ...]],
+    *,
+    window: TimelineWindow,
+    snapshots: Iterable[Mapping[str, object]],
+    max_intervals: int | None,
+) -> tuple[TimelineCoverage, ...]:
+    """Project an already cluster/time ordered DB cursor with O(scopes + output) memory."""
+    opened_by_cluster: dict[str, datetime] = {}
+    last_observed_by_cluster: dict[str, datetime] = {}
+    projected: list[TimelineCoverage] = []
+    for snapshot in snapshots:
+        observation = _capture_observation(snapshot, scopes_by_cluster, window=window)
+        if observation is None:
+            continue
+        previous_observed_at = last_observed_by_cluster.get(observation.cluster_id)
+        if previous_observed_at is not None and observation.observed_at < previous_observed_at:
+            raise ValueError("timeline coverage snapshots must be ordered per cluster")
+        last_observed_by_cluster[observation.cluster_id] = observation.observed_at
+        if observation.state == "gap":
+            opened_by_cluster.setdefault(observation.cluster_id, observation.observed_at)
+            continue
+        opened_at = opened_by_cluster.get(observation.cluster_id)
+        if opened_at is None or observation.observed_at <= opened_at:
+            continue
+        from_ms = _milliseconds(opened_at)
+        to_ms = _milliseconds(observation.observed_at)
+        if _intersects_window(from_ms, to_ms, window):
+            _append_coverage_intervals(
+                projected,
+                scopes=scopes_by_cluster[observation.cluster_id],
+                from_ms=from_ms,
+                to_ms=to_ms,
+                max_intervals=max_intervals,
+            )
+        del opened_by_cluster[observation.cluster_id]
+    return tuple(sorted(projected, key=_coverage_sort_key))
+
+
+def _append_coverage_intervals(
+    projected: list[TimelineCoverage],
+    *,
+    scopes: tuple[ClusterScope, ...],
+    from_ms: int,
+    to_ms: int,
+    max_intervals: int | None,
+) -> None:
+    for scope in scopes:
+        if max_intervals is not None and len(projected) >= max_intervals:
+            raise TimelineCoverageLimitExceeded(
+                f"timeline coverage exceeds the server interval limit ({max_intervals})"
+            )
+        projected.append(
+            TimelineCoverage(
+                scope=scope,
+                source="kubernetes_event",
+                from_ms=from_ms,
+                to_ms=to_ms,
+                reason="collection_gap",
+            )
+        )
 
 
 def authorized_kubernetes_event_coverage(

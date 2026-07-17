@@ -13,10 +13,12 @@ from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
+from domains.dashboard.ready_stream import DashboardReadySnapshot
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
 )
+from domains.rca.timeline import issue_presentation_severity
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.storage.engine import DatabaseConnection
@@ -141,10 +143,10 @@ def incident_is_live_or_non_ephemeral(timeline: Any) -> Any:
     return or_(~is_ephemeral, live_unhealthy_ephemeral_resource_exists(timeline))
 
 
-def _rca_timeline_response_columns() -> tuple[Any, ...]:
+def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> tuple[Any, ...]:
     """화면 응답에 필요한 컬럼만 읽어 큰 payload 전송을 피한다."""
     table = RcaTimeline.__table__
-    return (
+    columns: tuple[Any, ...] = (
         table.c.id,
         table.c.workspace_id,
         table.c.correlation_id,
@@ -167,10 +169,78 @@ def _rca_timeline_response_columns() -> tuple[Any, ...]:
         table.c.error_reason,
         table.c.updated_at,
     )
+    if include_issue_severity:
+        return (*columns, table.c.severity, table.c.severity_complete)
+    return columns
 
 
 class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
+
+    def latest_dashboard_ready_snapshot(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> DashboardReadySnapshot | None:
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(table.c.snapshot_id, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
+            )
+            .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return (
+            DashboardReadySnapshot(
+                snapshot_id=str(row["snapshot_id"]),
+                created_at=row["created_at"],
+            )
+            if row is not None
+            else None
+        )
+
+    def list_dashboard_ready_snapshots(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        after: DashboardReadySnapshot,
+        limit: int,
+    ) -> tuple[DashboardReadySnapshot, ...]:
+        effective_limit = max(1, min(int(limit), 100))
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(table.c.snapshot_id, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
+                or_(
+                    table.c.created_at > after.created_at,
+                    and_(
+                        table.c.created_at == after.created_at,
+                        table.c.snapshot_id > after.snapshot_id,
+                    ),
+                ),
+            )
+            .order_by(table.c.created_at.asc(), table.c.snapshot_id.asc())
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return tuple(
+            DashboardReadySnapshot(
+                snapshot_id=str(row["snapshot_id"]),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        )
 
     def list_metric_query_presets(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
         table = MetricQueryPreset.__table__
@@ -354,7 +424,13 @@ class DashboardRepository(DatabaseConnection):
             key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
             for key in preserve_when_missing
         }
-        for value_name in ("severity", "environment", "application_ids", "labels"):
+        for value_name in (
+            "severity",
+            "category",
+            "environment",
+            "application_ids",
+            "labels",
+        ):
             complete_name = f"{value_name}_complete"
             existing_value = getattr(table.c, value_name)
             incoming_value = getattr(insert.excluded, value_name)
@@ -409,6 +485,93 @@ class DashboardRepository(DatabaseConnection):
         allowed_cluster_ids: set[str] | None,
         limit: int = 50,
     ) -> list[JsonObject]:
+        return self._list_rca_timeline_projection(
+            workspace_id,
+            allowed_cluster_ids,
+            limit,
+            include_issue_severity=False,
+        )
+
+    def list_rca_issues(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int = 50,
+    ) -> list[JsonObject]:
+        """Return the additive Issues queue projection without altering timeline JSON."""
+        return self._list_rca_timeline_projection(
+            workspace_id,
+            allowed_cluster_ids,
+            limit,
+            include_issue_severity=True,
+        )
+
+    def list_resource_issues(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        namespace: str | None,
+        resource_kind: str,
+        resource_name: str,
+        limit: int = 26,
+    ) -> list[JsonObject]:
+        """Return an exact, bounded resource projection with server-owned onset evidence."""
+
+        bounded_limit = max(1, min(limit, 101))
+        scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
+        table = RcaTimeline.__table__
+        statement: Select[Any] = (
+            select(
+                *_rca_timeline_response_columns(include_issue_severity=True),
+                table.c.created_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.incident_id.is_not(None),
+                func.lower(table.c.incident_resource_kind) == resource_kind.casefold(),
+                func.coalesce(table.c.incident_namespace, "") == (namespace or ""),
+                table.c.incident_resource_name == resource_name,
+            )
+            .order_by(table.c.updated_at.desc(), table.c.id.desc())
+            .limit(scan_limit)
+        )
+        statement = _exclude_non_incident_detection(statement)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        seen: set[str] = set()
+        items: list[JsonObject] = []
+        for row in rows:
+            item = serialize_timeline_row(row)
+            item.update(issue_severity_projection(row))
+            key = incident_logical_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            created_at = item.get("created_at")
+            if not isinstance(created_at, str) or not created_at:
+                continue
+            item["onset"] = {
+                "first_observed_at": created_at,
+                "source": "timeline_created_at",
+                "timing_kind": None,
+                "timing_availability": "unavailable",
+                "timing_reason_code": "health_transition_evidence_unavailable",
+            }
+            items.append(item)
+            if len(items) >= bounded_limit:
+                break
+        return items
+
+    def _list_rca_timeline_projection(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int,
+        *,
+        include_issue_severity: bool,
+    ) -> list[JsonObject]:
         if allowed_cluster_ids == set():
             return []
         bounded_limit = max(1, min(limit, 100))
@@ -417,7 +580,7 @@ class DashboardRepository(DatabaseConnection):
         # without starving other incidents from the operator list.
         scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
         statement: Select[Any] = (
-            select(*_rca_timeline_response_columns())
+            select(*_rca_timeline_response_columns(include_issue_severity=include_issue_severity))
             .where(
                 RcaTimeline.workspace_id == workspace_id,
                 # Command/approval subjects are shared by incident recovery and
@@ -436,6 +599,8 @@ class DashboardRepository(DatabaseConnection):
         items: list[JsonObject] = []
         for row in rows:
             item = serialize_timeline_row(row)
+            if include_issue_severity:
+                item.update(issue_severity_projection(row))
             key = incident_logical_key(item)
             if key in seen:
                 continue
@@ -826,6 +991,8 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
     raw_severity = _first_string(payload, ("severity",))
     severity = raw_severity.casefold() if raw_severity is not None else None
+    raw_category = _first_string(payload, ("incident", "category"), ("category",))
+    category = raw_category.casefold() if raw_category is not None else None
     is_incident_detection = str(evt.subject) == EventSubject.INCIDENT_DETECTED.value
     row: JsonObject = {
         "workspace_id": workspace_id,
@@ -835,6 +1002,8 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
         **projection,
         "severity": severity if is_incident_detection else None,
         "severity_complete": is_incident_detection and severity is not None,
+        "category": category if is_incident_detection else None,
+        "category_complete": is_incident_detection and category is not None,
         "environment": None,
         "environment_complete": False,
         "application_ids": None,
@@ -866,6 +1035,29 @@ def serialize_timeline_row(row: Any) -> JsonObject:
     item["supporting_evidence"] = item.get("supporting_evidence") or []
     item["missing_evidence"] = item.get("missing_evidence") or []
     return item
+
+
+def issue_severity_projection(row: Any) -> JsonObject:
+    """Keep source absence distinct from a verified non-queue severity tier."""
+    item = dict(row)
+    source_complete = item.get("severity_complete") is True
+    tier = issue_presentation_severity(
+        item.get("severity"),
+        source_complete=source_complete,
+    )
+    if tier is not None:
+        return {
+            "issue_severity": tier,
+            "severity_availability": "available",
+            "severity_reason_code": None,
+        }
+    return {
+        "issue_severity": None,
+        "severity_availability": "unavailable",
+        "severity_reason_code": (
+            "source_incomplete" if not source_complete else "outside_two_tier_scale"
+        ),
+    }
 
 
 def _incident_projection(

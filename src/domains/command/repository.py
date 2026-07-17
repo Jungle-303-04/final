@@ -111,6 +111,10 @@ class DuplicateCommandControl(CommandControlError):
         self.control = control
 
 
+class AgentCommandCapacityExceeded(RuntimeError):
+    """A transaction-scoped command capacity gate rejected a new logical row."""
+
+
 def rca_test_guard_lock_key(
     workspace_id: str,
     cluster_id: str,
@@ -122,6 +126,12 @@ def rca_test_guard_lock_key(
     canonical = "\x1f".join(
         (workspace_id, cluster_id, resource_kind.casefold(), namespace, resource_name)
     )
+    digest = hashlib.sha256(canonical.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=True)
+
+
+def command_capacity_lock_key(workspace_id: str, cluster_id: str, action: str) -> int:
+    canonical = "\x1f".join((workspace_id, cluster_id, action))
     digest = hashlib.sha256(canonical.encode("utf-8")).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
@@ -272,6 +282,7 @@ def stage_logical_command_acceptance_in_transaction(
     plan: JsonObject,
     confirmation_event_id: str,
     status: str = CommandStatus.QUEUED,
+    max_active_per_action: int | None = None,
 ) -> bool:
     """Create the logical command inside the receipt event/outbox transaction.
 
@@ -281,6 +292,36 @@ def stage_logical_command_acceptance_in_transaction(
     """
 
     table = AgentCommand.__table__
+    if max_active_per_action is not None:
+        if max_active_per_action < 1:
+            raise ValueError("command capacity must be positive")
+        workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        cluster_id = str(plan["cluster_id"])
+        action = str(plan["action"])
+        conn.execute(
+            text("select pg_advisory_xact_lock(:lock_key)"),
+            {"lock_key": command_capacity_lock_key(workspace_id, cluster_id, action)},
+        )
+        active = conn.execute(
+            select(func.count())
+            .select_from(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.action == action,
+                table.c.status.in_(
+                    (
+                        CommandStatus.QUEUED,
+                        CommandStatus.LEASED,
+                        CommandStatus.RUNNING,
+                        CommandStatus.CANCEL_REQUESTED,
+                        CommandStatus.CANCELLING,
+                    )
+                ),
+            )
+        ).scalar_one()
+        if int(active) >= max_active_per_action:
+            raise AgentCommandCapacityExceeded(f"active command capacity exceeded for {action}")
     inserted = conn.execute(
         agent_command_insert(
             correlation_id=correlation_id,
@@ -1048,6 +1089,41 @@ class AgentCommandRepository(DatabaseConnection):
         async with self.async_connection() as conn:
             row = (await conn.execute(statement)).mappings().first()
         return row_dict(row) if row else None
+
+    async def count_active_agent_commands(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        action: str,
+    ) -> int:
+        """Count bounded active commands for one workspace/cluster/action.
+
+        The count is authoritative in PostgreSQL and includes queued work, so a
+        disconnected agent cannot turn repeated browser clicks into an
+        unbounded backlog.
+        """
+
+        table = AgentCommand.__table__
+        statement = (
+            select(func.count())
+            .select_from(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.action == action,
+                table.c.status.in_(
+                    (
+                        CommandStatus.QUEUED,
+                        CommandStatus.LEASED,
+                        CommandStatus.RUNNING,
+                        CommandStatus.CANCEL_REQUESTED,
+                        CommandStatus.CANCELLING,
+                    )
+                ),
+            )
+        )
+        async with self.async_connection() as conn:
+            return int((await conn.execute(statement)).scalar_one())
 
     async def list_agent_commands_by_correlation(
         self,
