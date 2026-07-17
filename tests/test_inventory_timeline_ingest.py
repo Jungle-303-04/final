@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -523,6 +524,49 @@ def test_ingest_announces_only_after_the_unit_of_work_commits() -> None:
         assert result["snapshot_id"] == "snapshot-1"
         assert db.steps == ["begin", "mutation", "append", "commit", "fanout"]
         assert fanout.published == db.appended
+
+    asyncio.run(run())
+
+
+def test_callback_free_inventory_persistence_does_not_block_the_event_loop() -> None:
+    class SlowTransactionDb(_TransactionDb):
+        def __init__(self) -> None:
+            super().__init__(_mutation_with_add())
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.persistence_thread: int | None = None
+
+        def save_inventory_snapshot_mutation(self, **kwargs: object) -> InventorySnapshotMutation:
+            self.persistence_thread = threading.get_ident()
+            self.started.set()
+            self.release.wait(timeout=2)
+            return super().save_inventory_snapshot_mutation(**kwargs)
+
+    async def run() -> None:
+        db = SlowTransactionDb()
+        event_loop_thread = threading.get_ident()
+        timer = threading.Timer(1, db.release.set)
+        timer.start()
+        try:
+            ingest = asyncio.create_task(
+                ingest_inventory_snapshot(
+                    db=db,
+                    workspace_id="workspace-1",
+                    cluster_id="cluster-1",
+                    agent_id="agent-1",
+                    payload={},
+                )
+            )
+            assert await asyncio.to_thread(db.started.wait, 1)
+            await asyncio.wait_for(asyncio.sleep(0.01), timeout=0.25)
+            assert db.persistence_thread is not None
+            assert db.persistence_thread != event_loop_thread
+            db.release.set()
+            result = await ingest
+            assert result["snapshot_id"] == "snapshot-1"
+        finally:
+            db.release.set()
+            timer.cancel()
 
     asyncio.run(run())
 

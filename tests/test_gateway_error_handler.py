@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 from typing import Any
 
+import httpx
 import pytest
 from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
@@ -219,6 +222,45 @@ def test_gateway_readyz_fails_closed_before_session_store_starts(monkeypatch) ->
     assert service.app.state.db.ready_checks == 0
 
 
+def test_gateway_readyz_db_wait_does_not_block_health_requests(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowReadyDb:
+        def check_ready(self) -> None:
+            started.set()
+            release.wait(timeout=2)
+
+    monkeypatch.setattr(gateway, "Database", SlowReadyDb)
+    service = gateway.ApiGateway()
+    monkeypatch.setattr(service, "_session_store_available", lambda: True)
+
+    async def run() -> None:
+        timer = threading.Timer(1, release.set)
+        timer.start()
+        try:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=service.app),
+                base_url="http://gateway.test",
+            ) as client:
+                readiness = asyncio.create_task(client.get("/readyz"))
+                assert await asyncio.to_thread(started.wait, 1)
+                before = time.perf_counter()
+                health = await client.get("/healthz")
+                elapsed = time.perf_counter() - before
+                assert health.status_code == 200
+                assert elapsed < 0.25
+                release.set()
+                assert (await readiness).status_code == 200
+        finally:
+            release.set()
+            timer.cancel()
+
+    asyncio.run(run())
+
+
 def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     monkeypatch.setenv("METRICS_TOKEN", "metrics-secret")
@@ -333,6 +375,56 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
     assert "gitops_approvals_open_total 1" in response.text
     assert 'gitops_workflow_status_total{status="applying"} 1' in response.text
     assert 'gitops_workflow_current_step_total{step="approval"} 1' in response.text
+
+
+def test_gateway_metrics_snapshot_does_not_block_agent_event_loop(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-secret")
+    gateway = load_gateway_module()
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowMetricsDb:
+        def open_dead_letter_count(self) -> int:
+            started.set()
+            release.wait(timeout=2)
+            return 0
+
+        def __getattr__(self, name: str) -> Any:
+            if "counts" in name or "_by_" in name:
+                return lambda *_args, **_kwargs: {}
+            return lambda *_args, **_kwargs: 0
+
+    monkeypatch.setattr(gateway, "Database", SlowMetricsDb)
+    service = gateway.ApiGateway()
+
+    async def run() -> None:
+        timer = threading.Timer(1, release.set)
+        timer.start()
+        try:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=service.app),
+                base_url="http://gateway.test",
+            ) as client:
+                scrape = asyncio.create_task(
+                    client.get(
+                        "/metrics",
+                        headers={"authorization": "Bearer metrics-secret"},
+                    )
+                )
+                assert await asyncio.to_thread(started.wait, 1)
+                before = time.perf_counter()
+                health = await client.get("/healthz")
+                elapsed = time.perf_counter() - before
+                assert health.status_code == 200
+                assert elapsed < 0.25
+                release.set()
+                assert (await scrape).status_code == 200
+        finally:
+            release.set()
+            timer.cancel()
+
+    asyncio.run(run())
 
 
 def test_gateway_metrics_requires_token_configuration_in_protected_environment(

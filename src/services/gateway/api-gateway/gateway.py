@@ -139,6 +139,99 @@ def agent_connected_body_from_request(
     )
 
 
+def render_gateway_metrics(db: Database) -> str:
+    """Collect and render one metrics snapshot outside the ASGI event loop.
+
+    The storage contract is synchronous and each aggregate may wait for a
+    PostgreSQL connection.  Keeping the complete snapshot behind one thread
+    boundary prevents a slow Prometheus scrape from serialising unrelated
+    agent long-polls and browser reads on the process event loop.
+    """
+    scalar_metrics = {
+        "event_dead_letters_open_total": db.open_dead_letter_count(),
+        "outbox_pending_total": db.outbox_pending_count(),
+        "outbox_oldest_age_seconds": db.outbox_oldest_age_seconds(),
+        "command_queue_oldest_age_seconds": db.oldest_command_age_seconds(CommandStatus.QUEUED),
+        "command_leased_oldest_age_seconds": db.oldest_command_age_seconds(CommandStatus.LEASED),
+        "evidence_job_queue_oldest_age_seconds": db.oldest_evidence_job_age_seconds(
+            EVIDENCE_JOB_STATUS_QUEUED
+        ),
+        "evidence_job_leased_oldest_age_seconds": db.oldest_evidence_job_age_seconds(
+            EVIDENCE_JOB_STATUS_LEASED
+        ),
+        "gitops_workflow_running_total": db.count_running_workflow_runs(DEFAULT_WORKSPACE_ID),
+        "gitops_approvals_open_total": db.count_open_workflow_approvals(DEFAULT_WORKSPACE_ID),
+    }
+    body = render_prometheus_metrics(scalar_metrics)
+    body += render_labeled_counter(
+        "event_processing_status_total",
+        db.event_processing_status_counts(),
+        "status",
+    )
+    body += render_labeled_gauge(
+        "event_processing_duration_avg_ms",
+        db.event_processing_duration_avg_ms_by_consumer(),
+        "consumer",
+    )
+    body += render_labeled_gauge(
+        "event_processing_duration_max_ms",
+        db.event_processing_duration_max_ms_by_consumer(),
+        "consumer",
+    )
+    body += render_multi_labeled_gauge(
+        "nats_consumer_pending_events",
+        db.event_consumer_pending_by_consumer_subject(),
+        ("consumer", "subject"),
+    )
+    body += render_multi_labeled_gauge(
+        "nats_consumer_ack_pending_events",
+        db.event_consumer_ack_pending_by_consumer_subject(),
+        ("consumer", "subject"),
+    )
+    body += render_multi_labeled_gauge(
+        "nats_consumer_redelivered_events",
+        db.event_consumer_redelivered_by_consumer_subject(),
+        ("consumer", "subject"),
+    )
+    body += render_multi_labeled_gauge(
+        "llm_invocation_latency_avg_ms",
+        db.llm_invocation_latency_avg_ms_by_provider_model_operation_status(),
+        ("provider", "model", "operation", "status"),
+    )
+    body += render_multi_labeled_gauge(
+        "llm_invocation_latency_max_ms",
+        db.llm_invocation_latency_max_ms_by_provider_model_operation_status(),
+        ("provider", "model", "operation", "status"),
+    )
+    body += render_multi_labeled_gauge(
+        "llm_invocation_total_tokens",
+        db.llm_invocation_total_tokens_by_provider_model_operation_status(),
+        ("provider", "model", "operation", "status"),
+    )
+    body += render_multi_labeled_gauge(
+        "llm_invocation_estimated_cost_micros",
+        db.llm_invocation_estimated_cost_micros_by_provider_model_operation_status(),
+        ("provider", "model", "operation", "status"),
+    )
+    body += render_labeled_counter("command_status_total", db.command_status_counts(), "status")
+    body += render_labeled_counter(
+        "evidence_job_status_total",
+        db.evidence_job_status_counts(),
+        "status",
+    )
+    body += render_labeled_counter(
+        "gitops_workflow_status_total",
+        db.workflow_run_status_counts(DEFAULT_WORKSPACE_ID),
+        "status",
+    )
+    body += render_labeled_counter(
+        "gitops_workflow_current_step_total",
+        db.workflow_run_current_step_counts(DEFAULT_WORKSPACE_ID),
+        "step",
+    )
+    return body
+
+
 class ApiGateway:
     def __init__(
         self,
@@ -573,7 +666,7 @@ class ApiGateway:
                     status_code=Settings.SESSION_STORAGE_UNAVAILABLE_STATUS_CODE,
                     detail=Settings.SESSION_STORAGE_UNAVAILABLE_MESSAGE,
                 )
-            self.db.check_ready()
+            await asyncio.to_thread(self.db.check_ready)
             return HealthResponse(status=Gateway.STATUS_READY)
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
@@ -688,98 +781,7 @@ class ApiGateway:
                 header = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
                 if not secrets.compare_digest(header, f"Bearer {metrics_token}"):
                     raise HTTPException(status_code=401, detail="metrics token required")
-            scalar_metrics = {
-                "event_dead_letters_open_total": self.db.open_dead_letter_count(),
-                "outbox_pending_total": self.db.outbox_pending_count(),
-                "outbox_oldest_age_seconds": self.db.outbox_oldest_age_seconds(),
-                "command_queue_oldest_age_seconds": self.db.oldest_command_age_seconds(
-                    CommandStatus.QUEUED
-                ),
-                "command_leased_oldest_age_seconds": self.db.oldest_command_age_seconds(
-                    CommandStatus.LEASED
-                ),
-                "evidence_job_queue_oldest_age_seconds": (
-                    self.db.oldest_evidence_job_age_seconds(EVIDENCE_JOB_STATUS_QUEUED)
-                ),
-                "evidence_job_leased_oldest_age_seconds": (
-                    self.db.oldest_evidence_job_age_seconds(EVIDENCE_JOB_STATUS_LEASED)
-                ),
-                "gitops_workflow_running_total": self.db.count_running_workflow_runs(
-                    DEFAULT_WORKSPACE_ID
-                ),
-                "gitops_approvals_open_total": self.db.count_open_workflow_approvals(
-                    DEFAULT_WORKSPACE_ID
-                ),
-            }
-            body = render_prometheus_metrics(scalar_metrics)
-            body += render_labeled_counter(
-                "event_processing_status_total",
-                self.db.event_processing_status_counts(),
-                "status",
-            )
-            body += render_labeled_gauge(
-                "event_processing_duration_avg_ms",
-                self.db.event_processing_duration_avg_ms_by_consumer(),
-                "consumer",
-            )
-            body += render_labeled_gauge(
-                "event_processing_duration_max_ms",
-                self.db.event_processing_duration_max_ms_by_consumer(),
-                "consumer",
-            )
-            body += render_multi_labeled_gauge(
-                "nats_consumer_pending_events",
-                self.db.event_consumer_pending_by_consumer_subject(),
-                ("consumer", "subject"),
-            )
-            body += render_multi_labeled_gauge(
-                "nats_consumer_ack_pending_events",
-                self.db.event_consumer_ack_pending_by_consumer_subject(),
-                ("consumer", "subject"),
-            )
-            body += render_multi_labeled_gauge(
-                "nats_consumer_redelivered_events",
-                self.db.event_consumer_redelivered_by_consumer_subject(),
-                ("consumer", "subject"),
-            )
-            body += render_multi_labeled_gauge(
-                "llm_invocation_latency_avg_ms",
-                self.db.llm_invocation_latency_avg_ms_by_provider_model_operation_status(),
-                ("provider", "model", "operation", "status"),
-            )
-            body += render_multi_labeled_gauge(
-                "llm_invocation_latency_max_ms",
-                self.db.llm_invocation_latency_max_ms_by_provider_model_operation_status(),
-                ("provider", "model", "operation", "status"),
-            )
-            body += render_multi_labeled_gauge(
-                "llm_invocation_total_tokens",
-                self.db.llm_invocation_total_tokens_by_provider_model_operation_status(),
-                ("provider", "model", "operation", "status"),
-            )
-            body += render_multi_labeled_gauge(
-                "llm_invocation_estimated_cost_micros",
-                self.db.llm_invocation_estimated_cost_micros_by_provider_model_operation_status(),
-                ("provider", "model", "operation", "status"),
-            )
-            body += render_labeled_counter(
-                "command_status_total", self.db.command_status_counts(), "status"
-            )
-            body += render_labeled_counter(
-                "evidence_job_status_total",
-                self.db.evidence_job_status_counts(),
-                "status",
-            )
-            body += render_labeled_counter(
-                "gitops_workflow_status_total",
-                self.db.workflow_run_status_counts(DEFAULT_WORKSPACE_ID),
-                "status",
-            )
-            body += render_labeled_counter(
-                "gitops_workflow_current_step_total",
-                self.db.workflow_run_current_step_counts(DEFAULT_WORKSPACE_ID),
-                "step",
-            )
+            body = await asyncio.to_thread(render_gateway_metrics, self.db)
             return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 
     def _register_error_handler(self, app: FastAPI) -> None:
