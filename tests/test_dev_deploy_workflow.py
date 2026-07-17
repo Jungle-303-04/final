@@ -170,6 +170,55 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     )
 
 
+def test_deploy_upgrades_existing_target_policy_after_smoke_and_before_release_record() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    upgrade = steps["Upgrade existing target agent policies"]
+    source = upgrade["run"]
+
+    assert upgrade["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert upgrade["env"]["DEPLOY_IMAGE"] == "${{ steps.image.outputs.image }}"
+    assert "deploy/management/target-policy-upgrade-job.yaml" in source
+    assert 'upgrade="${DEPLOY_IMAGE}"' in source
+    assert "delete job target-policy-upgrade" in source
+    assert "wait --for=condition=complete job/target-policy-upgrade" in source
+    assert "logs job/target-policy-upgrade" in source
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Upgrade existing target agent policies"
+    )
+    assert names.index("Upgrade existing target agent policies") < names.index(
+        "Record successful dev SHA in cluster"
+    )
+
+
+def test_target_policy_upgrade_job_has_bounded_non_privileged_database_authority() -> None:
+    manifest = yaml.safe_load(
+        (ROOT / "deploy/management/target-policy-upgrade-job.yaml").read_text(encoding="utf-8")
+    )
+    pod_spec = manifest["spec"]["template"]["spec"]
+    container = pod_spec["containers"][0]
+
+    assert manifest["kind"] == "Job"
+    assert manifest["metadata"]["name"] == "target-policy-upgrade"
+    assert manifest["spec"]["backoffLimit"] == 0
+    assert manifest["spec"]["activeDeadlineSeconds"] == 300
+    assert pod_spec["automountServiceAccountToken"] is False
+    assert pod_spec["restartPolicy"] == "Never"
+    assert container["command"] == ["python", "-m", "domains.target.policy_upgrade"]
+    assert container["args"] == ["--apply"]
+    assert container["securityContext"]["allowPrivilegeEscalation"] is False
+    assert container["securityContext"]["capabilities"]["drop"] == ["ALL"]
+    env = {item["name"]: item["valueFrom"] for item in container["env"]}
+    assert env["DATABASE_URL"]["secretKeyRef"] == {
+        "name": "management-runtime-secret",
+        "key": "COMMAND_NOTIFY_DATABASE_URL",
+    }
+    assert env["TARGET_AGENT_IMAGE"]["configMapKeyRef"] == {
+        "name": "management-runtime-config",
+        "key": "TARGET_AGENT_IMAGE",
+    }
+
+
 def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording() -> None:
     steps = steps_by_name()
     names = [step["name"] for step in deploy_job()["steps"]]
