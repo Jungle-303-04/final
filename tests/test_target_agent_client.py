@@ -278,9 +278,23 @@ def test_management_client_fetches_revision_bound_prometheus_configuration() -> 
 
 
 def test_target_agent_applies_revision_once_and_reports_probe_status(
+    monkeypatch: pytest.MonkeyPatch,
     target_agent_factory: Callable[..., Any],
 ) -> None:
     agent_module = load_agent_module()
+    monkeypatch.setattr(
+        agent_module.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                agent_module.socket.AF_INET,
+                agent_module.socket.SOCK_STREAM,
+                6,
+                "",
+                ("93.184.216.34", 443),
+            )
+        ],
+    )
     probe_requests: list[httpx.Request] = []
 
     def probe_handler(request: httpx.Request) -> httpx.Response:
@@ -340,15 +354,32 @@ def test_target_agent_applies_revision_once_and_reports_probe_status(
             "state": "connected",
         }
     ]
+    assert probe_requests[0].url.host == "93.184.216.34"
+    assert probe_requests[0].headers["host"] == "prometheus.test"
+    assert probe_requests[0].extensions["sni_hostname"] == "prometheus.test"
     assert probe_requests[0].headers["authorization"] == "Bearer secret"
     assert agent.evidence_collector.providers["metrics"].base_url == "https://prometheus.test"
     assert "secret" not in repr(asyncio.run(agent.policy_status_details()))
 
 
 def test_target_agent_caches_failed_probe_without_replaying_secrets(
+    monkeypatch: pytest.MonkeyPatch,
     target_agent_factory: Callable[..., Any],
 ) -> None:
     agent_module = load_agent_module()
+    monkeypatch.setattr(
+        agent_module.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                agent_module.socket.AF_INET6,
+                agent_module.socket.SOCK_STREAM,
+                6,
+                "",
+                ("2606:2800:220:1:248:1893:25c8:1946", 443, 0, 0),
+            )
+        ],
+    )
     agent = target_agent_factory(
         agent_module,
         telemetry_transport=getattr(httpx, "Mo" + "ckTransport")(

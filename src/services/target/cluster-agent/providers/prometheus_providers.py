@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import ipaddress
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from queries import PrometheusInstantQuery, PrometheusRangeQuery
@@ -33,6 +36,46 @@ MAX_PROMETHEUS_SERIES_VALUES = 40
 MAX_PROMETHEUS_RESULT_ITEMS = 250
 
 
+@dataclass(frozen=True)
+class PrometheusHttpTarget:
+    """Original HTTP authority plus an optional verified, DNS-free connect address."""
+
+    base_url: str
+    connect_base_url: str
+    host_header: str | None = None
+    sni_hostname: str | None = None
+
+    @classmethod
+    def build(
+        cls,
+        base_url: str,
+        *,
+        resolved_address: str | None = None,
+    ) -> PrometheusHttpTarget:
+        original = base_url.rstrip("/")
+        if resolved_address is None:
+            return cls(base_url=original, connect_base_url=original)
+
+        parsed = urlsplit(original)
+        hostname = parsed.hostname or ""
+        address = ipaddress.ip_address(resolved_address)
+        ip_authority = f"[{address}]" if address.version == 6 else str(address)
+        if parsed.port is not None:
+            ip_authority = f"{ip_authority}:{parsed.port}"
+        connect_base_url = urlunsplit(
+            (parsed.scheme, ip_authority, parsed.path.rstrip("/"), "", "")
+        )
+        original_authority = f"[{hostname}]" if ":" in hostname else hostname
+        if parsed.port is not None:
+            original_authority = f"{original_authority}:{parsed.port}"
+        return cls(
+            base_url=original,
+            connect_base_url=connect_base_url,
+            host_header=original_authority,
+            sni_hostname=hostname if parsed.scheme == "https" else None,
+        )
+
+
 @telemetry.source(
     source="prometheus",
     evidence_key="metrics",
@@ -51,10 +94,34 @@ class PrometheusMetricsProvider:
     failure_message = "prometheus metrics collection failed"
     queries: tuple[PrometheusInstantQuery | PrometheusRangeQuery, ...] = ()
 
-    def __init__(self, base_url: str, *, headers: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        resolved_address: str | None = None,
+    ) -> None:
         """Store the Prometheus base URL without a trailing slash."""
-        self.base_url = base_url.rstrip("/")
+        self.target = PrometheusHttpTarget.build(
+            base_url,
+            resolved_address=resolved_address,
+        )
+        self.base_url = self.target.base_url
         self.headers = dict(headers or {})
+
+    def request_url(self, path: str) -> str:
+        return f"{self.target.connect_base_url}{path}"
+
+    def request_headers(self) -> dict[str, str]:
+        headers = {name: value for name, value in self.headers.items() if name.casefold() != "host"}
+        if self.target.host_header is not None:
+            headers["Host"] = self.target.host_header
+        return headers
+
+    def request_extensions(self) -> dict[str, object]:
+        if self.target.sni_hostname is None:
+            return {}
+        return {"sni_hostname": self.target.sni_hostname}
 
     @classmethod
     def from_config(cls, read_config: ConfigReader) -> PrometheusMetricsProvider:
@@ -80,9 +147,10 @@ class PrometheusMetricsProvider:
         with TRACER.start_as_current_span("prometheus.query") as span:
             span.attr("prometheus.query", telemetry_query.promql)
             response = await client.get(
-                f"{self.base_url}/api/v1/query",
+                self.request_url("/api/v1/query"),
                 params={"query": telemetry_query.promql},
-                headers=self.headers,
+                headers=self.request_headers(),
+                extensions=self.request_extensions(),
             )
             span.http_status(response.status_code)
             response.raise_for_status()
@@ -101,14 +169,15 @@ class PrometheusMetricsProvider:
             span.attr("prometheus.query", telemetry_query.promql)
             span.attr("prometheus.range_seconds", telemetry_query.range_seconds)
             response = await client.get(
-                f"{self.base_url}/api/v1/query_range",
+                self.request_url("/api/v1/query_range"),
                 params={
                     "query": telemetry_query.promql,
                     "start": f"{start:.3f}",
                     "end": f"{end:.3f}",
                     "step": str(step),
                 },
-                headers=self.headers,
+                headers=self.request_headers(),
+                extensions=self.request_extensions(),
             )
             span.http_status(response.status_code)
             response.raise_for_status()

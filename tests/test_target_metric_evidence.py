@@ -144,6 +144,60 @@ def test_prometheus_provider_sends_runtime_headers_without_exposing_them_in_resu
     assert "secret" not in repr(result)
 
 
+@pytest.mark.parametrize(
+    "resolved_address",
+    ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+)
+def test_prometheus_provider_pins_all_queries_to_verified_ip_with_original_host_and_sni(
+    resolved_address: str,
+) -> None:
+    module = load_evidence_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "vector", "result": []}},
+            request=request,
+        )
+
+    provider = module.PrometheusMetricsProvider(
+        "https://prometheus.test:9443/prometheus",
+        headers={"Authorization": "Bearer secret", "Host": "attacker.invalid"},
+        resolved_address=resolved_address,
+    )
+    instant = module.TelemetryQueryDefinition.from_mapping(
+        {"source": "prometheus", "name": "up", "description": "Probe", "query": "up"}
+    ).to_provider_query()
+    ranged = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "up_range",
+            "description": "Range",
+            "query": "up",
+            "range_seconds": 60,
+            "step_seconds": 15,
+        }
+    ).to_provider_query()
+
+    async def run() -> None:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            await provider.query_instant(client, instant)
+            await provider.query_range(client, ranged)
+
+    asyncio.run(run())
+
+    assert len(requests) == 2
+    assert all(request.url.host == resolved_address for request in requests)
+    assert all(request.url.port == 9443 for request in requests)
+    assert all(request.headers["host"] == "prometheus.test:9443" for request in requests)
+    assert all(request.extensions["sni_hostname"] == "prometheus.test" for request in requests)
+    assert all(request.headers["authorization"] == "Bearer secret" for request in requests)
+
+
 def test_replacing_prometheus_provider_preserves_registered_queries() -> None:
     module = load_evidence_module()
     collector = module.EvidenceCollector([module.PrometheusMetricsProvider("http://old.test")])

@@ -954,17 +954,22 @@ class TargetClusterAgent:
                 "prometheus_configuration_invalid",
                 retryable=False,
             )
-        provider = PrometheusMetricsProvider(config.address, headers=config.headers)
-        await self.assert_prometheus_destination_safe(provider.base_url)
+        resolved_address = await self.resolve_prometheus_destination(config.address)
+        provider = PrometheusMetricsProvider(
+            config.address,
+            headers=config.headers,
+            resolved_address=resolved_address,
+        )
         try:
             async with httpx.AsyncClient(
                 timeout=provider.timeout_seconds,
                 transport=self.telemetry_transport,
             ) as probe_client:
                 response = await probe_client.get(
-                    f"{provider.base_url}/api/v1/query",
+                    provider.request_url("/api/v1/query"),
                     params={"query": "up"},
-                    headers=provider.headers,
+                    headers=provider.request_headers(),
+                    extensions=provider.request_extensions(),
                 )
                 response.raise_for_status()
         except Exception as exc:
@@ -990,10 +995,8 @@ class TargetClusterAgent:
             )
         return provider
 
-    async def assert_prometheus_destination_safe(self, address: str) -> None:
-        """Reject resolved local/link-local destinations while allowing private cluster networks."""
-        if self.telemetry_transport is not None:
-            return
+    async def resolve_prometheus_destination(self, address: str) -> str:
+        """Resolve once, reject unsafe answers, and return one DNS-free connect address."""
         parsed = urlsplit(address)
         hostname = parsed.hostname or ""
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
@@ -1007,6 +1010,7 @@ class TargetClusterAgent:
                 "prometheus_probe_dns_error",
                 retryable=True,
             ) from exc
+        resolved_addresses: list[str] = []
         for info in infos:
             try:
                 resolved = ipaddress.ip_address(str(info[4][0]))
@@ -1022,6 +1026,15 @@ class TargetClusterAgent:
                     "prometheus_destination_denied",
                     retryable=False,
                 )
+            normalized = str(resolved)
+            if normalized not in resolved_addresses:
+                resolved_addresses.append(normalized)
+        if not resolved_addresses:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_dns_error",
+                retryable=True,
+            )
+        return resolved_addresses[0]
 
     async def target_rbac_manifest_status(self) -> JsonObject:
         """Observe the administrator-owned role without ever attempting RBAC writes."""
