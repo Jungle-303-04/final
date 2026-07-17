@@ -10637,6 +10637,48 @@
           }
         },
         {
+          "sourceKey": "upstream-ui:app-shell:scope-and-session:header:v1",
+          "legacyContractIds": [
+            "reference.feature.015"
+          ],
+          "symbol": "ScopePill, header connection state, reconnect action, and PortForwardIndicator",
+          "interaction": "one stable global scope row combines cluster and multi-namespace selection with an observed connection mark, a scope-safe status refresh, and capability-gated port-forward session feedback without allowing browser-owned target connectivity",
+          "transport": "poll",
+          "realtime": {
+            "resume": "explicit status refresh and the visible thirty-second catalog clock reacquire only the current authenticated authority while preserving the last safe same-scope pills",
+            "backpressure": "the shared cluster-scope request deduplicates concurrent readers and aborts the final unused request while the native session registry keeps its own bounded refresh policy",
+            "merge": "only a response for the current authority and canonical cluster scope may replace connection metadata; namespace and session identity remain independently URL- and registry-owned"
+          },
+          "motion": {
+            "reducedMotion": "cluster, namespace, connection, refresh, and session meaning remains in fixed geometry and text or status semantics when decorative pill entry, pulse, and color transitions are disabled.",
+            "evidence": [
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx",
+              "src/domains/target/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.target.router"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-scope.selection",
+              "shell.connection-retry.safety"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia reuses its canonical URL filter, cluster-scope provider, agent-derived catalog, and native session registry. The offline affordance refreshes observation only; it cannot directly reconnect to a cluster because agents remain outbound authority."
+          }
+        },
+        {
           "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
           "legacyContractIds": [
             "reference.feature.043",

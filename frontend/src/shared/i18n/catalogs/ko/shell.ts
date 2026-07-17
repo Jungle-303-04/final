@@ -32,6 +32,7 @@ export const shellKo = {
   "shell.filter.rule": "같은 타입은 OR · 다른 타입은 AND · 라벨끼리는 AND",
   "shell.filter.remove": "{type} 필터 {label} 제거",
   "shell.filter.clearAll": "모든 필터 지우기",
+  "shell.filter.cluster.refreshStatus": "{cluster} 연결 상태 다시 확인",
   "shell.filter.group.cluster": "클러스터",
   "shell.filter.group.namespace": "네임스페이스",
   "shell.filter.group.application": "애플리케이션",

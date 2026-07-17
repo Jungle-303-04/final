@@ -989,6 +989,7 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
   ]);
   const expected = new Map([
     ["reference.feature.014", "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1"],
+    ["reference.feature.015", "upstream-ui:app-shell:scope-and-session:header:v1"],
     ...[
       "021", "022", "023", "024", "027", "028", "029",
       "030", "031", "032", "033", "034", "035", "036",

@@ -24,6 +24,34 @@
         }
       }
     },
+    "reference.feature.015": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterListResponse",
+      "frontendContract": "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_target_registration.py",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/ProductShell.portForward.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#list_clusters",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#listClusterChoices",
+          "reason": "The authorized cluster catalog derives connection status, stage, and last observation from stored outbound-agent heartbeat and inventory evidence; the browser never opens a target connection or impersonates an agent reconnect.",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useClusterScope",
+          "reason": "One fixed-height, horizontally scrolling filter control owns cluster and multi-namespace pills, renders the selected cluster's authorized agent-derived status mark, and reuses the scope refresh plus native-capability-gated port-forward indicator without adding a selector or transport.",
+          "test": "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
+        }
+      }
+    },
     "reference.feature.018": {
       "deliveryStatus": "implemented",
       "desktopContract": null,

@@ -3,6 +3,7 @@
   "sourceRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
   "aliases": {
     "reference.feature.014": "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1",
+    "reference.feature.015": "upstream-ui:app-shell:scope-and-session:header:v1",
     "reference.feature.018": "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1",
     "reference.feature.021": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
     "reference.feature.022": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",

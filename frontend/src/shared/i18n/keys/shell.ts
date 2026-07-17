@@ -30,6 +30,7 @@ export type ShellMessageKey =
   | "shell.filter.rule"
   | "shell.filter.remove"
   | "shell.filter.clearAll"
+  | "shell.filter.cluster.refreshStatus"
   | "shell.filter.group.cluster"
   | "shell.filter.group.namespace"
   | "shell.filter.group.application"
