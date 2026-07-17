@@ -19,6 +19,7 @@ AGENT_EVIDENCE_PATH = "/agent/evidence"
 TARGETS_PATH = "/targets"
 # 원라인 인스톨러 — agent 토큰 자체가 자격증명(해시 대조)이라 세션 불필요.
 INSTALL_MANIFEST_PATH = "/install/{agent_token}"
+TARGET_RBAC_MANIFEST_PATH = "/clusters/{cluster_id}/target-rbac-manifest"
 COMMANDS_PATH = "/commands"
 COMMAND_STATUS_PATH = "/commands/{command_id}"
 COMMAND_EVENTS_PATH = "/commands/{command_id}/events"

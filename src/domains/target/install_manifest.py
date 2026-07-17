@@ -17,7 +17,12 @@ from packages.config.security import (
     rca_test_runs_enabled,
 )
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
-from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
+from packages.contracts.target import (
+    SANDBOX_NAMESPACE,
+    TARGET_NAMESPACE,
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RBAC_VERSION_ANNOTATION,
+)
 
 CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
@@ -39,6 +44,24 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
             priority_class_manifest(),
             service_account_manifest(namespace),
+            target_rbac_manifest(payload),
+            runtime_config_manifest(payload),
+            runtime_secret_manifest(agent_token, namespace),
+            sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            cluster_agent_manifest(payload),
+        ]
+        if block.strip()
+    )
+
+
+def target_rbac_manifest(payload: TargetRegisterRequest) -> str:
+    """Render the single RBAC source used by install and admin upgrades."""
+
+    namespace = agent_namespace(payload)
+    role = payload.cluster_role
+    return "\n---\n".join(
+        block.strip()
+        for block in (
             cluster_read_rbac_manifest(namespace),
             gitops_control_rbac_manifest(namespace),
             node_control_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -49,11 +72,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             catalog_install_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            runtime_config_manifest(payload),
-            runtime_secret_manifest(agent_token, namespace),
-            sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            cluster_agent_manifest(payload),
-        ]
+        )
         if block.strip()
     )
 
@@ -109,6 +128,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: cluster-agent-read
+  annotations:
+    {TARGET_RBAC_VERSION_ANNOTATION}: {yaml_string(TARGET_RBAC_MANIFEST_VERSION)}
 rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints", "serviceaccounts", "resourcequotas"]

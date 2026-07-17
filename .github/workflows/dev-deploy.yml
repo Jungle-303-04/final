@@ -576,6 +576,33 @@ jobs:
         if: always()
         run: rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"
 
+      - name: Upgrade existing target agent policies
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          kubectl set image \
+            --filename deploy/management/target-policy-upgrade-job.yaml \
+            upgrade="${DEPLOY_IMAGE}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/target-policy-upgrade-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            delete job target-policy-upgrade --ignore-not-found --wait=true
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --filename "${RUNNER_TEMP}/target-policy-upgrade-job.yaml"
+          if ! kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            wait --for=condition=complete job/target-policy-upgrade --timeout=300s; then
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs job/target-policy-upgrade --all-containers --tail=500 || true
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              describe job target-policy-upgrade || true
+            exit 1
+          fi
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            logs job/target-policy-upgrade --all-containers --tail=500
+
       - name: Record successful dev SHA in cluster
         if: env.DEPLOYMENT_SCOPE == 'FULL'
         id: status

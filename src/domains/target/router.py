@@ -39,7 +39,6 @@ from domains.target.connectivity import (
 from domains.target.events import (
     ClusterDesiredStateChangedBody,
     EvidenceJobUpdatedBody,
-    TargetDesiredComponent,
 )
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
@@ -52,7 +51,11 @@ from domains.target.evidence_policy import (
     enabled_provider_keys,
     provider_policy_snapshots,
 )
-from domains.target.install_manifest import agent_namespace, target_install_manifest
+from domains.target.install_manifest import (
+    agent_namespace,
+    target_install_manifest,
+    target_rbac_manifest,
+)
 from domains.target.management_guard import (
     MANAGEMENT_CLUSTER_ROLE,
     freeze_management_policy,
@@ -61,6 +64,7 @@ from domains.target.management_guard import (
     management_policy_update_is_forbidden,
     management_readonly_detail,
 )
+from domains.target.policy_upgrade import target_desired_components
 from domains.target.reconciler import desired_state_version
 from domains.target.uninstall import (
     SELF_CLEANUP_RESIDUALS,
@@ -110,7 +114,7 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     Permission,
 )
-from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
+from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
 from packages.events.envelope import event
 from packages.runtime.dependencies import (
     get_dashboard_ready_fanout,
@@ -191,42 +195,6 @@ TEST_FIXTURE_PURGE_UNSUPPORTED_CODE = "test_fixture_purge_unsupported"
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
 agent_router = APIRouter()
-
-
-def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesiredComponent]:
-    """등록 요청을 target cluster desired-state 컴포넌트로 정규화함.
-
-    Secret 원문(agent token)은 desired-state에 저장하지 않음. 운영 구현에서는
-    이 spec을 Helm/Kustomize/CRD desired state로 확장함.
-    """
-
-    return [
-        TargetDesiredComponent(
-            component=TargetComponent.CLUSTER_AGENT.value,
-            namespace=TARGET_NAMESPACE,
-            version=payload.image,
-            spec={
-                "deployment": "cluster-agent",
-                "management_base_url": payload.management_base_url,
-                "cluster_role": payload.cluster_role,
-                "evidence_interval_seconds": payload.evidence_interval_seconds,
-                "prometheus_base_url": payload.prometheus_base_url,
-                "loki_base_url": payload.loki_base_url,
-                "tempo_base_url": payload.tempo_base_url,
-                "otel_traces_endpoint": payload.otel_traces_endpoint,
-            },
-        ),
-        TargetDesiredComponent(
-            component=TargetComponent.NODE_COLLECTOR.value,
-            namespace=TARGET_NAMESPACE,
-            version=payload.image,
-            spec={
-                "enabled": payload.install_node_collector,
-                "daemonset": "optional-node-collector",
-                "managed_by": TargetComponent.CLUSTER_AGENT.value,
-            },
-        ),
-    ]
 
 
 def allowed_kube_contexts() -> set[str]:
@@ -1315,6 +1283,31 @@ async def install_manifest_by_token(
         manifest,
         media_type="text/yaml",
         headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get(gateway_routes.TARGET_RBAC_MANIFEST_PATH, include_in_schema=True)
+async def target_rbac_manifest_for_admin(
+    cluster_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> PlainTextResponse:
+    """Return an RBAC-only artifact that requires an external cluster administrator."""
+
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        raise HTTPException(status_code=404, detail=CLUSTER_NOT_FOUND)
+    if is_management_registration(registration):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    payload = target_register_payload_from_settings(registration.get("settings") or {})
+    return PlainTextResponse(
+        target_rbac_manifest(payload),
+        media_type="text/yaml",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Target-RBAC-Manifest-Version": TARGET_RBAC_MANIFEST_VERSION,
+        },
     )
 
 

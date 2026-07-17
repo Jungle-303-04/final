@@ -4,13 +4,13 @@ from contextlib import contextmanager
 from typing import Any
 
 import pytest
+
+from domains.target.evidence_policy import DEFAULT_EVIDENCE_PROVIDER_QUERIES
 from domains.target.policy_upgrade import (
     TARGET_RBAC_ADMIN_MANIFEST_PATH,
     TargetPolicyUpgradeService,
     build_target_upgrade_plan,
 )
-
-from domains.target.evidence_policy import DEFAULT_EVIDENCE_PROVIDER_QUERIES
 from packages.contracts.gateway.requests import AgentPolicy
 from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
 

@@ -183,6 +183,10 @@ from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
     ServiceHttpRequestCommandPayload,
 )
+from packages.contracts.target import (
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RBAC_VERSION_ANNOTATION,
+)
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -645,6 +649,7 @@ class TargetClusterAgent:
             default_policy=self.default_policy,
             apply_policy=self.apply_policy,
             interval_seconds=self.policy_sync_interval_seconds,
+            status_details=self.policy_status_details,
         )
         self.reconciler = DesiredStateReconciler(
             cluster_id=self.cluster_id,
@@ -737,6 +742,47 @@ class TargetClusterAgent:
             "evidence_worker_counts": min_worker_counts,
             "registered_queries": registered_queries,
         }
+
+    async def policy_status_details(self) -> JsonObject:
+        return {"target_rbac_manifest": await self.target_rbac_manifest_status()}
+
+    async def target_rbac_manifest_status(self) -> JsonObject:
+        """Observe the administrator-owned role without ever attempting RBAC writes."""
+
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        result: JsonObject = {
+            "status": "admin_apply_required",
+            "actual_version": None,
+            "expected_version": TARGET_RBAC_MANIFEST_VERSION,
+        }
+        if self.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+            result["status"] = "not_applicable"
+            return result
+        if not base_url or not token:
+            result["probe"] = "kubernetes_api_unavailable"
+            return result
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            response = await client.get(
+                f"{base_url}/apis/rbac.authorization.k8s.io/v1/clusterroles/cluster-agent-read",
+                headers=kubernetes_headers(token),
+            )
+        if response.status_code != 200:
+            result["probe"] = "forbidden" if response.status_code == 403 else "unavailable"
+            return result
+        body = response.json()
+        metadata = body.get("metadata") if isinstance(body, dict) else None
+        annotations = metadata.get("annotations") if isinstance(metadata, dict) else None
+        actual = (
+            annotations.get(TARGET_RBAC_VERSION_ANNOTATION)
+            if isinstance(annotations, dict)
+            else None
+        )
+        if isinstance(actual, str) and actual:
+            result["actual_version"] = actual
+        if actual == TARGET_RBAC_MANIFEST_VERSION:
+            result["status"] = "current"
+        return result
 
     def register_policy_queries(
         self,
