@@ -20,6 +20,7 @@ from packages.contracts.helm.sources import (
     HelmChartSourcePage,
     HelmChartVersion,
     HelmChartVersionObservation,
+    HelmRepositoryRefreshResult,
 )
 from packages.runtime.dependencies import get_db, get_events
 
@@ -682,3 +683,89 @@ def test_version_route_rejects_cross_source_credential_scope(monkeypatch) -> Non
     assert response.json()["availability"] == "unavailable"
     assert response.json()["reason_codes"] == ["helm_chart_source_credential_unavailable"]
     assert provider_called is False
+
+
+def test_repository_update_refreshes_one_authorized_source_and_emits_audit() -> None:
+    captured: dict[str, object] = {}
+
+    class Db:
+        def accessible_resource_ids(
+            self,
+            _user_id: str,
+            workspace_id: str,
+            resource_type: str,
+            permission: str,
+        ) -> set[str]:
+            assert workspace_id == "workspace-a"
+            assert resource_type == "helm_chart_source"
+            assert permission == "config.update"
+            return {"source-a"}
+
+        def list_helm_chart_source_records(self, **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                rows=(
+                    {
+                        "source_id": "source-a",
+                        "workspace_id": "workspace-a",
+                        "provider": "repository",
+                        "name": "stable",
+                        "canonical_ref": "https://charts.example.com/stable",
+                        "credential_ref": None,
+                        "status": "active",
+                        "updated_at": datetime(2026, 7, 17, tzinfo=UTC),
+                    },
+                ),
+                truncated=False,
+            )
+
+    class Provider:
+        async def refresh_repository(
+            self,
+            source: HelmChartSource,
+            *,
+            credential: object | None = None,
+        ) -> HelmRepositoryRefreshResult:
+            captured["provider"] = (source, credential)
+            return HelmRepositoryRefreshResult(
+                source_id="source-a",
+                chart_count=27,
+                observed_at="2026-07-17T09:00:00+00:00",
+            )
+
+    class Events:
+        async def accept_body(self, body: object, *, actor: object) -> object:
+            captured["event"] = (body, actor)
+            return SimpleNamespace(
+                event=SimpleNamespace(
+                    event_id="event-refresh-source-a",
+                    correlation_id="correlation-refresh-source-a",
+                )
+            )
+
+    response = _client(
+        Db(),
+        provider=Provider(),
+        admin=True,
+        events=Events(),
+    ).post("/helm/repositories/stable/update")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "source_id": "source-a",
+        "chart_count": 27,
+        "observed_at": "2026-07-17T09:00:00+00:00",
+        "event_id": "event-refresh-source-a",
+        "correlation_id": "correlation-refresh-source-a",
+    }
+    source, credential = captured["provider"]
+    assert source.source_id == "source-a"
+    assert credential is None
+    body, actor = captured["event"]
+    assert body.to_body() == {
+        "workspace_id": "workspace-a",
+        "source_id": "source-a",
+        "name": "stable",
+        "chart_count": 27,
+        "observed_at": "2026-07-17T09:00:00+00:00",
+    }
+    assert actor.user_id == "user-a"
