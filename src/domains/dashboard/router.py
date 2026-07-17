@@ -8,8 +8,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from domains.command.router import debug_query_plan
-from domains.dashboard.metrics_validation import validate_promql_query
+from domains.command.debug_queries import queue_debug_query
+from domains.command.router import debug_query_plan, publish_operation_event
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
     require_cluster_access,
@@ -26,7 +26,6 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     MetricQueryPresetUpsertRequest,
-    MetricsValidateRequest,
     MetricWidgetUpsertRequest,
 )
 from packages.contracts.gateway.responses import (
@@ -34,7 +33,6 @@ from packages.contracts.gateway.responses import (
     MetricQueryPresetItem,
     MetricQueryPresetListResponse,
     MetricQueryPresetResponse,
-    MetricsValidateResponse,
     MetricWidgetItem,
     MetricWidgetListResponse,
     MetricWidgetResponse,
@@ -50,7 +48,7 @@ from packages.contracts.gateway.responses import (
     ResourceIssueListResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
-from packages.runtime.dependencies import get_db
+from packages.runtime.dependencies import get_db, get_operation_events
 
 DEFAULT_TIMELINE_LIMIT = gateway_limits.DASHBOARD_RCA_DEFAULT_LIMIT
 MAX_TIMELINE_LIMIT = gateway_limits.DASHBOARD_RCA_MAX_LIMIT
@@ -65,21 +63,52 @@ METRIC_WIDGET_NOT_FOUND = "metric widget not found"
 router = APIRouter()
 
 
-@router.post(gateway_routes.METRICS_VALIDATE_PATH, response_model=MetricsValidateResponse)
-async def validate_metrics_query(
-    payload: MetricsValidateRequest,
-    _current: Any = Depends(require_session),
-) -> MetricsValidateResponse:
-    result = await validate_promql_query(
-        payload.query,
-        range_seconds=payload.range_seconds,
-        step_seconds=payload.step_seconds,
+@router.post(
+    gateway_routes.METRICS_VALIDATE_PATH,
+    response_model=AgentDebugQueryResponse,
+    status_code=202,
+)
+async def queue_metrics_validation(
+    payload: AgentDebugQueryRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
+) -> AgentDebugQueryResponse:
+    """Queue PromQL validation through the authenticated target agent only."""
+    if "cluster_id" not in payload.model_fields_set or not payload.cluster_id.strip():
+        raise HTTPException(status_code=422, detail="explicit cluster_id is required")
+    workspace_id = _workspace_id(current)
+    _require_evidence_access(db, current, workspace_id, payload.cluster_id)
+    source = payload.query.get("source")
+    query = payload.query.get("query")
+    if source != "prometheus" or not isinstance(query, str) or not query.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Prometheus agent query is required",
+        )
+    queued = queue_debug_query(
+        db,
+        payload,
+        workspace_id=workspace_id,
+        requested_by=current.user_id,
     )
-    return MetricsValidateResponse(
-        valid=result.valid,
-        code=result.code,
-        detail=result.detail,
-        result_type=result.result_type,
+    if not queued.inserted:
+        raise HTTPException(status_code=409, detail="Prometheus validation is already queued")
+    await publish_operation_event(
+        operation_events,
+        command_id=queued.command_id,
+        workspace_id=workspace_id,
+        status=CommandStatus.QUEUED,
+        payload={
+            "cluster_id": payload.cluster_id,
+            "action": str(queued.plan["action"]),
+            "correlation_id": queued.correlation_id,
+        },
+    )
+    return AgentDebugQueryResponse(
+        accepted=True,
+        command_id=queued.command_id,
+        correlation_id=queued.correlation_id,
     )
 
 

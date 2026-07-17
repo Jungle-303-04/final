@@ -6,27 +6,20 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any
 
-import httpx
 from fastapi import HTTPException
 
-import domains.dashboard.router as dashboard_router
-from domains.dashboard.metrics_validation import (
-    PROMETHEUS_VALIDATE_BASE_URL_ENV,
-    MetricsValidationResult,
-    validate_promql_query,
-)
 from domains.dashboard.router import (
     delete_metric_query_preset,
     list_metric_query_presets,
+    queue_metrics_validation,
     run_metric_query_preset,
     upsert_metric_query_preset,
     upsert_metric_widget,
-    validate_metrics_query,
 )
 from packages.config.constants import Command, CommandStatus
 from packages.contracts.gateway.requests import (
+    AgentDebugQueryRequest,
     MetricQueryPresetUpsertRequest,
-    MetricsValidateRequest,
     MetricWidgetUpsertRequest,
 )
 
@@ -136,8 +129,17 @@ class MetricPresetDb:
             "updated_at": "2026-07-07T00:00:00",
         }
 
-    def queue_agent_command(self, correlation_id: str, plan: dict[str, Any], status: str) -> None:
+    def queue_agent_command(self, correlation_id: str, plan: dict[str, Any], status: str) -> bool:
         self.commands.append((correlation_id, plan, status))
+        return True
+
+
+class MetricOperationEvents:
+    def __init__(self) -> None:
+        self.published: list[dict[str, object]] = []
+
+    async def publish(self, **event: object) -> None:
+        self.published.append(event)
 
 
 def test_metric_query_presets_list_requires_dashboard_access() -> None:
@@ -163,126 +165,142 @@ def test_metric_query_presets_list_requires_dashboard_access() -> None:
     asyncio.run(run())
 
 
-def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -> None:
-    calls: list[tuple[str, int | None, int | None]] = []
-
-    async def stub_validate(query: str, *, range_seconds=None, step_seconds=None):
-        calls.append((query, range_seconds, step_seconds))
-        return MetricsValidationResult(
-            valid=True,
-            detail="PromQL dry-run 성공",
-            result_type="matrix",
-        )
-
-    monkeypatch.setattr(dashboard_router, "validate_promql_query", stub_validate)
-
+def test_metrics_validate_queues_agent_only_prometheus_query_and_operation_event() -> None:
     async def run() -> None:
-        response = await validate_metrics_query(
-            MetricsValidateRequest(
-                query="up",
-                base_url="http://prometheus:9090",
-                range_seconds=300,
-                step_seconds=30,
+        db = MetricPresetDb()
+        operation_events = MetricOperationEvents()
+        response = await queue_metrics_validation(
+            AgentDebugQueryRequest(
+                cluster_id="cluster-1",
+                query={
+                    "source": "prometheus",
+                    "name": "promql_validation",
+                    "query": "up",
+                    "range_seconds": 300,
+                    "step_seconds": 30,
+                },
             ),
-            _current=_current_session(),
+            current=_current_session(),
+            db=db,
+            operation_events=operation_events,
         )
-        assert response.valid is True
-        assert response.detail == "PromQL dry-run 성공"
-        assert response.result_type == "matrix"
+        assert response.accepted is True
+        assert response.command_id.startswith("cmd-debug-")
+        assert len(db.commands) == 1
+        correlation_id, plan, status = db.commands[0]
+        assert correlation_id == response.correlation_id
+        assert status == CommandStatus.QUEUED
+        assert plan["action"] == Command.TELEMETRY_QUERY_RUN_ACTION
+        assert plan["routing_constraint"] == {
+            "channel": "agent",
+            "cluster_id": "cluster-1",
+            "workspace_id": "workspace-1",
+            "required_capability": "collector",
+        }
+        assert plan["payload"] == {
+            "query": {
+                "source": "prometheus",
+                "name": "promql_validation",
+                "query": "up",
+                "range_seconds": 300,
+                "step_seconds": 30,
+            }
+        }
+        assert operation_events.published == [
+            {
+                "command_id": response.command_id,
+                "workspace_id": "workspace-1",
+                "kind": "progress",
+                "payload": {
+                    "status": CommandStatus.QUEUED,
+                    "cluster_id": "cluster-1",
+                    "action": Command.TELEMETRY_QUERY_RUN_ACTION,
+                    "correlation_id": response.correlation_id,
+                },
+            }
+        ]
 
     asyncio.run(run())
 
-    assert calls == [("up", 300, 30)]
 
-
-def test_metrics_validate_ignores_attacker_base_url_and_uses_server_env(monkeypatch) -> None:
-    requested_urls: list[httpx.URL] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        requested_urls.append(request.url)
-        return httpx.Response(
-            200,
-            json={"status": "success", "data": {"resultType": "matrix", "result": []}},
-        )
-
-    monkeypatch.setenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, "https://prometheus.internal:9090")
-
-    result = asyncio.run(
-        validate_promql_query(
-            "up",
-            base_url="https://attacker.example/steal",
-            transport=httpx.MockTransport(handler),
-        )
-    )
-
-    assert result.valid is True
-    assert len(requested_urls) == 1
-    assert requested_urls[0].host == "prometheus.internal"
-    assert requested_urls[0].port == 9090
-    assert requested_urls[0].path == "/api/v1/query_range"
-
-
-def test_metrics_validate_requires_server_env_even_with_client_base_url(monkeypatch) -> None:
-    attempted = False
-
-    async def handler(_request: httpx.Request) -> httpx.Response:
-        nonlocal attempted
-        attempted = True
-        return httpx.Response(200)
-
-    monkeypatch.delenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, raising=False)
-
-    result = asyncio.run(
-        validate_promql_query(
-            "up",
-            base_url="https://attacker.example/steal",
-            transport=httpx.MockTransport(handler),
-        )
-    )
-
-    assert result.valid is False
-    assert result.code == "prometheus_base_url_required"
-    assert result.detail == "Prometheus 검증 URL이 설정되지 않았습니다."
-    assert attempted is False
-
-
-def test_metrics_validate_does_not_reflect_prometheus_error_body(monkeypatch) -> None:
-    reflected_secret = "upstream-secret-response-body"
-
-    async def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            422,
-            json={"status": "error", "error": reflected_secret},
-        )
-
-    monkeypatch.setenv(PROMETHEUS_VALIDATE_BASE_URL_ENV, "https://prometheus.internal")
-
-    result = asyncio.run(validate_promql_query("sum(", transport=httpx.MockTransport(handler)))
-
-    assert result.valid is False
-    assert result.code == "promql_invalid"
-    assert result.detail == "PromQL 쿼리가 유효하지 않습니다."
-    assert reflected_secret not in result.detail
-
-
-def test_metrics_validate_route_returns_validation_error(monkeypatch) -> None:
-    async def stub_validate(*_args, **_kwargs):
-        return MetricsValidationResult(
-            valid=False,
-            code="promql_invalid",
-            detail="PromQL 문법 오류입니다.",
-        )
-
-    monkeypatch.setattr(dashboard_router, "validate_promql_query", stub_validate)
-
+def test_metrics_validate_denies_without_cluster_evidence_access() -> None:
     async def run() -> None:
-        response = await validate_metrics_query(
-            MetricsValidateRequest(query="sum("),
-            _current=_current_session(),
-        )
-        assert response.valid is False
-        assert response.code == "promql_invalid"
-        assert response.detail == "PromQL 문법 오류입니다."
+        db = MetricPresetDb(allowed_actions={"dashboard.read"})
+        operation_events = MetricOperationEvents()
+        try:
+            await queue_metrics_validation(
+                AgentDebugQueryRequest(
+                    cluster_id="cluster-1",
+                    query={"source": "prometheus", "query": "up"},
+                ),
+                current=_current_session(),
+                db=db,
+                operation_events=operation_events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail == "resource access denied"
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert db.commands == []
+        assert operation_events.published == []
+
+    asyncio.run(run())
+
+
+def test_metrics_validate_requires_explicit_cluster_identity() -> None:
+    async def run() -> None:
+        db = MetricPresetDb()
+        operation_events = MetricOperationEvents()
+        try:
+            await queue_metrics_validation(
+                AgentDebugQueryRequest(
+                    query={
+                        "source": "prometheus",
+                        "name": "promql_validation",
+                        "query": "up",
+                    },
+                ),
+                current=_current_session(),
+                db=db,
+                operation_events=operation_events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert exc.detail == "explicit cluster_id is required"
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert db.calls == []
+        assert db.commands == []
+        assert operation_events.published == []
+
+    asyncio.run(run())
+
+
+def test_metrics_validate_rejects_non_prometheus_agent_query() -> None:
+    async def run() -> None:
+        db = MetricPresetDb()
+        operation_events = MetricOperationEvents()
+        try:
+            await queue_metrics_validation(
+                AgentDebugQueryRequest(
+                    cluster_id="cluster-1",
+                    query={"source": "loki", "query": '{app="checkout"}'},
+                ),
+                current=_current_session(),
+                db=db,
+                operation_events=operation_events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert exc.detail == "Prometheus agent query is required"
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert db.commands == []
+        assert operation_events.published == []
 
     asyncio.run(run())
 
