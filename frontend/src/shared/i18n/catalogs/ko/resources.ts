@@ -1,6 +1,11 @@
 import type { ResourcesMessageKey } from "../../keys/resources";
 
 export const resourcesKo = {
+  "resources.page.title": "{resourceType} 현황",
+  "resources.page.description": "{cluster} 클러스터의 {resourceType} 상태와 서버 배치를 확인합니다.",
+  "resources.page.allClusters": "전체 클러스터",
+  "resources.page.allTypes": "전체 리소스",
+  "resources.page.visibleCount": "현재 {count}개 표시",
   "resources.detail.events": "이벤트",
   "resources.detail.related": "관련 리소스",
   "resources.empty": "조건에 맞는 리소스 없음",

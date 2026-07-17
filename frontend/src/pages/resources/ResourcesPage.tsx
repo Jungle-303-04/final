@@ -45,6 +45,7 @@ import { useResourceTopologyViewController } from "./useResourceTopologyViewCont
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
 import { ResourcesLiveStatus } from "./ResourcesLiveStatus";
+import { ResourcesPageHeader } from "./ResourcesPageHeader";
 import { selectResourceMetricIds } from "./resourceMetricSelection";
 import {
   EMPTY_POD_TERMINAL_PORT,
@@ -216,6 +217,9 @@ export function ResourcesPage({
     [state.choices, state.catalog, state.list, state.detail].some(
       (resource) => resource.phase === "ready" && resource.refreshing,
     ) || filtered.list.refreshing;
+  const selectedCluster = state.choices.data.clusters.find(
+    (cluster) => cluster.id === state.selectedClusterId,
+  ) ?? null;
   return (
     <div
       className="flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
@@ -230,8 +234,12 @@ export function ResourcesPage({
         data-slot="resources-list-column"
       >
         <ProductPageFrame>
-          <header className="flex min-w-0 justify-end">
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <ResourcesPageHeader
+            clusterName={selectedCluster?.name ?? state.selectedClusterId}
+            environment={selectedCluster?.environment ?? null}
+            resourceType={state.selectedResourceType}
+            visibleCount={filteredPage?.counts.filteredCount ?? null}
+          >
               {state.automaticRefreshPaused ? (
                 <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
               ) : null}
@@ -249,8 +257,7 @@ export function ResourcesPage({
                   onRefresh={state.refresh}
                 />
               )}
-            </div>
-          </header>
+          </ResourcesPageHeader>
 
           {!state.selectedClusterExists ? (
             state.clusterSelection.kind === "unknown" ? (

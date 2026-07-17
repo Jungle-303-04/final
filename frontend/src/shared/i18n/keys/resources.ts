@@ -1,4 +1,9 @@
 export type ResourcesMessageKey =
+  | "resources.page.title"
+  | "resources.page.description"
+  | "resources.page.allClusters"
+  | "resources.page.allTypes"
+  | "resources.page.visibleCount"
   | "resources.detail.events"
   | "resources.detail.related"
   | "resources.empty"

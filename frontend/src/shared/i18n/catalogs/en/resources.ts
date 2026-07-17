@@ -1,6 +1,11 @@
 import type { ResourcesMessageKey } from "../../keys/resources";
 
 export const resourcesEn = {
+  "resources.page.title": "{resourceType} overview",
+  "resources.page.description": "Inspect {resourceType} status and placement in the {cluster} cluster.",
+  "resources.page.allClusters": "All clusters",
+  "resources.page.allTypes": "All resources",
+  "resources.page.visibleCount": "{count} visible",
   "resources.detail.events": "Events",
   "resources.detail.related": "Related resources",
   "resources.empty": "No matching resources",
