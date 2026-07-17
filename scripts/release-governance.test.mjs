@@ -20,7 +20,7 @@ test('웹 운영 배포와 최종 desktop package gate를 분리한다', async (
   )
   assert.match(
     makefile,
-    /^reference-feature-ledger-check:.*\n(?:\t.*\n)*?\tnode --test scripts\/reference-feature-ledger\.test\.mjs scripts\/reference-feature-source-identity\.test\.mjs scripts\/reference-resource-metrics-parity\.test\.mjs$/m,
+    /^reference-feature-ledger-check:.*\n(?:\t.*\n)*?\tnode --test scripts\/reference-feature-ledger\.test\.mjs scripts\/reference-feature-source-identity\.test\.mjs scripts\/reference-resource-metrics-parity\.test\.mjs scripts\/release-governance\.test\.mjs$/m,
   )
   assert.match(
     makefile,

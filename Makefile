@@ -87,6 +87,7 @@ reference-feature-ledger: ## 원본 기능·계약 전수 ledger 생성
 
 reference-feature-ledger-check: ## 원본 기능 ledger의 완전성 확인
 	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check
+	node --test scripts/reference-feature-ledger.test.mjs scripts/reference-feature-source-identity.test.mjs scripts/reference-resource-metrics-parity.test.mjs scripts/release-governance.test.mjs
 
 reference-upstream-prepare: ## strict UI delta 검증용 승인 원본 Git object 준비
 	@if [[ -e "$(REFERENCE_UPSTREAM_GIT)" ]]; then \
