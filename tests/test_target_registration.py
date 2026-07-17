@@ -29,6 +29,7 @@ from domains.target.router import (
     cluster_connection_status,
     cluster_summary,
     connect_cluster,
+    get_cluster,
     get_cluster_connection,
     get_cluster_connection_status,
     get_cluster_scheduling_profiles,
@@ -388,7 +389,22 @@ class StubClusterDb:
         return {
             "snapshot_id": "snapshot-1",
             "agent_id": "agent-1",
-            "summary": {"detected_provider": "eks"},
+            "summary": {
+                "summary": {
+                    "detected_provider": "eks",
+                    "resources_complete": True,
+                    "namespaces": ["default", "storefront"],
+                    "nodes": [
+                        {"name": "node-a", "version": "v1.33.1"},
+                        {"name": "node-b", "version": "v1.33.1"},
+                    ],
+                    "api_resource_discovery": {
+                        "completeness": "exact",
+                    },
+                },
+                "health": {},
+                "usage": {},
+            },
             "created_at": (datetime.now(UTC) - timedelta(seconds=30)).isoformat(),
         }
 
@@ -1628,10 +1644,32 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].node_count == 2
     assert response.clusters[0].server_count == 2
     assert response.clusters[0].pod_count == 9
+    assert response.clusters[0].namespace_count == 2
+    assert response.clusters[0].kubernetes_version == "v1.33.1"
+    assert response.clusters[0].crd_discovery_status == "exact"
     assert response.clusters[0].incident_count == 3
     assert response.clusters[0].open_incidents == 3
     assert response.clusters[0].app_count is None
     assert response.clusters[0].last_seen_at == db.agent["last_seen_at"]
+
+
+def test_cluster_detail_reuses_complete_agent_inventory_counts() -> None:
+    db = StubClusterDb()
+
+    async def run():
+        return await get_cluster(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.cluster.node_count == 2
+    assert response.cluster.pod_count == 9
+    assert response.cluster.namespace_count == 2
+    assert response.cluster.kubernetes_version == "v1.33.1"
+    assert response.cluster.crd_discovery_status == "exact"
 
 
 def test_cluster_connect_returns_only_server_generated_one_line_command(monkeypatch) -> None:

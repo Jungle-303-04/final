@@ -2452,6 +2452,9 @@ class ClusterSummary(StrictModel):
     last_agent_seen_at: str | None = None
     node_count: int | None = Field(default=None, ge=0)
     pod_count: int | None = Field(default=None, ge=0)
+    namespace_count: int | None = Field(default=None, ge=0)
+    kubernetes_version: str | None = None
+    crd_discovery_status: Literal["exact", "partial", "unavailable"] | None = None
     incident_count: int | None = Field(default=None, ge=0)
     # VP-015 / BQ-069 product fields. These stay nullable until the backing
     # inventory or incident source proves a value; unknown is never reported

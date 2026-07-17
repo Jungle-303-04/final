@@ -944,6 +944,9 @@ def cluster_summary(
         if connection_status == AGENT_STATUS_INSTALL_EXPIRED
         else cluster["status"]
     )
+    kubernetes_version, namespace_count, crd_discovery_status = cluster_observation_metadata(
+        latest_snapshot
+    )
     return ClusterSummary(
         workspace_id=cluster["workspace_id"],
         cluster_id=cluster["cluster_id"],
@@ -956,10 +959,66 @@ def cluster_summary(
         connection_stage=cluster_connection_stage(cluster, latest_agent, latest_snapshot),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_agent_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
+        kubernetes_version=kubernetes_version,
+        namespace_count=namespace_count,
+        crd_discovery_status=crd_discovery_status,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         created_at=cluster.get("created_at"),
         updated_at=cluster.get("updated_at"),
     )
+
+
+def cluster_observation_metadata(
+    latest_snapshot: dict[str, Any] | None,
+) -> tuple[str | None, int | None, str | None]:
+    source = snapshot_source_summary(latest_snapshot)
+    if source is None:
+        return None, None, None
+    nodes = source.get("nodes")
+    node_items = nodes if isinstance(nodes, list) else []
+    versions = {
+        str(node.get("version") or "").strip() for node in node_items if isinstance(node, dict)
+    }
+    versions.discard("")
+    kubernetes_version = next(iter(versions)) if len(versions) == 1 else None
+    namespaces = source.get("namespaces")
+    namespace_count = (
+        len({value for value in namespaces if isinstance(value, str) and value})
+        if complete_inventory_snapshot(latest_snapshot) and isinstance(namespaces, list)
+        else None
+    )
+    discovery = source.get("api_resource_discovery")
+    discovery_status = discovery.get("completeness") if isinstance(discovery, dict) else None
+    crd_discovery_status = (
+        str(discovery_status) if discovery_status in {"exact", "partial", "unavailable"} else None
+    )
+    return kubernetes_version, namespace_count, crd_discovery_status
+
+
+def complete_inventory_snapshot(latest_snapshot: dict[str, Any] | None) -> bool:
+    source = snapshot_source_summary(latest_snapshot)
+    if source is None or source.get("resources_complete") is not True:
+        return False
+    limits = source.get("collection_limits")
+    return not isinstance(limits, dict) or limits.get("truncated") is not True
+
+
+def enrich_cluster_inventory_counts(
+    db: Any,
+    workspace_id: str,
+    summary: ClusterSummary,
+    latest_snapshot: dict[str, Any] | None,
+) -> None:
+    if not complete_inventory_snapshot(latest_snapshot):
+        return
+    count_reader = getattr(db, "inventory_resource_counts", None)
+    if not callable(count_reader):
+        return
+    counts = inventory_counts(count_reader(workspace_id, summary.cluster_id))
+    summary.node_count = counts.get("node", 0)
+    summary.server_count = summary.node_count
+    summary.pod_count = counts.get("pod", 0)
+    summary.namespace_count = counts.get("namespace", summary.namespace_count)
 
 
 def touch_agent_seen(
@@ -1461,13 +1520,12 @@ async def list_clusters(
         )
     ]
     for summary in summaries:
-        if hasattr(db, "inventory_resource_counts") and latest_snapshots.get(summary.cluster_id):
-            counts = inventory_counts(
-                db.inventory_resource_counts(workspace_id, summary.cluster_id)
-            )
-            summary.node_count = counts.get("node", 0)
-            summary.server_count = counts.get("node", 0)
-            summary.pod_count = counts.get("pod", 0)
+        enrich_cluster_inventory_counts(
+            db,
+            workspace_id,
+            summary,
+            latest_snapshots.get(summary.cluster_id),
+        )
         if has_open_incident_counts:
             summary.incident_count = int(open_incident_counts.get(summary.cluster_id, 0))
             summary.open_incidents = summary.incident_count
@@ -1499,10 +1557,9 @@ async def get_cluster(
     latest_snapshot = (
         snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
     )
-    return ClusterResponse(
-        cluster=cluster_summary(cluster, latest_agent, latest_snapshot=latest_snapshot),
-        agents=agents,
-    )
+    summary = cluster_summary(cluster, latest_agent, latest_snapshot=latest_snapshot)
+    enrich_cluster_inventory_counts(db, workspace_id, summary, latest_snapshot)
+    return ClusterResponse(cluster=summary, agents=agents)
 
 
 @router.get(
