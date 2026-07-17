@@ -7,6 +7,7 @@ Create Date: 2026-07-18 05:40:00
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -19,6 +20,8 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 INDEX_NAME = "ix_timeline_events_diagnostics"
+LOCK_TIMEOUT = "30s"
+CREATE_RETRY_DELAYS = (2.0, 4.0, 8.0)
 
 
 def _preflight_offline_invalid_index() -> None:
@@ -60,24 +63,45 @@ def _drop_invalid_index() -> None:
         op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {INDEX_NAME}")
 
 
+def _is_lock_timeout(error: sa.exc.OperationalError) -> bool:
+    original = getattr(error, "orig", None)
+    return getattr(original, "sqlstate", None) == "55P03" or "lock timeout" in str(error).casefold()
+
+
+def _create_index_with_bounded_retry() -> None:
+    statement = (
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+        f"{INDEX_NAME} ON timeline_events "
+        "(workspace_id, occurred_at, sequence)"
+    )
+    if op.get_context().as_sql:
+        op.execute(statement)
+        return
+
+    for attempt in range(len(CREATE_RETRY_DELAYS) + 1):
+        _drop_invalid_index()
+        try:
+            op.execute(statement)
+            return
+        except sa.exc.OperationalError as error:
+            if not _is_lock_timeout(error) or attempt == len(CREATE_RETRY_DELAYS):
+                raise
+            time.sleep(CREATE_RETRY_DELAYS[attempt])
+
+
 def upgrade() -> None:
     with op.get_context().autocommit_block():
-        op.execute("SET lock_timeout = '5s'")
+        op.execute(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
         try:
             _preflight_offline_invalid_index()
-            _drop_invalid_index()
-            op.execute(
-                "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-                f"{INDEX_NAME} ON timeline_events "
-                "(workspace_id, occurred_at, sequence)"
-            )
+            _create_index_with_bounded_retry()
         finally:
             op.execute("RESET lock_timeout")
 
 
 def downgrade() -> None:
     with op.get_context().autocommit_block():
-        op.execute("SET lock_timeout = '5s'")
+        op.execute(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
         try:
             op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {INDEX_NAME}")
         finally:

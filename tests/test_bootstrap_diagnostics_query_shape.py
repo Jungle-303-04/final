@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager, redirect_stdout
 from datetime import UTC, datetime
+from importlib.util import module_from_spec, spec_from_file_location
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -130,10 +131,34 @@ def test_timeline_diagnostics_index_migration_is_online_safe(monkeypatch: Any) -
         "on timeline_events (workspace_id, occurred_at, sequence)"
     ) in upgrade
     assert "invalid concurrent index remnant" in upgrade
-    assert "set lock_timeout = '5s'" in upgrade
+    assert "set lock_timeout = '30s'" in upgrade
     assert "reset lock_timeout" in upgrade
 
     downgrade = _render(config, "downgrade", f"{REVISION}:{DOWN_REVISION}")
     assert f"drop index concurrently if exists {INDEX_NAME}" in downgrade
-    assert "set lock_timeout = '5s'" in downgrade
+    assert "set lock_timeout = '30s'" in downgrade
     assert "reset lock_timeout" in downgrade
+
+
+def test_timeline_diagnostics_index_retries_only_lock_timeouts() -> None:
+    spec = spec_from_file_location(
+        "timeline_diagnostics_index_migration",
+        ROOT / "alembic" / "versions" / "20260718_0200_timeline_diagnostics_index.py",
+    )
+    assert spec is not None and spec.loader is not None
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    class LockTimeout:
+        sqlstate = "55P03"
+
+    class UniqueViolation:
+        sqlstate = "23505"
+
+    assert migration._is_lock_timeout(  # noqa: SLF001
+        migration.sa.exc.OperationalError("create index", {}, LockTimeout())
+    )
+    assert not migration._is_lock_timeout(  # noqa: SLF001
+        migration.sa.exc.OperationalError("create index", {}, UniqueViolation())
+    )
+    assert migration.CREATE_RETRY_DELAYS == (2.0, 4.0, 8.0)
