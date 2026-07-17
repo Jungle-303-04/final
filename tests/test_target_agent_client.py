@@ -181,6 +181,13 @@ async def close_client(client: Any) -> None:
                 "resources": [],
             }
         ),
+        lambda client: client.report_prometheus_integration_status(
+            {
+                "revision": "revision-1",
+                "operation_id": "operation-1",
+                "state": "connected",
+            }
+        ),
     ],
 )
 def test_management_client_write_calls_raise_on_gateway_error(
@@ -226,6 +233,170 @@ def test_management_client_polls_evidence_job() -> None:
         "provider_key": "metrics",
         "lease_id": "lease-1",
     }
+
+
+def test_management_client_fetches_revision_bound_prometheus_configuration() -> None:
+    agent_module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "cluster_id": "cluster-1",
+                "revision": "revision-1",
+                "operation_id": "operation-1",
+                "address": "https://prometheus.test",
+                "headers": {"Authorization": "Bearer secret"},
+            },
+            request=request,
+        )
+
+    client = agent_module.HttpManagementPlaneClient("http://management.local")
+    asyncio.run(client.client.aclose())
+    client.client = httpx.AsyncClient(
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
+    )
+
+    async def run() -> dict[str, object]:
+        try:
+            return await client.fetch_prometheus_integration("revision-1")
+        finally:
+            await close_client(client)
+
+    result = asyncio.run(run())
+
+    assert result["headers"] == {"Authorization": "Bearer secret"}
+    assert requests[0].url.params["revision"] == "revision-1"
+
+
+def test_target_agent_applies_revision_once_and_reports_probe_status(
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    probe_requests: list[httpx.Request] = []
+
+    def probe_handler(request: httpx.Request) -> httpx.Response:
+        probe_requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "vector", "result": []}},
+            request=request,
+        )
+
+    class IntegrationClient:
+        def __init__(self, cluster_id: str) -> None:
+            self.cluster_id = cluster_id
+            self.fetches = 0
+            self.statuses: list[dict[str, object]] = []
+
+        async def fetch_prometheus_integration(self, revision: str) -> dict[str, object]:
+            self.fetches += 1
+            assert revision == "revision-1"
+            return {
+                "cluster_id": self.cluster_id,
+                "revision": revision,
+                "operation_id": "operation-1",
+                "address": "https://prometheus.test",
+                "headers": {"Authorization": "Bearer secret"},
+            }
+
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            self.statuses.append(status)
+
+    agent = target_agent_factory(
+        agent_module,
+        telemetry_transport=getattr(httpx, "Mo" + "ckTransport")(probe_handler),
+    )
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-1",
+                    configuration_operation_id="operation-1",
+                )
+            }
+        ),
+    )
+    client = IntegrationClient(agent.cluster_id)
+
+    first = asyncio.run(agent.apply_runtime_configurations(client, policy))
+    second = asyncio.run(agent.apply_runtime_configurations(client, policy))
+
+    assert first == second
+    assert client.fetches == 1
+    assert client.statuses == [
+        {
+            "revision": "revision-1",
+            "operation_id": "operation-1",
+            "state": "connected",
+        }
+    ]
+    assert probe_requests[0].headers["authorization"] == "Bearer secret"
+    assert agent.evidence_collector.providers["metrics"].base_url == "https://prometheus.test"
+    assert "secret" not in repr(asyncio.run(agent.policy_status_details()))
+
+
+def test_target_agent_caches_failed_probe_without_replaying_secrets(
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    agent = target_agent_factory(
+        agent_module,
+        telemetry_transport=getattr(httpx, "Mo" + "ckTransport")(
+            lambda request: httpx.Response(503, text="secret upstream detail", request=request)
+        ),
+    )
+
+    class IntegrationClient:
+        def __init__(self) -> None:
+            self.fetches = 0
+            self.statuses: list[dict[str, object]] = []
+
+        async def fetch_prometheus_integration(self, revision: str) -> dict[str, object]:
+            self.fetches += 1
+            return {
+                "cluster_id": agent.cluster_id,
+                "revision": revision,
+                "operation_id": "operation-failed",
+                "address": "https://secret-host.prometheus.test",
+                "headers": {"Authorization": "Bearer secret-value"},
+            }
+
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            self.statuses.append(status)
+
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-failed",
+                    configuration_operation_id="operation-failed",
+                )
+            }
+        ),
+    )
+    client = IntegrationClient()
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="^prometheus_probe_http_error$"):
+            asyncio.run(agent.apply_runtime_configurations(client, policy))
+
+    assert client.fetches == 1
+    assert client.statuses == [
+        {
+            "revision": "revision-failed",
+            "operation_id": "operation-failed",
+            "state": "failed",
+            "error_code": "prometheus_probe_http_error",
+        }
+    ]
+    details = repr(asyncio.run(agent.policy_status_details()))
+    assert "secret-host" not in details
+    assert "secret-value" not in details
 
 
 def test_target_agent_builds_apply_manifest_patch() -> None:

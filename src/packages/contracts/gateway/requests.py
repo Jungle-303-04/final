@@ -896,6 +896,18 @@ class EvidenceProviderPolicy(StrictModel):
     max_workers: int = Field(default=DEFAULT_PROVIDER_MAX_WORKERS, ge=0)
     queue_age_target_seconds: int = Field(default=DEFAULT_QUEUE_AGE_TARGET_SECONDS, ge=1)
     queries: list[dict[str, Any]] = Field(default_factory=list)
+    # Opaque management-plane revision only. Provider secrets never enter the
+    # durable policy or the agent's on-disk policy cache.
+    configuration_revision: str | None = Field(default=None, min_length=1, max_length=120)
+    configuration_operation_id: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @model_validator(mode="after")
+    def require_complete_configuration_identity(self) -> EvidenceProviderPolicy:
+        if (self.configuration_revision is None) != (self.configuration_operation_id is None):
+            raise ValueError(
+                "provider configuration revision and operation identity must be paired"
+            )
+        return self
 
 
 class EvidenceRuntimePolicy(StrictModel):

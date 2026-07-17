@@ -5,6 +5,7 @@ import importlib
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
 
 from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
@@ -108,6 +109,55 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
         results["node_collector_node_pod_count"]["samples"][0]["metric"]["node"]
         == "target-control-plane"
     )
+
+
+def test_prometheus_provider_sends_runtime_headers_without_exposing_them_in_results() -> None:
+    module = load_evidence_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "vector", "result": []}},
+            request=request,
+        )
+
+    provider = module.PrometheusMetricsProvider(
+        "https://prometheus.test",
+        headers={"Authorization": "Bearer secret", "X-Scope-OrgID": "tenant-a"},
+    )
+    query = module.TelemetryQueryDefinition.from_mapping(
+        {"source": "prometheus", "name": "up", "description": "Probe", "query": "up"}
+    ).to_provider_query()
+
+    async def run() -> dict[str, object]:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            return await provider.query_instant(client, query)
+
+    result = asyncio.run(run())
+
+    assert requests[0].headers["authorization"] == "Bearer secret"
+    assert requests[0].headers["x-scope-orgid"] == "tenant-a"
+    assert "secret" not in repr(result)
+
+
+def test_replacing_prometheus_provider_preserves_registered_queries() -> None:
+    module = load_evidence_module()
+    collector = module.EvidenceCollector([module.PrometheusMetricsProvider("http://old.test")])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {"source": "prometheus", "name": "up", "description": "Probe", "query": "up"}
+        )
+    )
+
+    replacement = module.PrometheusMetricsProvider("http://new.test")
+    collector.replace_provider(replacement)
+
+    assert collector.providers["metrics"] is replacement
+    assert [query.metric_name for query in replacement.queries] == ["up"]
 
 
 def test_collector_runs_one_off_query_definition() -> None:

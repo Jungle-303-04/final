@@ -5,16 +5,21 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from domains.integrations.prometheus import agent_router, router
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
 from pydantic import ValidationError
 
 from domains.identity.dependencies import ClusterAgentIdentity, require_cluster_agent
+from domains.integrations.prometheus import router
+from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
 from packages.contracts.parity import OperationEvent
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.security.credentials import decrypt_credential
+
+
+@pytest.fixture(autouse=True)
+def _credential_encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "prometheus-integration-test-key")
 
 
 class SessionAuth:
@@ -240,6 +245,60 @@ def test_update_encrypts_headers_advances_policy_and_returns_durable_receipt() -
     assert "secret-value" not in repr(events.bodies[0])
 
 
+def test_update_fails_closed_when_credential_encryption_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CREDENTIAL_ENCRYPTION_KEY", raising=False)
+    client = _client(IntegrationDb(), IntegrationEvents(), IntegrationOperations())
+
+    response = client.put(
+        "/integrations/prometheus",
+        json={"cluster_id": "cluster-a", "prometheus_url": "https://prometheus.test"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "prometheus credential encryption unavailable"}
+
+
+def test_omitted_headers_preserve_write_only_secret_and_explicit_empty_clears_it() -> None:
+    db = IntegrationDb()
+    client = _client(db, IntegrationEvents(), IntegrationOperations())
+    client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://old.prometheus.test",
+            "headers": {"Authorization": "Bearer secret-value"},
+        },
+    )
+
+    preserved = client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://new.prometheus.test",
+        },
+    )
+    assert preserved.status_code == 202
+    assert preserved.json()["header_keys"] == ["Authorization"]
+    assert db.credential is not None
+    assert json.loads(decrypt_credential(db.credential["encrypted_value"]))["headers"] == {
+        "Authorization": "Bearer secret-value"
+    }
+
+    cleared = client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://new.prometheus.test",
+            "headers": {},
+        },
+    )
+    assert cleared.status_code == 202
+    assert cleared.json()["header_keys"] == []
+    assert json.loads(decrypt_credential(db.credential["encrypted_value"])) == {"headers": {}}
+
+
 def test_browser_status_redacts_values_and_agent_fetch_is_revision_bound() -> None:
     db = IntegrationDb()
     events = IntegrationEvents()
@@ -342,5 +401,4 @@ def _client(
         cluster_id="cluster-a",
     )
     app.include_router(router)
-    app.include_router(agent_router)
     return TestClient(app)

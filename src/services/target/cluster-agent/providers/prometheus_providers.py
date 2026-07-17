@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 
 import httpx
 from queries import PrometheusInstantQuery, PrometheusRangeQuery
@@ -50,9 +51,10 @@ class PrometheusMetricsProvider:
     failure_message = "prometheus metrics collection failed"
     queries: tuple[PrometheusInstantQuery | PrometheusRangeQuery, ...] = ()
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, *, headers: Mapping[str, str] | None = None) -> None:
         """Store the Prometheus base URL without a trailing slash."""
         self.base_url = base_url.rstrip("/")
+        self.headers = dict(headers or {})
 
     @classmethod
     def from_config(cls, read_config: ConfigReader) -> PrometheusMetricsProvider:
@@ -80,6 +82,7 @@ class PrometheusMetricsProvider:
             response = await client.get(
                 f"{self.base_url}/api/v1/query",
                 params={"query": telemetry_query.promql},
+                headers=self.headers,
             )
             span.http_status(response.status_code)
             response.raise_for_status()
@@ -105,6 +108,7 @@ class PrometheusMetricsProvider:
                     "end": f"{end:.3f}",
                     "step": str(step),
                 },
+                headers=self.headers,
             )
             span.http_status(response.status_code)
             response.raise_for_status()

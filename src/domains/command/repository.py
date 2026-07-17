@@ -785,6 +785,25 @@ def stage_command_control_in_transaction(
 
 
 class AgentCommandRepository(DatabaseConnection):
+    def stage_integration_operation_event(
+        self,
+        conn: Any,
+        *,
+        workspace_id: str,
+        operation_id: str,
+        cluster_id: str,
+        payload: JsonObject,
+    ) -> OperationEvent | None:
+        """Stage a non-command configuration operation in the shared durable stream."""
+
+        return stage_command_operation_event_in_transaction(
+            conn,
+            workspace_id=workspace_id,
+            command_id=operation_id,
+            kind="progress",
+            payload={"cluster_id": cluster_id, **dict(payload)},
+        )
+
     async def fail_logical_command_and_stage_event(
         self,
         workspace_id: str,

@@ -48,6 +48,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
+from domains.integrations.prometheus import router as prometheus_integration_router
 from domains.inventory.deletion import router as resource_deletion_router
 from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
@@ -354,6 +355,9 @@ class ApiGateway:
         app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API
         app.include_router(gitops_filter_router)  # workspace GitOps 변경·승인 필터·facet
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
+        app.include_router(
+            prometheus_integration_router
+        )  # Prometheus 암호화 설정 + agent revision/status 스트림
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         app.include_router(gitops_overview_router)  # mixed registered/controller fleet overview
         app.include_router(gitops_detail_router)  # browser GitOps detail (session + RBAC)

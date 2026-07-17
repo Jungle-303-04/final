@@ -191,6 +191,7 @@ from packages.contracts.helm import (
     HelmValuesPreviewCommandPayload,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.integrations import AgentPrometheusIntegrationConfig
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
@@ -578,6 +579,24 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
 
+    async def fetch_prometheus_integration(self, revision: str) -> JsonObject:
+        response = await self.client.get(
+            f"{self.base_url}{gateway_routes.AGENT_PROMETHEUS_INTEGRATION_PATH}",
+            params={"revision": revision},
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+
+    async def report_prometheus_integration_status(self, status: JsonObject) -> None:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.AGENT_PROMETHEUS_INTEGRATION_STATUS_PATH}",
+            json=status,
+            headers=self.headers,
+        )
+        response.raise_for_status()
+
     async def report_reconcile_status(self, status: JsonObject) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.AGENT_RECONCILE_STATUS_PATH}",
@@ -668,6 +687,12 @@ class TargetClusterAgent:
             )
         self.query_registry = TelemetryQueryRegistry()
         self.evidence_collector = EvidenceCollector(providers, self.query_registry)
+        self.prometheus_integration_status: JsonObject = {
+            "state": "unconfigured",
+            "revision": None,
+            "operation_id": None,
+            "error_code": None,
+        }
         self.control_store = AgentControlStore(self.agent_control_db_path)
         self.command_outbox = CommandResultOutbox(self.command_outbox_db_path)
         self.evidence_scheduler = EvidenceJobScheduler(
@@ -688,6 +713,7 @@ class TargetClusterAgent:
             apply_policy=self.apply_policy,
             interval_seconds=self.policy_sync_interval_seconds,
             status_details=self.policy_status_details,
+            apply_runtime_configuration=self.apply_runtime_configurations,
         )
         self.reconciler = DesiredStateReconciler(
             cluster_id=self.cluster_id,
@@ -783,7 +809,95 @@ class TargetClusterAgent:
         }
 
     async def policy_status_details(self) -> JsonObject:
-        return {"target_rbac_manifest": await self.target_rbac_manifest_status()}
+        return {
+            "target_rbac_manifest": await self.target_rbac_manifest_status(),
+            "integrations": {"prometheus": dict(self.prometheus_integration_status)},
+        }
+
+    async def apply_runtime_configurations(
+        self,
+        client: ManagementPlaneClient,
+        policy: AgentPolicy,
+    ) -> JsonObject:
+        """Apply revision-bound provider secrets without persisting them in agent policy state."""
+        provider_policy = policy.evidence.providers.get("metrics")
+        revision = provider_policy.configuration_revision if provider_policy else None
+        operation_id = provider_policy.configuration_operation_id if provider_policy else None
+        if revision is None or operation_id is None:
+            self.prometheus_integration_status = {
+                "state": "unconfigured",
+                "revision": None,
+                "operation_id": None,
+                "error_code": None,
+            }
+            return {"integrations": {"prometheus": dict(self.prometheus_integration_status)}}
+
+        current = self.prometheus_integration_status
+        if current.get("revision") == revision and current.get("operation_id") == operation_id:
+            if current.get("state") == "connected":
+                return {"integrations": {"prometheus": dict(current)}}
+            if current.get("state") == "failed":
+                raise RuntimeError(str(current.get("error_code") or "prometheus_probe_failed"))
+
+        failure_code = "prometheus_configuration_invalid"
+        try:
+            raw_config = await client.fetch_prometheus_integration(revision)
+            config = AgentPrometheusIntegrationConfig.model_validate(raw_config)
+            if (
+                config.cluster_id != self.cluster_id
+                or config.revision != revision
+                or config.operation_id != operation_id
+            ):
+                raise ValueError("prometheus configuration identity mismatch")
+            provider = PrometheusMetricsProvider(config.address, headers=config.headers)
+            async with httpx.AsyncClient(
+                timeout=provider.timeout_seconds,
+                transport=self.telemetry_transport,
+            ) as probe_client:
+                response = await probe_client.get(
+                    f"{provider.base_url}/api/v1/query",
+                    params={"query": "up"},
+                    headers=provider.headers,
+                )
+                failure_code = "prometheus_probe_http_error"
+                response.raise_for_status()
+                payload = response.json()
+            failure_code = "prometheus_probe_invalid_response"
+            if (
+                not isinstance(payload, dict)
+                or payload.get("status") != "success"
+                or not isinstance(payload.get("data"), dict)
+            ):
+                raise ValueError("prometheus probe response is invalid")
+
+            await client.report_prometheus_integration_status(
+                {
+                    "revision": revision,
+                    "operation_id": operation_id,
+                    "state": "connected",
+                }
+            )
+            self.evidence_collector.replace_provider(provider)
+            self.prometheus_integration_status = {
+                "state": "connected",
+                "revision": revision,
+                "operation_id": operation_id,
+                "error_code": None,
+            }
+            return {"integrations": {"prometheus": dict(self.prometheus_integration_status)}}
+        except Exception as exc:
+            failed = {
+                "state": "failed",
+                "revision": revision,
+                "operation_id": operation_id,
+                "error_code": failure_code,
+            }
+            try:
+                await client.report_prometheus_integration_status(dict(failed))
+            except Exception as report_exc:
+                raise RuntimeError("prometheus_status_report_failed") from report_exc
+            self.prometheus_integration_status = failed
+            raise RuntimeError(failure_code) from exc
 
     async def target_rbac_manifest_status(self) -> JsonObject:
         """Observe the administrator-owned role without ever attempting RBAC writes."""

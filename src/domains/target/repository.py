@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -355,12 +356,15 @@ class TargetAgentRepository(DatabaseConnection):
         workspace_id: str,
         cluster_id: str,
         policy: JsonObject,
+        *,
+        conn: Any | None = None,
     ) -> JsonObject:
         generation = int(policy.get("generation", 1))
         table = AgentPolicyRecord.__table__
-        with self.connection() as conn:
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
             existing = (
-                conn.execute(
+                connection.execute(
                     select(table.c.generation).where(
                         table.c.workspace_id == workspace_id,
                         table.c.cluster_id == cluster_id,
@@ -391,7 +395,7 @@ class TargetAgentRepository(DatabaseConnection):
                 )
                 .returning(table.c.policy)
             )
-            row = conn.execute(statement).mappings().one()
+            row = connection.execute(statement).mappings().one()
         return dict(row["policy"])
 
     def get_cluster_policy(self, workspace_id: str, cluster_id: str) -> JsonObject | None:

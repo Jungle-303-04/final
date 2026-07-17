@@ -94,6 +94,9 @@ class EventSubject(StrEnum):
     NAMESPACE_SCOPE_UPDATED = "namespace.scope.updated"
     UI_PREFERENCES_UPDATED = "ui.preferences.updated"
 
+    # --- Workspace/cluster integration configuration ---
+    PROMETHEUS_INTEGRATION_CONFIGURED = "integration.prometheus.configured"
+
     # --- Helm workspace configuration ---
     HELM_CHART_SOURCE_DELETED = "helm.chart_source.deleted"
     HELM_CHART_SOURCE_REFRESHED = "helm.chart_source.refreshed"

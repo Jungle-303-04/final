@@ -62,6 +62,13 @@ class EvidenceCollector:
         self.refresh_provider_queries()
         return registered
 
+    def replace_provider(self, provider: TelemetryProvider) -> TelemetryProvider:
+        """Atomically replace one runtime provider while preserving registry-owned queries."""
+        self.providers[provider.evidence_key] = provider
+        definitions = self.registry.for_source(provider.source)
+        provider.queries = tuple(definition.to_provider_query() for definition in definitions)
+        return provider
+
     def refresh_provider_queries(self) -> None:
         for provider in self.providers.values():
             definitions = self.registry.for_source(provider.source)
