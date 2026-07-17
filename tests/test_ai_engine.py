@@ -8,8 +8,9 @@ from typing import Any
 
 import pytest
 
-from packages.ai.engine import ConversationEngine, EngineResult
+from packages.ai.engine import MAX_TOOL_CALLS_LIMIT, ConversationEngine, EngineResult
 from packages.ai.tools import ToolContext, ToolRegistry
+from packages.security.log_lines import MAX_LOG_LINE_LENGTH, TRUNCATED_LOG_LINE_SUFFIX
 
 
 class ScriptedLlm:
@@ -114,6 +115,85 @@ def test_unknown_tool_error_is_fed_back_to_llm() -> None:
     assert "unknown ai tool: nope" in llm.prompts[1]
 
 
+def test_tool_trace_and_transcript_redact_sensitive_values() -> None:
+    registry = ToolRegistry()
+
+    @registry.tool(
+        name="leaky",
+        description="returns sensitive-looking values",
+        parameters={"token": {"type": "string", "description": "secret token", "required": True}},
+    )
+    async def leaky(_context: ToolContext, token: str) -> dict:
+        return {
+            "password": "result-password",
+            "note": f"authorization: Bearer response-secret token={token}",
+            "contacts": ["admin@example.com"],
+        }
+
+    llm = ScriptedLlm(tool_call("leaky", token="input-secret"), final("redacted answer"))
+    engine = ConversationEngine(llm, registry)
+
+    result = respond(engine)
+
+    serialized_trace = json.dumps(result.tool_trace, ensure_ascii=False)
+    second_prompt = llm.prompts[1]
+    for leaked in (
+        "input-secret",
+        "result-password",
+        "response-secret",
+        "admin@example.com",
+    ):
+        assert leaked not in serialized_trace
+        assert leaked not in second_prompt
+    assert result.tool_trace[0]["arguments"]["token"] == "[REDACTED]"
+    assert result.tool_trace[0]["result"]["password"] == "[REDACTED]"
+    assert "[REDACTED]" in second_prompt
+
+
+def test_non_object_tool_arguments_are_rejected_before_execution() -> None:
+    registry = ToolRegistry()
+    calls = 0
+
+    @registry.tool(name="zero_arg", description="no-op", parameters={})
+    async def zero_arg(_context: ToolContext) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"called": True}
+
+    llm = ScriptedLlm(
+        json.dumps({"type": "tool_call", "tool": "zero_arg", "arguments": ["bad"]}),
+        final("handled"),
+    )
+    engine = ConversationEngine(llm, registry)
+
+    result = respond(engine)
+
+    assert calls == 0
+    assert result.content == "handled"
+    assert result.tool_trace[0]["ok"] is False
+    assert result.tool_trace[0]["error"] == "tool arguments must be an object"
+    assert "tool arguments must be an object" in llm.prompts[1]
+
+
+def test_tool_trace_and_transcript_truncate_large_values() -> None:
+    registry = ToolRegistry()
+    large_value = "x" * (MAX_LOG_LINE_LENGTH + 100)
+
+    @registry.tool(name="large", description="large result", parameters={})
+    async def large(_context: ToolContext) -> dict:
+        return {"message": large_value}
+
+    llm = ScriptedLlm(tool_call("large"), final("bounded"))
+    engine = ConversationEngine(llm, registry)
+
+    result = respond(engine)
+
+    message = result.tool_trace[0]["result"]["message"]
+    assert len(message) == MAX_LOG_LINE_LENGTH
+    assert message.endswith(TRUNCATED_LOG_LINE_SUFFIX)
+    assert large_value not in llm.prompts[1]
+
+
 def test_max_tool_call_cutoff_forces_final_answer() -> None:
     # 대본이 끝까지 tool_call 만 반복 — 상한(2) 이후 강제 최종 답변 요구
     llm = ScriptedLlm(tool_call("lookup", key="a"))
@@ -126,6 +206,16 @@ def test_max_tool_call_cutoff_forces_final_answer() -> None:
     assert "Tool call budget exhausted" in llm.prompts[2]
     # 강제 최종 호출에서도 tool_call 을 고집하면 원문을 답변으로 폴백
     assert result.content == tool_call("lookup", key="a")
+
+
+def test_max_tool_calls_is_bounded() -> None:
+    for invalid in (0, MAX_TOOL_CALLS_LIMIT + 1, True, 1.5):
+        with pytest.raises(ValueError, match="max_tool_calls"):
+            ConversationEngine(  # type: ignore[arg-type]
+                ScriptedLlm(final("unused")),
+                make_registry(),
+                max_tool_calls=invalid,
+            )
 
 
 def test_malformed_json_is_treated_as_final_content() -> None:
