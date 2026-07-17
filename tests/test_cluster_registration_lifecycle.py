@@ -160,6 +160,7 @@ def test_online_disconnect_marks_uninstall_requested_until_agent_ack() -> None:
 def test_disconnected_display_name_can_be_registered_again_with_new_token(
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "cluster-lifecycle-test-key")
     monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com/api")
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
     db = _LifecycleDb()
