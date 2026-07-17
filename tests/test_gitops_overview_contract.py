@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
+
 from packages.contracts.gitops.overview import (
     GitOpsOverviewCoverage,
     GitOpsOverviewResponse,
     GitOpsOverviewRow,
 )
-from pydantic import ValidationError
-
 from packages.contracts.parity import CapabilitySet, ClusterScope, ResourceRef
 
 

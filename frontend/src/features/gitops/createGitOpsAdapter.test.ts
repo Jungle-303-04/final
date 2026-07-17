@@ -246,7 +246,7 @@ describe("createGitOpsAdapter", () => {
       partialReasonCodes: [],
     }]);
     expect(endpoints.listOverview).toHaveBeenCalledTimes(1);
-    expect(endpoints.listApplicationDeployments).not.toHaveBeenCalled();
+    expect(endpoints.listApplications).not.toHaveBeenCalled();
   });
 
   it("rejects overview rows without a stable identity", async () => {
@@ -346,7 +346,6 @@ function endpointFixture(
       observed_at: null,
     }),
     listApplications: vi.fn().mockResolvedValue({ applications: [] }),
-    listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [] }),
     listClusters: vi.fn().mockResolvedValue({ clusters: [] }),
     connectApplication: unsupported,
     listPlans: vi.fn().mockResolvedValue({ plans: [] }),

@@ -88,17 +88,10 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
         return response.applications.map(toApplication).filter((item): item is ReleaseApplication => item !== null);
       });
     },
-    async listSyncTargets(signal) {
+    async listSyncTargets(signal, query) {
       return withPortFailure(async () => {
-        const response = await endpoints.listApplications(signal);
-        const applications = response.applications
-          .map(toApplication)
-          .filter((item): item is ReleaseApplication => item !== null);
-        const groups = await Promise.all(applications.map(async (application) => {
-          const deployments = await endpoints.listApplicationDeployments(application.id, { signal });
-          return deployments.deployments.map((deployment) => toSyncTarget(application, deployment));
-        }));
-        return groups.flat().sort(compareSyncTargets);
+        const response = await endpoints.listOverview(query ?? {}, signal);
+        return response.items.map(toOverviewSyncTarget).sort(compareSyncTargets);
       });
     },
     async listClusters(signal) {
@@ -131,6 +124,49 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.submitSafePr(plan, stepIndex, signal)),
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
+  };
+}
+
+function toOverviewSyncTarget(
+  item: import("../../api/gitops-overview-schemas").GitOpsOverviewEndpoint["items"][number],
+): GitOpsSyncTarget {
+  if (!item.id || !item.display_name || !item.scope.cluster_id) {
+    throw new GitOpsPortFailure("invalid-response");
+  }
+  if (item.authority === "controller" && item.resource === null) {
+    throw new GitOpsPortFailure("invalid-response");
+  }
+  const resourceLocator = item.resource?.namespace
+    ? {
+      clusterId: item.scope.cluster_id,
+      apiVersion: item.resource.api_group
+        ? `${item.resource.api_group}/${item.resource.version}`
+        : item.resource.version,
+      kind: item.resource.kind,
+      namespace: item.resource.namespace,
+      name: item.resource.name,
+    }
+    : null;
+  return {
+    id: item.id,
+    applicationId: item.application_ids[0]
+      ?? item.resource?.uid
+      ?? item.binding_id
+      ?? item.id,
+    applicationName: item.display_name,
+    clusterId: item.scope.cluster_id,
+    namespace: item.resource?.namespace ?? item.scope.namespaces[0] ?? null,
+    environment: item.environment,
+    syncStatus: item.status,
+    revision: item.revision,
+    observedAt: item.observed_at,
+    authority: item.authority,
+    provider: item.provider,
+    kind: item.resource?.kind ?? null,
+    health: item.health,
+    resourceLocator,
+    freshness: item.scope.freshness,
+    partialReasonCodes: item.partial_reason_codes,
   };
 }
 
@@ -300,26 +336,6 @@ function toCapability(
   };
 }
 
-function toSyncTarget(
-  application: ReleaseApplication,
-  value: Record<string, unknown>,
-): GitOpsSyncTarget {
-  const bindingId = stringValue(value.binding_id);
-  if (!bindingId) throw new GitOpsPortFailure("invalid-response");
-  const poll = mapValue(value.gitops_poll);
-  return {
-    id: `${application.id}:${bindingId}`,
-    applicationId: application.id,
-    applicationName: application.name,
-    clusterId: nullableStringValue(value.cluster_id),
-    namespace: nullableStringValue(value.namespace),
-    environment: nullableStringValue(value.environment),
-    syncStatus: poll ? nullableStringValue(poll.status) : null,
-    revision: poll ? nullableStringValue(poll.last_seen_commit_sha) : null,
-    observedAt: poll ? nullableStringValue(poll.last_polled_at) : null,
-  };
-}
-
 function compareSyncTargets(left: GitOpsSyncTarget, right: GitOpsSyncTarget): number {
   return left.applicationName.localeCompare(right.applicationName) ||
     (left.clusterId ?? "").localeCompare(right.clusterId ?? "") ||
@@ -363,17 +379,6 @@ function firstStringValue(value: Record<string, unknown>, keys: readonly string[
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function nullableStringValue(value: unknown): string | null {
-  const normalized = stringValue(value).trim();
-  return normalized || null;
-}
-
-function mapValue(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
 }
 
 async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {

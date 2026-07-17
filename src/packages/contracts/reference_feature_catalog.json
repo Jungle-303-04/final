@@ -8167,29 +8167,33 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gitops.detail",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gitops.overview",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_application_product_router.py",
-        "tests/test_gitops_application_detail_router.py",
+        "tests/test_gitops_overview_contract.py",
+        "tests/test_gitops_overview_projection.py",
+        "tests/test_gitops_overview_repository.py",
+        "tests/test_gitops_overview_router.py",
+        "frontend/src/api/gitops-overview.test.ts",
         "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+        "frontend/src/pages/gitops/GitOpsPage.test.tsx",
         "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/applications/router.py#list_applications",
-          "consumer": "src/domains/gitops/detail_router.py#get_gitops_application_detail",
-          "reason": "Authorized applications and deployment bindings replace raw controller CR discovery, but external GitOps kind, labels, health, and managed-resource inventory are not projected.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/overview_router.py#list_gitops_overview",
+          "consumer": "src/domains/gitops/overview_projection.py#project_gitops_overview",
+          "reason": "One authorized bounded aggregate preserves registered bindings and projects observed Argo and Flux controller/source identities, status, health, labels, freshness, capability evidence, and partial reasons without raw CR payloads or per-row reads.",
+          "test": "tests/test_gitops_overview_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
           "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
-          "reason": "The fleet table uses canonical application and binding identity without browser CR normalization; provider-specific facets remain unavailable.",
+          "reason": "The fleet table consumes the canonical mixed overview in one request, preserves registered rows, shows observed controller evidence and partial coverage, and links exact resources to the shared GitOps detail route without browser CR normalization.",
           "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
         },
         "desktop": null,

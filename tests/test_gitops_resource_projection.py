@@ -4,6 +4,7 @@ from domains.gitops.resource_projection import (
     GITOPS_TREE_NODE_LIMIT,
     gitops_resource_insights,
     gitops_resource_tree,
+    provider_for_inventory_resource,
 )
 
 
@@ -183,3 +184,24 @@ def test_flux_insights_expose_only_actions_supported_by_exact_observed_state() -
     assert insights.capabilities.actions == ("reconcile", "suspend", "sync_with_source")
     assert insights.conditions[0].reason == "ReconciliationSucceeded"
     assert insights.history[0].revision == "main@sha1:previous"
+
+
+def test_detail_provider_registry_accepts_overview_families_and_version_drift() -> None:
+    assert (
+        provider_for_inventory_resource(
+            {
+                "api_version": "argoproj.io/v1alpha1",
+                "kind": "ApplicationSet",
+            }
+        )
+        == "argo"
+    )
+    assert (
+        provider_for_inventory_resource(
+            {
+                "api_version": "source.toolkit.fluxcd.io/v1beta2",
+                "kind": "OCIRepository",
+            }
+        )
+        == "flux"
+    )

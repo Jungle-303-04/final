@@ -36,6 +36,17 @@ export interface ReleaseCluster {
   connectionStatus: string;
 }
 
+export interface GitOpsSyncTargetQuery {
+  clusters?: readonly string[];
+  namespaces?: readonly string[];
+  applications?: readonly string[];
+  providers?: readonly ("argo" | "flux" | "internal")[];
+  kinds?: readonly string[];
+  labels?: Readonly<Record<string, string>>;
+  q?: string;
+  limit?: number;
+}
+
 export interface GitOpsSyncTarget {
   id: string;
   applicationId: string;
@@ -46,6 +57,13 @@ export interface GitOpsSyncTarget {
   syncStatus: string | null;
   revision: string | null;
   observedAt: string | null;
+  authority?: "registered" | "controller";
+  provider?: "internal" | "argo" | "flux";
+  kind?: string | null;
+  health?: string | null;
+  resourceLocator?: GitOpsResourceLocator | null;
+  freshness?: "live" | "stale" | "partial" | "disconnected";
+  partialReasonCodes?: string[];
 }
 
 export type GitOpsAvailability = "available" | "partial" | "unavailable";
@@ -399,7 +417,10 @@ export type ReleaseRunAction =
 
 export interface GitOpsPort {
   listApplications(signal?: AbortSignal): Promise<ReleaseApplication[]>;
-  listSyncTargets(signal?: AbortSignal): Promise<GitOpsSyncTarget[]>;
+  listSyncTargets(
+    signal?: AbortSignal,
+    query?: GitOpsSyncTargetQuery,
+  ): Promise<GitOpsSyncTarget[]>;
   getApplicationDetail(applicationId: string, signal?: AbortSignal): Promise<GitOpsApplicationDetail>;
   getResourceTree?(locator: GitOpsResourceLocator, signal?: AbortSignal): Promise<GitOpsResourceTree>;
   getResourceInsights?(locator: GitOpsResourceLocator, signal?: AbortSignal): Promise<GitOpsResourceInsights>;

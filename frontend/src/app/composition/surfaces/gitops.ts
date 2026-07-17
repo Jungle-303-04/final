@@ -5,7 +5,7 @@ import {
   getGitOpsApplicationDetail,
   getGitOpsResourceInsights,
   getGitOpsResourceTree,
-  listApplicationDeployments,
+  listGitOpsOverview,
 } from "../../../api";
 import { createGitOpsAdapter } from "../../../features/gitops/createGitOpsAdapter";
 import { createGitOpsSurface } from "../../../pages/gitops/createGitOpsSurface";
@@ -21,7 +21,7 @@ export function loadGitOpsSurface(
       getResourceTree: getGitOpsResourceTree,
       getResourceInsights: getGitOpsResourceInsights,
       executeResourceAction: executeGitOpsResourceAction,
-      listApplicationDeployments,
+      listOverview: listGitOpsOverview,
     }),
     refreshPolicies,
   );

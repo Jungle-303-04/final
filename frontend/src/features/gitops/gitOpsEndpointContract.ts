@@ -8,7 +8,9 @@ import type {
   ReleaseTargetInput,
   SafePrResult,
   GitOpsReasonCode,
+  GitOpsSyncTargetQuery,
 } from "./gitOpsContract";
+import type { GitOpsOverviewEndpoint } from "../../api/gitops-overview-schemas";
 
 type EndpointResourceRef = GitOpsApplicationDetailEndpoint["application"]["resource"];
 type EndpointClusterScope = NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>;
@@ -180,13 +182,13 @@ export interface GitOpsEndpointDependencies {
     idempotencyKey: string,
     signal?: AbortSignal,
   ): Promise<GitOpsCommandAcceptedEndpoint>;
+  listOverview(
+    query?: GitOpsSyncTargetQuery,
+    signal?: AbortSignal,
+  ): Promise<GitOpsOverviewEndpoint>;
   listApplications(signal?: AbortSignal): Promise<{
     applications: Record<string, unknown>[];
   }>;
-  listApplicationDeployments(
-    applicationId: string,
-    options?: { signal?: AbortSignal },
-  ): Promise<{ deployments: Record<string, unknown>[] }>;
   listClusters(signal?: AbortSignal): Promise<{ clusters: ReleaseClusterEndpoint[] }>;
   listPlans(signal?: AbortSignal): Promise<{ plans: ReleasePlan[] }>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<{ runs: ReleaseRun[] }>;

@@ -7,6 +7,7 @@ import json
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from domains.gitops.overview_projection import gitops_resource_family
 from packages.contracts.gitops.detail import (
     GitOpsCondition,
     GitOpsHistoryEntry,
@@ -178,11 +179,12 @@ def gitops_resource_insights(
 
 
 def provider_for_inventory_resource(resource: Mapping[str, Any]) -> str:
-    identity = _api_kind(resource)
-    if identity == ARGO_APPLICATION_IDENTITY:
-        return "argo"
-    if identity in SUPPORTED_GITOPS_IDENTITIES:
-        return "flux"
+    family = gitops_resource_family(
+        str(resource.get("api_version") or ""),
+        str(resource.get("kind") or ""),
+    )
+    if family is not None:
+        return family[0]
     raise ValueError("unsupported GitOps resource identity")
 
 

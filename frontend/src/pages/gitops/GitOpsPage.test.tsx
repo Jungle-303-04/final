@@ -52,6 +52,26 @@ describe("GitOpsPage workspace navigation", () => {
     expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
   });
 
+  it("passes canonical workspace scope filters to the aggregate overview", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    renderGitOps(
+      "/gitops?clusters=cluster-a&namespaces=cluster-a%2Fargocd&applications=app-a&labels=team%3Dplatform&gitops.q=store",
+      port,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Sync status" }));
+    await screen.findByRole("heading", { name: "Deployment sync status" });
+
+    expect(port.listSyncTargets).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      clusters: ["cluster-a"],
+      namespaces: ["cluster-a/argocd"],
+      applications: ["app-a"],
+      labels: { team: "platform" },
+      q: "store",
+    });
+  });
+
   it("starts with plan blocks and opens the selected plan overview", async () => {
     const user = userEvent.setup();
     renderGitOps("/gitops");

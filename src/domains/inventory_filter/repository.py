@@ -1653,6 +1653,23 @@ def _current_versions(
     )
 
 
+def current_inventory_versions(
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    snapshot_revision: int,
+    *,
+    include_deleted: bool,
+) -> Any:
+    """Public reusable temporal selector for bounded domain-specific projections."""
+
+    return _current_versions(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=include_deleted,
+    )
+
+
 def _apply_resource_filters(
     table: Any,
     *,
