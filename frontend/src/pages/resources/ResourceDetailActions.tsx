@@ -2,7 +2,6 @@ import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
-  isResourceMaintenanceCapability,
   type ResourceActionCapability,
   type ResourceActionExecutionContext,
   type ResourceDeletionPreview,
@@ -36,19 +35,20 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
+import type { PodTerminalCoordinates } from "../../features/pod-terminal/podTerminalContract";
 
 export function ResourceDetailActions({
   actionsPort,
   capabilities,
   detail,
   onInvalidate,
-  onPodDebugReady,
+  onTerminalReady,
 }: {
   actionsPort: ResourceActionsPort;
   capabilities: ResourceCapabilitiesFrame;
   detail: ResourceDetail;
   onInvalidate?: (context: ResourceActionExecutionContext) => void;
-  onPodDebugReady?: (containerName: string) => void;
+  onTerminalReady?: (target: PodTerminalCoordinates) => void;
 }) {
   const { t } = useI18n();
   const session = useOptionalProductSession();
@@ -74,6 +74,7 @@ export function ResourceDetailActions({
     commandId: string;
     context: ResourceActionExecutionContext;
   } | null>(null);
+  const [latestResult, setLatestResult] = useState<Readonly<Record<string, unknown>> | null>(null);
   const enabled = useMemo(() => enabledActions(capabilities, detail), [capabilities, detail]);
   const diagnoseTarget = diagnoseTargetFrom(detail);
 
@@ -84,25 +85,21 @@ export function ResourceDetailActions({
       const status = snapshot.status;
       if (!isTerminalOperationStatus(status)) return;
       onInvalidate?.(terminalInvalidation.context);
-      if (
-        status === "completed"
-        && terminalInvalidation.context.capabilityId === "pod.debug"
-      ) {
+      if (status === "completed") {
         const result = operationResult(snapshot.event?.payload);
-        if (
-          result?.namespace === terminalInvalidation.context.resource.namespace
-          && result.pod === terminalInvalidation.context.resource.name
-          && typeof result.container_name === "string"
-          && result.container_name.length > 0
-        ) {
-          onPodDebugReady?.(result.container_name);
+        if (result) {
+          setLatestResult(result);
+          if (terminalInvalidation.context.resultIntent === "terminal-session") {
+            const target = terminalTarget(result);
+            if (target) onTerminalReady?.(target);
+          }
         }
       }
       setTerminalInvalidation(null);
     };
     invalidateWhenTerminal();
     return operationStatusStore.subscribe(terminalInvalidation.commandId, invalidateWhenTerminal);
-  }, [onInvalidate, onPodDebugReady, operationStatusStore, terminalInvalidation]);
+  }, [onInvalidate, onTerminalReady, operationStatusStore, terminalInvalidation]);
 
   if (enabled.length === 0 && (!diagnose || !diagnoseTarget || !session)) return null;
 
@@ -120,14 +117,11 @@ export function ResourceDetailActions({
         rollbackPreview,
         selectedRollbackUid,
       );
-      if (dialog.capabilityId.startsWith("cronjob.") && context === null) {
-        throw new Error("CronJob action identity is incomplete");
-      }
-      if (dialog.capabilityId === "workload.rollback" && context?.rollback === undefined) {
+      if (dialog.requestContext === "rollback" && context?.rollback === undefined) {
         throw new Error("Workload rollback identity is incomplete");
       }
-      if (isResourceMaintenanceCapability(dialog.capabilityId) && context === null) {
-        throw new Error("Resource maintenance identity is incomplete");
+      if (dialog.requestContext !== "simple" && context === null) {
+        throw new Error("Resource action identity is incomplete");
       }
       const deleteValues = dialog.capabilityId === "resource.delete"
         ? {
@@ -280,7 +274,7 @@ export function ResourceDetailActions({
                 )}
               </div>
             ) : null}
-            {dialog?.capabilityId === "workload.rollback" ? (
+            {dialog?.requestContext === "rollback" ? (
               <div className="grid gap-3" data-slot="workload-rollback-preview">
                 {rollbackPreviewPending ? (
                   <p className="text-sm text-muted-foreground" role="status">
@@ -342,7 +336,7 @@ export function ResourceDetailActions({
                     disabled={
                       dialog?.capabilityId === "resource.delete" &&
                       (deletePreviewPending || deletePreview === null)
-                      || dialog?.capabilityId === "workload.rollback" &&
+                      || dialog?.requestContext === "rollback" &&
                       (rollbackPreviewPending || selectedRollback(rollbackPreview, selectedRollbackUid) === null)
                     }
                     type="submit"
@@ -397,9 +391,8 @@ export function ResourceDetailActions({
 
   async function open(capability: ResourceActionCapability) {
     setFailed(false);
-    setValues(defaultInputValues(capability));
-    setExecutionKey(capability.capabilityId.startsWith("cronjob.")
-      || isResourceMaintenanceCapability(capability.capabilityId)
+    setValues(defaultInputValues(capability, latestResult));
+    setExecutionKey(capability.requestContext !== "simple"
       ? resourceActionIdempotencyKey()
       : null);
     setDeletePreview(null);
@@ -420,7 +413,7 @@ export function ResourceDetailActions({
         setDeletePreviewPending(false);
       }
     }
-    if (capability.capabilityId === "workload.rollback") {
+    if (capability.requestContext === "rollback") {
       setRollbackPreviewPending(true);
       setExecutionKey(resourceActionIdempotencyKey("workload-rollback"));
       try {
@@ -494,6 +487,22 @@ function operationResult(payload: Readonly<Record<string, unknown>> | undefined)
     : null;
 }
 
+function terminalTarget(result: Readonly<Record<string, unknown>>): PodTerminalCoordinates | null {
+  const terminal = result.terminal;
+  if (!terminal || typeof terminal !== "object" || Array.isArray(terminal)) return null;
+  const candidate = terminal as Readonly<Record<string, unknown>>;
+  if (
+    typeof candidate.namespace !== "string" || candidate.namespace.length === 0
+    || typeof candidate.pod !== "string" || candidate.pod.length === 0
+    || typeof candidate.container !== "string" || candidate.container.length === 0
+  ) return null;
+  return {
+    namespace: candidate.namespace,
+    pod: candidate.pod,
+    container: candidate.container,
+  };
+}
+
 function isTerminalOperationStatus(status: string) {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
@@ -506,12 +515,8 @@ function resourceActionExecutionContext(
   rollbackPreview: WorkloadRollbackPreview | null,
   selectedRollbackUid: string,
 ): ResourceActionExecutionContext | null {
-  const rollback = capability.capabilityId === "workload.rollback";
-  if (
-    !capability.capabilityId.startsWith("cronjob.")
-    && !rollback
-    && !isResourceMaintenanceCapability(capability.capabilityId)
-  ) return null;
+  const rollback = capability.requestContext === "rollback";
+  if (capability.requestContext === "simple") return null;
   if (frame.phase !== "ready" || idempotencyKey === null) return null;
   const uid = detail.resource.uid;
   const apiIdentity = splitApiVersion(detail.resource.apiVersion);
@@ -519,7 +524,9 @@ function resourceActionExecutionContext(
   const context: ResourceActionExecutionContext = {
     capabilityId: capability.capabilityId,
     idempotencyKey,
+    requestContext: capability.requestContext,
     resourceId: frame.data.subject.resourceId,
+    resultIntent: capability.resultIntent,
     snapshotId: frame.data.subject.snapshotId,
     revision: frame.data.revision,
     resource: {
@@ -613,11 +620,26 @@ function enabledActions(
 
 function defaultInputValues(
   capability: ResourceActionCapability,
+  result: Readonly<Record<string, unknown>> | null = null,
 ): Record<string, boolean | string> {
-  return Object.fromEntries(capability.inputSchema.map((input) => [
-    input.key,
-    defaultInputValue(input.default),
-  ]));
+  return Object.fromEntries(capability.inputSchema.map((input) => {
+    const preferred = input.prefillResultKey ? result?.[input.prefillResultKey] : undefined;
+    return [
+      input.key,
+      inputValueFromResult(preferred, input.type) ?? defaultInputValue(input.default),
+    ];
+  }));
+}
+
+function inputValueFromResult(
+  value: unknown,
+  type: ResourceActionCapability["inputSchema"][number]["type"],
+): boolean | string | null {
+  if (type === "boolean") return typeof value === "boolean" ? value : null;
+  if (type === "integer") return typeof value === "number" && Number.isInteger(value)
+    ? String(value)
+    : null;
+  return typeof value === "string" ? value : null;
 }
 
 function defaultInputValue(value: boolean | number | string | null): boolean | string {

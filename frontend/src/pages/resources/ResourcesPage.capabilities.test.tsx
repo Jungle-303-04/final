@@ -75,6 +75,8 @@ describe("resource detail capabilities", () => {
           inputSchema: [],
           method: "POST",
           path: "/clusters/cluster-1/namespaces/shop/deployments/checkout-api/restart",
+          requestContext: "simple",
+          resultIntent: "refresh-resource",
         }],
       }),
     });

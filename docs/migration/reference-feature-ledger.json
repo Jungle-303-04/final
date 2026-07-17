@@ -8043,11 +8043,11 @@
     {
       "id": "reference-feature-174",
       "contractId": "reference.feature.174",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
       "legacyContractIds": [
         "reference.feature.174"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.6 Resource·workload mutation",
       "line": 479,
       "cells": [
@@ -8060,7 +8060,7 @@
       "endpoints": [
         "POST /nodes/{name}/drain"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "resource-commands",
       "releasePhase": "baseline",
       "deliveryStatus": "implemented",
@@ -8092,17 +8092,23 @@
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The accepted drain receipt resumes one durable SSE command stream and preserves bounded progress plus the terminal per-Pod result without replaying the mutation.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {
       "id": "reference-feature-175",
       "contractId": "reference.feature.175",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
       "legacyContractIds": [
         "reference.feature.175"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.6 Resource·workload mutation",
       "line": 480,
       "cells": [
@@ -8115,7 +8121,7 @@
       "endpoints": [
         "POST /pods/{ns}/{name}/debug"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "resource-commands",
       "releasePhase": "baseline",
       "deliveryStatus": "implemented",
@@ -8148,17 +8154,23 @@
           "test": "frontend/src/features/resources/resourceFacts.debug.test.ts"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The accepted Pod debug receipt resumes one durable SSE command stream and hands the server-owned terminal coordinates to the existing audited terminal only after observed completion.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {
       "id": "reference-feature-176",
       "contractId": "reference.feature.176",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
       "legacyContractIds": [
         "reference.feature.176"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.6 Resource·workload mutation",
       "line": 481,
       "cells": [
@@ -8172,7 +8184,7 @@
         "POST /nodes/{name}/debug",
         "DELETE /nodes/{name}/debug"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "resource-commands",
       "releasePhase": "baseline",
       "deliveryStatus": "implemented",
@@ -8204,7 +8216,13 @@
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The accepted Node debug receipt resumes one durable SSE command stream, consumes terminal and cleanup coordinates from the observed result, and never reconstructs them in the browser.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {

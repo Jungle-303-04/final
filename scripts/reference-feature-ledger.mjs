@@ -108,6 +108,9 @@ function featurePortMap(portMap, section, contractId) {
   if (port.releasePhase !== undefined && !RELEASE_PHASES.has(port.releasePhase)) {
     throw new Error(`알 수 없는 출하 단계입니다: ${contractId} (${port.releasePhase})`);
   }
+  if (port.streaming !== undefined && typeof port.streaming !== "boolean") {
+    throw new Error(`실시간 이식 증거는 boolean이어야 합니다: ${contractId}`);
+  }
   return port;
 }
 
@@ -186,8 +189,8 @@ export function parseReferenceInventory(markdown, sourceRevision, portMap, sourc
     const number = String(features.length + 1).padStart(3, "0");
     const contractId = `reference.feature.${number}`;
     const sourceKey = sourceKeyFor(sourceKeyAliases, contractId);
-    const streaming = endpoints.some(isStreamingEndpoint);
     const port = featurePortMap(portMap, section, contractId);
+    const streaming = port.streaming ?? endpoints.some(isStreamingEndpoint);
     features.push({
       id: `reference-feature-${number}`,
       contractId,

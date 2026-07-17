@@ -213,6 +213,8 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
             "input_schema": [],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/restart",
+            "request_context": "simple",
+            "result_intent": "refresh-resource",
         },
         {
             "capability_id": "deployment.scale",
@@ -230,10 +232,13 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
                     "minimum": 0,
                     "maximum": 100,
                     "default": 1,
+                    "prefill_result_key": None,
                 }
             ],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/scale",
+            "request_context": "simple",
+            "result_intent": "refresh-resource",
         },
     ]
     assert len(body["revision"]) == 64
@@ -347,6 +352,7 @@ def test_capabilities_are_server_owned_execution_descriptors() -> None:
             "minimum": 0,
             "maximum": 100,
             "default": 1,
+            "prefill_result_key": None,
         }
     ]
 
@@ -585,6 +591,8 @@ def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod()
             "input_schema": [],
             "method": "WEBSOCKET",
             "path": "/live/terminal",
+            "request_context": "simple",
+            "result_intent": "refresh-resource",
         }
     ]
     assert [check[-1] for check in db.access_checks] == ["inventory.read", "pod.exec"]

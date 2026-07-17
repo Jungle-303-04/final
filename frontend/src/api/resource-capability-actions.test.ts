@@ -48,7 +48,9 @@ describe("server-discovered resource action API", () => {
       {
         capabilityId: "cronjob.trigger",
         idempotencyKey: "resource-action-cronjob-key-1",
+        requestContext: "exact-resource",
         resourceId: "resource-cronjob-nightly",
+        resultIntent: "refresh-resource",
         snapshotId: "snapshot-42",
         revision: "a".repeat(64),
         resource: {

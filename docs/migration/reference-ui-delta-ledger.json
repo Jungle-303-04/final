@@ -5496,7 +5496,10 @@
         {
           "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
           "legacyContractIds": [
-            "reference.feature.158"
+            "reference.feature.158",
+            "reference.feature.174",
+            "reference.feature.175",
+            "reference.feature.176"
           ],
           "symbol": "ResourceActionsBar workload logs and imperative operations",
           "interaction": "the resource command bar renders only exact CapabilitySet actions, confirms typed inputs once, returns a durable command receipt, follows OperationEvent progress, and opens logs through the shared authenticated dock",

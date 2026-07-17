@@ -18,9 +18,12 @@ const CAPABILITY: ResourceActionCapability = {
     minimum: 0,
     maximum: 100,
     default: 1,
+    prefillResultKey: null,
   }],
   method: "POST",
   path: "/clusters/cluster-1/namespaces/shop/deployments/checkout-api/scale",
+  requestContext: "simple",
+  resultIntent: "refresh-resource",
 };
 
 const EXECUTION = {
@@ -29,6 +32,8 @@ const EXECUTION = {
   resourceId: "resource-cronjob-nightly",
   snapshotId: "snapshot-42",
   revision: "a".repeat(64),
+  requestContext: "exact-resource",
+  resultIntent: "refresh-resource",
   resource: {
     apiGroup: "batch",
     version: "v1",

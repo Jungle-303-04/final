@@ -28,6 +28,8 @@ from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
 NamespacePolicy = Literal["control", "terminal", "cluster", "resource"]
 ExecutionTransport = Literal["command", "terminal"]
+RequestContext = Literal["simple", "exact-resource", "rollback"]
+ResultIntent = Literal["refresh-resource", "resource-summary", "terminal-session"]
 ResourceState = Literal[
     "always",
     "deletable",
@@ -55,6 +57,8 @@ class ResourceActionDefinition:
     command_action: str | None = None
     inputs: tuple[ResourceCapabilityInput, ...] = ()
     resource_state: ResourceState = "always"
+    request_context: RequestContext = "simple"
+    result_intent: ResultIntent = "refresh-resource"
 
     def applies_to(
         self,
@@ -110,6 +114,8 @@ class ResourceActionDefinition:
             input_schema=list(self.inputs),
             method=self.method,
             path=self.path_template.format(**values),
+            request_context=self.request_context,
+            result_intent=self.result_intent,
         )
 
 
@@ -133,6 +139,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
         resource_state="rollback-available",
+        request_context="rollback",
     ),
     ResourceActionDefinition(
         capability_id="workload.rollback",
@@ -148,6 +155,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
         resource_state="rollback-available",
+        request_context="rollback",
     ),
     ResourceActionDefinition(
         capability_id="workload.rollback",
@@ -163,6 +171,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
         resource_state="rollback-available",
+        request_context="rollback",
     ),
     ResourceActionDefinition(
         capability_id="resource.delete",
@@ -314,6 +323,8 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
         namespace_policy="cluster",
         command_action=Command.KUBERNETES_NODE_DRAIN_ACTION,
+        request_context="exact-resource",
+        result_intent="resource-summary",
         inputs=(
             ResourceCapabilityInput(
                 key="timeout_seconds",
@@ -375,6 +386,8 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
         namespace_policy="cluster",
         command_action=Command.KUBERNETES_NODE_DEBUG_ACTION,
+        request_context="exact-resource",
+        result_intent="terminal-session",
         inputs=(
             ResourceCapabilityInput(
                 key="namespace",
@@ -409,6 +422,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
         namespace_policy="cluster",
         command_action=Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        request_context="exact-resource",
         inputs=(
             ResourceCapabilityInput(
                 key="namespace",
@@ -418,6 +432,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
                 minimum=None,
                 maximum=None,
                 default="",
+                prefill_result_key="namespace",
             ),
             ResourceCapabilityInput(
                 key="session_id",
@@ -427,6 +442,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
                 minimum=None,
                 maximum=None,
                 default="",
+                prefill_result_key="session_id",
             ),
         ),
     ),
@@ -443,6 +459,8 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability=Command.KUBERNETES_DEBUG_CAPABILITY,
         namespace_policy="control",
         command_action=Command.KUBERNETES_POD_DEBUG_ACTION,
+        request_context="exact-resource",
+        result_intent="terminal-session",
         inputs=(
             ResourceCapabilityInput(
                 key="target_container",
@@ -491,6 +509,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
         resource_state="cronjob-suspended",
+        request_context="exact-resource",
     ),
     ResourceActionDefinition(
         capability_id="cronjob.suspend",
@@ -506,6 +525,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         resource_state="cronjob-running",
+        request_context="exact-resource",
     ),
     ResourceActionDefinition(
         capability_id="cronjob.trigger",
@@ -520,6 +540,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
         namespace_policy="control",
         command_action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        request_context="exact-resource",
     ),
 )
 

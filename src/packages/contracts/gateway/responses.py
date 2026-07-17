@@ -853,6 +853,12 @@ class InventoryResourceDetailResponse(StrictModel):
 
 ResourceCapabilityExecution = Literal["command", "terminal"]
 ResourceCapabilityInputType = Literal["boolean", "integer", "string"]
+ResourceCapabilityRequestContext = Literal["simple", "exact-resource", "rollback"]
+ResourceCapabilityResultIntent = Literal[
+    "refresh-resource",
+    "resource-summary",
+    "terminal-session",
+]
 
 
 class ResourceCapabilitySubject(StrictModel):
@@ -877,6 +883,12 @@ class ResourceCapabilityInput(StrictModel):
     minimum: int | None = None
     maximum: int | None = None
     default: bool | int | str | None = None
+    prefill_result_key: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        pattern=r"^[a-z][a-z0-9_]*$",
+    )
 
     @model_validator(mode="after")
     def validate_bounds(self) -> Self:
@@ -908,6 +920,8 @@ class ResourceActionCapability(StrictModel):
     input_schema: list[ResourceCapabilityInput] = Field(default_factory=list)
     method: Literal["POST", "WEBSOCKET"] = "POST"
     path: str = Field(min_length=1, pattern=r"^/")
+    request_context: ResourceCapabilityRequestContext = "simple"
+    result_intent: ResourceCapabilityResultIntent = "refresh-resource"
 
 
 class ResourceCapabilitiesResponse(StrictModel):

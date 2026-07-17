@@ -12,6 +12,7 @@ export const resourceCapabilityInputSchema = z.strictObject({
   minimum: z.number().int().nullable(),
   maximum: z.number().int().nullable(),
   default: z.union([z.boolean(), z.number().int(), z.string(), z.null()]),
+  prefill_result_key: z.string().regex(/^[a-z][a-z0-9_]*$/u).max(120).nullable(),
 }).superRefine((input, context) => {
   if (input.minimum !== null && input.maximum !== null && input.minimum > input.maximum) {
     context.addIssue({ code: "custom", message: "minimum must not exceed maximum" });
@@ -47,6 +48,8 @@ export const resourceActionCapabilitySchema = z.strictObject({
   input_schema: z.array(resourceCapabilityInputSchema),
   method: z.enum(["POST", "WEBSOCKET"]),
   path: z.string().regex(/^\/(?!\/)[^?\s]+$/u),
+  request_context: z.enum(["simple", "exact-resource", "rollback"]),
+  result_intent: z.enum(["refresh-resource", "resource-summary", "terminal-session"]),
 });
 
 export const resourceCapabilitiesSchema = z.strictObject({

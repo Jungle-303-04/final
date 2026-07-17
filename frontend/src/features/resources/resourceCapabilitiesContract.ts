@@ -1,15 +1,10 @@
 export type ResourceActionCapabilityId = string;
 
-export const RESOURCE_MAINTENANCE_CAPABILITY_IDS = [
-  "node.drain",
-  "node.debug",
-  "node.debug.cleanup",
-  "pod.debug",
-] as const;
-
-export function isResourceMaintenanceCapability(capabilityId: string): boolean {
-  return (RESOURCE_MAINTENANCE_CAPABILITY_IDS as readonly string[]).includes(capabilityId);
-}
+export type ResourceActionRequestContext = "simple" | "exact-resource" | "rollback";
+export type ResourceActionResultIntent =
+  | "refresh-resource"
+  | "resource-summary"
+  | "terminal-session";
 
 export interface ResourceCapabilityInput {
   key: string;
@@ -19,6 +14,7 @@ export interface ResourceCapabilityInput {
   minimum: number | null;
   maximum: number | null;
   default: boolean | number | string | null;
+  prefillResultKey: string | null;
 }
 
 export interface ResourceCapabilitySubject {
@@ -41,6 +37,8 @@ export interface ResourceActionCapability {
   inputSchema: ResourceCapabilityInput[];
   method: "POST" | "WEBSOCKET";
   path: string;
+  requestContext: ResourceActionRequestContext;
+  resultIntent: ResourceActionResultIntent;
 }
 
 export interface ResourceCapabilities {
@@ -52,7 +50,9 @@ export interface ResourceCapabilities {
 export interface ResourceActionExecutionContext {
   capabilityId: ResourceActionCapabilityId;
   idempotencyKey: string;
+  requestContext: ResourceActionRequestContext;
   resourceId: string;
+  resultIntent: ResourceActionResultIntent;
   snapshotId: string;
   revision: string;
   resource: ResourceRefContract;

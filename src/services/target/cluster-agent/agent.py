@@ -2185,6 +2185,11 @@ class TargetClusterAgent:
             pod=ctx.payload.name,
             container_name=ctx.payload.container_name,
             target_container=ctx.payload.target_container,
+            terminal={
+                "namespace": ctx.payload.namespace,
+                "pod": ctx.payload.name,
+                "container": ctx.payload.container_name,
+            },
             result=result,
         )
 
@@ -2216,6 +2221,11 @@ class TargetClusterAgent:
             pod=ctx.payload.debug_pod_name,
             container_name="debugger",
             session_id=ctx.payload.session_id,
+            terminal={
+                "namespace": ctx.payload.namespace,
+                "pod": ctx.payload.debug_pod_name,
+                "container": "debugger",
+            },
             result=result,
         )
 
