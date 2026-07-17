@@ -21,7 +21,9 @@ const configuredResponse = {
 
 describe("Prometheus integration API", () => {
   it("loads one cluster configuration without accepting secret header values", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(configuredResponse)));
+    const fetchMock = vi.fn().mockImplementation(async () => (
+      new Response(JSON.stringify(configuredResponse))
+    ));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getPrometheusIntegration(" cluster-a ")).resolves.toEqual(configuredResponse);
@@ -86,6 +88,33 @@ describe("Prometheus integration API", () => {
 
     await expect(getPrometheusIntegration("cluster-a")).rejects.toMatchObject({
       kind: "invalid-payload",
+    });
+  });
+
+  it("omits preserved secrets and sends an explicit empty record only for removal", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => (
+      new Response(JSON.stringify(configuredResponse))
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updatePrometheusIntegration({
+      clusterId: "cluster-a",
+      prometheusUrl: "https://prometheus.example.com",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      cluster_id: "cluster-a",
+      prometheus_url: "https://prometheus.example.com",
+    });
+
+    await updatePrometheusIntegration({
+      clusterId: "cluster-a",
+      prometheusUrl: "https://prometheus.example.com",
+      headers: {},
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({
+      cluster_id: "cluster-a",
+      prometheus_url: "https://prometheus.example.com",
+      headers: {},
     });
   });
 });

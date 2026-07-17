@@ -148,4 +148,43 @@ describe("createSettingsAdapter", () => {
     })).rejects.toMatchObject({ code: "invalid-request" });
     expect(updatePrometheusIntegration).not.toHaveBeenCalled();
   });
+
+  it("distinguishes preserving stored secrets from explicitly removing every header", async () => {
+    const updatePrometheusIntegration = vi.fn().mockResolvedValue({
+      cluster_id: "cluster-a",
+      revision: "revision-b",
+      operation_id: "operation-b",
+      address: "https://prometheus.example.com",
+      header_keys: [],
+      state: "pending",
+      error_code: null,
+      receipt: null,
+    });
+    const adapter = createSettingsAdapter({
+      getSettingsAccessProfile: vi.fn(),
+      getPrometheusIntegration: vi.fn(),
+      updatePrometheusIntegration,
+    });
+
+    await adapter.updatePrometheusIntegration({
+      clusterId: "cluster-a",
+      url: "https://prometheus.example.com",
+    });
+    expect(updatePrometheusIntegration).toHaveBeenNthCalledWith(1, {
+      clusterId: "cluster-a",
+      prometheusUrl: "https://prometheus.example.com",
+      headers: undefined,
+    }, undefined);
+
+    await adapter.updatePrometheusIntegration({
+      clusterId: "cluster-a",
+      url: "https://prometheus.example.com",
+      headers: [],
+    });
+    expect(updatePrometheusIntegration).toHaveBeenNthCalledWith(2, {
+      clusterId: "cluster-a",
+      prometheusUrl: "https://prometheus.example.com",
+      headers: {},
+    }, undefined);
+  });
 });

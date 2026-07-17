@@ -65,6 +65,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../shared/ui/primitives/tabs";
+import { PrometheusIntegrationCard } from "./PrometheusIntegrationCard";
 
 type SettingsSection = "overview" | "access" | "preferences" | "administration";
 type LoadState<T> =
@@ -188,7 +189,7 @@ export function SettingsPage({
         </TabsContent>
 
         <TabsContent className="min-w-0" value="administration">
-          <AdministrationPanel />
+          <AdministrationPanel settingsPort={settingsPort} />
         </TabsContent>
       </Tabs>
     </ProductPageFrame>
@@ -504,10 +505,11 @@ function PreferencesPanel() {
   );
 }
 
-function AdministrationPanel() {
+function AdministrationPanel({ settingsPort }: { settingsPort: SettingsPort }) {
   const { t } = useI18n();
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <PrometheusIntegrationCard settingsPort={settingsPort} />
       <UnavailableSettingsCard
         descriptionKey="settings.repositories.unavailable"
         icon={GitBranch}
@@ -532,12 +534,6 @@ function AdministrationPanel() {
         description={t("settings.hostConfiguration.unavailable")}
         icon={Server}
         title={t("settings.hostConfiguration.title")}
-        unavailable
-      />
-      <SettingsCard
-        description={t("settings.integrations.unavailable")}
-        icon={Settings2}
-        title={t("settings.integrations.title")}
         unavailable
       />
     </div>

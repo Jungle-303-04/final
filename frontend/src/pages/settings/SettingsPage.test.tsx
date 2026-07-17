@@ -135,15 +135,45 @@ describe("SettingsPage", () => {
     vi.mocked(settingsPort.updatePrometheusIntegration).mockRejectedValueOnce(new Error("offline"));
     renderSettings("/settings?clusters=cluster-1#administration", operationStatusStore);
 
-    const save = await screen.findByRole("button", { name: "Prometheus 설정 저장" });
-    expect(save).toBeDisabled();
+    const save = await screen.findByRole("button", { name: "Prometheus 설정 저장" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
     expect(settingsPort.updatePrometheusIntegration).not.toHaveBeenCalled();
 
     await user.type(screen.getByLabelText("Prometheus URL"), "https://prometheus.example.com");
-    expect(save).toBeEnabled();
+    expect(save.disabled).toBe(false);
     await user.click(save);
     expect(await screen.findByText("Prometheus 설정을 저장하지 못했습니다.")).toBeTruthy();
     expect(screen.getByDisplayValue("https://prometheus.example.com")).toBeTruthy();
+  });
+
+  it("preserves write-only headers when their names are unchanged and values stay empty", async () => {
+    const user = userEvent.setup();
+    renderSettings("/settings?clusters=cluster-1#administration");
+
+    const save = await screen.findByRole("button", { name: "Prometheus 설정 저장" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    await user.click(save);
+
+    await waitFor(() => expect(settingsPort.updatePrometheusIntegration).toHaveBeenCalledWith({
+      clusterId: "cluster-1",
+      url: "https://prometheus.example.com",
+      headers: undefined,
+    }, expect.any(AbortSignal)));
+  });
+
+  it("sends an explicit empty header set only after the user removes every stored header", async () => {
+    const user = userEvent.setup();
+    renderSettings("/settings?clusters=cluster-1#administration");
+
+    await screen.findByDisplayValue("Authorization");
+    await user.click(screen.getByRole("button", { name: "Authorization 헤더 제거" }));
+    await user.click(screen.getByRole("button", { name: "Prometheus 설정 저장" }));
+
+    await waitFor(() => expect(settingsPort.updatePrometheusIntegration).toHaveBeenCalledWith({
+      clusterId: "cluster-1",
+      url: "https://prometheus.example.com",
+      headers: [],
+    }, expect.any(AbortSignal)));
   });
 });
 
@@ -245,20 +275,22 @@ function renderSettings(initialEntry: string, store?: OperationStatusStore) {
 
 const operationStatusStore: OperationStatusStore = {
   dispose: vi.fn(),
-  getSnapshot: vi.fn((commandId: string) => ({
-    commandId,
-    event: null,
-    failure: null,
-    retry: null,
-    sequence: null,
-    status: "connecting",
-    updatedAt: 0,
-  })),
+  getSnapshot: vi.fn(() => operationSnapshot),
   getSnapshots: vi.fn(() => []),
   reobserve: vi.fn(),
   start: vi.fn(),
   subscribe: vi.fn(() => () => undefined),
   subscribeAll: vi.fn(() => () => undefined),
+};
+
+const operationSnapshot = {
+  commandId: "operation-b",
+  event: null,
+  failure: null,
+  retry: null,
+  sequence: null,
+  status: "connecting" as const,
+  updatedAt: 0,
 };
 
 const clusterScopePort: ClusterScopePort = {

@@ -86,6 +86,18 @@ export {
   type SettingsAccessProfileEndpoint,
 } from "./settings-access-schemas";
 export {
+  getPrometheusIntegration,
+  PROMETHEUS_INTEGRATION_PATH,
+  updatePrometheusIntegration,
+  type PrometheusIntegrationUpdateInput,
+} from "./prometheus-integration";
+export {
+  prometheusIntegrationReceiptSchema,
+  prometheusIntegrationStatusSchema,
+  type PrometheusIntegrationEndpoint,
+  type PrometheusIntegrationReceiptEndpoint,
+} from "./prometheus-integration-schemas";
+export {
   getTimelineCapabilities,
   getTimelineOverview,
   getTimelinePins,
