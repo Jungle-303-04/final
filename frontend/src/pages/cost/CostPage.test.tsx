@@ -82,6 +82,16 @@ describe("CostPage", () => {
     }, expect.any(AbortSignal)));
     expect(screen.getByTestId("location").textContent).toContain("cost.range=7d");
   });
+
+  it("keeps the route stable while supplemental node evidence is still loading", async () => {
+    const port = costPort();
+    port.getNodes = vi.fn().mockReturnValue(new Promise(() => undefined));
+    renderCostPage(port);
+
+    expect(await screen.findByRole("heading", { name: "Cost" })).toBeTruthy();
+    expect(await screen.findByLabelText("Node cost evidence")).toBeTruthy();
+    expect(document.querySelector('[data-product-state="loading"]')).toBeNull();
+  });
 });
 
 function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType<typeof vi.fn> } {
