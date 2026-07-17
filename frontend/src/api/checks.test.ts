@@ -33,6 +33,22 @@ describe("Checks API", () => {
 
     await expect(getChecksOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
+
+  it("accepts a count-consistent agent observation and rejects mismatched findings", async () => {
+    const fixture = observedOverview();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(fixture));
+
+    await expect(getChecksOverview()).resolves.toMatchObject({
+      result_set: { availability: "available", total_finding_count: 1 },
+      visibility: { clusters: [{ cluster_id: "cluster-a", state: "limited" }] },
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ...fixture,
+      result_set: { ...fixture.result_set, total_finding_count: 0 },
+    }));
+    await expect(getChecksOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
 });
 
 function overview() {
@@ -50,6 +66,67 @@ function overview() {
       availability: "unavailable",
       entries: null,
       reason_codes: ["checks_catalog_not_integrated"],
+    },
+    visibility: {
+      availability: "unavailable",
+      clusters: [],
+      reason_codes: ["checks_visibility_not_observed"],
+    },
+  };
+}
+
+function observedOverview() {
+  return {
+    scope_coverage: coverage(),
+    result_set: {
+      availability: "available",
+      evaluated_at: "2026-07-17T05:59:30+00:00",
+      checks: [finding()],
+      total_check_count: 1,
+      total_finding_count: 1,
+      reason_codes: [],
+    },
+    catalog: {
+      availability: "available",
+      entries: [{
+        check_id: "workload-limits",
+        title: "Workload limits",
+        category: "resources",
+        severity: "warning",
+        description: "Checks container resource limits.",
+        remediation: "Set explicit resource limits.",
+      }],
+      reason_codes: [],
+    },
+    visibility: {
+      availability: "available",
+      clusters: [{
+        cluster_id: "cluster-a",
+        state: "limited",
+        namespace_scope: ["storefront"],
+        core: { deployments: "allowed" },
+        missing_optional_kinds: ["Gateway"],
+      }],
+      reason_codes: [],
+    },
+  };
+}
+
+function finding() {
+  return {
+    finding_id: "finding-a",
+    cluster_id: "cluster-a",
+    check_id: "workload-limits",
+    category: "resources",
+    severity: "warning",
+    message: "Container limits are not observed.",
+    resource: {
+      api_group: "apps",
+      version: "v1",
+      kind: "Deployment",
+      namespace: "storefront",
+      name: "checkout",
+      uid: "uid-checkout",
     },
   };
 }

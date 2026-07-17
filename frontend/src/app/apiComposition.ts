@@ -216,7 +216,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "checks",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/checks")).loadChecksSurface(),
+        default: (await import("./composition/surfaces/checks")).loadChecksSurface(refreshPolicies),
       })),
     },
     {

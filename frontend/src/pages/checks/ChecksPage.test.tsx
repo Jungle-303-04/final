@@ -55,6 +55,20 @@ describe("ChecksPage", () => {
     }, expect.any(AbortSignal)));
   });
 
+  it("renders namespace-scoped findings and collector visibility reported by the agent", async () => {
+    const port = checksPort();
+    port.getOverview.mockResolvedValueOnce(observedOverview());
+
+    render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
+
+    expect(await screen.findByText("Container limits are not observed.")).toBeTruthy();
+    expect(screen.getByText("Deployment/checkout")).toBeTruthy();
+    expect(screen.getByText("Workload limits")).toBeTruthy();
+    expect(screen.getByText("cluster-a · storefront")).toBeTruthy();
+    expect(screen.getByText("Optional kinds not observed: Gateway")).toBeTruthy();
+    expect(screen.queryByText(CHECKS_RESULT_INTERNAL_REASON)).toBeNull();
+  });
+
   it("resolves a direct check detail URL as unavailable without rendering fabricated finding details", async () => {
     filterState.value = {
       detail: { detail: "check:workload-limits" },
@@ -85,7 +99,7 @@ describe("ChecksPage", () => {
     const port = checksPort({ scopeReasons: ["internal_probe:secret-cluster"] });
     render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
 
-    expect(await screen.findByText("Some scope evidence is unavailable.")).toBeTruthy();
+    expect((await screen.findAllByText("Some scope evidence is unavailable.")).length).toBeGreaterThan(0);
     expect(screen.queryByText("internal_probe:secret-cluster")).toBeNull();
   });
 
@@ -114,6 +128,7 @@ function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksP
   getDetail: ReturnType<typeof vi.fn>;
 } {
   return {
+    loadRefreshPolicy: vi.fn().mockResolvedValue(refreshPolicy()),
     getOverview: vi.fn().mockResolvedValue({
       scopeCoverage: {
         availability: "partial",
@@ -130,6 +145,7 @@ function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksP
         reasonCodes: ["checks_result_projection_not_integrated"],
       },
       catalog: { availability: "unavailable", entries: null, reasonCodes: ["checks_catalog_not_integrated"] },
+      visibility: { availability: "unavailable", clusters: [], reasonCodes: ["checks_visibility_not_observed"] },
     }),
     getDetail: vi.fn().mockResolvedValue({
       scopeCoverage: {
@@ -151,5 +167,81 @@ function checksPort(options: { scopeReasons?: readonly string[] } = {}): ChecksP
         reasonCodes: ["checks_catalog_not_integrated", "checks_result_projection_not_integrated"],
       },
     }),
+  };
+}
+
+const CHECKS_RESULT_INTERNAL_REASON = "checks_observation_partial:cluster-a";
+
+function observedOverview() {
+  return {
+    scopeCoverage: {
+      availability: "available" as const,
+      scopes: [{ workspaceId: "workspace-a", clusterId: "cluster-a", namespaces: ["storefront"], freshness: "live" as const }],
+      observedAt: "2026-07-17T05:59:30+00:00",
+      reasonCodes: [],
+    },
+    resultSet: {
+      availability: "available" as const,
+      evaluatedAt: "2026-07-17T05:59:30+00:00",
+      checks: [finding()],
+      totalCheckCount: 1,
+      totalFindingCount: 1,
+      reasonCodes: [],
+    },
+    catalog: {
+      availability: "available" as const,
+      entries: [{
+        checkId: "workload-limits",
+        title: "Workload limits",
+        category: "resources",
+        severity: "warning" as const,
+        description: "Checks container resource limits.",
+        remediation: "Set explicit resource limits.",
+      }],
+      reasonCodes: [],
+    },
+    visibility: {
+      availability: "available" as const,
+      clusters: [{
+        clusterId: "cluster-a",
+        state: "limited" as const,
+        namespaceScope: ["storefront"],
+        core: { deployments: "allowed" as const },
+        missingOptionalKinds: ["Gateway"],
+      }],
+      reasonCodes: [],
+    },
+  };
+}
+
+function finding() {
+  return {
+    findingId: "finding-a",
+    clusterId: "cluster-a",
+    checkId: "workload-limits",
+    category: "resources",
+    severity: "warning" as const,
+    message: "Container limits are not observed.",
+    resource: {
+      apiGroup: "apps",
+      version: "v1",
+      kind: "Deployment",
+      namespace: "storefront",
+      name: "checkout",
+      uid: "uid-checkout",
+    },
+  };
+}
+
+function refreshPolicy() {
+  return {
+    staleAfterSeconds: 30,
+    refreshAfterSeconds: 60,
+    keepLastSuccess: true as const,
+    pauseWhenHidden: true as const,
+    eventInvalidation: false,
+    retryAfterSeconds: null,
+    retryLimit: null,
+    postMutationRefreshAfterSeconds: null,
   };
 }

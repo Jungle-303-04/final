@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -44,6 +45,62 @@ class ChecksDb:
             for cluster_id in cluster_ids
         }
 
+    def latest_inventory_snapshots(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        assert workspace_id == "workspace-a"
+        observed_at = datetime.now(UTC).isoformat()
+        return {
+            cluster_id: {
+                "summary": {
+                    "summary": {
+                        "checks_observation": {
+                            "availability": "available",
+                            "observed_at": observed_at,
+                            "namespaces": [],
+                            "reason_codes": [],
+                            "findings": [
+                                {
+                                    "finding_id": f"finding-{cluster_id}",
+                                    "check_id": "workload-limits",
+                                    "category": "resources",
+                                    "severity": "warning",
+                                    "message": "Container limits are not observed.",
+                                    "resource": {
+                                        "api_group": "apps",
+                                        "version": "v1",
+                                        "kind": "Deployment",
+                                        "namespace": "storefront",
+                                        "name": "checkout",
+                                        "uid": f"uid-{cluster_id}",
+                                    },
+                                }
+                            ],
+                            "catalog": [
+                                {
+                                    "check_id": "workload-limits",
+                                    "title": "Workload limits",
+                                    "category": "resources",
+                                    "severity": "warning",
+                                    "description": "Checks resource limits.",
+                                    "remediation": "Set resource limits.",
+                                }
+                            ],
+                            "visibility": {
+                                "state": "ok",
+                                "namespace_scope": [],
+                                "core": {"deployments": "allowed"},
+                                "missing_optional_kinds": [],
+                            },
+                        }
+                    }
+                }
+            }
+            for cluster_id in cluster_ids
+        }
+
 
 def _client() -> TestClient:
     module = importlib.import_module("domains.checks.router")
@@ -58,7 +115,7 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_checks_overview_is_scope_and_permission_bound_without_fabricating_a_clean_result() -> None:
+def test_checks_overview_is_scope_and_permission_bound_to_agent_observations() -> None:
     response = _client().get(
         "/checks/overview?clusters=cluster-a,cluster-b&namespaces=cluster-a/storefront"
     )
@@ -80,25 +137,26 @@ def test_checks_overview_is_scope_and_permission_bound_without_fabricating_a_cle
             "freshness": "partial",
         },
     ]
-    assert body["result_set"] == {
-        "availability": "unavailable",
-        "evaluated_at": None,
-        "checks": None,
-        "total_check_count": None,
-        "total_finding_count": None,
-        "reason_codes": ["checks_result_projection_not_integrated"],
+    assert body["result_set"]["availability"] == "partial"
+    assert body["result_set"]["total_check_count"] == 1
+    assert body["result_set"]["total_finding_count"] == 2
+    assert {finding["cluster_id"] for finding in body["result_set"]["checks"]} == {
+        "cluster-a",
+        "cluster-b",
     }
-    assert body["catalog"]["entries"] is None
+    assert body["catalog"]["entries"][0]["check_id"] == "workload-limits"
+    assert body["visibility"]["clusters"][0]["state"] == "ok"
 
 
-def test_checks_detail_is_direct_url_read_but_does_not_assert_a_catalog_entry() -> None:
+def test_checks_detail_resolves_an_agent_reported_catalog_entry() -> None:
     response = _client().get("/checks/workload-limits?clusters=cluster-a")
 
     assert response.status_code == 200
     body = response.json()
     assert body["detail"]["requested_check_id"] == "workload-limits"
-    assert body["detail"]["title"] is None
-    assert body["detail"]["findings"] is None
+    assert body["detail"]["title"] == "Workload limits"
+    assert body["detail"]["affected_resource_count"] == 1
+    assert body["detail"]["findings"][0]["cluster_id"] == "cluster-a"
 
 
 def test_checks_hides_unauthorized_scope_and_rejects_invalid_scope_or_identity() -> None:

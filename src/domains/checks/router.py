@@ -30,7 +30,7 @@ async def get_checks_overview(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ChecksOverviewResponse:
-    """Read scope-aware checks availability without claiming an empty evaluation."""
+    """Read authorized Checks evidence persisted from outbound agents."""
 
     scope = await _authorized_scope(
         clusters=clusters, namespaces=namespaces, current=current, db=db
@@ -46,7 +46,7 @@ async def get_checks_detail(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ChecksDetailResponse:
-    """Preserve direct URL intent while catalog materialization is unavailable."""
+    """Resolve a direct check URL against the persisted agent catalog."""
 
     requested_check_id = _check_id(check_id)
     scope = await _authorized_scope(
@@ -77,14 +77,22 @@ async def _authorized_scope(
     }
     _require_requested_clusters(requested_scope_clusters, allowed_clusters)
     selected_cluster_ids = tuple(sorted(requested_scope_clusters or allowed_clusters))
-    contexts = await asyncio.to_thread(
-        db.filter_snapshot_contexts,
-        workspace_id,
-        selected_cluster_ids,
+    contexts, snapshots = await asyncio.gather(
+        asyncio.to_thread(
+            db.filter_snapshot_contexts,
+            workspace_id,
+            selected_cluster_ids,
+        ),
+        asyncio.to_thread(
+            db.latest_inventory_snapshots,
+            workspace_id,
+            set(selected_cluster_ids),
+        ),
     )
     return {
         "workspace_id": workspace_id,
         "contexts": contexts,
+        "snapshots": snapshots,
         "namespace_refs": requested_namespaces,
         "selected_cluster_ids": selected_cluster_ids,
     }

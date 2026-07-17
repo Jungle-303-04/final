@@ -6,10 +6,28 @@ import {
   type ChecksPort,
   type ChecksScopeCoverage,
 } from "./checksContract";
-import type { ChecksEndpointDependencies, ChecksEndpointScopeCoverage } from "./checksEndpointContract";
+import type {
+  ChecksEndpointCatalog,
+  ChecksEndpointCatalogEntry,
+  ChecksEndpointDependencies,
+  ChecksEndpointDetail,
+  ChecksEndpointFinding,
+  ChecksEndpointResultSet,
+  ChecksEndpointScopeCoverage,
+} from "./checksEndpointContract";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
-export function createChecksAdapter(endpoints: ChecksEndpointDependencies): ChecksPort {
+export function createChecksAdapter(
+  endpoints: ChecksEndpointDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"issues_audit">,
+): ChecksPort {
   return {
+    loadRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "issues_audit", signal);
+    },
     async getOverview(request, signal) {
       return withPortFailure(async () => toOverview(await endpoints.getChecksOverview(request, signal)));
     },
@@ -22,18 +40,18 @@ export function createChecksAdapter(endpoints: ChecksEndpointDependencies): Chec
 function toOverview(value: Awaited<ReturnType<ChecksEndpointDependencies["getChecksOverview"]>>): ChecksOverview {
   return {
     scopeCoverage: toScopeCoverage(value.scope_coverage),
-    resultSet: {
-      availability: value.result_set.availability,
-      evaluatedAt: value.result_set.evaluated_at,
-      checks: value.result_set.checks,
-      totalCheckCount: value.result_set.total_check_count,
-      totalFindingCount: value.result_set.total_finding_count,
-      reasonCodes: value.result_set.reason_codes,
-    },
-    catalog: {
-      availability: value.catalog.availability,
-      entries: value.catalog.entries,
-      reasonCodes: value.catalog.reason_codes,
+    resultSet: toResultSet(value.result_set),
+    catalog: toCatalog(value.catalog),
+    visibility: {
+      availability: value.visibility.availability,
+      clusters: value.visibility.clusters.map((item) => ({
+        clusterId: item.cluster_id,
+        state: item.state,
+        namespaceScope: item.namespace_scope,
+        core: item.core,
+        missingOptionalKinds: item.missing_optional_kinds,
+      })),
+      reasonCodes: value.visibility.reason_codes,
     },
   };
 }
@@ -41,18 +59,98 @@ function toOverview(value: Awaited<ReturnType<ChecksEndpointDependencies["getChe
 function toDetail(value: Awaited<ReturnType<ChecksEndpointDependencies["getChecksDetail"]>>): ChecksDetailResponse {
   return {
     scopeCoverage: toScopeCoverage(value.scope_coverage),
-    detail: {
-      requestedCheckId: value.detail.requested_check_id,
-      availability: value.detail.availability,
-      title: value.detail.title,
-      category: value.detail.category,
-      effectiveSeverity: value.detail.effective_severity,
-      message: value.detail.message,
-      remediation: value.detail.remediation,
-      affectedResourceCount: value.detail.affected_resource_count,
-      findings: value.detail.findings,
-      reasonCodes: value.detail.reason_codes,
+    detail: toDetailValue(value.detail),
+  };
+}
+
+function toResultSet(value: ChecksEndpointResultSet): ChecksOverview["resultSet"] {
+  if (value.availability === "unavailable") {
+    return {
+      availability: "unavailable",
+      evaluatedAt: null,
+      checks: null,
+      totalCheckCount: null,
+      totalFindingCount: null,
+      reasonCodes: value.reason_codes,
+    };
+  }
+  return {
+    availability: value.availability,
+    evaluatedAt: value.evaluated_at,
+    checks: value.checks.map(toFinding),
+    totalCheckCount: value.total_check_count,
+    totalFindingCount: value.total_finding_count,
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toCatalog(value: ChecksEndpointCatalog): ChecksOverview["catalog"] {
+  if (value.availability === "unavailable") {
+    return { availability: "unavailable", entries: null, reasonCodes: value.reason_codes };
+  }
+  return {
+    availability: value.availability,
+    entries: value.entries.map(toCatalogEntry),
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toDetailValue(value: ChecksEndpointDetail): ChecksDetailResponse["detail"] {
+  if (value.availability === "unavailable") {
+    return {
+      requestedCheckId: value.requested_check_id,
+      availability: "unavailable",
+      title: null,
+      category: null,
+      effectiveSeverity: null,
+      message: null,
+      remediation: null,
+      affectedResourceCount: null,
+      findings: null,
+      reasonCodes: value.reason_codes,
+    };
+  }
+  return {
+    requestedCheckId: value.requested_check_id,
+    availability: value.availability,
+    title: value.title,
+    category: value.category,
+    effectiveSeverity: value.effective_severity,
+    message: value.message,
+    remediation: value.remediation,
+    affectedResourceCount: value.affected_resource_count,
+    findings: value.findings.map(toFinding),
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toFinding(value: ChecksEndpointFinding) {
+  return {
+    findingId: value.finding_id,
+    clusterId: value.cluster_id,
+    checkId: value.check_id,
+    category: value.category,
+    severity: value.severity,
+    message: value.message,
+    resource: {
+      apiGroup: value.resource.api_group,
+      version: value.resource.version,
+      kind: value.resource.kind,
+      namespace: value.resource.namespace,
+      name: value.resource.name,
+      uid: value.resource.uid,
     },
+  };
+}
+
+function toCatalogEntry(value: ChecksEndpointCatalogEntry) {
+  return {
+    checkId: value.check_id,
+    title: value.title,
+    category: value.category,
+    severity: value.severity,
+    description: value.description,
+    remediation: value.remediation,
   };
 }
 
