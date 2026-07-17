@@ -4,6 +4,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CircleCheck,
+  Lightbulb,
   ShieldAlert,
   Sparkle,
   X,
@@ -31,6 +32,7 @@ import {
 } from "../../shared/ui/primitives/tabs";
 import type {
   IssueEvidencePage,
+  IssueRecentChanges,
   IssueRcaReportPage,
   IssueRecoveryPlan,
 } from "./issuesContract";
@@ -70,8 +72,9 @@ export function IssuesPanels({
   selected,
   state,
 }: IssuesPanelsProps) {
+  const panelState = state;
   const [activeTab, setActiveTab] = useState("overview");
-  const auditCount = state.audit.data?.items.length ?? null;
+  const auditCount = panelState.audit.data?.items.length ?? null;
   const confidence = selected.confidence === null
     ? null
     : `${Math.round(selected.confidence * 100)}%`;
@@ -183,10 +186,10 @@ export function IssuesPanels({
                 copy={copy}
                 onJumpToEvidenceSummary={jumpToEvidenceSummary}
                 selected={selected}
-                state={state.detail}
+                state={panelState.detail}
               />
-              <IssueRecentChangesPanel copy={copy} state={state.recentChanges} />
-              <ReportsPanel copy={copy} onOpenRecovery={() => setActiveTab("recovery")} state={state.reports} />
+              <IssueRecentChangesPanel copy={copy} state={panelState.recentChanges} />
+              <ReportsPanel copy={copy} onOpenRecovery={() => setActiveTab("recovery")} state={panelState.reports} />
             </TabsContent>
 
             <TabsContent className={cn("grid min-w-0 gap-4 py-4", DETAIL_TAB_CONTENT_MOTION)} value="recovery">
@@ -198,8 +201,8 @@ export function IssuesPanels({
                 selected={selected}
                 selectionFailure={state.selectionFailure}
                 selectionPendingId={state.selectionPendingId}
-                state={state.recovery}
-                audit={state.audit.data}
+                state={panelState.recovery}
+                audit={panelState.audit.data}
               />
             </TabsContent>
 
@@ -207,7 +210,7 @@ export function IssuesPanels({
               <IssueAuditTimelinePanel
                 copy={copy}
                 onLoadMore={onLoadMoreAudit}
-                state={state.audit}
+                state={panelState.audit}
               />
             </TabsContent>
           </Tabs>
@@ -235,7 +238,8 @@ function IssueOverview({
   const detail = state.data;
   const missingEvidence = detail?.missingEvidence ?? selected.missingEvidence ?? [];
   const missingCount = missingEvidence.length;
-  const summary = issueSituationSummary(selected, copy, resolved);
+  const summary = selected.situationSummary?.trim()
+    || issueSituationSummary(selected, copy, resolved);
   return (
     <Card className="gap-0 border-foreground/15 py-0 shadow-sm">
       <CardContent className="grid min-w-0 gap-4 p-4">
@@ -676,10 +680,10 @@ function ReportSelectedEvidenceDetails({
       <ul className="grid gap-2">
         {report.supportingEvidenceRefs.map((evidence, index) => (
           <li
-            className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 py-2"
+            className="grid min-w-0 grid-cols-[7.25rem_minmax(0,1fr)] items-start gap-3 py-2"
             key={`${evidence.source}:${evidence.name}:${index}`}
           >
-            <Badge className="max-w-36 truncate" title={evidence.source} variant="secondary">
+            <Badge className="w-fit max-w-full truncate" title={evidence.source} variant="secondary">
               {evidenceSourceDisplayName(evidence.source)}
             </Badge>
             <div className="grid min-w-0 gap-1">
@@ -1015,9 +1019,12 @@ function RecoveryPanel({
                 {recommendedCandidate ? (
                   <section className="grid min-w-0 gap-3 bg-[#FBFBFB] p-3 dark:bg-white/5">
                     <div className="flex min-w-0 items-center gap-2">
-                      <h4 className="min-w-0 flex-1 truncate text-sm font-semibold" title={recommendedCandidate.title}>
-                        {recommendedCandidate.title}
-                      </h4>
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <Lightbulb aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                        <h4 className="min-w-0 truncate text-sm font-semibold leading-snug" title={recommendedCandidate.title}>
+                          {recommendedCandidate.title}
+                        </h4>
+                      </span>
                       <Badge className="border-status-healthy/30 bg-status-healthy/10 text-status-healthy" variant="outline">
                         {copy.recommended}
                       </Badge>
@@ -1059,8 +1066,11 @@ function RecoveryPanel({
                         onClick={() => toggleCandidate(candidate.id)}
                         type="button"
                       >
-                        <span className="min-w-0 truncate text-sm font-semibold" title={candidate.title}>
-                          {candidate.title}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Lightbulb aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 truncate text-sm font-semibold" title={candidate.title}>
+                            {candidate.title}
+                          </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
                           <span className="text-xs tabular-nums text-muted-foreground">
@@ -1134,6 +1144,30 @@ function RecoveryCandidateDetails({
           </dd>
         </div>
       </dl>
+      {candidate.recommendationReason ? (
+        <section className="grid gap-2 border-t pt-5">
+          <h4 className="text-xs font-medium text-muted-foreground">추천 이유</h4>
+          <p className="break-words text-sm font-medium leading-relaxed text-foreground">
+            {candidate.recommendationReason}
+          </p>
+        </section>
+      ) : null}
+      {candidate.expectedOutcome ? (
+        <section className="grid gap-2 border-t pt-5">
+          <h4 className="text-xs font-medium text-muted-foreground">기대 효과</h4>
+          <p className="break-words text-sm font-medium leading-relaxed text-foreground">
+            {candidate.expectedOutcome}
+          </p>
+        </section>
+      ) : null}
+      {candidate.riskExplanation ? (
+        <section className="grid gap-2 border-t pt-5">
+          <h4 className="text-xs font-medium text-muted-foreground">위험도 설명</h4>
+          <p className="break-words text-sm font-medium leading-relaxed text-foreground">
+            {candidate.riskExplanation}
+          </p>
+        </section>
+      ) : null}
       <section className="grid gap-2 border-t pt-5">
         <h4 className="text-xs font-medium text-muted-foreground">실행할 조치</h4>
         <p className="break-words text-sm font-medium leading-relaxed text-foreground">{candidate.description}</p>
@@ -1154,6 +1188,11 @@ function RecoveryCandidateDetails({
       {candidate.rollbackPlan ? (
         <section className="grid gap-2 border-t pt-5">
           <h4 className="text-xs font-medium text-muted-foreground">실패 시 롤백 조치</h4>
+          {candidate.rollbackReason ? (
+            <p className="break-words text-sm font-medium leading-relaxed text-foreground">
+              {candidate.rollbackReason}
+            </p>
+          ) : null}
           <p className="border-l border-foreground/20 pl-3 text-xs leading-relaxed text-muted-foreground">
             {candidate.rollbackPlan}
           </p>
@@ -1259,11 +1298,13 @@ function RecoveryProgress({
           const completed = progress.phase === "completed" || index < progress.activeStep;
           const active = index === progress.activeStep;
           const failed = progress.phase === "failed" && active;
+          const completedBeforeFailure = progress.phase === "failed" && completed;
           return (
             <li className="grid min-w-0 justify-items-center gap-1.5 text-center" key={label}>
               <span className={cn(
                 "grid size-6 place-items-center rounded-md border bg-card text-[10px] font-semibold tabular-nums text-muted-foreground",
                 completed && "border-foreground/10 bg-muted/35 text-muted-foreground/70 opacity-70",
+                completedBeforeFailure && "border-[#F74720]/15 bg-[#F74720]/5 text-[#F74720]/55 opacity-100",
                 active && activeMarkerClass,
               )}
               >
@@ -1271,6 +1312,7 @@ function RecoveryProgress({
               </span>
               <span className={cn(
                 "w-full truncate text-[11px] leading-4 text-muted-foreground",
+                completed && "text-muted-foreground/55",
                 active && "font-medium text-foreground",
                 failed && "text-destructive",
               )} title={label}

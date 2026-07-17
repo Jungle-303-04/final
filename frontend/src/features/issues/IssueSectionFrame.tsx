@@ -55,7 +55,7 @@ export function IssueEmpty({ text }: { text: string }) {
 
 function IssueFailure({ detail, title }: { detail: string; title: string }) {
   return (
-    <Alert variant="destructive">
+    <Alert className="text-[#F74720] *:data-[slot=alert-description]:text-[#F74720]" variant="destructive">
       <CircleAlert aria-hidden="true" />
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>{detail}</AlertDescription>

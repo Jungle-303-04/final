@@ -376,6 +376,7 @@ function IssueQueueRow({
               <Badge
                 className={cn(
                   "h-7 cursor-pointer rounded-md border-transparent px-2.5",
+                  "h-8 px-3 text-sm",
                   resolved
                     ? "border-foreground bg-white text-foreground dark:border-foreground dark:bg-background"
                     : "bg-black text-white dark:bg-white dark:text-black",
@@ -399,6 +400,8 @@ function IssueRecoveryProgressBadge({ issue }: { issue: IssueSummary }) {
     ? "failed"
     : progress.label === "복구 완료"
       ? "completed"
+      : progress.label === "복구 대기"
+        ? "approval"
       : "active";
   return <IssueRecoveryProgressBadgeContent label={progress.label} step={progress.step} tone={tone} />;
 }
@@ -410,6 +413,8 @@ function IssueRecoveryProgressLine({ issue }: { issue: IssueSummary }) {
     ? "failed"
     : progress.label === "복구 완료"
       ? "completed"
+      : progress.label === "복구 대기"
+        ? "approval"
       : "active";
   return (
     <IssueSummaryLine label="복구">
@@ -418,7 +423,7 @@ function IssueRecoveryProgressLine({ issue }: { issue: IssueSummary }) {
   );
 }
 
-type RecoveryBadgeTone = "active" | "completed" | "failed";
+type RecoveryBadgeTone = "active" | "approval" | "completed" | "failed";
 
 function IssueRecoveryProgressBadgeContent({
   label,
@@ -448,6 +453,7 @@ function RecoveryMiniProgress({
   const activeClassName = cn(
     tone === "failed" && "bg-[#F74720]",
     tone === "completed" && "bg-[#5358E0]",
+    tone === "approval" && "bg-[#FF9B51]",
     tone === "active" && "bg-[#5358E0]",
   );
   return (
@@ -545,6 +551,9 @@ function issueRecoveryProgressSummary(issue: IssueSummary): { label: string; ste
     status.includes("selected")
   ) {
     return { label: "복구 요청됨", step: 2 };
+  }
+  if (!isResolvedIssue(issue.status)) {
+    return { label: "복구 대기", step: 1 };
   }
   return null;
 }
