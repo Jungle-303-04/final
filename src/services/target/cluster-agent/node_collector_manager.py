@@ -203,11 +203,28 @@ def daemonset_image(daemonset: Mapping[object, object]) -> str:
 
 
 def pod_uses_exact_image(pod: Mapping[object, object], expected_image: str) -> bool:
+    expected = require_target_image_digest(expected_image)
+    pod_spec = mapping(pod.get("spec"))
+    spec_containers = pod_spec.get("containers")
+    if not isinstance(spec_containers, list):
+        return False
+    spec_image = ""
+    for container in spec_containers:
+        if not isinstance(container, Mapping):
+            continue
+        if container.get("name") != NodeCollectorManagerConfig.NODE_COLLECTOR_CONTAINER_NAME:
+            continue
+        image = container.get("image")
+        spec_image = image if isinstance(image, str) else ""
+        break
+    if spec_image != expected:
+        return False
+
     status = mapping(pod.get("status"))
     container_statuses = status.get("containerStatuses")
     if not isinstance(container_statuses, list):
         return False
-    expected_digest = expected_image.rsplit("@", 1)[1]
+    expected_digest = expected.rsplit("@", 1)[1]
     for container in container_statuses:
         if not isinstance(container, Mapping):
             continue
@@ -216,11 +233,19 @@ def pod_uses_exact_image(pod: Mapping[object, object], expected_image: str) -> b
         image_id = container.get("imageID")
         return (
             container.get("ready") is True
-            and container.get("image") == expected_image
             and isinstance(image_id, str)
-            and image_id.endswith(expected_digest)
+            and image_id_has_exact_digest(image_id, expected_digest)
         )
     return False
+
+
+def image_id_has_exact_digest(image_id: str, expected_digest: str) -> bool:
+    normalized = image_id.strip()
+    return (
+        normalized == expected_digest
+        or normalized.endswith(f"@{expected_digest}")
+        or normalized.endswith(f"://{expected_digest}")
+    )
 
 
 def mapping(value: object) -> Mapping[object, object]:
