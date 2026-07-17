@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -179,23 +179,45 @@ def test_only_explicit_incomplete_gap_evidence_opens_coverage() -> None:
 
 
 def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
+    def capture(row: Mapping[str, object]) -> object:
+        summary = row["summary"]
+        assert isinstance(summary, Mapping)
+        source_summary = summary["summary"]
+        assert isinstance(source_summary, Mapping)
+        return source_summary["kubernetes_event_capture"]
+
     rows = [
         {
-            **_snapshot(observed_at=_timestamp(10), complete=False, gap="timeout"),
+            "cluster_id": "cluster-a",
             "status": "accepted",
+            "event_capture": capture(
+                _snapshot(observed_at=_timestamp(10), complete=False, gap="timeout")
+            ),
         },
-        {**_snapshot(observed_at=_timestamp(20), complete=True), "status": "accepted"},
+        {
+            "cluster_id": "cluster-a",
+            "status": "accepted",
+            "event_capture": capture(_snapshot(observed_at=_timestamp(20), complete=True)),
+        },
     ]
 
     class Result:
+        partition_sizes: list[int] = []
+
         def mappings(self) -> Result:
             return self
 
-        def __iter__(self) -> Iterator[dict[str, object]]:
-            return iter(rows)
+        def partitions(self, size: int) -> Iterator[list[dict[str, object]]]:
+            self.partition_sizes.append(size)
+            yield rows
 
     class Connection:
         statement: object | None = None
+        execution_options_kwargs: dict[str, object] = {}
+
+        def execution_options(self, **kwargs: object) -> Connection:
+            self.execution_options_kwargs = dict(kwargs)
+            return self
 
         def execute(self, statement: object) -> Result:
             self.statement = statement
@@ -216,7 +238,7 @@ def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
     ]
     assert connection.statement is not None
     selected = connection.statement.selected_columns.keys()  # type: ignore[union-attr]
-    assert list(selected) == ["cluster_id", "status", "summary"]
+    assert list(selected) == ["cluster_id", "status", "event_capture"]
     sql = str(
         connection.statement.compile(  # type: ignore[union-attr]
             dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
@@ -224,4 +246,72 @@ def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
     ).lower()
     assert "cluster_inventory_snapshots.workspace_id = 'workspace-a'" in sql
     assert "cluster_inventory_snapshots.status != 'ignored_stale'" in sql
+    assert "kubernetes_event_capture" in sql
+    assert "is not null" in sql
+    assert "cluster_inventory_snapshots.collected_at <" in sql
+    assert "cluster_inventory_snapshots.summary as summary" not in sql
     assert "raw" not in sql
+    assert connection.execution_options_kwargs == {
+        "max_row_buffer": 128,
+        "stream_results": True,
+    }
+    assert Result.partition_sizes == [128]
+
+
+def test_repository_stops_streaming_capture_projection_after_request_cancellation() -> None:
+    capture = {
+        "complete": False,
+        "truncated": False,
+        "reason": "timeout",
+        "freshness": {
+            "observed_at": _timestamp(10).isoformat(),
+            "max_age_seconds": 120,
+        },
+        "coverage": {
+            "scope": "all_namespaces",
+            "pagination": "continue",
+            "gap": "timeout",
+        },
+    }
+
+    class Result:
+        partitions_read = 0
+
+        def mappings(self) -> Result:
+            return self
+
+        def partitions(self, _size: int) -> Iterator[list[dict[str, object]]]:
+            for _index in range(10):
+                self.partitions_read += 1
+                yield [
+                    {
+                        "cluster_id": "cluster-a",
+                        "status": "accepted",
+                        "event_capture": capture,
+                    }
+                ]
+
+    result = Result()
+
+    class Connection:
+        def execution_options(self, **_kwargs: object) -> Connection:
+            return self
+
+        def execute(self, _statement: object) -> Result:
+            return result
+
+    @contextmanager
+    def connect() -> Iterator[Connection]:
+        yield Connection()
+
+    repository = object.__new__(InventoryRepository)
+    repository.connection = connect
+
+    coverage = repository.snapshot_timeline_coverage(
+        _read_scope(),
+        window=_window(),
+        cancelled=lambda: result.partitions_read >= 1,
+    )
+
+    assert coverage == ()
+    assert result.partitions_read == 1
