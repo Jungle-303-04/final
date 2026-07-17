@@ -467,6 +467,13 @@ jobs:
               "${RUNNER_TEMP}/demo-workspace-seed-image.yaml" \
               "${RUNNER_TEMP}/demo-workspace-seed-job.yaml"
           }
+          describe_demo_seed_failure() {
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs job/management-demo-workspace-seed \
+              --all-containers --tail=500 || true
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              describe job management-demo-workspace-seed || true
+          }
           trap cleanup_demo_seed EXIT
           cleanup_demo_seed
           kubectl set image \
@@ -481,15 +488,32 @@ jobs:
             --output yaml >"${RUNNER_TEMP}/demo-workspace-seed-job.yaml"
           kubectl --context "${MGMT_CONTEXT}" apply \
             --filename "${RUNNER_TEMP}/demo-workspace-seed-job.yaml"
-          if ! kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            wait --for=condition=complete \
-            job/management-demo-workspace-seed --timeout=330s; then
-            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-              logs job/management-demo-workspace-seed --all-containers --tail=500 || true
-            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-              describe job management-demo-workspace-seed || true
-            exit 1
-          fi
+          seed_deadline=$((SECONDS + 330))
+          while true; do
+            seed_status="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get job management-demo-workspace-seed --output json)"
+            if jq -e '
+              .status.conditions[]?
+              | select(.type == "Failed" and .status == "True")
+            ' >/dev/null <<<"${seed_status}"; then
+              echo "demo workspace seed job reported Failed=True" >&2
+              describe_demo_seed_failure
+              exit 1
+            fi
+            if jq -e '
+              .status.conditions[]?
+              | select(.type == "Complete" and .status == "True")
+            ' >/dev/null <<<"${seed_status}"; then
+              break
+            fi
+            if (( SECONDS >= seed_deadline )); then
+              echo "timed out waiting 330 seconds for demo workspace seed job" >&2
+              describe_demo_seed_failure
+              exit 1
+            fi
+            sleep 2
+          done
+          unset seed_status seed_deadline
           seed_json="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             logs job/management-demo-workspace-seed --all-containers --tail=500)"
           printf '%s\n' "${seed_json}"
@@ -581,7 +605,8 @@ jobs:
           AUTH_COOKIE_JAR_OUT: ${{ runner.temp }}/browser-auth-cookie.jar
         run: |
           set -euo pipefail
-          export EXPECTED_ALEMBIC_HEAD="$(uv run alembic heads | awk '{print $1}')"
+          EXPECTED_ALEMBIC_HEAD="$(uv run alembic heads | awk '{print $1}')"
+          export EXPECTED_ALEMBIC_HEAD
           RUN_SMOKE=1 SMOKE_COMMIT_SHA="${SOURCE_SHA}" bash scripts/post-deploy-smoke.sh
 
       - name: Run post-deploy console smoke

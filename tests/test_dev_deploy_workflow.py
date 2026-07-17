@@ -293,7 +293,6 @@ def test_full_deploy_renders_seed_owner_from_fixed_admin_and_cleans_up() -> None
     assert 'DEMO_WORKSPACE_OWNER_USER_ID="${DEV_ADMIN_USER_ID}"' in source
     assert "delete job management-demo-workspace-seed" in source
     assert "trap cleanup_demo_seed EXIT" in source
-    assert "wait --for=condition=complete" in source
     assert "logs job/management-demo-workspace-seed" in source
     assert "describe job management-demo-workspace-seed" in source
     assert "seed_json=" in source
@@ -301,6 +300,22 @@ def test_full_deploy_renders_seed_owner_from_fixed_admin_and_cleans_up() -> None
     assert "${GITHUB_OUTPUT}" in source
     assert "workspace_id=%s" in source
     assert "controller.demo_workspace reset" not in WORKFLOW_PATH.read_text(encoding="utf-8")
+
+
+def test_demo_workspace_seed_poll_has_complete_failed_and_timeout_semantics() -> None:
+    source = steps_by_name()["Seed dedicated dev demo workspace"]["run"]
+
+    assert "wait --for=condition=complete" not in source
+    assert "seed_deadline=$((SECONDS + 330))" in source
+    assert "sleep 2" in source
+    assert '.type == "Failed" and .status == "True"' in source
+    assert '.type == "Complete" and .status == "True"' in source
+    assert source.index('.type == "Failed"') < source.index('.type == "Complete"')
+    assert "demo workspace seed job reported Failed=True" in source
+    assert "if (( SECONDS >= seed_deadline )); then" in source
+    assert "timed out waiting 330 seconds for demo workspace seed job" in source
+    assert source.count("describe_demo_seed_failure") == 3
+    assert source.index('.type == "Complete"') < source.index("break")
 
 
 def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording() -> None:
