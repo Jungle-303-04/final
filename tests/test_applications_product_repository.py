@@ -319,7 +319,9 @@ def test_application_catalog_reads_200_states_with_seven_statements() -> None:
     assert "row_number() over (partition by workflow_runs.application_id" in sql[1]
     assert "join lateral jsonb_array_elements_text" in sql[4]
     assert "application_ids_complete is false" in sql[5]
-    assert "row_number() over (partition by inventory_filter_revisions.cluster_id" in sql[6]
+    assert "join lateral" in sql[6]
+    assert "inventory_filter_revisions.revision_id desc" in sql[6]
+    assert "row_number() over (partition by inventory_filter_revisions.cluster_id" not in sql[6]
 
 
 def test_application_catalog_rejects_more_than_contract_limit_before_query() -> None:
