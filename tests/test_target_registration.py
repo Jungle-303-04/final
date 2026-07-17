@@ -38,6 +38,7 @@ from domains.target.router import (
     router,
     schedule_evidence_jobs,
     target_install_manifest,
+    target_rbac_manifest_for_admin,
     target_registration_preflight,
     unregister_cluster,
     update_cluster_policy,
@@ -61,6 +62,10 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import ClusterSummary
+from packages.contracts.target import (
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RBAC_VERSION_ANNOTATION,
+)
 
 
 class StubDb:
@@ -486,6 +491,72 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+
+
+def test_target_install_manifest_versions_admin_applied_rbac() -> None:
+    documents = [
+        item
+        for item in yaml.safe_load_all(target_install_manifest(target_request(), "agent-secret"))
+        if isinstance(item, dict)
+    ]
+    read_role = next(
+        item
+        for item in documents
+        if item.get("kind") == "ClusterRole"
+        and item.get("metadata", {}).get("name") == "cluster-agent-read"
+    )
+
+    assert read_role["metadata"]["annotations"][TARGET_RBAC_VERSION_ANNOTATION] == (
+        TARGET_RBAC_MANIFEST_VERSION
+    )
+
+
+class _AdminRbacManifestDb:
+    def __init__(self, role: str = "target") -> None:
+        self.role = role
+
+    def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        assert workspace_id == "workspace-a"
+        assert cluster_id == "customer-cluster"
+        settings = target_request().model_dump(exclude={"apply", "kube_context"})
+        settings.update({"cluster_id": cluster_id, "cluster_role": self.role})
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": settings,
+        }
+
+
+def test_admin_rbac_manifest_is_rbac_only_and_excludes_management_cluster() -> None:
+    response = asyncio.run(
+        target_rbac_manifest_for_admin(
+            "customer-cluster",
+            current=SimpleNamespace(workspace_id="workspace-a"),
+            db=_AdminRbacManifestDb(),
+        )
+    )
+    documents = [item for item in yaml.safe_load_all(response.body.decode()) if item]
+    assert documents
+    assert {str(item["kind"]) for item in documents} <= {
+        "Role",
+        "RoleBinding",
+        "ClusterRole",
+        "ClusterRoleBinding",
+    }
+    assert response.headers["x-target-rbac-manifest-version"] == TARGET_RBAC_MANIFEST_VERSION
+    assert all(item["kind"] not in {"Secret", "ConfigMap", "Deployment"} for item in documents)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            target_rbac_manifest_for_admin(
+                "customer-cluster",
+                current=SimpleNamespace(workspace_id="workspace-a"),
+                db=_AdminRbacManifestDb(role="management"),
+            )
+        )
+    assert exc.value.status_code == 400
 
 
 def test_target_uninstall_rbac_is_exact_name_scoped_and_cannot_delete_namespaces() -> None:
