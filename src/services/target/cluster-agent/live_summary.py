@@ -34,6 +34,7 @@ from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.realtime import derive_realtime_gateway_url
 from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
+from packages.contracts.port_forward import AgentPortForwardEvent
 from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     MAX_HOT_PODS,
@@ -58,13 +59,26 @@ SummaryCollector = Callable[[], Awaitable[LiveSummary | None]]
 
 
 class LiveStreamConnection(Protocol):
-    async def send(self, message: str) -> None: ...
+    async def send(self, message: str | bytes) -> None: ...
 
     async def recv(self) -> str | bytes: ...
 
 
 class TerminalController(Protocol):
     async def handle(self, payload: object, emit: Callable[..., Awaitable[None]]) -> bool: ...
+
+    async def close_all(self) -> None: ...
+
+
+class PortForwardStreamController(Protocol):
+    async def handle_control(
+        self,
+        payload: object,
+        emit_event: Callable[[AgentPortForwardEvent], Awaitable[None]],
+        emit_data: Callable[[bytes], Awaitable[None]],
+    ) -> bool: ...
+
+    async def handle_data(self, raw: bytes) -> bool: ...
 
     async def close_all(self) -> None: ...
 
@@ -267,6 +281,7 @@ class LiveSummaryPublisher:
         collector: SummaryCollector,
         connect: LiveStreamConnector | None = None,
         terminal_controller: TerminalController | None = None,
+        port_forward_controller: PortForwardStreamController | None = None,
         retry_delay_seconds: float = agent_config.LIVE_SUMMARY_RETRY_DELAY_SECONDS,
         enabled: bool = True,
     ) -> None:
@@ -277,6 +292,7 @@ class LiveSummaryPublisher:
         self.collector = collector
         self.connect = connect or _websockets_connector
         self.terminal_controller = terminal_controller
+        self.port_forward_controller = port_forward_controller
         self.retry_delay_seconds = retry_delay_seconds
         self.enabled = enabled
 
@@ -287,6 +303,7 @@ class LiveSummaryPublisher:
         management_base_url: str,
         kubernetes_transport: httpx.AsyncBaseTransport | None = None,
         terminal_controller: TerminalController | None = None,
+        port_forward_controller: PortForwardStreamController | None = None,
     ) -> LiveSummaryPublisher:
         enabled = (
             env(
@@ -312,6 +329,7 @@ class LiveSummaryPublisher:
                 cluster_id, int(interval * 1000), kubernetes_transport
             ),
             terminal_controller=terminal_controller,
+            port_forward_controller=port_forward_controller,
             enabled=enabled,
         )
 
@@ -354,25 +372,49 @@ class LiveSummaryPublisher:
             async with send_lock:
                 await connection.send(message.model_dump_json())
 
+        async def send_port_forward_event(message: AgentPortForwardEvent) -> None:
+            async with send_lock:
+                await connection.send(message.model_dump_json())
+
+        async def send_port_forward_data(frame: bytes) -> None:
+            async with send_lock:
+                await connection.send(frame)
+
         producer = asyncio.create_task(self._publish_loop(connection, send_lock))
-        if self.terminal_controller is None:
+        if self.terminal_controller is None and self.port_forward_controller is None:
             await producer
             return
         try:
             while True:
                 raw = await connection.recv()
                 if isinstance(raw, bytes):
-                    raw = raw.decode("utf-8")
+                    if (
+                        self.port_forward_controller is not None
+                        and await self.port_forward_controller.handle_data(raw)
+                    ):
+                        continue
+                    raise ValueError("invalid binary frame on the agent realtime stream")
                 try:
                     payload = json.loads(raw)
                 except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
                     continue
-                await self.terminal_controller.handle(payload, send_model)
+                handled = False
+                if self.terminal_controller is not None:
+                    handled = await self.terminal_controller.handle(payload, send_model)
+                if not handled and self.port_forward_controller is not None:
+                    await self.port_forward_controller.handle_control(
+                        payload,
+                        send_port_forward_event,
+                        send_port_forward_data,
+                    )
         finally:
             producer.cancel()
             with suppress(asyncio.CancelledError):
                 await producer
-            await self.terminal_controller.close_all()
+            if self.terminal_controller is not None:
+                await self.terminal_controller.close_all()
+            if self.port_forward_controller is not None:
+                await self.port_forward_controller.close_all()
 
     async def _publish_loop(
         self,

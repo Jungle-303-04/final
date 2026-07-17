@@ -64,6 +64,7 @@ from kubernetes_api import (
 )
 from live_summary import LiveSummaryPublisher
 from node_collector_manager import NodeCollectorManager
+from port_forward_stream import KubernetesTcpTargetResolver, PortForwardController
 from providers import (
     KubernetesSnapshotProvider,
     LokiLogsProvider,
@@ -732,6 +733,9 @@ class TargetClusterAgent:
             management_base_url=self.base_url,
             kubernetes_transport=kubernetes_transport,
             terminal_controller=PodExecController(),
+            port_forward_controller=PortForwardController(
+                resolver=KubernetesTcpTargetResolver(kubernetes_transport)
+            ),
         )
         if providers is None:
             providers = (

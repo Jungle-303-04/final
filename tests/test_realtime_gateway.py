@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -11,7 +12,13 @@ from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from packages.contracts.port_forward import (
+    PortForwardDataFrame,
+    decode_port_forward_data,
+    encode_port_forward_data,
+)
 from packages.contracts.realtime import RealtimeIngressLimits
+from packages.contracts.service_access import PORT_FORWARD_AGENT_CAPABILITY
 
 CLUSTER = "target-cluster-01"
 WORKSPACE = "ws-1"
@@ -853,3 +860,596 @@ def test_pod_terminal_fails_closed_without_exact_authorization_or_agent() -> Non
         error = browser.receive_json()
     assert error["type"] == "terminal.error"
     assert error["code"] == "agent_unavailable"
+
+
+def test_slow_terminal_browser_does_not_block_agent_ingress_and_preserves_order() -> None:
+    gateway_module = load_gateway_module()
+    terminal_symbols = gateway_module.TerminalSessionBroker.__init__.__globals__
+    audits: list[tuple[str, dict[str, Any]]] = []
+
+    async def scenario() -> None:
+        async def authorize(*_args: object) -> bool:
+            return True
+
+        async def audit(subject: str, _workspace_id: str, payload: dict[str, Any]) -> None:
+            audits.append((subject, payload))
+
+        class AgentSocket:
+            def __init__(self) -> None:
+                self.sent: list[dict[str, Any]] = []
+
+            async def send_json(self, payload: dict[str, Any]) -> None:
+                self.sent.append(payload)
+
+        class SlowBrowser:
+            def __init__(self) -> None:
+                self.started = asyncio.Event()
+                self.release = asyncio.Event()
+                self.sent: list[dict[str, Any]] = []
+
+            async def send_json(self, payload: dict[str, Any]) -> None:
+                self.started.set()
+                await self.release.wait()
+                self.sent.append(payload)
+
+        registry = gateway_module.AgentConnectionRegistry()
+        agent_socket = AgentSocket()
+        connection, _previous = registry.register(CLUSTER, agent_socket)
+        broker = gateway_module.TerminalSessionBroker(
+            authorize=authorize,
+            audit=audit,
+            connections=registry,
+        )
+        browser = SlowBrowser()
+        terminal = terminal_symbols["BrowserTerminalSession"](
+            session_id="terminal-session-1",
+            workspace_id=WORKSPACE,
+            cluster_id=CLUSTER,
+            namespace="sandbox",
+            pod="api-0",
+            container="app",
+            user_id="user-1",
+            command_hash="a" * 64,
+            command_length=2,
+            browser=browser,
+            agent=connection,
+        )
+        broker.sessions[terminal.session_id] = terminal
+        await broker._audit_started(terminal)
+        sender = asyncio.create_task(broker._browser_sender(terminal))
+
+        assert (
+            await broker.handle_agent_payload(
+                CLUSTER,
+                connection,
+                {"type": "terminal.connected", "session_id": terminal.session_id},
+            )
+            is True
+        )
+        await asyncio.wait_for(browser.started.wait(), timeout=0.1)
+        await asyncio.wait_for(
+            broker.handle_agent_payload(
+                CLUSTER,
+                connection,
+                {
+                    "type": "terminal.output",
+                    "session_id": terminal.session_id,
+                    "stream": "stdout",
+                    "data": "ready",
+                },
+            ),
+            timeout=0.1,
+        )
+        await asyncio.wait_for(
+            broker.handle_agent_payload(
+                CLUSTER,
+                connection,
+                {
+                    "type": "terminal.end",
+                    "session_id": terminal.session_id,
+                    "exit_code": 0,
+                    "reason": "completed",
+                },
+            ),
+            timeout=0.1,
+        )
+        browser.release.set()
+        await asyncio.wait_for(sender, timeout=0.1)
+        assert [message["type"] for message in browser.sent] == [
+            "terminal.connected",
+            "terminal.output",
+            "terminal.end",
+        ]
+        assert browser.sent[1]["data"] == "ready"
+
+        # A duplicate receipt after collection is ignored and cannot duplicate audit.
+        assert (
+            await broker.handle_agent_payload(
+                CLUSTER,
+                connection,
+                {
+                    "type": "terminal.end",
+                    "session_id": terminal.session_id,
+                    "exit_code": 0,
+                    "reason": "completed",
+                },
+            )
+            is True
+        )
+
+    asyncio.run(scenario())
+    assert [subject for subject, _payload in audits] == [
+        "terminal.session.started",
+        "terminal.session.finished",
+    ]
+    assert audits[-1][1]["reason"] == "completed"
+    assert audits[-1][1]["output_bytes"] == len("ready")
+
+
+def test_terminal_queue_overflow_ends_only_the_slow_session() -> None:
+    gateway_module = load_gateway_module()
+    terminal_symbols = gateway_module.TerminalSessionBroker.__init__.__globals__
+
+    async def scenario() -> None:
+        async def authorize(*_args: object) -> bool:
+            return True
+
+        async def audit(*_args: object) -> None:
+            return None
+
+        class AgentSocket:
+            def __init__(self) -> None:
+                self.sent: list[dict[str, Any]] = []
+
+            async def send_json(self, payload: dict[str, Any]) -> None:
+                self.sent.append(payload)
+
+        registry = gateway_module.AgentConnectionRegistry()
+        agent_socket = AgentSocket()
+        connection, _previous = registry.register(CLUSTER, agent_socket)
+        broker = gateway_module.TerminalSessionBroker(
+            authorize=authorize,
+            audit=audit,
+            connections=registry,
+        )
+
+        def make_session(session_id: str) -> Any:
+            return terminal_symbols["BrowserTerminalSession"](
+                session_id=session_id,
+                workspace_id=WORKSPACE,
+                cluster_id=CLUSTER,
+                namespace="sandbox",
+                pod="api-0",
+                container="app",
+                user_id="user-1",
+                command_hash="a" * 64,
+                command_length=2,
+                browser=object(),
+                agent=connection,
+            )
+
+        slow = make_session("terminal-session-slow")
+        slow.outbound = asyncio.Queue(maxsize=1)
+        healthy = make_session("terminal-session-healthy")
+        broker.sessions = {slow.session_id: slow, healthy.session_id: healthy}
+        assert slow.offer_browser(
+            terminal_symbols["parse_agent_terminal_event"](
+                {"type": "terminal.connected", "session_id": slow.session_id}
+            )
+        )
+
+        await asyncio.wait_for(
+            broker.handle_agent_payload(
+                CLUSTER,
+                connection,
+                {
+                    "type": "terminal.output",
+                    "session_id": slow.session_id,
+                    "stream": "stdout",
+                    "data": "overflow",
+                },
+            ),
+            timeout=0.1,
+        )
+        assert slow.session_id not in broker.sessions
+        assert healthy.session_id in broker.sessions
+        assert registry.current(CLUSTER) is connection
+        assert agent_socket.sent[-1] == {
+            "type": "terminal.close",
+            "session_id": slow.session_id,
+        }
+        terminal_receipt = slow.outbound.get_nowait()
+        assert terminal_receipt.type == "terminal.end"
+        assert terminal_receipt.reason == "output_limit"
+
+    asyncio.run(scenario())
+
+
+def port_forward_start_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "type": "port_forward.start",
+        "capability_revision": "a" * 64,
+        "resource": {
+            "api_group": "",
+            "version": "v1",
+            "kind": "Pod",
+            "namespace": "sandbox",
+            "name": "api-0",
+            "uid": "uid-pod-1",
+        },
+        "remote_port": 8080,
+        "confirmation": True,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_port_forward_reuses_agent_channel_for_bounded_bidirectional_frames() -> None:
+    module = load_gateway_module()
+    audits: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def authorize(
+        _session: object,
+        workspace_id: str,
+        cluster_id: str,
+        _start: object,
+    ) -> bool:
+        return (workspace_id, cluster_id) == (WORKSPACE, CLUSTER)
+
+    async def audit(subject: str, workspace_id: str, payload: dict[str, Any]) -> None:
+        audits.append((subject, workspace_id, payload))
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_port_forward=authorize,
+        audit_port_forward=audit,
+    )
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+        ) as agent:
+            agent.receive_json()
+            with client.websocket_connect(
+                f"/live/port-forward?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+                headers=browser_headers(),
+            ) as desktop:
+                desktop.send_json(port_forward_start_payload())
+                opened_request = agent.receive_json()
+                session_id = opened_request["session_id"]
+                assert opened_request == {
+                    "type": "port_forward.open",
+                    "session_id": session_id,
+                    "generation": 1,
+                    "capability_revision": "a" * 64,
+                    "resource": port_forward_start_payload()["resource"],
+                    "remote_port": 8080,
+                    "initial_credit_bytes": 262_144,
+                }
+                agent.send_json(
+                    {
+                        "type": "port_forward.opened",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "target_kind": "Pod",
+                        "target_name": "api-0",
+                        "target_uid": "uid-pod-1",
+                        "target_port": 8080,
+                    }
+                )
+                assert desktop.receive_json()["type"] == "port_forward.opened"
+
+                desktop.send_json(
+                    {
+                        "type": "port_forward.connection.open",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "connection_id": 1,
+                    }
+                )
+                assert agent.receive_json()["type"] == "port_forward.connection.open"
+                agent.send_json(
+                    {
+                        "type": "port_forward.connection.opened",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "connection_id": 1,
+                    }
+                )
+                assert desktop.receive_json()["type"] == "port_forward.connection.opened"
+
+                agent.send_json(
+                    {
+                        "type": "port_forward.window",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "connection_id": 1,
+                        "direction": "desktop_to_target",
+                        "credit_bytes": 4096,
+                    }
+                )
+                assert desktop.receive_json()["credit_bytes"] == 4096
+                desktop_payload = b"request\x00bytes"
+                desktop.send_bytes(
+                    encode_port_forward_data(
+                        PortForwardDataFrame(
+                            session_id=session_id,
+                            generation=1,
+                            connection_id=1,
+                            sequence=0,
+                            direction="desktop_to_target",
+                            payload=desktop_payload,
+                        )
+                    )
+                )
+                assert decode_port_forward_data(agent.receive_bytes()).payload == desktop_payload
+
+                target_payload = b"response\xffbytes"
+                agent.send_bytes(
+                    encode_port_forward_data(
+                        PortForwardDataFrame(
+                            session_id=session_id,
+                            generation=1,
+                            connection_id=1,
+                            sequence=0,
+                            direction="target_to_desktop",
+                            payload=target_payload,
+                        )
+                    )
+                )
+                assert decode_port_forward_data(desktop.receive_bytes()).payload == target_payload
+                desktop.send_json(
+                    {
+                        "type": "port_forward.window",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "connection_id": 1,
+                        "direction": "target_to_desktop",
+                        "credit_bytes": len(target_payload),
+                    }
+                )
+                assert agent.receive_json()["credit_bytes"] == len(target_payload)
+
+                agent.send_json(
+                    {
+                        "type": "port_forward.connection.end",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "connection_id": 1,
+                        "reason": "target_closed",
+                        "desktop_to_target_bytes": len(desktop_payload),
+                        "target_to_desktop_bytes": len(target_payload),
+                    }
+                )
+                assert desktop.receive_json()["type"] == "port_forward.connection.end"
+                agent.send_json(
+                    {
+                        "type": "port_forward.end",
+                        "session_id": session_id,
+                        "generation": 1,
+                        "reason": "target_closed",
+                        "desktop_to_target_bytes": len(desktop_payload),
+                        "target_to_desktop_bytes": len(target_payload),
+                    }
+                )
+                assert desktop.receive_json()["type"] == "port_forward.end"
+
+    assert app.state.terminal_broker.connections is app.state.port_forward_broker.connections
+    assert [subject for subject, _workspace, _payload in audits] == [
+        "port_forward.session.started",
+        "port_forward.session.finished",
+    ]
+    assert audits[-1][2]["desktop_to_target_bytes"] == len(desktop_payload)
+    assert audits[-1][2]["target_to_desktop_bytes"] == len(target_payload)
+
+
+def test_malformed_port_forward_session_does_not_close_shared_agent_stream() -> None:
+    module = load_gateway_module()
+
+    async def authorize(*_args: object) -> bool:
+        return True
+
+    async def audit(*_args: object) -> None:
+        return None
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_port_forward=authorize,
+        audit_port_forward=audit,
+    )
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+            headers=browser_headers(),
+        ) as live_browser:
+            live_browser.receive_json()
+            live_browser.receive_json()
+            with client.websocket_connect(
+                f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+            ) as agent:
+                agent.receive_json()
+                agent.send_bytes(b"not-a-port-forward-frame")
+                with client.websocket_connect(
+                    f"/live/port-forward?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+                    headers=browser_headers(),
+                ) as desktop:
+                    desktop.send_json(port_forward_start_payload())
+                    opened_request = agent.receive_json()
+                    session_id = opened_request["session_id"]
+                    agent.send_json(
+                        {
+                            "type": "port_forward.opened",
+                            "session_id": session_id,
+                            "generation": 1,
+                        }
+                    )
+                    failure = desktop.receive_json()
+                    assert failure["type"] == "port_forward.error"
+                    assert failure["code"] == "protocol_violation"
+
+                agent.send_json(summary_payload())
+                assert live_browser.receive_json()["type"] == "live.summary"
+
+
+def test_port_forward_start_fails_closed_when_audit_is_unavailable() -> None:
+    module = load_gateway_module()
+
+    async def authorize(*_args: object) -> bool:
+        return True
+
+    async def unavailable_audit(*_args: object) -> None:
+        raise RuntimeError("audit unavailable")
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_port_forward=authorize,
+        audit_port_forward=unavailable_audit,
+    )
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+        ) as agent:
+            agent.receive_json()
+            with client.websocket_connect(
+                f"/live/port-forward?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+                headers=browser_headers(),
+            ) as desktop:
+                desktop.send_json(port_forward_start_payload())
+                failure = desktop.receive_json()
+                assert failure["type"] == "port_forward.error"
+                assert failure["code"] == "audit_unavailable"
+            assert app.state.port_forward_broker.sessions == {}
+
+
+def test_database_port_forward_authorizer_rechecks_exact_revision_uid_and_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_gateway_module()
+    monkeypatch.setenv("POD_EXEC_ALLOWED_NAMESPACES", "sandbox")
+    row: dict[str, Any] = {
+        "inventory_key": "inventory-pod-1",
+        "snapshot_id": "snapshot-pod-1",
+        "workspace_id": WORKSPACE,
+        "cluster_id": CLUSTER,
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "namespace": "sandbox",
+        "name": "api-0",
+        "uid": "uid-pod-1",
+        "resource_version": "42",
+        "deleted_at": None,
+        "summary": {
+            "phase": "Running",
+            "container_ports_complete": True,
+            "containers": [
+                {
+                    "name": "app",
+                    "ports": [{"container_port": 8080, "protocol": "TCP"}],
+                }
+            ],
+        },
+    }
+
+    class PortForwardDb:
+        def user_has_resource_access(self, *_args: object) -> bool:
+            return True
+
+        def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, Any]:
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "settings": {"cluster_role": "target"},
+            }
+
+        def get_cluster_policy(self, _workspace_id: str, _cluster_id: str) -> dict[str, str]:
+            return {"cluster_role": "target"}
+
+        def get_inventory_resource_by_api_version(
+            self, **identity: object
+        ) -> dict[str, Any] | None:
+            expected = {
+                "workspace_id": WORKSPACE,
+                "cluster_id": CLUSTER,
+                "resource_type": "pod",
+                "api_version": "v1",
+                "kind": "Pod",
+                "namespace": "sandbox",
+                "name": "api-0",
+            }
+            return row if identity == expected else None
+
+        def list_cluster_agent_statuses(
+            self, _workspace: str, _cluster: str
+        ) -> list[dict[str, Any]]:
+            return [{"status": "connected", "capabilities": [PORT_FORWARD_AGENT_CAPABILITY]}]
+
+    db = PortForwardDb()
+    current = SimpleNamespace(
+        user_id="user-1",
+        roles=("cluster_steward",),
+        workspace_id=WORKSPACE,
+    )
+    scope, resource = module.port_forward_scope_and_resource(WORKSPACE, row)
+    ports, discovery, discovery_reason = module.port_forward_resource_ports(row)
+    availability, reason = "unavailable", "pod_service_request_unsupported"
+    local_forward, local_reason = module.port_forward_local_availability(
+        db, WORKSPACE, CLUSTER, row, ports
+    )
+    revision = module.port_forward_capability_revision(
+        current=current,
+        scope=scope,
+        resource=resource,
+        inventory=row,
+        ports=ports,
+        availability=availability,
+        reason=reason,
+        local_port_forward=local_forward,
+        local_port_forward_reason=local_reason,
+        port_discovery=discovery,
+        port_discovery_reason=discovery_reason,
+    )
+    authorize = module.database_port_forward_authorizer(db)
+    start = module.PortForwardStart(
+        capability_revision=revision,
+        resource=resource,
+        remote_port=8080,
+        confirmation=True,
+    )
+
+    assert asyncio.run(authorize(current, WORKSPACE, CLUSTER, start)) is True
+    assert (
+        asyncio.run(
+            authorize(
+                current,
+                WORKSPACE,
+                CLUSTER,
+                start.model_copy(update={"resource": resource.model_copy(update={"uid": "stale"})}),
+            )
+        )
+        is False
+    )
+    assert (
+        asyncio.run(
+            authorize(
+                current,
+                WORKSPACE,
+                CLUSTER,
+                start.model_copy(update={"capability_revision": "0" * 64}),
+            )
+        )
+        is False
+    )
+    assert (
+        asyncio.run(
+            authorize(current, WORKSPACE, CLUSTER, start.model_copy(update={"remote_port": 9999}))
+        )
+        is False
+    )
