@@ -200,7 +200,8 @@ describe("HelmPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Upgrade" }));
     expect(screen.getByRole("dialog", { name: "Confirm Helm upgrade" })).toBeTruthy();
     expect(screen.getByText(/cluster-a · sandbox · storefront · revision 3/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /rollback|uninstall/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Rollback" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Uninstall" })).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("master.persistence.storageClass"), {
       target: { value: "gp3" },
@@ -554,6 +555,8 @@ function helmPort(): HelmPort & {
   listReleaseVersions: ReturnType<typeof vi.fn>;
   readArtifact: ReturnType<typeof vi.fn>;
   upgradeRelease: ReturnType<typeof vi.fn>;
+  rollbackRelease: ReturnType<typeof vi.fn>;
+  uninstallRelease: ReturnType<typeof vi.fn>;
   listChartSources: ReturnType<typeof vi.fn>;
   registerChartSource: ReturnType<typeof vi.fn>;
   deleteChartSource: ReturnType<typeof vi.fn>;
@@ -609,6 +612,22 @@ function helmPort(): HelmPort & {
       auditEventId: "evt-helm-upgrade-1",
       correlationId: "corr-helm-upgrade-1",
       commandId: "cmd-helm-upgrade-1",
+      status: "queued",
+    }),
+    rollbackRelease: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "evt-helm-rollback-1",
+      auditEventId: "evt-helm-rollback-1",
+      correlationId: "corr-helm-rollback-1",
+      commandId: "cmd-helm-rollback-1",
+      status: "queued",
+    }),
+    uninstallRelease: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "evt-helm-uninstall-1",
+      auditEventId: "evt-helm-uninstall-1",
+      correlationId: "corr-helm-uninstall-1",
+      commandId: "cmd-helm-uninstall-1",
       status: "queued",
     }),
     deleteChartSource: vi.fn().mockResolvedValue({

@@ -183,6 +183,8 @@ function helmPort(): HelmPort & {
     listReleaseVersions: vi.fn(),
     readArtifact: vi.fn(),
     upgradeRelease: vi.fn(),
+    rollbackRelease: vi.fn(),
+    uninstallRelease: vi.fn(),
     deleteChartSource: vi.fn().mockResolvedValue({
       accepted: true,
       eventId: "event-delete-source",
