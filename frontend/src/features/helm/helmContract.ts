@@ -285,6 +285,49 @@ export interface HelmReleaseUpgradeBatch {
   refreshAfterSeconds: number;
 }
 
+export interface ArtifactHubChart {
+  packageId: string;
+  name: string;
+  version: string;
+  appVersion: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verifiedPublisher: boolean;
+  };
+}
+
+export interface ArtifactHubSearchRequest {
+  query: string;
+  offset?: number;
+  limit?: number;
+  sort?: "relevance" | "stars" | "last_updated";
+  official?: boolean;
+  verified?: boolean;
+}
+
+export interface ArtifactHubSearchPage {
+  items: readonly ArtifactHubChart[];
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+  observedAt: string;
+}
+
+export interface ArtifactHubChartDetail {
+  chart: ArtifactHubChart;
+  readme: string | null;
+  availableVersions: readonly { version: string; appVersion: string | null }[];
+  versionsTruncated: boolean;
+  observedAt: string;
+}
+
 export interface HelmReleaseHistoryEntry {
   storage: HelmResourceRef;
   revision: number | null;
@@ -366,6 +409,14 @@ export class HelmPortFailure extends Error {
 }
 
 export interface HelmPort {
+  searchArtifactHub(
+    request: ArtifactHubSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubSearchPage>;
+  getArtifactHubChart(
+    request: { repository: string; chart: string; version?: string },
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubChartDetail>;
   listReleases(request: HelmReleaseListRequest, signal?: AbortSignal): Promise<HelmReleaseList>;
   getRelease(request: HelmReleaseDetailRequest, signal?: AbortSignal): Promise<HelmReleaseDetail>;
   getReleaseUpgradeInfo(

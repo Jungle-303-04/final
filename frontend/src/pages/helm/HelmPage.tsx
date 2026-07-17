@@ -57,6 +57,7 @@ import {
 } from "../../shared/ui/primitives/table";
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
 import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
+import { HelmArtifactHubPanel } from "./HelmArtifactHubPanel";
 import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
 import { HelmReleaseOperationDialogs } from "./HelmReleaseOperationDialogs";
 import {
@@ -157,6 +158,7 @@ function HelmReleaseListPage({
         setQuery={setQuery}
       />
       <HelmChartSourcesPanel port={port} />
+      <HelmArtifactHubPanel port={port} />
     </ProductPageFrame>
   );
 }

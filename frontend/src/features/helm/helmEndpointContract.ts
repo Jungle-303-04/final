@@ -192,6 +192,21 @@ export interface HelmConfigMutationEndpointReceipt {
 }
 
 export interface HelmEndpointDependencies {
+  searchArtifactHubCharts(
+    query: {
+      query: string;
+      offset?: number;
+      limit?: number;
+      sort?: "relevance" | "stars" | "last_updated";
+      official?: boolean;
+      verified?: boolean;
+    },
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubSearchPageEndpoint>;
+  getArtifactHubChart(
+    input: { repository: string; chart: string; version?: string },
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubChartDetailEndpoint>;
   listHelmReleases(
     query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
     signal?: AbortSignal,
@@ -319,4 +334,38 @@ export interface HelmEndpointDependencies {
     event_id: string;
     correlation_id: string;
   }>;
+}
+
+export interface ArtifactHubChartEndpoint {
+  package_id: string;
+  name: string;
+  version: string;
+  app_version: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verified_publisher: boolean;
+  };
+}
+
+export interface ArtifactHubSearchPageEndpoint {
+  items: ArtifactHubChartEndpoint[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
+  observed_at: string;
+}
+
+export interface ArtifactHubChartDetailEndpoint {
+  chart: ArtifactHubChartEndpoint;
+  readme: string | null;
+  available_versions: Array<{ version: string; app_version: string | null }>;
+  versions_truncated: boolean;
+  observed_at: string;
 }

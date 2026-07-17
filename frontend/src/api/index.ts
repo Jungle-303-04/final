@@ -137,6 +137,21 @@ export {
   type HelmReleaseVersionListEndpoint,
 } from "./helm-releases-schemas";
 export {
+  getArtifactHubChart,
+  HELM_ARTIFACTHUB_CHART_PATH,
+  HELM_ARTIFACTHUB_SEARCH_PATH,
+  searchArtifactHubCharts,
+  type ArtifactHubSearchQuery,
+} from "./helm-artifacthub";
+export {
+  artifactHubChartDetailSchema,
+  artifactHubChartSchema,
+  artifactHubSearchPageSchema,
+  type ArtifactHubChartDetailEndpoint,
+  type ArtifactHubChartEndpoint,
+  type ArtifactHubSearchPageEndpoint,
+} from "./helm-artifacthub-schemas";
+export {
   HELM_CHART_SOURCES_PATH,
   HELM_REPOSITORY_UPDATE_PATH,
   deleteHelmChartSource,

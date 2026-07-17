@@ -3,6 +3,7 @@ import {
   checkHelmReleaseUpgrades,
   deleteHelmChartSource,
   getHelmRelease,
+  getArtifactHubChart,
   getHelmReleaseUpgradeInfo,
   listHelmChartSources,
   listHelmReleases,
@@ -13,6 +14,7 @@ import {
   startHelmReleaseUpgrade,
   startHelmReleaseRollback,
   startHelmReleaseUninstall,
+  searchArtifactHubCharts,
 } from "../../../api";
 import { createHelmAdapter } from "../../../features/helm/createHelmAdapter";
 import { createHelmSurface } from "../../../pages/helm/createHelmSurface";
@@ -22,6 +24,7 @@ export function loadHelmSurface(): ComponentType {
     checkHelmReleaseUpgrades,
     deleteHelmChartSource,
     getHelmRelease,
+    getArtifactHubChart,
     getHelmReleaseUpgradeInfo,
     listHelmChartSources,
     listHelmReleases,
@@ -32,5 +35,6 @@ export function loadHelmSurface(): ComponentType {
     startHelmReleaseUpgrade,
     startHelmReleaseRollback,
     startHelmReleaseUninstall,
+    searchArtifactHubCharts,
   }));
 }

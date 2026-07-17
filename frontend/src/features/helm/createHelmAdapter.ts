@@ -1,5 +1,6 @@
 import {
   type HelmArtifactReceipt,
+  type ArtifactHubChart,
   type HelmArtifactResult,
   type HelmClusterScope,
   type HelmObservationCoverage,
@@ -23,6 +24,34 @@ import type { HelmEndpointDependencies } from "./helmEndpointContract";
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
   return {
     ...createHelmChartSourcesPort(endpoints),
+    async searchArtifactHub(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.searchArtifactHubCharts(request, signal);
+        return {
+          items: value.items.map(toArtifactHubChart),
+          total: value.total,
+          offset: value.offset,
+          limit: value.limit,
+          hasMore: value.has_more,
+          observedAt: value.observed_at,
+        };
+      });
+    },
+    async getArtifactHubChart(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.getArtifactHubChart(request, signal);
+        return {
+          chart: toArtifactHubChart(value.chart),
+          readme: value.readme,
+          availableVersions: value.available_versions.map((item) => ({
+            version: item.version,
+            appVersion: item.app_version,
+          })),
+          versionsTruncated: value.versions_truncated,
+          observedAt: value.observed_at,
+        };
+      });
+    },
     async listReleases(request, signal) {
       return withHelmPortFailure(async () => {
         const response = await endpoints.listHelmReleases({
@@ -102,6 +131,40 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         }
         return toArtifactReceipt(receipt);
       });
+    },
+  };
+}
+
+function toArtifactHubChart(value: {
+  package_id: string;
+  name: string;
+  version: string;
+  app_version: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verified_publisher: boolean;
+  };
+}): ArtifactHubChart {
+  return {
+    packageId: value.package_id,
+    name: value.name,
+    version: value.version,
+    appVersion: value.app_version,
+    description: value.description,
+    stars: value.stars,
+    deprecated: value.deprecated,
+    signed: value.signed,
+    repository: {
+      name: value.repository.name,
+      url: value.repository.url,
+      official: value.repository.official,
+      verifiedPublisher: value.repository.verified_publisher,
     },
   };
 }

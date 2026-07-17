@@ -49,6 +49,52 @@ describe("HelmPage", () => {
     ));
   });
 
+  it("searches ArtifactHub metadata and loads exact chart details without an install action", async () => {
+    const port = helmPort();
+    const chart = {
+      packageId: "pkg-redis",
+      name: "redis",
+      version: "22.0.0",
+      appVersion: "8.0",
+      description: "Redis chart",
+      stars: 12,
+      deprecated: false,
+      signed: true,
+      repository: {
+        name: "bitnami",
+        url: "https://charts.bitnami.com/bitnami",
+        official: true,
+        verifiedPublisher: true,
+      },
+    };
+    port.searchArtifactHub.mockResolvedValue({
+      items: [chart], total: 1, offset: 0, limit: 20, hasMore: false,
+      observedAt: "2026-07-17T08:00:00Z",
+    });
+    port.getArtifactHubChart.mockResolvedValue({
+      chart,
+      readme: "# Redis",
+      availableVersions: [{ version: "22.0.0", appVersion: "8.0" }],
+      versionsTruncated: false,
+      observedAt: "2026-07-17T08:00:00Z",
+    });
+    renderRoute("/helm", port);
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "Search ArtifactHub charts" }), {
+      target: { value: "redis" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(await screen.findByRole("button", { name: "bitnami/redis 22.0.0" }));
+
+    expect(await screen.findByRole("heading", { name: "bitnami/redis" })).toBeTruthy();
+    expect(port.getArtifactHubChart).toHaveBeenCalledWith({
+      repository: "bitnami",
+      chart: "redis",
+      version: "22.0.0",
+    }, expect.any(AbortSignal));
+    expect(screen.queryByRole("button", { name: /install/i })).toBeNull();
+  });
+
   it("decorates the release list only with server-resolved batch upgrade evidence", async () => {
     const port = helmPort();
     port.checkReleaseUpgrades.mockResolvedValue({
@@ -549,6 +595,8 @@ function LocationProbe() {
 }
 
 function helmPort(): HelmPort & {
+  searchArtifactHub: ReturnType<typeof vi.fn>;
+  getArtifactHubChart: ReturnType<typeof vi.fn>;
   checkReleaseUpgrades: ReturnType<typeof vi.fn>;
   listReleases: ReturnType<typeof vi.fn>;
   getRelease: ReturnType<typeof vi.fn>;
@@ -564,6 +612,19 @@ function helmPort(): HelmPort & {
   deleteChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    searchArtifactHub: vi.fn().mockResolvedValue({
+      items: [], total: 0, offset: 0, limit: 20, hasMore: false,
+      observedAt: "2026-07-17T08:00:00Z",
+    }),
+    getArtifactHubChart: vi.fn().mockResolvedValue({
+      chart: {
+        packageId: "pkg", name: "chart", version: "1.0.0", appVersion: null,
+        description: null, stars: 0, deprecated: false, signed: false,
+        repository: { name: "repository", url: "https://example.test", official: false, verifiedPublisher: false },
+      },
+      readme: null, availableVersions: [], versionsTruncated: false,
+      observedAt: "2026-07-17T08:00:00Z",
+    }),
     checkReleaseUpgrades: vi.fn().mockResolvedValue({
       releases: {},
       coverage: { availability: "available", observedAt: null, reasonCodes: [] },

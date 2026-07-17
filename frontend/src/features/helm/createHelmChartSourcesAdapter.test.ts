@@ -108,6 +108,8 @@ describe("createHelmAdapter chart sources", () => {
 
 function endpointDependencies() {
   return {
+    searchArtifactHubCharts: vi.fn(),
+    getArtifactHubChart: vi.fn(),
     checkHelmReleaseUpgrades: vi.fn(),
     listHelmReleases: vi.fn(),
     getHelmRelease: vi.fn(),

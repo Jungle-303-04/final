@@ -195,6 +195,8 @@ function helmPort(): HelmPort & {
   refreshChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    searchArtifactHub: vi.fn(),
+    getArtifactHubChart: vi.fn(),
     checkReleaseUpgrades: vi.fn(),
     listReleases: vi.fn(),
     getRelease: vi.fn(),
