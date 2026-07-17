@@ -134,6 +134,10 @@ class HelmChartVersionProvider:
         self.timeout_seconds = timeout_seconds
         self.transport = transport
         self.resolver = resolver or resolve_host_addresses
+        self._repository_index_tasks: dict[
+            tuple[str, str, str],
+            asyncio.Task[Mapping[Any, Any]],
+        ] = {}
 
     async def fetch_versions(
         self,
@@ -187,15 +191,7 @@ class HelmChartVersionProvider:
         chart_name: str,
         credential: HelmProviderCredential | None,
     ) -> tuple[tuple[HelmChartVersion, ...], bool, tuple[str, ...]]:
-        url = f"{source.reference.rstrip('/')}/index.yaml"
-        response = await self._request(url, headers=_authorization_headers(credential))
-        _require_success(response)
-        payload = await asyncio.to_thread(_load_bounded_yaml, response.content)
-        if not isinstance(payload, Mapping):
-            raise _HelmProviderFailure("helm_chart_source_invalid_response")
-        entries = payload.get("entries")
-        if not isinstance(entries, Mapping):
-            raise _HelmProviderFailure("helm_chart_source_invalid_response")
+        entries = await self._repository_entries(source, credential)
         raw_versions = entries.get(chart_name)
         if raw_versions is None:
             raise _HelmProviderFailure("helm_chart_source_chart_not_found")
@@ -249,6 +245,38 @@ class HelmChartVersionProvider:
             truncated,
             tuple(reasons),
         )
+
+    async def _repository_entries(
+        self,
+        source: HelmChartSource,
+        credential: HelmProviderCredential | None,
+    ) -> Mapping[Any, Any]:
+        headers = _authorization_headers(credential)
+        credential_fingerprint = hashlib.sha256(
+            headers.get("Authorization", "").encode("utf-8")
+        ).hexdigest()
+        key = (source.source_id, source.reference, credential_fingerprint)
+        task = self._repository_index_tasks.get(key)
+        if task is None:
+            task = asyncio.create_task(self._load_repository_entries(source.reference, headers))
+            self._repository_index_tasks[key] = task
+        return await asyncio.shield(task)
+
+    async def _load_repository_entries(
+        self,
+        reference: str,
+        headers: Mapping[str, str],
+    ) -> Mapping[Any, Any]:
+        url = f"{reference.rstrip('/')}/index.yaml"
+        response = await self._request(url, headers=headers)
+        _require_success(response)
+        payload = await asyncio.to_thread(_load_bounded_yaml, response.content)
+        if not isinstance(payload, Mapping):
+            raise _HelmProviderFailure("helm_chart_source_invalid_response")
+        entries = payload.get("entries")
+        if not isinstance(entries, Mapping):
+            raise _HelmProviderFailure("helm_chart_source_invalid_response")
+        return entries
 
     async def _oci_versions(
         self,
