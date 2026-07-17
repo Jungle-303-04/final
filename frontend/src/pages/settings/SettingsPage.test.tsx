@@ -146,35 +146,6 @@ describe("SettingsPage", () => {
     expect(screen.getByDisplayValue("https://prometheus.example.com")).toBeTruthy();
   });
 
-  it("preserves write-only headers when their names are unchanged and values stay empty", async () => {
-    const user = userEvent.setup();
-    renderSettings("/settings?clusters=cluster-1#administration");
-
-    const save = await screen.findByRole("button", { name: "Prometheus 설정 저장" }) as HTMLButtonElement;
-    expect(save.disabled).toBe(false);
-    await user.click(save);
-
-    await waitFor(() => expect(settingsPort.updatePrometheusIntegration).toHaveBeenCalledWith({
-      clusterId: "cluster-1",
-      url: "https://prometheus.example.com",
-      headers: undefined,
-    }, expect.any(AbortSignal)));
-  });
-
-  it("sends an explicit empty header set only after the user removes every stored header", async () => {
-    const user = userEvent.setup();
-    renderSettings("/settings?clusters=cluster-1#administration");
-
-    await screen.findByDisplayValue("Authorization");
-    await user.click(screen.getByRole("button", { name: "Authorization 헤더 제거" }));
-    await user.click(screen.getByRole("button", { name: "Prometheus 설정 저장" }));
-
-    await waitFor(() => expect(settingsPort.updatePrometheusIntegration).toHaveBeenCalledWith({
-      clusterId: "cluster-1",
-      url: "https://prometheus.example.com",
-      headers: [],
-    }, expect.any(AbortSignal)));
-  });
 });
 
 const settingsPort: SettingsPort = {

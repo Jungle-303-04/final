@@ -4,36 +4,21 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { OperationStatusFeedback } from "../../features/operations/OperationStatusFeedback";
 import { useOptionalOperationStatusStore } from "../../features/operations/OperationStatusStore";
-import type {
-  PrometheusIntegrationStatus,
-  SettingsPort,
-} from "../../features/settings/settingsContract";
+import type { PrometheusIntegrationStatus, SettingsPort } from "../../features/settings/settingsContract";
 import { useI18n } from "../../shared/i18n";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../shared/ui/primitives/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import { Spinner } from "../../shared/ui/primitives/spinner";
+import { hasUrlOriginChanged } from "./prometheusIntegrationForm";
 
-type LoadState<T> =
-  | { phase: "idle" }
-  | { phase: "loading" }
-  | { phase: "ready"; data: T }
-  | { phase: "failed"; error: unknown };
+type LoadState<T> = { phase: "idle" } | { phase: "loading" }
+  | { phase: "ready"; data: T } | { phase: "failed"; error: unknown };
 
-interface PrometheusHeaderRow {
-  id: number;
-  name: string;
-  value: string;
-}
+interface PrometheusHeaderRow { id: number; name: string; value: string }
 
 export function PrometheusIntegrationCard({ settingsPort }: { settingsPort: SettingsPort }) {
   const scope = useClusterScope();
@@ -102,7 +87,9 @@ export function PrometheusIntegrationCard({ settingsPort }: { settingsPort: Sett
   const sameHeaderStructure = canonicalHeaderNames(headers.map((header) => header.name))
     === canonicalHeaderNames(baselineHeaderNames);
   const hasHeaderValue = headers.some((header) => Boolean(header.value.trim()));
-  const preservesHeaders = sameHeaderStructure && !hasHeaderValue;
+  const originChanged = baselineHeaderNames.length > 0
+    && hasUrlOriginChanged(url, load.phase === "ready" ? load.data.url : null);
+  const preservesHeaders = sameHeaderStructure && !hasHeaderValue && !originChanged;
   const explicitHeaderRemoval = baselineHeaderNames.length > 0 && headers.length === 0;
   const invalidHeader = headers.some((header) => !header.name.trim() || !header.value.trim());
   const duplicateHeader = new Set(
@@ -192,7 +179,7 @@ export function PrometheusIntegrationCard({ settingsPort }: { settingsPort: Sett
                 autoComplete="url"
                 id="prometheus-integration-url"
                 onChange={(event) => setUrl(event.currentTarget.value)}
-                placeholder="https://prometheus.example.com"
+                placeholder={t("settings.integrations.prometheus.urlPlaceholder")}
                 type="url"
                 value={url}
               />
@@ -269,6 +256,11 @@ export function PrometheusIntegrationCard({ settingsPort }: { settingsPort: Sett
             {duplicateHeader ? (
               <p className="text-xs text-destructive">
                 {t("settings.integrations.prometheus.duplicateHeader")}
+              </p>
+            ) : null}
+            {originChanged && invalidHeader ? (
+              <p className="text-xs text-destructive">
+                {t("settings.integrations.prometheus.originChanged")}
               </p>
             ) : null}
             {saveFailed ? (
