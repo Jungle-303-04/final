@@ -110,13 +110,18 @@ function HealthContent({
 }) {
   const { formatNumber, t } = useI18n();
   const usage = overview.usage;
-  const kubernetesVersions = nodes.phase === "ready"
+  const nodeKubernetesVersions = nodes.phase === "ready"
     ? Array.from(new Set(
       nodes.data.nodes
         .map((node) => node.kubernetesVersion)
         .filter((version): version is string => version !== null),
     )).sort((left, right) => left.localeCompare(right))
     : [];
+  const kubernetesVersions = nodeKubernetesVersions.length > 0
+    ? nodeKubernetesVersions
+    : cluster?.kubernetesVersion
+      ? [cluster.kubernetesVersion]
+      : [];
   return (
     <div
       className={HEALTH_BODY_CLASS_NAME}

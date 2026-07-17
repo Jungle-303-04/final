@@ -31,6 +31,9 @@ export interface HomeClusterChoice {
   lastObservedAt: string | null;
   nodeCount: number | null;
   podCount: number | null;
+  namespaceCount?: number | null;
+  kubernetesVersion?: string | null;
+  crdDiscoveryStatus?: "exact" | "partial" | "unavailable" | null;
   incidentCount: number | null;
   serverCount?: number | null;
   appCount?: number | null;

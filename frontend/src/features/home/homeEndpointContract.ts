@@ -14,6 +14,9 @@ export interface HomeEndpointClusterSummary {
   last_agent_seen_at: string | null;
   node_count: number | null;
   pod_count: number | null;
+  namespace_count?: number | null;
+  kubernetes_version?: string | null;
+  crd_discovery_status?: "exact" | "partial" | "unavailable" | null;
   incident_count: number | null;
   server_count?: number | null;
   app_count?: number | null;

@@ -71,6 +71,17 @@ describe("HomeClusterHealth provider context", () => {
       "[data-slot='cluster-provider-icon']",
     )).toBeNull();
   });
+
+  it("uses the agent-observed cluster version while node detail is unavailable", () => {
+    const cluster = { ...CLUSTERS.clusters[0]!, kubernetesVersion: "v1.33.1" };
+    const view = render(healthElement(ready, cluster, {
+      phase: "loading",
+      data: null,
+      failure: null,
+    }));
+
+    expect(view.getByText("Kubernetes v1.33.1")).toBeTruthy();
+  });
 });
 
 function renderHealth(
@@ -83,6 +94,13 @@ function renderHealth(
 function healthElement(
   overview: HomeResourceState<typeof OVERVIEW>,
   cluster: HomeClusterChoice | null = CLUSTERS.clusters[0] ?? null,
+  nodes: HomeResourceState<typeof NODES> = {
+    phase: "ready",
+    data: NODES,
+    failure: null,
+    refreshing: false,
+    refreshFailure: null,
+  },
 ) {
   return (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
@@ -96,13 +114,7 @@ function healthElement(
           warnings: "/timeline?clusters=cluster-1",
           workloads: "/resources?clusters=cluster-1&resources.types=workload",
         }}
-        nodes={{
-          phase: "ready",
-          data: NODES,
-          failure: null,
-          refreshing: false,
-          refreshFailure: null,
-        }}
+        nodes={nodes}
         onRefresh={vi.fn()}
         overview={overview}
       />
