@@ -26,6 +26,10 @@ from packages.contracts.bootstrap import (
     AgentDiagnosticsItem,
     VersionCheckResponse,
 )
+from packages.contracts.event_bus.interfaces import (
+    EventConsumerLagSnapshot,
+    EventConsumerMetrics,
+)
 from packages.runtime.dependencies import get_db
 
 
@@ -255,6 +259,45 @@ def test_runtime_diagnostics_marks_only_an_actual_lag_sample_as_truncated() -> N
     assert len(event_pipeline["consumer_lag"]) == CONSUMER_LAG_LIMIT
     assert event_pipeline["consumer_lag"][0]["pending"] == CONSUMER_LAG_LIMIT + 2
     assert event_pipeline["consumer_lag"][-1]["pending"] == 3
+
+
+def test_runtime_diagnostics_uses_the_atomic_lag_snapshot_contract() -> None:
+    class SnapshotRuntimeDiagnosticsDb(RuntimeDiagnosticsDb):
+        def event_consumer_lag_snapshot(self, *, limit: int) -> EventConsumerLagSnapshot:
+            assert limit == CONSUMER_LAG_LIMIT
+            return EventConsumerLagSnapshot(
+                samples=(
+                    EventConsumerMetrics(
+                        stream="SERVICE_EVENTS",
+                        subject="critical.subject",
+                        durable="critical-worker",
+                        pending=7,
+                        ack_pending=1,
+                        redelivered=0,
+                    ),
+                ),
+                metric_count=82,
+                lagging_count=1,
+            )
+
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            raise AssertionError("the atomic snapshot must replace three full-table reads")
+
+    response = _client(SnapshotRuntimeDiagnosticsDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    event_pipeline = response.json()["event_pipeline"]
+    assert event_pipeline["availability"] == "available"
+    assert event_pipeline["reason_codes"] == []
+    assert event_pipeline["consumer_lag"] == [
+        {
+            "consumer": "critical-worker",
+            "subject": "critical.subject",
+            "pending": 7,
+            "ack_pending": 1,
+            "redelivered": 0,
+        }
+    ]
 
 
 def test_runtime_diagnostics_preserves_partial_results_without_leaking_exception_text() -> None:
