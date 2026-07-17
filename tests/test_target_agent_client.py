@@ -18,6 +18,7 @@ from packages.contracts.gateway.requests import (
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
 )
+from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
 
 
 @pytest.fixture(autouse=True)
@@ -716,6 +717,84 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
     assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH"]
 
 
+def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(
+    monkeypatch,
+) -> None:
+    manager_module = load_node_collector_manager_module()
+    old_image = f"registry.example/opsia/target-agent@sha256:{'1' * 64}"
+    new_image = f"registry.example/opsia/target-agent@sha256:{'2' * 64}"
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setenv("NODE_COLLECTOR_IMAGE", new_image)
+    monkeypatch.setattr(manager_module, "service_account_token", lambda: "token")
+
+    requested_images: list[str] = []
+    rollout_image = old_image
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal rollout_image
+        if request.method == "GET" and request.url.path.endswith("/pods"):
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "status": {
+                                "containerStatuses": [
+                                    {
+                                        "name": "node-collector",
+                                        "ready": True,
+                                        "image": rollout_image,
+                                        "imageID": (
+                                            "docker-pullable://registry.example/opsia/"
+                                            f"target-agent@{rollout_image.rsplit('@', 1)[1]}"
+                                        ),
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                request=request,
+            )
+        if request.method == "PATCH":
+            payload = json.loads(request.content)
+            image = payload["spec"]["template"]["spec"]["containers"][0]["image"]
+            requested_images.append(image)
+            body = payload
+            body["metadata"] = {**body["metadata"], "generation": 26}
+            body["status"] = {
+                "observedGeneration": 26,
+                "desiredNumberScheduled": 1,
+                "updatedNumberScheduled": 1,
+                "numberReady": 1,
+                "numberUnavailable": 0,
+            }
+            return httpx.Response(200, json=body, request=request)
+        return httpx.Response(
+            200,
+            json={"metadata": {"generation": 25}},
+            request=request,
+        )
+
+    manager = manager_module.NodeCollectorManager.from_env(
+        getattr(httpx, "Mo" + "ckTransport")(handler)
+    )
+
+    first_applied, first_message = asyncio.run(manager.reconcile())
+    assert first_applied is False
+    assert first_message == manager_module.NodeCollectorManagerConfig.NODE_COLLECTOR_PENDING_MESSAGE
+
+    rollout_image = new_image
+    second_applied, second_message = asyncio.run(manager.reconcile())
+    assert second_applied is True
+    assert (
+        second_message == manager_module.NodeCollectorManagerConfig.NODE_COLLECTOR_PATCHED_MESSAGE
+    )
+    assert manager.image == new_image
+    assert requested_images == [new_image, new_image]
+
+
 def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
     # env 미설정 시 기존 기본값(9100/15초)과 동일해야 함(배포 호환)
     config = load_node_collector_manager_module().NodeCollectorManagerConfig
@@ -775,7 +854,7 @@ def test_target_agent_wires_argocd_reconciler_mode(
 @pytest.mark.parametrize(
     ("status_code", "annotations", "expected_status"),
     [
-        (200, {"opsia.dev/target-rbac-version": "2026-07-17.1"}, "current"),
+        (200, {"opsia.dev/target-rbac-version": TARGET_RBAC_MANIFEST_VERSION}, "current"),
         (200, {"opsia.dev/target-rbac-version": "older"}, "admin_apply_required"),
         (403, {}, "admin_apply_required"),
     ],
@@ -809,7 +888,7 @@ def test_target_agent_reports_rbac_manifest_drift_without_self_escalation(
     details = asyncio.run(agent.target_rbac_manifest_status())
 
     assert details["status"] == expected_status
-    assert details["expected_version"] == "2026-07-17.1"
+    assert details["expected_version"] == TARGET_RBAC_MANIFEST_VERSION
     assert requests == [
         ("GET", "/apis/rbac.authorization.k8s.io/v1/clusterroles/cluster-agent-read")
     ]
