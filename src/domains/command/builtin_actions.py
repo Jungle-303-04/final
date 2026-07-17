@@ -180,6 +180,18 @@ class DeleteResourceCommand:
 
 
 @command.action(
+    Command.GITOPS_RESOURCE_CONTROL_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.GITOPS_RESOURCE_CONTROL_CAPABILITY,
+)
+class GitOpsResourceControlCommand:
+    """Exact controller resource action after server RBAC and capability confirmation."""
+
+
+@command.action(
     Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
     requires_approval=False,
     supports_cancel=True,

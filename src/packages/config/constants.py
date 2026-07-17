@@ -64,6 +64,8 @@ class Command:
     KUBERNETES_STATEFULSET_ROLLBACK_ACTION: Final[str] = "k8s.apps.v1.statefulsets.rollback"
     KUBERNETES_DAEMONSET_ROLLBACK_ACTION: Final[str] = "k8s.apps.v1.daemonsets.rollback"
     KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY: Final[str] = "workload_rollback.v1"
+    GITOPS_RESOURCE_CONTROL_ACTION: Final[str] = "gitops.resource.control"
+    GITOPS_RESOURCE_CONTROL_CAPABILITY: Final[str] = "gitops_control.v1"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
     CLUSTER_AGENT_UNINSTALL_ACTION: Final[str] = "cluster.agent.uninstall"
 

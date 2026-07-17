@@ -627,7 +627,7 @@ def test_target_install_manifest_does_not_enable_rca_test_actions_without_both_g
     assert "RCA_TEST_RUNS_ENABLED:" not in manifest
 
 
-def test_management_install_manifest_is_read_only() -> None:
+def test_management_install_manifest_limits_writes_to_gitops_controller_resources() -> None:
     request = target_request().model_copy(update={"cluster_role": "management"})
 
     manifest = target_install_manifest(request, "agent-secret")
@@ -642,6 +642,7 @@ def test_management_install_manifest_is_read_only() -> None:
     assert "cluster-agent-target-manage" not in manifest
     assert "cluster-agent-uninstall" not in manifest
     assert "cluster-agent-node-control" not in manifest
+    assert "cluster-agent-gitops-control" in manifest
     assert 'NODE_CONTROL_ENABLED: "false"' in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
@@ -655,6 +656,19 @@ def test_management_install_manifest_is_read_only() -> None:
     )
     assert set(argo_rule["resources"]) == {"applications", "rollouts"}
     assert argo_rule["verbs"] == ["get", "list"]
+    control_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ClusterRole"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-gitops-control"
+    )
+    assert {tuple(rule["apiGroups"]) for rule in control_role["rules"]} == {
+        ("argoproj.io",),
+        ("kustomize.toolkit.fluxcd.io",),
+        ("helm.toolkit.fluxcd.io",),
+        ("source.toolkit.fluxcd.io",),
+    }
+    assert all(rule["verbs"] == ["get", "patch"] for rule in control_role["rules"])
 
 
 @pytest.mark.parametrize(
@@ -673,7 +687,7 @@ def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> No
         rule
         for role in read_roles
         for rule in role.get("rules", [])
-        if "argoproj.io" in rule.get("apiGroups", [])
+        if "argoproj.io" in rule.get("apiGroups", []) and "rollouts" in rule.get("resources", [])
     ]
 
     assert len(argo_rules) == 1
@@ -683,13 +697,16 @@ def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> No
     assert forbidden.isdisjoint(argo_rules[0]["verbs"])
 
 
-def test_static_management_agent_manifest_is_read_only() -> None:
+def test_static_management_agent_limits_writes_to_gitops_control() -> None:
     manifest_path = Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml"
     docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
     forbidden_verbs = {"create", "update", "patch", "delete", "deletecollection", "apply"}
 
     for doc in docs:
         if doc.get("kind") not in {"Role", "ClusterRole"}:
+            continue
+        if doc.get("metadata", {}).get("name") == "cluster-agent-gitops-control":
+            assert all(rule["verbs"] == ["get", "patch"] for rule in doc["rules"])
             continue
         verbs = {verb for rule in doc.get("rules", []) for verb in rule.get("verbs", [])}
         assert verbs.isdisjoint(forbidden_verbs)
@@ -711,6 +728,7 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         "name": "management-runtime-config",
         "key": "MANAGEMENT_CLUSTER_ID",
     }
+    assert env["AGENT_DIRECT_COMMANDS_ENABLED"]["value"] == "true"
     assert set(apps_rule["resources"]) == {
         "deployments",
         "replicasets",

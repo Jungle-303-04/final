@@ -12,6 +12,7 @@ from commands import (
     AgentCommandRegistry,
     CommandContext,
     CommandResultOutbox,
+    GitOpsResourceCommandPayload,
     KubernetesApiClient,
     KubernetesCronJobPayload,
     KubernetesGetPayload,
@@ -21,6 +22,7 @@ from commands import (
     KubernetesWorkloadRollbackPayload,
     command,
     cronjob_job_body,
+    execute_gitops_resource_command,
     rollback_template_from_revision,
     validate_cronjob_resource_ref,
     validate_exact_resource,
@@ -872,6 +874,7 @@ class TargetClusterAgent:
             capabilities.remove(Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY)
             capabilities.remove(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
             capabilities.remove(Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY)
+            capabilities.remove(Command.GITOPS_RESOURCE_CONTROL_CAPABILITY)
         if direct_commands_enabled and getattr(self, "node_control_enabled", False):
             capabilities.append(Command.KUBERNETES_NODE_CONTROL_CAPABILITY)
         return capabilities
@@ -1380,6 +1383,16 @@ class TargetClusterAgent:
             "Helm artifact read completed",
             artifact=result.artifact.model_dump(mode="json", exclude_none=True),
         )
+
+    @command.handler(
+        Command.GITOPS_RESOURCE_CONTROL_ACTION,
+        payload_model=GitOpsResourceCommandPayload,
+    )
+    async def gitops_resource_control_command(
+        self,
+        ctx: CommandContext[GitOpsResourceCommandPayload],
+    ) -> JsonObject:
+        return await execute_gitops_resource_command(ctx)
 
     @command.k8s(
         SERVICE_HTTP_REQUEST_ACTION,

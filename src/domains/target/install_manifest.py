@@ -40,6 +40,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             priority_class_manifest(),
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
+            gitops_control_rbac_manifest(namespace),
             node_control_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             cronjob_control_rbac_manifest(payload, namespace)
             if role != MANAGEMENT_CLUSTER_ROLE
@@ -133,6 +134,15 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories", "ocirepositories", "helmrepositories", "buckets", "helmcharts"]
+    verbs: ["get", "list"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
@@ -148,6 +158,43 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def gitops_control_rbac_manifest(namespace: str) -> str:
+    """Controller-only patches; the agent still validates UID/resourceVersion before use."""
+
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-gitops-control
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories", "ocirepositories", "helmrepositories", "buckets", "helmcharts"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-gitops-control
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-gitops-control
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
@@ -200,11 +247,11 @@ rules:
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
-    resourceNames: ["cluster-agent-read", "cluster-agent-node-control"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterrolebindings"]
-    resourceNames: ["cluster-agent-read", "cluster-agent-node-control"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control"]
     verbs: ["delete"]
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]

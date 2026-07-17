@@ -1,7 +1,10 @@
 import type { ComponentType } from "react";
 import {
   createReleaseFlowClient,
+  executeGitOpsResourceAction,
   getGitOpsApplicationDetail,
+  getGitOpsResourceInsights,
+  getGitOpsResourceTree,
   listApplicationDeployments,
 } from "../../../api";
 import { createGitOpsAdapter } from "../../../features/gitops/createGitOpsAdapter";
@@ -15,6 +18,9 @@ export function loadGitOpsSurface(
     createGitOpsAdapter({
       ...createReleaseFlowClient(),
       getApplicationDetail: getGitOpsApplicationDetail,
+      getResourceTree: getGitOpsResourceTree,
+      getResourceInsights: getGitOpsResourceInsights,
+      executeResourceAction: executeGitOpsResourceAction,
       listApplicationDeployments,
     }),
     refreshPolicies,

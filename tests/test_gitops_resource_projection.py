@@ -147,6 +147,14 @@ def test_flux_insights_expose_only_actions_supported_by_exact_observed_state() -
             "status": {
                 "observedGeneration": 8,
                 "lastAppliedRevision": "main@sha1:abc",
+                "history": [
+                    {
+                        "id": 7,
+                        "revision": "main@sha1:previous",
+                        "deployedAt": "2026-07-17T03:00:00Z",
+                        "phase": "Succeeded",
+                    }
+                ],
                 "conditions": [
                     {"type": "Ready", "status": "True", "reason": "ReconciliationSucceeded"}
                 ],
@@ -174,3 +182,4 @@ def test_flux_insights_expose_only_actions_supported_by_exact_observed_state() -
     assert insights.revision == "main@sha1:abc"
     assert insights.capabilities.actions == ("reconcile", "suspend", "sync_with_source")
     assert insights.conditions[0].reason == "ReconciliationSucceeded"
+    assert insights.history[0].revision == "main@sha1:previous"

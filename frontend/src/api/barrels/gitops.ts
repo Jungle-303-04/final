@@ -3,6 +3,11 @@ export {
   GITOPS_APPLICATION_DETAIL_PATH,
 } from "../gitops-application-detail";
 export {
+  executeGitOpsResourceAction,
+  getGitOpsResourceInsights,
+  getGitOpsResourceTree,
+} from "../gitops-resource-detail";
+export {
   gitOpsActionCapabilitySchema,
   gitOpsApplicationDetailResponseSchema,
   gitOpsApplicationDetailSchema,

@@ -11,6 +11,8 @@ import {
   type GitOpsResourceRef,
   type GitOpsSource,
   type GitOpsSyncTarget,
+  type GitOpsResourceInsights,
+  type GitOpsResourceTree,
   type ReleaseApplication,
   type ReleaseCluster,
 } from "./gitOpsContract";
@@ -25,6 +27,60 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       return withPortFailure(async () => toApplicationDetail(
         (await endpoints.getApplicationDetail(applicationId, signal)).application,
       ));
+    },
+    async getResourceTree(locator, signal) {
+      const endpoint = endpoints.getResourceTree;
+      if (!endpoint) throw new GitOpsPortFailure("not-found");
+      return withPortFailure(async () => toResourceTree(
+        await endpoint(locator, signal),
+      ));
+    },
+    async getResourceInsights(locator, signal) {
+      const endpoint = endpoints.getResourceInsights;
+      if (!endpoint) throw new GitOpsPortFailure("not-found");
+      return withPortFailure(async () => toResourceInsights(
+        (await endpoint(locator, signal)).insights,
+      ));
+    },
+    async executeResourceAction(locator, input, signal) {
+      const endpoint = endpoints.executeResourceAction;
+      if (!endpoint) throw new GitOpsPortFailure("not-found");
+      return withPortFailure(async () => {
+        const response = await endpoint(locator, {
+          cluster_id: locator.clusterId,
+          resource: toEndpointResourceRef(input.insights.resource),
+          resource_version: input.insights.resourceVersion,
+          capability_revision: input.insights.capabilities.revision,
+          action: input.action,
+          confirmation: input.confirmation,
+          reason: input.reason,
+          ...(input.refreshMode ? { refresh_mode: input.refreshMode } : {}),
+          ...(input.options ? {
+            options: {
+              revision: input.options.revision,
+              prune: input.options.prune,
+              dry_run: input.options.dryRun,
+              force: input.options.force,
+              apply_only: input.options.applyOnly,
+              sync_options: input.options.syncOptions,
+              resources: input.options.resources.map((resource) => ({
+                api_group: resource.apiGroup,
+                kind: resource.kind,
+                namespace: resource.namespace,
+                name: resource.name,
+              })),
+            },
+          } : {}),
+        }, input.idempotencyKey, signal);
+        return {
+          accepted: response.accepted,
+          commandId: response.command_id,
+          eventId: response.event_id,
+          auditEventId: response.audit_event_id,
+          correlationId: response.correlation_id,
+          status: response.status,
+        };
+      });
     },
     async listApplications(signal) {
       return withPortFailure(async () => {
@@ -75,6 +131,76 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.submitSafePr(plan, stepIndex, signal)),
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
+  };
+}
+
+function toResourceTree(
+  value: import("./gitOpsEndpointContract").GitOpsResourceTreeEndpoint,
+): GitOpsResourceTree {
+  return {
+    scope: toClusterScope(value.scope),
+    root: toResourceRef(value.root),
+    nodes: value.nodes.map((node) => ({
+      id: node.id,
+      resource: toResourceRef(node.resource),
+      role: node.role,
+      status: node.status,
+      health: node.health,
+    })),
+    edges: value.edges,
+    coverage: {
+      state: value.coverage.state,
+      reasonCodes: value.coverage.reason_codes,
+      observedCount: value.coverage.observed_count,
+      returnedCount: value.coverage.returned_count,
+    },
+  };
+}
+
+function toResourceInsights(
+  value: import("./gitOpsEndpointContract").GitOpsResourceInsightsEndpoint["insights"],
+): GitOpsResourceInsights {
+  return {
+    scope: toClusterScope(value.scope),
+    resource: toResourceRef(value.resource),
+    resourceVersion: value.resource_version,
+    provider: value.provider,
+    status: value.status,
+    health: value.health,
+    revision: value.revision,
+    source: value.source ? toResourceRef(value.source) : null,
+    conditions: value.conditions.map((condition) => ({
+      type: condition.type,
+      status: condition.status,
+      reason: condition.reason,
+      message: condition.message,
+      observedAt: condition.observed_at,
+    })),
+    history: value.history.map((entry) => ({
+      id: entry.id,
+      revision: entry.revision,
+      deployedAt: entry.deployed_at,
+      phase: entry.phase,
+      message: entry.message,
+      initiatedBy: entry.initiated_by,
+    })),
+    capabilities: {
+      scope: toClusterScope(value.capabilities.scope),
+      resource: toResourceRef(value.capabilities.resource),
+      revision: value.capabilities.revision,
+      actions: value.capabilities.actions,
+    },
+  };
+}
+
+function toEndpointResourceRef(value: GitOpsResourceRef) {
+  return {
+    api_group: value.apiGroup,
+    version: value.version,
+    kind: value.kind,
+    namespace: value.namespace,
+    name: value.name,
+    uid: value.uid,
   };
 }
 
