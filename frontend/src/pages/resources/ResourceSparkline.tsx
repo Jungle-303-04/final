@@ -22,7 +22,7 @@ export function ResourceSparkline({
     return (
       <span
         aria-label={t("resources.table.trendUnavailable")}
-        className="block h-6 w-24"
+        className="block h-7 w-24"
         data-slot="resource-trend-unavailable"
         role="img"
       />

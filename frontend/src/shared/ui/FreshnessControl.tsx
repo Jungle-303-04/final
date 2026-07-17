@@ -85,7 +85,7 @@ export function FreshnessControl({
 
   return (
     <div
-      className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}
+      className={cn("flex min-w-0 flex-nowrap items-center gap-1.5", className)}
       data-refresh-phase={phase}
       data-slot="freshness-control"
     >
@@ -93,7 +93,7 @@ export function FreshnessControl({
         <Tooltip>
           <TooltipTrigger
             render={
-              <span className="flex items-center gap-1 text-xs text-muted-foreground" />
+              <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground" />
             }
           >
             {presentation.tone ? (

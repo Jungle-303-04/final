@@ -71,6 +71,7 @@ describe("ResourcesPage refresh feedback", () => {
 
     const row = document.querySelector('[data-slot="resources-status-row"]');
     expect(row).toBeTruthy();
+    expect(row?.className).toContain("min-h-8");
     expect(row?.className).toContain("flex-nowrap");
     expect(row?.className).not.toContain("flex-wrap");
   });
