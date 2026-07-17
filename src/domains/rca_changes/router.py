@@ -10,13 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from domains.identity.dependencies import require_cluster_access, require_session
 from domains.rca_changes.projection import trusted_pr_url
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import RecentChangeItem, RecentChangeListResponse
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_RECENT_CHANGE_LIMIT = 5
-MAX_RECENT_CHANGE_LIMIT = 50
 RECENT_CHANGES_NOT_FOUND = "incident recent changes not found"
 
 router = APIRouter()
@@ -28,7 +27,11 @@ router = APIRouter()
 )
 async def recent_incident_changes(
     incident_id: str = Path(min_length=1, max_length=2048),
-    limit: int = Query(default=DEFAULT_RECENT_CHANGE_LIMIT, ge=1, le=MAX_RECENT_CHANGE_LIMIT),
+    limit: int = Query(
+        default=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.RCA_RECENT_CHANGE_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> RecentChangeListResponse:

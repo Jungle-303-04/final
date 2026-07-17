@@ -26,6 +26,9 @@ from domains.rca_changes.repository import RcaChangesRepository
 from domains.rca_changes.router import recent_incident_changes, router
 from domains.scm.events import SafePrCreatedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
+from packages.contracts.gateway import routes as gateway_routes
 from packages.runtime.dependencies import get_db
 
 NOW = "2026-07-13T08:00:00Z"
@@ -357,7 +360,7 @@ def test_recent_query_rechecks_unique_incident_scope_and_cutoff() -> None:
             "Deployment",
             "checkout-api",
             "incident-1",
-            limit=5,
+            limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
         )
         == []
     )
@@ -384,7 +387,7 @@ def test_recent_query_rechecks_unique_incident_scope_and_cutoff() -> None:
     assert {"workspace-a", "cluster-1", "shop", "deployment", "checkout-api", "incident-1"} <= set(
         compiled.params.values()
     )
-    assert 5 in compiled.params.values()
+    assert gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT in compiled.params.values()
 
 
 def test_evidence_join_query_uses_workload_and_time_without_incident_projection() -> None:
@@ -416,7 +419,7 @@ def test_evidence_join_query_uses_workload_and_time_without_incident_projection(
             "Deployment",
             "checkout-api",
             "2026-07-13T02:33:30+00:00",
-            limit=5,
+            limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
         )
         == []
     )
@@ -429,7 +432,7 @@ def test_evidence_join_query_uses_workload_and_time_without_incident_projection(
     assert {"workspace-a", "cluster-1", "shop", "deployment", "checkout-api"} <= set(
         compiled.params.values()
     )
-    assert 5 in compiled.params.values()
+    assert gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT in compiled.params.values()
 
 
 def _projected_row() -> dict[str, object]:
@@ -550,7 +553,7 @@ class _AuthorizedRouteDb:
             "checkout-api",
             "incident-1",
         )
-        assert kwargs == {"limit": 5}
+        assert kwargs == {"limit": gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT}
         return [_change_row()]
 
 
@@ -594,7 +597,7 @@ def test_recent_changes_route_returns_schema_and_hides_unsafe_pr_url() -> None:
     response = asyncio.run(
         recent_incident_changes(
             incident_id="incident-1",
-            limit=5,
+            limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
             current=_current(),
             db=db,
         )
@@ -611,7 +614,7 @@ def test_recent_changes_route_returns_schema_and_hides_unsafe_pr_url() -> None:
     unsafe = asyncio.run(
         recent_incident_changes(
             incident_id="incident-1",
-            limit=5,
+            limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
             current=_current(),
             db=UnsafeDb(),
         )
@@ -627,7 +630,7 @@ def test_recent_changes_route_returns_empty_list_for_authorized_incident() -> No
     response = asyncio.run(
         recent_incident_changes(
             incident_id="incident-1",
-            limit=5,
+            limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
             current=_current(),
             db=EmptyDb(),
         )
@@ -645,7 +648,7 @@ def test_cross_workspace_incident_is_concealed() -> None:
         asyncio.run(
             recent_incident_changes(
                 incident_id="workspace-a-incident",
-                limit=5,
+                limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
                 current=_current("workspace-b"),
                 db=CrossWorkspaceDb(),
             )
@@ -668,7 +671,7 @@ def test_recent_changes_route_conceals_missing_ambiguous_and_denied_incidents(
         asyncio.run(
             recent_incident_changes(
                 incident_id="incident-1",
-                limit=5,
+                limit=gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
                 current=_current(),
                 db=db,
             )
@@ -682,7 +685,10 @@ def test_recent_changes_http_route_validates_response_contract() -> None:
     app.dependency_overrides[require_session] = lambda: _current()
     app.dependency_overrides[get_db] = _AuthorizedRouteDb
 
-    response = TestClient(app).get("/rca/incidents/incident-1/recent-changes?limit=5")
+    response = TestClient(app).get(
+        gateway_routes.RCA_RECENT_CHANGES_PATH.format(incident_id="incident-1"),
+        params={gateway_params.LIMIT_QUERY: gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT},
+    )
 
     assert response.status_code == 200
     body = response.json()

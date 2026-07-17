@@ -38,6 +38,10 @@ MAX_GLOBAL_FILTER_FACET_LIMIT = gateway_limits.GLOBAL_FILTER_FACET_MAX_LIMIT
 MAX_FILTER_CURSOR_LENGTH = gateway_limits.FILTER_CURSOR_MAX_LENGTH
 MAX_FILTER_SEARCH_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
 MAX_FILTER_VALUE_LIST_LENGTH = gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH
+MAX_CLUSTER_ID_LENGTH = gateway_limits.CLUSTER_ID_MAX_LENGTH
+MAX_KUBERNETES_NAME_LENGTH = gateway_limits.KUBERNETES_NAME_MAX_LENGTH
+MAX_CORRELATION_ID_LENGTH = gateway_limits.CORRELATION_ID_MAX_LENGTH
+MAX_INCIDENT_ID_LENGTH = gateway_limits.INCIDENT_ID_MAX_LENGTH
 DEFAULT_RESOURCE_METRIC_HISTORY_LIMIT = gateway_limits.RESOURCE_METRIC_HISTORY_DEFAULT_LIMIT
 MAX_RESOURCE_METRIC_HISTORY_LIMIT = gateway_limits.RESOURCE_METRIC_HISTORY_MAX_LIMIT
 MAX_RESOURCE_METRIC_HISTORY_IDS = gateway_limits.RESOURCE_METRIC_HISTORY_MAX_IDS
@@ -49,6 +53,8 @@ DEFAULT_RESOURCE_METRIC_HISTORY_RANGE = gateway_limits.RESOURCE_METRIC_HISTORY_D
 RESOURCE_METRIC_HISTORY_RANGES = gateway_limits.RESOURCE_METRIC_HISTORY_RANGES
 DEFAULT_RECENT_INCIDENT_LIMIT = gateway_limits.RCA_QUERY_DEFAULT_LIMIT
 MAX_QUERY_LIMIT = gateway_limits.RCA_QUERY_MAX_LIMIT
+DEFAULT_RCA_RECENT_CHANGE_LIMIT = gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT
+MAX_RCA_RECENT_CHANGE_LIMIT = gateway_limits.RCA_RECENT_CHANGE_MAX_LIMIT
 DEFAULT_APPLICATION_LIMIT = gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
 MAX_APPLICATION_LIMIT = gateway_limits.APPLICATION_LIST_MAX_LIMIT
 DEFAULT_APPLICATION_DEPLOYMENT_LIMIT = gateway_limits.APPLICATION_DEPLOYMENT_DEFAULT_LIMIT
@@ -140,6 +146,30 @@ DIRECT_EXECUTION_KEYS = frozenset(
     {"confirmation", "direct_execution", "direct_execution_confirmed"}
 )
 WRITE_METHODS = frozenset({"POST", "PATCH"})
+ALLOWED_WRITE_GATEWAY_ROUTES = frozenset(
+    {
+        ("POST", routes.CLUSTER_METRIC_QUERY_PRESET_RUN_PATH),
+        ("POST", routes.ALERT_RULES_PATH),
+        ("POST", routes.RCA_RECOVERY_ACTION_SELECT_PATH),
+        ("POST", routes.RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH),
+        ("POST", routes.COMMANDS_PATH),
+        ("POST", routes.APPROVAL_GRANT_PATH),
+        ("POST", routes.APPROVAL_REJECT_PATH),
+        ("POST", routes.COMMAND_CANCEL_PATH),
+        ("POST", routes.COMMAND_RETRY_PATH),
+        ("POST", routes.ALERT_EVENT_ACK_PATH),
+        ("POST", routes.ALERT_EVENT_PROMOTE_INCIDENT_PATH),
+        ("POST", routes.RESOURCE_MANIFEST_APPROVE_PATH),
+        ("POST", routes.RELEASE_PLANS_PATH),
+        ("POST", routes.RELEASE_PLAN_START_PATH),
+        ("PATCH", routes.ALERT_RULE_PATH),
+    }
+)
+ALLOWED_NON_MUTATING_POST_GATEWAY_ROUTES = frozenset(
+    {
+        ("POST", routes.RESOURCE_MANIFEST_PREVIEW_PATH),
+    }
+)
 
 
 class ToolInputError(ValueError):
@@ -239,7 +269,10 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
                     },
                     required=["cluster_id"],
                 ),
@@ -254,7 +287,10 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
                     },
                     required=["cluster_id"],
                 ),
@@ -269,11 +305,54 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
                     },
                     required=["cluster_id"],
                 ),
                 handler=get_cluster_inventory_summary,
+            ),
+            McpTool(
+                name="get_cluster_nodes_summary",
+                title="Get Cluster Nodes Summary",
+                description=(
+                    "Return the authorized node health and usage roll-up for one cluster "
+                    "through the existing fleet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=get_cluster_nodes_summary,
+            ),
+            McpTool(
+                name="get_cluster_node_pods_summary",
+                title="Get Cluster Node Pods Summary",
+                description=(
+                    "Return the authorized pod roll-up for one node by calling the existing "
+                    "fleet node-pods summary API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
+                        "node_name": _string(
+                            "Existing Kubernetes node name from the node summary.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
+                        ),
+                    },
+                    required=["cluster_id", "node_name"],
+                ),
+                handler=get_cluster_node_pods_summary,
             ),
             McpTool(
                 name="get_cluster_usage",
@@ -284,7 +363,10 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
                         "limit": _integer(
                             "Maximum number of usage samples to return.",
                             minimum=1,
@@ -305,13 +387,17 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
                         "resource_type": _string(
                             "Optional resource type filter, for example pod, workload, service, node, namespace, or event.",
                             max_length=80,
                         ),
                         "namespace": _string(
-                            "Optional Kubernetes namespace filter.", max_length=253
+                            "Optional Kubernetes namespace filter.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
                         ),
                         "include_deleted": {
                             "type": "boolean",
@@ -328,6 +414,137 @@ def default_tool_registry() -> ToolRegistry:
                     required=["cluster_id"],
                 ),
                 handler=list_resources,
+            ),
+            McpTool(
+                name="list_cluster_workloads",
+                title="List Cluster Workloads",
+                description=(
+                    "List persisted workload inventory rows for one authorized cluster through "
+                    "the existing workload inventory API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
+                        "namespace": _string(
+                            "Optional Kubernetes namespace filter.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of workloads to return.",
+                            minimum=1,
+                            maximum=MAX_LIST_RESOURCES_LIMIT,
+                            default=DEFAULT_LIST_RESOURCES_LIMIT,
+                        ),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=list_cluster_workloads,
+            ),
+            McpTool(
+                name="list_cluster_services",
+                title="List Cluster Services",
+                description=(
+                    "List persisted service inventory rows for one authorized cluster through "
+                    "the existing service inventory API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
+                        "namespace": _string(
+                            "Optional Kubernetes namespace filter.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of services to return.",
+                            minimum=1,
+                            maximum=MAX_LIST_RESOURCES_LIMIT,
+                            default=DEFAULT_LIST_RESOURCES_LIMIT,
+                        ),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=list_cluster_services,
+            ),
+            McpTool(
+                name="list_cluster_events",
+                title="List Cluster Events",
+                description=(
+                    "List persisted event inventory rows for one authorized cluster through "
+                    "the existing event inventory API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
+                        "namespace": _string(
+                            "Optional Kubernetes namespace filter.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of events to return.",
+                            minimum=1,
+                            maximum=MAX_LIST_RESOURCES_LIMIT,
+                            default=DEFAULT_LIST_RESOURCES_LIMIT,
+                        ),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=list_cluster_events,
+            ),
+            McpTool(
+                name="list_helm_releases",
+                title="List Helm Releases",
+                description=(
+                    "List Helm releases inferred from authorized inventory metadata. "
+                    "The Gateway does not decode Helm values or manifests."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.",
+                            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.",
+                            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+                        ),
+                    }
+                ),
+                handler=list_helm_releases,
+            ),
+            McpTool(
+                name="get_helm_release",
+                title="Get Helm Release",
+                description=(
+                    "Fetch one Helm release detail inferred from authorized inventory "
+                    "metadata without exposing Helm values or rendered manifests."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Cluster id from list_clusters.",
+                            max_length=MAX_CLUSTER_ID_LENGTH,
+                        ),
+                        "namespace": _string(
+                            "Existing Helm storage namespace.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
+                        ),
+                        "release_name": _string(
+                            "Existing Helm release name.",
+                            max_length=MAX_KUBERNETES_NAME_LENGTH,
+                        ),
+                    },
+                    required=["cluster_id", "namespace", "release_name"],
+                ),
+                handler=get_helm_release,
             ),
             McpTool(
                 name="list_global_filter_facets",
@@ -572,6 +789,58 @@ def default_tool_registry() -> ToolRegistry:
                     }
                 ),
                 handler=list_recent_incidents,
+            ),
+            McpTool(
+                name="get_rca_bundle",
+                title="Get RCA Bundle",
+                description=(
+                    "Fetch the existing remediation bundle for an incident correlation id. "
+                    "Gateway RCA permissions and response redaction remain the boundary."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "correlation_id": _string(
+                            "Existing incident correlation id.",
+                            max_length=MAX_CORRELATION_ID_LENGTH,
+                        ),
+                    },
+                    required=["correlation_id"],
+                ),
+                handler=get_rca_bundle,
+            ),
+            McpTool(
+                name="list_incident_recent_changes",
+                title="List Incident Recent Changes",
+                description=(
+                    "List GitOps changes associated with one existing RCA incident workload "
+                    "scope through the RCA recent-changes API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "incident_id": _string(
+                            "Existing RCA incident id.",
+                            max_length=MAX_INCIDENT_ID_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of recent changes to return.",
+                            minimum=1,
+                            maximum=MAX_RCA_RECENT_CHANGE_LIMIT,
+                            default=DEFAULT_RCA_RECENT_CHANGE_LIMIT,
+                        ),
+                    },
+                    required=["incident_id"],
+                ),
+                handler=list_incident_recent_changes,
+            ),
+            McpTool(
+                name="list_rca_rules",
+                title="List RCA Rules",
+                description=(
+                    "List the existing RCA rule catalog so AI can explain which symptoms "
+                    "and candidate checks are supported without inventing rules."
+                ),
+                input_schema=_schema(properties={}),
+                handler=list_rca_rules,
             ),
             McpTool(
                 name="list_dead_letters",
@@ -1928,7 +2197,7 @@ async def get_cluster_summary(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     _reject_unknown(arguments, {"cluster_id"})
-    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
     path = _format_path(routes.CLUSTER_SUMMARY_PATH, cluster_id=cluster_id)
     data = await client.get_json(path)
     return _read_result("get_cluster_summary", path, data)
@@ -1938,7 +2207,7 @@ async def get_cluster_connection_status(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     _reject_unknown(arguments, {"cluster_id"})
-    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
     path = _format_path(routes.CLUSTER_CONNECTION_STATUS_PATH, cluster_id=cluster_id)
     data = await client.get_json(path)
     return _read_result("get_cluster_connection_status", path, data)
@@ -1948,17 +2217,42 @@ async def get_cluster_inventory_summary(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     _reject_unknown(arguments, {"cluster_id"})
-    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
     path = _format_path(routes.CLUSTER_INVENTORY_SUMMARY_PATH, cluster_id=cluster_id)
     data = await client.get_json(path)
     return _read_result("get_cluster_inventory_summary", path, data)
+
+
+async def get_cluster_nodes_summary(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
+    path = _format_path(routes.CLUSTER_NODES_SUMMARY_PATH, cluster_id=cluster_id)
+    data = await client.get_json(path)
+    return _read_result("get_cluster_nodes_summary", path, data)
+
+
+async def get_cluster_node_pods_summary(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "node_name"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
+    node_name = _required_str(arguments, "node_name", max_length=MAX_KUBERNETES_NAME_LENGTH)
+    path = _format_path(
+        routes.CLUSTER_NODE_PODS_SUMMARY_PATH,
+        cluster_id=cluster_id,
+        node_name=node_name,
+    )
+    data = await client.get_json(path)
+    return _read_result("get_cluster_node_pods_summary", path, data)
 
 
 async def get_cluster_usage(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     _reject_unknown(arguments, {"cluster_id", "limit"})
-    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
     path = _format_path(routes.CLUSTER_USAGE_PATH, cluster_id=cluster_id)
     data = await client.get_json(
         path,
@@ -1979,13 +2273,15 @@ async def list_resources(client: ManagementApiClient, arguments: dict[str, Any])
     _reject_unknown(
         arguments, {"cluster_id", "resource_type", "namespace", "include_deleted", "limit"}
     )
-    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
     path = _format_path(routes.CLUSTER_INVENTORY_RESOURCES_PATH, cluster_id=cluster_id)
     data = await client.get_json(
         path,
         {
             "resource_type": _optional_str(arguments, "resource_type", max_length=80),
-            "namespace": _optional_str(arguments, "namespace", max_length=253),
+            "namespace": _optional_str(
+                arguments, "namespace", max_length=MAX_KUBERNETES_NAME_LENGTH
+            ),
             "include_deleted": _optional_bool(arguments, "include_deleted", default=False),
             "limit": _bounded_int(
                 arguments,
@@ -1997,6 +2293,107 @@ async def list_resources(client: ManagementApiClient, arguments: dict[str, Any])
         },
     )
     return _read_result("list_resources", path, data)
+
+
+async def list_cluster_workloads(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    return await _read_cluster_inventory_collection(
+        client,
+        arguments,
+        tool_name="list_cluster_workloads",
+        route=routes.CLUSTER_INVENTORY_WORKLOADS_PATH,
+    )
+
+
+async def list_cluster_services(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    return await _read_cluster_inventory_collection(
+        client,
+        arguments,
+        tool_name="list_cluster_services",
+        route=routes.CLUSTER_INVENTORY_SERVICES_PATH,
+    )
+
+
+async def list_cluster_events(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    return await _read_cluster_inventory_collection(
+        client,
+        arguments,
+        tool_name="list_cluster_events",
+        route=routes.CLUSTER_INVENTORY_EVENTS_PATH,
+    )
+
+
+async def list_helm_releases(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"clusters", "namespaces"})
+    data = await client.get_json(
+        routes.HELM_RELEASES_PATH,
+        {
+            gateway_params.CLUSTERS_QUERY: _optional_str(
+                arguments,
+                "clusters",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+            gateway_params.NAMESPACES_QUERY: _optional_str(
+                arguments,
+                "namespaces",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+        },
+    )
+    return _read_result("list_helm_releases", routes.HELM_RELEASES_PATH, data)
+
+
+async def get_helm_release(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "namespace", "release_name"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
+    namespace = _required_str(arguments, "namespace", max_length=MAX_KUBERNETES_NAME_LENGTH)
+    release_name = _required_str(arguments, "release_name", max_length=MAX_KUBERNETES_NAME_LENGTH)
+    path = _format_path(
+        routes.HELM_RELEASE_PATH,
+        namespace=namespace,
+        release_name=release_name,
+    )
+    data = await client.get_json(path, {gateway_params.CLUSTER_ID_QUERY: cluster_id})
+    return _read_result("get_helm_release", path, data)
+
+
+async def _read_cluster_inventory_collection(
+    client: ManagementApiClient,
+    arguments: dict[str, Any],
+    *,
+    tool_name: str,
+    route: str,
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "namespace", "limit"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=MAX_CLUSTER_ID_LENGTH)
+    path = _format_path(route, cluster_id=cluster_id)
+    data = await client.get_json(
+        path,
+        {
+            gateway_params.NAMESPACE_QUERY: _optional_str(
+                arguments,
+                "namespace",
+                max_length=MAX_KUBERNETES_NAME_LENGTH,
+            ),
+            gateway_params.LIMIT_QUERY: _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_LIST_RESOURCES_LIMIT,
+                1,
+                MAX_LIST_RESOURCES_LIMIT,
+            ),
+        },
+    )
+    return _read_result(tool_name, path, data)
 
 
 async def list_global_filter_facets(
@@ -2194,6 +2591,45 @@ async def list_recent_incidents(
         },
     )
     return _read_result("list_recent_incidents", routes.RCA_REPORTS_PATH, data)
+
+
+async def get_rca_bundle(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
+    _reject_unknown(arguments, {"correlation_id"})
+    correlation_id = _required_str(
+        arguments,
+        "correlation_id",
+        max_length=MAX_CORRELATION_ID_LENGTH,
+    )
+    path = _format_path(routes.RCA_BUNDLE_PATH, correlation_id=correlation_id)
+    data = await client.get_json(path)
+    return _read_result("get_rca_bundle", path, data)
+
+
+async def list_incident_recent_changes(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"incident_id", "limit"})
+    incident_id = _required_str(arguments, "incident_id", max_length=MAX_INCIDENT_ID_LENGTH)
+    path = _format_path(routes.RCA_RECENT_CHANGES_PATH, incident_id=incident_id)
+    data = await client.get_json(
+        path,
+        {
+            gateway_params.LIMIT_QUERY: _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_RCA_RECENT_CHANGE_LIMIT,
+                1,
+                MAX_RCA_RECENT_CHANGE_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_incident_recent_changes", path, data)
+
+
+async def list_rca_rules(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
+    _reject_unknown(arguments, set())
+    data = await client.get_json(routes.RCA_RULES_PATH)
+    return _read_result("list_rca_rules", routes.RCA_RULES_PATH, data)
 
 
 async def list_dead_letters(
@@ -2472,9 +2908,7 @@ async def list_applications(
             "applications": _optional_str(
                 arguments, "applications", max_length=MAX_FILTER_VALUE_LIST_LENGTH
             ),
-            "labels": _optional_str(
-                arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
-            ),
+            "labels": _optional_str(arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH),
             gateway_params.APPLICATIONS_ENVIRONMENT_QUERY: _optional_str(
                 arguments,
                 "environment",
@@ -2898,9 +3332,7 @@ async def get_resource_graph(
                 "health",
                 max_length=MAX_FILTER_VALUE_LIST_LENGTH,
             ),
-            "labels": _optional_str(
-                arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
-            ),
+            "labels": _optional_str(arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH),
             gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
                 arguments,
                 "query",
@@ -2994,9 +3426,7 @@ async def list_recent_changes(
                 "health",
                 max_length=MAX_FILTER_VALUE_LIST_LENGTH,
             ),
-            "labels": _optional_str(
-                arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
-            ),
+            "labels": _optional_str(arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH),
             gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
                 arguments,
                 "query",
@@ -3374,6 +3804,8 @@ async def propose_manifest_change(
         raise ToolInputError("reason must be at least 3 characters")
     preview_path = _format_path(routes.RESOURCE_MANIFEST_PREVIEW_PATH, resource_id=resource_id)
     approve_path = _format_path(routes.RESOURCE_MANIFEST_APPROVE_PATH, resource_id=resource_id)
+    _assert_allowed_gateway_route("POST", preview_path, ALLOWED_NON_MUTATING_POST_GATEWAY_ROUTES)
+    _assert_allowed_gateway_route("POST", approve_path, ALLOWED_WRITE_GATEWAY_ROUTES)
     approve_payload = {**payload, "confirmed": True, "reason": reason_text}
     _validate_json_payload(approve_payload, "payload")
     proposal = _write_proposal("POST", approve_path, approve_payload)
@@ -3775,6 +4207,49 @@ async def _read_list_item(
     )
 
 
+def _assert_allowed_gateway_route(
+    method: str,
+    api_path: str,
+    allowed_routes: AbstractSet[tuple[str, str]],
+) -> None:
+    if not _gateway_route_is_allowed(method, api_path, allowed_routes):
+        raise ToolInputError(f"{method} {api_path} is not permitted for this MCP tool")
+
+
+def _gateway_route_is_allowed(
+    method: str,
+    api_path: str,
+    allowed_routes: AbstractSet[tuple[str, str]],
+) -> bool:
+    return any(
+        allowed_method == method and _route_template_matches(allowed_template, api_path)
+        for allowed_method, allowed_template in allowed_routes
+    )
+
+
+def _route_template_matches(template: str, api_path: str) -> bool:
+    template_segments = _path_segments(template)
+    path_segments = _path_segments(api_path)
+    if len(template_segments) != len(path_segments):
+        return False
+    for template_segment, path_segment in zip(template_segments, path_segments, strict=True):
+        if _is_route_parameter(template_segment):
+            if not path_segment:
+                return False
+            continue
+        if template_segment != path_segment:
+            return False
+    return True
+
+
+def _path_segments(path: str) -> tuple[str, ...]:
+    return tuple(segment for segment in path.strip("/").split("/") if segment)
+
+
+def _is_route_parameter(segment: str) -> bool:
+    return segment.startswith("{") and segment.endswith("}") and len(segment) > 2
+
+
 async def _post_or_propose(
     client: ManagementApiClient,
     arguments: dict[str, Any],
@@ -3789,6 +4264,7 @@ async def _post_or_propose(
 ) -> dict[str, Any]:
     if method not in WRITE_METHODS:
         raise ToolInputError(f"unsupported MCP write method: {method}")
+    _assert_allowed_gateway_route(method, api_path, ALLOWED_WRITE_GATEWAY_ROUTES)
     _validate_json_payload(payload, "payload")
     dry_run = _optional_bool(arguments, "dry_run", default=True)
     approval_confirmed = _optional_bool(arguments, "approval_confirmed", default=False)

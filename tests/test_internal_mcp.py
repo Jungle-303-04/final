@@ -70,6 +70,10 @@ def test_mcp_read_tool_bounds_use_gateway_contract_limits() -> None:
     assert mcp_tools.MAX_FILTER_CURSOR_LENGTH == gateway_limits.FILTER_CURSOR_MAX_LENGTH
     assert mcp_tools.MAX_FILTER_SEARCH_LENGTH == gateway_limits.FILTER_SEARCH_MAX_LENGTH
     assert mcp_tools.MAX_FILTER_VALUE_LIST_LENGTH == gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH
+    assert mcp_tools.MAX_CLUSTER_ID_LENGTH == gateway_limits.CLUSTER_ID_MAX_LENGTH
+    assert mcp_tools.MAX_KUBERNETES_NAME_LENGTH == gateway_limits.KUBERNETES_NAME_MAX_LENGTH
+    assert mcp_tools.MAX_CORRELATION_ID_LENGTH == gateway_limits.CORRELATION_ID_MAX_LENGTH
+    assert mcp_tools.MAX_INCIDENT_ID_LENGTH == gateway_limits.INCIDENT_ID_MAX_LENGTH
     assert (
         mcp_tools.DEFAULT_RESOURCE_METRIC_HISTORY_LIMIT
         == gateway_limits.RESOURCE_METRIC_HISTORY_DEFAULT_LIMIT
@@ -98,6 +102,10 @@ def test_mcp_read_tool_bounds_use_gateway_contract_limits() -> None:
     )
     assert mcp_tools.DEFAULT_RECENT_INCIDENT_LIMIT == gateway_limits.RCA_QUERY_DEFAULT_LIMIT
     assert mcp_tools.MAX_QUERY_LIMIT == gateway_limits.RCA_QUERY_MAX_LIMIT
+    assert (
+        mcp_tools.DEFAULT_RCA_RECENT_CHANGE_LIMIT == gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT
+    )
+    assert mcp_tools.MAX_RCA_RECENT_CHANGE_LIMIT == gateway_limits.RCA_RECENT_CHANGE_MAX_LIMIT
     assert mcp_tools.DEFAULT_APPLICATION_LIMIT == gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
     assert mcp_tools.MAX_APPLICATION_LIMIT == gateway_limits.APPLICATION_LIST_MAX_LIMIT
     assert (
@@ -131,6 +139,76 @@ def test_mcp_read_tool_bounds_use_gateway_contract_limits() -> None:
     assert mcp_tools.MAX_CHANGE_RANGE_MS == gateway_limits.CHANGE_TIMELINE_MAX_RANGE_MS
     assert mcp_tools.MAX_CHANGE_BUCKETS == gateway_limits.CHANGE_TIMELINE_MAX_BUCKETS
     assert mcp_tools.MAX_EPOCH_MILLISECONDS == gateway_limits.CHANGE_TIMELINE_MAX_EPOCH_MS
+
+
+def test_inventory_helm_and_rca_context_tool_schemas_use_gateway_bounds() -> None:
+    tools = {tool["name"]: tool for tool in default_tool_registry().list_tools()}
+
+    def property_schema(tool_name: str, property_name: str) -> dict[str, Any]:
+        return tools[tool_name]["inputSchema"]["properties"][property_name]
+
+    for tool_name in (
+        "get_cluster_summary",
+        "get_cluster_connection_status",
+        "get_cluster_inventory_summary",
+        "get_cluster_nodes_summary",
+        "get_cluster_node_pods_summary",
+        "get_cluster_usage",
+        "list_resources",
+        "list_cluster_workloads",
+        "list_cluster_services",
+        "list_cluster_events",
+        "get_helm_release",
+    ):
+        assert (
+            property_schema(tool_name, "cluster_id")["maxLength"]
+            == gateway_limits.CLUSTER_ID_MAX_LENGTH
+        )
+
+    for tool_name in (
+        "list_resources",
+        "list_cluster_workloads",
+        "list_cluster_services",
+        "list_cluster_events",
+        "get_helm_release",
+    ):
+        assert (
+            property_schema(tool_name, "namespace")["maxLength"]
+            == gateway_limits.KUBERNETES_NAME_MAX_LENGTH
+        )
+
+    assert (
+        property_schema("get_cluster_node_pods_summary", "node_name")["maxLength"]
+        == gateway_limits.KUBERNETES_NAME_MAX_LENGTH
+    )
+    assert (
+        property_schema("get_helm_release", "release_name")["maxLength"]
+        == gateway_limits.KUBERNETES_NAME_MAX_LENGTH
+    )
+    assert (
+        property_schema("list_helm_releases", "clusters")["maxLength"]
+        == gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH
+    )
+    assert (
+        property_schema("list_helm_releases", "namespaces")["maxLength"]
+        == gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH
+    )
+    assert (
+        property_schema("get_rca_bundle", "correlation_id")["maxLength"]
+        == gateway_limits.CORRELATION_ID_MAX_LENGTH
+    )
+    assert (
+        property_schema("list_incident_recent_changes", "incident_id")["maxLength"]
+        == gateway_limits.INCIDENT_ID_MAX_LENGTH
+    )
+    assert (
+        property_schema("list_incident_recent_changes", "limit")["default"]
+        == gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT
+    )
+    assert (
+        property_schema("list_incident_recent_changes", "limit")["maximum"]
+        == gateway_limits.RCA_RECENT_CHANGE_MAX_LIMIT
+    )
 
 
 def test_settings_fail_closed_without_auth() -> None:
@@ -320,12 +398,16 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "get_application_detail",
         "get_cluster_connection_status",
         "get_cluster_inventory_summary",
+        "get_cluster_node_pods_summary",
+        "get_cluster_nodes_summary",
         "get_cluster_summary",
         "get_cluster_usage",
         "get_command_status",
         "get_fleet_summary",
+        "get_helm_release",
         "get_log_evidence",
         "get_metric_widget",
+        "get_rca_bundle",
         "get_rca_incident",
         "get_release_plan",
         "get_release_run_report",
@@ -344,11 +426,16 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "list_application_label_facets",
         "list_applications",
         "list_audit_timeline",
+        "list_cluster_events",
+        "list_cluster_services",
+        "list_cluster_workloads",
         "list_dead_letters",
         "list_evidence_windows",
         "list_feature_contracts",
         "list_gitops_filter_facets",
         "list_global_filter_facets",
+        "list_helm_releases",
+        "list_incident_recent_changes",
         "list_clusters",
         "list_issue_filter_facets",
         "list_issue_label_facets",
@@ -356,6 +443,7 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "list_metric_query_presets",
         "list_pending_approvals",
         "list_rca_issues",
+        "list_rca_rules",
         "list_recent_incidents",
         "list_recent_changes",
         "list_release_audit",
@@ -381,12 +469,16 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "get_application_detail",
         "get_cluster_connection_status",
         "get_cluster_inventory_summary",
+        "get_cluster_node_pods_summary",
+        "get_cluster_nodes_summary",
         "get_cluster_summary",
         "get_cluster_usage",
         "get_command_status",
         "get_fleet_summary",
+        "get_helm_release",
         "get_log_evidence",
         "get_metric_widget",
+        "get_rca_bundle",
         "get_rca_incident",
         "get_release_plan",
         "get_release_run_report",
@@ -405,11 +497,16 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "list_application_label_facets",
         "list_applications",
         "list_audit_timeline",
+        "list_cluster_events",
+        "list_cluster_services",
+        "list_cluster_workloads",
         "list_dead_letters",
         "list_evidence_windows",
         "list_feature_contracts",
         "list_gitops_filter_facets",
         "list_global_filter_facets",
+        "list_helm_releases",
+        "list_incident_recent_changes",
         "list_clusters",
         "list_issue_filter_facets",
         "list_issue_label_facets",
@@ -417,6 +514,7 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "list_metric_query_presets",
         "list_pending_approvals",
         "list_rca_issues",
+        "list_rca_rules",
         "list_recent_incidents",
         "list_recent_changes",
         "list_release_audit",
@@ -522,8 +620,27 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             {"cluster_id": "cluster-1"},
             client,
         )
+        await registry.call("get_cluster_nodes_summary", {"cluster_id": "cluster-1"}, client)
+        await registry.call(
+            "get_cluster_node_pods_summary",
+            {"cluster_id": "cluster-1", "node_name": "node-1"},
+            client,
+        )
         await registry.call("get_cluster_usage", {"cluster_id": "cluster-1"}, client)
         await registry.call("list_resources", {"cluster_id": "cluster-1"}, client)
+        await registry.call("list_cluster_workloads", {"cluster_id": "cluster-1"}, client)
+        await registry.call("list_cluster_services", {"cluster_id": "cluster-1"}, client)
+        await registry.call("list_cluster_events", {"cluster_id": "cluster-1"}, client)
+        await registry.call("list_helm_releases", {"clusters": "cluster-1"}, client)
+        await registry.call(
+            "get_helm_release",
+            {
+                "cluster_id": "cluster-1",
+                "namespace": "shop",
+                "release_name": "backend",
+            },
+            client,
+        )
         await registry.call("list_global_filter_facets", {}, client)
         await registry.call("list_resource_filter_facets", {"axis": "clusters"}, client)
         await registry.call("list_resource_label_facets", {}, client)
@@ -544,6 +661,13 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             client,
         )
         await registry.call("list_recent_incidents", {}, client)
+        await registry.call("get_rca_bundle", {"correlation_id": "corr-1"}, client)
+        await registry.call(
+            "list_incident_recent_changes",
+            {"incident_id": "incident-1"},
+            client,
+        )
+        await registry.call("list_rca_rules", {}, client)
         await registry.call("list_dead_letters", {}, client)
         await registry.call("list_rca_issues", {}, client)
         await registry.call("list_issue_filter_facets", {"axis": "severity"}, client)
@@ -622,14 +746,27 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             routes.CLUSTER_SUMMARY_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_CONNECTION_STATUS_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_SUMMARY_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_NODES_SUMMARY_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_NODE_PODS_SUMMARY_PATH.format(
+                cluster_id="cluster-1",
+                node_name="node-1",
+            ),
             routes.CLUSTER_USAGE_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_RESOURCES_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_INVENTORY_WORKLOADS_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_INVENTORY_SERVICES_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_INVENTORY_EVENTS_PATH.format(cluster_id="cluster-1"),
+            routes.HELM_RELEASES_PATH,
+            routes.HELM_RELEASE_PATH.format(namespace="shop", release_name="backend"),
             routes.FILTER_FACETS_PATH,
             routes.RESOURCES_FILTER_FACETS_PATH,
             routes.RESOURCE_LABEL_FACETS_PATH,
             routes.RESOURCE_METRICS_HISTORY_PATH,
             routes.CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH.format(cluster_id="cluster-1"),
             routes.RCA_REPORTS_PATH,
+            routes.RCA_BUNDLE_PATH.format(correlation_id="corr-1"),
+            routes.RCA_RECENT_CHANGES_PATH.format(incident_id="incident-1"),
+            routes.RCA_RULES_PATH,
             routes.DEAD_LETTERS_PATH,
             routes.DASHBOARD_RCA_ISSUES_PATH,
             routes.ISSUES_FILTER_FACETS_PATH,
@@ -775,6 +912,101 @@ def test_new_read_tools_forward_gateway_query_aliases_without_mutation() -> None
                 gateway_params.RESOURCE_SEARCH_QUERY: "api",
             }
         )
+        assert all(request.content == b"" for request in seen)
+
+    asyncio.run(run())
+
+
+def test_inventory_helm_and_rca_context_tools_forward_gateway_filters() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(200, json={"ok": True})
+
+        registry = default_tool_registry()
+        client = _client(handler)
+
+        await registry.call("get_cluster_nodes_summary", {"cluster_id": "cluster-1"}, client)
+        await registry.call(
+            "get_cluster_node_pods_summary",
+            {"cluster_id": "cluster-1", "node_name": "node-1"},
+            client,
+        )
+        await registry.call(
+            "list_cluster_workloads",
+            {"cluster_id": "cluster-1", "namespace": "shop", "limit": 25},
+            client,
+        )
+        await registry.call(
+            "list_cluster_services",
+            {"cluster_id": "cluster-1", "namespace": "shop", "limit": 26},
+            client,
+        )
+        await registry.call(
+            "list_cluster_events",
+            {"cluster_id": "cluster-1", "namespace": "shop", "limit": 27},
+            client,
+        )
+        await registry.call(
+            "list_helm_releases",
+            {"clusters": "cluster-1", "namespaces": "shop"},
+            client,
+        )
+        await registry.call(
+            "get_helm_release",
+            {
+                "cluster_id": "cluster-1",
+                "namespace": "shop",
+                "release_name": "backend",
+            },
+            client,
+        )
+        await registry.call("get_rca_bundle", {"correlation_id": "corr-1"}, client)
+        await registry.call(
+            "list_incident_recent_changes",
+            {"incident_id": "incident-1", "limit": 10},
+            client,
+        )
+        await registry.call("list_rca_rules", {}, client)
+
+        assert [request.method for request in seen] == ["GET"] * 10
+        assert [request.url.path for request in seen] == [
+            routes.CLUSTER_NODES_SUMMARY_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_NODE_PODS_SUMMARY_PATH.format(
+                cluster_id="cluster-1",
+                node_name="node-1",
+            ),
+            routes.CLUSTER_INVENTORY_WORKLOADS_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_INVENTORY_SERVICES_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_INVENTORY_EVENTS_PATH.format(cluster_id="cluster-1"),
+            routes.HELM_RELEASES_PATH,
+            routes.HELM_RELEASE_PATH.format(namespace="shop", release_name="backend"),
+            routes.RCA_BUNDLE_PATH.format(correlation_id="corr-1"),
+            routes.RCA_RECENT_CHANGES_PATH.format(incident_id="incident-1"),
+            routes.RCA_RULES_PATH,
+        ]
+        assert seen[0].url.params == httpx.QueryParams()
+        assert seen[1].url.params == httpx.QueryParams()
+        assert seen[2].url.params == httpx.QueryParams(
+            {gateway_params.NAMESPACE_QUERY: "shop", gateway_params.LIMIT_QUERY: "25"}
+        )
+        assert seen[3].url.params == httpx.QueryParams(
+            {gateway_params.NAMESPACE_QUERY: "shop", gateway_params.LIMIT_QUERY: "26"}
+        )
+        assert seen[4].url.params == httpx.QueryParams(
+            {gateway_params.NAMESPACE_QUERY: "shop", gateway_params.LIMIT_QUERY: "27"}
+        )
+        assert seen[5].url.params == httpx.QueryParams(
+            {gateway_params.CLUSTERS_QUERY: "cluster-1", gateway_params.NAMESPACES_QUERY: "shop"}
+        )
+        assert seen[6].url.params == httpx.QueryParams(
+            {gateway_params.CLUSTER_ID_QUERY: "cluster-1"}
+        )
+        assert seen[7].url.params == httpx.QueryParams()
+        assert seen[8].url.params == httpx.QueryParams({gateway_params.LIMIT_QUERY: "10"})
+        assert seen[9].url.params == httpx.QueryParams()
         assert all(request.content == b"" for request in seen)
 
     asyncio.run(run())
@@ -1096,6 +1328,30 @@ def test_scope_discovery_read_tools_reject_write_like_arguments_without_http_req
             ("list_gitops_filter_facets", {"axis": "approval", "payload": {"key": "value"}}),
             ("list_issue_filter_facets", {"axis": "severity", "operation_id": "op-1"}),
             ("list_issue_label_facets", {"dry_run": True}),
+            ("get_cluster_nodes_summary", {"cluster_id": "cluster-1", "dry_run": True}),
+            (
+                "get_cluster_node_pods_summary",
+                {"cluster_id": "cluster-1", "node_name": "node-1", "payload": {}},
+            ),
+            ("list_cluster_workloads", {"cluster_id": "cluster-1", "operation_id": "op-1"}),
+            ("list_cluster_services", {"cluster_id": "cluster-1", "approval_confirmed": True}),
+            ("list_cluster_events", {"cluster_id": "cluster-1", "dry_run": True}),
+            ("list_helm_releases", {"payload": {"cluster": "cluster-1"}}),
+            (
+                "get_helm_release",
+                {
+                    "cluster_id": "cluster-1",
+                    "namespace": "shop",
+                    "release_name": "backend",
+                    "operation_id": "op-1",
+                },
+            ),
+            ("get_rca_bundle", {"correlation_id": "corr-1", "dry_run": True}),
+            (
+                "list_incident_recent_changes",
+                {"incident_id": "incident-1", "approval_confirmed": True},
+            ),
+            ("list_rca_rules", {"payload": {}}),
         ]
 
         for tool_name, arguments in cases:
@@ -1319,6 +1575,225 @@ def test_additional_context_read_tools_use_gateway_contracts_and_redaction() -> 
         assert "detail-secret" not in serialized_channels
         assert "[REDACTED]" in serialized_channels
         assert all(request.content == b"" for request in seen)
+
+    asyncio.run(run())
+
+
+def test_rca_bundle_read_tool_redacts_sensitive_evidence_values() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "correlation_id": "corr-1",
+                    "remediation": {
+                        "candidates": [
+                            {
+                                "action_id": "action-1",
+                                "draft": {
+                                    "params": {
+                                        "credential_ref": "github-token-ref",
+                                        "env": [
+                                            {"name": "DB_PASSWORD", "value": "db-pass"},
+                                            {"name": "LOG_LEVEL", "value": "info"},
+                                        ],
+                                        "stringData": {"api_key": "plain-api-key"},
+                                    }
+                                },
+                            }
+                        ]
+                    },
+                    "resources": [
+                        {
+                            "kind": "Secret",
+                            "metadata": {"name": "api-secret"},
+                            "data": {"token": "plain-secret-token"},
+                        }
+                    ],
+                    "notes": "authorization: Bearer response-secret",
+                },
+            )
+
+        result = await default_tool_registry().call(
+            "get_rca_bundle",
+            {"correlation_id": "corr-1"},
+            _client(handler),
+        )
+
+        assert len(seen) == 1
+        assert seen[0].method == "GET"
+        assert seen[0].url.path == routes.RCA_BUNDLE_PATH.format(correlation_id="corr-1")
+        params = result["data"]["remediation"]["candidates"][0]["draft"]["params"]
+        assert params["credential_ref"] == "[REDACTED]"
+        assert params["env"][0]["value"] == "[REDACTED]"
+        assert params["env"][1]["value"] == "info"
+        assert params["stringData"] == "[REDACTED]"
+        assert result["data"]["resources"][0]["data"] == "[REDACTED]"
+        assert result["data"]["notes"] == "authorization: Bearer [REDACTED]"
+        serialized = json.dumps(result, ensure_ascii=False)
+        for leaked in (
+            "plain-secret-token",
+            "response-secret",
+            "github-token-ref",
+            "db-pass",
+            "plain-api-key",
+        ):
+            assert leaked not in serialized
+
+    asyncio.run(run())
+
+
+def test_new_context_read_tools_reject_unsafe_input_before_http_request() -> None:
+    async def run() -> None:
+        registry = default_tool_registry()
+        cases = [
+            ("get_cluster_nodes_summary", {"cluster_id": "cluster-1\nx"}),
+            (
+                "get_cluster_node_pods_summary",
+                {"cluster_id": "cluster-1", "node_name": "node-1\rx"},
+            ),
+            ("list_cluster_workloads", {"cluster_id": "cluster-1", "namespace": "shop\nx"}),
+            ("list_cluster_services", {"cluster_id": "cluster-1\nx"}),
+            ("list_cluster_events", {"cluster_id": "cluster-1", "namespace": "shop\tx"}),
+            ("list_helm_releases", {"clusters": "cluster-1\nx"}),
+            (
+                "get_helm_release",
+                {"cluster_id": "cluster-1", "namespace": "shop", "release_name": "backend\nx"},
+            ),
+            ("get_rca_bundle", {"correlation_id": "corr-1\nx"}),
+            ("list_incident_recent_changes", {"incident_id": "incident-1\nx"}),
+        ]
+
+        for tool_name, arguments in cases:
+            seen: list[httpx.Request] = []
+            try:
+                await registry.call(
+                    tool_name,
+                    arguments,
+                    _client(lambda request, seen=seen: seen.append(request) or httpx.Response(500)),
+                )
+            except ValueError as exc:
+                assert "unsafe control characters" in str(exc)
+            else:
+                raise AssertionError(f"{tool_name} accepted unsafe input")
+            assert seen == []
+
+    asyncio.run(run())
+
+
+def test_new_context_read_tools_reject_overlong_input_before_http_request() -> None:
+    async def run() -> None:
+        registry = default_tool_registry()
+        long_cluster_id = "c" * (gateway_limits.CLUSTER_ID_MAX_LENGTH + 1)
+        long_kubernetes_name = "n" * (gateway_limits.KUBERNETES_NAME_MAX_LENGTH + 1)
+        long_filter = "f" * (gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH + 1)
+        long_correlation_id = "c" * (gateway_limits.CORRELATION_ID_MAX_LENGTH + 1)
+        long_incident_id = "i" * (gateway_limits.INCIDENT_ID_MAX_LENGTH + 1)
+        cases = [
+            (
+                "get_cluster_nodes_summary",
+                {"cluster_id": long_cluster_id},
+                gateway_params.CLUSTER_ID_QUERY,
+                gateway_limits.CLUSTER_ID_MAX_LENGTH,
+            ),
+            (
+                "get_cluster_node_pods_summary",
+                {"cluster_id": "cluster-1", "node_name": long_kubernetes_name},
+                "node_name",
+                gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+            ),
+            (
+                "list_cluster_workloads",
+                {"cluster_id": "cluster-1", "namespace": long_kubernetes_name},
+                gateway_params.NAMESPACE_QUERY,
+                gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+            ),
+            (
+                "list_cluster_services",
+                {"cluster_id": "cluster-1", "namespace": long_kubernetes_name},
+                gateway_params.NAMESPACE_QUERY,
+                gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+            ),
+            (
+                "list_cluster_events",
+                {"cluster_id": "cluster-1", "namespace": long_kubernetes_name},
+                gateway_params.NAMESPACE_QUERY,
+                gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+            ),
+            (
+                "list_helm_releases",
+                {"clusters": long_filter},
+                gateway_params.CLUSTERS_QUERY,
+                gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH,
+            ),
+            (
+                "get_helm_release",
+                {
+                    "cluster_id": "cluster-1",
+                    "namespace": "shop",
+                    "release_name": long_kubernetes_name,
+                },
+                "release_name",
+                gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+            ),
+            (
+                "get_rca_bundle",
+                {"correlation_id": long_correlation_id},
+                "correlation_id",
+                gateway_limits.CORRELATION_ID_MAX_LENGTH,
+            ),
+            (
+                "list_incident_recent_changes",
+                {"incident_id": long_incident_id},
+                "incident_id",
+                gateway_limits.INCIDENT_ID_MAX_LENGTH,
+            ),
+        ]
+
+        for tool_name, arguments, field_name, max_length in cases:
+            seen: list[httpx.Request] = []
+            try:
+                await registry.call(
+                    tool_name,
+                    arguments,
+                    _client(lambda request, seen=seen: seen.append(request) or httpx.Response(500)),
+                )
+            except ValueError as exc:
+                assert field_name in str(exc)
+                assert f"at most {max_length} characters" in str(exc)
+            else:
+                raise AssertionError(f"{tool_name} accepted overlong input")
+            assert seen == []
+
+    asyncio.run(run())
+
+
+def test_new_context_read_tools_encode_path_segments_without_expanding_scope() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        await default_tool_registry().call(
+            "get_helm_release",
+            {
+                "cluster_id": "cluster-1",
+                "namespace": "shop/prod",
+                "release_name": "backend/../../secret",
+            },
+            _client(lambda request: seen.append(request) or httpx.Response(200, json={"ok": True})),
+        )
+
+        assert len(seen) == 1
+        assert seen[0].method == "GET"
+        assert bytes(seen[0].url.raw_path).split(b"?")[0] == (
+            b"/helm/releases/shop%2Fprod/backend%2F..%2F..%2Fsecret"
+        )
+        assert seen[0].url.params == httpx.QueryParams(
+            {gateway_params.CLUSTER_ID_QUERY: "cluster-1"}
+        )
+        assert seen[0].content == b""
 
     asyncio.run(run())
 
@@ -1621,6 +2096,38 @@ def test_all_write_tools_require_mcp_write_enable_before_http_request() -> None:
             else:
                 raise AssertionError(f"{tool_name} submitted without MCP writes enabled")
             assert seen == []
+
+    asyncio.run(run())
+
+
+def test_write_gateway_route_allowlist_rejects_unapproved_submission_paths() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+        client = _client(
+            lambda request: seen.append(request) or httpx.Response(500),
+            writes_enabled=True,
+        )
+
+        for arguments in (
+            {},
+            {"dry_run": False, "approval_confirmed": True},
+        ):
+            try:
+                await mcp_tools._post_or_propose(
+                    client,
+                    arguments,
+                    tool_name="unsafe_future_tool",
+                    api_path=routes.AGENT_POLICY_PATH,
+                    payload={},
+                    operation_keys=("operation_id",),
+                    reason="future MCP tools must not submit arbitrary Gateway routes",
+                )
+            except ValueError as exc:
+                assert "not permitted" in str(exc)
+            else:
+                raise AssertionError("MCP write helper accepted a non-allowlisted route")
+
+        assert seen == []
 
     asyncio.run(run())
 
