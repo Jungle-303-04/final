@@ -709,16 +709,24 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
                     json={
                         "items": [
                             {
+                                "spec": {
+                                    "containers": [
+                                        {
+                                            "name": "node-collector",
+                                            "image": image,
+                                        }
+                                    ]
+                                },
                                 "status": {
                                     "containerStatuses": [
                                         {
                                             "name": "node-collector",
                                             "ready": True,
-                                            "image": image,
+                                            "image": f"sha256:{'9' * 64}",
                                             "imageID": f"containerd://{image.rsplit('@', 1)[1]}",
                                         }
                                     ]
-                                }
+                                },
                             }
                         ]
                     },
@@ -774,19 +782,27 @@ def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(
                 json={
                     "items": [
                         {
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "name": "node-collector",
+                                        "image": rollout_image,
+                                    }
+                                ]
+                            },
                             "status": {
                                 "containerStatuses": [
                                     {
                                         "name": "node-collector",
                                         "ready": True,
-                                        "image": rollout_image,
+                                        "image": f"sha256:{'8' * 64}",
                                         "imageID": (
                                             "docker-pullable://registry.example/opsia/"
                                             f"target-agent@{rollout_image.rsplit('@', 1)[1]}"
                                         ),
                                     }
                                 ]
-                            }
+                            },
                         }
                     ]
                 },
@@ -828,6 +844,113 @@ def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(
     )
     assert manager.image == new_image
     assert requested_images == [new_image, new_image]
+
+
+def test_node_collector_pod_accepts_kubernetes_normalized_status_image() -> None:
+    manager_module = load_node_collector_manager_module()
+    expected = f"registry.example/opsia/node-collector@sha256:{'9' * 64}"
+    pod = {
+        "spec": {
+            "containers": [
+                {
+                    "name": "node-collector",
+                    "image": expected,
+                }
+            ]
+        },
+        "status": {
+            "containerStatuses": [
+                {
+                    "name": "node-collector",
+                    "ready": True,
+                    "image": f"sha256:{'8' * 64}",
+                    "imageID": f"containerd://sha256:{'9' * 64}",
+                }
+            ]
+        },
+    }
+
+    assert manager_module.pod_uses_exact_image(pod, expected) is True
+
+
+@pytest.mark.parametrize(
+    ("spec_name", "spec_image", "status_name", "ready", "image_id"),
+    (
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'1' * 64}",
+            "node-collector",
+            True,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "node-collector",
+            True,
+            f"containerd://sha256:{'1' * 64}",
+        ),
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "node-collector",
+            False,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+        (
+            "other-container",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "node-collector",
+            True,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+        (
+            "node-collector",
+            f"registry.example/opsia/node-collector@sha256:{'9' * 64}",
+            "other-container",
+            True,
+            f"containerd://sha256:{'9' * 64}",
+        ),
+    ),
+    ids=(
+        "spec-image-wrong",
+        "image-id-wrong",
+        "container-not-ready",
+        "spec-container-mismatch",
+        "status-container-mismatch",
+    ),
+)
+def test_node_collector_pod_rejects_non_exact_runtime_evidence(
+    spec_name: str,
+    spec_image: str,
+    status_name: str,
+    ready: bool,
+    image_id: str,
+) -> None:
+    manager_module = load_node_collector_manager_module()
+    expected = f"registry.example/opsia/node-collector@sha256:{'9' * 64}"
+    pod = {
+        "spec": {
+            "containers": [
+                {
+                    "name": spec_name,
+                    "image": spec_image,
+                }
+            ]
+        },
+        "status": {
+            "containerStatuses": [
+                {
+                    "name": status_name,
+                    "ready": ready,
+                    "image": f"sha256:{'8' * 64}",
+                    "imageID": image_id,
+                }
+            ]
+        },
+    }
+
+    assert manager_module.pod_uses_exact_image(pod, expected) is False
 
 
 def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
