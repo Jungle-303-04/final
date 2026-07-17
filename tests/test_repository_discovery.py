@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import subprocess
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from domains.gitops.repository_discovery import (
     GitHubRepositoryClient,
     RepositoryDiscoveryError,
     RepositoryDiscoveryService,
+    RepositoryManifestBatchError,
     manifest_candidates_from_tree,
     normalize_github_repo_ref,
 )
@@ -25,6 +27,7 @@ from packages.contracts.gateway.requests import (
     RepositoryProbeRequest,
     RepoValidateRequest,
 )
+from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
 
 
 class StubGitHubClient:
@@ -412,6 +415,191 @@ metadata:
         ("Service", "api"),
     ]
     assert "static manifest parse only" in response.warnings[0]
+
+
+def test_manifest_batch_reuses_one_immutable_snapshot_for_five_sources() -> None:
+    revision = "a" * 40
+    contents = {
+        "manifests/raw.yaml": (b"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: raw\n"),
+        "manifests/overlays/dev/kustomization.yaml": b"resources:\n- config.yaml\n",
+        "manifests/overlays/dev/config.yaml": b"kind: ConfigMap\nmetadata:\n  name: dev\n",
+        "manifests/overlays/diagnostics/kustomization.yaml": (b"resources:\n- config.yaml\n"),
+        "manifests/overlays/diagnostics/config.yaml": (
+            b"kind: ConfigMap\nmetadata:\n  name: diagnostics\n"
+        ),
+        "charts/app/Chart.yaml": b"apiVersion: v2\nname: app\nversion: 0.1.0\n",
+        "charts/app/templates/config.yaml": b"kind: ConfigMap\nmetadata:\n  name: app\n",
+        "charts/app/values-staging.yaml": b"environment: staging\n",
+    }
+    tree = [{"type": "blob", "path": path} for path in contents]
+
+    class BatchClient:
+        def __init__(self) -> None:
+            self.branch_sha_calls = 0
+            self.tree_calls = 0
+            self.tree_at_revision_calls = 0
+            self.content_calls: list[tuple[str, str]] = []
+
+        async def branch_sha(self, repo_ref: str, branch: str) -> str:
+            assert (repo_ref, branch) == ("owner/service", "trunk")
+            self.branch_sha_calls += 1
+            return revision
+
+        async def tree(
+            self,
+            repo_ref: str,
+            branch: str,
+        ) -> tuple[list[dict[str, object]], list[str]]:
+            assert (repo_ref, branch) == ("owner/service", "trunk")
+            self.tree_calls += 1
+            return tree, ["bounded tree"]
+
+        async def tree_at_revision(
+            self,
+            repo_ref: str,
+            requested_revision: str,
+        ) -> tuple[list[dict[str, object]], list[str]]:
+            assert (repo_ref, requested_revision) == ("owner/service", revision)
+            self.tree_at_revision_calls += 1
+            return tree, ["bounded tree"]
+
+        async def content(self, repo_ref: str, ref: str, path: str) -> bytes:
+            assert repo_ref == "owner/service"
+            assert ref in {"trunk", revision}
+            self.content_calls.append((ref, path))
+            await asyncio.sleep(0)
+            return contents[path]
+
+        async def repository(self, _repo_ref: str) -> dict[str, object]:
+            raise AssertionError("batch validation must not refetch repository metadata")
+
+        async def branches(self, _repo_ref: str) -> list[dict[str, object]]:
+            raise AssertionError("batch validation must not refetch branches")
+
+    def executor(
+        command: Sequence[str],
+        _timeout_seconds: float,
+    ) -> subprocess.CompletedProcess[str]:
+        if command[0] == "kubectl":
+            name = Path(command[2]).name
+        else:
+            name = "helm-staging" if "--values" in command else "helm-default"
+        return subprocess.CompletedProcess(
+            list(command),
+            0,
+            stdout=(f"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {name}\n"),
+            stderr="",
+        )
+
+    requests = [
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path="manifests/raw.yaml",
+            source_type="raw-yaml",
+        ),
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path="manifests/overlays/dev",
+            source_type="kustomize",
+        ),
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path="manifests/overlays/diagnostics",
+            source_type="kustomize",
+        ),
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path="charts/app",
+            source_type="helm",
+        ),
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path="charts/app",
+            source_type="helm",
+            values_path="charts/app/values-staging.yaml",
+        ),
+    ]
+
+    baseline_client = BatchClient()
+    baseline_service = RepositoryDiscoveryService(
+        baseline_client,
+        render_executor=executor,
+    )
+
+    async def validate_baseline() -> list[RepositoryManifestValidationResponse]:
+        return await asyncio.gather(
+            *(baseline_service.validate_manifest(request) for request in requests)
+        )
+
+    baseline = asyncio.run(validate_baseline())
+    batch_client = BatchClient()
+    batch = asyncio.run(
+        RepositoryDiscoveryService(
+            batch_client,
+            render_executor=executor,
+        ).validate_manifests_at_revision(requests, expected_revision=revision)
+    )
+
+    assert [item.model_dump() for item in batch.validations] == [
+        item.model_dump() for item in baseline
+    ]
+    assert batch.revision == revision
+    assert batch_client.tree_at_revision_calls == 1
+    assert batch_client.tree_calls == 0
+    assert batch_client.branch_sha_calls == 2
+    assert Counter(path for _, path in batch_client.content_calls) == Counter(contents.keys())
+    assert set(ref for ref, _ in batch_client.content_calls) == {revision}
+    assert baseline_client.tree_calls == 4
+    assert len(baseline_client.content_calls) > len(batch_client.content_calls)
+
+
+def test_manifest_batch_fails_atomically_with_source_specific_errors() -> None:
+    revision = "a" * 40
+
+    class FailingBatchClient:
+        async def branch_sha(self, _repo_ref: str, _branch: str) -> str:
+            return revision
+
+        async def tree_at_revision(
+            self,
+            _repo_ref: str,
+            _revision: str,
+        ) -> tuple[list[dict[str, object]], list[str]]:
+            return [
+                {"type": "blob", "path": "one.yaml"},
+                {"type": "blob", "path": "two.yaml"},
+            ], []
+
+        async def content(self, _repo_ref: str, _ref: str, path: str) -> bytes:
+            raise RepositoryDiscoveryError(502, f"fetch failed for {path}")
+
+    requests = [
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path=path,
+            source_type="raw-yaml",
+        )
+        for path in ("one.yaml", "two.yaml")
+    ]
+
+    with pytest.raises(RepositoryManifestBatchError) as exc:
+        asyncio.run(
+            RepositoryDiscoveryService(FailingBatchClient()).validate_manifests_at_revision(
+                requests,
+                expected_revision=revision,
+            )
+        )
+
+    assert exc.value.source_errors == {
+        "raw-yaml:one.yaml": "fetch failed for one.yaml",
+        "raw-yaml:two.yaml": "fetch failed for two.yaml",
+    }
 
 
 def test_kustomize_validation_renders_exported_tree(monkeypatch: pytest.MonkeyPatch) -> None:

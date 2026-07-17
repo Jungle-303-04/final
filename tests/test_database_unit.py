@@ -1392,7 +1392,10 @@ def _capture_application_statements(
     class StubConnection:
         def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            if len(recorded) == 1:
+            sql = str(statement.compile(dialect=postgresql.dialect()))
+            if "FROM applications" in sql:
+                return StubResult(existing_application_id)
+            if "UPDATE applications" in sql:
                 return StubResult(existing_application_id)
             return StubResult("app-persisted")
 
@@ -1452,7 +1455,7 @@ def test_upsert_application_reuses_existing_product_identity() -> None:
     assert "ON CONFLICT" not in update_sql
 
 
-def test_upsert_application_keeps_application_id_conflict_for_renames() -> None:
+def test_upsert_application_create_does_not_update_application_id_conflicts() -> None:
     repository, recorded = _capture_application_statements()
 
     repository.upsert_application(
@@ -1467,7 +1470,7 @@ def test_upsert_application_keeps_application_id_conflict_for_renames() -> None:
 
     sql = str(recorded[1].compile(dialect=postgresql.dialect()))
 
-    assert "ON CONFLICT (application_id) DO UPDATE" in sql
+    assert "ON CONFLICT DO NOTHING" in sql
 
 
 def test_start_workflow_run_upsert_guards_status_transition() -> None:

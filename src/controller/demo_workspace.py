@@ -20,7 +20,10 @@ if str(SRC) not in sys.path:
 from domains.dashboard.repository import timeline_update_from_event  # noqa: E402
 from domains.demo_workspace.policy import require_demo_workspace_mutation_opt_in  # noqa: E402
 from domains.gitops.repository import derive_workflow_run_id  # noqa: E402
-from domains.gitops.repository_discovery import RepositoryDiscoveryService  # noqa: E402
+from domains.gitops.repository_discovery import (  # noqa: E402
+    RepositoryDiscoveryError,
+    RepositoryDiscoveryService,
+)
 from domains.inventory.events import InventorySnapshotRecordedBody  # noqa: E402
 from domains.inventory.ingest import ingest_inventory_snapshot  # noqa: E402
 from domains.rca.events import (  # noqa: E402
@@ -93,49 +96,40 @@ async def validate_demo_gitops_sources(
         raise RuntimeError("demo GitOps repository default branch does not match descriptor")
 
     normalized_repo_ref = probe.normalized_repo_ref
-    branches, candidates, revision = await asyncio.gather(
-        discovery.list_branches(normalized_repo_ref),
-        discovery.list_manifest_candidates(normalized_repo_ref, gitops.default_branch),
-        discovery.resolve_branch_revision(normalized_repo_ref, gitops.default_branch),
-    )
+    validation_requests = [
+        RepositoryManifestValidationRequest(
+            repo_ref=normalized_repo_ref,
+            branch=gitops.default_branch,
+            manifest_path=source.manifest_path,
+            source_type=source.source_type,
+            values_path=source.values_path,
+        )
+        for source in gitops.sources
+    ]
+    try:
+        branches, batch = await asyncio.gather(
+            discovery.list_branches(normalized_repo_ref),
+            discovery.validate_manifests_at_revision(
+                validation_requests,
+                expected_revision=gitops.revision,
+            ),
+        )
+    except RepositoryDiscoveryError as exc:
+        if exc.status_code == 409:
+            raise RuntimeError("demo GitOps repository changed during source validation") from exc
+        raise
     branch_names = {branch.name for branch in branches.branches}
     if gitops.default_branch not in branch_names:
         raise RuntimeError("demo GitOps default branch is unavailable")
-    if revision != gitops.revision:
-        raise RuntimeError("demo GitOps repository revision does not match descriptor")
-    candidate_identities = {
-        (candidate.path, candidate.source_type) for candidate in candidates.candidates
-    }
-    missing = [
-        f"{source.source_type}:{source.manifest_path}"
-        for source in gitops.sources
-        if (source.manifest_path, source.source_type) not in candidate_identities
-    ]
-    if missing:
-        raise RuntimeError(f"demo GitOps candidates are unavailable: {', '.join(missing)}")
-
-    validations = await asyncio.gather(
-        *(
-            discovery.validate_manifest(
-                RepositoryManifestValidationRequest(
-                    repo_ref=normalized_repo_ref,
-                    branch=gitops.default_branch,
-                    manifest_path=source.manifest_path,
-                    source_type=source.source_type,
-                    values_path=source.values_path,
-                )
-            )
-            for source in gitops.sources
-        )
-    )
-    confirmed_revision = await discovery.resolve_branch_revision(
-        normalized_repo_ref,
-        gitops.default_branch,
-    )
-    if confirmed_revision != gitops.revision:
-        raise RuntimeError("demo GitOps repository changed during source validation")
+    if (
+        batch.repo_ref != normalized_repo_ref
+        or batch.branch != gitops.default_branch
+        or batch.revision != gitops.revision
+        or len(batch.validations) != len(gitops.sources)
+    ):
+        raise RuntimeError("demo GitOps repository validation batch is incomplete")
     evidence: list[dict[str, object]] = []
-    for source, validation in zip(gitops.sources, validations, strict=True):
+    for source, validation in zip(gitops.sources, batch.validations, strict=True):
         if (
             not validation.valid
             or validation.repo_ref != normalized_repo_ref
@@ -274,7 +268,11 @@ def persist_demo_gitops_sources(
                 "mutation": "read-only-demo",
             },
         }
-        application = db.upsert_application(body)
+        application = ensure_demo_gitops_application(
+            db,
+            body,
+            marker=marker,
+        )
         binding_body = {
             **body,
             "application_id": str(application["application_id"]),
@@ -293,6 +291,57 @@ def persist_demo_gitops_sources(
             marker=marker,
         )
     return len(evidence)
+
+
+def ensure_demo_gitops_application(
+    db: Any,
+    payload: Mapping[str, object],
+    *,
+    marker: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Create a demo-owned app or update the exact marker-owned identity."""
+
+    workspace_id = str(payload.get("workspace_id") or "")
+    repository_id = str(payload.get("repository_id") or "")
+    name = str(payload.get("name") or "")
+    if not all((workspace_id, repository_id, name)):
+        raise RuntimeError("demo GitOps application identity is incomplete")
+    lookup = getattr(db, "get_application_by_identity", None)
+    if not callable(lookup):
+        raise RuntimeError("demo GitOps application identity lookup is unavailable")
+
+    def require_demo_owned(application: object) -> Mapping[str, object]:
+        if not isinstance(application, Mapping):
+            raise RuntimeError("demo GitOps application identity is unavailable")
+        metadata = application.get("metadata")
+        if (
+            str(application.get("workspace_id") or "") != workspace_id
+            or str(application.get("repository_id") or "") != repository_id
+            or str(application.get("name") or "") != name
+            or not isinstance(metadata, Mapping)
+            or metadata.get(DEMO_SEED_MARKER_KEY) != marker
+        ):
+            raise RuntimeError("demo GitOps application identity is not seed-owned")
+        return application
+
+    existing = lookup(workspace_id, repository_id, name)
+    if existing is None:
+        try:
+            application = db.upsert_application(dict(payload))
+        except LookupError:
+            # A concurrent seed can win the create after our lookup. Only the
+            # exact marker-owned identity may be retried as a trusted update.
+            require_demo_owned(lookup(workspace_id, repository_id, name))
+            update_payload = dict(payload)
+            update_payload.pop("user_id", None)
+            application = db.upsert_application(update_payload)
+    else:
+        require_demo_owned(existing)
+        update_payload = dict(payload)
+        update_payload.pop("user_id", None)
+        application = db.upsert_application(update_payload)
+
+    return require_demo_owned(application)
 
 
 def _persist_demo_gitops_runtime(

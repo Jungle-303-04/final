@@ -618,17 +618,23 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             "metadata": dict(payload.get("metadata", {})),
             "updated_at": func.now(),
         }
-        insert = pg_insert(table).values(
-            application_id=application_id,
-            workspace_id=workspace_id,
-            repository_id=repository_id,
-            name=name,
-            manifest_path=str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
-            status=str(payload.get("status", ApplicationStatus.ACTIVE.value)),
-            metadata=dict(payload.get("metadata", {})),
-            updated_at=func.now(),
+        create_statement = (
+            pg_insert(table)
+            .values(
+                application_id=application_id,
+                workspace_id=workspace_id,
+                repository_id=repository_id,
+                name=name,
+                manifest_path=str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
+                status=str(payload.get("status", ApplicationStatus.ACTIVE.value)),
+                metadata=dict(payload.get("metadata", {})),
+                updated_at=func.now(),
+            )
+            .on_conflict_do_nothing()
+            .returning(table.c.application_id)
         )
         user_id = str(payload.get("user_id") or "")
+        created = False
         with self.unit_of_work():
             repo_ref = str(payload.get("repo_ref") or "").strip()
             if repo_ref:
@@ -639,71 +645,61 @@ class RepoChangeRepository(GitOpsOverviewRepository):
                 existing_application_id = conn.execute(
                     existing_application_id_statement
                 ).scalar_one_or_none()
-            if existing_application_id is not None and user_id:
-                can_access = getattr(self, "can_access", None)
-                if not callable(can_access) or not can_access(
-                    user_id,
-                    workspace_id,
-                    AccessResourceType.APPLICATION.value,
-                    str(existing_application_id),
-                    Permission.APPLICATION_MANAGE.value,
-                ):
-                    raise LookupError("application not found in workspace")
-
-            authorized_application_id = (
-                str(existing_application_id)
-                if user_id and existing_application_id is not None
-                else application_id
-                if not user_id
-                else None
-            )
-            statement = insert.on_conflict_do_update(
-                index_elements=[table.c.application_id],
-                set_={
-                    "repository_id": insert.excluded.repository_id,
-                    "name": insert.excluded.name,
-                    "manifest_path": insert.excluded.manifest_path,
-                    "status": insert.excluded.status,
-                    "metadata": insert.excluded.metadata,
-                    "updated_at": func.now(),
-                },
-                where=and_(
-                    table.c.workspace_id == insert.excluded.workspace_id,
-                    table.c.application_id
-                    == bindparam("authorized_application_id", authorized_application_id),
-                ),
-            ).returning(table.c.application_id)
             with self.connection() as conn:
-                if existing_application_id and str(existing_application_id) != application_id:
-                    # 같은 workspace+repo+name 은 같은 application 으로 흡수(dedup).
-                    # 서로 다른 앱이 동명일 가능성이 있어 silent merge 대신 경고를 남김.
+                if existing_application_id is None:
+                    inserted_application_id = conn.execute(create_statement).scalar_one_or_none()
+                    if inserted_application_id is not None:
+                        resolved_application_id = str(inserted_application_id)
+                        created = True
+                    else:
+                        existing_application_id = conn.execute(
+                            existing_application_id_statement
+                        ).scalar_one_or_none()
+
+                if not created:
+                    if existing_application_id is None:
+                        # A conflicting primary key that is not the same
+                        # workspace/repository/name identity is never adopted.
+                        raise LookupError("application not found in workspace")
                     resolved_application_id = str(existing_application_id)
-                    LOGGER.warning(
-                        "application_id_merged_by_name",
-                        extra={
-                            "context": {
-                                "workspace_id": workspace_id,
-                                "repository_id": repository_id,
-                                "name": name,
-                                "incoming_application_id": application_id,
-                                "resolved_application_id": resolved_application_id,
-                            }
-                        },
-                    )
-                    conn.execute(
+                    if user_id:
+                        can_access = getattr(self, "can_access", None)
+                        if not callable(can_access) or not can_access(
+                            user_id,
+                            workspace_id,
+                            AccessResourceType.APPLICATION.value,
+                            resolved_application_id,
+                            Permission.APPLICATION_MANAGE.value,
+                        ):
+                            raise LookupError("application not found in workspace")
+                    if resolved_application_id != application_id:
+                        LOGGER.warning(
+                            "application_id_merged_by_name",
+                            extra={
+                                "context": {
+                                    "workspace_id": workspace_id,
+                                    "repository_id": repository_id,
+                                    "name": name,
+                                    "incoming_application_id": application_id,
+                                    "resolved_application_id": resolved_application_id,
+                                }
+                            },
+                        )
+                    updated_application_id = conn.execute(
                         table.update()
                         .where(
                             table.c.workspace_id == workspace_id,
+                            table.c.repository_id == repository_id,
+                            table.c.name == name,
                             table.c.application_id == resolved_application_id,
                         )
                         .values(**update_values)
-                    )
-                else:
-                    persisted_application_id = conn.execute(statement).scalar_one_or_none()
-                    if persisted_application_id is None:
+                        .returning(table.c.application_id)
+                    ).scalar_one_or_none()
+                    if updated_application_id is None:
                         raise LookupError("application not found in workspace")
-                    resolved_application_id = str(persisted_application_id)
-        if existing_application_id is None:
+                    resolved_application_id = str(updated_application_id)
+        if created:
             self._grant_owner_if_present(
                 workspace_id,
                 payload.get("user_id"),

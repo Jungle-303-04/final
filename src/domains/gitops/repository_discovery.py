@@ -10,6 +10,7 @@ import posixpath
 import re
 import subprocess
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Protocol
@@ -92,12 +93,35 @@ class ManifestRenderValidationError(Exception):
     """The selected render source could not be exported or rendered for validation."""
 
 
+class RepositoryManifestBatchError(RepositoryDiscoveryError):
+    """One immutable validation batch failed without exposing partial results."""
+
+    def __init__(self, source_errors: Mapping[str, str]) -> None:
+        self.source_errors = dict(source_errors)
+        detail = "; ".join(
+            f"{source}: {error}" for source, error in sorted(self.source_errors.items())
+        )
+        super().__init__(422, detail or "repository manifest batch validation failed")
+
+
+@dataclass(frozen=True)
+class RepositoryManifestValidationBatch:
+    repo_ref: str
+    branch: str
+    revision: str
+    validations: tuple[RepositoryManifestValidationResponse, ...]
+
+
 class GitHubClient(Protocol):
     async def repository(self, repo_ref: str) -> JsonMap: ...
 
     async def branches(self, repo_ref: str) -> list[JsonMap]: ...
 
     async def tree(self, repo_ref: str, branch: str) -> tuple[list[JsonMap], list[str]]: ...
+
+    async def tree_at_revision(
+        self, repo_ref: str, revision: str
+    ) -> tuple[list[JsonMap], list[str]]: ...
 
     async def content(self, repo_ref: str, branch: str, path: str) -> bytes: ...
 
@@ -154,6 +178,27 @@ class GitHubRepositoryClient:
         tree_sha = str(tree_map.get("sha") or "").strip()
         if not tree_sha:
             raise RepositoryDiscoveryError(502, "github branch tree response was invalid")
+        return await self._tree(repo_ref, tree_sha)
+
+    async def tree_at_revision(
+        self,
+        repo_ref: str,
+        revision: str,
+    ) -> tuple[list[JsonMap], list[str]]:
+        if not re.fullmatch(r"[0-9a-f]{40,64}", revision):
+            raise RepositoryDiscoveryError(422, "repository revision is invalid")
+        commit_data = await self._get(
+            f"/repos/{quote(repo_ref, safe='/')}/git/commits/{quote(revision, safe='')}"
+        )
+        if not isinstance(commit_data, Mapping):
+            raise RepositoryDiscoveryError(502, "github commit response was invalid")
+        tree = commit_data.get("tree")
+        tree_sha = str(tree.get("sha") or "") if isinstance(tree, Mapping) else ""
+        if not tree_sha:
+            raise RepositoryDiscoveryError(502, "github commit tree response was invalid")
+        return await self._tree(repo_ref, tree_sha)
+
+    async def _tree(self, repo_ref: str, tree_sha: str) -> tuple[list[JsonMap], list[str]]:
         tree_data = await self._get(
             f"/repos/{quote(repo_ref, safe='/')}/git/trees/{quote(tree_sha, safe='')}",
             params={"recursive": "1"},
@@ -232,6 +277,69 @@ class GitHubRepositoryClient:
             return response.json()
         except ValueError as exc:
             raise RepositoryDiscoveryError(502, "github api response was not json") from exc
+
+
+class ImmutableRepositorySnapshotClient:
+    """Revision-pinned tree and coalesced content reads for one validation batch."""
+
+    def __init__(
+        self,
+        client: GitHubClient,
+        *,
+        repo_ref: str,
+        branch: str,
+        revision: str,
+        tree: Sequence[Mapping[str, Any]],
+        warnings: Sequence[str],
+    ) -> None:
+        self._client = client
+        self._repo_ref = repo_ref
+        self._branch = branch
+        self._revision = revision
+        self._tree = [dict(item) for item in tree]
+        self._warnings = list(warnings)
+        self._content_tasks: dict[str, asyncio.Task[bytes]] = {}
+        self._content_lock = asyncio.Lock()
+
+    def _require_scope(self, repo_ref: str, revision: str) -> None:
+        if repo_ref != self._repo_ref or revision not in {self._branch, self._revision}:
+            raise RepositoryDiscoveryError(422, "repository snapshot scope mismatch")
+
+    async def repository(self, repo_ref: str) -> JsonMap:
+        self._require_scope(repo_ref, self._branch)
+        return await self._client.repository(repo_ref)
+
+    async def branches(self, repo_ref: str) -> list[JsonMap]:
+        self._require_scope(repo_ref, self._branch)
+        return await self._client.branches(repo_ref)
+
+    async def tree(self, repo_ref: str, branch: str) -> tuple[list[JsonMap], list[str]]:
+        self._require_scope(repo_ref, branch)
+        return [dict(item) for item in self._tree], list(self._warnings)
+
+    async def tree_at_revision(
+        self,
+        repo_ref: str,
+        revision: str,
+    ) -> tuple[list[JsonMap], list[str]]:
+        self._require_scope(repo_ref, revision)
+        return [dict(item) for item in self._tree], list(self._warnings)
+
+    async def content(self, repo_ref: str, branch: str, path: str) -> bytes:
+        self._require_scope(repo_ref, branch)
+        normalized_path = normalize_manifest_path(path)
+        async with self._content_lock:
+            task = self._content_tasks.get(normalized_path)
+            if task is None:
+                task = asyncio.create_task(
+                    self._client.content(self._repo_ref, self._revision, normalized_path)
+                )
+                self._content_tasks[normalized_path] = task
+        return await asyncio.shield(task)
+
+    async def branch_sha(self, repo_ref: str, branch: str) -> str:
+        self._require_scope(repo_ref, branch)
+        return self._revision
 
 
 class RepositoryDiscoveryService:
@@ -400,6 +508,135 @@ class RepositoryDiscoveryService:
         except UnicodeDecodeError as exc:
             raise RepositoryDiscoveryError(422, "selected manifest is not valid utf-8") from exc
         return validate_manifest_text(repo_ref, branch, manifest_path, text, source_type)
+
+    async def validate_manifests_at_revision(
+        self,
+        payloads: Sequence[RepositoryManifestValidationRequest],
+        *,
+        expected_revision: str,
+    ) -> RepositoryManifestValidationBatch:
+        """Validate one repository batch from a single immutable revision snapshot."""
+
+        if not payloads:
+            raise ValueError("repository manifest validation batch cannot be empty")
+        if not re.fullmatch(r"[0-9a-f]{40,64}", expected_revision):
+            raise ValueError("expected repository revision is invalid")
+
+        normalized: list[tuple[RepositoryManifestValidationRequest, str, str, str, str]] = []
+        for payload in payloads:
+            repo_ref = normalize_repo_ref(payload.repo_ref)
+            branch = normalize_branch(payload.branch)
+            manifest_path = normalize_manifest_path(payload.manifest_path)
+            source_type = normalize_source_type(payload.source_type) or source_type_from_path(
+                manifest_path
+            )
+            normalized.append((payload, repo_ref, branch, manifest_path, source_type))
+
+        repo_refs = {item[1] for item in normalized}
+        branches = {item[2] for item in normalized}
+        if len(repo_refs) != 1 or len(branches) != 1:
+            raise ValueError("repository manifest batch must share one repository and branch")
+        repo_ref = repo_refs.pop()
+        branch = branches.pop()
+
+        observed_revision = await self.client.branch_sha(repo_ref, branch)
+        if observed_revision != expected_revision:
+            raise RepositoryDiscoveryError(
+                409,
+                "repository revision does not match expected revision",
+            )
+        tree, warnings = await tree_at_revision(self.client, repo_ref, observed_revision)
+        candidate_identities = {
+            (candidate.path, candidate.source_type)
+            for candidate in manifest_candidates_from_tree(tree)
+        }
+        missing_errors = {
+            manifest_request_identity(payload, manifest_path, source_type): (
+                "selected manifest is not an attachable repository candidate"
+            )
+            for payload, _, _, manifest_path, source_type in normalized
+            if (manifest_path, source_type) not in candidate_identities
+        }
+
+        snapshot = ImmutableRepositorySnapshotClient(
+            self.client,
+            repo_ref=repo_ref,
+            branch=branch,
+            revision=observed_revision,
+            tree=tree,
+            warnings=warnings,
+        )
+        snapshot_service = RepositoryDiscoveryService(
+            snapshot,
+            render_executor=self.render_executor,
+        )
+        outcomes = await asyncio.gather(
+            *(snapshot_service.validate_manifest(item[0]) for item in normalized),
+            return_exceptions=True,
+        )
+
+        confirmed_revision = await self.client.branch_sha(repo_ref, branch)
+        if confirmed_revision != observed_revision:
+            raise RepositoryDiscoveryError(
+                409,
+                "repository changed during manifest batch validation",
+            )
+
+        validations: list[RepositoryManifestValidationResponse] = []
+        source_errors = dict(missing_errors)
+        unexpected_error: BaseException | None = None
+        for item, outcome in zip(normalized, outcomes, strict=True):
+            payload, _, _, manifest_path, source_type = item
+            if isinstance(outcome, RepositoryManifestValidationResponse):
+                validations.append(outcome)
+                continue
+            if isinstance(outcome, RepositoryDiscoveryError):
+                source_errors[manifest_request_identity(payload, manifest_path, source_type)] = (
+                    outcome.detail
+                )
+                continue
+            if isinstance(outcome, (ValueError, UnicodeDecodeError)):
+                source_errors[manifest_request_identity(payload, manifest_path, source_type)] = str(
+                    outcome
+                )
+                continue
+            if isinstance(outcome, BaseException) and unexpected_error is None:
+                unexpected_error = outcome
+
+        if unexpected_error is not None:
+            raise unexpected_error
+        if source_errors:
+            raise RepositoryManifestBatchError(source_errors)
+        return RepositoryManifestValidationBatch(
+            repo_ref=repo_ref,
+            branch=branch,
+            revision=observed_revision,
+            validations=tuple(validations),
+        )
+
+
+async def tree_at_revision(
+    client: GitHubClient,
+    repo_ref: str,
+    revision: str,
+) -> tuple[list[JsonMap], list[str]]:
+    resolver = getattr(client, "tree_at_revision", None)
+    if not callable(resolver):
+        raise RepositoryDiscoveryError(
+            500,
+            "repository client cannot provide a revision-pinned tree",
+        )
+    return await resolver(repo_ref, revision)
+
+
+def manifest_request_identity(
+    payload: RepositoryManifestValidationRequest,
+    manifest_path: str,
+    source_type: str,
+) -> str:
+    values = normalize_manifest_path(payload.values_path) if payload.values_path is not None else ""
+    suffix = f"?values={values}" if values else ""
+    return f"{source_type}:{manifest_path}{suffix}"
 
 
 async def validate_render_manifest(

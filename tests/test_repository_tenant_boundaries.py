@@ -1572,7 +1572,7 @@ def test_application_late_identity_conflict_is_rejected_instead_of_updated() -> 
             }
         )
 
-    assert len(statements) == 3
+    assert len(statements) == 4
 
 
 def test_application_write_locks_repository_before_application_identity() -> None:

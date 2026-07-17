@@ -62,6 +62,10 @@ from domains.demo_workspace.policy import (
 )
 from domains.demo_workspace.repository import DemoWorkspaceRepository
 from domains.gitops.detail_router import router as gitops_detail_router
+from domains.gitops.repository_discovery import (
+    RepositoryDiscoveryError,
+    RepositoryManifestValidationBatch,
+)
 from domains.helm.release_router import router as helm_release_router
 from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.identity.dependencies import require_session
@@ -108,6 +112,7 @@ class FakeDemoDatabase:
         self.reset_calls: list[dict[str, Any]] = []
         self.repository_writes: list[dict[str, Any]] = []
         self.application_writes: list[dict[str, Any]] = []
+        self.applications_by_identity: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.watch_writes: list[dict[str, Any]] = []
         self.binding_writes: list[dict[str, Any]] = []
         self.workflow_writes: list[dict[str, Any]] = []
@@ -159,12 +164,32 @@ class FakeDemoDatabase:
         return stored
 
     def upsert_application(self, payload: dict[str, Any]) -> dict[str, Any]:
+        identity = (
+            str(payload["workspace_id"]),
+            str(payload["repository_id"]),
+            str(payload["name"]),
+        )
+        existing = self.applications_by_identity.get(identity)
         stored = {
             **deepcopy(payload),
-            "application_id": f"application-{payload['name']}",
+            "application_id": (
+                str(existing["application_id"])
+                if existing is not None
+                else f"application-{payload['name']}"
+            ),
         }
         self.application_writes.append(stored)
-        return stored
+        self.applications_by_identity[identity] = stored
+        return deepcopy(stored)
+
+    def get_application_by_identity(
+        self,
+        workspace_id: str,
+        repository_id: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        application = self.applications_by_identity.get((workspace_id, repository_id, name))
+        return deepcopy(application) if application is not None else None
 
     def register_watch_target(self, payload: dict[str, Any]) -> dict[str, Any]:
         stored = {
@@ -818,6 +843,41 @@ class FakeRepositoryDiscovery:
                 )
                 for index in range(resource_count)
             ],
+        )
+
+    async def validate_manifests_at_revision(
+        self,
+        payloads: list[Any],
+        *,
+        expected_revision: str,
+    ) -> RepositoryManifestValidationBatch:
+        observed_revision = await self.resolve_branch_revision("", "")
+        if observed_revision != expected_revision:
+            raise RuntimeError("repository revision does not match expected revision")
+        candidates = await self.list_manifest_candidates(
+            "jungle-303-04/yaml-demo",
+            "main",
+        )
+        candidate_identities = {
+            (candidate.path, candidate.source_type) for candidate in candidates.candidates
+        }
+        for payload in payloads:
+            if (payload.manifest_path, payload.source_type) not in candidate_identities:
+                raise RuntimeError("repository manifest candidate is unavailable")
+        validations = tuple(
+            await asyncio.gather(*(self.validate_manifest(payload) for payload in payloads))
+        )
+        confirmed_revision = await self.resolve_branch_revision("", "")
+        if confirmed_revision != observed_revision:
+            raise RepositoryDiscoveryError(
+                409,
+                "repository changed during manifest batch validation",
+            )
+        return RepositoryManifestValidationBatch(
+            repo_ref="jungle-303-04/yaml-demo",
+            branch="main",
+            revision=observed_revision,
+            validations=validations,
         )
 
 
