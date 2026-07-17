@@ -163,4 +163,25 @@ describe("post-deploy route smoke helpers", () => {
       diagnostics,
     )).toContain('"failingRoute":"/traffic"');
   });
+
+  it("redacts credentials from structured browser diagnostics", () => {
+    const diagnostics = createRouteSmokeDiagnostics();
+    diagnostics.failingRoute = "/resources";
+    diagnostics.pageErrors.push("token=page-secret");
+    diagnostics.requestFailures.push({
+      error: "password=request-secret",
+      method: "GET",
+      url: "/api/resources",
+    });
+
+    const rendered = formatRouteSmokeFailureDiagnostics(
+      new Error("Authorization: Bearer header-secret"),
+      diagnostics,
+    );
+
+    expect(rendered).not.toContain("page-secret");
+    expect(rendered).not.toContain("request-secret");
+    expect(rendered).not.toContain("header-secret");
+    expect(rendered.match(/<redacted>/gu)).toHaveLength(3);
+  });
 });
