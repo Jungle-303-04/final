@@ -41,9 +41,21 @@ from domains.checks.observation_projection import checks_overview
 from domains.cost.node_projection import cost_node_page
 from domains.cost.observation_projection import cost_overview
 from domains.cost.router import router as cost_router
-from domains.dashboard.fleet_router import current_warning_event_items, rollup_health
+from domains.dashboard.fleet_router import (
+    current_warning_event_items,
+    rollup_health,
+)
+from domains.dashboard.fleet_router import (
+    router as fleet_router,
+)
 from domains.dashboard.home_bands import compose_home_topology_preview
-from domains.dashboard.repository import timeline_update_from_event
+from domains.dashboard.repository import (
+    OPEN_INCIDENT_STATUSES,
+    issue_severity_projection,
+    open_incident_summary,
+    timeline_update_from_event,
+)
+from domains.dashboard.router import router as dashboard_router
 from domains.demo_workspace.policy import (
     DEMO_WORKSPACE_MUTATIONS_ENV,
     DEMO_WORKSPACE_MUTATIONS_OPT_IN,
@@ -102,6 +114,7 @@ class FakeDemoDatabase:
         self.workflow_step_writes: list[dict[str, Any]] = []
         self.manifest_artifact_writes: list[dict[str, Any]] = []
         self.evidence_writes: list[dict[str, Any]] = []
+        self.rca_timeline_writes: list[dict[str, Any]] = []
 
     def get_cluster_registration(self, _workspace_id: str, _cluster_id: str) -> object:
         return self.registration
@@ -232,6 +245,115 @@ class FakeDemoDatabase:
             "correlation_id": event_envelope.correlation_id,
         }
 
+    def upsert_rca_timeline(self, row: dict[str, Any]) -> None:
+        existing = next(
+            (
+                item
+                for item in self.rca_timeline_writes
+                if item["workspace_id"] == row["workspace_id"]
+                and item["correlation_id"] == row["correlation_id"]
+            ),
+            None,
+        )
+        if existing is None:
+            self.rca_timeline_writes.append(
+                {
+                    "id": len(self.rca_timeline_writes) + 1,
+                    "created_at": row["last_event_at"],
+                    "updated_at": row["last_event_at"],
+                    **deepcopy(row),
+                }
+            )
+            return
+        for key, value in row.items():
+            if key.endswith("_complete") and existing.get(key) is True:
+                continue
+            if value is not None or key in {
+                "current_subject",
+                "status",
+                "error_reason",
+                "last_event_id",
+                "last_event_at",
+                "payload",
+            }:
+                existing[key] = deepcopy(value)
+        existing["updated_at"] = row["last_event_at"]
+
+    def list_rca_timeline(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        return deepcopy(self._rca_rows(workspace_id, allowed_cluster_ids)[:limit])
+
+    def list_rca_issues(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        return [
+            {**deepcopy(row), **issue_severity_projection(row)}
+            for row in self._rca_rows(workspace_id, allowed_cluster_ids)[:limit]
+        ]
+
+    def get_rca_timeline_item(
+        self,
+        workspace_id: str,
+        incident_id: str,
+        allowed_cluster_ids: set[str] | None,
+    ) -> dict[str, Any] | None:
+        return next(
+            (
+                deepcopy(row)
+                for row in self._rca_rows(workspace_id, allowed_cluster_ids)
+                if row.get("incident_id") == incident_id
+            ),
+            None,
+        )
+
+    def count_open_rca_incidents(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None = None,
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for row in self._rca_rows(workspace_id, allowed_cluster_ids):
+            if row.get("status") in OPEN_INCIDENT_STATUSES:
+                cluster_id = str(row["cluster_id"])
+                counts[cluster_id] = counts.get(cluster_id, 0) + 1
+        return counts
+
+    def list_open_rca_incidents(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        return [
+            open_incident_summary(row)
+            for row in self._rca_rows(workspace_id, {cluster_id})
+            if row.get("status") in OPEN_INCIDENT_STATUSES
+        ][:limit]
+
+    def _rca_rows(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None,
+    ) -> list[dict[str, Any]]:
+        return sorted(
+            (
+                row
+                for row in self.rca_timeline_writes
+                if row["workspace_id"] == workspace_id
+                and (allowed_cluster_ids is None or row.get("cluster_id") in allowed_cluster_ids)
+            ),
+            key=lambda item: str(item.get("updated_at") or ""),
+            reverse=True,
+        )
+
     def helm_release_observation_contexts(
         self,
         *,
@@ -295,6 +417,33 @@ class FakeDemoDatabase:
         _cluster_ids: set[str],
     ) -> dict[str, dict[str, Any]]:
         return {}
+
+    def list_inventory_resources(self, **kwargs: Any) -> list[dict[str, Any]]:
+        resource_type = kwargs.get("resource_type")
+        return [
+            row
+            for row in self._inventory_observation_rows()
+            if row["workspace_id"] == kwargs["workspace_id"]
+            and row["cluster_id"] == kwargs["cluster_id"]
+            and (resource_type is None or row.get("resource_type") == resource_type)
+        ][: int(kwargs.get("limit") or 100)]
+
+    def list_recent_warning_events(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        return []
+
+    def fleet_inventory_rollup(
+        self,
+        _workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, dict[str, Any]]:
+        return {cluster_id: {} for cluster_id in cluster_ids}
+
+    def latest_cluster_usage_rollups(
+        self,
+        _workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        return {cluster_id: [] for cluster_id in cluster_ids}
 
     def filter_snapshot_contexts(
         self,
@@ -739,6 +888,15 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
     ]
     assert descriptor.observations.traffic_source == "caretta"
     assert len(descriptor.observations.traffic_flows) == 2
+    assert descriptor.rca is not None
+    assert descriptor.rca.runtime_evidence_version == 1
+    assert descriptor.rca.origin == "descriptor-owned-synthetic"
+    assert descriptor.rca.analysis_mode == "none"
+    assert descriptor.rca.resource_name == "payments-api"
+    assert [step.stage for step in descriptor.rca.timeline] == [
+        "incident_detected",
+        "rca_completed",
+    ]
     assert descriptor.digest() == restored.digest()
     assert descriptor.seed_marker() == restored.seed_marker()
 
@@ -842,6 +1000,16 @@ def test_descriptor_rejects_default_workspace_and_incomplete_inventory(tmp_path:
 
     assert "runtime_evidence_version" in str(error.value)
 
+    raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
+    raw["rca"]["resource_name"] = "not-in-inventory"
+    invalid_rca_resource = tmp_path / "invalid-rca-resource.json"
+    invalid_rca_resource.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValidationError) as error:
+        load_descriptor(invalid_rca_resource)
+
+    assert "inventoried resource" in str(error.value)
+
 
 def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
@@ -883,11 +1051,14 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert len(db.workflow_step_writes) == 35
     assert len(db.manifest_artifact_writes) == 36
     assert len(db.evidence_writes) == 1
+    assert len(db.rca_timeline_writes) == 1
     assert len(discovery.validation_requests) == 5
     assert first["gitops_source_count"] == 5
     assert second["gitops_source_count"] == 5
     assert first["observation_window_count"] == 1
     assert second["observation_window_count"] == 1
+    assert first["rca_scenario_count"] == 1
+    assert second["rca_scenario_count"] == 1
     assert [
         request.values_path
         for request in discovery.validation_requests
@@ -967,6 +1138,16 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
         str(artifact["rendered_manifest"]["artifact_digest"]).startswith("sha256:")
         for artifact in db.manifest_artifact_writes
     )
+    assert descriptor.rca is not None
+    rca = db.rca_timeline_writes[0]
+    assert rca["current_subject"] == "rca.completed"
+    assert rca["status"] == "rca_completed"
+    assert rca["evidence_ref"].startswith("synthetic://demo-workspace/")
+    assert rca["severity"] == "high"
+    assert rca["severity_complete"] is True
+    assert rca["category"] == "availability"
+    assert rca["category_complete"] is True
+    assert rca["payload"]["rca_detail"]["selected_candidate_id"] == descriptor.rca.cause_id
 
 
 def test_seeded_runtime_is_visible_through_applications_and_gitops_reads() -> None:
@@ -1095,6 +1276,64 @@ def test_seeded_helm_cost_and_traffic_are_visible_through_existing_read_contract
     assert {edge["connections"] for edge in traffic["relationships"]["edges"]} == {6, 28}
 
 
+def test_seeded_synthetic_incident_is_visible_through_rca_issues_and_home_contracts() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+    asyncio.run(
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=FakeEvents(),
+            discovery=FakeRepositoryDiscovery(),
+            observed_at=datetime(2026, 7, 18, 1, 2, 3, tzinfo=UTC),
+        )
+    )
+    app = FastAPI()
+    app.include_router(dashboard_router)
+    app.include_router(fleet_router)
+    app.dependency_overrides[require_session] = lambda: SimpleNamespace(
+        user_id=descriptor.workspace.owner_user_id,
+        workspace_id=descriptor.workspace.workspace_id,
+        roles=("user",),
+    )
+    app.dependency_overrides[get_db] = lambda: db
+    client = TestClient(app)
+    cluster_id = descriptor.cluster.cluster_id
+
+    timeline_response = client.get(f"/dashboard/rca/timeline?cluster_id={cluster_id}")
+    assert timeline_response.status_code == 200
+    timeline = timeline_response.json()["items"]
+    assert len(timeline) == 1
+    assert timeline[0]["incident_id"] == "demo-payments-restart-loop"
+    assert timeline[0]["status"] == "rca_completed"
+    assert timeline[0]["evidence_ref"].startswith("synthetic://demo-workspace/")
+    assert timeline[0]["root_cause"].startswith("데모 서술자가 가정한")
+    assert any(
+        evidence.startswith("descriptor-impact:") for evidence in timeline[0]["supporting_evidence"]
+    )
+    assert "AI or rule-engine analysis" in timeline[0]["missing_evidence"]
+
+    issues_response = client.get(f"/dashboard/rca/issues?cluster_id={cluster_id}")
+    assert issues_response.status_code == 200
+    issues = issues_response.json()["items"]
+    assert len(issues) == 1
+    assert issues[0]["issue_severity"] == "critical"
+    assert issues[0]["severity_availability"] == "available"
+
+    incident_response = client.get(
+        f"/dashboard/rca/incidents/demo-payments-restart-loop?cluster_id={cluster_id}"
+    )
+    assert incident_response.status_code == 200
+    assert incident_response.json()["item"] == timeline[0]
+
+    home_response = client.get(f"/clusters/{cluster_id}/summary")
+    assert home_response.status_code == 200
+    open_incidents = home_response.json()["open_incidents"]
+    assert len(open_incidents) == 1
+    assert open_incidents[0]["incident_id"] == "demo-payments-restart-loop"
+    assert open_incidents[0]["root_cause"].startswith("데모 서술자가 가정한")
+
+
 def test_seed_rolls_back_inventory_and_gitops_when_one_binding_fails() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
     db = FailingTransactionalDemoDatabase()
@@ -1119,6 +1358,7 @@ def test_seed_rolls_back_inventory_and_gitops_when_one_binding_fails() -> None:
     assert db.watch_writes == []
     assert db.binding_writes == []
     assert db.evidence_writes == []
+    assert db.rca_timeline_writes == []
     assert events.bodies == []
 
 

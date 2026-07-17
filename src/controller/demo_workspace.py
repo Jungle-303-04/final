@@ -8,7 +8,7 @@ import hashlib
 import json
 import sys
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from domains.dashboard.repository import timeline_update_from_event  # noqa: E402
 from domains.demo_workspace.policy import require_demo_workspace_mutation_opt_in  # noqa: E402
 from domains.gitops.repository import derive_workflow_run_id  # noqa: E402
 from domains.gitops.repository_discovery import RepositoryDiscoveryService  # noqa: E402
@@ -24,6 +25,10 @@ from domains.inventory.events import InventorySnapshotRecordedBody  # noqa: E402
 from domains.inventory.ingest import ingest_inventory_snapshot  # noqa: E402
 from domains.rca.events import (  # noqa: E402
     ClusterEvidenceReceivedBody,
+    IncidentDetectedBody,
+    IncidentRecord,
+    RcaCompletedBody,
+    RcaReportDetail,
     compact_cluster_evidence_payload,
 )
 from packages.contracts.cost.observations import (  # noqa: E402
@@ -35,6 +40,8 @@ from packages.contracts.demo_workspace import (  # noqa: E402
     DemoGitOpsSourceDescriptor,
     DemoWorkspaceDescriptor,
 )
+from packages.contracts.event_bus.interfaces import EventEnvelope  # noqa: E402
+from packages.contracts.event_bus.subjects import EventSubject  # noqa: E402
 from packages.contracts.gateway.requests import (  # noqa: E402
     InventorySnapshotRequest,
     RepositoryManifestValidationRequest,
@@ -585,6 +592,90 @@ def persist_demo_observation(
     return 1
 
 
+def persist_demo_rca_scenario(
+    db: Any,
+    descriptor: DemoWorkspaceDescriptor,
+    *,
+    observed_at: datetime,
+) -> int:
+    """Project one typed synthetic scenario through the canonical RCA read-model writer."""
+
+    scenario = descriptor.rca
+    if scenario is None:
+        return 0
+    workspace_id = descriptor.workspace.workspace_id
+    cluster_id = descriptor.cluster.cluster_id
+    digest = descriptor.digest()
+    correlation_id = f"demo-rca-{digest[:24]}"
+    evidence_ref = f"synthetic://demo-workspace/{descriptor.descriptor_id}/{scenario.incident_id}"
+    incident = IncidentRecord(
+        incident_id=scenario.incident_id,
+        cluster_id=cluster_id,
+        resource_kind=scenario.resource_kind,
+        resource_name=scenario.resource_name,
+        namespace=scenario.namespace,
+        symptom=scenario.symptom,
+        severity=scenario.severity,
+        first_seen_at=(
+            _aware_utc(observed_at) + timedelta(seconds=scenario.timeline[0].offset_seconds)
+        ).isoformat(),
+        summary=scenario.summary,
+        category=scenario.category,
+        workspace_id=workspace_id,
+    )
+    detected = IncidentDetectedBody(
+        cluster_id=cluster_id,
+        detected=True,
+        reason=scenario.timeline[0].summary,
+        workspace_id=workspace_id,
+        severity=scenario.severity,
+        incident=incident,
+    )
+    completed = RcaCompletedBody(
+        root_cause=scenario.root_cause,
+        action=scenario.action,
+        evidence_ref=evidence_ref,
+        workspace_id=workspace_id,
+        incident=incident,
+        rca_detail=RcaReportDetail(
+            root_cause=scenario.root_cause,
+            confidence=scenario.confidence,
+            selected_candidate_id=scenario.cause_id,
+            supporting_evidence=[
+                *(f"descriptor-evidence:{item}" for item in scenario.supporting_evidence),
+                *(f"descriptor-impact:{item}" for item in scenario.impact),
+            ],
+            missing_evidence=list(scenario.missing_evidence),
+            reason=scenario.timeline[1].summary,
+        ),
+    )
+    stages = (
+        (EventSubject.INCIDENT_DETECTED.value, detected, scenario.timeline[0]),
+        (EventSubject.RCA_COMPLETED.value, completed, scenario.timeline[1]),
+    )
+    causation_id: str | None = None
+    for index, (subject, body, step) in enumerate(stages, start=1):
+        event_id = f"demo-rca-{digest[:20]}-{index}"
+        envelope = EventEnvelope(
+            event_id=event_id,
+            subject=subject,
+            source=DEMO_EVENT_SOURCE,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            created_at=(
+                _aware_utc(observed_at) + timedelta(seconds=step.offset_seconds)
+            ).isoformat(),
+            payload=body.to_body(),
+            workspace_id=workspace_id,
+        )
+        row = timeline_update_from_event(envelope)
+        if row is None:
+            raise RuntimeError(f"demo RCA stage was not projected: {step.stage}")
+        db.upsert_rca_timeline(row)
+        causation_id = event_id
+    return 1
+
+
 def _micro_usd(value: int) -> str:
     units, micros = divmod(value, 1_000_000)
     return f"{units}.{micros:06d}"
@@ -651,6 +742,7 @@ async def seed_demo_workspace(
             "snapshot_id": str(snapshot["snapshot_id"]),
             "gitops_source_count": len(descriptor.gitops.sources) if descriptor.gitops else 0,
             "observation_window_count": 1 if descriptor.observations else 0,
+            "rca_scenario_count": 1 if descriptor.rca else 0,
         }
 
     gitops_evidence = await validate_demo_gitops_sources(descriptor, discovery)
@@ -690,12 +782,21 @@ async def seed_demo_workspace(
             observed_at=collected_at,
         )
 
+    def persist_rca() -> int:
+        return persist_demo_rca_scenario(
+            db,
+            descriptor,
+            observed_at=collected_at,
+        )
+
     gitops_source_count = 0
     observation_window_count = 0
+    rca_scenario_count = 0
     if snapshot_current:
         with unit_of_work_or_null(db):
             await register_demo_target()
             observation_window_count = persist_observation()
+            rca_scenario_count = persist_rca()
             gitops_source_count = persist_gitops()
     else:
         inventory = InventorySnapshotRequest.model_validate(
@@ -718,10 +819,11 @@ async def seed_demo_workspace(
         )
 
         async def persist_snapshot_dependencies(saved: dict[str, Any]) -> None:
-            nonlocal gitops_source_count, observation_window_count
+            nonlocal gitops_source_count, observation_window_count, rca_scenario_count
             if saved.get("accepted") is not True:
                 raise RuntimeError("demo inventory snapshot was not accepted")
             observation_window_count = persist_observation()
+            rca_scenario_count = persist_rca()
             gitops_source_count = persist_gitops()
             await events.accept_body(
                 InventorySnapshotRecordedBody(
@@ -756,6 +858,7 @@ async def seed_demo_workspace(
         "inventory_written": not snapshot_current,
         "gitops_source_count": gitops_source_count,
         "observation_window_count": observation_window_count,
+        "rca_scenario_count": rca_scenario_count,
     }
 
 

@@ -189,6 +189,55 @@ class DemoSyntheticObservationDescriptor(StrictModel):
         return self
 
 
+class DemoRcaTimelineStepDescriptor(StrictModel):
+    """One ordered, descriptor-authored stage in a synthetic RCA scenario."""
+
+    stage: Literal["incident_detected", "rca_completed"]
+    offset_seconds: int = Field(ge=0, le=3600)
+    summary: str = Field(min_length=1, max_length=500)
+
+
+class DemoRcaScenarioDescriptor(StrictModel):
+    """Synthetic incident proof that never claims Agent or AI observation."""
+
+    runtime_evidence_version: Literal[1]
+    origin: Literal["descriptor-owned-synthetic"]
+    analysis_mode: Literal["none"]
+    incident_id: str = Field(min_length=1, max_length=253)
+    cause_id: str = Field(
+        min_length=1,
+        max_length=253,
+        pattern=r"^[a-z0-9][a-z0-9._-]{0,252}$",
+    )
+    namespace: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    resource_kind: str = Field(min_length=1, max_length=120)
+    resource_name: str = Field(min_length=1, max_length=253)
+    symptom: str = Field(min_length=1, max_length=500)
+    severity: Literal["high", "medium"]
+    category: str = Field(min_length=1, max_length=120)
+    summary: str = Field(min_length=1, max_length=1000)
+    root_cause: str = Field(min_length=1, max_length=1000)
+    confidence: float = Field(ge=0, le=1)
+    action: str = Field(min_length=1, max_length=1000)
+    impact: list[str] = Field(min_length=1, max_length=20)
+    supporting_evidence: list[str] = Field(min_length=1, max_length=20)
+    missing_evidence: list[str] = Field(min_length=1, max_length=20)
+    timeline: list[DemoRcaTimelineStepDescriptor] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def require_complete_ordered_synthetic_timeline(self) -> DemoRcaScenarioDescriptor:
+        if [step.stage for step in self.timeline] != ["incident_detected", "rca_completed"]:
+            raise ValueError("demo RCA timeline must contain detected then completed stages")
+        offsets = [step.offset_seconds for step in self.timeline]
+        if offsets != sorted(offsets) or offsets[0] == offsets[1]:
+            raise ValueError("demo RCA timeline offsets must increase")
+        return self
+
+
 class DemoWorkspaceDescriptor(StrictModel):
     schema_version: Literal[DEMO_WORKSPACE_DESCRIPTOR_VERSION]
     descriptor_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,119}$")
@@ -197,6 +246,7 @@ class DemoWorkspaceDescriptor(StrictModel):
     inventory: DemoInventoryDescriptor
     gitops: DemoGitOpsRepositoryDescriptor | None = None
     observations: DemoSyntheticObservationDescriptor | None = None
+    rca: DemoRcaScenarioDescriptor | None = None
 
     @model_validator(mode="after")
     def require_dedicated_workspace(self) -> DemoWorkspaceDescriptor:
@@ -219,6 +269,22 @@ class DemoWorkspaceDescriptor(StrictModel):
             )
             if not observation_namespaces.issubset(inventory_namespaces):
                 raise ValueError("demo observations must reference inventoried namespaces")
+        if self.rca is not None:
+            resource_identities = {
+                (
+                    item.kind.casefold(),
+                    item.namespace or "",
+                    item.name,
+                )
+                for item in self.inventory.resources
+            }
+            rca_identity = (
+                self.rca.resource_kind.casefold(),
+                self.rca.namespace,
+                self.rca.resource_name,
+            )
+            if rca_identity not in resource_identities:
+                raise ValueError("demo RCA must reference an inventoried resource")
         return self
 
     def digest(self) -> str:

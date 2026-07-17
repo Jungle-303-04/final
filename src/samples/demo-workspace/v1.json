@@ -1082,5 +1082,47 @@
         "connections": 6
       }
     ]
+  },
+  "rca": {
+    "runtime_evidence_version": 1,
+    "origin": "descriptor-owned-synthetic",
+    "analysis_mode": "none",
+    "incident_id": "demo-payments-restart-loop",
+    "cause_id": "demo-config-crash-loop",
+    "namespace": "demo-payments",
+    "resource_kind": "Deployment",
+    "resource_name": "payments-api",
+    "symptom": "CrashLoopBackOff",
+    "severity": "high",
+    "category": "availability",
+    "summary": "데모 시나리오에서 payments-api 재시작 반복 상태를 재현합니다.",
+    "root_cause": "데모 서술자가 가정한 잘못된 결제 API 설정으로 프로세스가 반복 종료됩니다.",
+    "confidence": 0.65,
+    "action": "실제 조치 없이 설정 차이와 재시작 이벤트를 확인합니다.",
+    "impact": [
+      "payments-api 가용성 저하",
+      "shop-api 결제 요청 실패 가능성"
+    ],
+    "supporting_evidence": [
+      "inventory:Deployment/demo-payments/payments-api=degraded",
+      "inventory:Event/demo-payments/payments-api-backoff=BackOff"
+    ],
+    "missing_evidence": [
+      "agent-observed container logs",
+      "agent-observed runtime metrics",
+      "AI or rule-engine analysis"
+    ],
+    "timeline": [
+      {
+        "stage": "incident_detected",
+        "offset_seconds": 0,
+        "summary": "서술자 소유 합성 장애가 감지 상태로 등록되었습니다."
+      },
+      {
+        "stage": "rca_completed",
+        "offset_seconds": 90,
+        "summary": "관측 분석이 아닌 서술자 소유 합성 원인과 영향이 표시되었습니다."
+      }
+    ]
   }
 }
