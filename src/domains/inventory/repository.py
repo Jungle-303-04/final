@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -38,6 +38,8 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 # 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한.
 # (파라미터 수 제한과 단일 트랜잭션 락 시간 사이의 절충값, env 아님: 계약이 아니라 내부 상수)
 INVENTORY_UPSERT_CHUNK = 500
+TIMELINE_COVERAGE_READ_CHUNK = 128
+TIMELINE_COVERAGE_RESPONSE_LIMIT = 256
 
 SYNTHETIC_NAMESPACE = None
 HEALTH_RESOURCE_TYPE = "health"
@@ -531,6 +533,29 @@ def inventory_timeline_source_key(
     return f"inventory:{event_type}:{inventory_key}:{fingerprint}"
 
 
+def _timeline_coverage_snapshot_rows(
+    partitions: Iterable[Sequence[Mapping[str, object]]],
+    *,
+    cancelled: Callable[[], bool] | None,
+) -> Iterator[dict[str, object]]:
+    """Rebuild the projector's narrow input without retaining DB partitions."""
+    for partition in partitions:
+        if cancelled is not None and cancelled():
+            return
+        for row in partition:
+            if cancelled is not None and cancelled():
+                return
+            yield {
+                "cluster_id": row.get("cluster_id"),
+                "status": row.get("status"),
+                "summary": {
+                    "summary": {
+                        EVENT_CAPTURE_SUMMARY_KEY: row.get("event_capture"),
+                    }
+                },
+            }
+
+
 def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
     """K8s 리소스 raw/summary 에서 첫 컨테이너 이미지를 찾음(workload → pod → summary 순)."""
     for path in (("spec", "template", "spec", "containers"), ("spec", "containers")):
@@ -554,12 +579,16 @@ class InventoryRepository(DatabaseConnection):
         read_scope: Any,
         *,
         window: TimelineWindow,
+        cancelled: Callable[[], bool] | None = None,
     ) -> tuple[TimelineCoverage, ...]:
         """Read durable global Event capture evidence for an authorized Timeline scope.
 
         Snapshot evidence, rather than the Timeline event ledger, is the source
         of completeness.  The pure projector proves both failure and recovery
-        bounds and emits no coverage where either bound is unknown.
+        bounds and emits no coverage where either bound is unknown.  This read
+        projects only the small capture proof from each snapshot and streams it
+        in fixed-size partitions.  Full inventory summaries can contain every
+        resource and must never be materialized for Timeline coverage.
         """
         cluster_ids = frozenset(
             str(cluster_id).strip()
@@ -572,16 +601,19 @@ class InventoryRepository(DatabaseConnection):
         if not workspace_id:
             return ()
         snapshots = ClusterInventorySnapshotRecord.__table__
+        event_capture = snapshots.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
         statement = (
             select(
                 snapshots.c.cluster_id,
                 snapshots.c.status,
-                snapshots.c.summary,
+                event_capture.label("event_capture"),
             )
             .where(
                 snapshots.c.workspace_id == workspace_id,
                 snapshots.c.cluster_id.in_(tuple(sorted(cluster_ids))),
                 snapshots.c.status != "ignored_stale",
+                snapshots.c.collected_at < datetime.fromtimestamp(window.to_ms / 1_000, tz=UTC),
+                event_capture.is_not(None),
             )
             .order_by(
                 snapshots.c.cluster_id.asc(),
@@ -591,12 +623,20 @@ class InventoryRepository(DatabaseConnection):
             )
         )
         with self.connection() as conn:
-            rows = tuple(dict(row) for row in conn.execute(statement).mappings())
-        return project_kubernetes_event_capture_coverage(
-            read_scope,
-            window=window,
-            snapshots=rows,
-        )
+            rows = conn.execution_options(
+                stream_results=True,
+                max_row_buffer=TIMELINE_COVERAGE_READ_CHUNK,
+            ).execute(statement)
+            return project_kubernetes_event_capture_coverage(
+                read_scope,
+                window=window,
+                snapshots=_timeline_coverage_snapshot_rows(
+                    rows.mappings().partitions(TIMELINE_COVERAGE_READ_CHUNK),
+                    cancelled=cancelled,
+                ),
+                snapshots_ordered=True,
+                max_intervals=TIMELINE_COVERAGE_RESPONSE_LIMIT,
+            )
 
     def save_live_cluster_usage_sample(
         self,
