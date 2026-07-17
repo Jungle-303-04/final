@@ -481,6 +481,17 @@ export function useOperationStatus(commandId: string): OperationStatusSnapshot {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+export function useOptionalOperationStatus(commandId: string): OperationStatusSnapshot | null {
+  const store = useOptionalOperationStatusStore();
+  const subscribe = useCallback((listener: () => void) => (
+    store && commandId ? store.subscribe(commandId, listener) : () => undefined
+  ), [commandId, store]);
+  const getSnapshot = useCallback(() => (
+    store && commandId ? store.getSnapshot(commandId) : null
+  ), [commandId, store]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
 export function useOperationStatusSnapshots(): readonly OperationStatusSnapshot[] {
   const store = useOperationStatusStore();
   const subscribe = useCallback((listener: () => void) => store.subscribeAll(listener), [store]);

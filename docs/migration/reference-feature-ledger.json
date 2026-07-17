@@ -9558,29 +9558,39 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.previews.HelmValuesPreviewResult",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_values_preview.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/install.py#validate_catalog_values",
-          "reason": "Catalog values schema validation exists, but no provider renders a revision-bound preview artifact or redacted manifest diff.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_values_preview",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_values_preview",
+          "reason": "A revision-bound digest-pinned candidate is rendered by the target Agent, compared with the current manifest, redacted, bounded, and returned through a typed terminal operation result.",
+          "test": "tests/test_helm_values_preview.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The browser has no typed preview response to confirm.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#toHelmValuesPreviewOperationResult",
+          "reason": "The values editor queues an optional preview, validates the strict redacted result, reuses the common resource diff view, and invalidates stale results when target inputs change without blocking the existing upgrade flow.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
+          "consumer": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "reason": "The audited preview receipt reuses the durable resumable OperationEvent stream; no Helm-specific polling or duplicate SSE connection is introduced.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        }
       }
     },
     {

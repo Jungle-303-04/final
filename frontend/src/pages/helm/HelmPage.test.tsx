@@ -20,6 +20,10 @@ vi.mock("../../features/cluster-scope/ClusterScopeProvider", () => ({
 }));
 vi.mock("../../features/operations/OperationStatusStore", () => ({
   useOptionalOperationStatusStore: () => operationState.value,
+  useOptionalOperationStatus: (commandId: string) => (
+    commandId ? (operationState.value as { getSnapshot?: (id: string) => unknown } | null)
+      ?.getSnapshot?.(commandId) ?? null : null
+  ),
 }));
 
 afterEach(() => {
@@ -309,6 +313,64 @@ describe("HelmPage", () => {
     await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(2));
     await vi.advanceTimersByTimeAsync(1_200);
     await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(3));
+  });
+
+  it("renders one strict redacted values preview and invalidates it when an input changes", async () => {
+    const port = helmPort();
+    const upgradeDetail = detail();
+    port.getRelease.mockResolvedValue({
+      ...upgradeDetail,
+      release: {
+        ...upgradeDetail.release,
+        storageNamespace: "sandbox",
+        scope: { ...upgradeDetail.release.scope, namespaces: ["sandbox"] },
+        storage: { ...upgradeDetail.release.storage, namespace: "sandbox" },
+        chart: "redis",
+        chartVersion: "22.0.0",
+        chartReasonCodes: [],
+      },
+      commands: availableUpgradeCommands(),
+    });
+    port.listReleaseVersions.mockResolvedValue(redisUpgradeVersions());
+    port.previewReleaseValues.mockResolvedValue({
+      accepted: true,
+      eventId: "evt-preview-1",
+      auditEventId: "evt-preview-1",
+      correlationId: "corr-preview-1",
+      commandId: "cmd-preview-1",
+      status: "queued",
+    });
+    const store = {
+      start: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+      getSnapshot: vi.fn(() => completedPreviewSnapshot()),
+    };
+    operationState.value = store;
+    renderRoute("/helm/detail/cluster-a/sandbox/storefront", port);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Upgrade" }));
+    const input = screen.getByLabelText("master.persistence.storageClass");
+    fireEvent.change(input, { target: { value: "gp3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+    await waitFor(() => expect(port.previewReleaseValues).toHaveBeenCalledWith({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "storefront",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+    }, expect.any(AbortSignal)));
+    expect(store.start).toHaveBeenCalledWith("cmd-preview-1");
+    expect(await screen.findByRole("heading", { name: "Rendered resource changes" })).toBeTruthy();
+    expect(screen.getByText("Service/storefront")).toBeTruthy();
+    expect(screen.getByText("spec.replicas")).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "standard" } });
+    expect(screen.queryByRole("heading", { name: "Rendered resource changes" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm upgrade" }));
+    await waitFor(() => expect(port.upgradeRelease).toHaveBeenCalled());
   });
 
   it("does not expose an upgrade when the authorized source lacks the server target", async () => {
@@ -645,6 +707,7 @@ function helmPort(): HelmPort & {
   listReleaseVersions: ReturnType<typeof vi.fn>;
   readArtifact: ReturnType<typeof vi.fn>;
   upgradeRelease: ReturnType<typeof vi.fn>;
+  previewReleaseValues: ReturnType<typeof vi.fn>;
   rollbackRelease: ReturnType<typeof vi.fn>;
   uninstallRelease: ReturnType<typeof vi.fn>;
   refreshChartSource: ReturnType<typeof vi.fn>;
@@ -662,7 +725,14 @@ function helmPort(): HelmPort & {
       correlationId: "corr-install",
       status: "queued",
     }),
-    previewReleaseValues: vi.fn(),
+    previewReleaseValues: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "evt-preview",
+      auditEventId: "evt-preview",
+      correlationId: "corr-preview",
+      commandId: "cmd-preview",
+      status: "queued",
+    }),
     searchArtifactHub: vi.fn().mockResolvedValue({
       items: [], total: 0, offset: 0, limit: 20, hasMore: false,
       observedAt: "2026-07-17T08:00:00Z",
@@ -772,6 +842,57 @@ function helmPort(): HelmPort & {
       credentialsConfigured: false,
       observedAt: null,
     }),
+  };
+}
+
+function completedPreviewSnapshot() {
+  const resources = {
+    added: [{ api_version: "v1", kind: "Service", name: "storefront", namespace: "sandbox" }],
+    removed: [],
+    modified: [{
+      api_version: "apps/v1",
+      kind: "Deployment",
+      name: "storefront",
+      namespace: "sandbox",
+      summary: "1 fields changed",
+      field_count: 1,
+      fields: [{ path: "spec.replicas", old_value: 1, new_value: 3 }],
+    }],
+    unchanged: [],
+    parse_error_count: 0,
+  };
+  return {
+    commandId: "cmd-preview-1",
+    event: {
+      commandId: "cmd-preview-1",
+      sequence: 2,
+      kind: "completed",
+      occurredAt: "2026-07-17T02:00:00Z",
+      payload: {
+        result: {
+          preview: {
+            namespace: "sandbox",
+            release_name: "storefront",
+            expected_revision: 3,
+            catalog_item_id: "catalog-redis",
+            catalog_version: "1.0.0",
+            chart_name: "redis",
+            chart_version: "23.1.1",
+            resources,
+            projection_sha256: "0".repeat(64),
+            projection_bytes: new TextEncoder().encode(JSON.stringify(resources)).byteLength,
+            source_bytes: 2_048,
+            redaction_applied: true,
+            truncated: false,
+          },
+        },
+      },
+    },
+    failure: null,
+    retry: null,
+    sequence: 2,
+    status: "completed",
+    updatedAt: 1,
   };
 }
 
