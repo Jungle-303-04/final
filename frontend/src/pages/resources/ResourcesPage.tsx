@@ -366,7 +366,11 @@ export function ResourcesPage({
               retryWaitSeconds={state.retryWaitSeconds}
             />
           ) : state.catalog.data.items.length === 0 ? (
-            <UnknownCompletenessEmpty variant="catalog" />
+            state.catalog.data.completeness === "observed" ? (
+              <ProductStateScreen kind="empty" placement="content" />
+            ) : (
+              <UnknownCompletenessEmpty variant="catalog" />
+            )
           ) : (
             <>
               <ResourcesRefreshFeedback

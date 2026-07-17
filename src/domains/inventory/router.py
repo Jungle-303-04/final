@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -16,6 +16,7 @@ from domains.inventory.capabilities import resource_capabilities_response
 from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.provider_detail import provider_detail_projection
+from domains.inventory.resource_count_evidence import project_inventory_resource_counts_evidence
 from domains.inventory.workload_revisions import workload_revision_history_response
 from domains.resource_access.projection import (
     ResourceAccessUnavailable,
@@ -39,7 +40,10 @@ from packages.contracts.gateway.responses import (
     WorkloadRevisionHistoryResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
-from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
+from packages.contracts.kubernetes_discovery import (
+    ApiResourceDiscoveryObservation,
+    canonical_kubernetes_namespaces,
+)
 from packages.contracts.resource_access import KubernetesAccessUnavailableResponse
 from packages.runtime.dependencies import (
     get_dashboard_ready_fanout,
@@ -432,16 +436,42 @@ async def get_cluster_usage(
 )
 async def get_inventory_summary(
     cluster_id: str,
+    namespaces: Annotated[str | None, Query(max_length=2_048)] = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> InventorySummaryResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_inventory_access(db, current, workspace_id, cluster_id)
+    namespace_scope = _inventory_count_namespaces(namespaces)
+    snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
     return InventorySummaryResponse(
         cluster_id=cluster_id,
-        latest_snapshot=db.latest_inventory_snapshot(workspace_id, cluster_id),
-        counts=db.inventory_resource_counts(workspace_id, cluster_id),
+        latest_snapshot=snapshot,
+        counts=db.inventory_resource_counts(
+            workspace_id,
+            cluster_id,
+            namespaces=namespace_scope,
+        ),
+        counts_evidence=project_inventory_resource_counts_evidence(
+            snapshot,
+            namespace_scope=namespace_scope,
+        ),
     )
+
+
+def _inventory_count_namespaces(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    values = tuple(item.strip() for item in value.split(","))
+    if any(not item for item in values):
+        raise HTTPException(status_code=422, detail="inventory count namespace scope is invalid")
+    try:
+        return canonical_kubernetes_namespaces(values)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="inventory count namespace scope is invalid",
+        ) from exc
 
 
 @router.get(

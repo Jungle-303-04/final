@@ -2061,10 +2061,49 @@ class ClusterUsageResponse(StrictModel):
     samples: list[ClusterUsageSample] = Field(default_factory=list)
 
 
+class InventoryResourceCountForbidden(StrictModel):
+    namespace: str | None = None
+    api_group: str = ""
+    version: str = Field(min_length=1)
+    resource: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespaced: bool
+    reason_code: Literal["list_permission_not_observed"] = "list_permission_not_observed"
+
+
+class InventoryResourceCountsEvidence(StrictModel):
+    completeness: Literal["observed", "partial", "unavailable"]
+    observed_at: str | None = None
+    namespace_scope: tuple[str, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    forbidden: tuple[InventoryResourceCountForbidden, ...] = ()
+
+    @field_validator("namespace_scope")
+    @classmethod
+    def canonicalize_namespace_scope(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if len(values) != len(set(values)) or tuple(sorted(values)) != values:
+            raise ValueError("inventory count namespace scope must be sorted and unique")
+        return values
+
+    @model_validator(mode="after")
+    def validate_evidence_state(self) -> Self:
+        if len(self.reason_codes) != len(set(self.reason_codes)):
+            raise ValueError("inventory count reason codes must be unique")
+        if self.completeness == "observed":
+            if self.observed_at is None or self.reason_codes:
+                raise ValueError("observed inventory counts require timestamp and no reasons")
+        elif not self.reason_codes:
+            raise ValueError("incomplete inventory counts require reasons")
+        if self.completeness == "unavailable" and (self.observed_at is not None or self.forbidden):
+            raise ValueError("unavailable inventory counts cannot carry observed evidence")
+        return self
+
+
 class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None
     counts: list[JsonMap] = Field(default_factory=list)
+    counts_evidence: InventoryResourceCountsEvidence
 
 
 class KubernetesApiResourcesResponse(StrictModel):

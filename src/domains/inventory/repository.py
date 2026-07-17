@@ -1786,19 +1786,28 @@ class InventoryRepository(DatabaseConnection):
             for row in rows
         }
 
-    def inventory_resource_counts(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
+    def inventory_resource_counts(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        namespaces: tuple[str, ...] = (),
+    ) -> list[JsonObject]:
         table = ClusterInventoryResourceRecord.__table__
+        predicates = [
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.deleted_at.is_(None),
+        ]
+        if namespaces:
+            predicates.append(or_(table.c.namespace.is_(None), table.c.namespace.in_(namespaces)))
         statement = (
             select(
                 table.c.resource_type,
                 table.c.health,
                 func.count().label("count"),
             )
-            .where(
-                table.c.workspace_id == workspace_id,
-                table.c.cluster_id == cluster_id,
-                table.c.deleted_at.is_(None),
-            )
+            .where(*predicates)
             .group_by(table.c.resource_type, table.c.health)
             .order_by(table.c.resource_type, table.c.health)
         )
