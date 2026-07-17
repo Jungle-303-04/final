@@ -13,7 +13,15 @@ test('웹 운영 배포와 최종 desktop package gate를 분리한다', async (
     readFile(path.join(repositoryRoot, '.github', 'workflows', 'desktop-package-gate.yml'), 'utf8'),
   ])
 
-  assert.match(makefile, /^gate: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## PR 진단용/m)
+  assert.match(makefile, /^gate: ## PR 진단용 백엔드·manifest·프론트 전체 gate$/m)
+  assert.match(
+    makefile,
+    /^gate-backend: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 백엔드·manifest 전체 gate$/m,
+  )
+  assert.match(
+    makefile,
+    /^reference-feature-ledger-check:.*\n(?:\t.*\n)*?\tnode --test scripts\/reference-feature-ledger\.test\.mjs scripts\/reference-feature-source-identity\.test\.mjs scripts\/reference-resource-metrics-parity\.test\.mjs$/m,
+  )
   assert.match(
     makefile,
     /^release-governance: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check ## 출하 차단용/m,

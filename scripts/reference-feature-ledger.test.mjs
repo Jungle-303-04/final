@@ -835,6 +835,8 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(changes.coverage.backend.state, "implemented");
   assert.equal(changes.coverage.frontend.state, "implemented");
   assert.equal(changes.coverage.realtime.state, "implemented");
+  assert.ok(changes.verification.includes("tests/test_change_timeline_router.py"));
+  assert.equal(changes.verification.includes("tests/test_changes_router.py"), false);
   assert.equal(changesFeature.deliveryStatus, "implemented");
   assert.equal(
     aliases.aliases["reference.feature.070"],
@@ -846,7 +848,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "implemented");
 });
 
-test("포트 전달 registry와 전역 표시는 단일 native 세션 수명주기를 공유한다", async () => {
+test("포트 전달 registry와 전역 표시는 agent stream 전까지 fail-closed 상태를 공유한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
     readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
@@ -865,19 +867,35 @@ test("포트 전달 registry와 전역 표시는 단일 native 세션 수명주�
     const port = portMap.features[contractId];
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
-    assert.equal(port.deliveryStatus, "implemented");
-    assert.equal(port.coverage.frontend.state, "implemented");
-    assert.equal(port.coverage.desktop.state, "implemented");
+    assert.equal(port.deliveryStatus, "in_progress");
+    assert.equal(port.coverage.frontend.state, "blocked");
+    assert.equal(port.coverage.desktop.state, "blocked");
     assert.equal(aliases.aliases[contractId], sourceKey);
-    assert.equal(feature.deliveryStatus, "implemented");
+    assert.equal(feature.deliveryStatus, "in_progress");
     assert.equal(feature.sourceKey, sourceKey);
     assert.equal(interaction.opsiaPort.state, "in_progress");
     assert.equal(interaction.opsiaPort.blockedReason, null);
   }
 
-  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "implemented");
-  assert.equal(portMap.features["reference.feature.162"].coverage.frontend.state, "implemented");
-  assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "implemented");
+  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "in_progress");
+  assert.equal(portMap.features["reference.feature.162"].coverage.backend.state, "blocked");
+  assert.equal(portMap.features["reference.feature.162"].coverage.frontend.state, "blocked");
+  assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "blocked");
+});
+
+test("공유 React Helm 조회 화면은 별도 desktop bridge 계약을 요구하지 않는다", async () => {
+  const [portMap, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+
+  for (const contractId of ["reference.feature.183", "reference.feature.184"]) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(port.deliveryStatus, "implemented", contractId);
+    assert.equal(port.desktopContract, null, contractId);
+    assert.equal(feature.desktopContract, null, contractId);
+  }
 });
 
 test("리소스 YAML 편집은 Safe PR와 직접 operation 적용을 함께 보존한다", async () => {
@@ -924,6 +942,10 @@ test("Helm 업그레이드는 서버 값 검증과 공용 operation stream 증�
   assert.equal(port.coverage.backend.state, "implemented");
   assert.equal(port.coverage.frontend.state, "implemented");
   assert.equal(port.coverage.realtime.state, "implemented");
+  assert.equal(
+    port.coverage.realtime.consumer,
+    "frontend/src/features/operations/OperationStatusStore.tsx",
+  );
   assert.equal(aliases.aliases[contractId], sourceKey);
   assert.equal(feature.deliveryStatus, "implemented");
   assert.equal(feature.sourceKey, sourceKey);

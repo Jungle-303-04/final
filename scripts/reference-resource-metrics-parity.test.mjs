@@ -94,14 +94,25 @@ test("unavailable providers and native port authority remain explicit", async ()
       `${contractId} requires an actionable blocked reason`,
     );
   }
+  assert.equal(
+    ports.features["reference.feature.159"].coverage.desktop.state,
+    "implemented",
+  );
   for (const contractId of [
-    "reference.feature.159",
     "reference.feature.160",
     "reference.feature.162",
     "reference.feature.163",
   ]) {
-    assert.equal(ports.features[contractId].coverage.desktop.state, "implemented", contractId);
+    assert.equal(ports.features[contractId].deliveryStatus, "in_progress", contractId);
+    assert.equal(ports.features[contractId].coverage.desktop.state, "blocked", contractId);
   }
+
+  const resourceAudit = ports.features["reference.feature.129"];
+  assert.equal(
+    resourceAudit.coverage.backend.test,
+    "scripts/reference-resource-metrics-parity.test.mjs",
+  );
+  assert.equal(resourceAudit.verification.includes("tests/test_audit.py"), false);
 });
 
 test("Prometheus status, connection, resource categories, and HPA ranges reuse typed runtime ports", async () => {
