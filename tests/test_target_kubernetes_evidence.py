@@ -2040,3 +2040,336 @@ def test_kubernetes_snapshot_provider_can_drop_single_oversized_list_item() -> N
         status="completed",
         result={"kubernetes": limited},
     )
+
+
+def _dynamic_resource_definition(module, **overrides: object):
+    dynamic_resource: dict[str, object] = {
+        "group": "argoproj.io",
+        "version": "v1alpha1",
+        "resource": "applications",
+        "namespaces": ["argocd"],
+        "page_size": 1,
+        "max_pages": 3,
+        "max_items": 2,
+    }
+    dynamic_resource.update(overrides)
+    return module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "kubernetes",
+            "name": "discovered_application_inventory",
+            "description": "Collect one discovery-authorized custom resource.",
+            "query": "*",
+            "collection_scope": "dynamic_resource",
+            "dynamic_resource": dynamic_resource,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("group", "argoproj.io/../../api"),
+        ("version", "v1alpha1?watch=true"),
+        ("resource", "applications/status"),
+        ("namespaces", ["argocd?labelSelector=all"]),
+    ],
+)
+def test_dynamic_resource_query_rejects_path_and_selector_injection(
+    field: str,
+    value: object,
+) -> None:
+    module, _kubernetes_module = load_evidence_modules()
+
+    with pytest.raises(ValueError, match="dynamic Kubernetes resource"):
+        _dynamic_resource_definition(module, **{field: value}).to_provider_query()
+
+
+def test_dynamic_resource_query_uses_live_discovery_and_continue_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requests: list[tuple[str, dict[str, str]]] = []
+
+    def application(name: str, uid: str, resource_version: str) -> dict[str, object]:
+        return {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "metadata": {
+                "name": name,
+                "namespace": "argocd",
+                "uid": uid,
+                "resourceVersion": resource_version,
+                "generation": 2,
+                "labels": {"team": "platform"},
+                "managedFields": [{"manager": "ignored"}],
+            },
+            "spec": {"source": {"repoURL": "https://example.invalid/platform.git"}},
+            "status": {
+                "sync": {"status": "Synced", "revision": "main@sha1:abc"},
+                "health": {"status": "Healthy"},
+            },
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.url.path, dict(request.url.params)))
+        if request.url.path == "/apis/argoproj.io/v1alpha1":
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": "argoproj.io/v1alpha1",
+                    "resources": [
+                        {
+                            "name": "applications",
+                            "singularName": "application",
+                            "namespaced": True,
+                            "kind": "Application",
+                            "verbs": ["get", "list", "watch"],
+                        }
+                    ],
+                },
+            )
+        if request.url.path == "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications":
+            if request.url.params.get("continue") == "page-2":
+                return httpx.Response(
+                    200,
+                    json={
+                        "metadata": {"resourceVersion": "list-rv", "continue": ""},
+                        "items": [application("checkout", "app-2", "22")],
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {"resourceVersion": "list-rv", "continue": "page-2"},
+                    "items": [application("storefront", "app-1", "21")],
+                },
+            )
+        return httpx.Response(404)
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+    inventory = kubernetes_evidence_to_inventory_snapshot(
+        kubernetes,
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    assert requests == [
+        ("/apis/argoproj.io/v1alpha1", {}),
+        (
+            "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications",
+            {"limit": "1"},
+        ),
+        (
+            "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications",
+            {"limit": "1", "continue": "page-2"},
+        ),
+    ]
+    assert kubernetes["dynamic_resource_collections"] == [
+        {
+            "query_name": "discovered_application_inventory",
+            "group": "argoproj.io",
+            "version": "v1alpha1",
+            "resource": "applications",
+            "kind": "Application",
+            "namespaced": True,
+            "namespaces": ["argocd"],
+            "completeness": "exact",
+            "reason_codes": [],
+            "page_count": 2,
+            "observed_count": 2,
+            "returned_count": 2,
+        }
+    ]
+    assert [row["name"] for row in kubernetes["custom_resources"]] == [
+        "storefront",
+        "checkout",
+    ]
+    assert [row["resource_type"] for row in inventory["resources"]] == [
+        "custom_resource",
+        "custom_resource",
+    ]
+    storefront = inventory["resources"][0]
+    assert storefront["api_version"] == "argoproj.io/v1alpha1"
+    assert storefront["kind"] == "Application"
+    assert storefront["uid"] == "app-1"
+    assert storefront["resource_version"] == "21"
+    assert storefront["raw"] == {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "name": "storefront",
+            "namespace": "argocd",
+            "uid": "app-1",
+            "resourceVersion": "21",
+            "generation": 2,
+            "labels": {"team": "platform"},
+        },
+        "spec": {"source": {"repoURL": "https://example.invalid/platform.git"}},
+        "status": {
+            "sync": {"status": "Synced", "revision": "main@sha1:abc"},
+            "health": {"status": "Healthy"},
+        },
+    }
+
+
+def test_dynamic_resource_query_fails_closed_on_rbac_denial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/apis/argoproj.io/v1alpha1":
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": "argoproj.io/v1alpha1",
+                    "resources": [
+                        {
+                            "name": "applications",
+                            "namespaced": True,
+                            "kind": "Application",
+                            "verbs": ["list"],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(403)
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert kubernetes["custom_resources"] == []
+    assert kubernetes["dynamic_resource_collections"][0]["completeness"] == "unavailable"
+    assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == ["rbac_denied"]
+
+
+def test_dynamic_resource_query_reports_page_limit_without_claiming_exact_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/apis/argoproj.io/v1alpha1":
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": "argoproj.io/v1alpha1",
+                    "resources": [
+                        {
+                            "name": "applications",
+                            "namespaced": True,
+                            "kind": "Application",
+                            "verbs": ["list"],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "metadata": {"continue": "still-more"},
+                "items": [
+                    {
+                        "apiVersion": "argoproj.io/v1alpha1",
+                        "kind": "Application",
+                        "metadata": {
+                            "name": "storefront",
+                            "namespace": "argocd",
+                            "uid": "app-1",
+                            "resourceVersion": "21",
+                        },
+                        "spec": {},
+                        "status": {},
+                    }
+                ],
+            },
+        )
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module, max_pages=1))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert kubernetes["dynamic_resource_collections"][0]["completeness"] == "partial"
+    assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == ["page_limit_exceeded"]
+    assert [row["name"] for row in kubernetes["custom_resources"]] == ["storefront"]
+
+
+def test_dynamic_resource_query_rejects_namespace_scope_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        return httpx.Response(
+            200,
+            json={
+                "groupVersion": "argoproj.io/v1alpha1",
+                "resources": [
+                    {
+                        "name": "applications",
+                        "namespaced": False,
+                        "kind": "Application",
+                        "verbs": ["list"],
+                    }
+                ],
+            },
+        )
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert requested == ["/apis/argoproj.io/v1alpha1"]
+    assert kubernetes["custom_resources"] == []
+    assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == [
+        "namespace_scope_mismatch"
+    ]

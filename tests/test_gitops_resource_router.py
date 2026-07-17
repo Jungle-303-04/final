@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from domains.gitops import detail_router
+from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from packages.contracts.gitops.detail import (
     GitOpsResourceActionRequest,
     GitOpsSyncOptions,
@@ -121,6 +122,91 @@ def test_tree_and_insights_share_one_exact_inventory_batch_per_request() -> None
     assert insights.insights.resource.uid == "app-uid"
     assert insights.insights.capabilities.actions == ("refresh", "sync")
     assert db.list_calls == 2
+
+
+def test_collected_argo_application_reaches_tree_and_insights_endpoints() -> None:
+    canonical = {
+        "api_version": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "namespace": "argocd",
+        "name": "storefront",
+        "uid": "app-uid",
+        "resource_version": "17",
+        "labels": {"team": "platform"},
+        "raw": {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "metadata": {
+                "name": "storefront",
+                "namespace": "argocd",
+                "uid": "app-uid",
+                "resourceVersion": "17",
+                "labels": {"team": "platform"},
+            },
+            "spec": {"source": {"repoURL": "https://example.invalid/storefront.git"}},
+            "status": {
+                "sync": {"status": "Synced", "revision": "main@sha1:abc"},
+                "health": {"status": "Healthy"},
+            },
+        },
+    }
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {
+            "cluster": {"collected_at": "2026-07-17T02:00:00Z"},
+            "custom_resources": [canonical],
+            "dynamic_resource_collections": [
+                {
+                    "query_name": "discovered_application_inventory",
+                    "completeness": "exact",
+                    "reason_codes": [],
+                }
+            ],
+        },
+        cluster_id="cluster-a",
+        agent_id="agent-a",
+    )
+    root = snapshot["resources"][0]
+    root.update(
+        {
+            "inventory_key": "gitops-root",
+            "snapshot_id": "snapshot-1",
+            "workspace_id": "workspace-a",
+            "cluster_id": "cluster-a",
+        }
+    )
+    db = GitOpsResourceDb()
+    db.root = root
+    db.resources = [root]
+
+    tree = asyncio.run(
+        detail_router.get_gitops_resource_tree(
+            kind="Application",
+            namespace="argocd",
+            name="storefront",
+            cluster_id="cluster-a",
+            api_version="argoproj.io/v1alpha1",
+            current=_current(),
+            db=db,
+        )
+    )
+    insights = asyncio.run(
+        detail_router.get_gitops_resource_insights(
+            kind="Application",
+            namespace="argocd",
+            name="storefront",
+            cluster_id="cluster-a",
+            api_version="argoproj.io/v1alpha1",
+            current=_current(),
+            db=db,
+        )
+    ).insights
+
+    assert tree.root.uid == "app-uid"
+    assert insights.provider == "argo"
+    assert insights.resource.uid == "app-uid"
+    assert insights.resource_version == "17"
+    assert insights.status == "Synced"
+    assert insights.health == "Healthy"
 
 
 def test_action_revalidates_capability_revision_and_dispatches_existing_receipt_flow(
