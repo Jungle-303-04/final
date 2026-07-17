@@ -1650,18 +1650,22 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsPage.tsx"
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "frontend/src/features/gitops/gitOpsResourceDetailRoute.ts",
+              "src/domains/gitops/detail_router.py",
+              "src/domains/gitops/resource_projection.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.gitops",
-              "domains.gitops.router"
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
             ],
             "plannedTestIds": [
               "gitops.tree.icon-and-portal"
             ],
-            "state": "blocked",
-            "blockedReason": "There is no GitOps detail route or typed tree node role in Opsia, so current navigation cannot distinguish a root subject from a managed child portal.",
-            "rationale": "This invariant must be encoded in the eventual route model before child GitOps CR navigation is exposed."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The typed tree preserves root and child roles, excludes the root from recursive navigation, and offers detail links only for supported child GitOps resource identities."
           }
         }
       ]
@@ -8187,12 +8191,17 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/gitops-application-detail-schemas.ts",
+              "frontend/src/api/gitops-resource-detail-schemas.ts",
               "frontend/src/features/gitops/gitOpsContract.ts",
               "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
               "src/packages/contracts/gitops/detail.py",
               "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/resource_projection.py",
               "src/domains/gitops/detail_router.py",
-              "tests/test_gitops_application_detail_router.py"
+              "tests/test_gitops_application_detail_router.py",
+              "tests/test_gitops_resource_projection.py",
+              "tests/test_gitops_resource_router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops.detail",
@@ -8205,7 +8214,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The strict Python and Zod detail contract already provides truthful scope, revision, workflow, capability, and comparison-availability evidence. Managed-resource changes, controller health, issue history, revision metadata, and full resource diffs remain unavailable until a provider observation boundary is added."
+            "rationale": "Strict Python and Zod contracts now provide exact resource identity, scope, observed status and health, source and revision, conditions, bounded history, revision-bound actions, and explicit unavailable comparison evidence without manufacturing a browser diff."
           }
         }
       ]
@@ -9358,9 +9367,12 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
+              "frontend/src/api/gitops-resource-detail.ts",
               "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "src/domains/gitops/detail_router.py"
+              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "src/domains/gitops/detail_router.py",
+              "src/services/target/cluster-agent/commands/gitops.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops",
@@ -9370,9 +9382,9 @@
             "plannedTestIds": [
               "gitops.sync-options.payload"
             ],
-            "state": "blocked",
-            "blockedReason": "The product has no provider-neutral selective resource sync CommandRequest, resource eligibility projection, provider executor, CommandReceipt, or operation event stream.",
-            "rationale": "The existing release workflow cannot be reused because selective controller sync has different safety fields and requires exact managed-resource ownership evidence."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The provider-neutral sync request carries exact selected identities and safe option constraints; the gateway checks complete inventory ownership and the agent rechecks live Argo ownership before returning the canonical streamed command receipt."
           }
         }
       ]
@@ -9941,10 +9953,14 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/gitops-application-detail.ts",
+              "frontend/src/api/gitops-resource-detail.ts",
               "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
               "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
               "src/domains/gitops/detail_router.py",
-              "src/packages/contracts/gitops/detail.py"
+              "src/domains/gitops/resource_projection.py",
+              "src/packages/contracts/gitops/detail.py",
+              "src/services/target/cluster-agent/commands/gitops.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops",
@@ -9958,9 +9974,9 @@
               "gitops.detail.operation-gate",
               "gitops.sync-options.payload"
             ],
-            "state": "blocked",
-            "blockedReason": "Provider-backed desired/live artifacts, revision metadata, controller status, selective validation, executor capability, CommandReceipt, and application-resource operation stream are not integrated.",
-            "rationale": "The current strict detail projection exposes source revision, operation gating, and explicit unavailable reasons, but it does not manufacture provider observations or reuse an unrelated release command."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Observed controller evidence and explicit comparison availability stay separate from action execution; reconcile, source sync, suspend, resume, and refresh use exact ResourceRefs, capability revisions, CAS, CommandReceipt, and the canonical operation event stream."
           }
         },
         {

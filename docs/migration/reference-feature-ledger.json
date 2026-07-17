@@ -9745,26 +9745,30 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
-      "frontendContract": "frontend/src/pages/gitops",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_router.py",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "tests/test_gitops_resource_projection.py",
+        "tests/test_gitops_resource_router.py",
+        "frontend/src/features/gitops/gitOpsResourceDetailRoute.test.ts",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/gitops/detail_router.py",
-          "reason": "No provider-neutral managed-resource tree preserves owns, source, and dependsOn edges for an external GitOps resource.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#get_gitops_resource_tree",
+          "consumer": "src/domains/gitops/resource_projection.py#gitops_resource_tree",
+          "reason": "One bounded inventory batch projects exact owns, source, and depends_on edges with explicit partial-coverage reasons and no per-node queries.",
+          "test": "tests/test_gitops_resource_projection.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-          "reason": "Release-plan workflow edges are not relabeled as a live controller resource tree.",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "The query-owned detail route renders the observed controller tree, coverage state, and exact selectable resource identities.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9793,30 +9797,30 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_projection.py",
-        "tests/test_gitops_application_detail_router.py",
+        "tests/test_gitops_resource_projection.py",
+        "tests/test_gitops_resource_router.py",
         "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/gitops/detail_router.py#get_gitops_application_detail",
-          "consumer": "src/domains/gitops/detail_projection.py#gitops_application_detail",
-          "reason": "Source revision, authorized scope, current workflow operation, and capability reasons are projected; desired/live resource evidence and provider history remain unavailable.",
-          "test": "tests/test_gitops_application_detail_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#get_gitops_resource_insights",
+          "consumer": "src/domains/gitops/resource_projection.py#gitops_resource_insights",
+          "reason": "Observed controller status, health, revision, source, conditions, bounded history, and revision-bound capabilities are projected without manufacturing provider state.",
+          "test": "tests/test_gitops_resource_projection.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx#GitOpsApplicationDetailPage",
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
           "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
-          "reason": "The detail renders observed evidence and explicit unavailable reasons without source-shaped unknown objects.",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "reason": "The detail renders typed controller insights and history while exposing only server-advertised actions.",
+          "test": "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9845,26 +9849,29 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_router.py",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "tests/test_gitops_resource_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/gitops/detail_router.py",
-          "reason": "No external controller executor can reconcile an exact provider ResourceRef and issue a CommandReceipt.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#create_gitops_resource_action",
+          "consumer": "src/services/target/cluster-agent/commands/gitops.py#execute_gitops_resource_command",
+          "reason": "Reconcile is RBAC- and capability-gated, CAS-bound to an exact ResourceRef, and returns the canonical CommandReceipt with OperationEvent streaming.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-          "reason": "Provider reconcile remains an explicit unavailable capability.",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "The shared confirmation flow dispatches reconcile only when present in the current CapabilitySet and follows the existing operation stream.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9893,26 +9900,29 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_router.py",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "tests/test_gitops_resource_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/gitops/detail_router.py",
-          "reason": "Webhook and release-plan workflows do not provide a direct provider sync-with-source command for an arbitrary external controller resource.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#create_gitops_resource_action",
+          "consumer": "src/services/target/cluster-agent/commands/gitops.py#execute_gitops_resource_command",
+          "reason": "Sync-with-source carries exact root and source UIDs and resourceVersions, revalidates both live resources, then reconciles source before root.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-          "reason": "The product does not expose an unrelated release command as provider sync.",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "Sync-with-source uses the same typed confirmation and receipt flow without conflating product release commands with provider control.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9942,26 +9952,29 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_router.py",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "tests/test_gitops_resource_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/gitops/detail_router.py",
-          "reason": "No provider capability can suspend or resume an external GitOps custom resource.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#create_gitops_resource_action",
+          "consumer": "src/services/target/cluster-agent/commands/gitops.py#execute_gitops_resource_command",
+          "reason": "Flux spec suspension and evidence-preserving Argo auto-sync suspension/resume are exact-resource CAS operations behind the shared audit flow.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-          "reason": "Release-run pause is scoped to product workflow execution and cannot mutate controller lifecycle.",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "Suspend or resume is shown from the latest controller CapabilitySet and uses the common impact-confirmation dialog.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9990,26 +10003,31 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_router.py",
-        "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
+        "tests/test_gitops_resource_action_contract.py",
+        "tests/test_gitops_resource_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/api/gitops-resource-detail.test.ts",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/gitops/detail_router.py",
-          "reason": "No selective managed-resource identity, eligibility projection, dry-run, provider executor, or CommandReceipt contract exists.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#create_gitops_resource_action",
+          "consumer": "src/services/target/cluster-agent/commands/gitops.py#execute_gitops_resource_command",
+          "reason": "Argo sync supports revision, prune, dry-run, force, apply-only, provider options, and selective resources with both inventory ownership and live controller ownership checks.",
+          "test": "tests/test_gitops_resource_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/features/gitops/gitOpsContract.ts",
-          "reason": "Release plans operate on application steps, not source-shaped selective controller resources.",
-          "test": "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/api/gitops-resource-detail.ts#executeGitOpsResourceAction",
+          "reason": "Typed sync controls submit exact selected tree identities and an idempotency key through the shared CommandReceipt contract.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -10038,26 +10056,29 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gitops.detail",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_gitops_application_detail_router.py",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "tests/test_gitops_resource_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/gitops/detail_router.py",
-          "reason": "A browser data refresh exists, but no provider hard-refresh action or audited executor exists.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/detail_router.py#create_gitops_resource_action",
+          "consumer": "src/services/target/cluster-agent/commands/gitops.py#execute_gitops_resource_command",
+          "reason": "Normal and hard Argo refresh are distinct audited controller annotations, revision-bound and dispatched through the command event path.",
+          "test": "tests/test_gitops_resource_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-          "reason": "The refresh capability remains disabled with its server reason instead of conflating refetch with provider refresh.",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "reason": "Browser refetch remains separate while the refresh action dialog explicitly selects normal or hard provider refresh.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
