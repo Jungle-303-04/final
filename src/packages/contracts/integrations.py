@@ -58,6 +58,7 @@ class PrometheusIntegrationUpdateRequest(StrictModel):
         if headers is None:
             return None
         normalized: dict[str, str] = {}
+        normalized_names: set[str] = set()
         for raw_name, raw_value in headers.items():
             name = raw_name.strip()
             value = raw_value.strip()
@@ -69,8 +70,10 @@ class PrometheusIntegrationUpdateRequest(StrictModel):
                 raise ValueError("integration header value is invalid")
             if "\r" in value or "\n" in value:
                 raise ValueError("integration header value cannot contain line breaks")
-            if name in normalized:
+            folded_name = name.casefold()
+            if folded_name in normalized_names:
                 raise ValueError("integration header names must be unique")
+            normalized_names.add(folded_name)
             normalized[name] = value
         return dict(sorted(normalized.items()))
 

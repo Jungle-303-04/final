@@ -191,6 +191,12 @@ def test_prometheus_integration_request_normalizes_and_bounds_sensitive_headers(
             prometheus_url="https://prometheus.example.test",
             headers={"Authorization": "Bearer secret\nX-Leak: yes"},
         )
+    with pytest.raises(ValidationError):
+        PrometheusIntegrationUpdateRequest(
+            cluster_id="cluster-a",
+            prometheus_url="https://prometheus.example.test",
+            headers={"Authorization": "Bearer one", "authorization": "Bearer two"},
+        )
 
 
 def test_update_encrypts_headers_advances_policy_and_returns_durable_receipt() -> None:
