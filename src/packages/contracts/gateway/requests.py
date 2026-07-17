@@ -19,6 +19,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.kubernetes_discovery import MAX_KUBERNETES_API_VERSION_LENGTH
 from packages.contracts.parity import ResourceRef
 from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
 
@@ -273,7 +274,7 @@ class RcaTestRunCreateRequest(StrictModel):
 
 class InventoryResource(StrictModel):
     resource_type: str = Field(min_length=1, max_length=80)
-    api_version: str = Field(default="", max_length=120)
+    api_version: str = Field(default="", max_length=MAX_KUBERNETES_API_VERSION_LENGTH)
     kind: str = Field(default="", max_length=120)
     namespace: str | None = Field(default=None, max_length=253)
     name: str = Field(min_length=1, max_length=253)

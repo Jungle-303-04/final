@@ -2,25 +2,85 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from packages.contracts.modeling import StrictModel
 
 MAX_API_DISCOVERY_DOCUMENTS = 128
 MAX_API_RESOURCES = 2_000
 MAX_API_RESOURCE_VERBS = 32
+MAX_KUBERNETES_API_VERSION_LENGTH = 317
+MAX_DYNAMIC_RESOURCE_NAMESPACES = 32
+DYNAMIC_RESOURCE_PAGE_SIZE_MAX = 500
+DYNAMIC_RESOURCE_MAX_PAGES = 20
+DYNAMIC_RESOURCE_MAX_ITEMS = 5_000
+
+DNS_LABEL_PATTERN = re.compile(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
+SAFE_API_SEGMENT_PATTERN = re.compile(r"[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?")
 
 ApiResourceDiscoveryCompleteness = Literal["exact", "partial", "unavailable"]
+
+
+class DynamicResourceCollectionSpec(StrictModel):
+    """One structured, discovery-authorized Kubernetes list request.
+
+    The policy carries no URL or continuation token. The agent resolves this
+    GVR against the live API discovery document and constructs every list path
+    from the validated descriptor and namespace set.
+    """
+
+    group: str = Field(default="", max_length=253)
+    version: str = Field(min_length=1, max_length=63)
+    resource: str = Field(min_length=1, max_length=253)
+    namespaces: tuple[str, ...] = Field(default=(), max_length=MAX_DYNAMIC_RESOURCE_NAMESPACES)
+    page_size: int = Field(default=200, ge=1, le=DYNAMIC_RESOURCE_PAGE_SIZE_MAX)
+    max_pages: int = Field(default=10, ge=1, le=DYNAMIC_RESOURCE_MAX_PAGES)
+    max_items: int = Field(default=1_000, ge=1, le=DYNAMIC_RESOURCE_MAX_ITEMS)
+
+    @field_validator("group")
+    @classmethod
+    def validate_group(cls, value: str) -> str:
+        normalized = value.strip()
+        if normalized and not _is_dns_subdomain(normalized):
+            raise ValueError("dynamic Kubernetes resource group must be a DNS subdomain")
+        return normalized
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, value: str) -> str:
+        normalized = value.strip()
+        if not _is_safe_api_segment(normalized):
+            raise ValueError("dynamic Kubernetes resource version must be one safe API segment")
+        return normalized
+
+    @field_validator("resource")
+    @classmethod
+    def validate_resource(cls, value: str) -> str:
+        normalized = value.strip()
+        if not _is_dns_subdomain(normalized):
+            raise ValueError("dynamic Kubernetes resource plural must be one safe API segment")
+        return normalized
+
+    @field_validator("namespaces")
+    @classmethod
+    def validate_namespaces(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(value.strip() for value in values)
+        if any(not _is_dns_label(value) for value in normalized):
+            raise ValueError("dynamic Kubernetes resource namespace must be a DNS label")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("dynamic Kubernetes resource namespaces must be unique")
+        return tuple(sorted(normalized))
 
 
 class ApiResourceDescriptor(StrictModel):
     group: str = Field(max_length=253)
     version: str = Field(min_length=1, max_length=63)
-    api_version: str = Field(min_length=1, max_length=317)
+    api_version: str = Field(min_length=1, max_length=MAX_KUBERNETES_API_VERSION_LENGTH)
     name: str = Field(min_length=1, max_length=253)
     singular_name: str = Field(max_length=253)
     kind: str = Field(min_length=1, max_length=253)
@@ -194,3 +254,19 @@ def _verbs(value: object) -> list[str]:
 
 def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _is_dns_label(value: str) -> bool:
+    return len(value) <= 63 and DNS_LABEL_PATTERN.fullmatch(value) is not None
+
+
+def _is_dns_subdomain(value: str) -> bool:
+    return (
+        len(value) <= 253
+        and bool(value)
+        and all(_is_dns_label(label) for label in value.split("."))
+    )
+
+
+def _is_safe_api_segment(value: str) -> bool:
+    return len(value) <= 63 and SAFE_API_SEGMENT_PATTERN.fullmatch(value) is not None

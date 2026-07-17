@@ -26,6 +26,7 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.kubernetes_discovery import (
     MAX_API_DISCOVERY_DOCUMENTS,
+    ApiResourceDescriptor,
     normalize_api_resource_discovery,
 )
 from packages.contracts.target import TARGET_NAMESPACE
@@ -69,6 +70,8 @@ K8S_DAEMONSETS_KEY = "daemonsets"
 K8S_JOBS_KEY = "jobs"
 K8S_CRONJOBS_KEY = "cronjobs"
 K8S_API_RESOURCE_DISCOVERY_KEY = "api_resource_discovery"
+K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY = "dynamic_resource_collections"
+K8S_CUSTOM_RESOURCES_KEY = "custom_resources"
 K8S_RESOURCE_ACCESS_KEY = "resource_access"
 K8S_CRD_DISCOVERY_PATH = "/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
 
@@ -79,6 +82,7 @@ MAX_KUBERNETES_WORKLOADS = 500
 MAX_KUBERNETES_SERVICES = 300
 MAX_KUBERNETES_ENDPOINTS = 300
 MAX_KUBERNETES_RESOURCE_QUOTAS = 200
+MAX_KUBERNETES_CUSTOM_RESOURCES = 1_000
 KUBERNETES_ACCESS_PAGE_SIZE = 500
 KUBERNETES_ACCESS_MAX_PAGES = 20
 KUBERNETES_ACCESS_MAX_ITEMS = 5000
@@ -91,6 +95,7 @@ KUBERNETES_LIST_LIMITS = {
     K8S_RESOURCE_SERVICES: MAX_KUBERNETES_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY: MAX_KUBERNETES_ENDPOINTS,
     K8S_RESOURCE_RESOURCE_QUOTAS: MAX_KUBERNETES_RESOURCE_QUOTAS,
+    K8S_CUSTOM_RESOURCES_KEY: MAX_KUBERNETES_CUSTOM_RESOURCES,
 }
 KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_RESOURCE_PODS,
@@ -100,7 +105,24 @@ KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_RESOURCE_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY,
     K8S_RESOURCE_RESOURCE_QUOTAS,
+    K8S_CUSTOM_RESOURCES_KEY,
 }
+
+DYNAMIC_RESOURCE_REASON_NOT_CONFIGURED = "not_configured"
+DYNAMIC_RESOURCE_REASON_DISCOVERY_RBAC = "discovery_rbac_denied"
+DYNAMIC_RESOURCE_REASON_DISCOVERY_UNAVAILABLE = "discovery_unavailable"
+DYNAMIC_RESOURCE_REASON_RESOURCE_NOT_DISCOVERED = "resource_not_discovered"
+DYNAMIC_RESOURCE_REASON_LIST_UNSUPPORTED = "list_not_supported"
+DYNAMIC_RESOURCE_REASON_SCOPE_MISMATCH = "namespace_scope_mismatch"
+DYNAMIC_RESOURCE_REASON_RBAC_DENIED = "rbac_denied"
+DYNAMIC_RESOURCE_REASON_RESOURCE_NOT_FOUND = "resource_not_found"
+DYNAMIC_RESOURCE_REASON_INVALID_RESPONSE = "invalid_response"
+DYNAMIC_RESOURCE_REASON_IDENTITY_MISMATCH = "identity_mismatch"
+DYNAMIC_RESOURCE_REASON_PAGE_LIMIT = "page_limit_exceeded"
+DYNAMIC_RESOURCE_REASON_ITEM_LIMIT = "item_limit_exceeded"
+DYNAMIC_RESOURCE_REASON_PAYLOAD_LIMIT = "payload_limit_exceeded"
+DYNAMIC_RESOURCE_REASON_TIMEOUT = "timeout"
+DYNAMIC_RESOURCE_REASON_NETWORK = "network_error"
 
 KUBERNETES_ACCESS_COLLECTIONS = {
     "roles": "/apis/rbac.authorization.k8s.io/v1/roles",
@@ -218,6 +240,14 @@ class KubernetesSnapshotProvider:
                     base_url=base_url,
                     token=token,
                     client=client,
+                )
+        if telemetry_query.is_dynamic_resource_collection:
+            async with kubernetes_client(self.transport) as client:
+                return await self.query_dynamic_resource_collection(
+                    base_url=base_url,
+                    token=token,
+                    client=client,
+                    telemetry_query=telemetry_query,
                 )
         if telemetry_query.is_cluster_wide_event_capture:
             async with kubernetes_client(self.transport) as client:
@@ -614,6 +644,215 @@ class KubernetesSnapshotProvider:
             return None
         return items(payload)
 
+    async def query_dynamic_resource_collection(
+        self,
+        *,
+        base_url: str | None,
+        token: str | None,
+        client: httpx.AsyncClient,
+        telemetry_query: KubernetesSnapshotQuery,
+    ) -> JsonObject:
+        """Collect one typed GVR only after exact live discovery resolution."""
+
+        collected_at = datetime.now(UTC).isoformat()
+        spec = telemetry_query.dynamic_resource
+        if spec is None:
+            return dynamic_resource_query_result(
+                cluster_id=self.cluster_id,
+                collected_at=collected_at,
+                telemetry_query=telemetry_query,
+                descriptor=None,
+                resources=[],
+                reason_codes=(DYNAMIC_RESOURCE_REASON_INVALID_RESPONSE,),
+            )
+        if not base_url or not token:
+            return dynamic_resource_query_result(
+                cluster_id=self.cluster_id,
+                collected_at=collected_at,
+                telemetry_query=telemetry_query,
+                descriptor=None,
+                resources=[],
+                reason_codes=(DYNAMIC_RESOURCE_REASON_NOT_CONFIGURED,),
+            )
+
+        headers = kubernetes_headers(token)
+        descriptor, discovery_reason = await self._resolve_dynamic_resource_descriptor(
+            base_url=base_url,
+            headers=headers,
+            client=client,
+            telemetry_query=telemetry_query,
+            collected_at=collected_at,
+        )
+        if descriptor is None:
+            return dynamic_resource_query_result(
+                cluster_id=self.cluster_id,
+                collected_at=collected_at,
+                telemetry_query=telemetry_query,
+                descriptor=None,
+                resources=[],
+                reason_codes=(discovery_reason or DYNAMIC_RESOURCE_REASON_DISCOVERY_UNAVAILABLE,),
+            )
+        if descriptor.namespaced != bool(spec.namespaces):
+            return dynamic_resource_query_result(
+                cluster_id=self.cluster_id,
+                collected_at=collected_at,
+                telemetry_query=telemetry_query,
+                descriptor=descriptor,
+                resources=[],
+                reason_codes=(DYNAMIC_RESOURCE_REASON_SCOPE_MISMATCH,),
+            )
+
+        namespaces: tuple[str | None, ...] = (
+            tuple(spec.namespaces) if descriptor.namespaced else (None,)
+        )
+        resources: dict[str, JsonObject] = {}
+        reason_codes: set[str] = set()
+        page_count = 0
+        observed_count = 0
+        stop = False
+        for namespace in namespaces:
+            continuation: str | None = None
+            seen_continuations: set[str] = set()
+            while not stop:
+                if page_count >= spec.max_pages:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_PAGE_LIMIT)
+                    stop = True
+                    break
+                remaining = spec.max_items - len(resources)
+                if remaining <= 0:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_ITEM_LIMIT)
+                    stop = True
+                    break
+                params: dict[str, str | int] = {"limit": min(spec.page_size, remaining)}
+                if continuation:
+                    params["continue"] = continuation
+                try:
+                    response = await client.get(
+                        f"{base_url}{dynamic_resource_list_path(descriptor, namespace)}",
+                        headers=headers,
+                        params=params,
+                    )
+                except httpx.TimeoutException:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_TIMEOUT)
+                    stop = True
+                    break
+                except httpx.NetworkError:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_NETWORK)
+                    stop = True
+                    break
+                if response.status_code in {401, 403}:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_RBAC_DENIED)
+                    stop = True
+                    break
+                if response.status_code == 404:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_RESOURCE_NOT_FOUND)
+                    stop = True
+                    break
+                if response.is_error:
+                    reason_codes.add(f"http_{response.status_code}")
+                    stop = True
+                    break
+                try:
+                    page = response.json()
+                except ValueError:
+                    page = None
+                if not isinstance(page, dict) or not isinstance(page.get("items"), list):
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_INVALID_RESPONSE)
+                    stop = True
+                    break
+
+                page_count += 1
+                page_items = page["items"]
+                observed_count += len(page_items)
+                for raw_item in page_items:
+                    if len(resources) >= spec.max_items:
+                        reason_codes.add(DYNAMIC_RESOURCE_REASON_ITEM_LIMIT)
+                        stop = True
+                        break
+                    normalized = canonical_dynamic_resource(raw_item, descriptor, namespace)
+                    if normalized is None:
+                        reason_codes.add(DYNAMIC_RESOURCE_REASON_IDENTITY_MISMATCH)
+                        continue
+                    identity = str(normalized["uid"])
+                    if identity in resources:
+                        reason_codes.add(DYNAMIC_RESOURCE_REASON_IDENTITY_MISMATCH)
+                        continue
+                    resources[identity] = normalized
+
+                next_continuation = metadata(page).get("continue")
+                continuation = str(next_continuation) if next_continuation else None
+                if continuation is None:
+                    break
+                if continuation in seen_continuations:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_INVALID_RESPONSE)
+                    stop = True
+                    break
+                seen_continuations.add(continuation)
+                if len(resources) >= spec.max_items:
+                    reason_codes.add(DYNAMIC_RESOURCE_REASON_ITEM_LIMIT)
+                    stop = True
+                    break
+
+        return dynamic_resource_query_result(
+            cluster_id=self.cluster_id,
+            collected_at=collected_at,
+            telemetry_query=telemetry_query,
+            descriptor=descriptor,
+            resources=list(resources.values()),
+            reason_codes=tuple(sorted(reason_codes)),
+            page_count=page_count,
+            observed_count=observed_count,
+        )
+
+    async def _resolve_dynamic_resource_descriptor(
+        self,
+        *,
+        base_url: str,
+        headers: dict[str, str],
+        client: httpx.AsyncClient,
+        telemetry_query: KubernetesSnapshotQuery,
+        collected_at: str,
+    ) -> tuple[ApiResourceDescriptor | None, str | None]:
+        spec = telemetry_query.dynamic_resource
+        if spec is None:
+            return None, DYNAMIC_RESOURCE_REASON_INVALID_RESPONSE
+        path = dynamic_resource_discovery_path(spec.group, spec.version)
+        try:
+            response = await client.get(f"{base_url}{path}", headers=headers)
+        except httpx.TimeoutException:
+            return None, DYNAMIC_RESOURCE_REASON_TIMEOUT
+        except httpx.NetworkError:
+            return None, DYNAMIC_RESOURCE_REASON_NETWORK
+        if response.status_code in {401, 403}:
+            return None, DYNAMIC_RESOURCE_REASON_DISCOVERY_RBAC
+        if response.is_error:
+            return None, DYNAMIC_RESOURCE_REASON_DISCOVERY_UNAVAILABLE
+        try:
+            document = response.json()
+        except ValueError:
+            document = None
+        expected_api_version = f"{spec.group}/{spec.version}" if spec.group else spec.version
+        if not isinstance(document, dict) or document.get("groupVersion") != expected_api_version:
+            return None, DYNAMIC_RESOURCE_REASON_DISCOVERY_UNAVAILABLE
+        discovery = normalize_api_resource_discovery(
+            documents=[document],
+            custom_resource_definitions=None,
+            observed_at=collected_at,
+        )
+        matches = [
+            descriptor
+            for descriptor in discovery.resources
+            if descriptor.group == spec.group
+            and descriptor.version == spec.version
+            and descriptor.name == spec.resource
+        ]
+        if len(matches) != 1:
+            return None, DYNAMIC_RESOURCE_REASON_RESOURCE_NOT_DISCOVERED
+        descriptor = matches[0]
+        if "list" not in descriptor.verbs:
+            return None, DYNAMIC_RESOURCE_REASON_LIST_UNSUPPORTED
+        return descriptor, None
+
     async def query_cluster_wide_event_capture(
         self,
         *,
@@ -817,6 +1056,8 @@ class KubernetesSnapshotProvider:
             return self.normalize_cluster_api_discovery(payload, telemetry_query)
         if telemetry_query.is_cluster_access_snapshot:
             return self.normalize_cluster_access_snapshot(payload, telemetry_query)
+        if telemetry_query.is_dynamic_resource_collection:
+            return self.normalize_dynamic_resource_collection(payload, telemetry_query)
         if telemetry_query.is_cluster_wide_event_capture:
             return self.normalize_cluster_wide_event_capture(payload, telemetry_query)
         snapshot = empty_snapshot(self.cluster_id)
@@ -1013,6 +1254,37 @@ class KubernetesSnapshotProvider:
         }
         return snapshot
 
+    def normalize_dynamic_resource_collection(
+        self,
+        payload: JsonObject,
+        telemetry_query: KubernetesSnapshotQuery,
+    ) -> JsonObject:
+        """Merge one already validated dynamic list into canonical evidence."""
+
+        snapshot = empty_snapshot(self.cluster_id)
+        collected_at = str(payload.get("collected_at") or datetime.now(UTC).isoformat())
+        collection = payload.get("dynamic_resource_collection")
+        observation = dict(collection) if isinstance(collection, dict) else {}
+        custom_resources = [
+            dict(item)
+            for item in payload.get(K8S_CUSTOM_RESOURCES_KEY, [])
+            if isinstance(item, dict)
+        ]
+        snapshot["cluster"] = {
+            "cluster_id": str(payload.get("cluster_id") or self.cluster_id),
+            "collected_at": collected_at,
+        }
+        snapshot[K8S_CUSTOM_RESOURCES_KEY] = custom_resources
+        snapshot[K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY] = [observation] if observation else []
+        snapshot["provider_status"] = {
+            telemetry_query.query_name: {
+                "status": observation.get("completeness", "unavailable"),
+                "reason_codes": observation.get("reason_codes", ["invalid_response"]),
+                "counts": {K8S_CUSTOM_RESOURCES_KEY: len(custom_resources)},
+            }
+        }
+        return snapshot
+
     def normalize_cluster_wide_event_capture(
         self,
         payload: JsonObject,
@@ -1037,6 +1309,140 @@ class KubernetesSnapshotProvider:
         return snapshot
 
 
+def dynamic_resource_discovery_path(group: str, version: str) -> str:
+    return f"/apis/{group}/{version}" if group else f"/api/{version}"
+
+
+def dynamic_resource_list_path(
+    descriptor: ApiResourceDescriptor,
+    namespace: str | None,
+) -> str:
+    base = dynamic_resource_discovery_path(descriptor.group, descriptor.version)
+    if descriptor.namespaced:
+        if not namespace:
+            raise ValueError("namespaced dynamic Kubernetes resource requires a namespace")
+        return f"{base}/namespaces/{namespace}/{descriptor.name}"
+    return f"{base}/{descriptor.name}"
+
+
+def canonical_dynamic_resource(
+    value: object,
+    descriptor: ApiResourceDescriptor,
+    namespace: str | None,
+) -> JsonObject | None:
+    """Keep identity, metadata, spec, and status while dropping unsafe top-level data."""
+
+    if not isinstance(value, dict):
+        return None
+    expected_api_version = (
+        f"{descriptor.group}/{descriptor.version}" if descriptor.group else descriptor.version
+    )
+    if value.get("apiVersion") != expected_api_version or value.get("kind") != descriptor.kind:
+        return None
+    source_metadata = metadata(value)
+    name = as_text(source_metadata.get("name"))
+    uid = as_text(source_metadata.get("uid"))
+    resource_version = as_text(source_metadata.get("resourceVersion"))
+    observed_namespace = as_text(source_metadata.get("namespace"))
+    if not name or not uid or not resource_version:
+        return None
+    if descriptor.namespaced:
+        if not namespace or observed_namespace != namespace:
+            return None
+    elif observed_namespace:
+        return None
+
+    canonical_metadata: JsonObject = {
+        "name": name,
+        "uid": uid,
+        "resourceVersion": resource_version,
+    }
+    if observed_namespace:
+        canonical_metadata["namespace"] = observed_namespace
+    for key in ("generation", "creationTimestamp", "deletionTimestamp"):
+        if source_metadata.get(key) is not None:
+            canonical_metadata[key] = source_metadata[key]
+    labels = string_mapping(source_metadata.get("labels"))
+    annotations = string_mapping(source_metadata.get("annotations"))
+    if labels:
+        canonical_metadata["labels"] = labels
+    if annotations:
+        canonical_metadata["annotations"] = annotations
+    owner_references = source_metadata.get("ownerReferences")
+    if isinstance(owner_references, list):
+        canonical_metadata["ownerReferences"] = [
+            dict(reference) for reference in owner_references[:16] if isinstance(reference, dict)
+        ]
+
+    raw = {
+        "apiVersion": expected_api_version,
+        "kind": descriptor.kind,
+        "metadata": canonical_metadata,
+        "spec": spec(value),
+        "status": status(value),
+    }
+    return {
+        "api_version": expected_api_version,
+        "kind": descriptor.kind,
+        "namespace": observed_namespace or None,
+        "name": name,
+        "uid": uid,
+        "resource_version": resource_version,
+        "labels": labels,
+        "annotations": annotations,
+        "raw": raw,
+    }
+
+
+def string_mapping(value: object) -> JsonObject:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): str(item) for key, item in value.items()}
+
+
+def dynamic_resource_query_result(
+    *,
+    cluster_id: str,
+    collected_at: str,
+    telemetry_query: KubernetesSnapshotQuery,
+    descriptor: ApiResourceDescriptor | None,
+    resources: list[JsonObject],
+    reason_codes: tuple[str, ...],
+    page_count: int = 0,
+    observed_count: int = 0,
+) -> JsonObject:
+    spec = telemetry_query.dynamic_resource
+    if spec is None:
+        group = version = resource = ""
+        namespaces: list[str] = []
+    else:
+        group = spec.group
+        version = spec.version
+        resource = spec.resource
+        namespaces = list(spec.namespaces)
+    completeness = "exact" if not reason_codes else "partial" if resources else "unavailable"
+    return {
+        "status": completeness,
+        "cluster_id": cluster_id,
+        "collected_at": collected_at,
+        K8S_CUSTOM_RESOURCES_KEY: resources,
+        "dynamic_resource_collection": {
+            "query_name": telemetry_query.query_name,
+            "group": group,
+            "version": version,
+            "resource": resource,
+            "kind": descriptor.kind if descriptor is not None else None,
+            "namespaced": descriptor.namespaced if descriptor is not None else None,
+            "namespaces": namespaces,
+            "completeness": completeness,
+            "reason_codes": list(reason_codes),
+            "page_count": page_count,
+            "observed_count": observed_count,
+            "returned_count": len(resources),
+        },
+    }
+
+
 def empty_snapshot(cluster_id: str) -> JsonObject:
     """Build the empty shape used by Kubernetes evidence."""
     return {
@@ -1050,6 +1456,8 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
         K8S_RESOURCE_SERVICES: [],
         K8S_SNAPSHOT_ENDPOINTS_KEY: [],
         K8S_RESOURCE_RESOURCE_QUOTAS: [],
+        K8S_CUSTOM_RESOURCES_KEY: [],
+        K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY: [],
         K8S_RESOURCE_ACCESS_KEY: unavailable_resource_access_payload("not_requested"),
         # A missing global collector is an explicit coverage gap, not an empty
         # all-namespace Event list. Timeline must therefore fail closed.
@@ -1083,9 +1491,14 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
         K8S_RESOURCE_SERVICES,
         K8S_SNAPSHOT_ENDPOINTS_KEY,
         K8S_RESOURCE_RESOURCE_QUOTAS,
+        K8S_CUSTOM_RESOURCES_KEY,
     ):
         target.setdefault(key, [])
         target[key].extend(source.get(key, []))
+    target.setdefault(K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY, [])
+    target[K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY].extend(
+        source.get(K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY, [])
+    )
     merge_cluster_scoped_nodes(target, source)
     target.setdefault("provider_status", {})
     target["provider_status"].update(source.get("provider_status", {}))
@@ -1444,8 +1857,48 @@ def limit_kubernetes_snapshot(snapshot: JsonObject) -> JsonObject:
         limits=limits,
         group_keys={key: namespace_group_key for key in KUBERNETES_NAMESPACED_LIST_KEYS},
     )
+    mark_dynamic_resource_payload_limit(snapshot, limits)
     attach_collection_limits(snapshot, limits)
     return snapshot
+
+
+def mark_dynamic_resource_payload_limit(snapshot: JsonObject, limits: JsonObject) -> None:
+    """Never retain exact dynamic coverage after the shared payload limiter truncates it."""
+
+    if K8S_CUSTOM_RESOURCES_KEY not in limits:
+        return
+    has_resources = bool(snapshot.get(K8S_CUSTOM_RESOURCES_KEY))
+    query_names: set[str] = set()
+    collections = snapshot.get(K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY)
+    if isinstance(collections, list):
+        for collection in collections:
+            if not isinstance(collection, dict):
+                continue
+            query_name = str(collection.get("query_name") or "").strip()
+            if query_name:
+                query_names.add(query_name)
+            reason_codes = dynamic_reason_codes(collection.get("reason_codes"))
+            reason_codes.add(DYNAMIC_RESOURCE_REASON_PAYLOAD_LIMIT)
+            collection["reason_codes"] = sorted(reason_codes)
+            collection["completeness"] = "partial" if has_resources else "unavailable"
+
+    provider_status = snapshot.get("provider_status")
+    if not isinstance(provider_status, dict):
+        return
+    for query_name in query_names:
+        status = provider_status.get(query_name)
+        if not isinstance(status, dict):
+            continue
+        reason_codes = dynamic_reason_codes(status.get("reason_codes"))
+        reason_codes.add(DYNAMIC_RESOURCE_REASON_PAYLOAD_LIMIT)
+        status["reason_codes"] = sorted(reason_codes)
+        status["status"] = "partial" if has_resources else "unavailable"
+
+
+def dynamic_reason_codes(value: object) -> set[str]:
+    if not isinstance(value, list):
+        return set()
+    return {reason for reason in value if isinstance(reason, str) and reason}
 
 
 def namespace_group_key(item: object) -> str:

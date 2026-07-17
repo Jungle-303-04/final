@@ -206,7 +206,7 @@ def test_collected_argo_application_reaches_tree_and_insights_endpoints() -> Non
     assert insights.resource.uid == "app-uid"
     assert insights.resource_version == "17"
     assert insights.status == "Synced"
-    assert insights.health == "Healthy"
+    assert insights.health == "healthy"
 
 
 def test_action_revalidates_capability_revision_and_dispatches_existing_receipt_flow(

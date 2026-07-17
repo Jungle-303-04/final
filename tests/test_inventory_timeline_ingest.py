@@ -343,6 +343,7 @@ def test_snapshot_mutation_reads_prestate_under_inventory_lock_before_building_e
                     "workspace-1",
                     "cluster-1",
                     "pod",
+                    "v1",
                     "payments",
                     "Pod",
                     "checkout",

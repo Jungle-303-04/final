@@ -17,6 +17,7 @@ from domains.inventory.repository import (
     inventory_resource_key,
     labels_match,
     normalize_inventory_resource,
+    preserve_existing_inventory_keys,
     selector_labels,
     snapshot_resources,
 )
@@ -210,13 +211,110 @@ def inventory_resource(
 
 
 def test_inventory_resource_key_is_stable_for_same_kubernetes_identity() -> None:
-    first = inventory_resource_key("ws-1", "cluster-1", "workload", "default", "Deployment", "api")
-    second = inventory_resource_key("ws-1", "cluster-1", "workload", "default", "Deployment", "api")
+    first = inventory_resource_key(
+        "ws-1", "cluster-1", "workload", "apps/v1", "default", "Deployment", "api"
+    )
+    second = inventory_resource_key(
+        "ws-1", "cluster-1", "workload", "apps/v1", "default", "Deployment", "api"
+    )
 
     assert first == second
     assert first != inventory_resource_key(
-        "ws-1", "cluster-1", "workload", "prod", "Deployment", "api"
+        "ws-1", "cluster-1", "workload", "apps/v1", "prod", "Deployment", "api"
     )
+
+
+def test_inventory_resource_key_separates_cross_group_resource_identity() -> None:
+    first = inventory_resource_key(
+        "ws-1",
+        "cluster-1",
+        "custom_resource",
+        "alpha.example.io/v1",
+        "default",
+        "Widget",
+        "api",
+    )
+    second = inventory_resource_key(
+        "ws-1",
+        "cluster-1",
+        "custom_resource",
+        "beta.example.io/v1",
+        "default",
+        "Widget",
+        "api",
+    )
+
+    assert first != second
+
+
+def test_existing_inventory_identity_keeps_legacy_key_during_key_upgrade() -> None:
+    observed_at = datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    current = normalize_inventory_resource(
+        {
+            "resource_type": "custom_resource",
+            "api_version": "alpha.example.io/v1",
+            "kind": "Widget",
+            "namespace": "default",
+            "name": "api",
+        },
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-2",
+        observed_at=observed_at,
+    )
+    previous = {**current, "inventory_key": "legacy-key", "snapshot_id": "snapshot-1"}
+
+    preserved = preserve_existing_inventory_keys([current], [previous])
+
+    assert preserved[0]["inventory_key"] == "legacy-key"
+
+
+def test_existing_inventory_key_is_not_reused_across_api_groups() -> None:
+    observed_at = datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    previous = normalize_inventory_resource(
+        {
+            "resource_type": "custom_resource",
+            "api_version": "alpha.example.io/v1",
+            "kind": "Widget",
+            "namespace": "default",
+            "name": "api",
+        },
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-1",
+        observed_at=observed_at,
+    )
+    current = normalize_inventory_resource(
+        {
+            "resource_type": "custom_resource",
+            "api_version": "beta.example.io/v1",
+            "kind": "Widget",
+            "namespace": "default",
+            "name": "api",
+        },
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-2",
+        observed_at=observed_at,
+    )
+
+    preserved = preserve_existing_inventory_keys([current], [previous])
+
+    assert preserved[0]["inventory_key"] == current["inventory_key"]
+    assert preserved[0]["inventory_key"] != previous["inventory_key"]
+
+
+def test_inventory_resource_accepts_full_kubernetes_api_version_length() -> None:
+    api_version = f"{'g' * 253}/{'v' * 63}"
+
+    resource = InventoryResource(
+        resource_type="custom_resource",
+        api_version=api_version,
+        kind="Widget",
+        name="api",
+    )
+
+    assert resource.api_version == api_version
 
 
 def test_snapshot_resources_adds_health_and_usage_rollups() -> None:

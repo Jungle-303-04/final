@@ -10,7 +10,11 @@ import pytest
 
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.inventory_filter.physical_topology import build_physical_topology
-from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
+from packages.contracts.gateway.requests import (
+    AgentEvidenceRequest,
+    EvidenceJobResultRequest,
+    EvidenceProviderPolicy,
+)
 from packages.kubernetes_provider import detect_kubernetes_provider
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -2042,6 +2046,46 @@ def test_kubernetes_snapshot_provider_can_drop_single_oversized_list_item() -> N
     )
 
 
+def test_dynamic_resource_payload_limit_revokes_exact_coverage() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["custom_resources"] = [
+        {
+            "api_version": "example.io/v1",
+            "kind": "Example",
+            "namespace": "target",
+            "name": "oversized",
+            "uid": "example-1",
+            "resource_version": "1",
+            "raw": {"spec": {"message": "x" * 1_100_000}},
+        }
+    ]
+    results["dynamic_resource_collections"] = [
+        {
+            "query_name": "examples",
+            "completeness": "exact",
+            "reason_codes": [],
+        }
+    ]
+    results["provider_status"] = {"examples": {"status": "exact", "reason_codes": []}}
+
+    limited = provider.build_response(results)
+
+    assert limited["custom_resources"] == []
+    assert limited["dynamic_resource_collections"] == [
+        {
+            "query_name": "examples",
+            "completeness": "unavailable",
+            "reason_codes": ["payload_limit_exceeded"],
+        }
+    ]
+    assert limited["provider_status"]["examples"] == {
+        "status": "unavailable",
+        "reason_codes": ["payload_limit_exceeded"],
+    }
+
+
 def _dynamic_resource_definition(module, **overrides: object):
     dynamic_resource: dict[str, object] = {
         "group": "argoproj.io",
@@ -2065,6 +2109,35 @@ def _dynamic_resource_definition(module, **overrides: object):
     )
 
 
+def test_dynamic_resource_policy_json_is_backward_compatible() -> None:
+    legacy_query = {
+        "name": "target_namespace_snapshot",
+        "description": "Legacy namespace query.",
+        "query": "target",
+    }
+    dynamic_query = {
+        "name": "examples",
+        "description": "Structured dynamic query.",
+        "query": "*",
+        "collection_scope": "dynamic_resource",
+        "dynamic_resource": {
+            "group": "example.io",
+            "version": "v1",
+            "resource": "examples",
+            "namespaces": ["target"],
+            "page_size": 50,
+            "max_pages": 4,
+            "max_items": 150,
+        },
+    }
+
+    policy = EvidenceProviderPolicy.model_validate(
+        {"interval_seconds": 30, "queries": [legacy_query, dynamic_query]}
+    )
+
+    assert policy.model_dump()["queries"] == [legacy_query, dynamic_query]
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -2072,6 +2145,7 @@ def _dynamic_resource_definition(module, **overrides: object):
         ("version", "v1alpha1?watch=true"),
         ("resource", "applications/status"),
         ("namespaces", ["argocd?labelSelector=all"]),
+        ("url", "/apis/argoproj.io/v1alpha1/applications?watch=true"),
     ],
 )
 def test_dynamic_resource_query_rejects_path_and_selector_injection(
@@ -2373,3 +2447,122 @@ def test_dynamic_resource_query_rejects_namespace_scope_mismatch(
     assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == [
         "namespace_scope_mismatch"
     ]
+
+
+@pytest.mark.parametrize(
+    (
+        "group",
+        "version",
+        "resource",
+        "namespaces",
+        "kind",
+        "discovery_path",
+        "list_path",
+        "observed_namespace",
+    ),
+    [
+        (
+            "",
+            "v1",
+            "configmaps",
+            ["target"],
+            "ConfigMap",
+            "/api/v1",
+            "/api/v1/namespaces/target/configmaps",
+            "target",
+        ),
+        (
+            "storage.k8s.io",
+            "v1",
+            "storageclasses",
+            [],
+            "StorageClass",
+            "/apis/storage.k8s.io/v1",
+            "/apis/storage.k8s.io/v1/storageclasses",
+            None,
+        ),
+    ],
+)
+def test_dynamic_resource_query_distinguishes_core_and_cluster_scopes(
+    monkeypatch: pytest.MonkeyPatch,
+    group: str,
+    version: str,
+    resource: str,
+    namespaces: list[str],
+    kind: str,
+    discovery_path: str,
+    list_path: str,
+    observed_namespace: str | None,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        if request.url.path == discovery_path:
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": f"{group}/{version}" if group else version,
+                    "resources": [
+                        {
+                            "name": resource,
+                            "namespaced": bool(namespaces),
+                            "kind": kind,
+                            "verbs": ["list"],
+                        }
+                    ],
+                },
+            )
+        item_metadata: dict[str, object] = {
+            "name": "sample",
+            "uid": "sample-1",
+            "resourceVersion": "4",
+        }
+        if observed_namespace is not None:
+            item_metadata["namespace"] = observed_namespace
+        return httpx.Response(
+            200,
+            json={
+                "metadata": {},
+                "items": [
+                    {
+                        "apiVersion": f"{group}/{version}" if group else version,
+                        "kind": kind,
+                        "metadata": item_metadata,
+                        "spec": {},
+                        "status": {},
+                    }
+                ],
+            },
+        )
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        _dynamic_resource_definition(
+            module,
+            group=group,
+            version=version,
+            resource=resource,
+            namespaces=namespaces,
+        )
+    )
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert requested == [discovery_path, list_path]
+    assert kubernetes["dynamic_resource_collections"][0]["completeness"] == "exact"
+    assert kubernetes["custom_resources"][0]["api_version"] == (
+        f"{group}/{version}" if group else version
+    )
+    assert kubernetes["custom_resources"][0]["namespace"] == observed_namespace

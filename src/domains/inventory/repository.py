@@ -141,13 +141,58 @@ def inventory_resource_key(
     workspace_id: str,
     cluster_id: str,
     resource_type: str,
+    api_version: str,
     namespace: str | None,
     kind: str,
     name: str,
 ) -> str:
-    identity = [workspace_id, cluster_id, resource_type, namespace or "", kind, name]
+    identity = [
+        workspace_id,
+        cluster_id,
+        resource_type,
+        api_version,
+        namespace or "",
+        kind,
+        name,
+    ]
     raw = json.dumps(identity, ensure_ascii=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def inventory_resource_identity(resource: Mapping[str, object]) -> tuple[str, ...]:
+    """Return the complete identity encoded by ``inventory_resource_key``."""
+    namespace = resource.get("namespace")
+    return (
+        str(resource.get("workspace_id") or ""),
+        str(resource.get("cluster_id") or ""),
+        str(resource.get("resource_type") or ""),
+        str(resource.get("api_version") or ""),
+        str(namespace) if namespace is not None else "",
+        str(resource.get("kind") or ""),
+        str(resource.get("name") or ""),
+    )
+
+
+def preserve_existing_inventory_keys(
+    current_rows: Sequence[JsonObject],
+    previous_rows: Sequence[Mapping[str, object]],
+) -> list[JsonObject]:
+    """Preserve history keys only when the complete Kubernetes identity is unchanged."""
+    existing_keys = {
+        inventory_resource_identity(row): str(row["inventory_key"])
+        for row in previous_rows
+        if row.get("inventory_key")
+    }
+    preserved = [
+        {
+            **row,
+            "inventory_key": existing_keys.get(
+                inventory_resource_identity(row), row["inventory_key"]
+            ),
+        }
+        for row in current_rows
+    ]
+    return dedupe_inventory_rows(preserved)
 
 
 def resource_type_of(resource: JsonObject) -> str:
@@ -163,6 +208,7 @@ def normalize_inventory_resource(
     observed_at: datetime,
 ) -> JsonObject:
     resource_type = resource_type_of(resource)
+    api_version = str(resource.get("api_version") or "")
     kind = str(resource.get("kind") or resource_type)
     namespace = resource.get("namespace")
     name = str(resource.get("name") or resource.get("uid") or f"{resource_type}-resource")
@@ -177,6 +223,7 @@ def normalize_inventory_resource(
             workspace_id,
             cluster_id,
             resource_type,
+            api_version,
             str(namespace) if namespace is not None else None,
             kind,
             name,
@@ -185,7 +232,7 @@ def normalize_inventory_resource(
         "workspace_id": workspace_id,
         "cluster_id": cluster_id,
         "resource_type": resource_type,
-        "api_version": str(resource.get("api_version") or ""),
+        "api_version": api_version,
         "kind": kind,
         "namespace": str(namespace) if namespace is not None else None,
         "name": name,
@@ -717,6 +764,7 @@ class InventoryRepository(DatabaseConnection):
                 .mappings()
                 .all()
             ]
+            normalized = preserve_existing_inventory_keys(normalized, previous_rows)
             # A non-authoritative cut cannot emit Event Timeline entries, so avoid
             # reading an older fact batch that it must never compare or append from.
             previous_event_batch = (
