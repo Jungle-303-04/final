@@ -268,5 +268,54 @@
         }
       }
     ]
+  },
+  "gitops": {
+    "repo_ref": "jungle-303-04/yaml-demo",
+    "default_branch": "main",
+    "revision": "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef",
+    "catalog_scenario_count": 17,
+    "sources": [
+      {
+        "name": "yaml-demo-raw",
+        "manifest_path": "manifests/base/workloads.yaml",
+        "source_type": "raw-yaml",
+        "namespace": "demo-shop",
+        "environment": "demo",
+        "interval_seconds": 300
+      },
+      {
+        "name": "yaml-demo-kustomize-parent",
+        "manifest_path": "manifests/overlays/dev",
+        "source_type": "kustomize",
+        "namespace": "demo-shop",
+        "environment": "demo",
+        "interval_seconds": 300
+      },
+      {
+        "name": "yaml-demo-kustomize-component",
+        "manifest_path": "manifests/overlays/diagnostics",
+        "source_type": "kustomize",
+        "namespace": "demo-shop",
+        "environment": "demo",
+        "interval_seconds": 300
+      },
+      {
+        "name": "yaml-demo-helm",
+        "manifest_path": "charts/demo-app",
+        "source_type": "helm",
+        "namespace": "demo-shop",
+        "environment": "demo",
+        "interval_seconds": 300
+      },
+      {
+        "name": "yaml-demo-helm-staging",
+        "manifest_path": "charts/demo-app",
+        "source_type": "helm",
+        "values_path": "charts/demo-app/values-staging.yaml",
+        "namespace": "demo-shop",
+        "environment": "demo",
+        "interval_seconds": 300
+      }
+    ]
   }
 }

@@ -296,6 +296,14 @@ class RepositoryDiscoveryService:
             warnings=[] if len(branches) < MAX_BRANCHES else ["showing the first 100 branches"],
         )
 
+    async def resolve_branch_revision(self, repo_ref: str, branch: str) -> str:
+        """Resolve one normalized branch through the discovery client's bounded API."""
+
+        return await self.client.branch_sha(
+            normalize_repo_ref(repo_ref),
+            normalize_branch(branch),
+        )
+
     async def list_manifest_candidates(
         self, repo_ref: str, branch: str
     ) -> RepositoryManifestCandidateListResponse:
@@ -366,9 +374,16 @@ class RepositoryDiscoveryService:
         repo_ref = normalize_repo_ref(payload.repo_ref)
         branch = normalize_branch(payload.branch)
         manifest_path = normalize_manifest_path(payload.manifest_path)
+        values_path = (
+            normalize_manifest_path(payload.values_path)
+            if payload.values_path is not None
+            else None
+        )
         source_type = normalize_source_type(payload.source_type) or source_type_from_path(
             manifest_path
         )
+        if values_path is not None and source_type != "helm":
+            raise ValueError("values_path is valid only for Helm manifest validation")
         if source_type in {"kustomize", "helm"}:
             return await validate_render_manifest(
                 self.client,
@@ -377,6 +392,7 @@ class RepositoryDiscoveryService:
                 branch,
                 manifest_path,
                 source_type,
+                values_path=values_path,
             )
         content = await self.client.content(repo_ref, branch, manifest_path)
         try:
@@ -393,6 +409,8 @@ async def validate_render_manifest(
     branch: str,
     manifest_path: str,
     source_type: str,
+    *,
+    values_path: str | None = None,
 ) -> RepositoryManifestValidationResponse:
     validation_mode = f"{source_type}-render"
     warnings: list[str] = []
@@ -407,9 +425,20 @@ async def validate_render_manifest(
                 manifest_path,
                 source_type,
                 checkout_root,
+                values_path=values_path,
             )
             warnings.extend(export_warnings)
-            rendered_text = await render_source(source_type, render_path, render_executor)
+            render_values_path = (
+                safe_checkout_file_path(checkout_root, values_path)
+                if values_path is not None
+                else None
+            )
+            rendered_text = await render_source(
+                source_type,
+                render_path,
+                render_executor,
+                values_path=render_values_path,
+            )
     except ManifestRenderValidationError as exc:
         return render_invalid_validation_response(
             repo_ref,
@@ -439,6 +468,8 @@ async def export_render_source(
     manifest_path: str,
     source_type: str,
     checkout_root: Path,
+    *,
+    values_path: str | None = None,
 ) -> tuple[Path, list[str]]:
     source_dir = render_source_directory(manifest_path, source_type)
     tree, warnings = await client.tree(repo_ref, branch)
@@ -455,15 +486,25 @@ async def export_render_source(
             write_render_source_file(checkout_root, path, content)
         return checkout_root if source_dir == "." else checkout_root / source_dir, warnings
 
-    source_paths = sorted(
-        {
-            path
-            for item in tree
-            if str(item.get("type") or "") == "blob"
-            for path in [normalize_tree_path(str(item.get("path") or ""))]
-            if path and path_is_under_directory(path, source_dir)
-        }
-    )
+    blob_paths = {
+        path
+        for item in tree
+        if str(item.get("type") or "") == "blob"
+        for path in [normalize_tree_path(str(item.get("path") or ""))]
+        if path
+    }
+    source_paths = {path for path in blob_paths if path_is_under_directory(path, source_dir)}
+    if values_path is not None:
+        if source_type != "helm":
+            raise ManifestRenderValidationError(
+                "values_path is valid only for Helm manifest validation"
+            )
+        if values_path not in blob_paths:
+            raise ManifestRenderValidationError(
+                f"Helm values override does not exist in repository: {values_path}"
+            )
+        source_paths.add(values_path)
+    source_paths = sorted(source_paths)
     if not source_paths:
         raise ManifestRenderValidationError(
             f"{source_type} render source contains no files under {source_dir}"
@@ -775,8 +816,10 @@ async def render_source(
     source_type: str,
     source_path: Path,
     render_executor: RenderCommandExecutor,
+    *,
+    values_path: Path | None = None,
 ) -> str:
-    command = render_command(source_type, source_path)
+    command = render_command(source_type, source_path, values_path=values_path)
     return await asyncio.to_thread(
         run_render_command,
         command,
@@ -820,8 +863,17 @@ def safe_checkout_file_path(checkout_root: Path, repository_path: str) -> Path:
     return destination
 
 
-def render_command(source_type: str, source_path: Path) -> list[str]:
+def render_command(
+    source_type: str,
+    source_path: Path,
+    *,
+    values_path: Path | None = None,
+) -> list[str]:
     if source_type == "kustomize":
+        if values_path is not None:
+            raise ManifestRenderValidationError(
+                "values_path is valid only for Helm manifest validation"
+            )
         if not source_path.is_dir():
             raise ManifestRenderValidationError("Kustomize rendering requires a directory source")
         if not any((source_path / name).is_file() for name in KUSTOMIZATION_FILES):
@@ -832,7 +884,7 @@ def render_command(source_type: str, source_path: Path) -> list[str]:
             raise ManifestRenderValidationError("Helm rendering requires a chart directory source")
         if not (source_path / HELM_CHART_FILE).is_file():
             raise ManifestRenderValidationError("Helm source is missing Chart.yaml")
-        return [
+        command = [
             helm_bin(),
             "template",
             helm_release_name(source_path),
@@ -840,6 +892,11 @@ def render_command(source_type: str, source_path: Path) -> list[str]:
             "--namespace",
             render_namespace(),
         ]
+        if values_path is not None:
+            if not values_path.is_file():
+                raise ManifestRenderValidationError("Helm values override is not a file")
+            command.extend(["--values", str(values_path)])
+        return command
     raise ManifestRenderValidationError(f"unsupported render source type: {source_type}")
 
 

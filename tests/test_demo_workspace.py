@@ -42,6 +42,15 @@ from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.repository import snapshot_resources
 from domains.registry import Database
 from packages.contracts.demo_workspace import DEMO_SEED_MARKER_KEY, DemoWorkspaceDescriptor
+from packages.contracts.gateway.responses import (
+    RepositoryBranchItem,
+    RepositoryBranchListResponse,
+    RepositoryManifestCandidate,
+    RepositoryManifestCandidateListResponse,
+    RepositoryManifestResource,
+    RepositoryManifestValidationResponse,
+    RepositoryProbeResponse,
+)
 from packages.runtime.gateway import ApiEventGateway
 
 
@@ -60,6 +69,10 @@ class FakeDemoDatabase:
         self.registration_writes: list[dict[str, Any]] = []
         self.inventory_writes: list[dict[str, Any]] = []
         self.reset_calls: list[dict[str, Any]] = []
+        self.repository_writes: list[dict[str, Any]] = []
+        self.application_writes: list[dict[str, Any]] = []
+        self.watch_writes: list[dict[str, Any]] = []
+        self.binding_writes: list[dict[str, Any]] = []
 
     def get_cluster_registration(self, _workspace_id: str, _cluster_id: str) -> object:
         return self.registration
@@ -98,6 +111,117 @@ class FakeDemoDatabase:
         self.reset_calls.append(deepcopy(kwargs))
         return {"cluster_inventory_snapshots": 1, "workspaces": 1}
 
+    def register_repository(self, payload: dict[str, Any]) -> dict[str, Any]:
+        stored = {**deepcopy(payload), "repository_id": "repository-yaml-demo"}
+        self.repository_writes.append(stored)
+        return stored
+
+    def upsert_application(self, payload: dict[str, Any]) -> dict[str, Any]:
+        stored = {
+            **deepcopy(payload),
+            "application_id": f"application-{payload['name']}",
+        }
+        self.application_writes.append(stored)
+        return stored
+
+    def register_watch_target(self, payload: dict[str, Any]) -> dict[str, Any]:
+        stored = deepcopy(payload)
+        self.watch_writes.append(stored)
+        return stored
+
+    def register_deployment_binding(self, payload: dict[str, Any]) -> dict[str, Any]:
+        stored = deepcopy(payload)
+        self.binding_writes.append(stored)
+        return stored
+
+
+class FakeRepositoryDiscovery:
+    def __init__(
+        self,
+        *,
+        reachable: bool = True,
+        revision: str = "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef",
+    ) -> None:
+        self.reachable = reachable
+        self.revision = revision
+        self.validation_requests: list[Any] = []
+
+    async def probe_repository(self, _payload: Any) -> RepositoryProbeResponse:
+        return RepositoryProbeResponse(
+            repo_ref="jungle-303-04/yaml-demo",
+            normalized_repo_ref="jungle-303-04/yaml-demo",
+            valid=True,
+            reachable=self.reachable,
+            default_branch="main",
+            private=False,
+            errors=[] if self.reachable else ["unreachable"],
+        )
+
+    async def list_branches(self, repo_ref: str) -> RepositoryBranchListResponse:
+        return RepositoryBranchListResponse(
+            repo_ref=repo_ref,
+            default_branch="main",
+            branches=[RepositoryBranchItem(name="main", default=True)],
+        )
+
+    async def resolve_branch_revision(self, _repo_ref: str, _branch: str) -> str:
+        return self.revision
+
+    async def list_manifest_candidates(
+        self, repo_ref: str, branch: str
+    ) -> RepositoryManifestCandidateListResponse:
+        return RepositoryManifestCandidateListResponse(
+            repo_ref=repo_ref,
+            branch=branch,
+            candidates=[
+                RepositoryManifestCandidate(
+                    path="manifests/base/workloads.yaml",
+                    source_type="raw-yaml",
+                    display_name="workloads",
+                ),
+                RepositoryManifestCandidate(
+                    path="manifests/overlays/dev",
+                    source_type="kustomize",
+                    display_name="dev",
+                ),
+                RepositoryManifestCandidate(
+                    path="manifests/overlays/diagnostics",
+                    source_type="kustomize",
+                    display_name="diagnostics",
+                ),
+                RepositoryManifestCandidate(
+                    path="charts/demo-app",
+                    source_type="helm",
+                    display_name="chart",
+                ),
+            ],
+        )
+
+    async def validate_manifest(self, payload: Any) -> RepositoryManifestValidationResponse:
+        self.validation_requests.append(payload)
+        return RepositoryManifestValidationResponse(
+            repo_ref="jungle-303-04/yaml-demo",
+            branch=payload.branch,
+            manifest_path=payload.manifest_path,
+            valid=True,
+            status="valid",
+            validation_mode=payload.source_type,
+            resource_count={
+                "manifests/base/workloads.yaml": 3,
+                "manifests/overlays/dev": 14,
+                "manifests/overlays/diagnostics": 15,
+                "charts/demo-app": 2,
+            }[payload.manifest_path],
+            resources=[
+                RepositoryManifestResource(
+                    api_version="apps/v1",
+                    kind="Deployment",
+                    namespace="demo-shop",
+                    name=payload.source_type,
+                )
+            ],
+        )
+
 
 class FakeOutboxDemoDatabase(FakeDemoDatabase):
     def __init__(self) -> None:
@@ -130,6 +254,16 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
     assert descriptor.workspace.workspace_id != "default"
     assert descriptor.inventory.summary["resources_complete"] is True
     assert descriptor.inventory.summary["labels_complete"] is True
+    assert descriptor.gitops is not None
+    assert descriptor.gitops.repo_ref == "jungle-303-04/yaml-demo"
+    assert descriptor.gitops.revision == "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef"
+    assert descriptor.gitops.catalog_scenario_count == 17
+    assert len(descriptor.gitops.sources) == 5
+    assert {source.source_type for source in descriptor.gitops.sources} == {
+        "raw-yaml",
+        "kustomize",
+        "helm",
+    }
     assert descriptor.digest() == restored.digest()
     assert descriptor.seed_marker() == restored.seed_marker()
 
@@ -142,7 +276,14 @@ def test_runtime_owner_override_is_revalidated_and_bound_to_seed_marker() -> Non
     restored = DemoWorkspaceDescriptor.model_validate_json(overridden.model_dump_json())
     db = FakeDemoDatabase()
 
-    asyncio.run(seed_demo_workspace(db, overridden, events=FakeEvents()))
+    asyncio.run(
+        seed_demo_workspace(
+            db,
+            overridden,
+            events=FakeEvents(),
+            discovery=FakeRepositoryDiscovery(),
+        )
+    )
 
     assert overridden.workspace.workspace_id == descriptor.workspace.workspace_id
     assert overridden.workspace.owner_user_id == owner_user_id
@@ -176,16 +317,51 @@ def test_descriptor_rejects_default_workspace_and_incomplete_inventory(tmp_path:
 
     assert "resources_complete" in str(error.value)
 
+    raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
+    raw["gitops"]["sources"][0]["manifest_path"] = "../secret.yaml"
+    unsafe_path = tmp_path / "unsafe-gitops-path.json"
+    unsafe_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValidationError) as error:
+        load_descriptor(unsafe_path)
+
+    assert "repository-relative" in str(error.value)
+
+    raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
+    raw["gitops"]["sources"][0]["values_path"] = "values.yaml"
+    invalid_values = tmp_path / "invalid-values-source.json"
+    invalid_values.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValidationError) as error:
+        load_descriptor(invalid_values)
+
+    assert "only for Helm" in str(error.value)
+
 
 def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
     db = FakeDemoDatabase()
     events = FakeEvents()
+    discovery = FakeRepositoryDiscovery()
     observed_at = datetime(2026, 7, 18, 1, 2, 3, tzinfo=UTC)
 
-    first = asyncio.run(seed_demo_workspace(db, descriptor, events=events, observed_at=observed_at))
+    first = asyncio.run(
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=events,
+            discovery=discovery,
+            observed_at=observed_at,
+        )
+    )
     second = asyncio.run(
-        seed_demo_workspace(db, descriptor, events=events, observed_at=observed_at)
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=events,
+            discovery=discovery,
+            observed_at=observed_at,
+        )
     )
 
     assert first["action"] == "seeded"
@@ -194,6 +370,18 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert second["action"] == "unchanged"
     assert len(db.registration_writes) == 1
     assert len(db.inventory_writes) == 1
+    assert len(db.repository_writes) == 1
+    assert len(db.application_writes) == 5
+    assert len(db.watch_writes) == 5
+    assert len(db.binding_writes) == 5
+    assert len(discovery.validation_requests) == 5
+    assert first["gitops_source_count"] == 5
+    assert second["gitops_source_count"] == 5
+    assert [
+        request.values_path
+        for request in discovery.validation_requests
+        if request.values_path is not None
+    ] == ["charts/demo-app/values-staging.yaml"]
     assert db.registration_writes[0]["settings"][DEMO_SEED_MARKER_KEY] == (descriptor.seed_marker())
     assert db.inventory_writes[0]["summary"][DEMO_SEED_MARKER_KEY] == (descriptor.seed_marker())
     assert db.inventory_writes[0]["collected_at"] == observed_at.isoformat()
@@ -205,6 +393,65 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert body.snapshot_id == "snapshot-demo-v1"
     assert body.resource_count == 6
 
+    repository = db.repository_writes[0]
+    assert repository["repo_ref"] == "jungle-303-04/yaml-demo"
+    assert repository["default_branch"] == "main"
+    assert repository["credential_ref"] is None
+    assert repository["access_policy"][DEMO_SEED_MARKER_KEY] == descriptor.seed_marker()
+    assert repository["access_policy"]["revision"] == descriptor.gitops.revision
+    assert repository["access_policy"]["catalog_scenario_count"] == 17
+    assert {application["metadata"]["source_type"] for application in db.application_writes} == {
+        "raw-yaml",
+        "kustomize",
+        "helm",
+    }
+    helm_override = next(
+        application
+        for application in db.application_writes
+        if application["name"] == "yaml-demo-helm-staging"
+    )
+    assert helm_override["metadata"]["values_path"] == ("charts/demo-app/values-staging.yaml")
+    assert helm_override["deploy_policy"]["values_path"] == ("charts/demo-app/values-staging.yaml")
+    assert all(binding["deploy_policy"]["read_only"] for binding in db.binding_writes)
+
+
+def test_seed_rejects_unreachable_demo_repository_before_any_write() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+
+    with pytest.raises(RuntimeError, match="repository validation failed"):
+        asyncio.run(
+            seed_demo_workspace(
+                db,
+                descriptor,
+                events=FakeEvents(),
+                discovery=FakeRepositoryDiscovery(reachable=False),
+            )
+        )
+
+    assert db.registration_writes == []
+    assert db.inventory_writes == []
+    assert db.repository_writes == []
+
+
+def test_seed_rejects_unpinned_demo_repository_revision_before_any_write() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+
+    with pytest.raises(RuntimeError, match="revision does not match"):
+        asyncio.run(
+            seed_demo_workspace(
+                db,
+                descriptor,
+                events=FakeEvents(),
+                discovery=FakeRepositoryDiscovery(revision="a" * 40),
+            )
+        )
+
+    assert db.registration_writes == []
+    assert db.inventory_writes == []
+    assert db.repository_writes == []
+
 
 def test_seed_rejects_missing_opt_in_before_any_write(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(DEMO_WORKSPACE_MUTATIONS_ENV)
@@ -212,7 +459,14 @@ def test_seed_rejects_missing_opt_in_before_any_write(monkeypatch: pytest.Monkey
     db = FakeDemoDatabase()
 
     with pytest.raises(RuntimeError, match=DEMO_WORKSPACE_MUTATIONS_ENV):
-        asyncio.run(seed_demo_workspace(db, descriptor, events=FakeEvents()))
+        asyncio.run(
+            seed_demo_workspace(
+                db,
+                descriptor,
+                events=FakeEvents(),
+                discovery=FakeRepositoryDiscovery(),
+            )
+        )
 
     assert db.registration_writes == []
     assert db.inventory_writes == []
@@ -223,7 +477,14 @@ def test_seed_stages_inventory_event_through_gateway_outbox_contract() -> None:
     db = FakeOutboxDemoDatabase()
     gateway = ApiEventGateway(OutboxRequiredPublisher(), db, DEMO_EVENT_SOURCE)
 
-    asyncio.run(seed_demo_workspace(db, descriptor, events=gateway))
+    asyncio.run(
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=gateway,
+            discovery=FakeRepositoryDiscovery(),
+        )
+    )
 
     assert len(db.recorded_events) == 1
     assert db.staged_events == db.recorded_events

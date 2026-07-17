@@ -665,6 +665,13 @@ class RepositoryManifestValidationRequest(StrictModel):
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
     manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
     source_type: str = Field(default="", max_length=40)
+    values_path: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def values_override_requires_helm(self) -> RepositoryManifestValidationRequest:
+        if self.values_path is not None and self.source_type.strip().lower() not in {"", "helm"}:
+            raise ValueError("values_path is valid only for Helm manifest validation")
+        return self
 
 
 class DeploymentBindingUpsertRequest(StrictModel):

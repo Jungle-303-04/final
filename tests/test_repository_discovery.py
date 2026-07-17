@@ -77,6 +77,11 @@ class StubGitHubClient:
             raise AssertionError(f"unexpected content path: {path}")
         return self.contents[path]
 
+    async def branch_sha(self, repo_ref: str, branch: str) -> str:
+        assert repo_ref == "owner/service"
+        assert branch == "trunk"
+        return "a" * 40
+
 
 def test_manifest_candidates_filter_to_attachable_paths() -> None:
     candidates = manifest_candidates_from_tree(
@@ -105,9 +110,10 @@ def test_probe_and_branch_list_use_normalized_repo_ref() -> None:
             RepositoryProbeRequest(repo_ref="https://github.test/owner/service.git")
         )
         branches = await service.list_branches("owner/service")
-        return probe, branches
+        revision = await service.resolve_branch_revision("owner/service", "trunk")
+        return probe, branches, revision
 
-    probe, branches = asyncio.run(run())
+    probe, branches, revision = asyncio.run(run())
 
     assert probe.reachable is True
     assert probe.normalized_repo_ref == "owner/service"
@@ -116,6 +122,7 @@ def test_probe_and_branch_list_use_normalized_repo_ref() -> None:
         ("trunk", True),
         ("release/2026-07", False),
     ]
+    assert revision == "a" * 40
 
 
 def test_github_repo_url_normalization_accepts_wizard_inputs() -> None:
@@ -698,6 +705,65 @@ metadata:
         "charts/service/templates/service.yaml",
     ]
     assert len(commands) == 1
+
+
+def test_helm_validation_applies_repository_values_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GITOPS_HELM_BIN", raising=False)
+    contents = {
+        "charts/service/Chart.yaml": b"apiVersion: v2\nname: service\nversion: 0.1.0\n",
+        "charts/service/templates/service.yaml": b"kind: Service\nmetadata:\n  name: source\n",
+        "charts/service/values-staging.yaml": b"replicaCount: 4\n",
+    }
+    client = StubGitHubClient(
+        contents=contents,
+        tree_items=[{"type": "blob", "path": path} for path in contents],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        assert timeout_seconds > 0
+        assert command[:3] == ["helm", "template", "service"]
+        assert command[4:6] == ["--namespace", "sandbox"]
+        assert command[6] == "--values"
+        values_path = Path(command[7])
+        assert values_path.name == "values-staging.yaml"
+        assert values_path.read_text() == "replicaCount: 4\n"
+        return subprocess.CompletedProcess(
+            list(command),
+            0,
+            stdout="apiVersion: v1\nkind: Service\nmetadata:\n  name: staging\n",
+            stderr="",
+        )
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client, render_executor=executor).validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="charts/service",
+                source_type="helm",
+                values_path="charts/service/values-staging.yaml",
+            )
+        )
+    )
+
+    assert response.valid is True
+    assert [(item.kind, item.name) for item in response.resources] == [("Service", "staging")]
+    assert set(client.content_paths) == set(contents)
+
+
+def test_manifest_validation_rejects_values_override_for_non_helm_source() -> None:
+    with pytest.raises(ValueError, match="only for Helm"):
+        RepositoryManifestValidationRequest(
+            repo_ref="owner/service",
+            branch="trunk",
+            manifest_path="k8s",
+            source_type="kustomize",
+            values_path="k8s/values.yaml",
+        )
 
 
 def test_render_validation_failure_is_invalid_and_redacted() -> None:

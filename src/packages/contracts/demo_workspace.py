@@ -49,12 +49,84 @@ class DemoInventoryDescriptor(StrictModel):
         return self
 
 
+class DemoGitOpsSourceDescriptor(StrictModel):
+    """One validated repository source exposed as a demo application."""
+
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[a-z0-9][a-z0-9-]{0,118}[a-z0-9]$",
+    )
+    manifest_path: str = Field(
+        min_length=1,
+        max_length=500,
+        pattern=r"^[^\\]+$",
+    )
+    source_type: Literal["raw-yaml", "kustomize", "helm"]
+    values_path: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        pattern=r"^[^\\]+$",
+    )
+    namespace: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    environment: Literal["demo"] = "demo"
+    interval_seconds: int = Field(default=300, ge=30, le=3600)
+
+    @model_validator(mode="after")
+    def require_repository_relative_path(self) -> DemoGitOpsSourceDescriptor:
+        for field, path in (
+            ("manifest", self.manifest_path),
+            ("values", self.values_path),
+        ):
+            if path is None:
+                continue
+            parts = path.split("/")
+            if path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+                raise ValueError(f"demo GitOps {field} path must be repository-relative")
+        if self.values_path is not None and self.source_type != "helm":
+            raise ValueError("demo GitOps values path is valid only for Helm sources")
+        return self
+
+
+class DemoGitOpsRepositoryDescriptor(StrictModel):
+    """Credential-free public GitHub repository attached by the seed CLI."""
+
+    repo_ref: str = Field(
+        min_length=3,
+        max_length=240,
+        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+    )
+    default_branch: Literal["main"] = "main"
+    revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    catalog_scenario_count: int = Field(ge=1, le=500)
+    sources: list[DemoGitOpsSourceDescriptor] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def require_unique_source_identities(self) -> DemoGitOpsRepositoryDescriptor:
+        names = [source.name for source in self.sources]
+        paths = [
+            (source.manifest_path, source.source_type, source.values_path)
+            for source in self.sources
+        ]
+        if len(names) != len(set(names)):
+            raise ValueError("demo GitOps source names must be unique")
+        if len(paths) != len(set(paths)):
+            raise ValueError("demo GitOps source paths must be unique")
+        return self
+
+
 class DemoWorkspaceDescriptor(StrictModel):
     schema_version: Literal[DEMO_WORKSPACE_DESCRIPTOR_VERSION]
     descriptor_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,119}$")
     workspace: DemoWorkspaceIdentity
     cluster: DemoClusterDescriptor
     inventory: DemoInventoryDescriptor
+    gitops: DemoGitOpsRepositoryDescriptor | None = None
 
     @model_validator(mode="after")
     def require_dedicated_workspace(self) -> DemoWorkspaceDescriptor:

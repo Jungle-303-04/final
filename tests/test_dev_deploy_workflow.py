@@ -256,6 +256,11 @@ def test_demo_workspace_seed_job_is_explicit_bounded_and_non_privileged() -> Non
         "key": "COMMAND_NOTIFY_DATABASE_URL",
     }
     assert env["OPSIA_DEMO_WORKSPACE_MUTATIONS"]["value"] == "demo-workspace-v1"
+    assert env["GITHUB_TOKEN"]["valueFrom"]["secretKeyRef"] == {
+        "name": "management-runtime-secret",
+        "key": "GITHUB_TOKEN",
+        "optional": True,
+    }
     assert env["DEMO_WORKSPACE_OWNER_USER_ID"]["value"] == ""
     assert container["securityContext"] == {
         "allowPrivilegeEscalation": False,
@@ -266,6 +271,8 @@ def test_demo_workspace_seed_job_is_explicit_bounded_and_non_privileged() -> Non
         "requests": {"cpu": "50m", "memory": "128Mi"},
         "limits": {"cpu": "1", "memory": "512Mi"},
     }
+    assert container["volumeMounts"] == [{"name": "render-tmp", "mountPath": "/tmp"}]
+    assert pod_spec["volumes"] == [{"name": "render-tmp", "emptyDir": {"sizeLimit": "64Mi"}}]
     assert "demo-workspace-seed-job.yaml" not in kustomization
 
 

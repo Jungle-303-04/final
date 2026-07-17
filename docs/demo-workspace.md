@@ -10,7 +10,25 @@ descriptor when another UI read path needs coverage. The seed validates the desc
 the public inventory request contract, registers its target through
 `IdentityAccessRepository.register_target_cluster`, persists through
 `ingest_inventory_snapshot`, and records `InventorySnapshotRecordedBody` through the database
-outbox.
+outbox. The same descriptor also attaches the public
+[`Jungle-303-04/yaml-demo`](https://github.com/Jungle-303-04/yaml-demo) repository. Before any
+database write, the seed reuses `RepositoryDiscoveryService` to confirm that the repository is
+public and reachable, `main` is its default branch at descriptor-pinned revision
+`3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef`, and the declared raw YAML, parent/sibling Kustomize,
+component Kustomize, Helm, and Helm values override sources are discoverable and renderable. The
+descriptor records the repository's 17-scenario catalog count. The seed then persists the
+repository, applications,
+poll targets, and deployment bindings through the existing GitOps repositories in the same
+transaction as the inventory cut.
+
+The public demo repository has no credential row or stored secret. Its canonical repository row
+keeps `credential_ref` null. Discovery uses anonymous GitHub access by default; the deployment Job
+may read the existing optional `GITHUB_TOKEN` key from `management-runtime-secret` into process
+environment only to avoid GitHub's anonymous NAT rate limit. The token is never copied to the
+descriptor, application metadata, GitOps repository row, log, or database credential table. If
+the optional key is absent or access is rate-limited, validation fails closed before a database
+write. Validation counts and warnings are stored as application evidence; source identities
+remain descriptor-owned rather than frontend constants.
 
 Both commands fail closed unless the exact mutation opt-in is present. They verify the existing
 database schema and never initialize or migrate it.
@@ -45,7 +63,9 @@ fixed administrator bootstrap. The workflow derives the owner UUID from the exis
 management kustomization so an ordinary workload apply cannot run a mutation. It uses the exact
 `OPSIA_DEMO_WORKSPACE_MUTATIONS=demo-workspace-v1` opt-in and the runtime database secret, runs the
 new immutable service digest without a service-account token or root privileges, and has bounded
-deadline, resources, retries, and post-run cleanup. A failure emits bounded Job logs and a
+deadline, resources, retries, and post-run cleanup. Its read-only root filesystem exposes only a
+bounded 64 MiB `emptyDir` at `/tmp` for repository export and Kustomize/Helm rendering. A failure
+emits bounded Job logs and a
 description before failing the deployment. Deployment automation only invokes `seed`; it never
 invokes `reset`.
 
