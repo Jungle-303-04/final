@@ -32,6 +32,7 @@ from controller.demo_workspace import (
     DEFAULT_DESCRIPTOR,
     DEMO_EVENT_SOURCE,
     OutboxRequiredPublisher,
+    ensure_demo_gitops_application,
     load_descriptor,
     reset_demo_workspace,
     seed_demo_workspace,
@@ -1736,6 +1737,299 @@ def test_direct_broker_fallback_is_fail_closed() -> None:
 def test_database_composition_exposes_demo_reset_repository() -> None:
     assert DemoWorkspaceRepository in Database.__mro__
     assert Database.reset_demo_workspace is DemoWorkspaceRepository.reset_demo_workspace
+    assert (
+        Database.reconcile_seed_owned_application
+        is DemoWorkspaceRepository.reconcile_seed_owned_application
+    )
+
+
+def test_demo_application_collision_uses_marker_scoped_reconciliation() -> None:
+    marker = {"descriptor_id": "opsia-ui-demo.v1", "schema_version": 1, "digest": "b" * 64}
+    calls: list[dict[str, Any]] = []
+
+    class LegacyCollisionDatabase:
+        def get_application_by_identity(self, *_args: Any) -> None:
+            return None
+
+        def upsert_application(self, _payload: dict[str, Any]) -> dict[str, Any]:
+            raise LookupError("application not found in workspace")
+
+        def reconcile_seed_owned_application(self, **kwargs: Any) -> dict[str, Any]:
+            calls.append(deepcopy(kwargs))
+            return {
+                "workspace_id": kwargs["workspace_id"],
+                "application_id": kwargs["application_id"],
+                "repository_id": kwargs["repository_id"],
+                "name": kwargs["name"],
+                "manifest_path": kwargs["manifest_path"],
+                "status": kwargs["status"],
+                "metadata": deepcopy(kwargs["metadata_"]),
+            }
+
+    payload = {
+        "workspace_id": "opsia-ui-demo-v1",
+        "user_id": "user-demo",
+        "repository_id": "repo-demo",
+        "repo_ref": "jungle-303-04/yaml-demo",
+        "name": "yaml-demo-raw",
+        "manifest_path": "manifests/base/workloads.yaml",
+        "status": "active",
+        "metadata": {DEMO_SEED_MARKER_KEY: marker},
+    }
+
+    application = ensure_demo_gitops_application(
+        LegacyCollisionDatabase(),
+        payload,
+        marker=marker,
+    )
+
+    assert application["application_id"] == calls[0]["application_id"]
+    assert str(application["application_id"]).startswith("app-")
+    assert calls == [
+        {
+            "workspace_id": "opsia-ui-demo-v1",
+            "application_id": application["application_id"],
+            "repository_id": "repo-demo",
+            "name": "yaml-demo-raw",
+            "manifest_path": "manifests/base/workloads.yaml",
+            "status": "active",
+            "metadata_": {DEMO_SEED_MARKER_KEY: marker},
+            "expected_marker": marker,
+        }
+    ]
+
+
+def test_sqlite_reconcile_updates_only_same_authority_demo_application(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    schema = MetaData()
+    repositories = Table(
+        "git_repositories",
+        schema,
+        Column("repository_id", String, primary_key=True),
+        Column("workspace_id", String, nullable=False),
+    )
+    applications = Table(
+        "applications",
+        schema,
+        Column("application_id", String, primary_key=True),
+        Column("workspace_id", String, nullable=False),
+        Column("repository_id", String, nullable=False),
+        Column("name", String, nullable=False),
+        Column("manifest_path", String, nullable=False),
+        Column("status", String, nullable=False),
+        Column("metadata", JSON, nullable=False),
+        Column("updated_at", String),
+    )
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    schema.create_all(engine)
+    old_marker = {
+        "descriptor_id": "opsia-ui-demo.v1",
+        "schema_version": 1,
+        "digest": "a" * 64,
+    }
+    current_marker = {**old_marker, "digest": "b" * 64}
+    with engine.begin() as connection:
+        connection.execute(
+            repositories.insert(),
+            [
+                {"repository_id": "repo-current", "workspace_id": "demo-workspace"},
+                {"repository_id": "repo-foreign", "workspace_id": "other-workspace"},
+            ],
+        )
+        connection.execute(
+            applications.insert(),
+            [
+                {
+                    "application_id": "app-legacy",
+                    "workspace_id": "demo-workspace",
+                    "repository_id": "repo-legacy",
+                    "name": "legacy-name",
+                    "manifest_path": "legacy/path.yaml",
+                    "status": "inactive",
+                    "metadata": {DEMO_SEED_MARKER_KEY: old_marker},
+                },
+                {
+                    "application_id": "app-foreign",
+                    "workspace_id": "other-workspace",
+                    "repository_id": "repo-foreign",
+                    "name": "foreign-name",
+                    "manifest_path": "foreign/path.yaml",
+                    "status": "active",
+                    "metadata": {DEMO_SEED_MARKER_KEY: old_marker},
+                },
+            ],
+        )
+    repository = object.__new__(DemoWorkspaceRepository)
+
+    @contextmanager
+    def unit_of_work():
+        with engine.begin() as connection:
+            yield connection
+
+    repository.unit_of_work = unit_of_work  # type: ignore[method-assign]
+    monkeypatch.setattr(demo_repository_module, "metadata", schema)
+
+    updated = repository.reconcile_seed_owned_application(
+        workspace_id="demo-workspace",
+        application_id="app-legacy",
+        repository_id="repo-current",
+        name="yaml-demo-raw",
+        manifest_path="manifests/base/workloads.yaml",
+        status="active",
+        metadata_={DEMO_SEED_MARKER_KEY: current_marker},
+        expected_marker=current_marker,
+    )
+    foreign = repository.reconcile_seed_owned_application(
+        workspace_id="demo-workspace",
+        application_id="app-foreign",
+        repository_id="repo-current",
+        name="yaml-demo-foreign",
+        manifest_path="manifests/base/workloads.yaml",
+        status="active",
+        metadata_={DEMO_SEED_MARKER_KEY: current_marker},
+        expected_marker=current_marker,
+    )
+
+    assert updated is not None
+    assert updated["repository_id"] == "repo-current"
+    assert updated["name"] == "yaml-demo-raw"
+    assert updated["metadata"] == {DEMO_SEED_MARKER_KEY: current_marker}
+    assert foreign is None
+    with engine.connect() as connection:
+        foreign_row = (
+            connection.execute(
+                select(applications).where(applications.c.application_id == "app-foreign")
+            )
+            .mappings()
+            .one()
+        )
+    assert foreign_row["workspace_id"] == "other-workspace"
+    assert foreign_row["name"] == "foreign-name"
+
+
+def test_sqlite_reconcile_rejects_other_marker_and_target_identity_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    schema = MetaData()
+    repositories = Table(
+        "git_repositories",
+        schema,
+        Column("repository_id", String, primary_key=True),
+        Column("workspace_id", String, nullable=False),
+    )
+    applications = Table(
+        "applications",
+        schema,
+        Column("application_id", String, primary_key=True),
+        Column("workspace_id", String, nullable=False),
+        Column("repository_id", String, nullable=False),
+        Column("name", String, nullable=False),
+        Column("manifest_path", String, nullable=False),
+        Column("status", String, nullable=False),
+        Column("metadata", JSON, nullable=False),
+        Column("updated_at", String),
+    )
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    schema.create_all(engine)
+    expected_marker = {
+        "descriptor_id": "opsia-ui-demo.v1",
+        "schema_version": 1,
+        "digest": "b" * 64,
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            repositories.insert().values(
+                repository_id="repo-current",
+                workspace_id="demo-workspace",
+            )
+        )
+        connection.execute(
+            applications.insert(),
+            [
+                {
+                    "application_id": "app-other-marker",
+                    "workspace_id": "demo-workspace",
+                    "repository_id": "repo-legacy",
+                    "name": "legacy-name",
+                    "manifest_path": "legacy/path.yaml",
+                    "status": "inactive",
+                    "metadata": {
+                        DEMO_SEED_MARKER_KEY: {
+                            "descriptor_id": "different-demo.v1",
+                            "schema_version": 1,
+                            "digest": "a" * 64,
+                        }
+                    },
+                },
+                {
+                    "application_id": "app-target",
+                    "workspace_id": "demo-workspace",
+                    "repository_id": "repo-current",
+                    "name": "yaml-demo-raw",
+                    "manifest_path": "current/path.yaml",
+                    "status": "active",
+                    "metadata": {DEMO_SEED_MARKER_KEY: expected_marker},
+                },
+                {
+                    "application_id": "app-conflicting-legacy",
+                    "workspace_id": "demo-workspace",
+                    "repository_id": "repo-legacy",
+                    "name": "legacy-conflicting-name",
+                    "manifest_path": "legacy/conflicting.yaml",
+                    "status": "inactive",
+                    "metadata": {
+                        DEMO_SEED_MARKER_KEY: {
+                            **expected_marker,
+                            "digest": "a" * 64,
+                        }
+                    },
+                },
+            ],
+        )
+    repository = object.__new__(DemoWorkspaceRepository)
+
+    @contextmanager
+    def unit_of_work():
+        with engine.begin() as connection:
+            yield connection
+
+    repository.unit_of_work = unit_of_work  # type: ignore[method-assign]
+    monkeypatch.setattr(demo_repository_module, "metadata", schema)
+
+    rejected_marker = repository.reconcile_seed_owned_application(
+        workspace_id="demo-workspace",
+        application_id="app-other-marker",
+        repository_id="repo-current",
+        name="yaml-demo-new",
+        manifest_path="manifests/base/workloads.yaml",
+        status="active",
+        metadata_={DEMO_SEED_MARKER_KEY: expected_marker},
+        expected_marker=expected_marker,
+    )
+    rejected_target = repository.reconcile_seed_owned_application(
+        workspace_id="demo-workspace",
+        application_id="app-conflicting-legacy",
+        repository_id="repo-current",
+        name="yaml-demo-raw",
+        manifest_path="manifests/base/workloads.yaml",
+        status="active",
+        metadata_={DEMO_SEED_MARKER_KEY: expected_marker},
+        expected_marker=expected_marker,
+    )
+
+    assert rejected_marker is None
+    assert rejected_target is None
+    with engine.connect() as connection:
+        row = (
+            connection.execute(
+                select(applications).where(applications.c.application_id == "app-other-marker")
+            )
+            .mappings()
+            .one()
+        )
+    assert row["repository_id"] == "repo-legacy"
+    assert row["name"] == "legacy-name"
 
 
 def test_sqlite_reset_deletes_children_before_parents_and_preserves_other_scopes(

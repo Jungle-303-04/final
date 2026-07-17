@@ -19,7 +19,7 @@ if str(SRC) not in sys.path:
 
 from domains.dashboard.repository import timeline_update_from_event  # noqa: E402
 from domains.demo_workspace.policy import require_demo_workspace_mutation_opt_in  # noqa: E402
-from domains.gitops.repository import derive_workflow_run_id  # noqa: E402
+from domains.gitops.repository import derive_application_id, derive_workflow_run_id  # noqa: E402
 from domains.gitops.repository_discovery import (  # noqa: E402
     RepositoryDiscoveryError,
     RepositoryDiscoveryService,
@@ -324,22 +324,49 @@ def ensure_demo_gitops_application(
             raise RuntimeError("demo GitOps application identity is not seed-owned")
         return application
 
+    def reconcile_legacy_identity() -> Mapping[str, object]:
+        reconcile = getattr(db, "reconcile_seed_owned_application", None)
+        if not callable(reconcile):
+            return require_demo_owned(None)
+        derived_payload = dict(payload)
+        derived_payload.pop("application_id", None)
+        application_id = derive_application_id(derived_payload)
+        application = reconcile(
+            workspace_id=workspace_id,
+            application_id=application_id,
+            repository_id=repository_id,
+            name=name,
+            manifest_path=str(payload.get("manifest_path") or ""),
+            status=str(payload.get("status") or "active"),
+            metadata_=dict(payload.get("metadata") or {}),
+            expected_marker=marker,
+        )
+        return require_demo_owned(application)
+
     existing = lookup(workspace_id, repository_id, name)
     if existing is None:
         try:
             application = db.upsert_application(dict(payload))
         except LookupError:
-            # A concurrent seed can win the create after our lookup. Only the
-            # exact marker-owned identity may be retried as a trusted update.
-            require_demo_owned(lookup(workspace_id, repository_id, name))
+            # A concurrent seed can win the exact identity. Legacy descriptor
+            # rows use a separate, marker-authorized reconciliation boundary.
+            concurrent = lookup(workspace_id, repository_id, name)
+            if concurrent is None:
+                application = reconcile_legacy_identity()
+            else:
+                require_demo_owned(concurrent)
+                update_payload = dict(payload)
+                update_payload.pop("user_id", None)
+                application = db.upsert_application(update_payload)
+    else:
+        try:
+            require_demo_owned(existing)
+        except RuntimeError:
+            application = reconcile_legacy_identity()
+        else:
             update_payload = dict(payload)
             update_payload.pop("user_id", None)
             application = db.upsert_application(update_payload)
-    else:
-        require_demo_owned(existing)
-        update_payload = dict(payload)
-        update_payload.pop("user_id", None)
-        application = db.upsert_application(update_payload)
 
     return require_demo_owned(application)
 

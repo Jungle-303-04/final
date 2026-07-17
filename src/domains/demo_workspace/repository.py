@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from domains.demo_workspace.policy import require_demo_workspace_mutation_opt_in
 from packages.contracts.demo_workspace import DEMO_SEED_MARKER_KEY
@@ -15,6 +16,107 @@ from packages.storage.schema import metadata
 
 class DemoWorkspaceRepository(DatabaseConnection):
     """Remove a dedicated demo tenant after revalidating its persisted marker."""
+
+    def reconcile_seed_owned_application(
+        self,
+        *,
+        workspace_id: str,
+        application_id: str,
+        repository_id: str,
+        name: str,
+        manifest_path: str,
+        status: str,
+        metadata_: Mapping[str, object],
+        expected_marker: Mapping[str, object],
+    ) -> dict[str, object] | None:
+        """Move one legacy demo application to its current descriptor identity.
+
+        This is deliberately narrower than the product application upsert.  It
+        accepts only a row in the same workspace whose persisted seed marker
+        belongs to the same descriptor/schema authority.  Public application
+        requests never call this boundary.
+        """
+
+        require_demo_workspace_mutation_opt_in()
+        if not all((workspace_id, application_id, repository_id, name, manifest_path, status)):
+            raise ValueError("demo application reconciliation scope must be complete")
+        marker = dict(expected_marker)
+        if not self._valid_seed_marker(marker):
+            raise ValueError("demo application reconciliation marker is invalid")
+        if metadata_.get(DEMO_SEED_MARKER_KEY) != marker:
+            raise ValueError("demo application reconciliation metadata marker is invalid")
+
+        tables = metadata.tables
+        application = tables["applications"]
+        repository = tables["git_repositories"]
+        with self.unit_of_work() as conn:
+            owned_repository_id = conn.execute(
+                select(repository.c.repository_id)
+                .where(
+                    repository.c.workspace_id == workspace_id,
+                    repository.c.repository_id == repository_id,
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            if owned_repository_id is None:
+                return None
+
+            existing = (
+                conn.execute(
+                    select(application)
+                    .where(
+                        application.c.workspace_id == workspace_id,
+                        application.c.application_id == application_id,
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if existing is None:
+                return None
+            persisted_metadata = existing.get("metadata")
+            persisted_marker = (
+                persisted_metadata.get(DEMO_SEED_MARKER_KEY)
+                if isinstance(persisted_metadata, Mapping)
+                else None
+            )
+            if not self._same_seed_authority(persisted_marker, marker):
+                return None
+
+            target_application_id = conn.execute(
+                select(application.c.application_id)
+                .where(
+                    application.c.workspace_id == workspace_id,
+                    application.c.repository_id == repository_id,
+                    application.c.name == name,
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            if target_application_id not in {None, application_id}:
+                return None
+
+            updated = (
+                conn.execute(
+                    application.update()
+                    .where(
+                        application.c.workspace_id == workspace_id,
+                        application.c.application_id == application_id,
+                    )
+                    .values(
+                        repository_id=repository_id,
+                        name=name,
+                        manifest_path=manifest_path,
+                        status=status,
+                        metadata=dict(metadata_),
+                        updated_at=func.now(),
+                    )
+                    .returning(application)
+                )
+                .mappings()
+                .first()
+            )
+        return dict(updated) if updated is not None else None
 
     def reset_demo_workspace(
         self,
@@ -139,3 +241,27 @@ class DemoWorkspaceRepository(DatabaseConnection):
         deleted = max(0, int(result.rowcount or 0))
         if deleted:
             counts[name] = counts.get(name, 0) + deleted
+
+    @staticmethod
+    def _valid_seed_marker(marker: object) -> bool:
+        return bool(
+            isinstance(marker, Mapping)
+            and isinstance(marker.get("descriptor_id"), str)
+            and isinstance(marker.get("schema_version"), int)
+            and isinstance(marker.get("digest"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", str(marker["digest"]))
+        )
+
+    @classmethod
+    def _same_seed_authority(
+        cls,
+        persisted_marker: object,
+        expected_marker: Mapping[str, object],
+    ) -> bool:
+        if not isinstance(persisted_marker, Mapping):
+            return False
+        return bool(
+            cls._valid_seed_marker(persisted_marker)
+            and persisted_marker["descriptor_id"] == expected_marker["descriptor_id"]
+            and persisted_marker["schema_version"] == expected_marker["schema_version"]
+        )
