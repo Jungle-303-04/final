@@ -8322,7 +8322,7 @@
           "state": "implemented",
           "destination": "src/domains/traffic/router.py#get_traffic_sources",
           "consumer": "src/domains/traffic/source_projection.py#traffic_sources_response",
-          "reason": "The target agent detects source workloads through the live Kubernetes API, persists observations in agent status details, and the authorized projection exposes freshness, partial coverage, and no-data reasons without fabricated samples.",
+          "reason": "The target agent detects source workloads through the live Kubernetes API, persists observations in agent status details, and the authorized projection distinguishes freshness, partial coverage, RBAC probe errors, and no-data without fabricated samples.",
           "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
@@ -8418,7 +8418,8 @@
       "verification": [
         "tests/test_traffic_control_router.py",
         "tests/test_target_agent_commands.py",
-        "tests/test_operation_stream.py",
+        "tests/test_operation_event_hub.py",
+        "frontend/src/features/operations/OperationStatusStore.test.ts",
         "frontend/src/features/operations/OperationStatusP1.test.tsx",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
@@ -8527,7 +8528,7 @@
           "state": "implemented",
           "destination": "src/domains/traffic/router.py#evaluate_network_policies",
           "consumer": "src/domains/traffic/network_policy.py#evaluate_network_policy",
-          "reason": "The evaluator rejects stale Pod UIDs, uses exact Pod and namespace labels, implements Kubernetes selector, peer, port, named-port, IPBlock, direction, and union-of-allow semantics, and bounds each inventory policy cut with explicit partial coverage.",
+          "reason": "The evaluator rejects stale Pod UIDs, uses exact Pod and namespace labels, implements Kubernetes selector, peer, port, named-port, IPBlock, direction, and union-of-allow semantics, and returns explicit partial indeterminate coverage for missing namespace evidence, bounded cuts, and selecting Cilium policies whose rules are not safely interpreted.",
           "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {

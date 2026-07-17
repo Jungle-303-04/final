@@ -287,21 +287,6 @@ async def _accept_traffic_source_command(
         Permission.DEPLOY_RUN.value,
         detail=TRAFFIC_SOURCE_ACCESS_DENIED,
     )
-    catalog = await _current_source_catalog(
-        db,
-        current=current,
-        workspace_id=workspace_id,
-        cluster_id=payload.scope.cluster_id,
-    )
-    if catalog.capability_revision != payload.capability_revision:
-        raise HTTPException(status_code=409, detail=TRAFFIC_SOURCE_CAPABILITY_STALE)
-    source = next((item for item in catalog.sources if item.key == payload.source_key), None)
-    if source is None or source.status != "available":
-        raise HTTPException(status_code=409, detail=TRAFFIC_SOURCE_NOT_AVAILABLE)
-    descriptor = next((item for item in source.actions if item.kind == action_kind), None)
-    already_selected = action_kind == "select" and catalog.active_source == source.key
-    if (descriptor is None or not descriptor.enabled) and not already_selected:
-        raise HTTPException(status_code=409, detail=TRAFFIC_SOURCE_ACTION_UNAVAILABLE)
     fingerprint = _traffic_request_fingerprint(action, payload)
     command_id = _traffic_command_id(
         workspace_id,
@@ -317,6 +302,21 @@ async def _accept_traffic_source_command(
     )
     if replay is not None:
         return replay
+    catalog = await _current_source_catalog(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=payload.scope.cluster_id,
+    )
+    if catalog.capability_revision != payload.capability_revision:
+        raise HTTPException(status_code=409, detail=TRAFFIC_SOURCE_CAPABILITY_STALE)
+    source = next((item for item in catalog.sources if item.key == payload.source_key), None)
+    if source is None or source.status != "available":
+        raise HTTPException(status_code=409, detail=TRAFFIC_SOURCE_NOT_AVAILABLE)
+    descriptor = next((item for item in source.actions if item.kind == action_kind), None)
+    already_selected = action_kind == "select" and catalog.active_source == source.key
+    if (descriptor is None or not descriptor.enabled) and not already_selected:
+        raise HTTPException(status_code=409, detail=TRAFFIC_SOURCE_ACTION_UNAVAILABLE)
     diff = Diff(
         workspace_id=workspace_id,
         cluster_id=payload.scope.cluster_id,

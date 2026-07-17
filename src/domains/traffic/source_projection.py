@@ -27,6 +27,7 @@ TRAFFIC_SOURCE_AGENT_STALE = "traffic_source_agent_stale"
 TRAFFIC_SOURCE_AGENT_DISCONNECTED = "traffic_source_agent_disconnected"
 TRAFFIC_SOURCE_DEPLOY_FORBIDDEN = "traffic_source_deploy_forbidden"
 TRAFFIC_SOURCE_CAPABILITY_UNAVAILABLE = "traffic_source_capability_unavailable"
+TRAFFIC_SOURCE_DETECTION_ERROR = "traffic_source_detection_error"
 TRAFFIC_SOURCE_LIVE_SECONDS = 90
 TRAFFIC_SOURCE_STALE_SECONDS = 300
 
@@ -139,6 +140,8 @@ def traffic_source_catalog(
     sources.sort(key=lambda item: item.key)
     if not sources:
         reasons.add(TRAFFIC_SOURCE_OBSERVATION_INVALID)
+    elif any(source.status == "error" for source in sources):
+        reasons.add(TRAFFIC_SOURCE_DETECTION_ERROR)
     if active_source and active_source not in {item.key for item in sources}:
         active_source = None
         reasons.add(TRAFFIC_SOURCE_OBSERVATION_INVALID)
@@ -150,7 +153,6 @@ def traffic_source_catalog(
         sources=sources,
         capabilities=capabilities,
         deploy_allowed=deploy_allowed,
-        observed_at=observed_at,
     )
     return TrafficClusterSourceCatalog(
         scope=scope,
@@ -254,7 +256,6 @@ def _empty_catalog(
         sources=(),
         capabilities=capabilities,
         deploy_allowed=deploy_allowed,
-        observed_at=None,
     )
     return TrafficClusterSourceCatalog(
         scope=scope,
@@ -273,7 +274,6 @@ def _capability_revision(
     sources: Iterable[TrafficSourceDescriptor],
     capabilities: set[str],
     deploy_allowed: bool,
-    observed_at: str | None,
 ) -> str:
     document = {
         "workspace_id": workspace_id,
@@ -282,7 +282,6 @@ def _capability_revision(
         "sources": [source.model_dump(mode="json") for source in sources],
         "capabilities": sorted(capabilities),
         "deploy_allowed": deploy_allowed,
-        "observed_at": observed_at,
     }
     encoded = json.dumps(document, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

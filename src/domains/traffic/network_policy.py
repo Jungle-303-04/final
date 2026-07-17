@@ -65,7 +65,7 @@ def evaluate_network_policy(
         name=peer_pod_name,
         uid=peer_pod_uid,
     )
-    policies, truncated = _network_policies(
+    policies, cilium_policies, truncated = _network_policies(
         db,
         workspace_id=workspace_id,
         cluster_id=cluster_id,
@@ -73,6 +73,7 @@ def evaluate_network_policy(
     evaluated_labels = _labels(evaluated)
     selecting: list[SelectingNetworkPolicy] = []
     any_allow = False
+    incomplete_reasons: set[str] = set()
     for policy in policies:
         if str(policy.get("namespace") or "") != namespace:
             continue
@@ -93,34 +94,54 @@ def evaluate_network_policy(
             port=port,
             protocol=protocol,
         )
-        any_allow = any_allow or allowed
+        any_allow = any_allow or allowed is True
+        if allowed is None:
+            incomplete_reasons.add("network_policy_namespace_labels_unavailable")
         selecting.append(
             SelectingNetworkPolicy(
                 resource=_resource_ref(policy),
-                effect="allow" if allowed else "deny",
+                effect=("allow" if allowed is True else "deny" if allowed is False else "unknown"),
                 reason=(
                     "a selecting policy rule admits the exact peer and destination port"
-                    if allowed
-                    else "the selecting policy has no rule admitting the exact peer and port"
+                    if allowed is True
+                    else (
+                        "the selecting policy has no rule admitting the exact peer and port"
+                        if allowed is False
+                        else "namespace labels required by a selecting policy were not observed"
+                    )
                 ),
+            )
+        )
+    for policy in cilium_policies:
+        if str(policy.get("namespace") or "") != namespace:
+            continue
+        spec = _mapping(_raw(policy).get("spec"))
+        if not _selector_matches(_mapping(spec.get("endpointSelector")), evaluated_labels):
+            continue
+        incomplete_reasons.add("cilium_network_policy_rule_unsupported")
+        selecting.append(
+            SelectingNetworkPolicy(
+                resource=_resource_ref(policy),
+                effect="unknown",
+                reason="Cilium policy selects the exact endpoint but rule evaluation is unavailable",
             )
         )
     selecting.sort(key=lambda item: (item.resource.namespace or "", item.resource.name))
     if truncated:
-        verdict = "indeterminate"
-        coverage = NetworkPolicyEvaluationCoverage(
-            state="partial",
-            evaluated_count=len(policies),
-            returned_count=len(selecting),
-            reason_codes=("network_policy_limit_reached",),
-        )
-    else:
-        verdict = "allowed" if not selecting or any_allow else "denied"
-        coverage = NetworkPolicyEvaluationCoverage(
-            state="complete",
-            evaluated_count=len(policies),
-            returned_count=len(selecting),
-        )
+        incomplete_reasons.add("network_policy_limit_reached")
+    verdict = (
+        "allowed"
+        if any_allow or (not selecting and not incomplete_reasons)
+        else "indeterminate"
+        if incomplete_reasons
+        else "denied"
+    )
+    coverage = NetworkPolicyEvaluationCoverage(
+        state="partial" if incomplete_reasons else "complete",
+        evaluated_count=len(policies) + len(cilium_policies),
+        returned_count=len(selecting),
+        reason_codes=tuple(sorted(incomplete_reasons)),
+    )
     return NetworkPolicyEvaluationResponse(
         evaluated_pod=_resource_ref(evaluated),
         peer_pod=_resource_ref(peer),
@@ -173,7 +194,7 @@ def _network_policies(
     *,
     workspace_id: str,
     cluster_id: str,
-) -> tuple[list[Mapping[str, Any]], bool]:
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], bool]:
     reader = getattr(db, "list_inventory_resources_by_api_version", None)
     if not callable(reader):
         raise NetworkPolicyObservationUnavailable("NetworkPolicy reader is unavailable")
@@ -186,10 +207,20 @@ def _network_policies(
         limit=MAX_NETWORK_POLICIES_PER_EVALUATION + 1,
     )
     observed = [row for row in rows if isinstance(row, Mapping)]
-    return (
-        observed[:MAX_NETWORK_POLICIES_PER_EVALUATION],
-        len(observed) > MAX_NETWORK_POLICIES_PER_EVALUATION,
+    standard = observed[:MAX_NETWORK_POLICIES_PER_EVALUATION]
+    if len(observed) > MAX_NETWORK_POLICIES_PER_EVALUATION:
+        return standard, [], True
+    remaining = MAX_NETWORK_POLICIES_PER_EVALUATION - len(standard)
+    cilium_rows = reader(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type="ciliumnetworkpolicy",
+        api_version="cilium.io/v2",
+        kind="CiliumNetworkPolicy",
+        limit=remaining + 1,
     )
+    cilium_observed = [row for row in cilium_rows if isinstance(row, Mapping)]
+    return standard, cilium_observed[:remaining], len(cilium_observed) > remaining
 
 
 def _policy_isolates_direction(spec: Mapping[str, Any], direction: str) -> bool:
@@ -215,10 +246,11 @@ def _policy_allows(
     direction: str,
     port: int,
     protocol: str,
-) -> bool:
+) -> bool | None:
     rules = spec.get("ingress" if direction == "ingress" else "egress")
     if not isinstance(rules, list):
         return False
+    uncertain = False
     for raw_rule in rules:
         rule = _mapping(raw_rule)
         if not _ports_allow(
@@ -233,7 +265,7 @@ def _policy_allows(
             return True
         if not isinstance(peers, list):
             continue
-        if any(
+        matches = [
             _peer_matches(
                 db,
                 workspace_id=workspace_id,
@@ -243,9 +275,11 @@ def _policy_allows(
                 peer=peer,
             )
             for raw_peer in peers
-        ):
+        ]
+        if any(match is True for match in matches):
             return True
-    return False
+        uncertain = uncertain or any(match is None for match in matches)
+    return None if uncertain else False
 
 
 def _peer_matches(
@@ -256,7 +290,7 @@ def _peer_matches(
     policy_namespace: str,
     selector: Mapping[str, Any],
     peer: Mapping[str, Any],
-) -> bool:
+) -> bool | None:
     if not selector:
         return True
     ip_block = selector.get("ipBlock")
@@ -267,16 +301,19 @@ def _peer_matches(
     if namespace_selector is None:
         if peer_namespace != policy_namespace:
             return False
-    elif not _selector_matches(
-        _mapping(namespace_selector),
-        _namespace_labels(
-            db,
-            workspace_id=workspace_id,
-            cluster_id=cluster_id,
-            namespace=peer_namespace,
-        ),
-    ):
-        return False
+    else:
+        normalized_namespace_selector = _mapping(namespace_selector)
+        if normalized_namespace_selector:
+            namespace_labels = _namespace_labels(
+                db,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                namespace=peer_namespace,
+            )
+            if namespace_labels is None:
+                return None
+            if not _selector_matches(normalized_namespace_selector, namespace_labels):
+                return False
     pod_selector = selector.get("podSelector")
     return pod_selector is None or _selector_matches(
         _mapping(pod_selector),
@@ -290,10 +327,10 @@ def _namespace_labels(
     workspace_id: str,
     cluster_id: str,
     namespace: str,
-) -> Mapping[str, str]:
+) -> Mapping[str, str] | None:
     reader = getattr(db, "get_inventory_resource_by_api_version", None)
     if not callable(reader):
-        return {}
+        return None
     row = reader(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
@@ -303,7 +340,7 @@ def _namespace_labels(
         namespace=None,
         name=namespace,
     )
-    return _labels(row if isinstance(row, Mapping) else {})
+    return _labels(row) if isinstance(row, Mapping) else None
 
 
 def _selector_matches(selector: Mapping[str, Any], labels: Mapping[str, str]) -> bool:

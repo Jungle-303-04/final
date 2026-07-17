@@ -56,6 +56,10 @@ CNI_DAEMONSETS = (
 )
 
 
+class TrafficSourceObservationError(RuntimeError):
+    """A source probe failed and must not be projected as an absent workload."""
+
+
 class TrafficSourceDetector:
     def __init__(self, kubernetes: Any) -> None:
         self.kubernetes = kubernetes
@@ -75,8 +79,8 @@ class TrafficSourceDetector:
         }
 
     async def _cluster_facts(self) -> JsonObject:
-        version = await self._get("/version")
-        nodes = await self._get("/api/v1/nodes")
+        version = await self._safe_get("/version")
+        nodes = await self._safe_get("/api/v1/nodes")
         labels = [
             self._mapping(self._mapping(item).get("metadata")).get("labels")
             for item in self._items(nodes)
@@ -98,7 +102,7 @@ class TrafficSourceDetector:
 
     async def _cni(self) -> str:
         for cni, daemonset in CNI_DAEMONSETS:
-            observed = await self._get(
+            observed = await self._safe_get(
                 f"/apis/apps/v1/namespaces/kube-system/daemonsets/{daemonset}"
             )
             if observed is not None:
@@ -107,7 +111,10 @@ class TrafficSourceDetector:
 
     async def _observe_source(self, spec: TrafficDetectorSpec, cni: object) -> JsonObject:
         query = urlencode({"labelSelector": spec.selector})
-        body = await self._get(f"/api/v1/pods?{query}")
+        try:
+            body = await self._get(f"/api/v1/pods?{query}")
+        except TrafficSourceObservationError as error:
+            return self._source_status(spec, "error", str(error))
         running = [
             pod
             for pod in self._items(body)
@@ -118,11 +125,14 @@ class TrafficSourceDetector:
         if spec.service_name:
             metadata = self._mapping(running[0].get("metadata"))
             namespace = str(metadata.get("namespace") or "")
-            service = (
-                await self._get(f"/api/v1/namespaces/{namespace}/services/{spec.service_name}")
-                if namespace
-                else None
-            )
+            try:
+                service = (
+                    await self._get(f"/api/v1/namespaces/{namespace}/services/{spec.service_name}")
+                    if namespace
+                    else None
+                )
+            except TrafficSourceObservationError as error:
+                return self._source_status(spec, "error", str(error))
             if service is None:
                 return self._source_status(
                     spec,
@@ -154,16 +164,27 @@ class TrafficSourceDetector:
     async def _get(self, path: str) -> JsonObject | None:
         try:
             response = await self.kubernetes.request("GET", path, allow_not_found=True)
-        except (httpx.HTTPError, OSError):
-            return None
+        except (httpx.HTTPError, OSError) as error:
+            raise TrafficSourceObservationError("source observation request failed") from error
         if response.status_code == 404:
             return None
+        if response.status_code == 403:
+            raise TrafficSourceObservationError("source observation is forbidden by cluster RBAC")
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError:
-            return None
-        value = response.json()
+        except httpx.HTTPStatusError as error:
+            raise TrafficSourceObservationError("source observation request failed") from error
+        try:
+            value = response.json()
+        except ValueError as error:
+            raise TrafficSourceObservationError("source observation response is invalid") from error
         return value if isinstance(value, dict) else None
+
+    async def _safe_get(self, path: str) -> JsonObject | None:
+        try:
+            return await self._get(path)
+        except TrafficSourceObservationError:
+            return None
 
     @staticmethod
     def _platform(labels: list[dict[str, Any]]) -> str:

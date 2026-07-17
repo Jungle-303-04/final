@@ -90,9 +90,7 @@
     },
     {
       "sourceKey": "upstream-ui:traffic:source-discovery:wizard-catalog:v1",
-      "legacyContractIds": [
-        "reference.feature.178"
-      ],
+      "legacyContractId": "reference.feature.178",
       "interaction": "agent-observed source detection drives the scoped setup wizard without a browser-owned source list",
       "evidence": [
         {
@@ -109,9 +107,7 @@
     },
     {
       "sourceKey": "upstream-ui:traffic:source-selection:flow-invalidation:v1",
-      "legacyContractIds": [
-        "reference.feature.179"
-      ],
+      "legacyContractId": "reference.feature.179",
       "interaction": "an exact detected source selection invalidates prior flow projections before the next observation",
       "evidence": [
         {
@@ -128,9 +124,7 @@
     },
     {
       "sourceKey": "upstream-ui:traffic:source-connect:durable-progress:v1",
-      "legacyContractIds": [
-        "reference.feature.180"
-      ],
+      "legacyContractId": "reference.feature.180",
       "interaction": "the selected observed source connects through an explicit operation lifecycle and reports progress",
       "evidence": [
         {
@@ -147,9 +141,7 @@
     },
     {
       "sourceKey": "upstream-ui:traffic:network-policy:exact-flow-verdict:v1",
-      "legacyContractIds": [
-        "reference.feature.182"
-      ],
+      "legacyContractId": "reference.feature.182",
       "interaction": "flow detail resolves exact pod identities and evaluates selecting Kubernetes ingress or egress policies",
       "evidence": [
         {
