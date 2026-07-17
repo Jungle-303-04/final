@@ -13,6 +13,9 @@ import { rightsizingEn } from "./catalogs/en/rightsizing";
 import { applicationsEn } from "./catalogs/en/applications";
 import { checksEn } from "./catalogs/en/checks";
 import { trafficEn } from "./catalogs/en/traffic";
+import { compareEn } from "./catalogs/en/compare";
+import { helmEn } from "./catalogs/en/helm";
+import { workloadDetailEn } from "./catalogs/en/workloadDetail";
 
 export const en = {
   "product.name": "Opsia",
@@ -428,6 +431,9 @@ export const en = {
   ...applicationsEn,
   ...checksEn,
   ...trafficEn,
+  ...compareEn,
+  ...helmEn,
+  ...workloadDetailEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

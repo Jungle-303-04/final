@@ -9,6 +9,7 @@ import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import { BottomDockProvider } from "../../features/bottom-dock/BottomDockProvider";
 import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
 import type { WorkloadDetail, WorkloadDetailPort } from "../../features/workload-detail/workloadDetailContract";
+import { I18nProvider } from "../../shared/i18n";
 import { WorkloadDetailRoute } from "./WorkloadDetailRoute";
 
 describe("WorkloadDetailRoute", () => {
@@ -31,21 +32,34 @@ describe("WorkloadDetailRoute", () => {
       name: "checkout",
     }, expect.any(Object)));
   });
+
+  it("renders product-owned workload copy in Korean", async () => {
+    renderRoute({
+      getDetail: async () => detail(),
+      getScheduledRuns: vi.fn(),
+    }, { open: vi.fn(() => () => undefined) }, "ko-KR");
+
+    expect(await screen.findByText("실시간 로그")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "실시간 로그 스트림 열기" })).toBeTruthy();
+    expect(screen.getByLabelText("워크로드 상세 섹션")).toBeTruthy();
+  });
 });
 
-function renderRoute(port: WorkloadDetailPort, logStreamPort: LogStreamPort) {
+function renderRoute(port: WorkloadDetailPort, logStreamPort: LogStreamPort, navigatorLanguage = "en-US") {
   return render(
-    <MemoryRouter initialEntries={[
-      "/workload/Deployment/shop/checkout?cluster=cluster-a&apiGroup=apps&apiVersion=v1&tab=logs",
-    ]}>
-      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-        <BottomDockProvider port={logStreamPort}>
-          <Routes>
-            <Route element={<WorkloadDetailRoute port={port} />} path="/workload/:kind/:namespace/:name" />
-          </Routes>
-        </BottomDockProvider>
-      </AuthSessionGateProvider>
-    </MemoryRouter>,
+    <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
+      <MemoryRouter initialEntries={[
+        "/workload/Deployment/shop/checkout?cluster=cluster-a&apiGroup=apps&apiVersion=v1&tab=logs",
+      ]}>
+        <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+          <BottomDockProvider port={logStreamPort}>
+            <Routes>
+              <Route element={<WorkloadDetailRoute port={port} />} path="/workload/:kind/:namespace/:name" />
+            </Routes>
+          </BottomDockProvider>
+        </AuthSessionGateProvider>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 

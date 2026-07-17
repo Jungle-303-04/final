@@ -9,7 +9,6 @@ import {
   type HelmUpgradeTarget,
 } from "../../features/helm/helmContract";
 import { toHelmValuesPreviewOperationResult } from "../../features/helm/createHelmAdapter";
-import { HELM_COPY } from "../../features/helm/helmCopy";
 import {
   useOptionalOperationStatus,
   useOptionalOperationStatusStore,
@@ -19,6 +18,8 @@ import { Button } from "../../shared/ui/primitives/button";
 import { ConfirmationDialog } from "../../shared/ui/primitives/confirmation-dialog";
 import { Input } from "../../shared/ui/primitives/input";
 import { HelmResourcesDiffView } from "./HelmResourcesDiffView";
+import { useI18n } from "../../shared/i18n/I18nProvider";
+import type { TranslationFunction } from "../../shared/i18n/types";
 
 export type HelmFormValues = Readonly<Record<string, string>>;
 
@@ -33,6 +34,7 @@ export function HelmReleaseUpgradeDialog({
   onAccepted: () => void;
   port: HelmPort;
 }) {
+  const { t } = useI18n();
   const commands = detail.commands;
   const operationStore = useOptionalOperationStatusStore();
   const [open, setOpen] = useState(false);
@@ -103,7 +105,7 @@ export function HelmReleaseUpgradeDialog({
   };
   const previewChanges = async () => {
     if (target === null || detail.release.revision === null || !valuesAreValid(target, values)) {
-      setPreviewFailure(HELM_COPY.upgradeInputRequired);
+      setPreviewFailure(t("helm.upgrade.inputRequired"));
       return;
     }
     const controller = new AbortController();
@@ -122,13 +124,13 @@ export function HelmReleaseUpgradeDialog({
         values: typedValues(target, values),
       }, controller.signal);
       if (!operationStore) {
-        setPreviewFailure(HELM_COPY.valuesPreviewStreamUnavailable);
+        setPreviewFailure(t("helm.upgrade.previewStreamUnavailable"));
         return;
       }
       setPreviewCommandId(receipt.commandId);
       operationStore.start(receipt.commandId);
     } catch (error) {
-      if (!controller.signal.aborted) setPreviewFailure(previewFailureCopy(error));
+      if (!controller.signal.aborted) setPreviewFailure(previewFailureCopy(error, t));
     } finally {
       if (previewRequestRef.current === controller) previewRequestRef.current = null;
     }
@@ -136,7 +138,7 @@ export function HelmReleaseUpgradeDialog({
   const confirm = async () => {
     if (pending || target === null || detail.release.revision === null) return;
     if (!valuesAreValid(target, values)) {
-      setFailure(HELM_COPY.upgradeInputRequired);
+      setFailure(t("helm.upgrade.inputRequired"));
       return;
     }
     const controller = new AbortController();
@@ -154,14 +156,14 @@ export function HelmReleaseUpgradeDialog({
         catalogVersion: target.version,
         values: typedValues(target, values),
         confirmation: true,
-        reason: `Upgrade ${detail.release.name} to ${target.name} ${target.version}`,
+        reason: t("helm.upgrade.reason", { release: detail.release.name, target: target.name, version: target.version }),
       }, controller.signal);
       operationStore?.start(receipt.commandId);
-      if (!operationStore) setFailure(HELM_COPY.upgradeStreamUnavailable);
+      if (!operationStore) setFailure(t("helm.upgrade.streamUnavailable"));
       onAccepted();
       setOpen(false);
     } catch (error) {
-      setFailure(upgradeFailureCopy(error));
+      setFailure(upgradeFailureCopy(error, t));
     } finally {
       if (requestRef.current === controller) requestRef.current = null;
       setPending(false);
@@ -179,9 +181,9 @@ export function HelmReleaseUpgradeDialog({
     && previewResult.catalogVersion === target.version;
   const previewStatusFailure = previewCommandId && previewSnapshot
     && ["failed", "cancelled", "forbidden", "invalid", "unavailable"].includes(previewSnapshot.status)
-      ? HELM_COPY.valuesPreviewFailed
+      ? t("helm.upgrade.previewFailed")
       : previewSnapshot?.status === "completed" && !previewMatches
-        ? HELM_COPY.valuesPreviewInvalid
+        ? t("helm.upgrade.previewInvalid")
         : null;
   const previewRunning = previewCommandId !== ""
     && previewSnapshot !== null
@@ -190,25 +192,25 @@ export function HelmReleaseUpgradeDialog({
   return (
     <>
       <Button onClick={() => changeOpen(true)} size="sm" type="button">
-        {HELM_COPY.upgrade}
+        {t("helm.upgrade.action")}
       </Button>
       <ConfirmationDialog
-        cancelLabel={HELM_COPY.chartSourceCancel}
+        cancelLabel={t("common.action.cancel")}
         className="sm:max-w-3xl"
         confirmDisabled={target === null || detail.release.revision === null || !valuesAreValid(target, values)}
-        confirmLabel={pending ? HELM_COPY.upgradePending : HELM_COPY.upgradeConfirm}
-        description={HELM_COPY.upgradeDescription}
-        details={target ? upgradeDiff(detail, target) : undefined}
+        confirmLabel={pending ? t("helm.upgrade.pending") : t("helm.upgrade.confirm")}
+        description={t("helm.upgrade.description")}
+        details={target ? upgradeDiff(detail, target, t) : undefined}
         onConfirm={() => void confirm()}
         onOpenChange={changeOpen}
         open={open}
         pending={pending}
-        title={HELM_COPY.upgradeTitle}
+        title={t("helm.upgrade.title")}
         variant="warning"
       >
         <div className="grid min-w-0 gap-3">
           <label className="grid gap-1 text-sm" htmlFor="helm-upgrade-target">
-            <span className="font-medium">{HELM_COPY.upgradeTarget}</span>
+            <span className="font-medium">{t("helm.upgrade.target")}</span>
             <select
               className="h-9 min-w-0 rounded-md border bg-background px-2 text-sm text-foreground"
               id="helm-upgrade-target"
@@ -217,7 +219,7 @@ export function HelmReleaseUpgradeDialog({
             >
               {targets.map((item) => (
                 <option key={upgradeTargetKey(item)} value={upgradeTargetKey(item)}>
-                  {item.name} {item.version} (chart {item.chartVersion})
+                  {t("helm.upgrade.option", { name: item.name, version: item.version, chartVersion: item.chartVersion })}
                 </option>
               ))}
             </select>
@@ -238,18 +240,18 @@ export function HelmReleaseUpgradeDialog({
               type="button"
               variant="outline"
             >
-              {previewRunning ? HELM_COPY.valuesPreviewPending : HELM_COPY.valuesPreview}
+              {previewRunning ? t("helm.upgrade.previewPending") : t("helm.upgrade.preview")}
             </Button>
             {previewRunning ? (
               <span aria-live="polite" className="text-xs text-muted-foreground">
-                {HELM_COPY.valuesPreviewRunning}
+                {t("helm.upgrade.previewRunning")}
               </span>
             ) : null}
           </div>
           {previewMatches && previewResult ? (
             <section className="grid max-h-80 min-w-0 gap-3 overflow-auto rounded-md border bg-muted/20 p-3">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">{HELM_COPY.valuesPreviewReady}</h3>
+                <h3 className="text-sm font-semibold">{t("helm.upgrade.previewReady")}</h3>
                 <span className="text-xs text-muted-foreground">
                   {previewResult.chartName} {previewResult.chartVersion}
                 </span>
@@ -282,6 +284,7 @@ export function UpgradeInputField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const { t } = useI18n();
   const label = input.required ? `${input.name} *` : input.name;
   if (input.allowedValues.length > 0 || input.valueType === "boolean") {
     const options = input.allowedValues.length > 0
@@ -297,7 +300,7 @@ export function UpgradeInputField({
           onChange={(event) => onChange(event.target.value)}
           value={value}
         >
-          <option value="">Select a value</option>
+          <option value="">{t("helm.upgrade.selectValue")}</option>
           {options.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
       </label>
@@ -369,34 +372,39 @@ export function typedValues(target: HelmUpgradeTarget, values: HelmFormValues): 
   return result;
 }
 
-function upgradeDiff(detail: HelmReleaseDetail, target: HelmUpgradeTarget): string {
+function upgradeDiff(detail: HelmReleaseDetail, target: HelmUpgradeTarget, t: TranslationFunction): string {
   return [
-    `${detail.release.scope.clusterId} · ${detail.release.storageNamespace} · ${detail.release.name} · revision ${detail.release.revision ?? "unknown"}`,
-    `Target: ${target.name} ${target.version} · chart ${target.chartVersion}`,
-    `Values: ${target.inputs.length}`,
+    t("helm.upgrade.diff.release", {
+      cluster: detail.release.scope.clusterId,
+      namespace: detail.release.storageNamespace,
+      release: detail.release.name,
+      revision: detail.release.revision ?? t("common.state.unknown"),
+    }),
+    t("helm.upgrade.diff.target", { target: target.name, version: target.version, chartVersion: target.chartVersion }),
+    t("helm.upgrade.diff.values", { count: target.inputs.length }),
   ].join("\n");
 }
 
-function upgradeFailureCopy(error: unknown): string {
+function upgradeFailureCopy(error: unknown, t: TranslationFunction): string {
   if (error instanceof HelmPortFailure) {
     if (error.code === "forbidden" || error.code === "unauthorized") {
-      return HELM_COPY.upgradeForbidden;
+      return t("helm.upgrade.forbidden");
     }
     if (error.code === "invalid-request" || error.code === "not-found") {
-      return HELM_COPY.upgradeStale;
+      return t("helm.upgrade.stale");
     }
   }
-  return HELM_COPY.upgradeFailed;
+  return t("helm.upgrade.failed");
 }
 
-function previewFailureCopy(error: unknown): string {
+function previewFailureCopy(error: unknown, t: TranslationFunction): string {
   if (error instanceof HelmPortFailure) {
     if (error.code === "forbidden" || error.code === "unauthorized") {
-      return HELM_COPY.upgradeForbidden;
+      return t("helm.upgrade.forbidden");
     }
     if (error.code === "invalid-request" || error.code === "not-found") {
-      return HELM_COPY.upgradeStale;
+      return t("helm.upgrade.stale");
     }
   }
-  return HELM_COPY.valuesPreviewFailed;
+  return t("helm.upgrade.previewFailed");
 }

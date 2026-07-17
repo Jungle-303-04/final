@@ -1,0 +1,28 @@
+import type { HelmMessageKey } from "../../keys/helm";
+
+export const helmEn = {
+  "helm.upgrade.action": "Upgrade",
+  "helm.upgrade.title": "Confirm Helm upgrade",
+  "helm.upgrade.description": "Review the exact release, observed revision, chart target, and values before queueing the upgrade.",
+  "helm.upgrade.target": "Upgrade target",
+  "helm.upgrade.confirm": "Confirm upgrade",
+  "helm.upgrade.pending": "Queueing upgrade",
+  "helm.upgrade.failed": "The Helm upgrade could not be queued.",
+  "helm.upgrade.stale": "The release changed after it was loaded. Refresh before upgrading.",
+  "helm.upgrade.forbidden": "You are not authorized to upgrade this release.",
+  "helm.upgrade.inputRequired": "Complete every required upgrade value.",
+  "helm.upgrade.streamUnavailable": "Live upgrade status is unavailable.",
+  "helm.upgrade.preview": "Preview changes",
+  "helm.upgrade.previewPending": "Queueing preview",
+  "helm.upgrade.previewRunning": "Rendering and comparing resources.",
+  "helm.upgrade.previewFailed": "The values preview could not be completed. You can still review and confirm the upgrade.",
+  "helm.upgrade.previewStreamUnavailable": "Live preview status is unavailable. You can still review and confirm the upgrade.",
+  "helm.upgrade.previewInvalid": "The preview result did not match this release and was discarded.",
+  "helm.upgrade.previewReady": "Rendered resource changes",
+  "helm.upgrade.option": "{name} {version} (chart {chartVersion})",
+  "helm.upgrade.reason": "Upgrade {release} to {target} {version}",
+  "helm.upgrade.diff.release": "{cluster} · {namespace} · {release} · revision {revision}",
+  "helm.upgrade.diff.target": "Target: {target} {version} · chart {chartVersion}",
+  "helm.upgrade.diff.values": "Values: {count}",
+  "helm.upgrade.selectValue": "Select a value",
+} satisfies Record<HelmMessageKey, string>;

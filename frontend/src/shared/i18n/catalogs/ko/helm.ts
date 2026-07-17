@@ -1,0 +1,28 @@
+import type { HelmMessageKey } from "../../keys/helm";
+
+export const helmKo = {
+  "helm.upgrade.action": "업그레이드",
+  "helm.upgrade.title": "Helm 업그레이드 확인",
+  "helm.upgrade.description": "업그레이드를 대기열에 넣기 전에 정확한 릴리스, 관측된 리비전, 차트 대상 및 값을 확인하세요.",
+  "helm.upgrade.target": "업그레이드 대상",
+  "helm.upgrade.confirm": "업그레이드 확인",
+  "helm.upgrade.pending": "업그레이드 대기열 등록 중",
+  "helm.upgrade.failed": "Helm 업그레이드를 대기열에 넣지 못했습니다.",
+  "helm.upgrade.stale": "불러온 뒤 릴리스가 변경되었습니다. 새로 고친 후 업그레이드하세요.",
+  "helm.upgrade.forbidden": "이 릴리스를 업그레이드할 권한이 없습니다.",
+  "helm.upgrade.inputRequired": "필수 업그레이드 값을 모두 입력하세요.",
+  "helm.upgrade.streamUnavailable": "실시간 업그레이드 상태를 사용할 수 없습니다.",
+  "helm.upgrade.preview": "변경 사항 미리 보기",
+  "helm.upgrade.previewPending": "미리 보기 대기열 등록 중",
+  "helm.upgrade.previewRunning": "리소스를 렌더링하고 비교하는 중입니다.",
+  "helm.upgrade.previewFailed": "값 미리 보기를 완료하지 못했습니다. 업그레이드를 계속 검토하고 확인할 수 있습니다.",
+  "helm.upgrade.previewStreamUnavailable": "실시간 미리 보기 상태를 사용할 수 없습니다. 업그레이드를 계속 검토하고 확인할 수 있습니다.",
+  "helm.upgrade.previewInvalid": "미리 보기 결과가 이 릴리스와 일치하지 않아 폐기했습니다.",
+  "helm.upgrade.previewReady": "렌더링된 리소스 변경 사항",
+  "helm.upgrade.option": "{name} {version} (차트 {chartVersion})",
+  "helm.upgrade.reason": "{release}을(를) {target} {version}(으)로 업그레이드",
+  "helm.upgrade.diff.release": "{cluster} · {namespace} · {release} · 리비전 {revision}",
+  "helm.upgrade.diff.target": "대상: {target} {version} · 차트 {chartVersion}",
+  "helm.upgrade.diff.values": "값: {count}개",
+  "helm.upgrade.selectValue": "값 선택",
+} satisfies Record<HelmMessageKey, string>;

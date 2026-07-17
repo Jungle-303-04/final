@@ -35,6 +35,11 @@ describe("i18n catalogs", () => {
     const key: MessageKey = "common.action.retry";
     expect(translate("en", key)).toBe("Retry");
   });
+
+  it("localizes the Helm upgrade empty selection", () => {
+    expect(translate("en", "helm.upgrade.selectValue")).toBe("Select a value");
+    expect(translate("ko", "helm.upgrade.selectValue")).toBe("값 선택");
+  });
 });
 
 describe("locale resolution", () => {

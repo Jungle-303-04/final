@@ -11,6 +11,7 @@ import {
   type HelmRelease,
 } from "../../features/helm/helmContract";
 import { HelmPage } from "./HelmPage";
+import { I18nProvider } from "../../shared/i18n";
 
 const scopeState = vi.hoisted(() => ({ value: null as unknown }));
 const operationState = vi.hoisted(() => ({ value: null as unknown }));
@@ -393,6 +394,31 @@ describe("HelmPage", () => {
     await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(3));
   });
 
+  it("renders the upgrade dialog contract in Korean", async () => {
+    const port = helmPort();
+    const upgradeDetail = detail();
+    port.getRelease.mockResolvedValue({
+      ...upgradeDetail,
+      release: {
+        ...upgradeDetail.release,
+        storageNamespace: "sandbox",
+        scope: { ...upgradeDetail.release.scope, namespaces: ["sandbox"] },
+        storage: { ...upgradeDetail.release.storage, namespace: "sandbox" },
+        chart: "redis",
+        chartVersion: "22.0.0",
+        chartReasonCodes: [],
+      },
+      commands: availableUpgradeCommands(),
+    });
+    port.listReleaseVersions.mockResolvedValue(redisUpgradeVersions());
+    renderRoute("/helm/detail/cluster-a/sandbox/storefront", port, "ko-KR");
+
+    fireEvent.click(await screen.findByRole("button", { name: "업그레이드" }));
+    expect(screen.getByRole("dialog", { name: "Helm 업그레이드 확인" })).toBeTruthy();
+    expect(screen.getByText(/cluster-a · sandbox · storefront · 리비전 3/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "업그레이드 확인" })).toBeTruthy();
+  });
+
   it("renders one strict redacted values preview and invalidates it when an input changes", async () => {
     const port = helmPort();
     const upgradeDetail = detail();
@@ -759,12 +785,14 @@ describe("HelmPage", () => {
   });
 });
 
-function renderRoute(path: string, port: HelmPort) {
+function renderRoute(path: string, port: HelmPort, navigatorLanguage = "en-US") {
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <HelmPage port={port} />
-      <LocationProbe />
-    </MemoryRouter>,
+    <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
+      <MemoryRouter initialEntries={[path]}>
+        <HelmPage port={port} />
+        <LocationProbe />
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 

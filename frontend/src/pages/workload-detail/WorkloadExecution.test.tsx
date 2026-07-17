@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BottomDockProvider } from "../../features/bottom-dock/BottomDockProvider";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import type { ScheduledRunCatalog, WorkloadDetailPort } from "../../features/workload-detail/workloadDetailContract";
+import { I18nProvider } from "../../shared/i18n";
 import { WorkloadExecution } from "./WorkloadExecution";
 
 describe("WorkloadExecution", () => {
@@ -32,12 +33,23 @@ describe("WorkloadExecution", () => {
       })),
     };
 
-    render(<AuthSessionGateProvider reportUnauthorized={vi.fn()}><BottomDockProvider port={{ open }}><WorkloadExecution port={port} request={{ clusterId: "cluster-a", apiGroup: "batch", apiVersion: "v1", kind: "CronJob", namespace: "shop", name: "nightly" }} /></BottomDockProvider></AuthSessionGateProvider>);
+    render(<I18nProvider navigatorLanguage="en-US" storage={null}><AuthSessionGateProvider reportUnauthorized={vi.fn()}><BottomDockProvider port={{ open }}><WorkloadExecution port={port} request={{ clusterId: "cluster-a", apiGroup: "batch", apiVersion: "v1", kind: "CronJob", namespace: "shop", name: "nightly" }} /></BottomDockProvider></AuthSessionGateProvider></I18nProvider>);
 
     expect(await screen.findByText("Job failed")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "View logs" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith({
       type: "scheduled-run", clusterId: "cluster-a", kind: "CronJob", namespace: "shop", name: "nightly", runKey: "run-1",
     }, expect.any(Object)));
+  });
+
+  it("renders execution failures in Korean", async () => {
+    const port: WorkloadDetailPort = {
+      getDetail: vi.fn(),
+      getScheduledRuns: vi.fn(async () => { throw new Error("unavailable"); }),
+    };
+
+    render(<I18nProvider navigatorLanguage="ko-KR" storage={null}><AuthSessionGateProvider reportUnauthorized={vi.fn()}><BottomDockProvider port={{ open: vi.fn(() => () => undefined) }}><WorkloadExecution port={port} request={{ clusterId: "cluster-a", apiGroup: "batch", apiVersion: "v1", kind: "CronJob", namespace: "shop", name: "nightly" }} /></BottomDockProvider></AuthSessionGateProvider></I18nProvider>);
+
+    expect(await screen.findByText("현재 권한 범위의 실행 기록을 불러올 수 없습니다.")).toBeTruthy();
   });
 });

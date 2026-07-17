@@ -13,6 +13,9 @@ import { rightsizingKo } from "./catalogs/ko/rightsizing";
 import { applicationsKo } from "./catalogs/ko/applications";
 import { checksKo } from "./catalogs/ko/checks";
 import { trafficKo } from "./catalogs/ko/traffic";
+import { compareKo } from "./catalogs/ko/compare";
+import { helmKo } from "./catalogs/ko/helm";
+import { workloadDetailKo } from "./catalogs/ko/workloadDetail";
 
 export const ko = {
   "product.name": "Opsia",
@@ -428,6 +431,9 @@ export const ko = {
   ...applicationsKo,
   ...checksKo,
   ...trafficKo,
+  ...compareKo,
+  ...helmKo,
+  ...workloadDetailKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,

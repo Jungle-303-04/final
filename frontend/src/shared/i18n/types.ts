@@ -13,6 +13,9 @@ import type { RightsizingMessageKey } from "./keys/rightsizing";
 import type { ApplicationsMessageKey } from "./keys/applications";
 import type { ChecksMessageKey } from "./keys/checks";
 import type { TrafficMessageKey } from "./keys/traffic";
+import type { CompareMessageKey } from "./keys/compare";
+import type { HelmMessageKey } from "./keys/helm";
+import type { WorkloadDetailMessageKey } from "./keys/workloadDetail";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -392,6 +395,9 @@ export type MessageKey =
   | ResourcesMessageKey
   | TimelineMessageKey
   | TrafficMessageKey
+  | CompareMessageKey
+  | HelmMessageKey
+  | WorkloadDetailMessageKey
   | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;
