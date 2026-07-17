@@ -1,11 +1,6 @@
 import { CircleAlert, ExternalLink } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "../../shared/ui/primitives/alert";
-import {
   Card,
   CardContent,
   CardHeader,
@@ -27,25 +22,28 @@ export function IssueRecentChangesPanel({
   return (
     <Card
       aria-label={copy.recentChangesLabel}
+      className="gap-0 py-0"
       data-testid="issue-recent-changes"
       role="region"
     >
-      <CardHeader className="border-b">
+      <CardHeader className="border-b bg-muted/45 p-4">
         <CardTitle>{copy.recentChangesLabel}</CardTitle>
       </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
+      <CardContent className="grid min-w-0 gap-3 p-4">
         {state.failure ? (
-          <Alert variant="destructive">
-            <CircleAlert aria-hidden="true" />
-            <AlertTitle>{copy.recentChangesUnavailable}</AlertTitle>
-            <AlertDescription>{copy.failureDetail(state.failure.code)}</AlertDescription>
-          </Alert>
+          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 text-sm text-[#F74720]">
+            <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <div className="grid min-w-0 gap-1">
+              <p className="font-medium">{copy.recentChangesUnavailable}</p>
+              <p className="break-words text-xs">{copy.failureDetail(state.failure.code)}</p>
+            </div>
+          </div>
         ) : null}
         {hasChanges ? (
           <ul className="grid min-w-0 gap-3">
             {state.data?.items.map((change) => (
               <li
-                className="grid min-w-0 gap-3 rounded-lg border p-3"
+                className="grid min-w-0 gap-3 border-b pb-4 last:border-b-0 last:pb-0"
                 key={change.eventId}
               >
                 <div className="grid min-w-0 gap-1">
