@@ -108,6 +108,7 @@ export {
   getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_PATH,
+  HELM_RELEASE_ROLLBACK_STREAM_PATH,
   HELM_RELEASES_PATH,
   HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,
@@ -117,6 +118,8 @@ export {
   listHelmReleases,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
+  startHelmReleaseRollback,
+  startHelmReleaseUninstall,
   type HelmReleaseListQuery,
 } from "./helm-releases";
 export {

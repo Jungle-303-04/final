@@ -24,6 +24,8 @@ export const HELM_RELEASE_ARTIFACT_PATH =
   "/api/helm/releases/{namespace}/{release_name}/artifacts" as const;
 export const HELM_RELEASE_UPGRADE_PATH =
   "/api/helm/releases/{namespace}/{release_name}/upgrade" as const;
+export const HELM_RELEASE_ROLLBACK_STREAM_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/rollback-stream" as const;
 export const HELM_RELEASE_UPGRADE_INFO_PATH =
   "/api/helm/releases/{namespace}/{release_name}/upgrade-info" as const;
 export const HELM_RELEASE_VERSIONS_PATH =
@@ -168,6 +170,76 @@ export function startHelmReleaseUpgrade(
     }),
     signal,
   });
+}
+
+export function startHelmReleaseRollback(
+  input: {
+    clusterId: string;
+    namespace: string;
+    releaseName: string;
+    expectedRevision: number;
+    revision: number;
+    confirmation: true;
+    reason?: string;
+  },
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const path = releaseMutationPath(HELM_RELEASE_ROLLBACK_STREAM_PATH, input);
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 2) {
+    throw new RangeError("expectedRevision must be an integer greater than one");
+  }
+  if (!Number.isInteger(input.revision) || input.revision < 1 || input.revision >= input.expectedRevision) {
+    throw new RangeError("revision must be an older positive revision");
+  }
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: requiredIdentity(input.clusterId, "clusterId"),
+      expected_revision: input.expectedRevision,
+      revision: input.revision,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
+export function startHelmReleaseUninstall(
+  input: {
+    clusterId: string;
+    namespace: string;
+    releaseName: string;
+    expectedRevision: number;
+    confirmation: true;
+    reason?: string;
+  },
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const path = releaseMutationPath(HELM_RELEASE_PATH, input);
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    throw new RangeError("expectedRevision must be a positive integer");
+  }
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: requiredIdentity(input.clusterId, "clusterId"),
+      expected_revision: input.expectedRevision,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
+function releaseMutationPath(
+  template: typeof HELM_RELEASE_PATH | typeof HELM_RELEASE_ROLLBACK_STREAM_PATH,
+  input: { namespace: string; releaseName: string },
+): ApiPath {
+  return template
+    .replace("{namespace}", encodePathSegment(requiredIdentity(input.namespace, "namespace")))
+    .replace("{release_name}", encodePathSegment(requiredIdentity(input.releaseName, "releaseName"))) as ApiPath;
 }
 
 function releaseReadPath(
