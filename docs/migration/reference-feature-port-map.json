@@ -3518,8 +3518,8 @@
       }
     },
     "reference.feature.196": {
-      "deliveryStatus": "implemented",
-      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/api/catalog.ts",
       "desktopContract": null,
       "verification": [
@@ -3623,8 +3623,8 @@
       }
     },
     "reference.feature.200": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
       "desktopContract": null,
       "verification": [

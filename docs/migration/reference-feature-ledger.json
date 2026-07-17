@@ -517,8 +517,8 @@
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "implemented",
-      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
       "desktopContract": "desktop",
       "verification": [
@@ -9381,8 +9381,8 @@
       "streaming": true,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
       "desktopContract": null,
       "verification": [
