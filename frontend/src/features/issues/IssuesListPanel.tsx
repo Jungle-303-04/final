@@ -3,9 +3,9 @@ import {
   BrainCircuit,
   Check,
   CircleCheckBig,
+  CircleDot,
   Clock3,
   Cuboid,
-  CircleAlert,
   MapPin,
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
@@ -98,7 +98,7 @@ export function IssuesListPanel({
         <IssueStateTab
           active={activeState === "open"}
           count={openIssues.length}
-          icon={<CircleAlert aria-hidden="true" className="size-4" />}
+          icon={<CircleDot aria-hidden="true" className="size-4" />}
           label={copy.lifecycleOpen}
           onClick={() => setActiveState("open")}
         />
@@ -266,7 +266,7 @@ function IssueQueueRow({
         aria-label={title}
         className={cn(
           "@container group/issue relative h-auto w-full min-w-0 animate-in cursor-pointer fade-in-0 items-stretch justify-start overflow-hidden whitespace-normal rounded-xl border border-border/80 bg-card p-0 text-left shadow-xs transition-[transform,border-color,box-shadow,background-color,opacity] duration-150 ease-out hover:-translate-y-px hover:border-foreground/20 hover:bg-card hover:shadow-sm motion-reduce:animate-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-          selected && "border-foreground/15 bg-[#F7F8F8] shadow-md ring-1 ring-foreground/10 dark:bg-white/5",
+          selected && "border-foreground/15 bg-[#FBFBFB] shadow-md ring-1 ring-foreground/10 dark:bg-white/5",
           resolved && !selected && "opacity-65 hover:opacity-100",
         )}
         onClick={() => onSelect(issue)}
@@ -361,7 +361,7 @@ function IssueQueueRow({
             <span className="flex min-w-0 flex-wrap items-center gap-2">
               {!resolved ? (
                 <Badge
-                  className="border-[#FFD1AD] bg-[#FFF7F0] text-[#FF9B51] dark:border-[#FF9B51]/45 dark:bg-[#FF9B51]/12 dark:text-[#FFB176]"
+                  className="border-[#FFE2CC] bg-[#FFF9F4] text-foreground/80 dark:border-[#FF9B51]/25 dark:bg-[#FF9B51]/8 dark:text-foreground/80"
                   variant="outline"
                 >
                   {needsActionReviewAgain

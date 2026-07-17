@@ -1,5 +1,6 @@
 import {
   BrainCircuit,
+  Check,
   ChevronsLeft,
   ChevronsRight,
   CircleCheck,
@@ -8,7 +9,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
@@ -53,6 +54,9 @@ import type {
   SectionState,
 } from "./issuesSurfaceContract";
 
+const RCA_EVIDENCE_SUMMARY_ID = "issue-rca-evidence-summary";
+const DETAIL_TAB_CONTENT_MOTION = "animate-in fade-in-0 slide-in-from-bottom-1 duration-200 ease-out motion-reduce:animate-none";
+
 export function IssuesPanels({
   capability,
   copy,
@@ -78,6 +82,15 @@ export function IssuesPanels({
     { label: "대상", value: selected.resourceName },
   ].filter((item): item is { label: string; value: string } => Boolean(item.value?.trim()));
   const contextTitle = contextMeta.map(({ label, value }) => `${label} ${value}`).join(" | ");
+  const jumpToEvidenceSummary = () => {
+    setActiveTab("overview");
+    window.setTimeout(() => {
+      document.getElementById(RCA_EVIDENCE_SUMMARY_ID)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  };
 
   return (
     <div
@@ -119,9 +132,15 @@ export function IssuesPanels({
               ) : null}
             </div>
             {contextMeta.length > 0 ? (
-              <p className="mt-1 truncate text-xs text-muted-foreground" title={contextTitle}>
-                {contextTitle}
-              </p>
+              <dl className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs" title={contextTitle}>
+                {contextMeta.map(({ label, value }, index) => (
+                  <div className="inline-flex min-w-0 items-center gap-1" key={`${label}:${value}`}>
+                    {index > 0 ? <span className="shrink-0 text-border">|</span> : null}
+                    <dt className="shrink-0 text-muted-foreground">{label}</dt>
+                    <dd className="min-w-0 truncate font-medium text-foreground/75">{value}</dd>
+                  </div>
+                ))}
+              </dl>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -137,7 +156,7 @@ export function IssuesPanels({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="min-w-0 lg:overflow-y-auto">
+        <CardContent className="min-w-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
           <Tabs
             onValueChange={(value) => {
               if (value !== null) setActiveTab(value);
@@ -159,13 +178,18 @@ export function IssuesPanels({
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent className="grid min-w-0 gap-4 py-4" value="overview">
-              <IssueOverview copy={copy} selected={selected} state={state.detail} />
+            <TabsContent className={cn("grid min-w-0 gap-6 py-4", DETAIL_TAB_CONTENT_MOTION)} value="overview">
+              <IssueOverview
+                copy={copy}
+                onJumpToEvidenceSummary={jumpToEvidenceSummary}
+                selected={selected}
+                state={state.detail}
+              />
               <IssueRecentChangesPanel copy={copy} state={state.recentChanges} />
               <ReportsPanel copy={copy} onOpenRecovery={() => setActiveTab("recovery")} state={state.reports} />
             </TabsContent>
 
-            <TabsContent className="grid min-w-0 gap-4 py-4" value="recovery">
+            <TabsContent className={cn("grid min-w-0 gap-4 py-4", DETAIL_TAB_CONTENT_MOTION)} value="recovery">
               <RecoveryPanel
                 capability={capability}
                 copy={copy}
@@ -179,7 +203,7 @@ export function IssuesPanels({
               />
             </TabsContent>
 
-            <TabsContent className="grid min-w-0 gap-4 py-4" value="timeline">
+            <TabsContent className={cn("grid min-w-0 gap-4 py-4", DETAIL_TAB_CONTENT_MOTION)} value="timeline">
               <IssueAuditTimelinePanel
                 copy={copy}
                 onLoadMore={onLoadMoreAudit}
@@ -195,10 +219,12 @@ export function IssuesPanels({
 
 function IssueOverview({
   copy,
+  onJumpToEvidenceSummary,
   selected,
   state,
 }: {
   copy: IssuesSurfaceCopy;
+  onJumpToEvidenceSummary: () => void;
   selected: IssuesPanelsProps["selected"];
   state: IssuesPanelsProps["state"]["detail"];
 }) {
@@ -209,39 +235,45 @@ function IssueOverview({
   const detail = state.data;
   const missingEvidence = detail?.missingEvidence ?? selected.missingEvidence ?? [];
   const missingCount = missingEvidence.length;
+  const summary = issueSituationSummary(selected, copy, resolved);
   return (
-    <Card className="gap-0 py-0">
-      <CardHeader className="border-b bg-muted/45 p-4">
-        <CardTitle>상황 요약</CardTitle>
-      </CardHeader>
+    <Card className="gap-0 border-foreground/15 py-0 shadow-sm">
       <CardContent className="grid min-w-0 gap-4 p-4">
-        <div className="grid min-w-0 gap-3">
-        <p className="break-words text-sm leading-relaxed text-foreground">
-          {issueSituationSummary(selected, copy, resolved)}
-        </p>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-          <Badge variant={resolved ? "secondary" : "outline"}>{resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status)}</Badge>
-          {confidence !== null ? (
-            <Badge variant="outline">{copy.confidence} {confidence}</Badge>
-          ) : null}
-          {supportingCount !== null ? (
-            <Badge variant="outline">{copy.supportingEvidence} {supportingCount}</Badge>
-          ) : null}
-        </div>
-      </div>
-      {missingCount > 0 ? (
-        <section className="grid min-w-0 gap-2 rounded-lg border border-[#FFD1AD] bg-[#FFF7F0] p-3 dark:border-[#FF9B51]/45 dark:bg-[#FF9B51]/12">
-          <h3 className="flex items-center gap-2 text-xs font-medium text-[#FF9B51] dark:text-[#FFB176]">
-            <ShieldAlert aria-hidden="true" className="size-4" />
-            {copy.missingEvidence}
-          </h3>
-          <ul className="grid gap-1.5 text-xs text-muted-foreground">
-            {missingEvidence.map((item, index) => (
-              <li className="break-words" key={`${item}:${index}`}>• {humanizeFilterValue(item)}</li>
-            ))}
-          </ul>
+        <section className="grid min-w-0 gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">상황 요약</h2>
+          <p className="break-words text-base font-medium leading-relaxed text-foreground">{summary}</p>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+            <Badge variant={resolved ? "secondary" : "outline"}>
+              {resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status)}
+            </Badge>
+            {confidence !== null ? (
+              <Badge variant="outline">{copy.confidence} {confidence}</Badge>
+            ) : null}
+            {supportingCount !== null ? (
+              <Badge
+                className="cursor-pointer hover:bg-muted"
+                onClick={onJumpToEvidenceSummary}
+                render={<button type="button" />}
+                variant="outline"
+              >
+                {copy.supportingEvidence} {supportingCount}
+              </Badge>
+            ) : null}
+          </div>
         </section>
-      ) : null}
+        {missingCount > 0 ? (
+          <section className="grid min-w-0 gap-2 rounded-lg border border-[#FFE2CC] bg-[#FFF9F4] p-3 dark:border-[#FF9B51]/25 dark:bg-[#FF9B51]/8">
+            <h3 className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+              <ShieldAlert aria-hidden="true" className="size-4 text-[#C96A18] dark:text-[#FFB176]" />
+              {copy.missingEvidence}
+            </h3>
+            <ul className="grid gap-1.5 text-xs text-muted-foreground">
+              {missingEvidence.map((item, index) => (
+                <li className="break-words" key={`${item}:${index}`}>• {humanizeFilterValue(item)}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -374,7 +406,7 @@ function ReportsPanel({
           <IssueEmpty text={copy.reportsEmpty} />
         ) : (
           <ul className="grid gap-6">
-            {page.items.map((report) => (
+            {page.items.map((report, index) => (
               <li className="grid min-w-0 gap-5" key={report.id}>
                 <ReportMetaHeader copy={copy} report={report} />
 
@@ -400,7 +432,11 @@ function ReportsPanel({
                     <ReportCandidateAccordion copy={copy} report={report} />
                   </div>
                 </ReportNumberedSection>
-                <ReportNumberedSection number="03" title="근거 요약">
+                <ReportNumberedSection
+                  id={index === 0 ? RCA_EVIDENCE_SUMMARY_ID : undefined}
+                  number="03"
+                  title="근거 요약"
+                >
                   <ReportEvidenceSummary copy={copy} report={report} />
                 </ReportNumberedSection>
                 <ReportNumberedSection number="04" title="근거 상세">
@@ -469,16 +505,18 @@ function ReportLine({ label, value }: { label: string; value: string }) {
 function ReportNumberedSection({
   body,
   children,
+  id,
   number,
   title,
 }: {
   body?: string;
   children?: React.ReactNode;
+  id?: string;
   number: string;
   title: string;
 }) {
   return (
-    <section className="grid min-w-0 grid-cols-[3.25rem_minmax(0,1fr)] gap-3 border-b border-dashed pb-5 last:border-b-0 last:pb-0">
+    <section className="grid min-w-0 scroll-mt-16 grid-cols-[3.25rem_minmax(0,1fr)] gap-3 border-b border-dashed pb-5 last:border-b-0 last:pb-0" id={id}>
       <span className="grid min-h-full grid-cols-[auto_auto] gap-2 self-stretch text-lg font-semibold tabular-nums leading-tight text-muted-foreground">
         <span>{number}</span>
         <span aria-hidden="true" className="h-full border-l border-foreground/45" />
@@ -534,7 +572,7 @@ function ReportCandidateAccordion({
   const selectedMissingCount = selectedCandidate.missingEvidence.length;
   return (
     <div className="grid min-w-0 gap-4">
-      <section className="grid min-w-0 gap-2 bg-[#F7F8F8] p-3 dark:bg-white/5">
+      <section className="grid min-w-0 gap-2 bg-[#FBFBFB] p-3 dark:bg-white/5">
         <div className="flex min-w-0 items-center gap-2">
           <h5 className="min-w-0 flex-1 truncate text-sm font-semibold" title={selectedCandidate.title ?? selectedCandidate.id}>
             {selectedCandidate.title ?? humanizeFilterValue(selectedCandidate.id)}
@@ -568,33 +606,33 @@ function ReportCandidateAccordion({
       </section>
       {candidateOptions.length > 0 ? (
         <section className="grid min-w-0 gap-2">
-          <h5 className="text-xs font-medium text-muted-foreground">원인 후보</h5>
-          <div className="grid border-y border-dashed">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <h5 className="text-xs font-medium text-muted-foreground">원인 후보</h5>
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{candidateOptions.length}개</span>
+          </div>
+          <div className="grid overflow-hidden border-y border-dashed">
             {candidateOptions.map((candidate) => {
         const supportingCount = candidate.supportingEvidence.length;
         const missingCount = candidate.missingEvidence.length;
         return (
           <details
-            className="group border-b border-dashed last:border-b-0 open:bg-[#F7F8F8] dark:open:bg-white/5"
+            className="group border-b border-dashed last:border-b-0 open:bg-[#FBFBFB] dark:open:bg-white/5"
             key={candidate.id}
           >
-            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
-              <span className="min-w-0 flex-1 truncate text-sm font-medium" title={candidate.title ?? candidate.id}>
+            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 truncate text-sm font-medium" title={candidate.title ?? candidate.id}>
                 {candidate.title ?? humanizeFilterValue(candidate.id)}
               </span>
-              {candidate.score !== null ? (
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {Math.round(candidate.score * 100)}%
-                </span>
-              ) : null}
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {candidate.score !== null ? `${Math.round(candidate.score * 100)}%` : "미확인"}
+              </span>
               <Sparkle
                 aria-hidden="true"
-                className="size-3.5 shrink-0 text-muted-foreground transition-colors group-open:text-[#25343F] dark:group-open:text-[#EAEFEF]"
-                fill="currentColor"
+                className="size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground/80 group-open:rotate-45 group-open:text-foreground motion-reduce:transition-none"
                 strokeWidth={1.8}
               />
             </summary>
-            <div className="grid gap-2 border-t px-3 py-3">
+            <div className="grid gap-2 border-t px-3 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out motion-reduce:animate-none">
               <p className="text-xs leading-relaxed text-muted-foreground">
                 필요한 근거 {supportingCount + missingCount}개 중 {supportingCount}개가 확인되었습니다.
               </p>
@@ -684,11 +722,15 @@ function EvidenceTokenList({
 }) {
   return (
     <section className="grid gap-1">
-      <h5 className={cn(
-        "text-xs font-medium",
-        tone === "healthy" ? "text-status-healthy" : "text-[#FF9B51] dark:text-[#FFB176]",
-      )}
+      <h5
+        className={cn(
+          "flex items-center gap-1.5 text-xs font-medium",
+          tone === "healthy" ? "text-status-healthy" : "text-foreground/80",
+        )}
       >
+        {tone === "warning" ? (
+          <ShieldAlert aria-hidden="true" className="size-3.5 text-[#C96A18] dark:text-[#FFB176]" />
+        ) : null}
         {label}
       </h5>
       <p className="break-words text-xs leading-relaxed text-muted-foreground">
@@ -908,6 +950,11 @@ function RecoveryPanel({
   selectionPendingId: string | null;
   state: SectionState<IssueRecoveryPlan>;
 }) {
+  const [openCandidateIds, setOpenCandidateIds] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    setOpenCandidateIds(null);
+  }, [selected.correlationId, state.data?.id]);
+
   const recoveryProgress = issueRecoveryProgress({
     audit,
     plan: state.data,
@@ -919,7 +966,7 @@ function RecoveryPanel({
     selectionPending: selectionPendingId !== null,
   });
   return (
-    <SectionCard title={copy.recoveryLabel}>
+    <SectionCard contentClassName="gap-5" title={copy.recoveryLabel}>
       <RecoveryProgress
         copy={copy}
         progress={recoveryProgress}
@@ -941,79 +988,206 @@ function RecoveryPanel({
         </Alert>
       ) : null}
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.recoveryUnavailable}>
-        {(plan) => (
-          <div className="grid gap-3">
-            <Badge variant="outline">{copy.statusLabel(plan.status)}</Badge>
-            {plan.candidates.length === 0 ? <IssueEmpty text={copy.sectionEmpty} /> : (
-              <ul className="grid gap-3">
-                {plan.candidates.map((candidate) => (
-                  <li className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3" key={candidate.id}>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <span className="break-words font-medium">{candidate.title}</span>
-                      {candidate.id === plan.recommendedActionId
-                        ? <Badge variant="secondary">{copy.recommended}</Badge>
-                        : null}
-                      {candidate.approvalRequired
-                        ? <Badge variant="outline">{copy.approvalRequired}</Badge>
-                        : null}
+        {(plan) => {
+          const displayPlan = plan;
+          const recommendedCandidate = displayPlan.candidates.find(({ id }) => id === displayPlan.recommendedActionId)
+            ?? displayPlan.candidates[0];
+          const candidateOptions = displayPlan.candidates.filter(({ id }) => id !== recommendedCandidate?.id);
+          const resolvedOpenCandidateIds = openCandidateIds ?? new Set<string>();
+          const toggleCandidate = (candidateId: string) => {
+            setOpenCandidateIds((current) => {
+              const next = new Set(current ?? []);
+              if (next.has(candidateId)) next.delete(candidateId);
+              else next.add(candidateId);
+              return next;
+            });
+          };
+          return (
+          <div className="grid gap-4">
+            {displayPlan.candidates.length === 0 ? <IssueEmpty text={copy.sectionEmpty} /> : (
+              <section className="grid gap-3 border-t border-dashed pt-4">
+                <div className="flex min-w-0 items-end justify-between gap-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground">권장 복구 조치</h3>
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    1개
+                  </span>
+                </div>
+                {recommendedCandidate ? (
+                  <section className="grid min-w-0 gap-3 bg-[#FBFBFB] p-3 dark:bg-white/5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h4 className="min-w-0 flex-1 truncate text-sm font-semibold" title={recommendedCandidate.title}>
+                        {recommendedCandidate.title}
+                      </h4>
+                      <Badge className="border-status-healthy/30 bg-status-healthy/10 text-status-healthy" variant="outline">
+                        {copy.recommended}
+                      </Badge>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {Math.round(recommendedCandidate.score * 100)}%
+                      </span>
                     </div>
-                    <p className="break-words text-sm text-muted-foreground">
-                      {candidate.description}
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <RecoveryFact label={copy.confidence} value={`${Math.round(candidate.score * 100)}%`} />
-                      <RecoveryFact label={copy.status} value={candidate.riskLevel} />
-                      <RecoveryFact label={copy.target} value={candidate.blastRadius} />
+                    <RecoveryCandidateDetails
+                      candidate={recommendedCandidate}
+                      capability={capability}
+                      copy={copy}
+                      onSelect={onSelect}
+                      selectionPendingId={selectionPendingId}
+                    />
+                  </section>
+                ) : null}
+                {candidateOptions.length > 0 ? (
+                  <>
+                    <div className="flex min-w-0 items-center justify-between gap-3 pt-1">
+                      <h3 className="text-xs font-semibold text-muted-foreground">다른 복구 후보</h3>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {candidateOptions.length}개
+                      </span>
                     </div>
-                    {candidate.validationChecks.length > 0 ? (
-                      <ul className="grid gap-1 text-xs text-muted-foreground">
-                        {candidate.validationChecks.map((check, index) => (
-                          <li className="flex items-start gap-1.5 break-words" key={`${check}:${index}`}>
-                            <CircleCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-healthy" />
-                            {check}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {candidate.rollbackPlan ? (
-                      <p className="rounded-lg border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                        {candidate.rollbackPlan}
-                      </p>
-                    ) : null}
-                    {capability.state === "hidden" ? null : (
-                      <Button
-                        aria-describedby={capability.state === "disabled"
-                          ? `recovery-capability-${candidate.id}`
-                          : undefined}
-                        className="enabled:cursor-pointer"
-                        disabled={capability.state === "disabled" || selectionPendingId !== null}
-                        onClick={() => onSelect(candidate.id)}
+                <ul className="grid overflow-hidden border-y border-dashed">
+                  {candidateOptions.map((candidate) => {
+                    const open = resolvedOpenCandidateIds.has(candidate.id);
+                    return (
+                      <li
+                        className={cn("min-w-0 border-b border-dashed last:border-b-0", open && "bg-[#FBFBFB]")}
+                        key={candidate.id}
+                      >
+                      <button
+                        aria-expanded={open}
+                        className={cn(
+                          "group grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-3 text-left transition-colors hover:bg-muted/35 motion-reduce:transition-none",
+                          open && "bg-muted/25",
+                        )}
+                        onClick={() => toggleCandidate(candidate.id)}
                         type="button"
                       >
-                        {selectionPendingId === candidate.id ? (
-                          <>
-                            <Spinner decorative />
-                            {copy.selectionPending}
-                          </>
-                        ) : candidate.title}
-                      </Button>
-                    )}
-                    {capability.state === "disabled" ? (
-                      <p
-                        className="text-sm text-muted-foreground"
-                        id={`recovery-capability-${candidate.id}`}
-                      >
-                        {capability.reason}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+                        <span className="min-w-0 truncate text-sm font-semibold" title={candidate.title}>
+                          {candidate.title}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {Math.round(candidate.score * 100)}%
+                          </span>
+                        </span>
+                        <Sparkle
+                          aria-hidden="true"
+                          className={cn(
+                            "size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground/80 motion-reduce:transition-none",
+                            open && "rotate-45 text-foreground",
+                          )}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+                      {open ? (
+                        <RecoveryCandidateDetails
+                          candidate={candidate}
+                          capability={capability}
+                          className="px-3 pb-3"
+                          copy={copy}
+                          onSelect={onSelect}
+                          selectionPendingId={selectionPendingId}
+                        />
+                      ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+                  </>
+                ) : null}
+              </section>
             )}
           </div>
-        )}
+          );
+        }}
       </IssueSectionFrame>
     </SectionCard>
+  );
+}
+
+function RecoveryCandidateDetails({
+  candidate,
+  capability,
+  className,
+  copy,
+  onSelect,
+  selectionPendingId,
+}: {
+  candidate: IssueRecoveryPlan["candidates"][number];
+  capability: RecoverySelectionCapability;
+  className?: string;
+  copy: IssuesSurfaceCopy;
+  onSelect: (actionId: string) => void;
+  selectionPendingId: string | null;
+}) {
+  return (
+    <div className={cn("grid min-w-0 gap-5 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out motion-reduce:animate-none", className)}>
+      <dl className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <div className="inline-flex min-w-0 items-center gap-1.5">
+          <dt className="shrink-0">조치 위험도</dt>
+          <dd className="w-fit rounded-md bg-muted/55 px-2 py-1 font-medium text-foreground/80">
+            {actionRiskLabel(candidate.riskLevel)}
+          </dd>
+        </div>
+        <span aria-hidden="true" className="text-border">|</span>
+        <div className="inline-flex min-w-0 items-center gap-1.5">
+          <dt className="shrink-0">영향 범위</dt>
+          <dd className="w-fit max-w-full truncate rounded-md bg-muted/55 px-2 py-1 font-medium text-foreground/80" title={candidate.blastRadius}>
+            {candidate.blastRadius}
+          </dd>
+        </div>
+      </dl>
+      <section className="grid gap-2 border-t pt-5">
+        <h4 className="text-xs font-medium text-muted-foreground">실행할 조치</h4>
+        <p className="break-words text-sm font-medium leading-relaxed text-foreground">{candidate.description}</p>
+      </section>
+      {candidate.validationChecks.length > 0 ? (
+        <section className="grid gap-2 border-t pt-5">
+          <h4 className="text-xs font-medium text-muted-foreground">성공 확인 기준</h4>
+          <ul className="grid gap-1 text-xs text-muted-foreground">
+            {candidate.validationChecks.map((check, index) => (
+              <li className="flex items-start gap-1.5 break-words" key={`${check}:${index}`}>
+                <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                {check}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {candidate.rollbackPlan ? (
+        <section className="grid gap-2 border-t pt-5">
+          <h4 className="text-xs font-medium text-muted-foreground">실패 시 롤백 조치</h4>
+          <p className="border-l border-foreground/20 pl-3 text-xs leading-relaxed text-muted-foreground">
+            {candidate.rollbackPlan}
+          </p>
+        </section>
+      ) : null}
+      {capability.state === "hidden" ? null : (
+        <div className="flex justify-end pt-1">
+          <Button
+            aria-describedby={capability.state === "disabled"
+              ? `recovery-capability-${candidate.id}`
+              : undefined}
+            className="enabled:cursor-pointer"
+            disabled={capability.state === "disabled" || selectionPendingId !== null}
+            onClick={() => onSelect(candidate.id)}
+            type="button"
+          >
+            {selectionPendingId === candidate.id ? (
+              <>
+                <Spinner decorative />
+                {copy.selectionPending}
+              </>
+            ) : "복구 조치 선택"}
+          </Button>
+        </div>
+      )}
+      {capability.state === "disabled" ? (
+        <p
+          className="text-sm text-muted-foreground"
+          id={`recovery-capability-${candidate.id}`}
+        >
+          {capability.reason}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1040,51 +1214,63 @@ function RecoveryProgress({
       : progress.phase === "submitting" && selectionAccepted
         ? copy.recoveryProgressAccepted
         : steps[progress.activeStep];
+  const progressTone = progress.phase === "failed"
+    ? "failed"
+    : progress.phase === "approval"
+      ? "approval"
+      : "active";
+  const progressToneClass = progressTone === "failed"
+    ? "[&_div[data-slot=progress-indicator]]:bg-[#F74720]"
+    : progressTone === "approval"
+      ? "[&_div[data-slot=progress-indicator]]:bg-[#FF9B51]"
+      : "[&_div[data-slot=progress-indicator]]:bg-[#5358E0]";
+  const activeMarkerClass = progressTone === "failed"
+    ? "border-[#F74720] bg-[#F74720] text-white shadow-[0_0_14px_rgba(247,71,32,0.22)]"
+    : progressTone === "approval"
+      ? "border-[#FF9B51] bg-[#FF9B51] text-white shadow-[0_0_14px_rgba(255,155,81,0.22)]"
+      : "border-[#5358E0] bg-[#5358E0] text-white shadow-[0_0_14px_rgba(83,88,224,0.22)]";
+  const markerAlignedProgress = progress.phase === "completed"
+    ? 100
+    : Math.min(100, Math.max(0, ((progress.activeStep + 0.5) / steps.length) * 100));
   return (
     <section
       aria-live="polite"
-      className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3"
+      className="grid min-w-0 gap-4 rounded-xl border border-foreground/15 bg-card p-4 shadow-sm"
     >
-      <div className="flex min-w-0 items-center gap-2">
-        {progress.phase === "completed" ? (
-          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-status-healthy" />
-        ) : progress.phase === "failed" ? (
-          <XCircle aria-hidden="true" className="size-4 shrink-0 text-destructive" />
-        ) : progress.phase === "approval" ? (
-          <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
-        ) : (
-          <Spinner className="size-4 shrink-0" decorative />
-        )}
-        <p className="min-w-0 flex-1 truncate text-sm font-medium" title={activeLabel}>
-          {activeLabel}
-        </p>
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold" title={activeLabel}>
+            {activeLabel}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{copy.recoveryProgressLabel}</p>
+        </div>
+        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
           {progress.phase === "failed" ? copy.recoveryProgressStopped : `${progress.progress}%`}
         </span>
       </div>
       <Progress
         aria-label={copy.recoveryProgressLabel}
-        value={progress.progress}
+        className={cn("h-1.5", progressToneClass)}
+        value={markerAlignedProgress}
         valueText={activeLabel}
       />
-      <ol className="grid min-w-0 grid-cols-5 gap-1" aria-label={copy.recoveryProgressLabel}>
+      <ol className="grid min-w-0 grid-cols-5 gap-2 border-t border-dashed pt-3" aria-label={copy.recoveryProgressLabel}>
         {steps.map((label, index) => {
           const completed = progress.phase === "completed" || index < progress.activeStep;
           const active = index === progress.activeStep;
           const failed = progress.phase === "failed" && active;
           return (
-            <li className="grid min-w-0 justify-items-center gap-1 text-center" key={label}>
+            <li className="grid min-w-0 justify-items-center gap-1.5 text-center" key={label}>
               <span className={cn(
-                "grid size-6 place-items-center rounded-full border bg-card text-[10px] font-semibold tabular-nums",
-                completed && "border-status-healthy/50 text-status-healthy",
-                active && !failed && "border-foreground bg-foreground text-background",
-                failed && "border-destructive bg-destructive text-destructive-foreground",
+                "grid size-6 place-items-center rounded-md border bg-card text-[10px] font-semibold tabular-nums text-muted-foreground",
+                completed && "border-foreground/10 bg-muted/35 text-muted-foreground/70 opacity-70",
+                active && activeMarkerClass,
               )}
               >
-                {completed ? <CircleCheck aria-hidden="true" className="size-3.5" /> : index + 1}
+                {completed ? <Check aria-hidden="true" className="size-3.5" /> : index + 1}
               </span>
               <span className={cn(
-                "w-full truncate text-[10px] leading-4 text-muted-foreground",
+                "w-full truncate text-[11px] leading-4 text-muted-foreground",
                 active && "font-medium text-foreground",
                 failed && "text-destructive",
               )} title={label}
@@ -1104,20 +1290,19 @@ function RecoveryProgress({
   );
 }
 
-function RecoveryFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border bg-card px-2.5 py-2">
-      <dt className="text-[11px] text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 truncate text-xs font-medium" title={value}>{value}</dd>
-    </div>
-  );
-}
-
-function SectionCard({ children, title }: { children: React.ReactNode; title: string }) {
+function SectionCard({
+  children,
+  contentClassName,
+  title,
+}: {
+  children: React.ReactNode;
+  contentClassName?: string;
+  title: string;
+}) {
   return (
     <Card className="gap-0 py-0">
       <CardHeader className="border-b bg-muted/45 p-4"><CardTitle>{title}</CardTitle></CardHeader>
-      <CardContent className="grid gap-3 p-4">{children}</CardContent>
+      <CardContent className={cn("grid gap-3 p-4", contentClassName)}>{children}</CardContent>
     </Card>
   );
 }
