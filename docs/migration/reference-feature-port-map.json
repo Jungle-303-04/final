@@ -510,6 +510,34 @@
         }
       }
     },
+    "reference.feature.089": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/api/bootstrap-status.test.ts",
+        "frontend/src/features/runtime-status/createRuntimeStatusAdapter.test.ts",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "src/domains/diagnostics/runtime.py#collect_runtime_diagnostics",
+          "reason": "Authenticated diagnostics batch bounded service health, event-consumer lag, provider failures, and projection counts while the public readiness endpoint remains tenant-neutral.",
+          "test": "tests/test_bootstrap_diagnostics.py#test_runtime_diagnostics_is_session_scoped_batched_and_bounded"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx#RuntimeDiagnosticsDialog",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "reason": "The shared authenticated dialog renders partial and unavailable diagnostics explicitly and never derives runtime health from hardcoded browser values.",
+          "test": "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+        }
+      }
+    },
     "reference.feature.090": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",

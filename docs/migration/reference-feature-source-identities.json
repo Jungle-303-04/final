@@ -3,6 +3,23 @@
   "sourceRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
   "identities": [
     {
+      "sourceKey": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
+      "legacyContractId": "reference.feature.089",
+      "evidence": [
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "useRuntimeStats"
+        },
+        {
+          "path": "internal/server/server.go",
+          "sha256": "e5df3ea4ea2a5a7e0c8f3e4c63527be12890b84595c909b0631bdd96fb2c4129",
+          "symbol": "handleHealth"
+        }
+      ],
+      "interaction": "The authenticated diagnostics surface refreshes bounded runtime, timeline, resource projection, and provider collection health without exposing tenant state through the public readiness probe."
+    },
+    {
       "sourceKey": "upstream-ui:nodes:drain:confirm-and-progress:v1",
       "legacyContractId": "reference.feature.174",
       "evidence": [

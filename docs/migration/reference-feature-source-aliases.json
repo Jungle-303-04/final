@@ -57,6 +57,7 @@
     "reference.feature.075": "upstream-ui:helm:release-list:scope-rbac:v1",
     "reference.feature.076": "upstream-ui:cost:overview:availability-scope:v1",
     "reference.feature.077": "upstream-ui:service-access:port-session:list-and-layout:v1",
+    "reference.feature.089": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
     "reference.feature.090": "upstream-ui:api:client-boundary:request-orchestration:v1",
     "reference.feature.092": "upstream-ui:api:client-boundary:request-orchestration:v1",
     "reference.feature.093": "upstream-ui:shell:connection-state:authorized-refresh:v1",

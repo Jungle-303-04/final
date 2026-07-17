@@ -3722,11 +3722,11 @@
     {
       "id": "reference-feature-089",
       "contractId": "reference.feature.089",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
       "legacyContractIds": [
         "reference.feature.089"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 360,
       "cells": [
@@ -3742,17 +3742,31 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/api/bootstrap-status.test.ts",
+        "frontend/src/features/runtime-status/createRuntimeStatusAdapter.test.ts",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "src/domains/diagnostics/runtime.py#collect_runtime_diagnostics",
+          "reason": "Authenticated diagnostics batch bounded service health, event-consumer lag, provider failures, and projection counts while the public readiness endpoint remains tenant-neutral.",
+          "test": "tests/test_bootstrap_diagnostics.py#test_runtime_diagnostics_is_session_scoped_batched_and_bounded"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx#RuntimeDiagnosticsDialog",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "reason": "The shared authenticated dialog renders partial and unavailable diagnostics explicitly and never derives runtime health from hardcoded browser values.",
+          "test": "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

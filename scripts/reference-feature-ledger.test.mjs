@@ -1041,6 +1041,24 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
   }
 });
 
+test("런타임 health는 공개 준비 상태와 인증 진단 경계를 분리한다", async () => {
+  const [portMap, aliases, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.089";
+  const sourceKey = "upstream-ui:bootstrap:health:runtime-diagnostics:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+});
+
 test("Helm 리비전 비교는 URL 재개와 Python artifact 증거로 완결한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
