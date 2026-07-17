@@ -1098,7 +1098,7 @@ test("노드 비용은 실제 관측·권한 범위와 가격 부재를 단일 �
   ));
 });
 
-test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차단 사유를 연결한다", async () => {
+test("설정 권한과 호스트 설정 delta는 분리된 권한 주체와 명시적 차단 사유를 연결한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
     readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
@@ -1107,6 +1107,9 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
   ]);
   const permissions = classifications
     .classifications["web/src/components/settings/MyPermissionsDialog.tsx"];
+  const permissionsInteraction = permissions.interactions.find(
+    (candidate) => candidate.sourceKey === aliases.aliases["reference.feature.134"],
+  );
   const settings = classifications
     .classifications["web/src/components/settings/SettingsDialog.tsx"];
 
@@ -1132,7 +1135,14 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
     aliases.aliases["reference.feature.223"],
     "upstream-ui:settings:prometheus:live-apply:v1",
   );
-  assert.equal(portMap.features["reference.feature.134"].deliveryStatus, "in_progress");
+  assert.equal(portMap.features["reference.feature.134"].deliveryStatus, "implemented");
+  assert.equal(portMap.features["reference.feature.134"].coverage.backend.state, "implemented");
+  assert.equal(portMap.features["reference.feature.134"].coverage.frontend.state, "implemented");
+  assert.ok(
+    portMap.features["reference.feature.134"].verification.includes(
+      "tests/test_resource_access_projection.py",
+    ),
+  );
   assert.equal(
     portMap.features["reference.feature.134"].coverage.backend.destination,
     "src/domains/shell_state/router.py#get_settings_access",
@@ -1143,7 +1153,6 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
   );
   for (const contractId of [
     "reference.feature.124",
-    "reference.feature.134",
     "reference.feature.221",
     "reference.feature.222",
   ]) {
@@ -1151,6 +1160,13 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
     assert.equal(feature.sourceKey, aliases.aliases[contractId]);
     assert.notEqual(feature.deliveryStatus, "implemented");
   }
+  const permissionsFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.134",
+  );
+  assert.equal(permissionsFeature.deliveryStatus, "implemented");
+  assert.equal(permissionsInteraction.opsiaPort.state, "in_progress");
+  assert.equal(permissionsInteraction.opsiaPort.blockedReason, null);
+  assert.match(permissionsInteraction.opsiaPort.rationale, /cluster-agent ServiceAccount/);
   const prometheusFeature = ledger.features.find(
     (candidate) => candidate.contractId === "reference.feature.223",
   );
@@ -1163,12 +1179,6 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
   assert.equal(
     portMap.features["reference.feature.223"].coverage.frontend.destination,
     "frontend/src/pages/settings/PrometheusIntegrationCard.tsx#PrometheusIntegrationCard",
-  );
-  assert.equal(
-    permissions.interactions.find((interaction) =>
-      interaction.sourceKey === "upstream-ui:settings:permissions:kubernetes-subject-rules:v1"
-    ).opsiaPort.state,
-    "blocked",
   );
   assert.equal(
     settings.interactions.find((interaction) =>

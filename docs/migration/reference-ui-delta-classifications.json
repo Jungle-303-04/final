@@ -12812,9 +12812,9 @@
               "settings.access.surface",
               "settings.access.contract"
             ],
-            "state": "blocked",
-            "blockedReason": "The cluster agent authenticates as its own service account and no delegated or impersonated Kubernetes subject identity exists for the signed-in product user, so a SelfSubjectRulesReview would report the wrong principal.",
-            "rationale": "Explicit ServiceAccount, User, Group, Role, and Namespace reverse lookups use one complete retained RBAC index in resource detail. The signed-in user's SelfSubjectRulesReview remains unavailable because the product identity is not delegated, and agent service-account rules never impersonate user permissions."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia normalizes the source whoami semantics into two explicit authorities: authenticated product-user decisions remain under opsia_rbac, while the actual outbound cluster-agent ServiceAccount execution rules come from exact retained RBAC and discovery evidence for the selected namespace. The UI labels both authorities, cancels superseded namespace reads, and fails closed when agent evidence is missing without impersonating the product user or claiming a false SelfSubjectRulesReview."
           }
         },
         {

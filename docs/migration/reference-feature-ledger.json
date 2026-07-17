@@ -5917,11 +5917,12 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
       "frontendContract": "frontend/src/features/settings/settingsContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_resource_access_projection.py",
         "tests/test_shell_state_router.py",
         "frontend/src/api/settings-access.test.ts",
         "frontend/src/features/settings/createSettingsAdapter.test.ts",
@@ -5929,17 +5930,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "consumer": "src/domains/identity/repository.py#effective_permissions_for_resource",
-          "reason": "Product RBAC decisions are implemented, but the cluster agent cannot run SelfSubjectRulesReview for the signed-in product subject.",
-          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+          "consumer": "src/domains/resource_access/projection.py#agent_execution_access_projection",
+          "reason": "The workspace-scoped response keeps signed-in product decisions under opsia_rbac and separately projects the actual cluster-agent ServiceAccount execution rules from retained outbound-agent RBAC and discovery evidence; absent, partial, or ambiguous evidence fails closed without claiming a user SelfSubjectRulesReview.",
+          "test": "tests/test_shell_state_router.py#test_settings_access_merges_product_rbac_with_agent_execution_authority"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
           "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
-          "reason": "The access panel shows explicit Kubernetes rule unavailability and never translates product permissions into Kubernetes verbs.",
+          "reason": "The selected namespace loads one typed access profile that labels product-user decisions and observed cluster-agent ServiceAccount rules as separate authorities, cancels superseded reads, and renders unavailable evidence without translating product permissions into Kubernetes verbs.",
           "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
         },
         "desktop": null,
