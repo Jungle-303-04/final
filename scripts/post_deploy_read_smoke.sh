@@ -9,16 +9,24 @@ API_BASE_URL="${API_BASE_URL:-}"
 AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 AUTH_COOKIE_JAR_OUT="${AUTH_COOKIE_JAR_OUT:-}"
+READ_CONNECT_TIMEOUT_SECONDS="${READ_CONNECT_TIMEOUT_SECONDS:-5}"
+READ_TIMEOUT_SECONDS="${READ_TIMEOUT_SECONDS:-20}"
 COOKIE_JAR="$(mktemp)"
-CLUSTERS_RESPONSE="$(mktemp)"
-RESOURCES_RESPONSE="$(mktemp)"
-trap 'rm -f "${COOKIE_JAR}" "${CLUSTERS_RESPONSE}" "${RESOURCES_RESPONSE}"' EXIT
+RESPONSE_DIR="$(mktemp -d)"
+trap 'rm -f "${COOKIE_JAR}"; rm -rf "${RESPONSE_DIR}"' EXIT
 
 for variable in \
   API_BASE_URL \
   AUTH_EMAIL \
   AUTH_PASSWORD; do
   require_env "${variable}"
+done
+
+for timeout_value in "${READ_CONNECT_TIMEOUT_SECONDS}" "${READ_TIMEOUT_SECONDS}"; do
+  if ! [[ "${timeout_value}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "read smoke timeout must be a positive integer" >&2
+    exit 1
+  fi
 done
 
 if [ -n "${AUTH_COOKIE_JAR_OUT}" ] && [[ "${AUTH_COOKIE_JAR_OUT}" != /* ]]; then
@@ -29,30 +37,68 @@ fi
 echo "==> post-deploy operator login"
 login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"
 
-echo "==> post-deploy cluster and resource reads"
-curl --fail --silent --show-error \
-  --cookie "${COOKIE_JAR}" \
-  --output "${CLUSTERS_RESPONSE}" \
-  "${API_BASE_URL}/clusters?limit=100"
-curl --fail --silent --show-error \
-  --cookie "${COOKIE_JAR}" \
-  --output "${RESOURCES_RESPONSE}" \
-  "${API_BASE_URL}/resources?limit=1"
+probe_index=0
 
-python3 - "${CLUSTERS_RESPONSE}" "${RESOURCES_RESPONSE}" <<'PY'
+probe_read() {
+  local label="$1"
+  local path="$2"
+  local expected_type="$3"
+  local expected_key="$4"
+  local output_file
+  local elapsed
+
+  probe_index=$((probe_index + 1))
+  output_file="${RESPONSE_DIR}/$(printf '%02d' "${probe_index}").json"
+  elapsed="$(curl --fail --silent --show-error \
+    --connect-timeout "${READ_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${READ_TIMEOUT_SECONDS}" \
+    --cookie "${COOKIE_JAR}" \
+    --output "${output_file}" \
+    --write-out '%{time_total}' \
+    "${API_BASE_URL}${path}")"
+
+  python3 - "${output_file}" "${label}" "${expected_type}" "${expected_key}" "${elapsed}" <<'PY'
 import json
 import sys
 
-with open(sys.argv[1], encoding="utf-8") as handle:
-    clusters = json.load(handle)
-with open(sys.argv[2], encoding="utf-8") as handle:
-    resources = json.load(handle)
-
-if not isinstance(clusters.get("clusters"), list):
-    raise SystemExit("cluster list response is invalid")
-if not isinstance(resources.get("items"), list):
-    raise SystemExit("resource list response is invalid")
+path, label, expected_type, expected_key, elapsed = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    document = json.load(handle)
+if expected_type == "object":
+    if not isinstance(document, dict) or expected_key not in document:
+        raise SystemExit(f"{label} response contract is invalid")
+elif expected_type == "array":
+    if not isinstance(document, list):
+        raise SystemExit(f"{label} response contract is invalid")
+else:
+    raise SystemExit(f"{label} smoke contract type is invalid")
+try:
+    measured = float(elapsed)
+except ValueError as exc:
+    raise SystemExit(f"{label} latency measurement is invalid") from exc
+if measured < 0:
+    raise SystemExit(f"{label} latency measurement is invalid")
 PY
+  printf 'read smoke passed: %s latency=%ss\n' "${label}" "${elapsed}"
+}
+
+echo "==> post-deploy operational surface reads"
+probe_read "session" "/auth/session" object user_id
+probe_read "bootstrap diagnostics" "/diagnostics" object observed_at
+probe_read "version check" "/version-check" object current_version
+probe_read "clusters" "/clusters?limit=100" object clusters
+probe_read "resources" "/resources?limit=1" object items
+probe_read "issues" "/dashboard/rca/issues?contract_version=2&limit=1" object items
+probe_read "applications" "/applications?limit=1" object applications
+probe_read "timeline" "/timeline/capabilities" object selected_source_mode
+probe_read "traffic" "/traffic/flows?limit=1" object scope_coverage
+probe_read "traffic sources" "/traffic/sources" object clusters
+probe_read "helm" "/helm/releases" object releases
+probe_read "gitops" "/gitops/overview?limit=1" object items
+probe_read "checks" "/checks/overview" object scope_coverage
+probe_read "cost overview" "/cost/overview?range=6h" object scope_coverage
+probe_read "cost nodes" "/cost/nodes?limit=1" object items
+probe_read "alerts" "/alert-events?limit=1" array ignored
 
 if [ -n "${AUTH_COOKIE_JAR_OUT}" ]; then
   rm -f -- "${AUTH_COOKIE_JAR_OUT}"

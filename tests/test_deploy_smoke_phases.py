@@ -187,10 +187,12 @@ def _write_post_deploy_read_fakes(
         'url=""\n'
         'output=""\n'
         'cookie_jar=""\n'
+        "write_out=0\n"
         'previous=""\n'
         'for argument in "$@"; do\n'
         '  if [ "${previous}" = "--output" ]; then output="${argument}"; fi\n'
         '  if [ "${previous}" = "-c" ]; then cookie_jar="${argument}"; fi\n'
+        '  if [ "${argument}" = "--write-out" ]; then write_out=1; fi\n'
         '  case "${argument}" in http://*|https://*) url="${argument}" ;; esac\n'
         '  previous="${argument}"\n'
         "done\n"
@@ -210,8 +212,23 @@ def _write_post_deploy_read_fakes(
             'case "${url}" in\n'
             "  */clusters*) printf '%s' '{\"clusters\":[]}' >\"${output}\" ;;\n"
             "  */resources*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
+            '  */auth/session) printf \'%s\' \'{"user_id":"user-1"}\' >"${output}" ;;\n'
+            '  */diagnostics) printf \'%s\' \'{"observed_at":"2026-07-18T00:00:00Z"}\' >"${output}" ;;\n'
+            '  */version-check) printf \'%s\' \'{"current_version":"1.0.0"}\' >"${output}" ;;\n'
+            "  */dashboard/rca/issues*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
+            "  */applications*) printf '%s' '{\"applications\":[]}' >\"${output}\" ;;\n"
+            '  */timeline/capabilities) printf \'%s\' \'{"selected_source_mode":"all"}\' >"${output}" ;;\n'
+            "  */traffic/flows*) printf '%s' '{\"scope_coverage\":{}}' >\"${output}\" ;;\n"
+            "  */traffic/sources*) printf '%s' '{\"clusters\":[]}' >\"${output}\" ;;\n"
+            "  */helm/releases*) printf '%s' '{\"releases\":[]}' >\"${output}\" ;;\n"
+            "  */gitops/overview*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
+            "  */checks/overview*) printf '%s' '{\"scope_coverage\":{}}' >\"${output}\" ;;\n"
+            "  */cost/overview*) printf '%s' '{\"scope_coverage\":{}}' >\"${output}\" ;;\n"
+            "  */cost/nodes*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
+            "  */alert-events*) printf '%s' '[]' >\"${output}\" ;;\n"
             "  *) exit 22 ;;\n"
             "esac\n"
+            'if [ "${write_out}" = "1" ]; then printf \'0.010000\'; fi\n'
             if reads_ok
             else "printf '%s' '{\"invalid\":true}' >\"${output}\"\n"
         ),
@@ -268,13 +285,31 @@ def test_post_deploy_read_smoke_logs_in_and_reads_current_catalogs(tmp_path: Pat
 
     assert result.returncode == 0, result.stderr
     assert "post-deploy operator login" in result.stdout
-    assert "post-deploy cluster and resource reads" in result.stdout
+    assert "post-deploy operational surface reads" in result.stdout
     assert not strict_log.exists()
     curl_calls = curl_log.read_text(encoding="utf-8").splitlines()
-    assert len(curl_calls) == 3
+    assert len(curl_calls) == 17
     assert "/auth/login" in curl_calls[0]
-    assert "/clusters?limit=100" in curl_calls[1]
-    assert "/resources?limit=1" in curl_calls[2]
+    assert any("/auth/session" in call for call in curl_calls[1:])
+    assert any("/diagnostics" in call for call in curl_calls[1:])
+    assert any("/version-check" in call for call in curl_calls[1:])
+    assert any("/clusters?limit=100" in call for call in curl_calls[1:])
+    assert any("/resources?limit=1" in call for call in curl_calls[1:])
+    assert any(
+        "/dashboard/rca/issues?contract_version=2&limit=1" in call for call in curl_calls[1:]
+    )
+    assert any("/applications?limit=1" in call for call in curl_calls[1:])
+    assert any("/timeline/capabilities" in call for call in curl_calls[1:])
+    assert any("/traffic/flows?limit=1" in call for call in curl_calls[1:])
+    assert any("/traffic/sources" in call for call in curl_calls[1:])
+    assert any("/helm/releases" in call for call in curl_calls[1:])
+    assert any("/gitops/overview?limit=1" in call for call in curl_calls[1:])
+    assert any("/checks/overview" in call for call in curl_calls[1:])
+    assert any("/cost/overview?range=6h" in call for call in curl_calls[1:])
+    assert any("/cost/nodes?limit=1" in call for call in curl_calls[1:])
+    assert any("/alert-events?limit=1" in call for call in curl_calls[1:])
+    assert all("--connect-timeout 5" in call for call in curl_calls[1:])
+    assert all("--max-time 20" in call for call in curl_calls[1:])
     handoff = tmp_path / "auth-cookie.jar"
     assert handoff.stat().st_mode & 0o777 == 0o600
     assert "session-token" in handoff.read_text(encoding="utf-8")
