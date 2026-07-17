@@ -15,6 +15,8 @@ KUBERNETES_SERVICEACCOUNT_TOKEN_PATH = f"{KUBERNETES_SERVICEACCOUNT_DIR}/token"
 KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH = f"{KUBERNETES_SERVICEACCOUNT_DIR}/ca.crt"
 KUBERNETES_API_TIMEOUT_SECONDS_ENV = "KUBERNETES_API_TIMEOUT_SECONDS"  # k8s API 타임아웃 초(기본 5)
 KUBERNETES_API_TIMEOUT_SECONDS = int(env(KUBERNETES_API_TIMEOUT_SECONDS_ENV, "5"))
+POD_NODE_FIELD_SELECTOR = "spec.nodeName"
+NODE_SCOPE_REQUIRED = "node_name is required for bounded pod collection"
 
 # collector 전용 payload 모델이 굳기 전까지 helper 시그니처를 짧게 유지하려는 로컬 alias.
 JsonObject = dict[str, object]
@@ -31,8 +33,16 @@ class KubernetesApiClient:
         token = Path(KUBERNETES_SERVICEACCOUNT_TOKEN_PATH).read_text(encoding="utf-8").strip()
         return {"Authorization": f"Bearer {token}"}
 
-    async def list_pods(self) -> JsonObject:
-        # /api/v1/pods 는 cluster 전체 PodList 반환.
+    async def list_pods_on_node(self, node_name: str) -> JsonObject:
+        """Return only pods assigned to one exact node.
+
+        The node collector is a cluster-agent-managed bounded subworker.  It
+        must never download a cluster-wide PodList and filter it locally.
+        """
+
+        normalized_node_name = node_name.strip()
+        if not normalized_node_name:
+            raise ValueError(NODE_SCOPE_REQUIRED)
         async with httpx.AsyncClient(
             timeout=KUBERNETES_API_TIMEOUT_SECONDS,
             verify=KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
@@ -40,6 +50,7 @@ class KubernetesApiClient:
             response = await client.get(
                 f"{self.base_url()}/api/v1/pods",
                 headers=self.auth_headers(),
+                params={"fieldSelector": f"{POD_NODE_FIELD_SELECTOR}={normalized_node_name}"},
             )
             response.raise_for_status()
             return response.json()

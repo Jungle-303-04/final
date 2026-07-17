@@ -27,6 +27,7 @@ from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     MetricQueryPresetUpsertRequest,
     MetricWidgetUpsertRequest,
+    PrometheusQueryDefinition,
 )
 from packages.contracts.gateway.responses import (
     AgentDebugQueryResponse,
@@ -79,13 +80,14 @@ async def queue_metrics_validation(
         raise HTTPException(status_code=422, detail="explicit cluster_id is required")
     workspace_id = _workspace_id(current)
     _require_evidence_access(db, current, workspace_id, payload.cluster_id)
-    source = payload.query.get("source")
-    query = payload.query.get("query")
-    if source != "prometheus" or not isinstance(query, str) or not query.strip():
+    try:
+        query = PrometheusQueryDefinition.model_validate(payload.query)
+    except ValueError as exc:
         raise HTTPException(
             status_code=422,
-            detail="Prometheus agent query is required",
-        )
+            detail="Prometheus agent query is invalid",
+        ) from exc
+    payload = payload.model_copy(update={"query": query.model_dump(exclude_none=True)})
     queued = queue_debug_query(
         db,
         payload,

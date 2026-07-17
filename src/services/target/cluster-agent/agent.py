@@ -739,7 +739,6 @@ class TargetClusterAgent:
                     cluster_id=self.cluster_id,
                     transport=kubernetes_transport,
                 ),
-                PrometheusMetricsProvider.from_config(env),
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
                 MetadataProvider.from_config(env),
@@ -842,7 +841,10 @@ class TargetClusterAgent:
                 provider_key,
                 base_policy.evidence.providers.get(
                     provider_key,
-                    self.default_policy.evidence.providers[provider_key],
+                    self.default_policy.evidence.providers.get(
+                        provider_key,
+                        EvidenceProviderPolicy(enabled=False),
+                    ),
                 ),
             )
             provider_intervals[provider_key] = provider_policy.interval_seconds
@@ -884,6 +886,8 @@ class TargetClusterAgent:
         revision = provider_policy.configuration_revision if provider_policy else None
         operation_id = provider_policy.configuration_operation_id if provider_policy else None
         if revision is None or operation_id is None:
+            self.evidence_collector.remove_provider("metrics")
+            self.evidence_scheduler.unregister_provider("metrics")
             self.prometheus_probe_attempts.clear()
             self.prometheus_integration_status = {
                 "state": "unconfigured",
@@ -924,6 +928,40 @@ class TargetClusterAgent:
             self.prometheus_integration_status = failed
             raise RuntimeError(exc.code) from exc
 
+        previous_provider = self.evidence_collector.providers.get("metrics")
+        previous_scheduled = "metrics" in self.evidence_scheduler.provider_keys
+        previous_worker_count = self.evidence_scheduler.provider_worker_counts.get("metrics", 0)
+        previous_interval = self.evidence_scheduler.provider_intervals.get(
+            "metrics", provider_policy.interval_seconds
+        )
+        previous_enabled = "metrics" in self.evidence_scheduler.enabled_provider_keys
+
+        def rollback_local_provider() -> None:
+            if previous_provider is None:
+                self.evidence_collector.remove_provider("metrics")
+            else:
+                self.evidence_collector.replace_provider(previous_provider)
+            if previous_scheduled:
+                self.evidence_scheduler.register_provider(
+                    "metrics",
+                    worker_count=previous_worker_count,
+                    interval_seconds=previous_interval,
+                    enabled=previous_enabled,
+                )
+            else:
+                self.evidence_scheduler.unregister_provider("metrics")
+
+        try:
+            self.evidence_collector.replace_provider(provider)
+            self.evidence_scheduler.register_provider(
+                "metrics",
+                worker_count=provider_policy.min_workers,
+                interval_seconds=provider_policy.interval_seconds,
+                enabled=provider_policy.enabled,
+            )
+        except Exception:
+            rollback_local_provider()
+            raise
         try:
             await client.report_prometheus_integration_status(
                 {
@@ -933,8 +971,8 @@ class TargetClusterAgent:
                 }
             )
         except Exception as exc:
+            rollback_local_provider()
             raise RuntimeError("prometheus_status_report_failed") from exc
-        self.evidence_collector.replace_provider(provider)
         self.prometheus_probe_attempts.clear()
         self.prometheus_integration_status = {
             "state": "connected",

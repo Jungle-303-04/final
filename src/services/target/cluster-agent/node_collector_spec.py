@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.target import NODE_COLLECTOR_SERVICE_ACCOUNT_NAME
 
 
 def node_collector_daemonset(
@@ -40,6 +41,7 @@ def node_collector_daemonset(
                     "labels": labels,
                 },
                 "spec": {
+                    "serviceAccountName": NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
                     "tolerations": [{"operator": "Exists"}],
                     "containers": [
                         node_collector_container(

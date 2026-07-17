@@ -13,7 +13,12 @@ from node_collector_spec import node_collector_daemonset
 
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.target import require_target_image_digest
+from packages.contracts.target import (
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+    require_target_image_digest,
+)
 
 
 class NodeCollectorManagerConfig:
@@ -36,6 +41,7 @@ class NodeCollectorManagerConfig:
     NODE_COLLECTOR_CREATED_MESSAGE = "node collector daemonset created"
     NODE_COLLECTOR_PATCHED_MESSAGE = "node collector daemonset reconciled"
     NODE_COLLECTOR_PENDING_MESSAGE = "node collector rollout pending exact image digest"
+    NODE_COLLECTOR_IDENTITY_PENDING_MESSAGE = "node collector identity requires administrator apply"
     NODE_COLLECTOR_DRY_RUN_MESSAGE = "kubernetes api not configured; node collector dry-run only"
     NODE_COLLECTOR_DISABLED_MESSAGE = "node collector reconcile disabled"
     NODE_COLLECTOR_IMAGE_REQUIRED_MESSAGE = "node collector image is required"
@@ -93,6 +99,28 @@ class NodeCollectorManager:
         collection_url = f"{base_url}/apis/apps/v1/namespaces/{self.namespace}/daemonsets"
         resource_url = f"{collection_url}/{NodeCollectorManagerConfig.NODE_COLLECTOR_NAME}"
         async with kubernetes_client(self.transport) as client:
+            identity_urls = (
+                (
+                    f"{base_url}/api/v1/namespaces/{self.namespace}/serviceaccounts/"
+                    f"{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}"
+                ),
+                (
+                    f"{base_url}/apis/rbac.authorization.k8s.io/v1/clusterroles/"
+                    f"{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}"
+                ),
+                (
+                    f"{base_url}/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/"
+                    f"{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}"
+                ),
+            )
+            for identity_url in identity_urls:
+                identity = await client.get(identity_url, headers=kubernetes_headers(token))
+                if identity.status_code == 404:
+                    return (
+                        False,
+                        NodeCollectorManagerConfig.NODE_COLLECTOR_IDENTITY_PENDING_MESSAGE,
+                    )
+                identity.raise_for_status()
             current = await client.get(resource_url, headers=kubernetes_headers(token))
             if current.status_code == 404:
                 response = await client.post(

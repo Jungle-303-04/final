@@ -186,6 +186,7 @@ BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
 CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 AGENT_STATUS_NOT_REGISTERED = "not_registered"
 AGENT_STATUS_PENDING_INSTALL = ClusterRegistrationStatus.PENDING_INSTALL.value
+AGENT_STATUS_INSTALL_FAILED = ClusterRegistrationStatus.INSTALL_FAILED.value
 AGENT_STATUS_INSTALL_EXPIRED = ClusterRegistrationStatus.INSTALL_EXPIRED.value
 CONCRETE_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks", "kind"})
 GENERIC_ONPREM_PROVIDERS = frozenset({"existing-k8s", "minikube", "onprem"})
@@ -342,7 +343,6 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
         updates["install_sample_workload"] = False
         updates["control_namespaces"] = payload.control_namespaces or SANDBOX_NAMESPACE
         for telemetry_field in (
-            "prometheus_base_url",
             "loki_base_url",
             "tempo_base_url",
             "otel_traces_endpoint",
@@ -762,11 +762,16 @@ def install_response(
     connect_expires_at: str | None = None,
 ) -> TargetInstallResponse:
     bootstrap_command = bootstrap_command_for(payload, agent_token)
+    applied = apply_output is not None
     return TargetInstallResponse(
         registered=True,
         cluster_id=payload.cluster_id,
-        status=ClusterRegistrationStatus.PENDING_INSTALL.value,
-        applied=apply_output is not None,
+        status=(
+            ClusterRegistrationStatus.INSTALL_APPLIED.value
+            if applied
+            else ClusterRegistrationStatus.PENDING_INSTALL.value
+        ),
+        applied=applied,
         apply_output=apply_output,
         install_manifest=manifest,
         agent_token=agent_token,
@@ -775,7 +780,7 @@ def install_response(
         bootstrap_steps=bootstrap_steps_for(payload, bootstrap_command),
         connect_timeout_seconds=connect_timeout_seconds,
         connect_expires_at=connect_expires_at,
-        connection_stage="token_issued",
+        connection_stage="awaiting_install" if applied else "token_issued",
         management_access=management_access_response(),
     )
 
@@ -814,10 +819,15 @@ def registration_connection_status(
         return AGENT_STATUS_NEVER_CONNECTED
     status = str(registration.get("status") or "")
     expires_at = parse_timestamp(registration_connect_expires_at(registration))
-    if status == ClusterRegistrationStatus.PENDING_INSTALL.value:
+    if status in {
+        ClusterRegistrationStatus.PENDING_INSTALL.value,
+        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+    }:
         if expires_at is not None and datetime.now(UTC) > expires_at:
             return AGENT_STATUS_INSTALL_EXPIRED
         return AGENT_STATUS_PENDING_INSTALL
+    if status == ClusterRegistrationStatus.INSTALL_FAILED.value:
+        return AGENT_STATUS_INSTALL_FAILED
     if status == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
         return AGENT_STATUS_INSTALL_EXPIRED
     return agent_status
@@ -893,6 +903,8 @@ def cluster_connection_stage(
         return "expired"
     if connection_status == AGENT_STATUS_PENDING_INSTALL:
         return "awaiting_install"
+    if connection_status == AGENT_STATUS_INSTALL_FAILED:
+        return "error"
     return "error"
 
 
@@ -1109,11 +1121,11 @@ async def register_target(
         agent_token,
         agent_envelope_private_key,
     )
-    apply_output = (
-        apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
-        if scoped_payload.apply
-        else None
-    )
+    status_updater = getattr(db, "update_cluster_registration_status", None)
+    if scoped_payload.apply and not callable(status_updater):
+        raise HTTPException(
+            status_code=503, detail="cluster registration status update unavailable"
+        )
     connect_timeout_seconds = target_registration_connect_timeout_seconds()
     created_at = datetime.now(UTC)
     connect_expires_at = connect_expires_at_from(created_at, connect_timeout_seconds)
@@ -1123,7 +1135,22 @@ async def register_target(
 
     # 클러스터 등록·정책·desired-state·이벤트 스테이징을 한 트랜잭션으로 —
     # 부분 실패 시 정책/desired-state 없는 반쪽 등록(고아)이 남지 않음.
-    with unit_of_work_or_null(db):
+    with unit_of_work_or_null(db) as registration_connection:
+        # 동시 등록은 같은 클러스터 advisory lock 아래에서 재확인해 후행 upsert가
+        # 먼저 commit된 agent key를 회전시키거나 두 agent를 apply하지 못하게 한다.
+        registration_lock = getattr(db, "lock_cluster_policy_for_update", None)
+        if callable(registration_lock):
+            registration_lock(
+                workspace_id,
+                scoped_payload.cluster_id,
+                conn=registration_connection,
+            )
+        registration_getter = getattr(db, "get_cluster_registration", None)
+        if (
+            callable(registration_getter)
+            and registration_getter(workspace_id, scoped_payload.cluster_id) is not None
+        ):
+            raise HTTPException(status_code=409, detail="cluster_id is already registered")
         db.register_target_cluster(
             {
                 "workspace_id": workspace_id,
@@ -1168,6 +1195,27 @@ async def register_target(
                 requested_by=current.user_id,
             )
         )
+
+    # 외부 bootstrap은 pending 등록 commit 뒤에만 실행한다. kubectl apply는 같은
+    # manifest 재시도에 멱등이며, 부분 실패해도 저장된 per-cluster key를 유지한다.
+    apply_output: str | None = None
+    if scoped_payload.apply:
+        try:
+            apply_output = apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
+        except Exception:
+            with unit_of_work_or_null(db):
+                status_updater(
+                    workspace_id,
+                    scoped_payload.cluster_id,
+                    ClusterRegistrationStatus.INSTALL_FAILED.value,
+                )
+            raise
+        with unit_of_work_or_null(db):
+            status_updater(
+                workspace_id,
+                scoped_payload.cluster_id,
+                ClusterRegistrationStatus.INSTALL_APPLIED.value,
+            )
     return install_response(
         scoped_payload,
         manifest,
@@ -1234,6 +1282,8 @@ async def reissue_cluster_connect_command(
     status = str(registration.get("status") or "")
     if status not in {
         ClusterRegistrationStatus.PENDING_INSTALL.value,
+        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+        ClusterRegistrationStatus.INSTALL_FAILED.value,
         ClusterRegistrationStatus.INSTALL_EXPIRED.value,
     }:
         raise HTTPException(

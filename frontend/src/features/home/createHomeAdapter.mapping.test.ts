@@ -88,6 +88,43 @@ describe("canonical Home adapter mapping", () => {
     });
   });
 
+  it("maps durable agent installation outcomes without inventing a ready cluster", async () => {
+    const applied = {
+      ...CLUSTER_LIST.clusters[0],
+      cluster_id: "cluster-applied",
+      status: "install_applied",
+      connection_status: "pending_install",
+      connection_stage: "awaiting_install" as const,
+    };
+    const failed = {
+      ...CLUSTER_LIST.clusters[0],
+      cluster_id: "cluster-failed",
+      status: "install_failed",
+      connection_status: "install_failed",
+      connection_stage: "error" as const,
+    };
+    const dependencies = endpoints({
+      listClusters: vi.fn(async () => ({ clusters: [applied, failed] })),
+    });
+
+    await expect(createHomeAdapter(dependencies).listClusterChoices()).resolves.toMatchObject({
+      clusters: [
+        {
+          id: "cluster-applied",
+          registrationState: "pending",
+          connectionState: "pending",
+          connectionStage: "awaiting_install",
+        },
+        {
+          id: "cluster-failed",
+          registrationState: "expired",
+          connectionState: "offline",
+          connectionStage: "error",
+        },
+      ],
+    });
+  });
+
   it("maps cluster health, usage, workloads, warnings, and incidents", async () => {
     const result = await createHomeAdapter(endpoints()).loadClusterOverview("cluster-1");
 

@@ -139,8 +139,6 @@ spec:
               value: "false"
             - name: OTEL_SERVICE_NAME
               value: "target-cluster-agent"
-            - name: PROMETHEUS_BASE_URL
-              value: ""
             - name: LOKI_BASE_URL
               value: ""
             - name: TEMPO_BASE_URL

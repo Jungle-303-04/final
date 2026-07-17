@@ -6,6 +6,7 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi import HTTPException
 
 from domains.dashboard.router import (
@@ -201,6 +202,7 @@ def test_metrics_validate_queues_agent_only_prometheus_query_and_operation_event
             "query": {
                 "source": "prometheus",
                 "name": "promql_validation",
+                "description": "",
                 "query": "up",
                 "range_seconds": 300,
                 "step_seconds": 30,
@@ -295,10 +297,51 @@ def test_metrics_validate_rejects_non_prometheus_agent_query() -> None:
             )
         except HTTPException as exc:
             assert exc.status_code == 422
-            assert exc.detail == "Prometheus agent query is required"
+            assert exc.detail == "Prometheus agent query is invalid"
         else:
             raise AssertionError("expected HTTPException")
 
+        assert db.commands == []
+        assert operation_events.published == []
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        {"source": "prometheus", "query": "up"},
+        {
+            "source": "prometheus",
+            "name": "promql_validation",
+            "query": "up",
+            "base_url": "http://169.254.169.254",
+        },
+        {
+            "source": "prometheus",
+            "name": "promql_validation",
+            "query": "up",
+            "range_seconds": 60,
+            "step_seconds": 61,
+        },
+    ],
+)
+def test_metrics_validate_rejects_noncanonical_or_destination_overriding_query(
+    query: dict[str, object],
+) -> None:
+    async def run() -> None:
+        db = MetricPresetDb()
+        operation_events = MetricOperationEvents()
+        with pytest.raises(HTTPException) as exc:
+            await queue_metrics_validation(
+                AgentDebugQueryRequest(cluster_id="cluster-1", query=query),
+                current=_current_session(),
+                db=db,
+                operation_events=operation_events,
+            )
+
+        assert exc.value.status_code == 422
+        assert exc.value.detail == "Prometheus agent query is invalid"
         assert db.commands == []
         assert operation_events.published == []
 

@@ -5,7 +5,15 @@ from packages.config.realtime import (
     DEFAULT_REALTIME_GATEWAY_NODEPORT as DEFAULT_REALTIME_GATEWAY_NODEPORT,
 )
 from packages.config.settings import env
-from packages.contracts.gateway import requests as gateway_requests
+from packages.contracts.gateway.requests import (
+    DEFAULT_LOKI_BASE_URL as DEFAULT_LOKI_BASE_URL,
+)
+from packages.contracts.gateway.requests import (
+    DEFAULT_OTEL_SERVICE_NAME as DEFAULT_OTEL_SERVICE_NAME,
+)
+from packages.contracts.gateway.requests import (
+    DEFAULT_TEMPO_BASE_URL as DEFAULT_TEMPO_BASE_URL,
+)
 from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HELM_RELEASE_OPERATION_CAPABILITY,
@@ -17,15 +25,9 @@ from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
 DEFAULT_MANAGEMENT_BASE_URL = ""
-# 관측 스택 기본 주소는 contracts 가 유일한 정의 지점 — 여기서는 re-export 만 함.
-DEFAULT_PROMETHEUS_BASE_URL = gateway_requests.DEFAULT_PROMETHEUS_BASE_URL
-DEFAULT_LOKI_BASE_URL = gateway_requests.DEFAULT_LOKI_BASE_URL
-DEFAULT_TEMPO_BASE_URL = gateway_requests.DEFAULT_TEMPO_BASE_URL
-DEFAULT_OTEL_SERVICE_NAME = gateway_requests.DEFAULT_OTEL_SERVICE_NAME
 DEFAULT_OTEL_TRACES_ENDPOINT = ""
 
 MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
-PROMETHEUS_BASE_URL_ENV = "PROMETHEUS_BASE_URL"
 LOKI_BASE_URL_ENV = "LOKI_BASE_URL"
 TEMPO_BASE_URL_ENV = "TEMPO_BASE_URL"
 OTEL_SERVICE_NAME_ENV = "OTEL_SERVICE_NAME"

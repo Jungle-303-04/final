@@ -64,7 +64,11 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import ClusterSummary
+from packages.contracts.identity import ClusterRegistrationStatus
 from packages.contracts.target import (
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
     TARGET_RBAC_MANIFEST_VERSION,
     TARGET_RBAC_VERSION_ANNOTATION,
 )
@@ -85,10 +89,37 @@ class StubDb:
         self.registered: list[dict[str, object]] = []
         self.desired_states: list[dict[str, object]] = []
         self.policy: dict[str, object] | None = None
+        self.registration_status_updates: list[str] = []
 
     def register_target_cluster(self, payload: dict[str, object]) -> dict[str, object]:
         self.registered.append(payload)
         return payload
+
+    def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, object] | None:
+        return next(
+            (
+                registration
+                for registration in self.registered
+                if registration["workspace_id"] == workspace_id
+                and registration["cluster_id"] == cluster_id
+            ),
+            None,
+        )
+
+    def update_cluster_registration_status(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        status: str,
+    ) -> None:
+        registration = self.get_cluster_registration(workspace_id, cluster_id)
+        assert registration is not None
+        registration["status"] = status
+        self.registration_status_updates.append(status)
 
     def upsert_target_desired_states(
         self,
@@ -412,9 +443,10 @@ class StubPreflightDb(StubClusterDb):
 
 
 class StubPendingClusterDb(StubClusterDb):
-    def __init__(self, expires_at: str) -> None:
+    def __init__(self, expires_at: str, *, status: str = "pending_install") -> None:
         super().__init__()
         self.expires_at = expires_at
+        self.registration_status = status
 
     def list_cluster_agent_statuses(
         self,
@@ -435,7 +467,7 @@ class StubPendingClusterDb(StubClusterDb):
             "cluster_id": "cluster-1",
             "name": "prod",
             "environment": "production",
-            "status": "pending_install",
+            "status": self.registration_status,
             "settings": {
                 "cloud_provider": "existing-k8s",
                 "connect_timeout_seconds": 1800,
@@ -480,7 +512,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert "kind: DaemonSet" not in manifest
     assert "cluster-agent-target-manage" in manifest
     assert 'MANAGEMENT_BASE_URL\n              value: "http://management.local:30080"' in manifest
-    assert 'PROMETHEUS_BASE_URL: "http://prometheus.target.svc:9090"' in manifest
+    assert "PROMETHEUS_BASE_URL" not in manifest
     assert 'LOKI_BASE_URL: "http://loki-gateway.target.svc"' in manifest
     assert 'TEMPO_BASE_URL: "http://tempo.target.svc:3200"' in manifest
     assert (
@@ -549,6 +581,95 @@ def test_target_install_manifest_versions_admin_applied_rbac() -> None:
     }
 
 
+def test_node_collector_uses_dedicated_minimal_identity_in_dynamic_and_static_manifests() -> None:
+    dynamic_documents = [
+        item
+        for item in yaml.safe_load_all(target_install_manifest(target_request(), "agent-secret"))
+        if isinstance(item, dict)
+    ]
+    static_documents = [
+        item
+        for item in yaml.safe_load_all(
+            (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text()
+        )
+        if isinstance(item, dict)
+    ]
+
+    def resource(documents: list[dict[str, object]], kind: str, name: str) -> dict[str, object]:
+        return next(
+            item
+            for item in documents
+            if item.get("kind") == kind
+            and isinstance(item.get("metadata"), dict)
+            and item["metadata"].get("name") == name
+        )
+
+    dynamic_service_account = resource(
+        dynamic_documents,
+        "ServiceAccount",
+        NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+    )
+    dynamic_role = resource(
+        dynamic_documents,
+        "ClusterRole",
+        NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    )
+    dynamic_binding = resource(
+        dynamic_documents,
+        "ClusterRoleBinding",
+        NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    )
+
+    assert dynamic_service_account["metadata"] == {
+        "name": NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+        "namespace": "target",
+    }
+    assert dynamic_role["rules"] == [
+        {
+            "apiGroups": [""],
+            "resources": ["pods"],
+            "verbs": ["get", "list"],
+        }
+    ]
+    assert dynamic_binding["roleRef"] == {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    }
+    assert dynamic_binding["subjects"] == [
+        {
+            "kind": "ServiceAccount",
+            "name": NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+            "namespace": "target",
+        }
+    ]
+
+    for kind, name in (
+        ("ServiceAccount", NODE_COLLECTOR_SERVICE_ACCOUNT_NAME),
+        ("ClusterRole", NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME),
+        ("ClusterRoleBinding", NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME),
+    ):
+        dynamic = resource(dynamic_documents, kind, name)
+        static = resource(static_documents, kind, name)
+        for key in ("metadata", "rules", "roleRef", "subjects"):
+            if key in dynamic:
+                assert static[key] == dynamic[key]
+
+
+def test_node_collector_identity_is_absent_when_collector_is_disabled() -> None:
+    request = target_request().model_copy(update={"install_node_collector": False})
+
+    manifest = target_install_manifest(request, "agent-secret")
+    resource_names = {
+        item.get("metadata", {}).get("name")
+        for item in yaml.safe_load_all(manifest)
+        if isinstance(item, dict) and isinstance(item.get("metadata"), dict)
+    }
+
+    assert NODE_COLLECTOR_SERVICE_ACCOUNT_NAME not in resource_names
+    assert NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME not in resource_names
+
+
 class _AdminRbacManifestDb:
     def __init__(self, role: str = "target") -> None:
         self.role = role
@@ -578,6 +699,7 @@ def test_admin_rbac_manifest_is_rbac_only_and_excludes_management_cluster() -> N
     documents = [item for item in yaml.safe_load_all(response.body.decode()) if item]
     assert documents
     assert {str(item["kind"]) for item in documents} <= {
+        "ServiceAccount",
         "Role",
         "RoleBinding",
         "ClusterRole",
@@ -751,6 +873,7 @@ def test_management_install_manifest_limits_writes_to_gitops_controller_resource
     assert "cluster-agent-target-manage" not in manifest
     assert "cluster-agent-uninstall" not in manifest
     assert "cluster-agent-node-control" in manifest
+    assert NODE_COLLECTOR_SERVICE_ACCOUNT_NAME not in manifest
     assert "cluster-agent-resource-debug" in manifest
     assert "cluster-agent-gitops-control" in manifest
     assert 'NODE_CONTROL_ENABLED: "true"' in manifest
@@ -919,7 +1042,7 @@ def test_static_management_agent_limits_writes_to_gitops_control() -> None:
         "ws://realtime-gateway.management.svc.cluster.local:8000"
     )
     assert env["NODE_COLLECTOR_ENABLED"] == "false"
-    assert env["PROMETHEUS_BASE_URL"] == ""
+    assert "PROMETHEUS_BASE_URL" not in env
     assert env["LOKI_BASE_URL"] == ""
     assert env["TEMPO_BASE_URL"] == ""
     assert env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == ""
@@ -973,7 +1096,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
         "node-collector",
     }
     agent_state = next(item for item in db.desired_states if item["component"] == "cluster-agent")
-    assert agent_state["spec"]["prometheus_base_url"] == "http://prometheus.target.svc:9090"
+    assert "prometheus_base_url" not in agent_state["spec"]
     assert agent_state["spec"]["loki_base_url"] == "http://loki-gateway.target.svc"
     assert agent_state["spec"]["tempo_base_url"] == "http://tempo.target.svc:3200"
     assert (
@@ -1041,7 +1164,7 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
         "http://opentelemetry-collector.target.svc:4318/v1/traces" not in response.install_manifest
     )
     agent_state = next(item for item in db.desired_states if item["component"] == "cluster-agent")
-    assert agent_state["spec"]["prometheus_base_url"] == ""
+    assert "prometheus_base_url" not in agent_state["spec"]
     assert agent_state["spec"]["loki_base_url"] == ""
     assert agent_state["spec"]["tempo_base_url"] == ""
     assert db.policy is not None
@@ -1184,7 +1307,7 @@ def test_target_bootstrap_config_rejects_invalid_gke_location_type() -> None:
     assert exc.value.detail == "provider_config.location_type must be region or zone"
 
 
-def test_target_registration_apply_failure_does_not_record_state(monkeypatch) -> None:
+def test_target_registration_apply_failure_preserves_pending_state_for_retry(monkeypatch) -> None:
     db = StubDb()
     events = StubEvents()
     request = target_request().model_copy(update={"apply": True})
@@ -1215,9 +1338,113 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
     assert exc.value.detail == "apply failed"
     assert len(apply_calls) == 1
     assert apply_calls[0][1] is None
+    assert db.registered[0]["status"] == ClusterRegistrationStatus.INSTALL_FAILED.value
+    assert db.registration_status_updates == [ClusterRegistrationStatus.INSTALL_FAILED.value]
+    assert len(db.desired_states) == 2
+    assert len(events.accepted) == 1
+
+
+def test_target_registration_commits_pending_before_apply_and_status_after_apply(
+    monkeypatch,
+) -> None:
+    db = TransactionalStubDb()
+    events = StubEvents()
+    request = target_request().model_copy(update={"apply": True})
+    apply_observations: list[tuple[bool, str | None]] = []
+
+    def stub_apply(_manifest: str, _kube_context: str | None) -> str:
+        registration = db.get_cluster_registration("default", "target-cluster-01")
+        apply_observations.append(
+            (
+                db.uow_active,
+                str(registration["status"]) if registration is not None else None,
+            )
+        )
+        return "applied"
+
+    monkeypatch.setattr(
+        "domains.target.router.kube_context_connectivity_error",
+        lambda _kube_context: None,
+    )
+    monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", stub_apply)
+
+    response = asyncio.run(
+        register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+    )
+
+    assert response.applied is True
+    assert response.status == ClusterRegistrationStatus.INSTALL_APPLIED.value
+    assert response.connection_stage == "awaiting_install"
+    assert apply_observations == [(False, "pending_install")]
+    assert db.registration_status_updates == [ClusterRegistrationStatus.INSTALL_APPLIED.value]
+    assert db.registered[0]["status"] == ClusterRegistrationStatus.INSTALL_APPLIED.value
+    assert db.uow_count == 2
+
+
+def test_target_registration_rechecks_duplicate_under_registration_lock(monkeypatch) -> None:
+    class RacingRegistrationDb(StubDb):
+        def __init__(self) -> None:
+            super().__init__()
+            self.locked = False
+            self.apply_calls = 0
+
+        def lock_cluster_policy_for_update(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+            *,
+            conn: object,
+        ) -> None:
+            assert (workspace_id, cluster_id) == ("default", "target-cluster-01")
+            assert conn is None
+            self.locked = True
+
+        def get_cluster_registration(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+        ) -> dict[str, object] | None:
+            if not self.locked:
+                return None
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "status": "pending_install",
+                "agent_token_hash": "winner-token-hash",
+                "agent_envelope_public_key": "winner-public-key",
+            }
+
+    db = RacingRegistrationDb()
+
+    def unexpected_apply(_manifest: str, _kube_context: str | None) -> str:
+        db.apply_calls += 1
+        return "unexpected"
+
+    monkeypatch.setattr(
+        "domains.target.router.kube_context_connectivity_error",
+        lambda _kube_context: None,
+    )
+    monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", unexpected_apply)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                target_request().model_copy(update={"apply": True}),
+                current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+                db=db,
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "cluster_id is already registered"
+    assert db.apply_calls == 0
     assert db.registered == []
-    assert db.desired_states == []
-    assert events.accepted == []
 
 
 def test_target_registration_apply_defaults_to_kube_context_provider(monkeypatch) -> None:
@@ -1442,8 +1669,17 @@ def test_cluster_connect_rejects_duplicate_workspace_display_name_before_issuing
     assert db.registered == []
 
 
-def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_registration(
+@pytest.mark.parametrize(
+    "registration_status",
+    [
+        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+        ClusterRegistrationStatus.INSTALL_FAILED.value,
+        ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+    ],
+)
+def test_reissue_cluster_connect_command_rotates_token_for_retryable_registration(
     monkeypatch,
+    registration_status: str,
 ) -> None:
     monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com/api")
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
@@ -1465,7 +1701,7 @@ def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_regi
                 "cluster_id": cluster_id,
                 "name": "Production",
                 "environment": "development",
-                "status": "install_expired",
+                "status": registration_status,
                 "settings": TargetRegisterRequest(
                     cluster_id=cluster_id,
                     name="Production",
@@ -1581,6 +1817,57 @@ def test_cluster_connection_status_reports_pending_install_before_ttl() -> None:
     assert response.refresh_after_seconds == 0.5
     assert response.connect_timeout_seconds == 1800
     assert response.connect_expires_at == expires_at
+
+
+def test_cluster_connection_status_normalizes_applied_bootstrap_to_agent_wait() -> None:
+    expires_at = (datetime.now(UTC) + timedelta(minutes=20)).isoformat()
+
+    response = asyncio.run(
+        get_cluster_connection_status(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=StubPendingClusterDb(
+                expires_at,
+                status=ClusterRegistrationStatus.INSTALL_APPLIED.value,
+            ),
+        )
+    )
+
+    assert response.connection_status == "pending_install"
+    assert response.connection_stage == "awaiting_install"
+    assert response.refresh_after_seconds == 0.5
+
+    registration = StubPendingClusterDb(
+        expires_at,
+        status=ClusterRegistrationStatus.INSTALL_APPLIED.value,
+    ).get_cluster_registration("default", "cluster-1")
+    assert registration is not None
+    summary = cluster_summary(
+        registration,
+        None,
+    )
+    assert summary.status == ClusterRegistrationStatus.INSTALL_APPLIED.value
+    assert summary.connection_status == ClusterRegistrationStatus.PENDING_INSTALL.value
+    assert summary.connection_stage == "awaiting_install"
+
+
+def test_cluster_connection_status_exposes_retryable_bootstrap_failure_as_error() -> None:
+    expires_at = (datetime.now(UTC) + timedelta(minutes=20)).isoformat()
+
+    response = asyncio.run(
+        get_cluster_connection_status(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=StubPendingClusterDb(
+                expires_at,
+                status=ClusterRegistrationStatus.INSTALL_FAILED.value,
+            ),
+        )
+    )
+
+    assert response.connection_status == "install_failed"
+    assert response.connection_stage == "error"
+    assert response.refresh_after_seconds is None
 
 
 def test_cluster_connection_status_reports_install_expired_after_ttl() -> None:
@@ -2385,10 +2672,12 @@ class TransactionalStubDb(StubDb):
     def __init__(self) -> None:
         super().__init__()
         self.uow_active = False
+        self.uow_count = 0
         self.calls: list[tuple[str, bool]] = []
 
     @contextmanager
     def unit_of_work(self):
+        self.uow_count += 1
         self.uow_active = True
         try:
             yield self
@@ -2420,6 +2709,15 @@ class TransactionalStubDb(StubDb):
             workspace_id, cluster_id, components, updated_by
         )
 
+    def update_cluster_registration_status(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        status: str,
+    ) -> None:
+        self.calls.append(("status", self.uow_active))
+        super().update_cluster_registration_status(workspace_id, cluster_id, status)
+
 
 class UowTrackingEvents(StubEvents):
     def __init__(self, db: TransactionalStubDb) -> None:
@@ -2448,6 +2746,7 @@ def test_target_registration_wraps_writes_and_event_in_single_transaction() -> N
     assert db.calls == [("register", True), ("policy", True), ("desired_states", True)]
     assert events.accepted_in_uow == [True]
     assert db.uow_active is False
+    assert db.uow_count == 1
 
 
 class StubInstallLinkDb:

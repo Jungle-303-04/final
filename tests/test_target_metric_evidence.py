@@ -58,7 +58,7 @@ def load_evidence_module():
 
 def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
     collector.register_query(
         module.TelemetryQueryDefinition.from_mapping(
@@ -216,7 +216,7 @@ def test_replacing_prometheus_provider_preserves_registered_queries() -> None:
 
 def test_collector_runs_one_off_query_definition() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
 
     async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
@@ -259,7 +259,7 @@ def test_collector_runs_one_off_query_definition() -> None:
 
 def test_prometheus_ratio_metrics_add_threshold_analysis() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
 
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
@@ -310,7 +310,7 @@ def test_prometheus_ratio_metrics_add_threshold_analysis() -> None:
 
 def test_prometheus_range_metrics_add_baseline_comparison() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
 
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
@@ -363,7 +363,7 @@ def test_prometheus_range_metrics_add_baseline_comparison() -> None:
 
 def test_prometheus_cpu_throttling_metrics_add_positive_signal() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
 
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
@@ -406,7 +406,7 @@ def test_prometheus_cpu_throttling_metrics_add_positive_signal() -> None:
 
 def test_prometheus_range_query_is_normalized_into_series() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
 
     async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
@@ -451,7 +451,7 @@ def test_prometheus_range_query_is_normalized_into_series() -> None:
 
 def test_allow_partial_metric_collection_keeps_successful_query_results() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
     definitions = (
         module.TelemetryQueryDefinition.from_mapping(
@@ -500,7 +500,7 @@ def test_allow_partial_metric_collection_keeps_successful_query_results() -> Non
 
 def test_prometheus_vector_samples_are_limited_before_job_result() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -554,7 +554,7 @@ def test_prometheus_vector_samples_are_limited_before_job_result() -> None:
 
 def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -606,7 +606,7 @@ def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
 
 def test_prometheus_vector_can_drop_single_oversized_sample() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -654,7 +654,7 @@ def test_prometheus_vector_can_drop_single_oversized_sample() -> None:
 
 def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -716,7 +716,7 @@ def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> 
 
 def test_prometheus_matrix_value_limits_match_final_series_payload() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {

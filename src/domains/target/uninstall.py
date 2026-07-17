@@ -25,7 +25,13 @@ from domains.command.policy import (
 )
 from packages.config.constants import Command, CommandStatus, RiskLevel
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
+from packages.contracts.target import (
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+    SANDBOX_NAMESPACE,
+    TARGET_NAMESPACE,
+)
 
 UNINSTALL_CONTRACT_VERSION = 1
 UNINSTALL_PRIORITY = 1_000
@@ -57,6 +63,13 @@ PRE_ACK_NAMESPACED_CLEANUP = (
     ),
     NamespacedCleanupResource("core", "v1", TARGET_NAMESPACE, "configmaps", "target-agent-policy"),
     NamespacedCleanupResource("core", "v1", TARGET_NAMESPACE, "secrets", "target-runtime-secret"),
+    NamespacedCleanupResource(
+        "core",
+        "v1",
+        TARGET_NAMESPACE,
+        "serviceaccounts",
+        NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
+    ),
     NamespacedCleanupResource(
         "rbac.authorization.k8s.io",
         "v1",
@@ -121,6 +134,18 @@ PRE_ACK_CLUSTER_CLEANUP = (
         "rbac.authorization.k8s.io",
         "v1",
         "clusterrolebindings",
+        NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    ),
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterroles",
+        NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    ),
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterrolebindings",
         "cluster-agent-gitops-control",
     ),
     ClusterCleanupResource(
@@ -158,6 +183,7 @@ TARGET_NAMESPACED_RESOURCES = (
     "configmap/target-runtime-config",
     "configmap/target-agent-policy",
     "secret/target-runtime-secret",
+    f"serviceaccount/{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}",
     "serviceaccount/cluster-agent",
     "role/cluster-agent-self-manage",
     "role/cluster-agent-target-manage",
@@ -173,6 +199,7 @@ SANDBOX_RBAC_RESOURCES = (
     "rolebinding/cluster-agent-cronjob-control",
 )
 CLUSTER_SCOPED_RESOURCES = (
+    f"clusterrolebinding/{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}",
     "clusterrolebinding/cluster-agent-gitops-control",
     "clusterrolebinding/cluster-agent-node-control",
     "clusterrolebinding/cluster-agent-read",
@@ -181,6 +208,7 @@ CLUSTER_SCOPED_RESOURCES = (
     "clusterrole/cluster-agent-gitops-control",
     "clusterrole/cluster-agent-read",
     "clusterrole/cluster-agent-uninstall",
+    f"clusterrole/{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}",
     "priorityclass/gitops-control-critical",
     "priorityclass/gitops-demo-fast",
 )

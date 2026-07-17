@@ -10,13 +10,9 @@ import httpx
 from queries import PrometheusInstantQuery, PrometheusRangeQuery
 from telemetry_registry import telemetry
 
-from config import (
-    DEFAULT_PROMETHEUS_BASE_URL,
-    PROMETHEUS_BASE_URL_ENV,
-    PROMETHEUS_TIMEOUT_SECONDS,
-)
+from config import PROMETHEUS_TIMEOUT_SECONDS
 from packages.contracts.event_bus.interfaces import JsonObject
-from providers.base import TRACER, ConfigReader
+from providers.base import TRACER
 from providers.collection_limits import (
     attach_collection_limits,
     collection_limit,
@@ -122,11 +118,6 @@ class PrometheusMetricsProvider:
         if self.target.sni_hostname is None:
             return {}
         return {"sni_hostname": self.target.sni_hostname}
-
-    @classmethod
-    def from_config(cls, read_config: ConfigReader) -> PrometheusMetricsProvider:
-        """Create the provider from agent config values."""
-        return cls(read_config(PROMETHEUS_BASE_URL_ENV, DEFAULT_PROMETHEUS_BASE_URL))
 
     async def query(
         self,

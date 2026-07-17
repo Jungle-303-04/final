@@ -111,6 +111,8 @@ class TargetAgentRepository(DatabaseConnection):
                 registration.c.status.in_(
                     (
                         ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+                        ClusterRegistrationStatus.INSTALL_FAILED.value,
                         ClusterRegistrationStatus.REGISTERED.value,
                     )
                 ),
@@ -248,6 +250,8 @@ class TargetAgentRepository(DatabaseConnection):
                         registration.c.status.in_(
                             (
                                 ClusterRegistrationStatus.PENDING_INSTALL.value,
+                                ClusterRegistrationStatus.INSTALL_APPLIED.value,
+                                ClusterRegistrationStatus.INSTALL_FAILED.value,
                                 ClusterRegistrationStatus.REGISTERED.value,
                             )
                         ),

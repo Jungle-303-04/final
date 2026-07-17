@@ -2538,13 +2538,6 @@ class RcaRuleCatalogResponse(StrictModel):
     candidates_count: int = 0
 
 
-class MetricsValidateResponse(StrictModel):
-    valid: bool
-    code: str | None = None
-    detail: str = ""
-    result_type: str | None = None
-
-
 class DeadLettersResponse(StrictModel):
     dead_letters: list[JsonMap]
 

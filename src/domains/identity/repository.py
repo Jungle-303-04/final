@@ -246,6 +246,8 @@ class IdentityAccessRepository(DatabaseConnection):
                 table.c.status.in_(
                     (
                         ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+                        ClusterRegistrationStatus.INSTALL_FAILED.value,
                         ClusterRegistrationStatus.INSTALL_EXPIRED.value,
                     )
                 ),
@@ -898,6 +900,8 @@ class IdentityAccessRepository(DatabaseConnection):
                 table.c.status.in_(
                     (
                         ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+                        ClusterRegistrationStatus.INSTALL_FAILED.value,
                         ClusterRegistrationStatus.REGISTERED.value,
                         ClusterRegistrationStatus.UNINSTALL_REQUESTED.value,
                     )
