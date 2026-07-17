@@ -136,10 +136,16 @@ function unauthenticatedPort(): AuthPort {
 
 function endpointPort(overrides: Partial<AuthEndpointDependencies> = {}): AuthPort {
   return createAuthAdapter({
-    getSession: vi.fn().mockResolvedValue(UNAUTHENTICATED_SESSION),
-    login: vi.fn().mockResolvedValue(UNAUTHENTICATED_SESSION),
-    logout: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
+    getSession: overrides.getSession ?? vi.fn().mockResolvedValue(UNAUTHENTICATED_SESSION),
+    listWorkspaces: overrides.listWorkspaces ?? vi.fn().mockResolvedValue({
+      current_workspace_id: "test",
+      items: [],
+    }),
+    login: overrides.login ?? vi.fn().mockResolvedValue(UNAUTHENTICATED_SESSION),
+    logout: overrides.logout ?? vi.fn().mockResolvedValue(undefined),
+    switchWorkspace: overrides.switchWorkspace ?? vi.fn().mockResolvedValue(
+      UNAUTHENTICATED_SESSION,
+    ),
   });
 }
 

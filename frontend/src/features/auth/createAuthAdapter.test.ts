@@ -22,6 +22,29 @@ const AUTHENTICATED_WIRE_SESSION: AuthEndpointSession = {
 };
 
 describe("canonical auth adapter", () => {
+  it("maps the authorized workspace catalog and returns switched session authority", async () => {
+    const dependencies = endpoints({
+      listWorkspaces: vi.fn().mockResolvedValue({
+        current_workspace_id: "workspace-main",
+        items: [{ workspace_id: "workspace-next", name: "Next", slug: "next" }],
+      }),
+      switchWorkspace: vi.fn().mockResolvedValue({
+        ...AUTHENTICATED_WIRE_SESSION,
+        workspace_id: "workspace-next",
+      }),
+    });
+    const port = createAuthAdapter(dependencies);
+
+    await expect(port.listWorkspaces()).resolves.toEqual({
+      currentWorkspaceId: "workspace-main",
+      items: [{ workspaceId: "workspace-next", name: "Next", slug: "next" }],
+    });
+    await expect(port.switchWorkspace("workspace-next")).resolves.toMatchObject({
+      workspaceId: "workspace-next",
+    });
+    expect(dependencies.switchWorkspace).toHaveBeenCalledWith("workspace-next", undefined);
+  });
+
   it("maps an authenticated wire session and canonicalizes role order", async () => {
     const dependencies = endpoints();
     const port = createAuthAdapter(dependencies);
@@ -277,7 +300,14 @@ function endpoints(
  ) {
   return {
     getSession: vi.fn(overrides.getSession ?? (() => Promise.resolve(AUTHENTICATED_WIRE_SESSION))),
+    listWorkspaces: vi.fn(overrides.listWorkspaces ?? (() => Promise.resolve({
+      current_workspace_id: "workspace-main",
+      items: [],
+    }))),
     login: vi.fn(overrides.login ?? (() => Promise.resolve(AUTHENTICATED_WIRE_SESSION))),
     logout: vi.fn(overrides.logout ?? (() => Promise.resolve())),
+    switchWorkspace: vi.fn(
+      overrides.switchWorkspace ?? (() => Promise.resolve(AUTHENTICATED_WIRE_SESSION)),
+    ),
   };
 }

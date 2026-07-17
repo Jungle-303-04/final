@@ -35,6 +35,10 @@ describe("AuthSessionControl", () => {
 
 function renderControl(mode: "panel" | "toolbar") {
   const auth: AuthenticatedAuthState = {
+    listWorkspaces: async () => ({
+      currentWorkspaceId: "production-workspace-with-a-long-identifier",
+      items: [],
+    }),
     session: {
       authEnabled: true,
       authMode: "password",
@@ -56,6 +60,7 @@ function renderControl(mode: "panel" | "toolbar") {
     },
     signOutPending: false,
     onSignOut: vi.fn(),
+    switchWorkspace: async () => { throw new Error("not used"); },
   };
 
   return render(

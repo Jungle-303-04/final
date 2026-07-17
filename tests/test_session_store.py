@@ -117,6 +117,26 @@ def test_touch_session_extends_session_ttl_without_reading_payload() -> None:
     assert redis.get_calls == 0
 
 
+def test_redis_session_restores_trusted_proxy_authority_mode() -> None:
+    store = RedisSessionStore(session_config())
+    redis = StubRedisClient()
+    redis.values["session:token-1"] = json.dumps(
+        {
+            "user_id": "operator-dev",
+            "roles": ["service_admin"],
+            "workspace_id": "workspace-b",
+            "auth_mode": "trusted_proxy",
+        }
+    )
+    store.client = redis  # type: ignore[assignment]
+
+    session = asyncio.run(store.get_session("token-1"))
+
+    assert session is not None
+    assert session.workspace_id == "workspace-b"
+    assert session.auth_mode == "trusted_proxy"
+
+
 def test_touch_session_returns_false_for_missing_token() -> None:
     store = RedisSessionStore(session_config())
     redis = StubRedisClient()

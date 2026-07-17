@@ -94,6 +94,7 @@ class Settings:
     METRICS_TOKEN_NOT_CONFIGURED_MESSAGE = "metrics token is not configured"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
+    WORKSPACE_ACCESS_DENIED_MESSAGE = "workspace access denied"
     SESSION_STORAGE_UNAVAILABLE_MESSAGE = "session storage unavailable"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
     INVALID_CREDENTIALS_MESSAGE = "invalid email or password"

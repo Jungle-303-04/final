@@ -328,7 +328,7 @@ function ProductShellFrame({
         </SidebarContent>
 
         <SidebarFooter className="gap-1.5 overflow-x-hidden">
-          <SidebarWorkspaceSwitcher workspaceId={auth.session.workspaceId} />
+          <SidebarWorkspaceSwitcher auth={auth} />
           <Separator className="mx-2 data-horizontal:w-auto" />
           <SidebarProfileMenu
             auth={auth}

@@ -14,3 +14,14 @@ export interface AuthEndpointSession {
   user_id: string;
   workspace_id: string;
 }
+
+export interface AuthEndpointWorkspace {
+  workspace_id: string;
+  name: string;
+  slug: string;
+}
+
+export interface AuthEndpointWorkspaceList {
+  current_workspace_id: string;
+  items: readonly AuthEndpointWorkspace[];
+}

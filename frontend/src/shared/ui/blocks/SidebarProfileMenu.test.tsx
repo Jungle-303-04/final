@@ -21,6 +21,7 @@ describe("SidebarProfileMenu auth semantics", () => {
   it("prevents a false sign-out claim when trusted proxy identity will be re-injected", () => {
     const onSignOut = vi.fn();
     const auth: AuthenticatedAuthState = {
+      listWorkspaces: async () => ({ currentWorkspaceId: "default", items: [] }),
       session: {
         authEnabled: true,
         authMode: "trusted_proxy",
@@ -37,6 +38,7 @@ describe("SidebarProfileMenu auth semantics", () => {
       signOutIssue: null,
       signOutPending: false,
       onSignOut,
+      switchWorkspace: async () => { throw new Error("not used"); },
     };
 
     render(

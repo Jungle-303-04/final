@@ -519,6 +519,10 @@ async def authenticated_browser_session(
     websocket: WebSocket,
     authenticate: BrowserSessionAuthenticator,
 ) -> Any:
+    for token in browser_session_tokens(websocket):
+        session = await authenticate(token)
+        if session is not None:
+            return session
     proxy_identity = trusted_proxy_identity(websocket.headers)
     if proxy_identity is not None:
         return {
@@ -526,16 +530,24 @@ async def authenticated_browser_session(
             "user_id": proxy_identity.user_id,
             "roles": [ServiceRole.SERVICE_ADMIN.value],
         }
-    return await authenticate(browser_session_token(websocket))
+    return None
 
 
 def browser_session_token(websocket: WebSocket) -> str | None:
+    tokens = browser_session_tokens(websocket)
+    return tokens[0] if tokens else None
+
+
+def browser_session_tokens(websocket: WebSocket) -> tuple[str, ...]:
+    candidates: list[str] = []
     authorization = websocket.headers.get(AUTHORIZATION_HEADER, "")
     if authorization.lower().startswith(BEARER_PREFIX):
-        return authorization.split(" ", 1)[1].strip()
+        candidates.append(authorization.split(" ", 1)[1].strip())
     if websocket.headers.get(SESSION_TOKEN_HEADER):
-        return websocket.headers[SESSION_TOKEN_HEADER]
-    return websocket.cookies.get(Auth.SESSION_COOKIE_NAME)
+        candidates.append(websocket.headers[SESSION_TOKEN_HEADER])
+    if websocket.cookies.get(Auth.SESSION_COOKIE_NAME):
+        candidates.append(websocket.cookies[Auth.SESSION_COOKIE_NAME])
+    return tuple(dict.fromkeys(token for token in candidates if token))
 
 
 def session_workspace_id(session: Any) -> str:

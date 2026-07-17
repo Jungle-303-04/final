@@ -14,6 +14,7 @@ from packages.contracts.gateway.requests import (
     LoginRequest,
     ResendEmailVerificationRequest,
     SignupRequest,
+    WorkspaceSwitchRequest,
 )
 
 
@@ -47,12 +48,31 @@ class StubPasswordAuth:
             "groups": ["group-platform", "group-release"],
             "roles": ["user"],
         }
+        self.workspaces = [
+            {"workspace_id": "default", "name": "Default", "slug": "default"},
+            {"workspace_id": "workspace-b", "name": "Workspace B", "slug": "workspace-b"},
+        ]
 
     def user_identity(self, _user_id: str) -> dict[str, str] | None:
         return self.identity
 
     def session_identity(self, _user_id: str, _workspace_id: str) -> dict[str, Any] | None:
         return self.session_authority
+
+    def list_authorized_workspaces(self, _current: Any) -> list[dict[str, str]]:
+        return self.workspaces
+
+    async def switch_workspace(self, current: Any, workspace_id: str) -> Any:
+        self.calls.append(("switch_workspace", (current.token, workspace_id)))
+        return SimpleNamespace(
+            token="switched-token",
+            user_id=current.user_id,
+            roles=list(current.roles),
+            workspace_id=workspace_id,
+            display_name="Local User",
+            email="local@example.com",
+            auth_mode=getattr(current, "auth_mode", "password"),
+        )
 
     async def signup(
         self, email: str, password: str, password_confirm: str, client_key: str
@@ -306,6 +326,63 @@ def test_session_refresh_route_is_guarded_by_require_session() -> None:
     )
 
     assert any(dependency.call is require_session for dependency in route.dependant.dependencies)
+
+
+def test_workspace_routes_are_guarded_by_require_session() -> None:
+    routes = {
+        route.path: route for route in identity_router.router.routes if isinstance(route, APIRoute)
+    }
+
+    for path in ("/auth/workspaces", "/auth/workspaces/switch"):
+        assert any(
+            dependency.call is require_session for dependency in routes[path].dependant.dependencies
+        )
+
+
+def test_workspace_catalog_returns_only_authorized_store_records() -> None:
+    password_auth = StubPasswordAuth()
+    current = SimpleNamespace(workspace_id="default")
+
+    body = asyncio.run(
+        identity_router.list_workspaces(current=current, password_auth=password_auth)
+    )
+
+    assert body.current_workspace_id == "default"
+    assert [item.workspace_id for item in body.items] == ["default", "workspace-b"]
+
+
+def test_workspace_switch_sets_secure_scoped_cookie_and_returns_refreshed_authority(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("COOKIE_SECURE", raising=False)
+    response = Response()
+    password_auth = StubPasswordAuth()
+    current = SimpleNamespace(
+        token="proxy-scoped-token",
+        user_id="operator-dev",
+        roles=["service_admin"],
+        workspace_id="default",
+        auth_mode="trusted_proxy",
+    )
+
+    body = asyncio.run(
+        identity_router.switch_workspace(
+            WorkspaceSwitchRequest(workspace_id="workspace-b"),
+            response=response,
+            current=current,
+            password_auth=password_auth,
+        )
+    )
+    cookie = response.headers["set-cookie"].lower()
+
+    assert body.workspace_id == "workspace-b"
+    assert body.auth_mode == "trusted_proxy"
+    assert password_auth.calls == [("switch_workspace", ("proxy-scoped-token", "workspace-b"))]
+    assert "service_session=switched-token" in cookie
+    assert "httponly" in cookie
+    assert "secure" in cookie
+    assert "samesite=lax" in cookie
+    assert "path=/" in cookie
 
 
 def test_session_refresh_touches_store_and_resets_httponly_cookie(monkeypatch) -> None:

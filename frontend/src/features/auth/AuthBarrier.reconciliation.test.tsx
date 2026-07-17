@@ -196,10 +196,17 @@ function renderBarrier(port: AuthPort) {
 
 function authPort(overrides: Partial<AuthPort> = {}): AuthPort {
   return {
-    loadSession: vi.fn().mockResolvedValue({ status: "authenticated", session: TEST_SESSION }),
-    signIn: vi.fn().mockResolvedValue(TEST_SESSION),
-    signOut: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
+    listWorkspaces: overrides.listWorkspaces ?? vi.fn().mockResolvedValue({
+      currentWorkspaceId: "workspace-1",
+      items: [],
+    }),
+    loadSession: overrides.loadSession ?? vi.fn().mockResolvedValue({
+      status: "authenticated",
+      session: TEST_SESSION,
+    }),
+    signIn: overrides.signIn ?? vi.fn().mockResolvedValue(TEST_SESSION),
+    signOut: overrides.signOut ?? vi.fn().mockResolvedValue(undefined),
+    switchWorkspace: overrides.switchWorkspace ?? vi.fn().mockResolvedValue(TEST_SESSION),
   };
 }
 

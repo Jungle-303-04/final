@@ -22,10 +22,13 @@ from packages.contracts.gateway.requests import (
     LoginRequest,
     ResendEmailVerificationRequest,
     SignupRequest,
+    WorkspaceSwitchRequest,
 )
 from packages.contracts.gateway.responses import (
     AuthLogoutCapability,
     AuthSessionResponse,
+    AuthWorkspaceItem,
+    AuthWorkspaceListResponse,
     EmailCheckResponse,
     EmailVerificationResponse,
     LogoutResponse,
@@ -77,7 +80,11 @@ def _clear_session_cookie(response: Response) -> None:
 
 
 def _authenticated_body(session: Any, password_auth: Any | None = None) -> AuthSessionResponse:
-    auth_mode = "trusted_proxy" if session.token == TRUSTED_PROXY_SESSION_TOKEN else "password"
+    auth_mode = getattr(
+        session,
+        "auth_mode",
+        "trusted_proxy" if session.token == TRUSTED_PROXY_SESSION_TOKEN else "password",
+    )
     display_name = getattr(session, "display_name", None)
     email = getattr(session, "email", None)
     groups: list[str] = []
@@ -185,6 +192,38 @@ async def refresh_session(
         raise HTTPException(status_code=401, detail="authentication required")
     _set_session_cookie(response, current)
     return _authenticated_body(current, password_auth)
+
+
+@router.get(
+    gateway_routes.AUTH_WORKSPACES_PATH,
+    response_model=AuthWorkspaceListResponse,
+)
+async def list_workspaces(
+    current: Any = Depends(require_session),
+    password_auth: Any = Depends(get_password_auth),
+) -> AuthWorkspaceListResponse:
+    return AuthWorkspaceListResponse(
+        current_workspace_id=current.workspace_id,
+        items=[
+            AuthWorkspaceItem.model_validate(item)
+            for item in password_auth.list_authorized_workspaces(current)
+        ],
+    )
+
+
+@router.post(
+    gateway_routes.AUTH_WORKSPACE_SWITCH_PATH,
+    response_model=AuthSessionResponse,
+)
+async def switch_workspace(
+    payload: WorkspaceSwitchRequest,
+    response: Response,
+    current: Any = Depends(require_session),
+    password_auth: Any = Depends(get_password_auth),
+) -> AuthSessionResponse:
+    next_session = await password_auth.switch_workspace(current, payload.workspace_id)
+    _set_session_cookie(response, next_session)
+    return _authenticated_body(next_session, password_auth)
 
 
 @router.post(gateway_routes.AUTH_SIGNUP_PATH, response_model=EmailVerificationResponse)

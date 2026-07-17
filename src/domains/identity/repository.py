@@ -624,6 +624,41 @@ class IdentityAccessRepository(DatabaseConnection):
             ).scalar_one_or_none()
         return str(value) if value is not None else None
 
+    def list_authorized_workspaces(
+        self,
+        user_id: str,
+        *,
+        service_admin: bool,
+    ) -> list[JsonObject]:
+        """List active workspaces granted by persistent membership or service authority."""
+
+        workspace = self.workspace_table
+        organization = self.organization_table
+        member = self.organization_member_table
+        statement = select(
+            workspace.c.workspace_id,
+            workspace.c.name,
+            workspace.c.slug,
+        ).where(workspace.c.status == WorkspaceStatus.ACTIVE.value)
+        if not service_admin:
+            statement = statement.select_from(
+                workspace.join(
+                    organization,
+                    organization.c.organization_id == workspace.c.workspace_id,
+                ).join(
+                    member,
+                    member.c.organization_id == organization.c.organization_id,
+                )
+            ).where(
+                organization.c.status == AccessStatus.ACTIVE.value,
+                member.c.user_id == user_id,
+                member.c.status == AccessStatus.ACTIVE.value,
+            )
+        statement = statement.order_by(func.lower(workspace.c.name), workspace.c.workspace_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
+
     def grant_resource_access(self, payload: JsonObject) -> JsonObject:
         user_id = str(payload.get("subject_id") or payload.get("user_id"))
         organization_id = str(

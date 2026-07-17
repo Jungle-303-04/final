@@ -87,9 +87,11 @@ const FILTER_SEARCH = serializeProductFilterUrl(FILTER_STATE, DETAIL_QUERY);
 const FILTER_ONLY_SEARCH = serializeProductFilterUrl(FILTER_STATE);
 
 const authPort: AuthPort = {
+  listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
   loadSession: async () => ({ status: "unauthenticated" }),
   signIn: async () => { throw new Error("not used"); },
   signOut: async () => undefined,
+  switchWorkspace: async () => { throw new Error("not used"); },
 };
 
 beforeEach(() => {

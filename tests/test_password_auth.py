@@ -4,13 +4,19 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from conftest import ROOT, load_file
 from fastapi import HTTPException, Request
+from starlette.datastructures import Headers
+
+from controller.demo_workspace import DEFAULT_DESCRIPTOR, load_descriptor
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 AUTH_PATH = ROOT_DIR / "src" / "services" / "gateway" / "api-gateway" / "auth.py"
+REALTIME_PATH = ROOT / "src" / "services" / "realtime" / "realtime-gateway" / "app.py"
 
 
 def load_auth_module():
@@ -57,10 +63,195 @@ def test_session_identity_uses_active_user_role_and_workspace_groups() -> None:
     }
 
 
+def test_workspace_switch_denies_cross_tenant_target_without_rotating_session() -> None:
+    auth = load_auth_module()
+    users = StubUserStore(
+        {
+            "operator@example.com": {
+                "user_id": "user-1",
+                "email": "operator@example.com",
+                "display_name": "Operator",
+                "status": "active",
+                "role": "user",
+                "workspace_id": "workspace-a",
+                "groups": [],
+            },
+        }
+    )
+    sessions = StubSessionStore(auth)
+    current = auth.AuthSession("current", "user-1", ["user"], "workspace-a")
+    sessions.sessions[current.token] = current
+    service = auth.PasswordAuthService(users, sessions)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(service.switch_workspace(current, "workspace-b"))
+
+    assert exc_info.value.status_code == 403
+    assert set(sessions.sessions) == {"current"}
+    assert users.workspace_calls == [("user-1", False)]
+
+
+def test_trusted_proxy_service_admin_lists_all_and_rotates_to_scoped_session() -> None:
+    auth = load_auth_module()
+    users = StubUserStore({})
+    sessions = StubSessionStore(auth)
+    current = auth.AuthSession(
+        "mtls-dev-console",
+        "operator-dev",
+        ["service_admin"],
+        "workspace-a",
+        auth_mode="trusted_proxy",
+    )
+    service = auth.PasswordAuthService(users, sessions)
+
+    assert [
+        workspace["workspace_id"] for workspace in service.list_authorized_workspaces(current)
+    ] == ["workspace-a", "workspace-b"]
+    switched = asyncio.run(service.switch_workspace(current, "workspace-b"))
+
+    assert switched.workspace_id == "workspace-b"
+    assert switched.auth_mode == "trusted_proxy"
+    assert switched.token != "mtls-dev-console"
+    assert users.workspace_calls == [("operator-dev", True), ("operator-dev", True)]
+
+
+def test_deployed_demo_workspace_proxy_switch_keeps_http_and_realtime_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = load_auth_module()
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR, owner_user_id="operator-dev")
+    demo_workspace_id = descriptor.workspace.workspace_id
+    users = StubUserStore({})
+    users.register_target_cluster(
+        {
+            "workspace_id": demo_workspace_id,
+            "name": descriptor.cluster.name,
+        }
+    )
+    sessions = StubSessionStore(auth)
+    proxy = auth.AuthSession(
+        "mtls-dev-console",
+        "operator-dev",
+        ["service_admin"],
+        "default",
+        auth_mode="trusted_proxy",
+    )
+    service = auth.PasswordAuthService(users, sessions)
+
+    catalog = service.list_authorized_workspaces(proxy)
+    switched = asyncio.run(service.switch_workspace(proxy, demo_workspace_id))
+
+    proxy_secret = "p" * 64
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", proxy_secret)
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", "default")
+    headers = [
+        (b"cookie", f"service_session={switched.token}".encode()),
+        (b"x-session-token", b"invalid-explicit-token"),
+        (b"x-kubeheal-internal-auth", proxy_secret.encode()),
+    ]
+    http_session = asyncio.run(
+        auth.SessionAuthService(sessions).require_session(
+            Request({"type": "http", "headers": headers})
+        )
+    )
+    realtime = load_file(REALTIME_PATH, "test_workspace_switch_realtime_gateway")
+    websocket = SimpleNamespace(
+        headers=Headers(raw=headers),
+        cookies={"service_session": switched.token},
+    )
+    realtime_session = asyncio.run(
+        realtime.authenticated_browser_session(websocket, sessions.get_session)
+    )
+
+    assert demo_workspace_id in {item["workspace_id"] for item in catalog}
+    assert switched.auth_mode == "trusted_proxy"
+    assert http_session is switched
+    assert realtime_session is switched
+    assert http_session.workspace_id == realtime.session_workspace_id(realtime_session)
+    assert http_session.workspace_id == demo_workspace_id
+
+
+def test_valid_cookie_session_precedes_trusted_proxy_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = load_auth_module()
+    secret = "p" * 64
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", secret)
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", "workspace-a")
+    sessions = StubSessionStore(auth)
+    scoped = auth.AuthSession(
+        "scoped-token",
+        "operator-dev",
+        ["service_admin"],
+        "workspace-b",
+        auth_mode="trusted_proxy",
+    )
+    sessions.sessions[scoped.token] = scoped
+    request = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"cookie", b"service_session=scoped-token"),
+                (b"x-session-token", b"invalid-explicit-token"),
+                (b"x-kubeheal-internal-auth", secret.encode()),
+            ],
+        }
+    )
+
+    current = asyncio.run(auth.SessionAuthService(sessions).require_session(request))
+
+    assert current is scoped
+    assert current.workspace_id == "workspace-b"
+
+
+def test_invalid_cookie_can_fall_back_to_verified_proxy_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = load_auth_module()
+    secret = "p" * 64
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", secret)
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", "workspace-a")
+    request = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"cookie", b"service_session=invalid-token"),
+                (b"x-kubeheal-internal-auth", secret.encode()),
+            ],
+        }
+    )
+
+    current = asyncio.run(auth.SessionAuthService(StubSessionStore(auth)).require_session(request))
+
+    assert current.token == "mtls-dev-console"
+    assert current.workspace_id == "workspace-a"
+    assert current.auth_mode == "trusted_proxy"
+
+
 class StubUserStore:
     def __init__(self, users: dict[str, dict[str, Any]]) -> None:
         self.users = users
         self.organization_members: dict[str, dict[str, str]] = {}
+        self.workspace_calls: list[tuple[str, bool]] = []
+        self.workspaces = [
+            {"workspace_id": "workspace-a", "name": "Workspace A", "slug": "workspace-a"},
+            {"workspace_id": "workspace-b", "name": "Workspace B", "slug": "workspace-b"},
+        ]
+
+    def register_target_cluster(self, payload: dict[str, Any]) -> dict[str, Any]:
+        workspace_id = str(payload["workspace_id"])
+        if not any(row["workspace_id"] == workspace_id for row in self.workspaces):
+            self.workspaces.append(
+                {
+                    "workspace_id": workspace_id,
+                    "name": str(payload["name"]),
+                    "slug": workspace_id,
+                }
+            )
+        return payload
 
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         return self.users.get(email)
@@ -128,6 +319,21 @@ class StubUserStore:
             return []
         return [str(group_id) for group_id in user.get("groups", [])]
 
+    def list_authorized_workspaces(
+        self, user_id: str, *, service_admin: bool
+    ) -> list[dict[str, Any]]:
+        self.workspace_calls.append((user_id, service_admin))
+        if service_admin:
+            return list(self.workspaces)
+        member = self.organization_members.get(user_id)
+        workspace_id = member and member.get("workspace_id")
+        if workspace_id is None:
+            user = self._find_user(user_id)
+            workspace_id = (
+                str(user.get("workspace_id")) if user and user.get("workspace_id") else None
+            )
+        return [row for row in self.workspaces if row["workspace_id"] == workspace_id]
+
     def _find_user(self, user_id: str) -> dict[str, Any] | None:
         for user in self.users.values():
             if user.get("user_id") == user_id or user.get("id") == user_id:
@@ -153,6 +359,7 @@ class StubSessionStore:
         workspace_id: str | None = None,
         display_name: str | None = None,
         email: str | None = None,
+        auth_mode: str = "password",
     ) -> Any:
         # Redis 대신 dict에 저장해서 PasswordAuthService 흐름만 검증.
         token = f"token-{len(self.sessions) + 1}"
@@ -163,6 +370,7 @@ class StubSessionStore:
             workspace_id or "default",
             display_name,
             email,
+            auth_mode,
         )
         self.sessions[token] = session
         return session

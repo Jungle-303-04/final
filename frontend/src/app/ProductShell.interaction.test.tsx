@@ -18,9 +18,11 @@ import {
 } from "./__tests__/ProductShellInteractionSupport";
 
 const testAuthPort: AuthPort = {
+  listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
   loadSession: async () => ({ status: "unauthenticated" }),
   signIn: async () => { throw new Error("not used"); },
   signOut: async () => undefined,
+  switchWorkspace: async () => { throw new Error("not used"); },
 };
 
 beforeEach(() => {
@@ -261,7 +263,7 @@ describe("ProductShell keyboard and help interaction", () => {
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
   });
 
-  it("keeps workspace proof and account actions in the sidebar footer", async () => {
+  it("keeps the workspace catalog and account actions in the sidebar footer", async () => {
     const user = userEvent.setup();
     renderShell();
 
@@ -269,7 +271,7 @@ describe("ProductShell keyboard and help interaction", () => {
       name: "현재 워크스페이스: test-workspace",
     }));
     expect(await screen.findByText(
-      "현재 워크스페이스만 사용할 수 있습니다.",
+      "접근 가능한 워크스페이스가 없습니다.",
     )).toBeTruthy();
     await user.keyboard("{Escape}");
 

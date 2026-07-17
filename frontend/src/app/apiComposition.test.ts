@@ -4,9 +4,11 @@ import { PRODUCT_ROUTE_CATALOG, type ProductSurfaceId } from "./productRoutes";
 import type { AuthPort } from "../features/auth/authContract";
 
 const testAuthPort: AuthPort = {
+  listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
   loadSession: async () => ({ status: "unauthenticated" }),
   signIn: async () => { throw new Error("not used"); },
   signOut: async () => undefined,
+  switchWorkspace: async () => { throw new Error("not used"); },
 };
 
 const APPROVED_SURFACE_IDS = new Set<ProductSurfaceId>([

@@ -293,3 +293,68 @@ def test_active_user_groups_are_workspace_scoped_and_sorted() -> None:
     assert {"user-1", "workspace-a", AccessStatus.ACTIVE.value}.issubset(
         set(compiled.params.values())
     )
+
+
+def test_normal_workspace_catalog_is_active_membership_scoped() -> None:
+    captured: list[Any] = []
+
+    class StubMappings:
+        def all(self) -> list[dict[str, str]]:
+            return []
+
+    class StubResult:
+        def mappings(self) -> StubMappings:
+            return StubMappings()
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            captured.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(WorkspaceAccessRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.list_authorized_workspaces("user-1", service_admin=False) == []
+    compiled = captured[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    assert "JOIN organizations" in sql
+    assert "JOIN organization_members" in sql
+    assert "organization_members.user_id =" in sql
+    assert sql.count("status =") == 3
+    assert {"user-1", AccessStatus.ACTIVE.value}.issubset(set(compiled.params.values()))
+
+
+def test_service_admin_workspace_catalog_lists_active_workspaces_without_membership_join() -> None:
+    captured: list[Any] = []
+
+    class StubMappings:
+        def all(self) -> list[dict[str, str]]:
+            return []
+
+    class StubResult:
+        def mappings(self) -> StubMappings:
+            return StubMappings()
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            captured.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(WorkspaceAccessRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.list_authorized_workspaces("admin-1", service_admin=True) == []
+    compiled = captured[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    assert "organization_members" not in sql
+    assert "workspaces.status =" in sql

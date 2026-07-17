@@ -9,7 +9,7 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Literal, Protocol, TypeVar, runtime_checkable
 
 from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -26,6 +26,7 @@ _REDIS_TRANSIENT_ERRORS = (
     RedisTimeoutError,
 )
 _Result = TypeVar("_Result")
+AuthMode = Literal["password", "trusted_proxy"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,11 @@ class AuthSession:
     workspace_id: str
     display_name: str | None = None
     email: str | None = None
+    auth_mode: AuthMode = "password"
+
+    def __post_init__(self) -> None:
+        if self.auth_mode not in {"password", "trusted_proxy"}:
+            raise ValueError("unsupported session authentication mode")
 
 
 @dataclass(frozen=True)
@@ -88,6 +94,7 @@ class SessionStore(Protocol):
         workspace_id: str | None = None,
         display_name: str | None = None,
         email: str | None = None,
+        auth_mode: AuthMode = "password",
     ) -> AuthSession: ...
 
     async def get_session(self, token: str | None) -> AuthSession | None: ...
@@ -149,6 +156,7 @@ class MemorySessionStore:
         workspace_id: str | None = None,
         display_name: str | None = None,
         email: str | None = None,
+        auth_mode: AuthMode = "password",
     ) -> AuthSession:
         self._require_connected()
         token = secrets.token_urlsafe(self.config.token_bytes)
@@ -159,6 +167,7 @@ class MemorySessionStore:
             workspace_id=workspace_id or self.config.default_workspace_id,
             display_name=display_name,
             email=email,
+            auth_mode=auth_mode,
         )
         self.sessions[token] = (time.monotonic() + self.config.ttl_seconds, session)
         return session
@@ -383,6 +392,7 @@ class RedisSessionStore:
         workspace_id: str | None = None,
         display_name: str | None = None,
         email: str | None = None,
+        auth_mode: AuthMode = "password",
     ) -> AuthSession:
         token = secrets.token_urlsafe(self.config.token_bytes)
         session = AuthSession(
@@ -392,6 +402,7 @@ class RedisSessionStore:
             workspace_id=workspace_id or self.config.default_workspace_id,
             display_name=display_name,
             email=email,
+            auth_mode=auth_mode,
         )
         await self._with_client(
             lambda client: client.setex(
@@ -404,6 +415,7 @@ class RedisSessionStore:
                         "workspace_id": session.workspace_id,
                         "display_name": session.display_name,
                         "email": session.email,
+                        "auth_mode": session.auth_mode,
                     }
                 ),
             )
@@ -426,6 +438,9 @@ class RedisSessionStore:
             workspace_id=payload.get("workspace_id", self.config.default_workspace_id),
             display_name=payload.get("display_name"),
             email=payload.get("email"),
+            auth_mode=(
+                "trusted_proxy" if payload.get("auth_mode") == "trusted_proxy" else "password"
+            ),
         )
 
     async def touch_session(self, token: str | None) -> bool:

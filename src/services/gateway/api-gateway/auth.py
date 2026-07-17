@@ -40,14 +40,20 @@ class EmailVerificationResult:
 
 
 def extract_session_token(request: Request) -> str | None:
+    tokens = extract_session_tokens(request)
+    return tokens[0] if tokens else None
+
+
+def extract_session_tokens(request: Request) -> tuple[str, ...]:
+    candidates: list[str] = []
     authorization = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
     if authorization.lower().startswith(Settings.BEARER_PREFIX):
-        return authorization.split(" ", 1)[1].strip()
+        candidates.append(authorization.split(" ", 1)[1].strip())
     if request.headers.get(Settings.SESSION_TOKEN_HEADER):
-        return request.headers[Settings.SESSION_TOKEN_HEADER]
+        candidates.append(request.headers[Settings.SESSION_TOKEN_HEADER])
     if request.cookies.get(Auth.SESSION_COOKIE_NAME):
-        return request.cookies[Auth.SESSION_COOKIE_NAME]
-    return None
+        candidates.append(request.cookies[Auth.SESSION_COOKIE_NAME])
+    return tuple(dict.fromkeys(token for token in candidates if token))
 
 
 class SessionAuthService:
@@ -55,6 +61,16 @@ class SessionAuthService:
         self.sessions = sessions
 
     async def require_session(self, request: Request) -> AuthSession:
+        for token in extract_session_tokens(request):
+            session = await self.sessions.get_session(token)
+            if session is not None:
+                try:
+                    await self.sessions.check_rate_limit(session.user_id)
+                except RateLimitExceeded:
+                    raise HTTPException(
+                        status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE
+                    ) from None
+                return session
         proxy_identity = trusted_proxy_identity(request.headers)
         if proxy_identity is not None:
             return AuthSession(
@@ -62,18 +78,9 @@ class SessionAuthService:
                 user_id=proxy_identity.user_id,
                 roles=[ServiceRole.SERVICE_ADMIN.value],
                 workspace_id=proxy_identity.workspace_id,
+                auth_mode="trusted_proxy",
             )
-        token = extract_session_token(request)
-        session = await self.sessions.get_session(token)
-        if session is None:
-            raise HTTPException(status_code=401, detail=Settings.AUTHENTICATION_REQUIRED_MESSAGE)
-        try:
-            await self.sessions.check_rate_limit(session.user_id)
-        except RateLimitExceeded:
-            raise HTTPException(
-                status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE
-            ) from None
-        return session
+        raise HTTPException(status_code=401, detail=Settings.AUTHENTICATION_REQUIRED_MESSAGE)
 
 
 class PasswordAuthService:
@@ -224,6 +231,50 @@ class PasswordAuthService:
     async def logout(self, token: str | None) -> None:
         if token:
             await self.sessions.delete_session(token)
+
+    def list_authorized_workspaces(self, session: AuthSession) -> list[dict[str, object]]:
+        roles = self._effective_roles(session)
+        return self.db.list_authorized_workspaces(
+            session.user_id,
+            service_admin=ServiceRole.SERVICE_ADMIN.value in roles,
+        )
+
+    async def switch_workspace(
+        self,
+        session: AuthSession,
+        workspace_id: str,
+    ) -> AuthSession:
+        roles = self._effective_roles(session)
+        allowed = {
+            str(workspace["workspace_id"])
+            for workspace in self.db.list_authorized_workspaces(
+                session.user_id,
+                service_admin=ServiceRole.SERVICE_ADMIN.value in roles,
+            )
+        }
+        if workspace_id not in allowed:
+            raise HTTPException(status_code=403, detail=Settings.WORKSPACE_ACCESS_DENIED_MESSAGE)
+
+        identity = self.user_identity(session.user_id) or {}
+        next_session = await self.sessions.create_session(
+            session.user_id,
+            roles,
+            workspace_id,
+            display_name=str(identity.get("display_name") or session.display_name or "") or None,
+            email=str(identity.get("email") or session.email or "") or None,
+            auth_mode=session.auth_mode,
+        )
+        if session.token != TRUSTED_PROXY_SESSION_TOKEN:
+            await self.sessions.delete_session(session.token)
+        return next_session
+
+    def _effective_roles(self, session: AuthSession) -> list[str]:
+        if session.auth_mode == "trusted_proxy":
+            return [ServiceRole.SERVICE_ADMIN.value]
+        identity = self.session_identity(session.user_id, session.workspace_id)
+        if identity is None:
+            raise HTTPException(status_code=401, detail=Settings.AUTHENTICATION_REQUIRED_MESSAGE)
+        return [str(role) for role in identity.get("roles", [])]
 
     def user_identity(self, user_id: str) -> dict[str, str] | None:
         user = self.db.get_user_by_id(user_id)

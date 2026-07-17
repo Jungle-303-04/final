@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { recentChangeItemSchema } from "./recent-changes-schemas";
 import type { AuthEndpointSession } from "../features/auth/authEndpointContract";
+import type { AuthEndpointWorkspaceList } from "../features/auth/authEndpointContract";
 
 const nullableStringSchema = z.string().nullable();
 const integerSchema = z.number().int();
@@ -43,6 +44,15 @@ export const authSessionSchema = z.strictObject({
 export const logoutResponseSchema = z.strictObject({
   authenticated: z.literal(false),
 });
+
+export const authWorkspaceListSchema = z.strictObject({
+  current_workspace_id: z.string().min(1),
+  items: z.array(z.strictObject({
+    workspace_id: z.string().min(1),
+    name: z.string().min(1),
+    slug: z.string().min(1),
+  })),
+}) satisfies z.ZodType<AuthEndpointWorkspaceList>;
 
 export const fleetHealthSchema = z.enum([
   "healthy",

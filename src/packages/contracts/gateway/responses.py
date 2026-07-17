@@ -93,6 +93,17 @@ class AuthSessionResponse(StrictModel):
         return self
 
 
+class AuthWorkspaceItem(StrictModel):
+    workspace_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    slug: str = Field(min_length=1)
+
+
+class AuthWorkspaceListResponse(StrictModel):
+    current_workspace_id: str = Field(min_length=1)
+    items: list[AuthWorkspaceItem]
+
+
 class EmailCheckResponse(StrictModel):
     available: bool
     reason_code: str = ""

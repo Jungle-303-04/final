@@ -201,6 +201,22 @@ describe("AuthBarrier", () => {
     expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
   });
 
+  it("installs switched session authority without another bootstrap read", async () => {
+    const nextSession = { ...TEST_SESSION, workspaceId: "workspace-next" };
+    const switchWorkspace = vi.fn().mockResolvedValue(nextSession);
+    const port = authPort({ switchWorkspace });
+    const user = userEvent.setup();
+    renderBarrier(port);
+
+    expect(await screen.findByText("workspace-main")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "테스트 워크스페이스 전환" }));
+
+    expect(await screen.findByText("workspace-next")).toBeTruthy();
+    expect(switchWorkspace).toHaveBeenCalledOnce();
+    expect(switchWorkspace).toHaveBeenCalledWith("workspace-next", expect.any(AbortSignal));
+    expect(port.loadSession).toHaveBeenCalledOnce();
+  });
+
   it("aborts an active session request after a real unmount", async () => {
     const pending = deferred<AuthSessionResult>();
     let receivedSignal: AbortSignal | undefined;
@@ -229,6 +245,13 @@ function AuthenticatedProduct({ auth }: { auth: AuthenticatedAuthState }) {
           ? t(auth.signOutIssue.messageKey, auth.signOutIssue.messageParams)
           : null}</p>
       <button onClick={auth.onSignOut} type="button">테스트 로그아웃</button>
+      <p>{auth.session.workspaceId}</p>
+      <button
+        onClick={() => void auth.switchWorkspace("workspace-next")}
+        type="button"
+      >
+        테스트 워크스페이스 전환
+      </button>
     </main>
   );
 }
@@ -258,13 +281,17 @@ function renderBarrier(
 
 function authPort(overrides: Partial<AuthPort> = {}): AuthPort {
   return {
-    loadSession: vi.fn().mockResolvedValue({
+    listWorkspaces: overrides.listWorkspaces ?? vi.fn().mockResolvedValue({
+      currentWorkspaceId: "workspace-1",
+      items: [],
+    }),
+    loadSession: overrides.loadSession ?? vi.fn().mockResolvedValue({
       status: "authenticated",
       session: TEST_SESSION,
     }),
-    signIn: vi.fn().mockResolvedValue(TEST_SESSION),
-    signOut: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
+    signIn: overrides.signIn ?? vi.fn().mockResolvedValue(TEST_SESSION),
+    signOut: overrides.signOut ?? vi.fn().mockResolvedValue(undefined),
+    switchWorkspace: overrides.switchWorkspace ?? vi.fn().mockResolvedValue(TEST_SESSION),
   };
 }
 

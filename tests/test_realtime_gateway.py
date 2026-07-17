@@ -281,6 +281,33 @@ def test_mtls_proxy_authenticates_browser_but_never_agent(
             assert excinfo.value.code == 4401
 
 
+def test_valid_cookie_session_precedes_proxy_workspace_for_realtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proxy_secret = "a" * 64
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", proxy_secret)
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_USER_ID", "operator-dev")
+    monkeypatch.setenv("TRUSTED_PROXY_AUTH_WORKSPACE_ID", "proxy-workspace")
+    module = load_gateway_module()
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers={
+            "cookie": f"service_session={GOOD_SESSION}",
+            "x-session-token": "invalid-explicit-token",
+            "x-kubeheal-internal-auth": proxy_secret,
+        },
+    ) as browser:
+        assert browser.receive_json()["type"] == "hello"
+        assert browser.receive_json()["type"] == "snapshot"
+
+
 def test_agent_rejected_for_foreign_cluster_query() -> None:
     _, client = make_client()
     with client.websocket_connect(

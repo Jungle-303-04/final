@@ -116,6 +116,10 @@ class EmailCheckRequest(StrictModel):
     email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+class WorkspaceSwitchRequest(StrictModel):
+    workspace_id: str = Field(min_length=1, max_length=200)
+
+
 class GitHubWebhookRequest(StrictModel):
     correlation_id: str | None = Field(default=None, min_length=1, max_length=2048)
     commit_sha: str

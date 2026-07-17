@@ -322,8 +322,10 @@ export {
 } from "./timeline-schemas";
 export {
   getSession,
+  listAuthWorkspaces,
   login,
   logout,
+  switchAuthWorkspace,
   type LoginCredentials,
 } from "./auth";
 export { getFleetSummary } from "./fleet";
@@ -692,6 +694,7 @@ export {
   type RealtimeMessage,
 } from "./live-schemas";
 export {
+  authWorkspaceListSchema,
   authSessionSchema,
   fleetClusterSummarySchema,
   fleetHealthSchema,

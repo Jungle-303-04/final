@@ -12,6 +12,7 @@ import { UnifiedFilterProvider } from "../features/filters/UnifiedFilterProvider
 import { I18nProvider } from "../shared/i18n";
 
 const testAuth: AuthenticatedAuthState = {
+  listWorkspaces: async () => ({ currentWorkspaceId: "test-workspace", items: [] }),
   session: {
     authEnabled: true,
     authMode: "password",
@@ -28,6 +29,7 @@ const testAuth: AuthenticatedAuthState = {
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,
+  switchWorkspace: async () => { throw new Error("not used"); },
 };
 const testClusterScope: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),

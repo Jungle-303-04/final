@@ -23,6 +23,7 @@ import {
 } from "../shortcutRegistry";
 
 export const testAuth: AuthenticatedAuthState = {
+  listWorkspaces: async () => ({ currentWorkspaceId: "test-workspace", items: [] }),
   session: {
     authEnabled: true,
     authMode: "password",
@@ -39,6 +40,7 @@ export const testAuth: AuthenticatedAuthState = {
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,
+  switchWorkspace: async () => { throw new Error("not used"); },
 };
 
 export const testClusterScope: ClusterScopePort = {

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getSession, login, logout } from "./auth";
+import {
+  getSession,
+  listAuthWorkspaces,
+  login,
+  logout,
+  switchAuthWorkspace,
+} from "./auth";
 import { ApiError } from "./client";
 
 const SESSION = {
@@ -45,6 +51,31 @@ describe("auth API", () => {
       }),
     );
     expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty("body");
+  });
+
+  it("loads the typed workspace catalog and switches with the shared CSRF client", async () => {
+    const catalog = {
+      current_workspace_id: "default",
+      items: [{ workspace_id: "workspace-b", name: "Workspace B", slug: "workspace-b" }],
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(catalog))
+      .mockResolvedValueOnce(jsonResponse({ ...SESSION, workspace_id: "workspace-b" }));
+
+    await expect(listAuthWorkspaces()).resolves.toEqual(catalog);
+    await expect(switchAuthWorkspace("workspace-b")).resolves.toMatchObject({
+      workspace_id: "workspace-b",
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/workspaces");
+    const [switchPath, switchInit] = fetchMock.mock.calls[1] ?? [];
+    expect(switchPath).toBe("/api/auth/workspaces/switch");
+    expect(switchInit).toMatchObject({
+      body: JSON.stringify({ workspace_id: "workspace-b" }),
+      credentials: "include",
+      method: "POST",
+    });
+    expect(new Headers(switchInit?.headers).get("x-service-csrf")).toBe("same-origin");
   });
 
   it("preserves a 401 session response as an unauthorized API error", async () => {

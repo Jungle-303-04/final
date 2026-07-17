@@ -21,6 +21,17 @@ export interface AuthCredentials {
   password: string;
 }
 
+export interface ProductWorkspace {
+  workspaceId: string;
+  name: string;
+  slug: string;
+}
+
+export interface ProductWorkspaceList {
+  currentWorkspaceId: string;
+  items: readonly ProductWorkspace[];
+}
+
 export type AuthSessionResult =
   | { status: "authenticated"; session: ProductSession }
   | { status: "unauthenticated" };
@@ -54,9 +65,11 @@ export class AuthPortFailure extends Error {
 }
 
 export interface AuthPort {
+  listWorkspaces(signal?: AbortSignal): Promise<ProductWorkspaceList>;
   loadSession(signal?: AbortSignal): Promise<AuthSessionResult>;
   signIn(credentials: AuthCredentials, signal?: AbortSignal): Promise<ProductSession>;
   signOut(signal?: AbortSignal): Promise<void>;
+  switchWorkspace(workspaceId: string, signal?: AbortSignal): Promise<ProductSession>;
 }
 
 export interface AuthActionIssue {
@@ -68,8 +81,10 @@ export interface AuthActionIssue {
 }
 
 export interface AuthenticatedAuthState {
+  listWorkspaces: AuthPort["listWorkspaces"];
   session: ProductSession;
   signOutIssue: AuthActionIssue | null;
   signOutPending: boolean;
   onSignOut: () => void;
+  switchWorkspace: AuthPort["switchWorkspace"];
 }
