@@ -1176,7 +1176,7 @@ def role_access_summary(item: JsonObject, kind: str) -> JsonObject:
         "kind": kind,
         "namespace": "" if kind == "ClusterRole" else _required_text(meta.get("namespace")),
         "name": _required_text(meta.get("name")),
-        "rules": [policy_rule_summary(rule) for rule in _dict_list(item.get("rules"))],
+        "rules": [policy_rule_summary(rule) for rule in _nullable_dict_list(item.get("rules"))],
     }
 
 
@@ -1196,7 +1196,9 @@ def binding_access_summary(item: JsonObject, kind: str) -> JsonObject:
             "kind": role_kind,
             "name": _required_text(role_ref.get("name")),
         },
-        "subjects": [subject_summary(subject) for subject in _dict_list(item.get("subjects"))],
+        "subjects": [
+            subject_summary(subject) for subject in _nullable_dict_list(item.get("subjects"))
+        ],
     }
 
 
@@ -1245,6 +1247,12 @@ def _dict_list(value: object) -> list[JsonObject]:
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise TypeError("Kubernetes access collection is invalid")
     return value
+
+
+def _nullable_dict_list(value: object) -> list[JsonObject]:
+    if value is None:
+        return []
+    return _dict_list(value)
 
 
 def _string_list(value: object) -> list[str]:
