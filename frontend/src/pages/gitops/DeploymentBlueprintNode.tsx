@@ -9,7 +9,7 @@ const blueprintPortClassName = cn(
   "!size-3 !rounded-full !border-[3px] !border-zinc-900 !bg-white !shadow-[0_1px_2px_rgba(0,0,0,0.16)]",
   "after:absolute after:-inset-2 after:rounded-full after:content-['']",
   "transition-[background-color,box-shadow] duration-150 hover:!bg-zinc-100 hover:!shadow-[0_2px_4px_rgba(0,0,0,0.2)]",
-  "focus-visible:!outline-none focus-visible:!ring-2 focus-visible:!ring-zinc-900/30",
+  "z-20 focus-visible:!outline-none focus-visible:!ring-2 focus-visible:!ring-zinc-900/30",
 );
 
 export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNodeCard({
@@ -41,7 +41,11 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
         data.placeholder && "border-dashed opacity-70",
       )}
     >
-      <header className="flex h-8 items-center gap-2 px-2">
+      <header className={cn(
+        "flex h-8 items-center gap-2 px-2",
+        !isRepository && "pl-7",
+        data.kind !== "cluster" && "pr-7",
+      )}>
         <span className={cn(
           "min-w-0 flex-1 truncate text-xs font-semibold",
           isRepository ? "text-[#294f87]" : isDeployment ? "text-[#8b4b22]" : "text-zinc-800",
@@ -116,9 +120,10 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
       {data.kind !== "cluster" && !data.placeholder ? (
         <Handle
           aria-label={t("workflows.blueprint.deployPort")}
-          className={cn(blueprintPortClassName, "!right-[-0.375rem]")}
+          className={blueprintPortClassName}
           id="output"
           position={Position.Right}
+          style={{ right: "-0.375rem", top: "1.375rem", transform: "translateY(-50%)" }}
           title={t("workflows.blueprint.deployPort")}
           type="source"
         />
@@ -126,9 +131,10 @@ export const DeploymentBlueprintNodeCard = memo(function DeploymentBlueprintNode
       {data.kind !== "repository" && !data.placeholder ? (
         <Handle
           aria-label={t("workflows.blueprint.targetPort")}
-          className={cn(blueprintPortClassName, "!left-[-0.375rem]")}
+          className={blueprintPortClassName}
           id="input"
           position={Position.Left}
+          style={{ left: "-0.375rem", top: "1.375rem", transform: "translateY(-50%)" }}
           title={t("workflows.blueprint.targetPort")}
           type="target"
         />
