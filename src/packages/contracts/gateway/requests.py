@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.contracts.evidence_policy import EvidenceProfile
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.gitops import (
     DEFAULT_APPLICATION_ID,
@@ -898,6 +899,7 @@ class EvidenceProviderPolicy(StrictModel):
 
 
 class EvidenceRuntimePolicy(StrictModel):
+    profile: EvidenceProfile = "standard"
     failure_policy: Literal["allow_partial", "strict"] = "allow_partial"
     max_attempts: int = Field(
         default=DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS,

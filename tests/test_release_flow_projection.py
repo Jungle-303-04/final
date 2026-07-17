@@ -177,9 +177,11 @@ def test_release_workflow_failed_requests_agent_evidence_jobs() -> None:
     assert request["max_attempts"] == 3
     provider_policies = request["provider_policies"]
     assert provider_policies["kubernetes"]["queries"][0]["query"] == "target"
-    assert provider_policies["metrics"]["queries"][1]["query"] == (
-        'kube_pod_info{namespace="target"}'
-    )
+    metric_queries = {query["name"]: query for query in provider_policies["metrics"]["queries"]}
+    assert metric_queries["target_pod_info"]["query"] == 'kube_pod_info{namespace="target"}'
+    assert metric_queries["target_pod_info"]["provenance"]["cluster_id"] == "target"
+    assert provider_policies["traces"]["enabled"] is False
+    assert provider_policies["traces"]["queries"] == []
     queued = evidence_queued_update(update, {"accepted": True, "queued": 4})
     assert queued["event_type"] == "evidence.queued"
     assert queued["details"] == {"evidence": {"accepted": True, "queued": 4}}

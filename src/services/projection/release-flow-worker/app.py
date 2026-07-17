@@ -49,7 +49,10 @@ from domains.scm.events import (
     SafePrRequestedBody,
 )
 from domains.target.events import EvidenceJobsQueuedBody, EvidenceJobUpdatedBody
-from domains.target.evidence_policy import DEFAULT_EVIDENCE_PROVIDER_QUERIES
+from domains.target.evidence_policy import (
+    DEMO_EVIDENCE_PROFILE,
+    evidence_provider_queries,
+)
 from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.stores import ReleaseFlowStore
@@ -184,7 +187,12 @@ def rca_test_evidence_request(evt: EventEnvelope) -> dict[str, object] | None:
     provider_policies: dict[str, object] = {}
     for provider_key in provider_keys:
         queries: list[dict[str, object]] = [
-            dict(query) for query in DEFAULT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, [])
+            dict(query)
+            for query in evidence_provider_queries(
+                provider_key,
+                cluster_id=cluster_id,
+                evidence_profile=DEMO_EVIDENCE_PROFILE,
+            )
         ]
         if provider_key == "kubernetes":
             queries = [

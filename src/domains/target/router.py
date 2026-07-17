@@ -49,6 +49,7 @@ from domains.target.evidence_jobs import (
 from domains.target.evidence_policy import (
     default_agent_policy,
     enabled_provider_keys,
+    evidence_profile_for_registration,
     provider_policy_snapshots,
 )
 from domains.target.install_manifest import (
@@ -1167,6 +1168,11 @@ async def register_target(
                 cluster_id=scoped_payload.cluster_id,
                 cluster_role=scoped_payload.cluster_role,
                 interval_seconds=scoped_payload.evidence_interval_seconds,
+                evidence_profile=evidence_profile_for_registration(
+                    cluster_role=scoped_payload.cluster_role,
+                    environment=scoped_payload.environment,
+                    install_sample_workload=scoped_payload.install_sample_workload,
+                ),
                 bootstrap_mode=(
                     "management"
                     if scoped_payload.cluster_role == MANAGEMENT_CLUSTER_ROLE

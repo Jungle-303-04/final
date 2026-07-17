@@ -129,6 +129,7 @@ def release_failure_evidence_request(
         "provider_policies": release_failure_provider_policies(
             provider_keys,
             namespace,
+            cluster_id,
             release_context,
         ),
     }
@@ -380,6 +381,7 @@ def release_step_for_workflow(
 def release_failure_provider_policies(
     provider_keys: list[str],
     namespace: str,
+    cluster_id: str,
     release_context: Mapping[str, Any] | None = None,
 ) -> JsonObject:
     interval_seconds = int(Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
@@ -388,6 +390,7 @@ def release_failure_provider_policies(
             provider_key,
             namespace,
             interval_seconds,
+            cluster_id,
             release_context,
         )
         for provider_key in provider_keys
@@ -398,9 +401,14 @@ def release_failure_provider_policy(
     provider_key: str,
     namespace: str,
     interval_seconds: int,
+    cluster_id: str,
     release_context: Mapping[str, Any] | None = None,
 ) -> JsonObject:
-    policy = default_evidence_provider_policy(provider_key, interval_seconds).model_dump()
+    policy = default_evidence_provider_policy(
+        provider_key,
+        interval_seconds,
+        cluster_id=cluster_id,
+    ).model_dump()
     queries = policy.get("queries")
     if isinstance(queries, list):
         policy["queries"] = [
@@ -420,8 +428,23 @@ def release_failure_query_for_namespace(
     release_context: Mapping[str, Any] | None = None,
 ) -> JsonObject:
     payload = dict(query)
+    provenance = mapping_value(payload.get("provenance"))
+    if provenance.get("query_scope") == "namespace":
+        old_namespaces = [str(item) for item in list_value(provenance.get("namespaces"))]
+        old_matchers = [str(item) for item in list_value(provenance.get("required_matchers"))]
+        provenance["namespaces"] = [namespace]
+        provenance["required_matchers"] = [
+            matcher.replace('namespace="target"', f'namespace="{namespace}"').replace(
+                'k8s_namespace_name="target"',
+                f'k8s_namespace_name="{namespace}"',
+            )
+            for matcher in old_matchers
+        ]
+        if not provenance["required_matchers"] and "target" in old_namespaces:
+            provenance["required_matchers"] = [namespace]
+        payload["provenance"] = provenance
     if provider_key == "kubernetes":
-        if payload.get("collection_scope") == "cluster_events":
+        if provenance.get("query_scope") == "cluster":
             return payload
         payload["query"] = namespace
         for key in ("resource_kind", "resource_name", "label_selector"):

@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from domains.target.evidence_policy import DEFAULT_EVIDENCE_PROVIDER_QUERIES
+from domains.target.evidence_policy import (
+    STANDARD_EVIDENCE_PROFILE,
+    evidence_provider_queries,
+)
 from domains.target.policy_upgrade import (
     TARGET_RBAC_ADMIN_MANIFEST_PATH,
     TargetPolicyUpgradeService,
@@ -152,10 +155,13 @@ def test_upgrade_plan_rebases_only_named_defaults_and_preserves_custom_configura
     assert kubernetes.max_workers == 1
     assert kubernetes.queue_age_target_seconds == 37
     query_by_name = {str(item["name"]): item for item in kubernetes.queries}
+    default_kubernetes_queries = evidence_provider_queries(
+        "kubernetes",
+        cluster_id="customer-cluster",
+        evidence_profile=STANDARD_EVIDENCE_PROFILE,
+    )
     assert query_by_name["target_namespace_snapshot"] == next(
-        item
-        for item in DEFAULT_EVIDENCE_PROVIDER_QUERIES["kubernetes"]
-        if item["name"] == "target_namespace_snapshot"
+        item for item in default_kubernetes_queries if item["name"] == "target_namespace_snapshot"
     )
     assert query_by_name["customer_query"] == {
         "name": "customer_query",
@@ -163,9 +169,7 @@ def test_upgrade_plan_rebases_only_named_defaults_and_preserves_custom_configura
         "query": "custom-value",
         "custom_option": {"keep": True},
     }
-    assert {str(item["name"]) for item in DEFAULT_EVIDENCE_PROVIDER_QUERIES["kubernetes"]}.issubset(
-        query_by_name
-    )
+    assert {str(item["name"]) for item in default_kubernetes_queries}.issubset(query_by_name)
     assert plan.policy.evidence.providers["customer-provider"].model_dump() == (
         _policy().evidence.providers["customer-provider"].model_dump()
     )

@@ -17,9 +17,12 @@ import yaml
 
 from domains.target.events import TargetDesiredComponent
 from domains.target.evidence_policy import (
-    DEFAULT_EVIDENCE_PROVIDER_QUERIES,
+    EVIDENCE_PROVIDER_KEYS,
     default_agent_policy,
     default_evidence_provider_policy,
+    evidence_profile_for_registration,
+    evidence_provider_queries,
+    profile_default_query_names,
 )
 from domains.target.install_manifest import cluster_agent_manifest
 from domains.target.management_guard import (
@@ -27,6 +30,7 @@ from domains.target.management_guard import (
     cluster_role_from_registration,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.evidence_policy import EvidenceProfile
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentPolicy,
@@ -157,15 +161,30 @@ def _registration_payload(registration: JsonObject, target_image: str) -> Target
     return TargetRegisterRequest.model_validate(values)
 
 
-def _rebase_provider_queries(policy: AgentPolicy, interval_seconds: int) -> AgentPolicy:
+def _rebase_provider_queries(
+    policy: AgentPolicy,
+    interval_seconds: int,
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+) -> AgentPolicy:
     payload = policy.model_dump()
     providers = payload["evidence"]["providers"]
-    for provider_key, default_queries in DEFAULT_EVIDENCE_PROVIDER_QUERIES.items():
+    payload["evidence"]["profile"] = evidence_profile
+    reserved_names = profile_default_query_names()
+    for provider_key in EVIDENCE_PROVIDER_KEYS:
+        default_queries = evidence_provider_queries(
+            provider_key,
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+        )
         existing_provider = providers.get(provider_key)
         if existing_provider is None:
             providers[provider_key] = default_evidence_provider_policy(
                 provider_key,
                 interval_seconds,
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
             ).model_dump()
             continue
 
@@ -179,6 +198,8 @@ def _rebase_provider_queries(policy: AgentPolicy, interval_seconds: int) -> Agen
                 if name not in seen_defaults:
                     rebased.append(copy.deepcopy(defaults_by_name[name]))
                     seen_defaults.add(name)
+                continue
+            if isinstance(name, str) and name in reserved_names:
                 continue
             rebased.append(copy.deepcopy(query))
         for default_query in default_queries:
@@ -353,7 +374,17 @@ def build_target_upgrade_plan(
         )
 
     payload = _registration_payload(registration, image)
-    rebased = _rebase_provider_queries(current, payload.evidence_interval_seconds)
+    evidence_profile = evidence_profile_for_registration(
+        cluster_role=payload.cluster_role,
+        environment=payload.environment,
+        install_sample_workload=payload.install_sample_workload,
+    )
+    rebased = _rebase_provider_queries(
+        current,
+        payload.evidence_interval_seconds,
+        cluster_id=cluster_id,
+        evidence_profile=evidence_profile,
+    )
     rebased = _runtime_config_resource(rebased, payload)
     rebased = _deployment_resource(rebased, payload)
     policy_changed = _policy_without_generation(rebased) != _policy_without_generation(current)

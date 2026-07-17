@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 from packages.config.constants import Target
+from packages.config.security import RCA_TEST_TARGET_ENVIRONMENTS
+from packages.contracts.evidence_policy import (
+    EvidencePolicyQuery,
+    EvidenceProfile,
+    EvidenceQueryProvenance,
+    EvidenceQueryScope,
+    EvidenceQuerySource,
+)
 from packages.contracts.gateway.requests import (
     AgentPolicy,
     BootstrapPolicy,
@@ -21,249 +29,399 @@ DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS = 2
 DEFAULT_CLUSTER_ROLE = "target"
 MANAGEMENT_CLUSTER_ROLE = "management"
 DEFAULT_BOOTSTRAP_MODE = "target"
-MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS = {"kubernetes"}
-CLUSTER_API_DISCOVERY_QUERY = {
-    "name": "cluster_api_discovery",
-    "description": "Discover authorized Kubernetes API resources and CRD identities.",
-    "query": KUBERNETES_ALL_NAMESPACES_QUERY,
-    "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
-}
-CLUSTER_ACCESS_QUERY = {
-    "name": "cluster_access_snapshot",
-    "description": "Collect complete bounded Kubernetes RBAC reverse-lookup evidence.",
-    "query": KUBERNETES_ALL_NAMESPACES_QUERY,
-    "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
-}
-MANAGEMENT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
-    "kubernetes": [
-        {
-            "name": "management_namespace_snapshot",
-            "description": (
-                "Kubernetes pods, events, nodes, workloads, services, and endpoint slices "
-                "in the management namespace."
-            ),
-            "query": "management",
-        },
-        {
-            "name": "cluster_wide_event_capture",
-            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
-            "query": KUBERNETES_ALL_NAMESPACES_QUERY,
-            "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
-        },
-        {**CLUSTER_API_DISCOVERY_QUERY},
-        {**CLUSTER_ACCESS_QUERY},
-    ]
-}
+STANDARD_EVIDENCE_PROFILE: EvidenceProfile = "standard"
+DEMO_EVIDENCE_PROFILE: EvidenceProfile = "demo"
+MANAGEMENT_EVIDENCE_PROFILE: EvidenceProfile = "management"
+EVIDENCE_PROVIDER_KEYS = ("kubernetes", "metrics", "logs", "traces", "metadata")
 
-# Default evidence queries sent to each provider.
-# These values seed the agent policy for a target cluster.
-DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
-    "kubernetes": [
-        {
-            "name": "target_namespace_snapshot",
-            "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the target namespace.",
-            "query": "target",
-        },
-        {
-            # 데모/장애주입 워크로드는 sandbox 네임스페이스에 배포된다 — 이 snapshot 이
-            # 없으면 sandbox 장애의 incident 가 탐지되지 않거나 target 관측 스택 신호로 오염된다.
-            "name": "sandbox_namespace_snapshot",
-            "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the sandbox namespace.",
-            "query": "sandbox",
-        },
-        {
-            # 실제 게임 데모는 격리된 color-turf 네임스페이스에서 실행된다. Pod 재시작,
-            # OOMKilled 종료 상태, Kubernetes Event를 같은 실제 evidence 파이프라인으로
-            # 수집해야 장애 버튼부터 incident/RCA까지 단절되지 않는다.
-            "name": "color_turf_namespace_snapshot",
-            "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the color-turf namespace.",
-            "query": "color-turf",
-        },
-        {
-            "name": "cluster_wide_event_capture",
-            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
-            "query": KUBERNETES_ALL_NAMESPACES_QUERY,
-            "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
-        },
-        {**CLUSTER_API_DISCOVERY_QUERY},
-        {**CLUSTER_ACCESS_QUERY},
-    ],
-    "metrics": [
-        {
-            "name": "scrape_targets_up",
-            "description": "Prometheus scrape target health for the target cluster.",
-            "query": "up",
-        },
-        {
-            "name": "target_pod_info",
-            "description": "Pods discovered by kube-state-metrics in the target namespace.",
-            "query": 'kube_pod_info{namespace="target"}',
-        },
-        {
-            "name": "target_deployment_replicas",
-            "description": "Deployment replica counts reported by kube-state-metrics.",
-            "query": 'kube_deployment_status_replicas{namespace="target"}',
-        },
-        {
-            "name": "color_turf_pod_restarts",
-            "description": "Container restart counts for the live color-turf game workloads.",
-            "query": 'kube_pod_container_status_restarts_total{namespace="color-turf"}',
-        },
-        {
-            "name": "color_turf_oom_terminated",
-            "description": "Containers in color-turf whose latest termination reason is OOMKilled.",
-            "query": 'kube_pod_container_status_last_terminated_reason{namespace="color-turf",reason="OOMKilled"}',
-        },
-        {
-            "name": "node_cpu_usage_ratio",
-            "description": "Node CPU usage ratio from Prometheus node-exporter metrics.",
-            "query": '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))',
-        },
-        {
-            "name": "node_memory_usage_ratio",
-            "description": "Node memory usage ratio from Prometheus node-exporter metrics.",
-            "query": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-        },
-        {
-            "name": "node_filesystem_usage_ratio",
-            "description": "Node filesystem usage ratio from Prometheus node-exporter metrics.",
-            "query": (
-                '1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"} '
-                '/ node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"})'
+
+def _provenance(
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+    query_scope: EvidenceQueryScope,
+    namespaces: tuple[str, ...] = (),
+    required_matchers: tuple[str, ...] = (),
+) -> EvidenceQueryProvenance:
+    return EvidenceQueryProvenance(
+        cluster_id=cluster_id,
+        evidence_profile=evidence_profile,
+        backend_scope="cluster_local",
+        query_scope=query_scope,
+        namespaces=namespaces,
+        required_matchers=required_matchers,
+    )
+
+
+def _query(
+    *,
+    source: EvidenceQuerySource,
+    name: str,
+    description: str,
+    query: str,
+    provenance: EvidenceQueryProvenance,
+    collection_scope: str | None = None,
+) -> dict[str, object]:
+    return EvidencePolicyQuery(
+        source=source,
+        name=name,
+        description=description,
+        query=query,
+        provenance=provenance,
+        collection_scope=collection_scope,
+    ).model_dump(mode="json", exclude_none=True)
+
+
+def _namespace_query(
+    *,
+    source: EvidenceQuerySource,
+    name: str,
+    description: str,
+    query: str,
+    namespace: str,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+    matcher: str | None = None,
+) -> dict[str, object]:
+    required_matcher = matcher or namespace
+    return _query(
+        source=source,
+        name=name,
+        description=description,
+        query=query,
+        provenance=_provenance(
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+            query_scope="namespace",
+            namespaces=(namespace,),
+            required_matchers=(required_matcher,),
+        ),
+    )
+
+
+def _cluster_kubernetes_queries(
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+) -> list[dict[str, object]]:
+    provenance = _provenance(
+        cluster_id=cluster_id,
+        evidence_profile=evidence_profile,
+        query_scope="cluster",
+    )
+    return [
+        _query(
+            source="kubernetes",
+            name="cluster_wide_event_capture",
+            description="Paginated all-namespace Kubernetes Event capture with coverage proof.",
+            query=KUBERNETES_ALL_NAMESPACES_QUERY,
+            provenance=provenance,
+            collection_scope=KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+        ),
+        _query(
+            source="kubernetes",
+            name="cluster_api_discovery",
+            description="Discover authorized Kubernetes API resources and CRD identities.",
+            query=KUBERNETES_ALL_NAMESPACES_QUERY,
+            provenance=provenance,
+            collection_scope=KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+        ),
+        _query(
+            source="kubernetes",
+            name="cluster_access_snapshot",
+            description="Collect complete bounded Kubernetes RBAC reverse-lookup evidence.",
+            query=KUBERNETES_ALL_NAMESPACES_QUERY,
+            provenance=provenance,
+            collection_scope=KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
+        ),
+    ]
+
+
+def evidence_provider_queries(
+    provider_key: str,
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile = STANDARD_EVIDENCE_PROFILE,
+) -> list[dict[str, object]]:
+    """Compile one server-owned provider query set for an exact cluster profile."""
+
+    if evidence_profile == MANAGEMENT_EVIDENCE_PROFILE:
+        if provider_key != "kubernetes":
+            return []
+        return [
+            _namespace_query(
+                source="kubernetes",
+                name="management_namespace_snapshot",
+                description="Kubernetes snapshot in the management namespace.",
+                query="management",
+                namespace="management",
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
             ),
-        },
-        {
-            "name": "node_collector_node_pod_count",
-            "description": "Pods scheduled on each Kubernetes node reported by optional-node-collector.",
-            "query": "node_collector_node_pod_count",
-            "range_seconds": "900",
-            "step_seconds": "30",
-        },
-        {
-            "name": "node_collector_node_not_ready_pod_count",
-            "description": (
-                "Not Ready Pods on each Kubernetes node reported by optional-node-collector."
+            *_cluster_kubernetes_queries(cluster_id, evidence_profile),
+        ]
+
+    if provider_key == "kubernetes":
+        queries = [
+            _namespace_query(
+                source="kubernetes",
+                name="target_namespace_snapshot",
+                description="Kubernetes snapshot in the target agent namespace.",
+                query="target",
+                namespace="target",
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
             ),
-            "query": "node_collector_node_not_ready_pod_count",
-            "range_seconds": "900",
-            "step_seconds": "30",
-        },
-        {
-            "name": "node_collector_scrape_error",
-            "description": "Whether optional-node-collector failed to read Kubernetes API data.",
-            "query": "node_collector_scrape_error",
-        },
-    ],
-    "logs": [
-        {
-            "name": "target_namespace_errors",
-            "description": "Error logs emitted by workloads in the target namespace.",
-            "query": '{k8s_namespace_name="target"} |= "ERROR"',
-        },
-        {
-            # sandbox 워크로드(장애주입 대상)의 오류 로그 — RCA 리포트 근거의 1차 소스.
-            # FATAL(치명 시작 실패)·panic 도 함께 잡아 crashloop 원인 판별 신호를 확보한다.
-            "name": "sandbox_namespace_errors",
-            "description": "Error/fatal logs emitted by workloads in the sandbox namespace.",
-            "query": '{k8s_namespace_name="sandbox"} |~ "ERROR|FATAL|panic"',
-        },
-        {
-            "name": "color_turf_runtime_failures",
-            "description": "OOM, fatal, and explicit chaos events emitted by the live color-turf game workloads.",
-            "query": (
-                '{k8s_namespace_name="color-turf"} '
-                '|~ "OOM|out of memory|chaos.oom|ERROR|FATAL|panic"'
+            *_cluster_kubernetes_queries(cluster_id, evidence_profile),
+        ]
+        if evidence_profile == DEMO_EVIDENCE_PROFILE:
+            queries[1:1] = [
+                _namespace_query(
+                    source="kubernetes",
+                    name="sandbox_namespace_snapshot",
+                    description="Kubernetes snapshot in the sandbox demo namespace.",
+                    query="sandbox",
+                    namespace="sandbox",
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                ),
+                _namespace_query(
+                    source="kubernetes",
+                    name="color_turf_namespace_snapshot",
+                    description="Kubernetes snapshot in the color-turf demo namespace.",
+                    query="color-turf",
+                    namespace="color-turf",
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                ),
+            ]
+        return queries
+
+    if provider_key == "metrics":
+        queries = [
+            _namespace_query(
+                source="prometheus",
+                name="target_pod_info",
+                description="Pods reported by kube-state-metrics in the agent namespace.",
+                query='kube_pod_info{namespace="target"}',
+                namespace="target",
+                matcher='namespace="target"',
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
             ),
-        },
-        {
-            "name": "node_collector_runtime_samples",
-            "description": "Structured runtime samples emitted by optional-node-collector.",
-            "query": (
-                '{k8s_namespace_name="target", k8s_container_name="node-collector"} '
-                '|= "node_runtime_sample"'
+            _namespace_query(
+                source="prometheus",
+                name="target_deployment_replicas",
+                description="Deployment replicas in the target agent namespace.",
+                query='kube_deployment_status_replicas{namespace="target"}',
+                namespace="target",
+                matcher='namespace="target"',
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
             ),
-        },
-        {
-            "name": "target_agent_warnings",
-            "description": "Warnings or failures emitted by the target-cluster-agent.",
-            "query": (
-                '{k8s_namespace_name="target", k8s_container_name="cluster-agent"} '
-                '|~ "WARN|ERROR|failed"'
+        ]
+        if evidence_profile == DEMO_EVIDENCE_PROFILE:
+            queries.extend(
+                [
+                    _namespace_query(
+                        source="prometheus",
+                        name="color_turf_pod_restarts",
+                        description="Container restarts in the color-turf demo namespace.",
+                        query=('kube_pod_container_status_restarts_total{namespace="color-turf"}'),
+                        namespace="color-turf",
+                        matcher='namespace="color-turf"',
+                        cluster_id=cluster_id,
+                        evidence_profile=evidence_profile,
+                    ),
+                    _namespace_query(
+                        source="prometheus",
+                        name="color_turf_oom_terminated",
+                        description="OOMKilled containers in the color-turf demo namespace.",
+                        query=(
+                            "kube_pod_container_status_last_terminated_reason"
+                            '{namespace="color-turf",reason="OOMKilled"}'
+                        ),
+                        namespace="color-turf",
+                        matcher='namespace="color-turf"',
+                        cluster_id=cluster_id,
+                        evidence_profile=evidence_profile,
+                    ),
+                ]
+            )
+        return queries
+
+    if provider_key == "logs":
+        queries = [
+            _namespace_query(
+                source="loki",
+                name="target_namespace_errors",
+                description="Error logs in the target agent namespace.",
+                query='{k8s_namespace_name="target"} |= "ERROR"',
+                namespace="target",
+                matcher='k8s_namespace_name="target"',
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
             ),
-        },
-    ],
-    "traces": [
-        {
-            "name": "application_error_spans",
-            "description": "Recent application spans that ended with an error status.",
-            "query": "{ status = error }",
-        },
-        {
-            "name": "target_agent_error_spans",
-            "description": "Error spans emitted by the target-cluster-agent.",
-            "query": '{ resource.service.name = "target-cluster-agent" && status = error }',
-        },
-        {
-            "name": "target_agent_recent_spans",
-            "description": "Recent spans emitted by the target-cluster-agent evidence loop.",
-            "query": '{ resource.service.name = "target-cluster-agent" }',
-        },
-        {
-            "name": "management_gateway_spans",
-            "description": "Management Gateway request spans related to agent traffic.",
-            "query": '{ resource.service.name = "api-gateway" }',
-        },
-    ],
-    "metadata": [
-        {
-            "name": "change_context",
-            "description": "Change context metadata for RCA",
-            "query": "change_context",
-        },
-    ],
-}
+            _namespace_query(
+                source="loki",
+                name="node_collector_runtime_samples",
+                description="Structured samples emitted by optional-node-collector.",
+                query=(
+                    '{k8s_namespace_name="target", k8s_container_name="node-collector"} '
+                    '|= "node_runtime_sample"'
+                ),
+                namespace="target",
+                matcher='k8s_namespace_name="target"',
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+            ),
+            _namespace_query(
+                source="loki",
+                name="target_agent_warnings",
+                description="Warnings or failures emitted by the target cluster agent.",
+                query=(
+                    '{k8s_namespace_name="target", k8s_container_name="cluster-agent"} '
+                    '|~ "WARN|ERROR|failed"'
+                ),
+                namespace="target",
+                matcher='k8s_namespace_name="target"',
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+            ),
+        ]
+        if evidence_profile == DEMO_EVIDENCE_PROFILE:
+            queries.extend(
+                [
+                    _namespace_query(
+                        source="loki",
+                        name="sandbox_namespace_errors",
+                        description="Error/fatal logs in the sandbox demo namespace.",
+                        query=('{k8s_namespace_name="sandbox"} |~ "ERROR|FATAL|panic"'),
+                        namespace="sandbox",
+                        matcher='k8s_namespace_name="sandbox"',
+                        cluster_id=cluster_id,
+                        evidence_profile=evidence_profile,
+                    ),
+                    _namespace_query(
+                        source="loki",
+                        name="color_turf_runtime_failures",
+                        description="Runtime failures in the color-turf demo namespace.",
+                        query=(
+                            '{k8s_namespace_name="color-turf"} '
+                            '|~ "OOM|out of memory|chaos.oom|ERROR|FATAL|panic"'
+                        ),
+                        namespace="color-turf",
+                        matcher='k8s_namespace_name="color-turf"',
+                        cluster_id=cluster_id,
+                        evidence_profile=evidence_profile,
+                    ),
+                ]
+            )
+        return queries
+
+    if provider_key == "traces":
+        # Current OTEL resources expose service.name only. Until a verified
+        # cluster attribute exists, emitting a shared-backend TraceQL query is unsafe.
+        return []
+    if provider_key == "metadata":
+        return [
+            _query(
+                source="metadata",
+                name="change_context",
+                description="Change context metadata for RCA.",
+                query="change_context",
+                provenance=_provenance(
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                    query_scope="cluster",
+                ),
+            )
+        ]
+    return []
+
+
+def profile_default_query_names() -> frozenset[str]:
+    """Return every reserved server preset name across target profiles."""
+
+    names: set[str] = set()
+    for profile in (STANDARD_EVIDENCE_PROFILE, DEMO_EVIDENCE_PROFILE):
+        for provider_key in EVIDENCE_PROVIDER_KEYS:
+            names.update(
+                str(query["name"])
+                for query in evidence_provider_queries(
+                    provider_key,
+                    cluster_id=Target.DEFAULT_CLUSTER_ID,
+                    evidence_profile=profile,
+                )
+            )
+    return frozenset(names)
+
+
+def evidence_profile_for_registration(
+    *,
+    cluster_role: str,
+    environment: str,
+    install_sample_workload: bool,
+) -> EvidenceProfile:
+    if cluster_role == MANAGEMENT_CLUSTER_ROLE:
+        return MANAGEMENT_EVIDENCE_PROFILE
+    if install_sample_workload or environment.strip().casefold() in RCA_TEST_TARGET_ENVIRONMENTS:
+        return DEMO_EVIDENCE_PROFILE
+    return STANDARD_EVIDENCE_PROFILE
 
 
 def default_evidence_provider_policy(
     provider_key: str,
     interval_seconds: int,
     *,
-    enabled: bool = True,
-    queries: list[dict[str, str]] | None = None,
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID,
+    evidence_profile: EvidenceProfile = STANDARD_EVIDENCE_PROFILE,
+    enabled: bool | None = None,
+    queries: list[dict[str, object]] | None = None,
 ) -> EvidenceProviderPolicy:
     """Build the default policy for one evidence provider."""
+    compiled_queries = (
+        evidence_provider_queries(
+            provider_key,
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+        )
+        if queries is None
+        else list(queries)
+    )
     return EvidenceProviderPolicy(
-        enabled=enabled,
+        enabled=bool(compiled_queries) if enabled is None else enabled,
         interval_seconds=interval_seconds,
         min_workers=DEFAULT_EVIDENCE_PROVIDER_WORKERS,
         max_workers=DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
-        queries=list(
-            DEFAULT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, []) if queries is None else queries
-        ),
+        queries=compiled_queries,
     )
 
 
 def default_evidence_providers(
     interval_seconds: int,
     *,
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID,
     cluster_role: str = DEFAULT_CLUSTER_ROLE,
+    evidence_profile: EvidenceProfile | None = None,
 ) -> dict[str, EvidenceProviderPolicy]:
     """Build default provider policies for all known providers."""
+    resolved_profile = evidence_profile or (
+        MANAGEMENT_EVIDENCE_PROFILE
+        if cluster_role == MANAGEMENT_CLUSTER_ROLE
+        else STANDARD_EVIDENCE_PROFILE
+    )
+    if cluster_role == MANAGEMENT_CLUSTER_ROLE and resolved_profile != MANAGEMENT_EVIDENCE_PROFILE:
+        raise ValueError("management clusters require the management evidence profile")
+    if cluster_role != MANAGEMENT_CLUSTER_ROLE and resolved_profile == MANAGEMENT_EVIDENCE_PROFILE:
+        raise ValueError("target clusters cannot use the management evidence profile")
     return {
         provider_key: default_evidence_provider_policy(
             provider_key,
             interval_seconds,
-            enabled=(
-                cluster_role != MANAGEMENT_CLUSTER_ROLE
-                or provider_key in MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS
-            ),
-            queries=(
-                MANAGEMENT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, [])
-                if cluster_role == MANAGEMENT_CLUSTER_ROLE
-                else None
-            ),
+            cluster_id=cluster_id,
+            evidence_profile=resolved_profile,
         )
-        for provider_key in DEFAULT_EVIDENCE_PROVIDER_QUERIES
+        for provider_key in EVIDENCE_PROVIDER_KEYS
     }
 
 
@@ -275,17 +433,26 @@ def default_agent_policy(
     failure_policy: str = DEFAULT_EVIDENCE_FAILURE_POLICY,
     bootstrap_mode: str = DEFAULT_BOOTSTRAP_MODE,
     generation: int = 1,
+    evidence_profile: EvidenceProfile | None = None,
 ) -> AgentPolicy:
     """Build the default policy used by a target cluster agent."""
+    resolved_profile = evidence_profile or (
+        MANAGEMENT_EVIDENCE_PROFILE
+        if cluster_role == MANAGEMENT_CLUSTER_ROLE
+        else STANDARD_EVIDENCE_PROFILE
+    )
     return AgentPolicy(
         cluster_id=cluster_id,
         cluster_role=cluster_role,
         generation=generation,
         evidence=EvidenceRuntimePolicy(
+            profile=resolved_profile,
             failure_policy=failure_policy,
             providers=default_evidence_providers(
                 interval_seconds,
+                cluster_id=cluster_id,
                 cluster_role=cluster_role,
+                evidence_profile=resolved_profile,
             ),
         ),
         bootstrap=BootstrapPolicy(mode=bootstrap_mode),

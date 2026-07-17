@@ -1137,6 +1137,12 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert "agent_token" not in db.registered[0]
     assert db.policy is not None
     assert db.policy["cluster_id"] == "target-cluster-01"
+    assert db.policy["evidence"]["profile"] == "standard"
+    assert all(
+        "sandbox" not in str(query) and "color-turf" not in str(query)
+        for provider in db.policy["evidence"]["providers"].values()
+        for query in provider["queries"]
+    )
     # 응답의 agent_token 은 매니페스트에 주입된 원문과 동일(대시보드가 x-agent-token 으로 사용)
     assert response.agent_token == match.group(1)
     assert response.status == "pending_install"
@@ -1178,39 +1184,25 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     )
     agent_state = next(item for item in db.desired_states if item["component"] == "cluster-agent")
     assert "prometheus_base_url" not in agent_state["spec"]
+    assert db.policy is not None
+    assert db.policy["evidence"]["profile"] == "management"
     assert agent_state["spec"]["loki_base_url"] == ""
     assert agent_state["spec"]["tempo_base_url"] == ""
     assert db.policy is not None
     providers = db.policy["evidence"]["providers"]
     assert providers["kubernetes"]["enabled"] is True
-    assert providers["kubernetes"]["queries"] == [
-        {
-            "name": "management_namespace_snapshot",
-            "description": (
-                "Kubernetes pods, events, nodes, workloads, services, and endpoint slices "
-                "in the management namespace."
-            ),
-            "query": "management",
-        },
-        {
-            "name": "cluster_wide_event_capture",
-            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
-            "query": "*",
-            "collection_scope": "cluster_events",
-        },
-        {
-            "name": "cluster_api_discovery",
-            "description": "Discover authorized Kubernetes API resources and CRD identities.",
-            "query": "*",
-            "collection_scope": "cluster_discovery",
-        },
-        {
-            "name": "cluster_access_snapshot",
-            "description": "Collect complete bounded Kubernetes RBAC reverse-lookup evidence.",
-            "query": "*",
-            "collection_scope": "cluster_access",
-        },
-    ]
+    management_queries = providers["kubernetes"]["queries"]
+    assert {query["name"] for query in management_queries} == {
+        "management_namespace_snapshot",
+        "cluster_wide_event_capture",
+        "cluster_api_discovery",
+        "cluster_access_snapshot",
+    }
+    assert all(
+        query["provenance"]["cluster_id"] == "kubernetes-ops"
+        and query["provenance"]["evidence_profile"] == "management"
+        for query in management_queries
+    )
     assert all(
         provider_key == "kubernetes" or provider["enabled"] is False
         for provider_key, provider in providers.items()
@@ -1223,6 +1215,32 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
         if provider_policy.enabled
     }
     assert enabled == {"kubernetes"}
+
+
+def test_rca_test_registration_explicitly_uses_demo_evidence_profile() -> None:
+    db = StubDb()
+    events = StubEvents()
+    request = target_request().model_copy(update={"environment": "test"})
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    asyncio.run(run())
+
+    assert db.policy is not None
+    assert db.policy["evidence"]["profile"] == "demo"
+    query_names = {
+        query["name"]
+        for provider in db.policy["evidence"]["providers"].values()
+        for query in provider["queries"]
+    }
+    assert "sandbox_namespace_snapshot" in query_names
+    assert "color_turf_pod_restarts" in query_names
 
 
 def test_target_registration_generates_cluster_id_when_missing(monkeypatch) -> None:
