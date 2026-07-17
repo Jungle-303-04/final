@@ -99,6 +99,84 @@ describe("HelmPage", () => {
     expect(screen.queryByRole("button", { name: /install bitnami\/redis/i })).toBeNull();
   });
 
+  it("searches registered sources and keeps exact chart detail identity in the URL", async () => {
+    const port = helmPort();
+    const source = {
+      id: "source-repository",
+      provider: "repository" as const,
+      name: "Stable",
+      reference: "https://charts.example.test/stable",
+      status: "active" as const,
+      actions: [] as const,
+      credentialsConfigured: false,
+      observedAt: "2026-07-17T08:00:00Z",
+    };
+    const chart = {
+      source,
+      name: "redis",
+      version: "2.0.0",
+      appVersion: "8.0",
+      description: "Redis chart",
+      deprecated: false,
+    };
+    port.listChartSources.mockResolvedValue({
+      items: [source], limit: 50, hasMore: false, nextCursor: null,
+    });
+    port.searchCharts.mockResolvedValue({
+      availability: "available",
+      items: [chart],
+      total: 1,
+      limit: 20,
+      query: "redis",
+      sourceId: "source-repository",
+      provider: "repository",
+      allVersions: false,
+      observedAt: "2026-07-17T08:00:00Z",
+      truncated: false,
+      reasonCodes: [],
+    });
+    port.getChartDetail.mockResolvedValue({
+      availability: "available",
+      chart,
+      versions: [{ version: "2.0.0", appVersion: "8.0", deprecated: false }],
+      valuesSchema: {
+        availability: "unavailable",
+        schema: null,
+        reasonCode: "helm_chart_values_schema_unavailable",
+      },
+      install: {
+        availability: "unavailable",
+        target: null,
+        reasonCode: "helm_chart_install_recipe_unavailable",
+      },
+      observedAt: "2026-07-17T08:00:00Z",
+      truncated: false,
+      reasonCodes: [],
+    });
+    renderRoute("/helm", port);
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "Search registered charts" }), {
+      target: { value: "redis" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Chart source" }), {
+      target: { value: "source-repository" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search catalog" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stable/redis 2.0.0" }));
+
+    await waitFor(() => expect(port.getChartDetail).toHaveBeenCalledWith({
+      sourceId: "source-repository",
+      chart: "redis",
+      version: "2.0.0",
+    }, expect.any(AbortSignal)));
+    expect(await screen.findByRole("heading", { name: "Stable/redis" })).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toContain(
+      "helmChartSource=source-repository",
+    );
+    expect(screen.getByTestId("location").textContent).toContain("helmChart=redis");
+    expect(screen.getByText("Values schema is not available for this chart source.")).toBeTruthy();
+  });
+
   it("installs only a server-owned recipe and hands its command to the operation stream", async () => {
     const port = helmPort();
     port.listInstallTargets.mockResolvedValue({
@@ -698,6 +776,8 @@ function LocationProbe() {
 function helmPort(): HelmPort & {
   listInstallTargets: ReturnType<typeof vi.fn>;
   installRelease: ReturnType<typeof vi.fn>;
+  searchCharts: ReturnType<typeof vi.fn>;
+  getChartDetail: ReturnType<typeof vi.fn>;
   searchArtifactHub: ReturnType<typeof vi.fn>;
   getArtifactHubChart: ReturnType<typeof vi.fn>;
   checkReleaseUpgrades: ReturnType<typeof vi.fn>;
@@ -725,6 +805,20 @@ function helmPort(): HelmPort & {
       correlationId: "corr-install",
       status: "queued",
     }),
+    searchCharts: vi.fn().mockResolvedValue({
+      availability: "available",
+      items: [],
+      total: 0,
+      limit: 20,
+      query: "",
+      sourceId: null,
+      provider: null,
+      allVersions: false,
+      observedAt: "2026-07-17T08:00:00Z",
+      truncated: false,
+      reasonCodes: [],
+    }),
+    getChartDetail: vi.fn(),
     previewReleaseValues: vi.fn().mockResolvedValue({
       accepted: true,
       eventId: "evt-preview",

@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   deleteHelmChartSource,
+  getHelmChartDetail,
+  HELM_CHARTS_PATH,
   HELM_CHART_SOURCES_PATH,
   listHelmChartSources,
   registerHelmChartSource,
   refreshHelmRepository,
   HELM_REPOSITORY_UPDATE_PATH,
+  searchHelmCharts,
 } from "./helm-chart-sources";
 
 describe("Helm chart source API", () => {
@@ -154,6 +157,43 @@ describe("Helm chart source API", () => {
     expect(() => listHelmChartSources({ cursor: " " })).toThrow(TypeError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("searches the authorized dynamic chart catalog with exact source and version filters", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(chartPage()));
+
+    await expect(searchHelmCharts({
+      query: "redis cache",
+      sourceId: "source-repository",
+      provider: "repository",
+      allVersions: true,
+      limit: 40,
+    })).resolves.toMatchObject({ items: [{ name: "redis", version: "2.0.0" }] });
+
+    expect(HELM_CHARTS_PATH).toBe("/api/helm/charts");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/helm/charts?query=redis+cache&source_id=source-repository&provider=repository&allVersions=true&limit=40",
+    );
+  });
+
+  it("loads one exact source/chart/version detail and rejects untyped provider fields", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(chartDetail()))
+      .mockResolvedValueOnce(jsonResponse({ ...chartDetail(), raw_values: "must-not-leak" }));
+
+    await expect(getHelmChartDetail({
+      sourceId: "source-repository",
+      chart: "redis",
+      version: "2.0.0+build.1",
+    })).resolves.toMatchObject({ chart: { name: "redis" } });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/helm/charts/source-repository/redis/2.0.0%2Bbuild.1",
+    );
+
+    await expect(getHelmChartDetail({
+      sourceId: "source-repository",
+      chart: "redis",
+    })).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
 });
 
 function page() {
@@ -176,6 +216,54 @@ function source(overrides: Record<string, unknown> = {}) {
     credentials_configured: false,
     observed_at: "2026-07-17T08:00:00Z",
     ...overrides,
+  };
+}
+
+function chartSummary() {
+  return {
+    source: source(),
+    name: "redis",
+    version: "2.0.0",
+    app_version: "8.0",
+    description: "Redis chart",
+    deprecated: false,
+  };
+}
+
+function chartPage() {
+  return {
+    availability: "available",
+    items: [chartSummary()],
+    total: 1,
+    limit: 40,
+    query: "redis cache",
+    source_id: "source-repository",
+    provider: "repository",
+    all_versions: true,
+    observed_at: "2026-07-17T08:00:00Z",
+    truncated: false,
+    reason_codes: [],
+  };
+}
+
+function chartDetail() {
+  return {
+    availability: "available",
+    chart: chartSummary(),
+    versions: [{ version: "2.0.0", app_version: "8.0", deprecated: false }],
+    values_schema: {
+      availability: "unavailable",
+      schema: null,
+      reason_code: "helm_chart_values_schema_unavailable",
+    },
+    install: {
+      availability: "unavailable",
+      target: null,
+      reason_code: "helm_chart_install_recipe_unavailable",
+    },
+    observed_at: "2026-07-17T08:00:00Z",
+    truncated: false,
+    reason_codes: [],
   };
 }
 
