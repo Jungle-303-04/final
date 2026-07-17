@@ -83,6 +83,19 @@ describe("physical topology view model", () => {
     expect(placements[0]?.visibleTotalCount).toBe(MAX_VISIBLE_PODS_PER_SERVER);
     expect(placements[0]?.pods[0]?.id).toBe("pod:pending");
   });
+
+  it("does not reorder pod marks when only live usage measurements change", () => {
+    const first = pod({ id: "pod:first", name: "first", usagePercent: 10 });
+    const second = pod({ id: "pod:second", name: "second", usagePercent: 95 });
+
+    expect(visiblePhysicalPods([first, second]).map((candidate) => candidate.id))
+      .toEqual(["pod:first", "pod:second"]);
+    expect(visiblePhysicalPods([
+      { ...first, usagePercent: 99 },
+      { ...second, usagePercent: 1 },
+    ]).map((candidate) => candidate.id))
+      .toEqual(["pod:first", "pod:second"]);
+  });
 });
 
 function pod(overrides: Partial<PhysicalTopologyPod>): PhysicalTopologyPod {

@@ -5,7 +5,6 @@ import type {
 } from "../../features/resources/physicalTopologyContract";
 import {
   podAbnormalBadge,
-  podProblemPriority as sharedPodProblemPriority,
   podResourcePressureToneFromPercent,
   podShortLabel,
   podUsageLabel,
@@ -153,7 +152,11 @@ function comparePhysicalPods(left: PhysicalTopologyPod, right: PhysicalTopologyP
 }
 
 function podProblemPriority(pod: PhysicalTopologyPod): number {
-  return sharedPodProblemPriority(pod);
+  const badge = podAbnormalBadge(pod);
+  if (badge === "crash-loop") return 0;
+  if (badge === "pending") return 1;
+  if (!["healthy", "ready", "ok"].includes(pod.health.toLocaleLowerCase())) return 3;
+  return 4;
 }
 
 export function podUsageTone(usagePercent: number | null): PodUsageTone {

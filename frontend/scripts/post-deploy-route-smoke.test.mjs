@@ -7,6 +7,7 @@ import {
   isBenignNavigationAbort,
   isChangeTimelineLimitResponse,
   isFailureProductState,
+  isStableRouteSurfaceSample,
   normalizeSurfaceText,
   orderRoutesForTraversal,
   parseNetscapeSessionCookie,
@@ -39,6 +40,20 @@ describe("post-deploy route smoke helpers", () => {
     expect(normalizeSurfaceText("Resource inventory 27")).not.toBe(
       normalizeSurfaceText("Incident timeline 27"),
     );
+  });
+
+  it("waits for the localized route surface to stabilize after hydration", () => {
+    const english = {
+      bodyFingerprint: "Resources Pods #",
+      routeTitle: "Resources",
+    };
+    const korean = {
+      bodyFingerprint: "리소스 파드 #",
+      routeTitle: "리소스",
+    };
+
+    expect(isStableRouteSurfaceSample(english, korean)).toBe(false);
+    expect(isStableRouteSurfaceSample(korean, { ...korean })).toBe(true);
   });
 
   it("recognizes only the bounded change timeline response", () => {

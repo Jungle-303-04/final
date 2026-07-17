@@ -339,6 +339,18 @@
       "destination": "tests/test_cost_router.py",
       "rationale": "The Python boundary applies workspace and inventory-read scope and keeps every monetary field null until a provider-backed observation exists."
     },
+    "cost.nodes.contract": {
+      "destination": "tests/test_cost_node_projection.py",
+      "rationale": "The bounded Python node page preserves provider-neutral identity, capacity, measured usage, pricing provenance, completeness, and explicit unavailable monetary fields without deriving prices."
+    },
+    "cost.nodes.scope-pagination": {
+      "destination": "tests/test_cost_router.py",
+      "rationale": "The normalized node endpoint enforces workspace, cluster, and namespace authorization, one bulk metric read, a signed cursor, and the server-owned 120-second refresh policy."
+    },
+    "cost.nodes.observed-or-unavailable": {
+      "destination": "frontend/src/pages/cost/CostPage.test.tsx",
+      "rationale": "The Cost surface renders observed node identity, capacity, and use while disclosing missing pricing evidence instead of showing a hardcoded or inferred amount."
+    },
     "cost.trend.contract": {
       "destination": "tests/test_cost_observation_projection.py",
       "rationale": "Trend windows, integer micro-unit rates, series count, point count, and timestamp ordering are bounded by the Python contract before browser delivery."
@@ -11977,8 +11989,11 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/api/cost-nodes.ts",
+              "frontend/src/pages/cost/CostNodesPanel.tsx",
               "frontend/src/pages/cost/CostPage.test.tsx",
+              "src/domains/cost/node_projection.py",
+              "src/domains/cost/router.py",
               "src/packages/contracts/cost/observations.py"
             ],
             "requiredBackendContracts": [
@@ -11986,12 +12001,13 @@
               "domains.cost.router"
             ],
             "plannedTestIds": [
-              "cost.overview.contract",
-              "cost.overview.unavailable"
+              "cost.nodes.contract",
+              "cost.nodes.scope-pagination",
+              "cost.nodes.observed-or-unavailable"
             ],
-            "state": "blocked",
-            "blockedReason": "No provider-neutral node allocation identity, pricing observation repository, authorization projection, or node-cost response contract exists.",
-            "rationale": "The product intentionally omits node prices and efficiency instead of deriving them from inventory or provider identifiers."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The normalized node-cost contract now binds provider-neutral identity, authorized scope, bounded pagination, bulk observed capacity and usage, pricing provenance, and the server-owned refresh policy. Monetary values remain explicitly unavailable until a real billing or allocation source records them."
           }
         },
         {

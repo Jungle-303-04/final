@@ -21,9 +21,14 @@ from domains.diagnostics.version_check import (
 from domains.identity.dependencies import require_session
 from packages.contracts.bootstrap import (
     AGENT_DIAGNOSTICS_LIMIT,
+    CONSUMER_LAG_LIMIT,
     AgentCollectionDiagnostics,
     AgentDiagnosticsItem,
     VersionCheckResponse,
+)
+from packages.contracts.event_bus.interfaces import (
+    EventConsumerLagSnapshot,
+    EventConsumerMetrics,
 )
 from packages.runtime.dependencies import get_db
 
@@ -184,6 +189,115 @@ def test_runtime_diagnostics_is_session_scoped_batched_and_bounded() -> None:
     ) in db.calls
     assert len([call for call in db.calls if call[0] == "latest_cluster_agent_statuses"]) == 1
     assert len([call for call in db.calls if call[0] == "latest_inventory_snapshots"]) == 1
+
+
+def test_runtime_diagnostics_prioritizes_nonzero_lag_before_bounded_idle_consumers() -> None:
+    class HighLagRuntimeDiagnosticsDb(RuntimeDiagnosticsDb):
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            idle = {
+                (f"idle-consumer-{index:03d}", f"idle.subject.{index:03d}"): 0
+                for index in range(CONSUMER_LAG_LIMIT + 2)
+            }
+            return {
+                **idle,
+                ("zz-critical-consumer", "critical.subject"): 9,
+            }
+
+        def event_consumer_ack_pending_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {("zz-critical-consumer", "critical.subject"): 2}
+
+        def event_consumer_redelivered_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {("zz-critical-consumer", "critical.subject"): 1}
+
+    response = _client(HighLagRuntimeDiagnosticsDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    event_pipeline = response.json()["event_pipeline"]
+    assert event_pipeline["availability"] == "available"
+    assert event_pipeline["reason_codes"] == []
+    assert event_pipeline["open_dead_letters"] == 3
+    assert event_pipeline["outbox_pending"] == 4
+    assert event_pipeline["consumer_lag"] == [
+        {
+            "consumer": "zz-critical-consumer",
+            "subject": "critical.subject",
+            "pending": 9,
+            "ack_pending": 2,
+            "redelivered": 1,
+        }
+    ]
+
+
+def test_runtime_diagnostics_marks_only_an_actual_lag_sample_as_truncated() -> None:
+    class ActualLagRuntimeDiagnosticsDb(RuntimeDiagnosticsDb):
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            return {
+                (f"consumer-{index:03d}", f"subject.{index:03d}"): index + 1
+                for index in range(CONSUMER_LAG_LIMIT + 2)
+            }
+
+        def event_consumer_ack_pending_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {}
+
+        def event_consumer_redelivered_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {}
+
+    response = _client(ActualLagRuntimeDiagnosticsDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    event_pipeline = response.json()["event_pipeline"]
+    assert event_pipeline["availability"] == "partial"
+    assert event_pipeline["reason_codes"] == ["consumer_lag_sample_truncated"]
+    assert len(event_pipeline["consumer_lag"]) == CONSUMER_LAG_LIMIT
+    assert event_pipeline["consumer_lag"][0]["pending"] == CONSUMER_LAG_LIMIT + 2
+    assert event_pipeline["consumer_lag"][-1]["pending"] == 3
+
+
+def test_runtime_diagnostics_uses_the_atomic_lag_snapshot_contract() -> None:
+    class SnapshotRuntimeDiagnosticsDb(RuntimeDiagnosticsDb):
+        def event_consumer_lag_snapshot(self, *, limit: int) -> EventConsumerLagSnapshot:
+            assert limit == CONSUMER_LAG_LIMIT
+            return EventConsumerLagSnapshot(
+                samples=(
+                    EventConsumerMetrics(
+                        stream="SERVICE_EVENTS",
+                        subject="critical.subject",
+                        durable="critical-worker",
+                        pending=7,
+                        ack_pending=1,
+                        redelivered=0,
+                    ),
+                ),
+                metric_count=82,
+                lagging_count=1,
+            )
+
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            raise AssertionError("the atomic snapshot must replace three full-table reads")
+
+    response = _client(SnapshotRuntimeDiagnosticsDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    event_pipeline = response.json()["event_pipeline"]
+    assert event_pipeline["availability"] == "available"
+    assert event_pipeline["reason_codes"] == []
+    assert event_pipeline["consumer_lag"] == [
+        {
+            "consumer": "critical-worker",
+            "subject": "critical.subject",
+            "pending": 7,
+            "ack_pending": 1,
+            "redelivered": 0,
+        }
+    ]
 
 
 def test_runtime_diagnostics_preserves_partial_results_without_leaking_exception_text() -> None:

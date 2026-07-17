@@ -522,3 +522,144 @@ def test_record_consumer_lag_metrics_records_subject_durable_samples() -> None:
         assert [sample.pending for sample in store.samples] == [5, 5]
 
     asyncio.run(run())
+
+
+def test_record_consumer_lag_metrics_bulk_writes_successful_partial_collection() -> None:
+    async def run() -> None:
+        class MetricsBus:
+            async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics:
+                if subject == "subject.failed":
+                    raise RuntimeError("broker sample unavailable")
+                return EventConsumerMetrics(
+                    stream="SERVICE_EVENTS",
+                    subject=subject,
+                    durable=durable,
+                    pending=1,
+                    ack_pending=0,
+                    redelivered=0,
+                )
+
+        class MetricsStore:
+            def __init__(self) -> None:
+                self.batches: list[tuple[EventConsumerMetrics, ...]] = []
+
+            def record_event_consumer_metrics_batch(
+                self,
+                samples: tuple[EventConsumerMetrics, ...],
+            ) -> None:
+                self.batches.append(samples)
+
+            def record_event_consumer_metrics(self, _sample: EventConsumerMetrics) -> None:
+                raise AssertionError(
+                    "bulk-capable stores must not write one transaction per sample"
+                )
+
+        async def handler(_evt: EventEnvelope) -> list[EventEnvelope]:
+            return []
+
+        store = MetricsStore()
+        spec = EventHandlerSpec(
+            service_name="bulk-worker",
+            subjects=("subject.first", "subject.failed", "subject.last"),
+            handler_factory=lambda _events, _db: handler,
+            retry_policy=EventRetryPolicy(max_concurrency=2),
+        )
+
+        await record_consumer_lag_metrics(MetricsBus(), store, spec)  # type: ignore[arg-type]
+
+        assert len(store.batches) == 1
+        assert [sample.subject for sample in store.batches[0]] == [
+            "subject.first",
+            "subject.last",
+        ]
+
+    asyncio.run(run())
+
+
+def test_record_consumer_lag_metrics_keeps_legacy_single_sample_store_compatibility() -> None:
+    async def run() -> None:
+        class MetricsBus:
+            async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics:
+                return EventConsumerMetrics(
+                    stream="SERVICE_EVENTS",
+                    subject=subject,
+                    durable=durable,
+                    pending=0,
+                    ack_pending=0,
+                    redelivered=0,
+                )
+
+        class MetricsStore:
+            def __init__(self) -> None:
+                self.samples: list[EventConsumerMetrics] = []
+
+            def record_event_consumer_metrics(self, sample: EventConsumerMetrics) -> None:
+                self.samples.append(sample)
+
+        async def handler(_evt: EventEnvelope) -> list[EventEnvelope]:
+            return []
+
+        store = MetricsStore()
+        spec = EventHandlerSpec(
+            service_name="legacy-worker",
+            subjects=("subject.first", "subject.last"),
+            handler_factory=lambda _events, _db: handler,
+        )
+
+        await record_consumer_lag_metrics(MetricsBus(), store, spec)  # type: ignore[arg-type]
+
+        assert [sample.subject for sample in store.samples] == ["subject.first", "subject.last"]
+
+    asyncio.run(run())
+
+
+def test_record_consumer_lag_metrics_batches_every_declared_subject_with_bounded_fanout() -> None:
+    async def run() -> None:
+        class MetricsBus:
+            def __init__(self) -> None:
+                self.active = 0
+                self.max_active = 0
+
+            async def consumer_metrics(self, subject: str, durable: str) -> EventConsumerMetrics:
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+                await asyncio.sleep(0)
+                self.active -= 1
+                return EventConsumerMetrics(
+                    stream="SERVICE_EVENTS",
+                    subject=subject,
+                    durable=durable,
+                    pending=0,
+                    ack_pending=0,
+                    redelivered=0,
+                )
+
+        class MetricsStore:
+            def __init__(self) -> None:
+                self.samples: tuple[EventConsumerMetrics, ...] = ()
+
+            def record_event_consumer_metrics_batch(
+                self,
+                samples: tuple[EventConsumerMetrics, ...],
+            ) -> None:
+                self.samples = samples
+
+        async def handler(_evt: EventEnvelope) -> list[EventEnvelope]:
+            return []
+
+        subjects = tuple(f"subject.{index:03d}" for index in range(82))
+        bus = MetricsBus()
+        store = MetricsStore()
+        spec = EventHandlerSpec(
+            service_name="multi-subject-worker",
+            subjects=subjects,
+            handler_factory=lambda _events, _db: handler,
+            retry_policy=EventRetryPolicy(max_concurrency=8),
+        )
+
+        await record_consumer_lag_metrics(bus, store, spec)  # type: ignore[arg-type]
+
+        assert [sample.subject for sample in store.samples] == list(subjects)
+        assert 1 < bus.max_active <= 8
+
+    asyncio.run(run())

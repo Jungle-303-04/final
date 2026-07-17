@@ -62,8 +62,13 @@ def parse_verified_live_images(values: Sequence[str]) -> dict[str, str]:
 
 
 def expected_deployment_containers(
-    manifest: Path, *, managed_image: str | None = None
+    manifest: Path,
+    *,
+    managed_image: str | None = None,
+    managed_repository: str | None = None,
 ) -> tuple[tuple[str, str], ...]:
+    if managed_image is not None and managed_repository is not None:
+        raise ValueError("managed_image and managed_repository are mutually exclusive")
     expected: list[tuple[str, str]] = []
     for index, value in enumerate(yaml.safe_load_all(manifest.read_text(encoding="utf-8"))):
         document = require_mapping(value, f"manifest document {index}")
@@ -89,6 +94,9 @@ def expected_deployment_containers(
             image = container.get("image")
             if managed_image is not None and image != managed_image:
                 continue
+            if managed_repository is not None:
+                if not isinstance(image, str) or image_repository(image) != managed_repository:
+                    continue
             expected.append((deployment, name))
     if not expected:
         raise ValueError("manifest must contain at least one Deployment container")
@@ -251,7 +259,12 @@ def capture(
         text=True,
     )
     live_document = json.loads(live_result.stdout)
-    if managed_repository is not None:
+    if managed_repository is not None and manifest is not None:
+        expected = expected_deployment_containers(
+            manifest,
+            managed_repository=managed_repository,
+        )
+    elif managed_repository is not None:
         expected = expected_repository_containers(
             live_document,
             managed_repository=managed_repository,

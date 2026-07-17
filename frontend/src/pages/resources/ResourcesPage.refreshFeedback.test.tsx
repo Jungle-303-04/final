@@ -59,6 +59,22 @@ describe("ResourcesPage refresh feedback", () => {
     expect(screen.getByText("스냅샷 지연")).toBeTruthy();
     expect(screen.getByText(/5분 전 관측/u)).toBeTruthy();
   });
+
+  it("keeps live and fallback freshness controls on one reserved row", async () => {
+    renderResources(
+      resourcesPort(),
+      "/resources?clusters=cluster-1&resources.types=pod",
+    );
+    expect(
+      await screen.findByText("checkout-api-0", {}, { timeout: 5_000 }),
+    ).toBeTruthy();
+
+    const row = document.querySelector('[data-slot="resources-status-row"]');
+    expect(row).toBeTruthy();
+    expect(row?.className).toContain("min-h-8");
+    expect(row?.className).toContain("flex-nowrap");
+    expect(row?.className).not.toContain("flex-wrap");
+  });
 });
 
 async function flushPromises() {

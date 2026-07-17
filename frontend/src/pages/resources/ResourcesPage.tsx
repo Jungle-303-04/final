@@ -295,7 +295,10 @@ export function ResourcesPage({
       >
         <ProductPageFrame>
           <header className="flex min-w-0 justify-end">
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
+            <div
+              className="flex min-h-8 w-full min-w-0 flex-nowrap items-center justify-end gap-2"
+              data-slot="resources-status-row"
+            >
               {isResourceManifestCreatePort(resourceManifestPort)
                 && state.selectedClusterExists
                 && state.selectedClusterId !== null

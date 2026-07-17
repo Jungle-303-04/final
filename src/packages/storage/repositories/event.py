@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ from sqlalchemy.engine import Connection
 
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import (
+    EventConsumerLagSnapshot,
     EventConsumerMetrics,
     EventEnvelope,
     JsonObject,
@@ -34,6 +36,7 @@ from packages.storage.schema import (
 # 실제 처리 중인 것으로 간주해 재클레임 거절(JetStream 재배달과의 동시 중복 처리 방지).
 # ack_wait(60s) 뒤 재배달이 와도 원 claim 이 이 창을 넘길 때까지는 획득 불가함.
 PROCESSING_STALE_SECONDS = 90
+EVENT_CONSUMER_METRICS_UPSERT_CHUNK = 1_000
 LOGGER = get_logger(__name__)
 
 
@@ -239,28 +242,52 @@ class EventRepository(DatabaseConnection):
         return {str(row["consumer"]): int(row["duration"] or 0) for row in rows}
 
     def record_event_consumer_metrics(self, sample: EventConsumerMetrics) -> None:
+        self.record_event_consumer_metrics_batch((sample,))
+
+    def record_event_consumer_metrics_batch(
+        self,
+        samples: Sequence[EventConsumerMetrics],
+    ) -> None:
+        """Upsert a metrics observation batch in one transaction.
+
+        One current row is retained per consumer/subject identity. Duplicate identities in
+        an input batch are collapsed to the last observation before issuing PostgreSQL's
+        multi-row upsert, avoiding a cardinality violation inside one statement.
+        """
+        latest_by_identity = {(sample.durable, sample.subject): sample for sample in samples}
+        if not latest_by_identity:
+            return
+
         table = EventConsumerMetric.__table__
-        insert = pg_insert(table).values(
-            consumer=sample.durable,
-            subject=sample.subject,
-            stream=sample.stream,
-            pending_events=max(0, int(sample.pending)),
-            ack_pending_events=max(0, int(sample.ack_pending)),
-            redelivered_events=max(0, int(sample.redelivered)),
-            observed_at=func.now(),
-        )
-        statement = insert.on_conflict_do_update(
-            index_elements=[table.c.consumer, table.c.subject],
-            set_={
-                "stream": insert.excluded.stream,
-                "pending_events": insert.excluded.pending_events,
-                "ack_pending_events": insert.excluded.ack_pending_events,
-                "redelivered_events": insert.excluded.redelivered_events,
+        values = [
+            {
+                "consumer": sample.durable,
+                "subject": sample.subject,
+                "stream": sample.stream,
+                "pending_events": max(0, int(sample.pending)),
+                "ack_pending_events": max(0, int(sample.ack_pending)),
+                "redelivered_events": max(0, int(sample.redelivered)),
                 "observed_at": func.now(),
-            },
-        )
+            }
+            for _identity, sample in sorted(latest_by_identity.items())
+        ]
         with self.connection() as conn:
-            conn.execute(statement)
+            for offset in range(0, len(values), EVENT_CONSUMER_METRICS_UPSERT_CHUNK):
+                insert = pg_insert(table).values(
+                    values[offset : offset + EVENT_CONSUMER_METRICS_UPSERT_CHUNK]
+                )
+                conn.execute(
+                    insert.on_conflict_do_update(
+                        index_elements=[table.c.consumer, table.c.subject],
+                        set_={
+                            "stream": insert.excluded.stream,
+                            "pending_events": insert.excluded.pending_events,
+                            "ack_pending_events": insert.excluded.ack_pending_events,
+                            "redelivered_events": insert.excluded.redelivered_events,
+                            "observed_at": func.now(),
+                        },
+                    )
+                )
 
     def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
         return self._event_consumer_metric_values("pending_events")
@@ -270,6 +297,65 @@ class EventRepository(DatabaseConnection):
 
     def event_consumer_redelivered_by_consumer_subject(self) -> dict[tuple[str, str], int]:
         return self._event_consumer_metric_values("redelivered_events")
+
+    def event_consumer_lag_snapshot(self, *, limit: int) -> EventConsumerLagSnapshot:
+        """Read actual backlog rows without confusing table cardinality with lag.
+
+        Counts and the bounded backlog-first sample are read inside the same transaction.
+        Idle consumer/subject metrics remain represented by ``metric_count`` but do not
+        consume the lag sample budget or degrade diagnostics completeness.
+        """
+        if limit < 1:
+            raise ValueError("consumer lag snapshot limit must be positive")
+
+        table = EventConsumerMetric.__table__
+        lagging = or_(
+            table.c.pending_events > 0,
+            table.c.ack_pending_events > 0,
+            table.c.redelivered_events > 0,
+        )
+        counts = select(
+            func.count().label("metric_count"),
+            func.count().filter(lagging).label("lagging_count"),
+        )
+        samples = (
+            select(
+                table.c.consumer,
+                table.c.subject,
+                table.c.stream,
+                table.c.pending_events,
+                table.c.ack_pending_events,
+                table.c.redelivered_events,
+            )
+            .where(lagging)
+            .order_by(
+                table.c.pending_events.desc(),
+                table.c.ack_pending_events.desc(),
+                table.c.redelivered_events.desc(),
+                table.c.consumer,
+                table.c.subject,
+            )
+            .limit(limit)
+        )
+        with self.connection() as conn:
+            count_row = conn.execute(counts).mappings().one()
+            rows = conn.execute(samples).mappings().all()
+
+        return EventConsumerLagSnapshot(
+            samples=tuple(
+                EventConsumerMetrics(
+                    stream=str(row["stream"]),
+                    subject=str(row["subject"]),
+                    durable=str(row["consumer"]),
+                    pending=max(0, int(row["pending_events"] or 0)),
+                    ack_pending=max(0, int(row["ack_pending_events"] or 0)),
+                    redelivered=max(0, int(row["redelivered_events"] or 0)),
+                )
+                for row in rows
+            ),
+            metric_count=max(0, int(count_row["metric_count"] or 0)),
+            lagging_count=max(0, int(count_row["lagging_count"] or 0)),
+        )
 
     def _event_consumer_metric_values(self, column_name: str) -> dict[tuple[str, str], int]:
         table = EventConsumerMetric.__table__

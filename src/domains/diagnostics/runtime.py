@@ -82,25 +82,12 @@ def _collect_event_pipeline(db: Any) -> EventPipelineDiagnostics:
             ),
             key=lambda item: item.status,
         )
-        pending = db.event_consumer_pending_by_consumer_subject()
-        ack_pending = db.event_consumer_ack_pending_by_consumer_subject()
-        redelivered = db.event_consumer_redelivered_by_consumer_subject()
-        lag_keys = sorted(set(pending) | set(ack_pending) | set(redelivered))
-        lag = [
-            ConsumerLagDiagnostics(
-                consumer=str(key[0]),
-                subject=str(key[1]),
-                pending=max(0, int(pending.get(key, 0))),
-                ack_pending=max(0, int(ack_pending.get(key, 0))),
-                redelivered=max(0, int(redelivered.get(key, 0))),
-            )
-            for key in lag_keys[:CONSUMER_LAG_LIMIT]
-        ]
+        lag, lagging_count = _consumer_lag_diagnostics(db)
         reason_codes: list[str] = []
         if len(statuses) > EVENT_STATUS_LIMIT:
             reason_codes.append("event_status_limit_reached")
-        if len(lag_keys) > CONSUMER_LAG_LIMIT:
-            reason_codes.append("consumer_lag_limit_reached")
+        if lagging_count > CONSUMER_LAG_LIMIT:
+            reason_codes.append("consumer_lag_sample_truncated")
         return EventPipelineDiagnostics(
             availability="partial" if reason_codes else "available",
             open_dead_letters=max(0, int(db.open_dead_letter_count())),
@@ -114,6 +101,58 @@ def _collect_event_pipeline(db: Any) -> EventPipelineDiagnostics:
             availability="unavailable",
             reason_codes=["event_pipeline_unavailable"],
         )
+
+
+def _consumer_lag_diagnostics(db: Any) -> tuple[list[ConsumerLagDiagnostics], int]:
+    snapshot_reader = getattr(db, "event_consumer_lag_snapshot", None)
+    if callable(snapshot_reader):
+        snapshot = snapshot_reader(limit=CONSUMER_LAG_LIMIT)
+        return (
+            [
+                ConsumerLagDiagnostics(
+                    consumer=str(sample.durable),
+                    subject=str(sample.subject),
+                    pending=max(0, int(sample.pending)),
+                    ack_pending=max(0, int(sample.ack_pending)),
+                    redelivered=max(0, int(sample.redelivered)),
+                )
+                for sample in snapshot.samples
+            ],
+            max(0, int(snapshot.lagging_count)),
+        )
+
+    pending = db.event_consumer_pending_by_consumer_subject()
+    ack_pending = db.event_consumer_ack_pending_by_consumer_subject()
+    redelivered = db.event_consumer_redelivered_by_consumer_subject()
+    lagging_keys = [
+        key
+        for key in set(pending) | set(ack_pending) | set(redelivered)
+        if any(
+            max(0, int(values.get(key, 0))) > 0 for values in (pending, ack_pending, redelivered)
+        )
+    ]
+    lagging_keys.sort(
+        key=lambda key: (
+            -max(0, int(pending.get(key, 0))),
+            -max(0, int(ack_pending.get(key, 0))),
+            -max(0, int(redelivered.get(key, 0))),
+            str(key[0]),
+            str(key[1]),
+        )
+    )
+    return (
+        [
+            ConsumerLagDiagnostics(
+                consumer=str(key[0]),
+                subject=str(key[1]),
+                pending=max(0, int(pending.get(key, 0))),
+                ack_pending=max(0, int(ack_pending.get(key, 0))),
+                redelivered=max(0, int(redelivered.get(key, 0))),
+            )
+            for key in lagging_keys[:CONSUMER_LAG_LIMIT]
+        ],
+        len(lagging_keys),
+    )
 
 
 def _collect_timeline(db: Any, workspace_id: str) -> TimelineDiagnostics:
