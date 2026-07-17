@@ -6,6 +6,7 @@ import {
   getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_UPGRADE_PATH,
+  HELM_RELEASE_ROLLBACK_STREAM_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,
   HELM_RELEASE_VERSIONS_PATH,
   HELM_RELEASE_PATH,
@@ -14,6 +15,8 @@ import {
   listHelmReleaseVersions,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
+  startHelmReleaseRollback,
+  startHelmReleaseUninstall,
   HELM_UPGRADE_CHECK_PATH,
 } from "./helm-releases";
 
@@ -162,6 +165,46 @@ describe("Helm release API", () => {
       confirmation: true,
       reason: "upgrade to selected chart",
     });
+  });
+
+  it("queues confirmed rollback and uninstall with the observed revision guard", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(receipt()))
+      .mockResolvedValueOnce(jsonResponse(receipt()));
+
+    await expect(startHelmReleaseRollback({
+      clusterId: "cluster-a",
+      namespace: "team/a",
+      releaseName: "shop/front",
+      expectedRevision: 3,
+      revision: 2,
+      confirmation: true,
+      reason: "rollback failed release",
+    })).resolves.toMatchObject({ command_id: "cmd-helm-1" });
+    await expect(startHelmReleaseUninstall({
+      clusterId: "cluster-a",
+      namespace: "team/a",
+      releaseName: "shop/front",
+      expectedRevision: 3,
+      confirmation: true,
+      reason: "remove release",
+    })).resolves.toMatchObject({ command_id: "cmd-helm-1" });
+
+    expect(HELM_RELEASE_ROLLBACK_STREAM_PATH).toBe(
+      "/api/helm/releases/{namespace}/{release_name}/rollback-stream",
+    );
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/helm/releases/team%2Fa/shop%2Ffront/rollback-stream",
+      "/api/helm/releases/team%2Fa/shop%2Ffront",
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      cluster_id: "cluster-a",
+      expected_revision: 3,
+      revision: 2,
+      confirmation: true,
+      reason: "rollback failed release",
+    });
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
   });
 
   it("reads server-resolved upgrade info, versions, and bounded batch decoration", async () => {
