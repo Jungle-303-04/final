@@ -73,10 +73,10 @@ def target_rbac_manifest(payload: TargetRegisterRequest) -> str:
     return "\n---\n".join(
         block.strip()
         for block in (
+            cluster_read_rbac_manifest(namespace),
             node_collector_read_rbac_manifest(namespace)
             if role != MANAGEMENT_CLUSTER_ROLE and payload.install_node_collector
             else "",
-            cluster_read_rbac_manifest(namespace),
             gitops_control_rbac_manifest(namespace),
             node_control_rbac_manifest(namespace),
             resource_debug_rbac_manifest(payload, namespace),

@@ -43,36 +43,6 @@ metadata:
   name: cluster-agent
   namespace: target
 ---
-# node-collector is a cluster-agent-managed bounded subworker. It does not
-# inherit the wider cluster-agent identity.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cluster-agent-node-collector
-  namespace: target
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: cluster-agent-node-collector-read
-rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cluster-agent-node-collector-read
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-agent-node-collector-read
-subjects:
-  - kind: ServiceAccount
-    name: cluster-agent-node-collector
-    namespace: target
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -132,6 +102,36 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
+    namespace: target
+---
+# node-collector is a cluster-agent-managed bounded subworker. It does not
+# inherit the wider cluster-agent identity.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-agent-node-collector
+  namespace: target
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-node-collector-read
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-node-collector-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-node-collector-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent-node-collector
     namespace: target
 ---
 # GitOps writes are isolated from inventory read access and remain exact-CR/CAS gated.

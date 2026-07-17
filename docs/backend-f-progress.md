@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 46건**
+현재 상태: **앵커 45건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
