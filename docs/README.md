@@ -173,6 +173,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
 - [codex-work-order-20260712](codex-work-order-20260712.md)
 - [demo-01-digital-twin-agent-town](demo-01-digital-twin-agent-town.md)
+- [demo-workspace](demo-workspace.md)
 - [team/gain-evidence-query-access-handoff-20260712](team/gain-evidence-query-access-handoff-20260712.md)
 - [current-service-state](current-service-state.md)
 - [security-review-20260710](security-review-20260710.md)

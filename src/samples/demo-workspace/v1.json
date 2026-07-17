@@ -1,0 +1,272 @@
+{
+  "schema_version": 1,
+  "descriptor_id": "opsia-ui-demo.v1",
+  "workspace": {
+    "workspace_id": "opsia-ui-demo-v1",
+    "owner_user_id": "opsia-ui-demo-user-v1"
+  },
+  "cluster": {
+    "cluster_id": "opsia-ui-demo-cluster-v1",
+    "agent_id": "opsia-ui-demo-agent-v1",
+    "name": "Opsia UI Demo",
+    "environment": "demo",
+    "settings": {
+      "provider": "kind",
+      "cluster_role": "target",
+      "install_source": "demo-descriptor"
+    }
+  },
+  "inventory": {
+    "replace": true,
+    "summary": {
+      "resources_complete": true,
+      "labels_complete": true,
+      "namespaces": [
+        "demo-shop"
+      ],
+      "nodes": [
+        {
+          "name": "demo-worker-1",
+          "version": "v1.32.2"
+        }
+      ],
+      "collection_limits": {
+        "truncated": false
+      },
+      "api_resource_discovery": {
+        "completeness": "exact",
+        "resources": []
+      }
+    },
+    "health": {
+      "status": "healthy",
+      "health": "healthy",
+      "message": "Descriptor-backed demo observation"
+    },
+    "usage": {
+      "status": "sampled",
+      "pod_total": 1,
+      "pod_running": 1,
+      "pod_pending": 0,
+      "pod_failed": 0,
+      "restart_total": 1,
+      "node_total": 1,
+      "node_ready": 1,
+      "cpu_pct": 24.0,
+      "mem_pct": 41.0,
+      "pods": {
+        "demo-shop/shop-api-6f87b7c95b-demo": {
+          "uid": "demo-pod-shop-api-v1",
+          "cpu_mcores": 120,
+          "mem_mib": 164,
+          "cpu_request_mcores": 250,
+          "mem_request_mib": 256
+        }
+      },
+      "nodes": {
+        "demo-worker-1": {
+          "cpu_mcores": 960,
+          "mem_mib": 3358,
+          "cpu_ratio": 0.24,
+          "mem_ratio": 0.41,
+          "cpu_pct": 24.0,
+          "mem_pct": 41.0
+        }
+      }
+    },
+    "resources": [
+      {
+        "resource_type": "node",
+        "api_version": "v1",
+        "kind": "Node",
+        "name": "demo-worker-1",
+        "uid": "demo-node-worker-1-v1",
+        "resource_version": "1",
+        "status": "Ready",
+        "health": "healthy",
+        "labels": {
+          "kubernetes.io/hostname": "demo-worker-1",
+          "node.kubernetes.io/instance-type": "demo.medium"
+        },
+        "summary": {
+          "ready": true,
+          "version": "v1.32.2",
+          "cpu_capacity": "4",
+          "memory_capacity": "8Gi"
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Node",
+          "metadata": {
+            "name": "demo-worker-1",
+            "uid": "demo-node-worker-1-v1",
+            "resourceVersion": "1"
+          },
+          "status": {
+            "nodeInfo": {
+              "kubeletVersion": "v1.32.2"
+            }
+          }
+        }
+      },
+      {
+        "resource_type": "workload",
+        "api_version": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "demo-shop",
+        "name": "shop-api",
+        "uid": "demo-deployment-shop-api-v1",
+        "resource_version": "7",
+        "status": "3/3",
+        "health": "healthy",
+        "labels": {
+          "app.kubernetes.io/name": "shop-api",
+          "app.kubernetes.io/part-of": "demo-shop"
+        },
+        "summary": {
+          "desired_replicas": 3,
+          "ready_replicas": 3,
+          "available_replicas": 3
+        },
+        "raw": {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "name": "shop-api",
+            "namespace": "demo-shop",
+            "uid": "demo-deployment-shop-api-v1",
+            "resourceVersion": "7",
+            "labels": {
+              "app.kubernetes.io/name": "shop-api",
+              "app.kubernetes.io/part-of": "demo-shop"
+            }
+          },
+          "spec": {
+            "replicas": 3,
+            "selector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "shop-api"
+              }
+            },
+            "template": {
+              "metadata": {
+                "labels": {
+                  "app.kubernetes.io/name": "shop-api"
+                }
+              },
+              "spec": {
+                "containers": [
+                  {
+                    "name": "api",
+                    "image": "ghcr.io/opsia/demo-shop-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  }
+                ]
+              }
+            }
+          },
+          "status": {
+            "replicas": 3,
+            "readyReplicas": 3,
+            "availableReplicas": 3
+          }
+        }
+      },
+      {
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "namespace": "demo-shop",
+        "name": "shop-api-6f87b7c95b-demo",
+        "uid": "demo-pod-shop-api-v1",
+        "resource_version": "12",
+        "status": "Running",
+        "health": "healthy",
+        "labels": {
+          "app.kubernetes.io/name": "shop-api",
+          "app.kubernetes.io/part-of": "demo-shop"
+        },
+        "summary": {
+          "phase": "Running",
+          "ready": true,
+          "restart_total": 1,
+          "owner_kind": "Deployment",
+          "owner_name": "shop-api"
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Pod",
+          "metadata": {
+            "name": "shop-api-6f87b7c95b-demo",
+            "namespace": "demo-shop",
+            "uid": "demo-pod-shop-api-v1",
+            "resourceVersion": "12"
+          },
+          "spec": {
+            "nodeName": "demo-worker-1",
+            "containers": [
+              {
+                "name": "api",
+                "image": "ghcr.io/opsia/demo-shop-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          },
+          "status": {
+            "phase": "Running"
+          }
+        }
+      },
+      {
+        "resource_type": "service",
+        "api_version": "v1",
+        "kind": "Service",
+        "namespace": "demo-shop",
+        "name": "shop-api",
+        "uid": "demo-service-shop-api-v1",
+        "resource_version": "4",
+        "status": "Active",
+        "health": "healthy",
+        "labels": {
+          "app.kubernetes.io/name": "shop-api",
+          "app.kubernetes.io/part-of": "demo-shop"
+        },
+        "summary": {
+          "type": "ClusterIP",
+          "cluster_ip": "10.96.0.42",
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP",
+              "target_port": 8080
+            }
+          ]
+        },
+        "raw": {
+          "apiVersion": "v1",
+          "kind": "Service",
+          "metadata": {
+            "name": "shop-api",
+            "namespace": "demo-shop",
+            "uid": "demo-service-shop-api-v1",
+            "resourceVersion": "4"
+          },
+          "spec": {
+            "type": "ClusterIP",
+            "clusterIP": "10.96.0.42",
+            "selector": {
+              "app.kubernetes.io/name": "shop-api"
+            },
+            "ports": [
+              {
+                "name": "http",
+                "port": 8080,
+                "protocol": "TCP",
+                "targetPort": 8080
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

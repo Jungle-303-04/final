@@ -86,6 +86,9 @@ make smoke
 자세한 기준은 [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)를 본다.
 API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/README.md)를 열고 Bruno collection을 사용한다.
 
+실제 target 없이 격리된 workspace에 UI 확인용 데이터를 넣으려면
+[descriptor 기반 demo workspace](docs/demo-workspace.md)를 사용한다.
+
 ## 로컬 캐시 정리
 
 ```bash
