@@ -412,6 +412,19 @@ def test_node_capability_is_derived_from_observed_scheduling_state(
     }
     assert by_id[capability_id]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
     assert by_id["node.drain"]["path"].endswith("/nodes/worker-a/drain")
+    assert by_id["node.drain"]["request_context"] == "exact-resource"
+    assert by_id["node.drain"]["result_intent"] == "resource-summary"
+    assert by_id["node.debug"]["request_context"] == "exact-resource"
+    assert by_id["node.debug"]["result_intent"] == "terminal-session"
+    assert by_id["node.debug.cleanup"]["request_context"] == "exact-resource"
+    assert by_id["node.debug.cleanup"]["result_intent"] == "refresh-resource"
+    assert {
+        item["key"]: item["prefill_result_key"]
+        for item in by_id["node.debug.cleanup"]["input_schema"]
+    } == {
+        "namespace": "namespace",
+        "session_id": "session_id",
+    }
     assert by_id["node.drain"]["input_schema"][0]["key"] == "timeout_seconds"
     assert by_id["node.drain"]["input_schema"][-2:] == [
         {
@@ -422,6 +435,7 @@ def test_node_capability_is_derived_from_observed_scheduling_state(
             "minimum": None,
             "maximum": None,
             "default": False,
+            "prefill_result_key": None,
         },
         {
             "key": "delete_empty_dir_data",
@@ -431,6 +445,7 @@ def test_node_capability_is_derived_from_observed_scheduling_state(
             "minimum": None,
             "maximum": None,
             "default": False,
+            "prefill_result_key": None,
         },
     ]
     assert all(item["realtime"] is True for item in capabilities)

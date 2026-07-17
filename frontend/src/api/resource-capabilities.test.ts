@@ -24,6 +24,8 @@ const RESPONSE = {
       input_schema: [],
       method: "POST",
       path: "/clusters/cluster-a/namespaces/shop/deployments/checkout-api/restart",
+      request_context: "simple",
+      result_intent: "refresh-resource",
     },
     {
       capability_id: "deployment.scale",
@@ -41,6 +43,7 @@ const RESPONSE = {
           minimum: 0,
           maximum: 100,
           default: 1,
+          prefill_result_key: null,
         },
         {
           key: "dry_run",
@@ -50,10 +53,13 @@ const RESPONSE = {
           minimum: null,
           maximum: null,
           default: false,
+          prefill_result_key: null,
         },
       ],
       method: "POST",
       path: "/clusters/cluster-a/namespaces/shop/deployments/checkout-api/scale",
+      request_context: "simple",
+      result_intent: "refresh-resource",
     },
   ],
 } as const;

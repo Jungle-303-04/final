@@ -141,6 +141,44 @@ test("경로 접미사의 fetch progress stream도 실시간 계약으로 분류
   assert.equal(ledger.features[0].coverage.realtime, null);
 });
 
+test("동기 원본 endpoint를 durable OperationEvent로 이식한 행은 port map 실시간 증거를 따른다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## API",
+      "| Method·path | 요청 |",
+      "|---|---|",
+      "| `POST /nodes/{name}/drain` | 장시간 요청 |",
+    ].join("\n"),
+    REVISION,
+    {
+      ...PORT_MAP,
+      features: {
+        "reference.feature.001": {
+          streaming: true,
+          coverage: {
+            backend: { state: "implemented" },
+            frontend: { state: "implemented" },
+            realtime: {
+              state: "implemented",
+              destination: "frontend/src/features/operations/OperationStatusStore.tsx",
+              consumer: "frontend/src/api/operation-events.ts",
+              test: "frontend/src/features/operations/OperationStatusStore.test.ts",
+            },
+          },
+        },
+      },
+    },
+    {
+      "reference.feature.001":
+        "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
+    },
+  );
+
+  assert.equal(ledger.features[0].streaming, true);
+  assert.equal(ledger.features[0].coverage.realtime.state, "implemented");
+  assert.equal(ledger.features[0].identityStatus, "source-key");
+});
+
 test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태를 생성한다", () => {
   const ledger = parseReferenceInventory(
     [

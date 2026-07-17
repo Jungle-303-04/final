@@ -126,6 +126,7 @@ describe("ResourceDetailActions operation handoff", () => {
       description: "Create one Job from this CronJob.",
       label: "Trigger",
       path: "/clusters/cluster-1/namespaces/shop/cronjobs/nightly/trigger",
+      requestContext: "exact-resource",
     };
     const cronjobCapabilities: ResourceCapabilitiesFrame = {
       data: {
@@ -168,7 +169,9 @@ describe("ResourceDetailActions operation handoff", () => {
     expect(firstContext).toEqual({
       capabilityId: "cronjob.trigger",
       idempotencyKey: expect.stringMatching(/^resource-action-/u),
+      requestContext: "exact-resource",
       resourceId: "resource-cronjob-nightly",
+      resultIntent: "refresh-resource",
       snapshotId: "snapshot-42",
       revision: "a".repeat(64),
       resource: {
@@ -298,6 +301,7 @@ describe("ResourceDetailActions operation handoff", () => {
       description: "Restore an exact observed workload revision.",
       label: "Rollback",
       path: "/resource-rollbacks/inventory-1",
+      requestContext: "rollback",
     };
 
     render(
@@ -361,12 +365,14 @@ describe("ResourceDetailActions operation handoff", () => {
       capabilityId: "node.drain",
       description: "Drain this exact node.",
       inputSchema: [
-        { key: "timeout_seconds", label: "Timeout", type: "integer", required: true, minimum: 10, maximum: 600, default: 60 },
-        { key: "max_parallel", label: "Parallel", type: "integer", required: true, minimum: 1, maximum: 32, default: 8 },
-        { key: "force", label: "Evict unmanaged Pods", type: "boolean", required: true, minimum: null, maximum: null, default: false },
+        { key: "timeout_seconds", label: "Timeout", type: "integer", required: true, minimum: 10, maximum: 600, default: 60, prefillResultKey: null },
+        { key: "max_parallel", label: "Parallel", type: "integer", required: true, minimum: 1, maximum: 32, default: 8, prefillResultKey: null },
+        { key: "force", label: "Evict unmanaged Pods", type: "boolean", required: true, minimum: null, maximum: null, default: false, prefillResultKey: null },
       ],
       label: "Drain",
       path: "/clusters/cluster-1/nodes/worker-a/drain",
+      requestContext: "exact-resource",
+      resultIntent: "resource-summary",
     };
     const frame: ResourceCapabilitiesFrame = {
       data: {
@@ -406,7 +412,9 @@ describe("ResourceDetailActions operation handoff", () => {
       {
         capabilityId: "node.drain",
         idempotencyKey: expect.stringMatching(/^resource-action-/u),
+        requestContext: "exact-resource",
         resourceId: "resource-node-worker-a",
+        resultIntent: "resource-summary",
         snapshotId: "snapshot-node-42",
         revision: "d".repeat(64),
         resource: {
@@ -421,7 +429,7 @@ describe("ResourceDetailActions operation handoff", () => {
     ));
   });
 
-  it("hands a completed Pod debug container to the existing terminal", async () => {
+  it("uses descriptor result intent for terminal handoff and cleanup input prefill", async () => {
     const user = userEvent.setup();
     const digestImage = `registry.example/debug@sha256:${"a".repeat(64)}`;
     const execute = vi.fn().mockResolvedValue({
@@ -432,7 +440,7 @@ describe("ResourceDetailActions operation handoff", () => {
       eventId: "event-debug",
       status: "queued",
     });
-    const onPodDebugReady = vi.fn();
+    const onTerminalReady = vi.fn();
     const podDetail: ResourceDetail = {
       ...detail,
       identity: { kind: "Pod", name: "checkout-0", namespace: "shop", resourceType: "pod" },
@@ -449,18 +457,33 @@ describe("ResourceDetailActions operation handoff", () => {
     };
     const debugCapability: ResourceActionCapability = {
       ...capability,
-      capabilityId: "pod.debug",
+      capabilityId: "maintenance.attach-diagnostics",
       description: "Attach an ephemeral debug container.",
       inputSchema: [
-        { key: "target_container", label: "Target container", type: "string", required: true, minimum: null, maximum: null, default: "" },
-        { key: "image", label: "Image", type: "string", required: true, minimum: null, maximum: null, default: "" },
+        { key: "target_container", label: "Target container", type: "string", required: true, minimum: null, maximum: null, default: "", prefillResultKey: null },
+        { key: "image", label: "Image", type: "string", required: true, minimum: null, maximum: null, default: "", prefillResultKey: null },
       ],
       label: "Debug container",
       path: "/clusters/cluster-1/namespaces/shop/pods/checkout-0/debug",
+      requestContext: "exact-resource",
+      resultIntent: "terminal-session",
+    };
+    const cleanupCapability: ResourceActionCapability = {
+      ...capability,
+      capabilityId: "maintenance.cleanup-diagnostics",
+      description: "Clean up the owned debug session.",
+      inputSchema: [
+        { key: "namespace", label: "Namespace", type: "string", required: true, minimum: null, maximum: null, default: "", prefillResultKey: "namespace" },
+        { key: "session_id", label: "Debug session ID", type: "string", required: true, minimum: null, maximum: null, default: "", prefillResultKey: "session_id" },
+      ],
+      label: "Clean up debug session",
+      path: "/clusters/cluster-1/nodes/worker-a/debug/cleanup",
+      requestContext: "exact-resource",
+      resultIntent: "refresh-resource",
     };
     const frame: ResourceCapabilitiesFrame = {
       data: {
-        capabilities: [debugCapability],
+        capabilities: [debugCapability, cleanupCapability],
         revision: "e".repeat(64),
         subject: {
           clusterId: "cluster-1",
@@ -487,6 +510,12 @@ describe("ResourceDetailActions operation handoff", () => {
               namespace: "shop",
               pod: "checkout-0",
               container_name: "opsia-debug-session-42",
+              session_id: "debug-session-42",
+              terminal: {
+                namespace: "shop",
+                pod: "checkout-0",
+                container: "opsia-debug-session-42",
+              },
             },
           },
         };
@@ -500,7 +529,7 @@ describe("ResourceDetailActions operation handoff", () => {
             actionsPort={{ execute, previewDeletion: vi.fn(), previewRollback: vi.fn() }}
             capabilities={frame}
             detail={podDetail}
-            onPodDebugReady={onPodDebugReady}
+            onTerminalReady={onTerminalReady}
           />
         </OperationStatusStoreProvider>
       </I18nProvider>,
@@ -512,7 +541,16 @@ describe("ResourceDetailActions operation handoff", () => {
     await user.type(within(dialog).getByLabelText("Image"), digestImage);
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
 
-    await waitFor(() => expect(onPodDebugReady).toHaveBeenCalledWith("opsia-debug-session-42"));
+    await waitFor(() => expect(onTerminalReady).toHaveBeenCalledWith({
+      namespace: "shop",
+      pod: "checkout-0",
+      container: "opsia-debug-session-42",
+    }));
+    await user.click(screen.getByRole("button", { name: "Clean up debug session" }));
+    const cleanupDialog = await screen.findByRole("dialog");
+    expect(within(cleanupDialog).getByLabelText("Namespace")).toHaveProperty("value", "shop");
+    expect(within(cleanupDialog).getByLabelText("Debug session ID"))
+      .toHaveProperty("value", "debug-session-42");
     store.dispose();
   });
 });
@@ -562,6 +600,8 @@ const capability: ResourceActionCapability = {
   method: "POST",
   path: "/api/resource-actions/restart",
   realtime: true,
+  requestContext: "simple",
+  resultIntent: "refresh-resource",
 };
 
 const deleteCapability: ResourceActionCapability = {
@@ -574,6 +614,8 @@ const deleteCapability: ResourceActionCapability = {
   method: "POST",
   path: "/resource-deletions/inventory-1",
   realtime: true,
+  requestContext: "simple",
+  resultIntent: "refresh-resource",
 };
 
 const detail: ResourceDetail = {

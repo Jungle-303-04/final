@@ -65,6 +65,22 @@ def test_feature_contract_lookup_is_catalog_driven() -> None:
         feature_contract("reference.feature.unknown")
 
 
+def test_resource_maintenance_contracts_keep_source_identity_and_realtime_evidence() -> None:
+    for contract_id in (
+        "reference.feature.174",
+        "reference.feature.175",
+        "reference.feature.176",
+    ):
+        feature = feature_contract(contract_id)
+        assert feature.source_key == (
+            "upstream-ui:resources:actions:capability-command-and-log-composition:v1"
+        )
+        assert feature.identity_status == "source-key"
+        assert feature.streaming is True
+        assert feature.coverage.realtime != "not_required"
+        assert feature.coverage.realtime["state"] == "implemented"
+
+
 def test_feature_contract_rejects_inconsistent_generated_identity_lineage() -> None:
     payload = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["features"][0]
     source_key_payload = {

@@ -2960,6 +2960,11 @@ def test_pod_debug_attaches_to_exact_target_container_with_digest_image() -> Non
     container = patch["body"]["spec"]["ephemeralContainers"][0]
     assert container["targetContainerName"] == "app"
     assert container["image"].endswith("a" * 64)
+    assert result["terminal"] == {
+        "namespace": "sandbox",
+        "pod": "checkout-1",
+        "container": "opsia-debug-abc123",
+    }
 
 
 def test_node_debug_create_binds_pod_to_exact_node_and_session_owner() -> None:
@@ -2995,6 +3000,12 @@ def test_node_debug_create_binds_pod_to_exact_node_and_session_owner() -> None:
         "opsia.io/debug-session": "debug-session-1",
         "opsia.io/node-uid": "node-uid-1",
     }
+    assert result["terminal"] == {
+        "namespace": "sandbox",
+        "pod": "opsia-node-debug-abc123",
+        "container": "debugger",
+    }
+    assert result["session_id"] == "debug-session-1"
 
 
 def test_node_debug_cleanup_deletes_only_owned_exact_debug_pod() -> None:

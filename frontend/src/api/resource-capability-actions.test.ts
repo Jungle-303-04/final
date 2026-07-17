@@ -81,7 +81,7 @@ describe("server-discovered resource action API", () => {
     }));
   });
 
-  it("binds maintenance actions to the exact capability snapshot and dynamic inputs", async () => {
+  it("binds a descriptor-declared exact action without a client capability-ID list", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       accepted: true,
       event_id: "event-drain-1",
@@ -91,9 +91,11 @@ describe("server-discovered resource action API", () => {
       status: "queued",
     }), { status: 202 }));
     const context = {
-      capabilityId: "node.drain",
+      capabilityId: "maintenance.node-evacuation",
       idempotencyKey: "resource-action-node-drain-1",
+      requestContext: "exact-resource" as const,
       resourceId: "resource-node-worker-a",
+      resultIntent: "resource-summary" as const,
       snapshotId: "snapshot-42",
       revision: "b".repeat(64),
       resource: {
