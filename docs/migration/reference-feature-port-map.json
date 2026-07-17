@@ -4018,10 +4018,12 @@
       }
     },
     "reference.feature.118": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.inventory_filter.graph",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.RelationsTopologyResponse",
       "frontendContract": "frontend/src/features/resources/relationTopologyContract.ts",
+      "desktopContract": null,
       "verification": [
+        "scripts/reference-topology-parity.test.mjs",
         "tests/test_relations_topology_router.py",
         "tests/test_relations_topology_contract.py",
         "frontend/src/api/relation-topology.test.ts",
@@ -4030,15 +4032,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/inventory_filter/router.py#get_topology",
           "consumer": "src/domains/inventory_filter/graph.py#build_resource_graph",
+          "reason": "The existing relations view resolves one authorized cluster and canonical filter scope, pins an inventory revision, and returns a bounded evidence graph with directed relation evidence, exact/partial/unavailable completeness, omitted counts, and server refresh policy. Traffic remains in its typed Agent observation contract and no direct cluster read or duplicate topology service is introduced.",
           "test": "tests/test_relations_topology_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/RelationTopologyCanvas.tsx#RelationTopologyCanvas",
           "consumer": "frontend/src/features/resources/createRelationTopologyAdapter.ts#createRelationTopologyAdapter",
+          "reason": "The Resources relation view reuses canonical URL filters, aborts superseded reads, rejects late scope results, retains the last verified graph during refresh, and exposes unavailable or truncated evidence without recreating the removed standalone Topology route.",
           "test": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
         }
       }

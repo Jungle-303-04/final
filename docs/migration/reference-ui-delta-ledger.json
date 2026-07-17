@@ -6855,7 +6855,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The initial vertical is evidence-backed and scope-pinned, but source grouping, export, focus, and large-cluster behavior remain separate work items."
+            "rationale": "The shared Resources relation view is evidence-backed, scope- and revision-pinned, bounded for large clusters, freshness-aware, keyboard-drillable, and explicit about partial or unavailable relationships; source-only export remains outside the normalized product contract."
           }
         }
       ]
