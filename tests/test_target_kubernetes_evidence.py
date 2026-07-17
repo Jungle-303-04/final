@@ -61,6 +61,91 @@ def load_evidence_modules():
                 sys.modules[name] = previous_modules[name]
 
 
+def _exact_resource_access(**overrides: object) -> dict[str, object]:
+    access: dict[str, object] = {
+        "completeness": "exact",
+        "reason_codes": [],
+        "roles": [],
+        "cluster_roles": [],
+        "role_bindings": [],
+        "cluster_role_bindings": [],
+        "service_accounts": [],
+        "pod_subjects": [],
+    }
+    access.update(overrides)
+    return access
+
+
+@pytest.mark.parametrize(
+    ("collection", "resource", "normalized_collection", "nested_collection"),
+    [
+        (
+            "roles",
+            {"metadata": {"name": "reader", "namespace": "shop"}, "rules": None},
+            "roles",
+            "rules",
+        ),
+        (
+            "role_bindings",
+            {
+                "metadata": {"name": "reader", "namespace": "shop"},
+                "roleRef": {"kind": "Role", "name": "reader"},
+                "subjects": None,
+            },
+            "role_bindings",
+            "subjects",
+        ),
+    ],
+)
+def test_resource_access_normalizes_null_rbac_collections_as_empty_lists(
+    collection: str,
+    resource: dict[str, object],
+    normalized_collection: str,
+    nested_collection: str,
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(**{collection: [resource]}),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "exact"
+    assert normalized[normalized_collection][0][nested_collection] == []
+
+
+@pytest.mark.parametrize(
+    ("collection", "resource"),
+    [
+        (
+            "roles",
+            {"metadata": {"name": "reader", "namespace": "shop"}, "rules": {}},
+        ),
+        (
+            "role_bindings",
+            {
+                "metadata": {"name": "reader", "namespace": "shop"},
+                "roleRef": {"kind": "Role", "name": "reader"},
+                "subjects": "checkout",
+            },
+        ),
+    ],
+)
+def test_resource_access_rejects_malformed_rbac_collections(
+    collection: str,
+    resource: dict[str, object],
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(**{collection: [resource]}),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "unavailable"
+    assert normalized["reason_codes"] == ["invalid_access_observation"]
+
+
 def test_endpoint_slice_summary_normalizes_null_collections() -> None:
     _, kubernetes_module = load_evidence_modules()
 
