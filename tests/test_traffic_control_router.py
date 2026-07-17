@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from domains.identity.dependencies import require_session
 from packages.contracts.identity import Permission
+from packages.contracts.parity import CommandReceipt
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 
 OBSERVED_AT = datetime.now(UTC).isoformat()
@@ -361,6 +362,89 @@ def test_source_selection_and_connect_queue_idempotent_audited_agent_commands(mo
     assert commands[1].payload["source_key"] == "hubble"
 
 
+def test_source_capability_revision_ignores_observation_clock_only_changes() -> None:
+    module = importlib.import_module("domains.traffic.source_projection")
+    db = TrafficControlDb()
+    now = datetime(2026, 7, 17, 7, 0, tzinfo=UTC)
+    statuses = db.latest_cluster_agent_statuses("workspace-a", {"cluster-a"})
+    first_status = statuses["cluster-a"]
+    first_status["last_seen_at"] = now.isoformat()
+    first_observation = first_status["details"]["traffic_sources"]
+    assert isinstance(first_observation, dict)
+    first_observation["observed_at"] = now.isoformat()
+    second_status = {
+        **first_status,
+        "details": {
+            "traffic_sources": {
+                **first_observation,
+                "observed_at": "2026-07-17T06:59:50+00:00",
+            }
+        },
+    }
+    context = db.filter_snapshot_contexts("workspace-a", ("cluster-a",))["cluster-a"]
+
+    first = module.traffic_source_catalog(
+        workspace_id="workspace-a",
+        cluster_id="cluster-a",
+        context=context,
+        status=first_status,
+        deploy_allowed=True,
+        now=now,
+    )
+    second = module.traffic_source_catalog(
+        workspace_id="workspace-a",
+        cluster_id="cluster-a",
+        context=context,
+        status=second_status,
+        deploy_allowed=True,
+        now=now,
+    )
+
+    assert first.freshness == second.freshness == "live"
+    assert first.capability_revision == second.capability_revision
+
+
+def test_idempotent_replay_precedes_live_capability_revalidation(monkeypatch) -> None:
+    client, commands = _client(monkeypatch)
+    module = importlib.import_module("domains.traffic.router")
+    receipt = CommandReceipt(
+        command_id="cmd-traffic-existing",
+        event_id="evt-existing",
+        audit_event_id="evt-existing",
+        correlation_id="corr-existing",
+        status="completed",
+    )
+
+    async def replay(*_args, **_kwargs):
+        return receipt
+
+    async def stale_catalog(*_args, **_kwargs):
+        raise AssertionError("a replay must not depend on a newer source observation")
+
+    monkeypatch.setattr(module, "replay_resource_action_receipt", replay)
+    monkeypatch.setattr(module, "_current_source_catalog", stale_catalog)
+    response = client.post(
+        "/traffic/source",
+        headers={"Idempotency-Key": "traffic-source-replay"},
+        json={
+            "scope": {
+                "workspace_id": "workspace-a",
+                "cluster_id": "cluster-a",
+                "namespaces": [],
+                "freshness": "live",
+            },
+            "source_key": "hubble",
+            "capability_revision": "0" * 64,
+            "confirmation": True,
+            "reason": "Retry the accepted source selection",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["command_id"] == "cmd-traffic-existing"
+    assert commands == []
+
+
 def test_network_policy_evaluation_uses_exact_pod_identity_and_kubernetes_union_semantics(
     monkeypatch,
 ) -> None:
@@ -407,3 +491,64 @@ def test_network_policy_batch_is_bounded() -> None:
         assert "batch" in str(error)
     else:
         raise AssertionError("oversized NetworkPolicy evaluation batch was accepted")
+
+
+class MissingNamespaceLabelsDb(TrafficControlDb):
+    def get_inventory_resource_by_api_version(self, **query: object) -> dict[str, object] | None:
+        if query.get("resource_type") == "namespace":
+            return None
+        return super().get_inventory_resource_by_api_version(**query)
+
+
+class CiliumPolicyDb(TrafficControlDb):
+    def list_inventory_resources_by_api_version(self, **query: object) -> list[dict[str, object]]:
+        if query.get("resource_type") == "networkpolicy":
+            return []
+        if query.get("resource_type") != "ciliumnetworkpolicy":
+            return []
+        return [
+            inventory_resource(
+                resource_type="ciliumnetworkpolicy",
+                api_version="cilium.io/v2",
+                kind="CiliumNetworkPolicy",
+                namespace="backend",
+                name="api-policy",
+                uid="cilium-policy-uid",
+                raw={"spec": {"endpointSelector": {"matchLabels": {"app": "api"}}}},
+            )
+        ]
+
+
+def test_network_policy_missing_namespace_labels_is_indeterminate(monkeypatch) -> None:
+    client, _commands = _client(monkeypatch, db=MissingNamespaceLabelsDb())
+    response = client.get(
+        "/network-policies/evaluate?cluster=cluster-a"
+        "&namespace=backend&pod_name=api-0&pod_uid=pod-api-uid"
+        "&peer_namespace=frontend&peer_pod_name=web-0&peer_pod_uid=pod-web-uid"
+        "&direction=ingress&port=8080&protocol=TCP"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["verdict"] == "indeterminate"
+    assert response.json()["coverage"] == {
+        "state": "partial",
+        "evaluated_count": 1,
+        "returned_count": 1,
+        "reason_codes": ["network_policy_namespace_labels_unavailable"],
+    }
+    assert response.json()["selecting_policies"][0]["effect"] == "unknown"
+
+
+def test_cilium_selecting_policy_is_reported_as_indeterminate(monkeypatch) -> None:
+    client, _commands = _client(monkeypatch, db=CiliumPolicyDb())
+    response = client.get(
+        "/network-policies/evaluate?cluster=cluster-a"
+        "&namespace=backend&pod_name=api-0&pod_uid=pod-api-uid"
+        "&peer_namespace=frontend&peer_pod_name=web-0&peer_pod_uid=pod-web-uid"
+        "&direction=ingress&port=8080&protocol=TCP"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["verdict"] == "indeterminate"
+    assert response.json()["selecting_policies"][0]["resource"]["kind"] == ("CiliumNetworkPolicy")
+    assert response.json()["coverage"]["reason_codes"] == ["cilium_network_policy_rule_unsupported"]

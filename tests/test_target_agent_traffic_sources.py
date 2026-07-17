@@ -71,6 +71,14 @@ class ObservedKubernetes:
         return httpx.Response(404, request=request, json={"kind": "Status"})
 
 
+class ForbiddenSourceKubernetes(ObservedKubernetes):
+    async def request(self, method: str, path: str, **kwargs: object) -> httpx.Response:
+        if path.startswith("/api/v1/pods?"):
+            request = httpx.Request(method, f"https://kubernetes.test{path}")
+            return httpx.Response(403, request=request, json={"kind": "Status"})
+        return await super().request(method, path, **kwargs)
+
+
 def test_detector_reports_only_observed_sources_with_cluster_facts() -> None:
     sys.path.insert(0, str(AGENT_DIR))
     try:
@@ -132,3 +140,21 @@ def test_agent_control_store_persists_active_traffic_source(tmp_path: Path) -> N
         sys.path.remove(str(AGENT_DIR))
         for name in ("control.store", "control"):
             sys.modules.pop(name, None)
+
+
+def test_detector_does_not_report_forbidden_observation_as_not_installed() -> None:
+    sys.path.insert(0, str(AGENT_DIR))
+    try:
+        module = importlib.import_module("traffic_sources")
+        observation = asyncio.run(
+            module.TrafficSourceDetector(ForbiddenSourceKubernetes()).observe(active_source=None)
+        )
+    finally:
+        sys.path.remove(str(AGENT_DIR))
+        sys.modules.pop("traffic_sources", None)
+
+    assert {source["status"] for source in observation["sources"]} == {"error"}
+    assert all(
+        source["message"] == "source observation is forbidden by cluster RBAC"
+        for source in observation["sources"]
+    )

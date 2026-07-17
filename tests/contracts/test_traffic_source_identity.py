@@ -30,7 +30,10 @@ def test_traffic_baseline_features_have_exact_frozen_source_identities() -> None
     }
     mapped: set[str] = set()
     for identity in identities["identities"]:
-        contracts = set(identity["legacyContractIds"])
+        contracts = set(identity.get("legacyContractIds", ()))
+        legacy_contract_id = identity.get("legacyContractId")
+        if isinstance(legacy_contract_id, str):
+            contracts.add(legacy_contract_id)
         relevant = contracts & expected_contracts
         if not relevant:
             continue
