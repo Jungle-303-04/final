@@ -22,6 +22,14 @@ from domains.gitops.repository import derive_workflow_run_id  # noqa: E402
 from domains.gitops.repository_discovery import RepositoryDiscoveryService  # noqa: E402
 from domains.inventory.events import InventorySnapshotRecordedBody  # noqa: E402
 from domains.inventory.ingest import ingest_inventory_snapshot  # noqa: E402
+from domains.rca.events import (  # noqa: E402
+    ClusterEvidenceReceivedBody,
+    compact_cluster_evidence_payload,
+)
+from packages.contracts.cost.observations import (  # noqa: E402
+    COST_NAMESPACE_HOURLY_METRIC,
+    COST_NAMESPACE_STORAGE_METRIC,
+)
 from packages.contracts.demo_workspace import (  # noqa: E402
     DEMO_SEED_MARKER_KEY,
     DemoGitOpsSourceDescriptor,
@@ -38,7 +46,9 @@ from packages.contracts.gitops import (  # noqa: E402
     WorkflowStepName,
     WorkflowStepStatus,
 )
+from packages.contracts.traffic.observations import TRAFFIC_CARETTA_FLOW_METRIC  # noqa: E402
 from packages.events.context import event_workspace  # noqa: E402
+from packages.events.envelope import event  # noqa: E402
 from packages.runtime.gateway import ApiEventGateway  # noqa: E402
 from packages.storage.database import Database  # noqa: E402
 from packages.storage.engine import unit_of_work_or_null  # noqa: E402
@@ -473,6 +483,117 @@ def _persist_demo_gitops_runtime(
         )
 
 
+def persist_demo_observation(
+    db: Any,
+    descriptor: DemoWorkspaceDescriptor,
+    *,
+    marker: Mapping[str, object],
+    observed_at: datetime,
+) -> int:
+    """Persist one explicit synthetic demo window through the Agent evidence ledger."""
+
+    observation = descriptor.observations
+    if observation is None:
+        return 0
+    workspace_id = descriptor.workspace.workspace_id
+    cluster_id = descriptor.cluster.cluster_id
+    window_start = _aware_utc(observed_at).isoformat()
+    digest = descriptor.digest()
+    evidence_key = f"demo-observation:{workspace_id}:{cluster_id}:{digest}"
+    correlation_id = f"demo-observation-{digest[:24]}"
+    results = {
+        COST_NAMESPACE_HOURLY_METRIC: {
+            "samples": [
+                {
+                    "metric": {"namespace": item.namespace},
+                    "value": _micro_usd(item.hourly_rate_micros),
+                }
+                for item in observation.cost_namespace_rates
+            ]
+        },
+        COST_NAMESPACE_STORAGE_METRIC: {
+            "samples": [
+                {
+                    "metric": {"namespace": item.namespace},
+                    "value": _micro_usd(item.storage_rate_micros),
+                }
+                for item in observation.cost_namespace_rates
+            ]
+        },
+        TRAFFIC_CARETTA_FLOW_METRIC: {
+            "samples": [
+                {
+                    "metric": {
+                        "client_name": item.source_name,
+                        "client_namespace": item.source_namespace,
+                        "client_kind": item.source_kind,
+                        "server_name": item.target_name,
+                        "server_namespace": item.target_namespace or "",
+                        "server_kind": item.target_kind,
+                        "server_service": item.target_service or "",
+                        "server_port": str(item.port),
+                    },
+                    "timestamp": _aware_utc(observed_at).timestamp(),
+                    "value": item.connections,
+                }
+                for item in observation.traffic_flows
+            ]
+        },
+    }
+    evidence_body = ClusterEvidenceReceivedBody(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        agent_id=descriptor.cluster.agent_id,
+        source_id="cluster-snapshot",
+        window_start=window_start,
+        evidence_key=evidence_key,
+        correlation_id=correlation_id,
+        kubernetes={},
+        metrics={"results": results},
+        logs=[],
+        traces={},
+        collection_status={
+            "availability": "observed",
+            "mode": observation.origin,
+            "cost_namespace_count": len(observation.cost_namespace_rates),
+            "traffic_source": observation.traffic_source,
+            "traffic_flow_count": len(observation.traffic_flows),
+        },
+        metadata={
+            "runtime_evidence_version": observation.runtime_evidence_version,
+            "synthetic": True,
+            DEMO_SEED_MARKER_KEY: dict(marker),
+        },
+    )
+    envelope = event(
+        evidence_body.__subject__,
+        DEMO_EVENT_SOURCE,
+        compact_cluster_evidence_payload(evidence_body, correlation_id),
+        correlation_id,
+        workspace_id=workspace_id,
+    )
+    db.record_evidence_event_once(
+        evidence_key=evidence_key,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        source_id="cluster-snapshot",
+        window_start=window_start,
+        agent_id=descriptor.cluster.agent_id,
+        event_envelope=envelope,
+        payload=evidence_body.to_body(),
+    )
+    return 1
+
+
+def _micro_usd(value: int) -> str:
+    units, micros = divmod(value, 1_000_000)
+    return f"{units}.{micros:06d}"
+
+
+def _aware_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 def load_descriptor(
     path: Path,
     *,
@@ -518,6 +639,7 @@ async def seed_demo_workspace(
     snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
     registration_current = _persisted_registration_marker(registration) == marker
     snapshot_current = _persisted_snapshot_marker(snapshot) == marker
+    collected_at = _aware_utc(observed_at or datetime.now(UTC))
 
     if registration_current and snapshot_current:
         return {
@@ -528,6 +650,7 @@ async def seed_demo_workspace(
             "cluster_id": cluster_id,
             "snapshot_id": str(snapshot["snapshot_id"]),
             "gitops_source_count": len(descriptor.gitops.sources) if descriptor.gitops else 0,
+            "observation_window_count": 1 if descriptor.observations else 0,
         }
 
     gitops_evidence = await validate_demo_gitops_sources(descriptor, discovery)
@@ -559,13 +682,22 @@ async def seed_demo_workspace(
             evidence=gitops_evidence,
         )
 
+    def persist_observation() -> int:
+        return persist_demo_observation(
+            db,
+            descriptor,
+            marker=marker,
+            observed_at=collected_at,
+        )
+
     gitops_source_count = 0
+    observation_window_count = 0
     if snapshot_current:
         with unit_of_work_or_null(db):
             await register_demo_target()
+            observation_window_count = persist_observation()
             gitops_source_count = persist_gitops()
     else:
-        collected_at = observed_at or datetime.now(UTC)
         inventory = InventorySnapshotRequest.model_validate(
             {
                 "cluster_id": cluster_id,
@@ -586,9 +718,10 @@ async def seed_demo_workspace(
         )
 
         async def persist_snapshot_dependencies(saved: dict[str, Any]) -> None:
-            nonlocal gitops_source_count
+            nonlocal gitops_source_count, observation_window_count
             if saved.get("accepted") is not True:
                 raise RuntimeError("demo inventory snapshot was not accepted")
+            observation_window_count = persist_observation()
             gitops_source_count = persist_gitops()
             await events.accept_body(
                 InventorySnapshotRecordedBody(
@@ -622,6 +755,7 @@ async def seed_demo_workspace(
         "registration_written": not registration_current,
         "inventory_written": not snapshot_current,
         "gitops_source_count": gitops_source_count,
+        "observation_window_count": observation_window_count,
     }
 
 

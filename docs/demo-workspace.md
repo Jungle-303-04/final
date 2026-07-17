@@ -24,6 +24,14 @@ repositories in the same transaction as the inventory cut. The runtime evidence 
 the descriptor digest, so deploying this extension produces a new seed cut instead of treating the
 older source-only marker as current.
 
+That transaction also records one descriptor-owned synthetic observation through the existing
+`EvidenceWindow` and durable event/outbox contract. Its metadata carries
+`synthetic=true`, `mode=descriptor-owned-synthetic`, and the exact descriptor marker. Cost and
+Traffic values live only in the versioned descriptor; neither the controller nor the browser has
+fallback constants. The evidence uses the canonical `cluster-snapshot` source identity so the
+existing bounded Cost and Traffic repositories consume it. It does not contact Prometheus,
+OpenCost, or a cluster directly.
+
 The public demo repository has no credential row or stored secret. Its canonical repository row
 keeps `credential_ref` null. Discovery uses anonymous GitHub access by default; the deployment Job
 may read the existing optional `GITHUB_TOKEN` key from `management-runtime-secret` into process
@@ -86,7 +94,8 @@ The normal trusted-proxy secret/header configuration is still required.
 
 The v1 descriptor contains two Nodes and two namespaces with healthy and degraded
 Deployments, ready and restarting Pods, Services, EndpointSlices, an unknown CronJob, a
-Warning Event, node and Pod usage, and a complete all-namespace Kubernetes Event capture. Its
+Warning Event, one Helm storage Secret without release payload data, node and Pod usage, and a
+complete all-namespace Kubernetes Event capture. Its
 owner UIDs, selectors, node assignments, and Service names are sufficient for the canonical
 Resources graph to derive ownership, selection, placement, and routing edges without guessing
 from object names.
@@ -99,7 +108,9 @@ The same persisted snapshot supplies these read paths:
 | Resources | Two namespaces, multiple kinds and health states, exact labels, usage, and ten derived graph relationships. |
 | Timeline | Inventory additions plus one warning Kubernetes Event fact, appended through the durable Timeline ledger during ingestion. |
 | Checks | Three agent-shaped findings and their catalog/visibility evidence from `checks_observation`. |
-| Cost | Two Node rows with observed capacity and usage; pricing remains explicitly unavailable. |
+| Helm | One observed `yaml-demo-helm-staging` release at revision 1, chart `demo-app` 0.1.0, plus two healthy owned resources inferred by the canonical Helm inventory projection. |
+| Cost | Two Node rows plus one current synthetic namespace allocation window. The overview exposes 840,000 micro-USD/hour and 90,000 micro-USD/hour of storage evidence. |
+| Traffic | Two synthetic Caretta-shaped flow observations, including one cross-namespace and one external destination, read through the bounded Agent evidence repository. |
 
 The descriptor intentionally does not fabricate evidence that belongs to another read model:
 
@@ -109,13 +120,22 @@ The descriptor intentionally does not fabricate evidence that belongs to another
   their successful repository-render validation deliveries. Apply, live diff, rollout health, and
   workload runtime membership stay unavailable: the successful WorkflowRun is explicitly
   read-only, while its apply and health steps are skipped.
-- Cost overview remains unavailable because monetary observations belong to bounded
-  `EvidenceWindow` records, not inventory usage.
 - GitOps shows the validated repository, source registrations, pinned revision, rendered resource
   identities, and the successful read-only validation operation. It still does not claim a target
-  synchronization, live comparison, or rollout. Helm release state, Traffic, and RCA/Issues remain
-  unavailable because their storage/controller/evidence contracts are separate from inventory and
-  source discovery.
+  synchronization, live comparison, or rollout.
+- Helm manifest/values, upgrade/rollback/uninstall commands, and a live freshness claim remain
+  unavailable. They require an outbound Agent heartbeat plus the Helm artifact/executor contracts;
+  a storage Secret and owned-resource labels prove only the release read state. The Secret never
+  contains an encoded Helm release payload.
+- Cost trend remains unavailable because one current seed window is not historical evidence.
+  Idle cost, efficiency, and savings recommendations need explicit provider/allocation collector
+  contracts; they are not derived from inventory utilization or the synthetic current allocation.
+- Traffic is intentionally partial with `traffic_source_selection_unobserved`: the evidence proves
+  flows but no live Agent status proves that Caretta is the selected collector. An outbound Agent
+  `traffic_sources.active_source` observation is required before the product can claim fully
+  available Traffic.
+- RCA/Issues remains unavailable because a Warning Event and synthetic metric windows do not prove
+  an incident or diagnosis. Those screens require their canonical incident/RCA write contracts.
 
 Those unavailable states are part of the fixture's evidence boundary. Extending them requires a
 separate descriptor-owned slice through their canonical write contracts; they must not be

@@ -40,6 +40,7 @@ from domains.applications.router import router as applications_router
 from domains.checks.observation_projection import checks_overview
 from domains.cost.node_projection import cost_node_page
 from domains.cost.observation_projection import cost_overview
+from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import current_warning_event_items, rollup_health
 from domains.dashboard.home_bands import compose_home_topology_preview
 from domains.dashboard.repository import timeline_update_from_event
@@ -49,6 +50,8 @@ from domains.demo_workspace.policy import (
 )
 from domains.demo_workspace.repository import DemoWorkspaceRepository
 from domains.gitops.detail_router import router as gitops_detail_router
+from domains.helm.release_router import router as helm_release_router
+from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.identity.dependencies import require_session
 from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.kubernetes_events import KubernetesEventFactBatch
@@ -58,8 +61,10 @@ from domains.inventory.repository import (
     normalize_inventory_resource,
     snapshot_resources,
 )
+from domains.inventory_filter.cursor import FilterCursorCodec
 from domains.inventory_filter.graph import build_resource_graph
 from domains.registry import Database
+from domains.traffic.router import router as traffic_router
 from packages.contracts.demo_workspace import DEMO_SEED_MARKER_KEY, DemoWorkspaceDescriptor
 from packages.contracts.gateway.responses import (
     RepositoryBranchItem,
@@ -96,6 +101,7 @@ class FakeDemoDatabase:
         self.workflow_writes: list[dict[str, Any]] = []
         self.workflow_step_writes: list[dict[str, Any]] = []
         self.manifest_artifact_writes: list[dict[str, Any]] = []
+        self.evidence_writes: list[dict[str, Any]] = []
 
     def get_cluster_registration(self, _workspace_id: str, _cluster_id: str) -> object:
         return self.registration
@@ -185,6 +191,193 @@ class FakeDemoDatabase:
         stored = deepcopy(payload)
         self.manifest_artifact_writes.append(stored)
         return stored
+
+    def record_evidence_event_once(
+        self,
+        *,
+        evidence_key: str,
+        workspace_id: str,
+        cluster_id: str,
+        source_id: str,
+        window_start: str,
+        agent_id: str | None,
+        event_envelope: Any,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        existing = next(
+            (item for item in self.evidence_writes if item["evidence_key"] == evidence_key),
+            None,
+        )
+        if existing is not None:
+            return {
+                "duplicate": True,
+                "event_id": existing["event_envelope"].event_id,
+                "correlation_id": existing["event_envelope"].correlation_id,
+            }
+        stored = {
+            "evidence_key": evidence_key,
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "source_id": source_id,
+            "window_start": window_start,
+            "updated_at": window_start,
+            "agent_id": agent_id,
+            "event_envelope": deepcopy(event_envelope),
+            "payload": deepcopy(payload),
+        }
+        self.evidence_writes.append(stored)
+        return {
+            "duplicate": False,
+            "event_id": event_envelope.event_id,
+            "correlation_id": event_envelope.correlation_id,
+        }
+
+    def helm_release_observation_contexts(
+        self,
+        *,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+    ) -> dict[str, dict[str, Any]]:
+        return self.filter_snapshot_contexts(workspace_id, cluster_ids)
+
+    def list_helm_storage_observations(
+        self,
+        *,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+        namespaces: tuple[str, ...],
+    ) -> list[dict[str, Any]]:
+        return [
+            row
+            for row in self._inventory_observation_rows()
+            if row["workspace_id"] == workspace_id
+            and row["cluster_id"] in cluster_ids
+            and (not namespaces or row["namespace"] in namespaces)
+            and str(row["kind"]).casefold() in {"secret", "configmap"}
+            and row["labels"].get("owner") == "helm"
+        ]
+
+    def list_helm_owned_resource_observations(
+        self,
+        *,
+        workspace_id: str,
+        release_scopes: tuple[tuple[str, str, str], ...],
+        limit: int,
+    ) -> HelmOwnedResourceObservationBatch:
+        scopes = set(release_scopes)
+        rows = []
+        for row in self._inventory_observation_rows():
+            annotations = row["annotations"]
+            release_name = annotations.get("meta.helm.sh/release-name")
+            release_namespace = annotations.get("meta.helm.sh/release-namespace")
+            if (
+                row["workspace_id"] == workspace_id
+                and row["labels"].get("app.kubernetes.io/managed-by") == "Helm"
+                and (row["cluster_id"], row["namespace"], release_name) in scopes
+                and release_namespace == row["namespace"]
+            ):
+                rows.append(
+                    {
+                        **row,
+                        "release_name": release_name,
+                        "release_namespace": release_namespace,
+                        "chart_label": row["labels"].get("helm.sh/chart"),
+                    }
+                )
+        return HelmOwnedResourceObservationBatch(
+            rows=tuple(rows[:limit]),
+            truncated=len(rows) > limit,
+        )
+
+    def latest_cluster_agent_statuses(
+        self,
+        _workspace_id: str,
+        _cluster_ids: set[str],
+    ) -> dict[str, dict[str, Any]]:
+        return {}
+
+    def filter_snapshot_contexts(
+        self,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+    ) -> dict[str, dict[str, Any]]:
+        if not self.inventory_writes or workspace_id != self.registration_writes[0]["workspace_id"]:
+            return {}
+        payload = self.inventory_writes[-1]
+        summary = payload["summary"]
+        return {
+            cluster_id: {
+                "snapshot_revision": 1,
+                "observed_at": payload["collected_at"],
+                "labels_complete": bool(summary.get("labels_complete")),
+                "resources_complete": bool(summary.get("resources_complete")),
+                "application_bindings_complete": False,
+                "partial_reason_codes": [],
+            }
+            for cluster_id in cluster_ids
+            if cluster_id == payload["cluster_id"]
+        }
+
+    def list_cost_evidence_windows(
+        self,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+        **_kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        return [
+            deepcopy(row)
+            for row in self.evidence_writes
+            if row["workspace_id"] == workspace_id and row["cluster_id"] in cluster_ids
+        ]
+
+    def list_latest_traffic_evidence_windows(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+        **_kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        return [
+            deepcopy(row)
+            for row in self.evidence_writes
+            if row["workspace_id"] == workspace_id
+            and row["cluster_id"] in cluster_ids
+            and row["source_id"] == "cluster-snapshot"
+        ]
+
+    def resolve_filter_namespaces(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+        _snapshot_revision: int,
+        requested: set[tuple[str, str]],
+    ) -> set[tuple[str, str]]:
+        if workspace_id != self.registration_writes[0]["workspace_id"]:
+            return set()
+        namespaces = set(self.inventory_writes[-1]["summary"].get("namespaces", ()))
+        return {
+            (cluster_id, namespace)
+            for cluster_id, namespace in requested
+            if cluster_id in cluster_ids and namespace in namespaces
+        }
+
+    def _inventory_observation_rows(self) -> list[dict[str, Any]]:
+        if not self.inventory_writes:
+            return []
+        payload = self.inventory_writes[-1]
+        workspace_id = self.registration_writes[0]["workspace_id"]
+        return [
+            {
+                **deepcopy(resource),
+                "workspace_id": workspace_id,
+                "cluster_id": payload["cluster_id"],
+                "inventory_key": (
+                    f"{resource['kind'].casefold()}:{resource.get('namespace') or '_cluster'}:"
+                    f"{resource['name']}"
+                ),
+                "observed_at": payload["collected_at"],
+            }
+            for resource in payload["resources"]
+        ]
 
     def accessible_resource_ids(
         self,
@@ -519,7 +712,7 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
     assert descriptor.inventory.summary["resources_complete"] is True
     assert descriptor.inventory.summary["labels_complete"] is True
     assert descriptor.inventory.summary["namespaces"] == ["demo-payments", "demo-shop"]
-    assert len(descriptor.inventory.resources) == 12
+    assert len(descriptor.inventory.resources) == 13
     assert {resource.health for resource in descriptor.inventory.resources} >= {
         "healthy",
         "warning",
@@ -537,6 +730,15 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
         "kustomize",
         "helm",
     }
+    assert descriptor.observations is not None
+    assert descriptor.observations.runtime_evidence_version == 1
+    assert descriptor.observations.origin == "descriptor-owned-synthetic"
+    assert [item.namespace for item in descriptor.observations.cost_namespace_rates] == [
+        "demo-shop",
+        "demo-payments",
+    ]
+    assert descriptor.observations.traffic_source == "caretta"
+    assert len(descriptor.observations.traffic_flows) == 2
     assert descriptor.digest() == restored.digest()
     assert descriptor.seed_marker() == restored.seed_marker()
 
@@ -620,6 +822,26 @@ def test_descriptor_rejects_default_workspace_and_incomplete_inventory(tmp_path:
 
     assert "runtime_evidence_version" in str(error.value)
 
+    raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
+    raw["observations"]["cost_namespace_rates"][0]["namespace"] = "not-in-inventory"
+    invalid_observation_scope = tmp_path / "invalid-observation-scope.json"
+    invalid_observation_scope.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValidationError) as error:
+        load_descriptor(invalid_observation_scope)
+
+    assert "inventoried namespaces" in str(error.value)
+
+    raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
+    del raw["observations"]["runtime_evidence_version"]
+    legacy_observations = tmp_path / "legacy-observation-evidence.json"
+    legacy_observations.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValidationError) as error:
+        load_descriptor(legacy_observations)
+
+    assert "runtime_evidence_version" in str(error.value)
+
 
 def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
@@ -660,9 +882,12 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert len(db.workflow_writes) == 5
     assert len(db.workflow_step_writes) == 35
     assert len(db.manifest_artifact_writes) == 36
+    assert len(db.evidence_writes) == 1
     assert len(discovery.validation_requests) == 5
     assert first["gitops_source_count"] == 5
     assert second["gitops_source_count"] == 5
+    assert first["observation_window_count"] == 1
+    assert second["observation_window_count"] == 1
     assert [
         request.values_path
         for request in discovery.validation_requests
@@ -677,7 +902,30 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert body.workspace_id == descriptor.workspace.workspace_id
     assert body.cluster_id == descriptor.cluster.cluster_id
     assert body.snapshot_id == "snapshot-demo-v1"
-    assert body.resource_count == 14
+    assert body.resource_count == 15
+
+    observation = db.evidence_writes[0]
+    assert observation["source_id"] == "cluster-snapshot"
+    assert observation["payload"]["metadata"] == {
+        "runtime_evidence_version": 1,
+        "synthetic": True,
+        DEMO_SEED_MARKER_KEY: descriptor.seed_marker(),
+    }
+    assert observation["payload"]["collection_status"] == {
+        "availability": "observed",
+        "mode": "descriptor-owned-synthetic",
+        "cost_namespace_count": 2,
+        "traffic_source": "caretta",
+        "traffic_flow_count": 2,
+    }
+    metric_results = observation["payload"]["metrics"]["results"]
+    assert set(metric_results) == {
+        "opencost_namespace_hourly_rate",
+        "opencost_namespace_storage_rate",
+        "traffic_caretta_flows",
+    }
+    assert observation["event_envelope"].workspace_id == descriptor.workspace.workspace_id
+    assert observation["event_envelope"].payload["metrics"] == {}
 
     repository = db.repository_writes[0]
     assert repository["repo_ref"] == "jungle-303-04/yaml-demo"
@@ -766,6 +1014,87 @@ def test_seeded_runtime_is_visible_through_applications_and_gitops_reads() -> No
     assert gitops["operation"]["reason_code"] == "provider_operation_not_integrated"
 
 
+def test_seeded_helm_cost_and_traffic_are_visible_through_existing_read_contracts() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+    asyncio.run(
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=FakeEvents(),
+            discovery=FakeRepositoryDiscovery(),
+            observed_at=datetime.now(UTC),
+        )
+    )
+    app = FastAPI()
+    app.include_router(helm_release_router)
+    app.include_router(cost_router)
+    app.include_router(traffic_router)
+    app.state.inventory_filter_cursor_codec = FilterCursorCodec("d" * 32)
+    app.dependency_overrides[require_session] = lambda: SimpleNamespace(
+        user_id=descriptor.workspace.owner_user_id,
+        workspace_id=descriptor.workspace.workspace_id,
+        roles=("user",),
+    )
+    app.dependency_overrides[get_db] = lambda: db
+    client = TestClient(app)
+    cluster_id = descriptor.cluster.cluster_id
+
+    helm_response = client.get(f"/helm/releases?clusters={cluster_id}")
+    assert helm_response.status_code == 200
+    helm = helm_response.json()
+    assert helm["coverage"] == {
+        "availability": "available",
+        "observed_at": db.inventory_writes[0]["collected_at"],
+        "reason_codes": [],
+    }
+    assert len(helm["releases"]) == 1
+    release = helm["releases"][0]
+    assert release["name"] == "yaml-demo-helm-staging"
+    assert release["storage_namespace"] == "demo-shop"
+    assert release["chart"] == "demo-app"
+    assert release["chart_version"] == "0.1.0"
+    assert release["status"] == "deployed"
+    assert release["revision"] == 1
+    assert release["scope"]["freshness"] == "disconnected"
+    assert release["resource_health"] == {
+        "availability": "available",
+        "health": "healthy",
+        "resource_count": 2,
+        "observed_at": db.inventory_writes[0]["collected_at"],
+        "reason_codes": [],
+    }
+
+    cost_response = client.get(f"/cost/overview?clusters={cluster_id}")
+    assert cost_response.status_code == 200
+    cost = cost_response.json()
+    assert cost["observation"]["availability"] == "available"
+    assert cost["summary"] == {
+        "availability": "available",
+        "hourly_cost": 840_000,
+        "monthly_projection": 613_200_000,
+        "storage_cost": 90_000,
+        "idle_cost": None,
+        "efficiency": None,
+        "savings_recommendations": None,
+        "reason_codes": [],
+    }
+    assert cost["trend"]["availability"] == "unavailable"
+    assert cost["trend"]["reason_codes"] == ["cost_trend_history_insufficient"]
+
+    traffic_response = client.get(f"/traffic/flows?clusters={cluster_id}")
+    assert traffic_response.status_code == 200
+    traffic = traffic_response.json()
+    assert traffic["observation"]["availability"] == "partial"
+    assert traffic["observation"]["source_keys"] == ["caretta"]
+    assert traffic["observation"]["reason_codes"] == [
+        f"traffic_source_selection_unobserved:{cluster_id}"
+    ]
+    assert traffic["summary"]["total_flow_count"] == 2
+    assert traffic["summary"]["external_flow_count"] == 1
+    assert {edge["connections"] for edge in traffic["relationships"]["edges"]} == {6, 28}
+
+
 def test_seed_rolls_back_inventory_and_gitops_when_one_binding_fails() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
     db = FailingTransactionalDemoDatabase()
@@ -789,6 +1118,7 @@ def test_seed_rolls_back_inventory_and_gitops_when_one_binding_fails() -> None:
     assert db.application_writes == []
     assert db.watch_writes == []
     assert db.binding_writes == []
+    assert db.evidence_writes == []
     assert events.bodies == []
 
 
@@ -914,13 +1244,14 @@ def test_seed_stages_inventory_event_through_gateway_outbox_contract() -> None:
             cluster_id=descriptor.cluster.cluster_id,
             snapshot_id="snapshot-demo-v1",
             agent_id=descriptor.cluster.agent_id,
-            resource_count=14,
+            resource_count=15,
             resource_types=[
                 "endpoint",
                 "event",
                 "health",
                 "node",
                 "pod",
+                "secret",
                 "service",
                 "usage",
                 "workload",
@@ -944,7 +1275,7 @@ def test_seed_payload_drives_canonical_resources_home_and_timeline_projections()
     )
 
     assert graph["relation_completeness"] == "exact"
-    assert graph["node_count"] == 14
+    assert graph["node_count"] == 15
     assert graph["edge_count"] == 10
     assert _edge_kind_counts(graph) == {
         "owns": 2,
@@ -957,7 +1288,7 @@ def test_seed_payload_drives_canonical_resources_home_and_timeline_projections()
         observed_at=observed_at.isoformat(),
     )
     assert home.coverage.availability == "available"
-    assert home.node_count == 14
+    assert home.node_count == 15
     assert home.edge_count == 10
     assert (
         rollup_health(
@@ -986,7 +1317,7 @@ def test_seed_payload_drives_canonical_resources_home_and_timeline_projections()
         resources_complete=True,
         current_event_batch=event_batch,
     )
-    assert len(timeline) == 12
+    assert len(timeline) == 13
     assert {event.source for event in timeline} == {"inventory", "kubernetes_event"}
     assert sum(event.source == "kubernetes_event" for event in timeline) == 1
     assert next(event for event in timeline if event.source == "kubernetes_event").severity == (

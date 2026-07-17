@@ -351,9 +351,15 @@
         "resource_version": "7",
         "status": "3/3",
         "health": "healthy",
-        "labels": {
-          "app.kubernetes.io/name": "shop-api",
-          "app.kubernetes.io/part-of": "demo-shop"
+      "labels": {
+        "app.kubernetes.io/name": "shop-api",
+        "app.kubernetes.io/part-of": "demo-shop",
+        "app.kubernetes.io/managed-by": "Helm",
+        "helm.sh/chart": "demo-app-0.1.0"
+      },
+      "annotations": {
+        "meta.helm.sh/release-name": "yaml-demo-helm-staging",
+        "meta.helm.sh/release-namespace": "demo-shop"
         },
         "summary": {
           "desired_replicas": 3,
@@ -433,7 +439,13 @@
           "owner_references_complete": true,
           "labels": {
             "app.kubernetes.io/name": "shop-api",
-            "app.kubernetes.io/part-of": "demo-shop"
+            "app.kubernetes.io/part-of": "demo-shop",
+            "app.kubernetes.io/managed-by": "Helm",
+            "helm.sh/chart": "demo-app-0.1.0"
+          },
+          "annotations": {
+            "meta.helm.sh/release-name": "yaml-demo-helm-staging",
+            "meta.helm.sh/release-namespace": "demo-shop"
           },
           "containers": [
             {
@@ -491,9 +503,15 @@
         "resource_version": "4",
         "status": "Active",
         "health": "healthy",
-        "labels": {
-          "app.kubernetes.io/name": "shop-api",
-          "app.kubernetes.io/part-of": "demo-shop"
+      "labels": {
+        "app.kubernetes.io/name": "shop-api",
+        "app.kubernetes.io/part-of": "demo-shop",
+        "app.kubernetes.io/managed-by": "Helm",
+        "helm.sh/chart": "demo-app-0.1.0"
+      },
+      "annotations": {
+        "meta.helm.sh/release-name": "yaml-demo-helm-staging",
+        "meta.helm.sh/release-namespace": "demo-shop"
         },
         "summary": {
           "type": "ClusterIP",
@@ -514,10 +532,20 @@
           "apiVersion": "v1",
           "kind": "Service",
           "metadata": {
-            "name": "shop-api",
-            "namespace": "demo-shop",
-            "uid": "demo-service-shop-api-v1",
-            "resourceVersion": "4"
+          "name": "shop-api",
+          "namespace": "demo-shop",
+          "uid": "demo-service-shop-api-v1",
+          "resourceVersion": "4",
+          "labels": {
+            "app.kubernetes.io/name": "shop-api",
+            "app.kubernetes.io/part-of": "demo-shop",
+            "app.kubernetes.io/managed-by": "Helm",
+            "helm.sh/chart": "demo-app-0.1.0"
+          },
+          "annotations": {
+            "meta.helm.sh/release-name": "yaml-demo-helm-staging",
+            "meta.helm.sh/release-namespace": "demo-shop"
+          }
           },
           "spec": {
             "type": "ClusterIP",
@@ -879,8 +907,46 @@
           "status": {}
         }
       },
-      {
-        "resource_type": "event",
+    {
+      "resource_type": "secret",
+      "api_version": "v1",
+      "kind": "Secret",
+      "namespace": "demo-shop",
+      "name": "sh.helm.release.v1.yaml-demo-helm-staging.v1",
+      "uid": "demo-helm-release-yaml-demo-staging-v1",
+      "resource_version": "1",
+      "status": "Active",
+      "health": "healthy",
+      "labels": {
+        "owner": "helm",
+        "name": "yaml-demo-helm-staging",
+        "version": "1",
+        "status": "deployed"
+      },
+      "summary": {
+        "storage_type": "helm_release_metadata",
+        "release_payload_collected": false
+      },
+      "raw": {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+          "name": "sh.helm.release.v1.yaml-demo-helm-staging.v1",
+          "namespace": "demo-shop",
+          "uid": "demo-helm-release-yaml-demo-staging-v1",
+          "resourceVersion": "1",
+          "labels": {
+            "owner": "helm",
+            "name": "yaml-demo-helm-staging",
+            "version": "1",
+            "status": "deployed"
+          }
+        },
+        "type": "helm.sh/release.v1"
+      }
+    },
+    {
+      "resource_type": "event",
         "api_version": "v1",
         "kind": "Event",
         "namespace": "demo-payments",
@@ -974,6 +1040,46 @@
         "namespace": "demo-shop",
         "environment": "demo",
         "interval_seconds": 300
+      }
+    ]
+  },
+  "observations": {
+    "runtime_evidence_version": 1,
+    "origin": "descriptor-owned-synthetic",
+    "cost_namespace_rates": [
+      {
+        "namespace": "demo-shop",
+        "hourly_rate_micros": 450000,
+        "storage_rate_micros": 50000
+      },
+      {
+        "namespace": "demo-payments",
+        "hourly_rate_micros": 300000,
+        "storage_rate_micros": 40000
+      }
+    ],
+    "traffic_source": "caretta",
+    "traffic_flows": [
+      {
+        "source_name": "shop-api",
+        "source_namespace": "demo-shop",
+        "source_kind": "Deployment",
+        "target_name": "payments-api",
+        "target_namespace": "demo-payments",
+        "target_kind": "Service",
+        "target_service": "payments-api",
+        "port": 8080,
+        "connections": 28
+      },
+      {
+        "source_name": "payments-api",
+        "source_namespace": "demo-payments",
+        "source_kind": "Deployment",
+        "target_name": "database.demo.internal",
+        "target_namespace": null,
+        "target_kind": "External",
+        "port": 5432,
+        "connections": 6
       }
     ]
   }

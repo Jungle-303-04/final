@@ -8,9 +8,11 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from packages.contracts.cost.observations import MAX_SAFE_JSON_INTEGER
 from packages.contracts.gateway.requests import InventoryResource
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.modeling import StrictModel
+from packages.contracts.traffic.observations import MAX_TRAFFIC_TOTAL_COUNT
 
 DEMO_WORKSPACE_DESCRIPTOR_VERSION = 1
 DEMO_SEED_MARKER_KEY = "opsia_demo_seed"
@@ -121,6 +123,72 @@ class DemoGitOpsRepositoryDescriptor(StrictModel):
         return self
 
 
+class DemoCostNamespaceRateDescriptor(StrictModel):
+    """One exact synthetic namespace allocation authored in integer micro-USD."""
+
+    namespace: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    hourly_rate_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    storage_rate_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+
+
+class DemoTrafficFlowDescriptor(StrictModel):
+    """One bounded Caretta-shaped flow retained as explicit synthetic evidence."""
+
+    source_name: str = Field(min_length=1, max_length=253)
+    source_namespace: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    source_kind: str = Field(min_length=1, max_length=120)
+    target_name: str = Field(min_length=1, max_length=512)
+    target_namespace: str | None = Field(
+        default=None,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    target_kind: str = Field(min_length=1, max_length=120)
+    target_service: str | None = Field(default=None, min_length=1, max_length=253)
+    port: int = Field(ge=1, le=65_535)
+    connections: int = Field(ge=0, le=MAX_TRAFFIC_TOTAL_COUNT)
+
+
+class DemoSyntheticObservationDescriptor(StrictModel):
+    """Descriptor-owned observations stored through the canonical Agent evidence ledger."""
+
+    runtime_evidence_version: Literal[1]
+    origin: Literal["descriptor-owned-synthetic"]
+    cost_namespace_rates: list[DemoCostNamespaceRateDescriptor] = Field(
+        min_length=1,
+        max_length=100,
+    )
+    traffic_source: Literal["caretta"]
+    traffic_flows: list[DemoTrafficFlowDescriptor] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_unique_observation_identities(self) -> DemoSyntheticObservationDescriptor:
+        namespaces = [item.namespace for item in self.cost_namespace_rates]
+        if len(namespaces) != len(set(namespaces)):
+            raise ValueError("demo Cost namespace rates must be unique")
+        flow_identities = [
+            (
+                item.source_namespace,
+                item.source_name,
+                item.target_namespace,
+                item.target_name,
+                item.port,
+            )
+            for item in self.traffic_flows
+        ]
+        if len(flow_identities) != len(set(flow_identities)):
+            raise ValueError("demo Traffic flow identities must be unique")
+        return self
+
+
 class DemoWorkspaceDescriptor(StrictModel):
     schema_version: Literal[DEMO_WORKSPACE_DESCRIPTOR_VERSION]
     descriptor_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,119}$")
@@ -128,6 +196,7 @@ class DemoWorkspaceDescriptor(StrictModel):
     cluster: DemoClusterDescriptor
     inventory: DemoInventoryDescriptor
     gitops: DemoGitOpsRepositoryDescriptor | None = None
+    observations: DemoSyntheticObservationDescriptor | None = None
 
     @model_validator(mode="after")
     def require_dedicated_workspace(self) -> DemoWorkspaceDescriptor:
@@ -135,6 +204,21 @@ class DemoWorkspaceDescriptor(StrictModel):
             raise ValueError("demo seed must use a dedicated non-default workspace")
         if DEMO_SEED_MARKER_KEY in self.cluster.settings:
             raise ValueError(f"{DEMO_SEED_MARKER_KEY} is reserved for the seed authority")
+        if self.observations is not None:
+            inventory_namespaces = {
+                str(namespace) for namespace in self.inventory.summary.get("namespaces", ())
+            }
+            observation_namespaces = {
+                item.namespace for item in self.observations.cost_namespace_rates
+            }
+            observation_namespaces.update(
+                namespace
+                for flow in self.observations.traffic_flows
+                for namespace in (flow.source_namespace, flow.target_namespace)
+                if namespace is not None
+            )
+            if not observation_namespaces.issubset(inventory_namespaces):
+                raise ValueError("demo observations must reference inventoried namespaces")
         return self
 
     def digest(self) -> str:
