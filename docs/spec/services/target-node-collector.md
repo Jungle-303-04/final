@@ -176,10 +176,17 @@ JsonObject = dict[str, object]
 class KubernetesApiClient:
     def base_url(self) -> str
     def auth_headers(self) -> dict[str, str]
-    async def list_pods(self) -> JsonObject
+    async def list_pods_on_node(self, node_name: str) -> JsonObject
 ```
 
 - 앵커: `src/services/target/node-collector/kubernetes_api.py :: KubernetesApiClient`
+- `list_pods_on_node`는 빈 node scope를 거부하고 Kubernetes API 요청에
+  `fieldSelector=spec.nodeName=<node>`를 반드시 전달한다. cluster-wide PodList를 받은 뒤
+  로컬에서만 필터링하는 경로는 제공하지 않는다.
+- 프로세스는 cluster-agent가 관리하는 bounded subworker이며
+  `cluster-agent-node-collector` 전용 ServiceAccount를 사용한다. 연결된
+  `cluster-agent-node-collector-read` ClusterRole은 core `pods`의 `get/list`만 허용하고
+  cluster-agent의 제어·exec·GitOps 쓰기 권한을 상속하지 않는다.
 
 ```python
 def pods_on_node(pods_payload: JsonObject, node_name: str) -> list[JsonObject]
@@ -198,6 +205,14 @@ class MetricCollector(Protocol):
 ```
 
 - 앵커: `src/services/target/node-collector/metric_collectors.py :: MetricCollector` — 타입 계약(Protocol).
+
+```python
+class NodeScopedKubernetesApi(Protocol):
+    async def list_pods_on_node(self, node_name: str) -> dict[str, object]: ...
+```
+
+- 앵커: `src/services/target/node-collector/metric_collectors.py :: NodeScopedKubernetesApi` —
+  collector가 cluster-wide 조회 계약을 주입받지 못하게 하는 agent-worker 경계.
 
 ```python
 @dataclass(frozen=True)
@@ -221,7 +236,7 @@ def collector_status_metric_sample(
 ```python
 class PodMetricCollector:
     collector_name = "pod"
-    def __init__(self, kubernetes: KubernetesApiClient, node_name: str) -> None
+    def __init__(self, kubernetes: NodeScopedKubernetesApi, node_name: str) -> None
     async def collect_pod_summary(self) -> PodSummary
     async def collect(self, labels: dict[str, str]) -> list[MetricSample]
 ```
