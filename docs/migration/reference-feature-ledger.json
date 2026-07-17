@@ -10477,25 +10477,29 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.cost.observations",
       "frontendContract": "frontend/src/pages/cost",
       "desktopContract": null,
       "verification": [
-        "tests/test_cost_observation_projection.py",
-        "frontend/src/pages/cost/CostPage.test.tsx"
+        "tests/test_cost_node_projection.py",
+        "tests/test_cost_router.py",
+        "frontend/src/api/cost-nodes.test.ts",
+        "frontend/src/features/cost/createCostAdapter.test.ts",
+        "frontend/src/pages/cost/CostPage.test.tsx",
+        "frontend/src/pages/cost/useCostNodesData.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/packages/contracts/cost/observations.py",
-          "reason": "No provider-neutral node allocation identity, pricing observation, or authorized node-cost repository exists.",
-          "test": "tests/test_cost_observation_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/cost/router.py#get_cost_nodes",
+          "reason": "The normalized /api/cost/nodes contract resolves authorized cluster and namespace scope, reads one bounded inventory page plus one bulk metrics projection, and returns provider-neutral node identity, capacity, measured usage, pricing provenance, completeness, pagination, and the server-owned 120-second refresh policy without fabricating monetary values.",
+          "test": "tests/test_cost_router.py#test_cost_nodes_are_scope_bound_paginated_and_use_one_bulk_metrics_read"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/cost/CostPage.tsx",
-          "reason": "The Cost surface cannot render node prices or efficiency until the server supplies a typed observed-or-unavailable node allocation contract.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/cost/CostNodesPanel.tsx#CostNodesPanel",
+          "reason": "The Cost surface consumes the typed node page through the shared adapter, preserves authorized scope and cursor pagination, follows the response-selected refresh policy, and renders observed capacity and usage with explicit unavailable pricing instead of hardcoded costs.",
           "test": "frontend/src/pages/cost/CostPage.test.tsx"
         },
         "desktop": null,

@@ -1045,6 +1045,36 @@ test("Helm 리비전 비교는 URL 재개와 Python artifact 증거로 완결한
   ));
 });
 
+test("노드 비용은 실제 관측·권한 범위와 가격 부재를 단일 계약으로 완결한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.220";
+  const sourceKey = "upstream-ui:cost:nodes-client:provider-identity:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  const interaction = classifications.classifications["web/src/api/client.ts"].interactions
+    .find((candidate) => candidate.sourceKey === sourceKey);
+
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.ok(port.verification.includes("tests/test_cost_node_projection.py"));
+  assert.ok(port.verification.includes("frontend/src/api/cost-nodes.test.ts"));
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+  assert.equal(interaction.opsiaPort.state, "in_progress");
+  assert.equal(interaction.opsiaPort.blockedReason, null);
+  assert.ok(interaction.opsiaPort.destinations.includes("src/domains/cost/router.py"));
+  assert.ok(interaction.opsiaPort.destinations.includes(
+    "frontend/src/pages/cost/CostNodesPanel.tsx",
+  ));
+});
+
 test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차단 사유를 연결한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),

@@ -9916,8 +9916,11 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/api/cost-nodes.ts",
+              "frontend/src/pages/cost/CostNodesPanel.tsx",
               "frontend/src/pages/cost/CostPage.test.tsx",
+              "src/domains/cost/node_projection.py",
+              "src/domains/cost/router.py",
               "src/packages/contracts/cost/observations.py"
             ],
             "requiredBackendContracts": [
@@ -9925,12 +9928,13 @@
               "domains.cost.router"
             ],
             "plannedTestIds": [
-              "cost.overview.contract",
-              "cost.overview.unavailable"
+              "cost.nodes.contract",
+              "cost.nodes.scope-pagination",
+              "cost.nodes.observed-or-unavailable"
             ],
-            "state": "blocked",
-            "blockedReason": "No provider-neutral node allocation identity, pricing observation repository, authorization projection, or node-cost response contract exists.",
-            "rationale": "The product intentionally omits node prices and efficiency instead of deriving them from inventory or provider identifiers."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The normalized node-cost contract now binds provider-neutral identity, authorized scope, bounded pagination, bulk observed capacity and usage, pricing provenance, and the server-owned refresh policy. Monetary values remain explicitly unavailable until a real billing or allocation source records them."
           }
         },
         {
