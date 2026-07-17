@@ -507,7 +507,7 @@ test("baseline 웹 출하 게이트는 명시적 post-parity 기능을 제외하
   );
 });
 
-test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
+test("feature ledger는 누락된 source identity·계약과 중복 ID를 거부한다", () => {
   const errors = validateFeatureLedger({
     schemaVersion: 1,
     sourceRevision: REVISION,
@@ -567,9 +567,11 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
   });
 
   assert.deepEqual(errors, [
+    "reference-feature-001: implemented source identity is required",
     "reference-feature-001: backendContract is required",
     "reference-feature-001: frontendContract is required",
     "reference-feature-001: at least one verification target is required",
+    "reference-feature-001: implemented source identity is required",
     "reference-feature-001: id is duplicated",
   ]);
 });

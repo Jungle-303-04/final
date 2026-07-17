@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
+  "identities": [
+    {
+      "sourceKey": "upstream-ui:nodes:drain:confirm-and-progress:v1",
+      "legacyContractId": "reference.feature.174",
+      "evidence": [
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "useDrainNode"
+        },
+        {
+          "path": "internal/server/node_handlers.go",
+          "sha256": "21d43eed00d7e228939bae155b737a33034fe60c7b7332a98948e934f15af964",
+          "symbol": "handleDrainNode"
+        },
+        {
+          "path": "pkg/k8score/node_ops.go",
+          "sha256": "403bd3aa7b55c00090e4b331b2a327541e950f2ed2a1edcd3dbbc522a43c8499",
+          "symbol": "DrainNode"
+        }
+      ],
+      "interaction": "The exact selected Node accepts bounded drain options, preserves per-Pod eviction and partial-failure results, and exposes long-running progress without converting a partial result into success."
+    },
+    {
+      "sourceKey": "upstream-ui:pods:debug-terminal:ephemeral-container:v1",
+      "legacyContractId": "reference.feature.175",
+      "evidence": [
+        {
+          "path": "web/src/components/dock/TerminalTab.tsx",
+          "sha256": "7a6eaae7c7cca2c276164a1593343b42c447e9b7285f5ab9c518fde620c84207",
+          "symbol": "createDebugContainer"
+        },
+        {
+          "path": "internal/server/exec.go",
+          "sha256": "4cb028005b39459383c350c1f4c98e0ce4cfaa577771c26e84e7d54e0366f220",
+          "symbol": "handleCreateDebugContainer"
+        },
+        {
+          "path": "internal/k8s/ephemeral.go",
+          "sha256": "f23e3671d012997aa7a6e1b690eb443e7df73e56548b43d5615e641d3a13d067",
+          "symbol": "CreateEphemeralContainerWithClient"
+        },
+        {
+          "path": "pkg/k8score/ephemeral.go",
+          "sha256": "c7787380f8060dab2f045a7664a0f1472f78e5010dea0f8b44f53dcb5a98d25c",
+          "symbol": "WaitForEphemeralContainer"
+        }
+      ],
+      "interaction": "The Pod terminal creates one ephemeral debug container for the selected target container, reports its exact identity and readiness, and then uses that observed container for the terminal session."
+    },
+    {
+      "sourceKey": "upstream-ui:nodes:debug-terminal:session-lifecycle:v1",
+      "legacyContractId": "reference.feature.176",
+      "evidence": [
+        {
+          "path": "web/src/components/dock/NodeTerminalTab.tsx",
+          "sha256": "93cc8fec3b37c8a961c9811af5acfeed3bec9e2b280784d7534f3f7fde28234f",
+          "symbol": "createNodeDebugPod"
+        },
+        {
+          "path": "web/src/components/dock/NodeTerminalTab.tsx",
+          "sha256": "93cc8fec3b37c8a961c9811af5acfeed3bec9e2b280784d7534f3f7fde28234f",
+          "symbol": "cleanupNodeDebugPod"
+        },
+        {
+          "path": "internal/server/exec.go",
+          "sha256": "4cb028005b39459383c350c1f4c98e0ce4cfaa577771c26e84e7d54e0366f220",
+          "symbol": "handleNodeDebug"
+        },
+        {
+          "path": "internal/server/exec.go",
+          "sha256": "4cb028005b39459383c350c1f4c98e0ce4cfaa577771c26e84e7d54e0366f220",
+          "symbol": "handleNodeDebugCleanup"
+        },
+        {
+          "path": "pkg/k8score/node_debug.go",
+          "sha256": "f70b0ea757aced6f7fda160991202e75969f7560db7a01930e69bfceee522341",
+          "symbol": "CreateNodeDebugPod"
+        },
+        {
+          "path": "pkg/k8score/node_debug.go",
+          "sha256": "f70b0ea757aced6f7fda160991202e75969f7560db7a01930e69bfceee522341",
+          "symbol": "DeleteNodeDebugPods"
+        }
+      ],
+      "interaction": "The Node terminal creates one owned privileged debug Pod for the exact Node, opens the terminal only from the returned session identity, and cleans up only that Node debug lifecycle."
+    }
+  ]
+}

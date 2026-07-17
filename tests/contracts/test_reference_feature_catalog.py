@@ -66,15 +66,14 @@ def test_feature_contract_lookup_is_catalog_driven() -> None:
 
 
 def test_resource_maintenance_contracts_keep_source_identity_and_realtime_evidence() -> None:
-    for contract_id in (
-        "reference.feature.174",
-        "reference.feature.175",
-        "reference.feature.176",
-    ):
+    expected = {
+        "reference.feature.174": "upstream-ui:nodes:drain:confirm-and-progress:v1",
+        "reference.feature.175": ("upstream-ui:pods:debug-terminal:ephemeral-container:v1"),
+        "reference.feature.176": ("upstream-ui:nodes:debug-terminal:session-lifecycle:v1"),
+    }
+    for contract_id, source_key in expected.items():
         feature = feature_contract(contract_id)
-        assert feature.source_key == (
-            "upstream-ui:resources:actions:capability-command-and-log-composition:v1"
-        )
+        assert feature.source_key == source_key
         assert feature.identity_status == "source-key"
         assert feature.streaming is True
         assert feature.coverage.realtime != "not_required"

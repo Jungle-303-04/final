@@ -8043,7 +8043,7 @@
     {
       "id": "reference-feature-174",
       "contractId": "reference.feature.174",
-      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
+      "sourceKey": "upstream-ui:nodes:drain:confirm-and-progress:v1",
       "legacyContractIds": [
         "reference.feature.174"
       ],
@@ -8104,7 +8104,7 @@
     {
       "id": "reference-feature-175",
       "contractId": "reference.feature.175",
-      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
+      "sourceKey": "upstream-ui:pods:debug-terminal:ephemeral-container:v1",
       "legacyContractIds": [
         "reference.feature.175"
       ],
@@ -8166,7 +8166,7 @@
     {
       "id": "reference-feature-176",
       "contractId": "reference.feature.176",
-      "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
+      "sourceKey": "upstream-ui:nodes:debug-terminal:session-lifecycle:v1",
       "legacyContractIds": [
         "reference.feature.176"
       ],
