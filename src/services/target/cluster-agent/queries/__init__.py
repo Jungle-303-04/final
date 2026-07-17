@@ -11,6 +11,7 @@ from queries.registry import (
     TelemetryQueryDefinition,
     TelemetryQueryRegistry,
     TelemetrySource,
+    compile_policy_query_definition,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "TelemetryQueryDefinition",
     "TelemetryQueryRegistry",
     "TelemetrySource",
+    "compile_policy_query_definition",
 ]

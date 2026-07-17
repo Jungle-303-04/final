@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Protocol
 
-from queries import TelemetryQueryDefinition
+from queries import TelemetryQueryDefinition, compile_policy_query_definition
 from telemetry_registry import telemetry
 
 from packages.config.constants import CommandStatus
@@ -219,9 +219,13 @@ class EvidenceJobScheduler:
         for query in query_rows:
             if not isinstance(query, Mapping):
                 continue
-            payload = dict(query)
-            payload.setdefault("source", source)
-            definitions.append(TelemetryQueryDefinition.from_mapping(payload))
+            definitions.append(
+                compile_policy_query_definition(
+                    query,
+                    source=source,
+                    cluster_id=self.cluster_id,
+                )
+            )
         return tuple(definitions)
 
     def configure_schedule(

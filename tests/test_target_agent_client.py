@@ -405,6 +405,37 @@ def test_target_agent_has_no_static_prometheus_provider(
     assert "metrics" not in agent.evidence_scheduler.provider_keys
 
 
+def test_target_agent_rejects_policy_query_provenance_for_a_different_cluster(
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    agent = target_agent_factory(agent_module)
+
+    with pytest.raises(
+        ValueError,
+        match="evidence query cluster provenance does not match this agent",
+    ):
+        agent.register_policy_queries(
+            "metrics",
+            [
+                {
+                    "name": "cluster_flow",
+                    "query": "up",
+                    "provenance": {
+                        "cluster_id": f"{agent.cluster_id}-other",
+                        "evidence_profile": "standard",
+                        "backend_scope": "cluster_local",
+                        "query_scope": "cluster",
+                        "namespaces": [],
+                        "required_matchers": [],
+                    },
+                }
+            ],
+        )
+
+    assert agent.query_registry.for_source("prometheus") == ()
+
+
 def test_target_agent_never_reports_connected_before_local_provider_registration(
     monkeypatch: pytest.MonkeyPatch,
     target_agent_factory: Callable[..., Any],

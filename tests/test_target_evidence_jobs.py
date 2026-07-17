@@ -263,6 +263,45 @@ def test_central_worker_polls_job_and_reports_provider_result() -> None:
     assert client.completed[0]["result"]["metrics"]["source"] == "prometheus"
 
 
+def test_central_worker_rejects_query_provenance_for_a_different_cluster() -> None:
+    module = load_evidence_module()
+    client = StubEvidenceJobClient()
+    client.jobs.append(
+        {
+            "job_id": "job-metrics-wrong-cluster",
+            "provider_key": "metrics",
+            "lease_id": "lease-1",
+            "provider_policy": {
+                "queries": [
+                    {
+                        "name": "cluster_flow",
+                        "query": "up",
+                        "provenance": {
+                            "cluster_id": "cluster-2",
+                            "evidence_profile": "standard",
+                            "backend_scope": "cluster_local",
+                            "query_scope": "cluster",
+                            "namespaces": [],
+                            "required_matchers": [],
+                        },
+                    }
+                ]
+            },
+        }
+    )
+    collector = InMemoryEvidenceCollector()
+    scheduler = make_scheduler(module, collector)
+
+    assert asyncio.run(scheduler.work_once(client, "metrics", "metrics-worker")) is True
+
+    assert collector.collected == []
+    assert client.completed[0]["status"] == "failed"
+    assert client.completed[0]["result"] == {}
+    assert client.completed[0]["error"] == (
+        "evidence query cluster provenance does not match this agent"
+    )
+
+
 def test_success_result_report_error_does_not_mark_job_failed() -> None:
     module = load_evidence_module()
 

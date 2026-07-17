@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Self
 
 from telemetry_registry import ensure_sources_loaded, telemetry
 
+from packages.contracts.evidence_policy import EvidencePolicyQuery
 from packages.contracts.kubernetes_discovery import DynamicResourceCollectionSpec
 from packages.contracts.target import (
     KUBERNETES_ALL_NAMESPACES_QUERY,
@@ -79,6 +81,24 @@ class TelemetryQueryDefinition:
                 self.dynamic_resource,
             )
         return query_type(self.name, self.description, self.query)
+
+
+def compile_policy_query_definition(
+    payload: Mapping[str, Any],
+    *,
+    source: TelemetrySource,
+    cluster_id: str,
+) -> TelemetryQueryDefinition:
+    """Compile one server-owned query against the exact receiving Agent cluster."""
+
+    compiled_payload = dict(payload)
+    compiled_payload.setdefault("source", source)
+    if compiled_payload.get("provenance") is not None:
+        compiled = EvidencePolicyQuery.model_validate(compiled_payload)
+        if compiled.provenance.cluster_id != cluster_id:
+            raise ValueError("evidence query cluster provenance does not match this agent")
+        compiled_payload = compiled.model_dump(mode="json", exclude_none=True)
+    return TelemetryQueryDefinition.from_mapping(compiled_payload)
 
 
 class TelemetryQueryRegistry:

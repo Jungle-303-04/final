@@ -80,6 +80,7 @@ from queries import (
     TelemetryQueryCommandPayload,
     TelemetryQueryDefinition,
     TelemetryQueryRegistry,
+    compile_policy_query_definition,
 )
 from span import configure_tracing
 from telemetry_registry import telemetry
@@ -176,7 +177,6 @@ from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.security import RCA_TEST_RUNS_DISABLED_MESSAGE, rca_test_runs_enabled
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.evidence_policy import EvidencePolicyQuery
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
@@ -1156,14 +1156,11 @@ class TargetClusterAgent:
             return []
         definitions: list[TelemetryQueryDefinition] = []
         for query in queries:
-            payload = dict(query)
-            payload.setdefault("source", source)
-            if payload.get("provenance") is not None:
-                compiled = EvidencePolicyQuery.model_validate(payload)
-                if compiled.provenance.cluster_id != self.cluster_id:
-                    raise ValueError("evidence query cluster provenance does not match this agent")
-                payload = compiled.model_dump(mode="json", exclude_none=True)
-            definition = TelemetryQueryDefinition.from_mapping(payload)
+            definition = compile_policy_query_definition(
+                query,
+                source=source,
+                cluster_id=self.cluster_id,
+            )
             definitions.append(definition)
         self.evidence_collector.replace_queries(source, tuple(definitions))
         return [definition.name for definition in definitions]

@@ -28,6 +28,8 @@ class EvidenceQueryProvenance(StrictModel):
     def require_effective_scope(self) -> EvidenceQueryProvenance:
         if self.query_scope == "namespace" and not self.namespaces:
             raise ValueError("namespace queries require an exact namespace")
+        if self.query_scope == "namespace" and not self.required_matchers:
+            raise ValueError("namespace queries require a matcher")
         if self.backend_scope == "shared" and not self.required_matchers:
             raise ValueError("shared backend queries require a matcher")
         return self

@@ -119,3 +119,23 @@ def test_shared_backend_query_fails_closed_without_a_cluster_matcher() -> None:
             query="up",
             provenance=provenance,
         )
+
+
+def test_namespace_query_requires_a_matcher_but_cluster_local_cluster_scope_does_not() -> None:
+    with pytest.raises(ValueError, match="namespace queries require a matcher"):
+        EvidenceQueryProvenance(
+            cluster_id="cluster-a",
+            evidence_profile=STANDARD_EVIDENCE_PROFILE,
+            backend_scope="cluster_local",
+            query_scope="namespace",
+            namespaces=("target",),
+        )
+
+    cluster_scope = EvidenceQueryProvenance(
+        cluster_id="cluster-a",
+        evidence_profile=STANDARD_EVIDENCE_PROFILE,
+        backend_scope="cluster_local",
+        query_scope="cluster",
+    )
+
+    assert cluster_scope.required_matchers == ()
