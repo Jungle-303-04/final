@@ -1,13 +1,20 @@
 export type ResourceActionCapabilityId = string;
 
+export type ResourceActionRequestContext = "simple" | "exact-resource" | "rollback";
+export type ResourceActionResultIntent =
+  | "refresh-resource"
+  | "resource-summary"
+  | "terminal-session";
+
 export interface ResourceCapabilityInput {
   key: string;
   label: string;
-  type: "integer" | "string";
+  type: "boolean" | "integer" | "string";
   required: boolean;
   minimum: number | null;
   maximum: number | null;
-  default: number | string | null;
+  default: boolean | number | string | null;
+  prefillResultKey: string | null;
 }
 
 export interface ResourceCapabilitySubject {
@@ -30,6 +37,8 @@ export interface ResourceActionCapability {
   inputSchema: ResourceCapabilityInput[];
   method: "POST" | "WEBSOCKET";
   path: string;
+  requestContext: ResourceActionRequestContext;
+  resultIntent: ResourceActionResultIntent;
 }
 
 export interface ResourceCapabilities {
@@ -41,7 +50,9 @@ export interface ResourceCapabilities {
 export interface ResourceActionExecutionContext {
   capabilityId: ResourceActionCapabilityId;
   idempotencyKey: string;
+  requestContext: ResourceActionRequestContext;
   resourceId: string;
+  resultIntent: ResourceActionResultIntent;
   snapshotId: string;
   revision: string;
   resource: ResourceRefContract;

@@ -29,7 +29,7 @@ export interface HelmEndpointUpgradeInput {
 
 export interface HelmEndpointReleaseCommands {
   availability: "available";
-  actions: ["upgrade"];
+  actions: ["upgrade", "rollback", "uninstall"];
   confirmation_required: true;
   realtime: true;
   upgrade_targets: Array<{
@@ -155,7 +155,7 @@ export interface HelmChartSourceEndpoint {
   name: string;
   reference: string;
   status: "active" | "disabled";
-  actions: Array<"delete">;
+  actions: Array<"refresh" | "delete">;
   credentials_configured: boolean;
   observed_at: string | null;
 }
@@ -191,7 +191,55 @@ export interface HelmConfigMutationEndpointReceipt {
   command_id: null;
 }
 
+export interface HelmEndpointCommandReceipt {
+  accepted: true;
+  event_id: string;
+  audit_event_id: string;
+  correlation_id: string;
+  command_id: string;
+  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+}
+
 export interface HelmEndpointDependencies {
+  listHelmInstallTargets(signal?: AbortSignal): Promise<{
+    namespace: string;
+    targets: Array<{
+      item_id: string;
+      name: string;
+      version: string;
+      chart_version: string;
+      inputs: HelmEndpointUpgradeInput[];
+    }>;
+  }>;
+  startHelmReleaseInstall(
+    input: {
+      clusterId: string;
+      namespace: string;
+      applicationName: string;
+      releaseName: string;
+      catalogItemId: string;
+      catalogVersion: string;
+      values: Readonly<Record<string, unknown>>;
+      confirmation: true;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<HelmEndpointCommandReceipt>;
+  searchArtifactHubCharts(
+    query: {
+      query: string;
+      offset?: number;
+      limit?: number;
+      sort?: "relevance" | "stars" | "last_updated";
+      official?: boolean;
+      verified?: boolean;
+    },
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubSearchPageEndpoint>;
+  getArtifactHubChart(
+    input: { repository: string; chart: string; version?: string },
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubChartDetailEndpoint>;
   listHelmReleases(
     query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
     signal?: AbortSignal,
@@ -230,14 +278,19 @@ export interface HelmEndpointDependencies {
       allValues?: boolean;
     },
     signal?: AbortSignal,
-  ): Promise<{
-    accepted: true;
-    event_id: string;
-    audit_event_id: string;
-    correlation_id: string;
-    command_id: string;
-    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
-  }>;
+  ): Promise<HelmEndpointCommandReceipt>;
+  startHelmReleaseValuesPreview(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      expectedRevision: number;
+      catalogItemId: string;
+      catalogVersion: string;
+      values: Readonly<Record<string, unknown>>;
+    },
+    signal?: AbortSignal,
+  ): Promise<HelmEndpointCommandReceipt>;
   startHelmReleaseUpgrade(
     input: {
       clusterId: string;
@@ -251,14 +304,30 @@ export interface HelmEndpointDependencies {
       reason?: string;
     },
     signal?: AbortSignal,
-  ): Promise<{
-    accepted: true;
-    event_id: string;
-    audit_event_id: string;
-    correlation_id: string;
-    command_id: string;
-    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
-  }>;
+  ): Promise<HelmEndpointCommandReceipt>;
+  startHelmReleaseRollback(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      expectedRevision: number;
+      revision: number;
+      confirmation: true;
+      reason?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<HelmEndpointCommandReceipt>;
+  startHelmReleaseUninstall(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      expectedRevision: number;
+      confirmation: true;
+      reason?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<HelmEndpointCommandReceipt>;
   listHelmChartSources(
     query?: { limit?: number; cursor?: string },
     signal?: AbortSignal,
@@ -272,4 +341,48 @@ export interface HelmEndpointDependencies {
     input: HelmChartSourceDeleteEndpointInput,
     signal?: AbortSignal,
   ): Promise<HelmConfigMutationEndpointReceipt>;
+  refreshHelmRepository(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    source_id: string;
+    chart_count: number;
+    observed_at: string;
+    event_id: string;
+    correlation_id: string;
+  }>;
+}
+
+export interface ArtifactHubChartEndpoint {
+  package_id: string;
+  name: string;
+  version: string;
+  app_version: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verified_publisher: boolean;
+  };
+}
+
+export interface ArtifactHubSearchPageEndpoint {
+  items: ArtifactHubChartEndpoint[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
+  observed_at: string;
+}
+
+export interface ArtifactHubChartDetailEndpoint {
+  chart: ArtifactHubChartEndpoint;
+  readme: string | null;
+  available_versions: Array<{ version: string; app_version: string | null }>;
+  versions_truncated: boolean;
+  observed_at: string;
 }

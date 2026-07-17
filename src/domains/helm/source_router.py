@@ -12,7 +12,8 @@ from fastapi.routing import APIRoute
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from domains.helm.events import HelmChartSourceDeletedBody
+from domains.helm.artifacthub_provider import ArtifactHubProvider
+from domains.helm.events import HelmChartSourceDeletedBody, HelmChartSourceRefreshedBody
 from domains.helm.repository import (
     HelmChartSourceConflict,
     HelmChartSourceIdentityConflict,
@@ -21,6 +22,7 @@ from domains.helm.repository import (
 from domains.helm.source_provider import (
     HelmChartVersionProvider,
     HelmProviderCredential,
+    HelmRepositoryRefreshError,
     helm_chart_credential_provider,
     helm_chart_credential_scope,
     helm_chart_source_from_row,
@@ -35,6 +37,11 @@ from domains.identity.dependencies import (
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import AcceptedResponse
+from packages.contracts.helm.artifacthub import (
+    ARTIFACTHUB_PAGE_MAX,
+    ArtifactHubChartDetail,
+    ArtifactHubSearchPage,
+)
 from packages.contracts.helm.sources import (
     HELM_CHART_SOURCE_PAGE_MAX,
     HelmChartSource,
@@ -43,6 +50,7 @@ from packages.contracts.helm.sources import (
     HelmChartSourcePage,
     HelmChartSourceRegisterRequest,
     HelmChartVersionObservation,
+    HelmRepositoryRefreshAccepted,
 )
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -87,10 +95,166 @@ HELM_CHART_SOURCE_RESOURCE_TYPE = AccessResourceType.HELM_CHART_SOURCE.value
 HELM_CHART_SOURCE_NOT_FOUND = "Helm chart source not found"
 HELM_CHART_SOURCE_CONFLICT = "Helm chart source already exists"
 HELM_CHART_CREDENTIAL_UNAVAILABLE = "helm_chart_source_credential_unavailable"
+_artifacthub_provider = ArtifactHubProvider()
 
 
 def get_helm_chart_version_provider() -> HelmChartVersionProvider:
     return HelmChartVersionProvider()
+
+
+def get_artifacthub_provider() -> ArtifactHubProvider:
+    return _artifacthub_provider
+
+
+@router.get(
+    gateway_routes.HELM_ARTIFACTHUB_SEARCH_PATH,
+    response_model=ArtifactHubSearchPage,
+)
+async def search_artifacthub_charts(
+    q: str = Query(min_length=1, max_length=200),
+    offset: int = Query(default=0, ge=0, le=100_000),
+    limit: int = Query(default=20, ge=1, le=ARTIFACTHUB_PAGE_MAX),
+    sort: str = Query(default="relevance", pattern=r"^(relevance|stars|last_updated)$"),
+    official: bool = Query(default=False),
+    verified: bool = Query(default=False),
+    current: Any = Depends(require_session),
+    provider: ArtifactHubProvider = Depends(get_artifacthub_provider),
+) -> ArtifactHubSearchPage:
+    _ = current
+    try:
+        return await provider.search(
+            query=q,
+            offset=offset,
+            limit=limit,
+            sort=sort,  # type: ignore[arg-type]
+            official=official,
+            verified=verified,
+        )
+    except RuntimeError as exc:
+        raise _artifacthub_http_error(exc) from exc
+
+
+@router.get(
+    gateway_routes.HELM_ARTIFACTHUB_CHART_PATH,
+    response_model=ArtifactHubChartDetail,
+)
+async def get_artifacthub_chart(
+    repository: str = Path(min_length=1, max_length=253),
+    chart: str = Path(min_length=1, max_length=253),
+    current: Any = Depends(require_session),
+    provider: ArtifactHubProvider = Depends(get_artifacthub_provider),
+) -> ArtifactHubChartDetail:
+    _ = current
+    return await _artifacthub_chart(provider, repository, chart, None)
+
+
+@router.get(
+    gateway_routes.HELM_ARTIFACTHUB_CHART_VERSION_PATH,
+    response_model=ArtifactHubChartDetail,
+)
+async def get_artifacthub_chart_version(
+    repository: str = Path(min_length=1, max_length=253),
+    chart: str = Path(min_length=1, max_length=253),
+    version: str = Path(min_length=1, max_length=256),
+    current: Any = Depends(require_session),
+    provider: ArtifactHubProvider = Depends(get_artifacthub_provider),
+) -> ArtifactHubChartDetail:
+    _ = current
+    return await _artifacthub_chart(provider, repository, chart, version)
+
+
+async def _artifacthub_chart(
+    provider: ArtifactHubProvider,
+    repository: str,
+    chart: str,
+    version: str | None,
+) -> ArtifactHubChartDetail:
+    try:
+        return await provider.chart(repository, chart, version)
+    except RuntimeError as exc:
+        raise _artifacthub_http_error(exc) from exc
+
+
+def _artifacthub_http_error(error: RuntimeError) -> HTTPException:
+    code = str(error)
+    if code == "artifacthub_chart_not_found":
+        return HTTPException(status_code=404, detail=code)
+    if code in {
+        "artifacthub_query_invalid",
+        "artifacthub_pagination_invalid",
+        "artifacthub_chart_identity_invalid",
+    }:
+        return HTTPException(status_code=422, detail=code)
+    return HTTPException(status_code=502, detail=code)
+
+
+@router.post(
+    gateway_routes.HELM_REPOSITORY_UPDATE_PATH,
+    response_model=HelmRepositoryRefreshAccepted,
+)
+async def update_helm_repository(
+    name: str = Path(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$",
+    ),
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmRepositoryRefreshAccepted:
+    workspace_id = _workspace_id(current)
+    source_ids = await accessible_helm_chart_source_ids(
+        db,
+        current,
+        workspace_id,
+        Permission.CONFIG_UPDATE.value,
+    )
+    batch = await asyncio.to_thread(
+        db.list_helm_chart_source_records,
+        workspace_id=workspace_id,
+        source_ids=source_ids,
+        limit=HELM_CHART_SOURCE_PAGE_MAX,
+    )
+    matches = tuple(
+        row
+        for row in batch.rows
+        if str(row.get("name") or "") == name
+        and str(row.get("provider") or "") == "repository"
+        and str(row.get("status") or "") == "active"
+    )
+    if len(matches) != 1:
+        raise HTTPException(status_code=404, detail=HELM_CHART_SOURCE_NOT_FOUND)
+    row = dict(matches[0])
+    source = helm_chart_source_from_row(row)
+    try:
+        credential = await asyncio.to_thread(
+            load_helm_provider_credential,
+            db,
+            workspace_id,
+            row,
+        )
+        refreshed = await provider.refresh_repository(source, credential=credential)
+    except CredentialEncryptionError as exc:
+        raise HTTPException(status_code=503, detail=HELM_CHART_CREDENTIAL_UNAVAILABLE) from exc
+    except HelmRepositoryRefreshError as exc:
+        raise HTTPException(status_code=502, detail=exc.reason_code) from exc
+    with event_workspace(workspace_id):
+        accepted = await events.accept_body(
+            HelmChartSourceRefreshedBody(
+                workspace_id=workspace_id,
+                source_id=refreshed.source_id,
+                name=source.name,
+                chart_count=refreshed.chart_count,
+                observed_at=refreshed.observed_at,
+            ),
+            actor=Actor(str(current.user_id), tuple(current.roles)),
+        )
+    return HelmRepositoryRefreshAccepted(
+        **refreshed.model_dump(mode="json"),
+        event_id=str(accepted.event.event_id),
+        correlation_id=str(accepted.event.correlation_id),
+    )
 
 
 @router.get(
@@ -130,7 +294,11 @@ async def list_helm_chart_sources(
             "items": tuple(
                 source.model_copy(
                     update={
-                        "actions": ("delete",)
+                        "actions": (
+                            ("refresh", "delete")
+                            if source.provider == "repository"
+                            else ("delete",)
+                        )
                         if delete_ids is None or source.source_id in delete_ids
                         else ()
                     }

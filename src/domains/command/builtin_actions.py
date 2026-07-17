@@ -9,6 +9,10 @@ from packages.config.constants import Command, Sandbox
 from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
 )
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
@@ -57,6 +61,18 @@ class ApplyManifestCommand:
 )
 class CatalogHelmUpgradeCommand:
     """Digest-pinned catalog execution reused for an observed release upgrade."""
+
+
+@command.action(
+    HELM_RELEASE_OPERATION_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=HELM_RELEASE_OPERATION_CAPABILITY,
+)
+class HelmReleaseOperationCommand:
+    """Revision-bound Helm rollback or uninstall command."""
 
 
 @command.action(
@@ -128,6 +144,53 @@ class CordonNodeCommand:
     required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
 )
 class UncordonNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DRAIN_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class DrainNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_POD_DEBUG_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_DEBUG_CAPABILITY,
+)
+class DebugPodCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DEBUG_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class DebugNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class CleanupNodeDebugCommand:
     pass
 
 
@@ -275,3 +338,16 @@ class ServiceHttpRequestCommand:
 )
 class HelmReleaseArtifactReadCommand:
     """Read one revision-bound Helm artifact through the target agent."""
+
+
+@command.action(
+    HELM_VALUES_PREVIEW_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    read_only=True,
+    required_agent_capability=HELM_VALUES_PREVIEW_CAPABILITY,
+)
+class HelmValuesPreviewCommand:
+    """Render a revision-bound digest-pinned candidate without applying it."""

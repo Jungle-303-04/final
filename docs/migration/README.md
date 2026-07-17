@@ -49,6 +49,16 @@ existing consumers, but are not authoritative source proof. Until an alias is
 bound to a semantic `sourceKey`, the generated feature catalog reports
 `identityStatus: legacy-unmapped`; it does not promote the row to implemented.
 
+`reference-feature-source-identities.json` is the canonical semantic identity
+source for frozen snapshot interactions that are not present in the A/M/D/R UI
+delta. Each row binds one source key and legacy contract ID to the frozen
+revision, semantic interaction, and exact source path, SHA-256, and symbol
+evidence. An alias source key must resolve to exactly one authority: either one
+delta-classification interaction or one full-snapshot identity, never both.
+Generation fails when authority is missing or duplicated, when a full-snapshot
+path or hash differs from the source ledger or frozen file, or when an
+implemented feature lacks source identity.
+
 When an individual product feature becomes `implemented`, add its contract ID
 to the map's `features` object with independent `coverage` evidence. Backend
 evidence names its route, handler, and test; frontend evidence names its

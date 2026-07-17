@@ -35,6 +35,10 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
         Command.KUBERNETES_NODE_CORDON_ACTION,
         Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        Command.KUBERNETES_POD_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
@@ -56,6 +60,10 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
         Command.KUBERNETES_NODE_CORDON_ACTION,
         Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        Command.KUBERNETES_POD_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
         Command.APPLY_MANIFEST_ACTION,
         Command.KUBERNETES_RESOURCE_DELETE_ACTION,
         Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
@@ -98,11 +106,18 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     for action in (
         Command.KUBERNETES_NODE_CORDON_ACTION,
         Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.KUBERNETES_NODE_DRAIN_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_ACTION,
+        Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
     ):
         node = command_action_spec(action)
         assert node is not None
         assert node.enforce_control_namespace is False
         assert node.required_agent_capability == Command.KUBERNETES_NODE_CONTROL_CAPABILITY
+    pod_debug = command_action_spec(Command.KUBERNETES_POD_DEBUG_ACTION)
+    assert pod_debug is not None
+    assert pod_debug.supports_cancel is True
+    assert pod_debug.required_agent_capability == Command.KUBERNETES_DEBUG_CAPABILITY
     for action in (
         Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
         Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,

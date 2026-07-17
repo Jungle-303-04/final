@@ -9,6 +9,9 @@ const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
 const NETWORK_OBSERVATION_MS = 3_000;
+const DIAGNOSTIC_ITEM_LIMIT = 50;
+const SENSITIVE_ASSIGNMENT_PATTERN = /\b(authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)\s*([:=])\s*(?:Bearer\s+)?[^\s,"']+/giu;
+const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+\/=-]+/giu;
 const FAILURE_PRODUCT_STATES = new Set([
   "error",
   "forbidden",
@@ -66,6 +69,54 @@ export function isFailureProductState(state) {
   return FAILURE_PRODUCT_STATES.has(state);
 }
 
+export function createRouteSmokeDiagnostics() {
+  return {
+    apiErrors: [],
+    changeTimelineLimits: [],
+    failingRoute: "<bootstrap>",
+    pageErrors: [],
+    requestFailures: [],
+  };
+}
+
+export function formatRouteSmokeFailureDiagnostics(error, diagnostics) {
+  const bounded = (items) => items.slice(-DIAGNOSTIC_ITEM_LIMIT);
+  return JSON.stringify({
+    event: "authenticated_route_smoke_failure",
+    failingRoute: diagnostics.failingRoute,
+    error: redactDiagnosticText(error instanceof Error ? error.message : error),
+    requestFailures: bounded(diagnostics.requestFailures).map((failure) => ({
+      ...failure,
+      error: redactDiagnosticText(failure.error),
+    })),
+    apiErrors: bounded(diagnostics.apiErrors),
+    pageErrors: bounded(diagnostics.pageErrors).map(redactDiagnosticText),
+    changeTimelineLimits: bounded(diagnostics.changeTimelineLimits),
+  });
+}
+
+export async function withRouteSmokeDiagnostics(
+  action,
+  diagnostics,
+  emit = (message) => process.stderr.write(`${message}\n`),
+) {
+  try {
+    return await action();
+  } catch (error) {
+    emit(formatRouteSmokeFailureDiagnostics(error, diagnostics));
+    throw error;
+  }
+}
+
+function redactDiagnosticText(value) {
+  return String(value)
+    .replace(BEARER_PATTERN, "Bearer <redacted>")
+    .replace(
+      SENSITIVE_ASSIGNMENT_PATTERN,
+      (_match, key, separator) => `${key}${separator}<redacted>`,
+    );
+}
+
 export function parseNetscapeSessionCookie(rawCookieJar) {
   const candidates = [];
   for (const rawLine of rawCookieJar.split(/\r?\n/u)) {
@@ -93,20 +144,23 @@ export function parseNetscapeSessionCookie(rawCookieJar) {
 }
 
 async function run() {
+  const diagnostics = createRouteSmokeDiagnostics();
+  return withRouteSmokeDiagnostics(
+    () => runWithDiagnostics(diagnostics),
+    diagnostics,
+  );
+}
+
+async function runWithDiagnostics(diagnostics) {
   const baseUrl = requiredEnvironment("BASE_URL");
   const email = requiredEnvironment("AUTH_EMAIL");
   const password = requiredEnvironment("AUTH_PASSWORD", { trim: false });
+  diagnostics.failingRoute = new URL(baseUrl).pathname;
   const browser = await chromium.launch({
     headless: true,
     args: ["--disable-dev-shm-usage", "--no-sandbox"],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const diagnostics = {
-    apiErrors: [],
-    changeTimelineLimits: [],
-    pageErrors: [],
-    requestFailures: [],
-  };
 
   page.on("pageerror", (error) => {
     diagnostics.pageErrors.push(error.message);
@@ -145,6 +199,7 @@ async function run() {
 
     let previous = initial;
     for (const route of traversal) {
+      diagnostics.failingRoute = route.pathname;
       const link = await releasedRouteLink(page, route.pathname);
       const observedHref = await link.getAttribute("href");
       assert.ok(observedHref, `released route ${route.pathname} lost its href`);
@@ -367,7 +422,7 @@ function requiredEnvironment(name, { trim = true } = {}) {
 function safeUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    return `${url.pathname}${url.search}`;
+    return url.pathname;
   } catch {
     return "<invalid-url>";
   }

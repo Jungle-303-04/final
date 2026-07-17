@@ -81,6 +81,10 @@ from packages.contracts.gateway.requests import (
     CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
+    NodeDebugCleanupRequest,
+    NodeDebugRequest,
+    NodeDrainRequest,
+    PodDebugRequest,
     WorkloadRollbackRequest,
 )
 from packages.contracts.gateway.responses import (
@@ -860,6 +864,342 @@ async def uncordon_node(
         events=events,
         operation_events=operation_events,
     )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_DRAIN_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def drain_node(
+    cluster_id: str,
+    node: str,
+    payload: NodeDrainRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        capability_id="node.drain",
+        action=Command.KUBERNETES_NODE_DRAIN_ACTION,
+        reason=payload.reason or f"drain node/{node}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "timeout_seconds": payload.timeout_seconds,
+            "max_parallel": payload.max_parallel,
+            "max_pods": payload.max_pods,
+            "force": payload.force,
+            "delete_empty_dir_data": payload.delete_empty_dir_data,
+        },
+        resource_ref_key="node_ref",
+        resource_version_key="node_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_POD_DEBUG_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def debug_pod(
+    cluster_id: str,
+    namespace: str,
+    pod: str,
+    payload: PodDebugRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    suffix = hashlib.sha256(idempotency_key.encode()).hexdigest()[:16]
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind="pod",
+        resource_name=pod,
+        capability_id="pod.debug",
+        action=Command.KUBERNETES_POD_DEBUG_ACTION,
+        reason=payload.reason or f"debug pod/{namespace}/{pod}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "target_container": payload.target_container,
+            "container_name": f"opsia-debug-{suffix}",
+            "image": payload.image,
+        },
+        resource_ref_key="pod_ref",
+        resource_version_key="pod_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_DEBUG_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def debug_node(
+    cluster_id: str,
+    node: str,
+    payload: NodeDebugRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    validate_control_namespace(payload.namespace)
+    suffix = hashlib.sha256(idempotency_key.encode()).hexdigest()[:16]
+    session_id = f"debug-session-{suffix}"
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        capability_id="node.debug",
+        action=Command.KUBERNETES_NODE_DEBUG_ACTION,
+        reason=payload.reason or f"debug node/{node}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "namespace": payload.namespace,
+            "session_id": session_id,
+            "debug_pod_name": f"opsia-node-debug-{suffix}",
+            "image": payload.image,
+        },
+        resource_ref_key="node_ref",
+        resource_version_key="node_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_DEBUG_CLEANUP_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def cleanup_node_debug(
+    cluster_id: str,
+    node: str,
+    payload: NodeDebugCleanupRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    validate_control_namespace(payload.namespace)
+    session_suffix = payload.session_id.removeprefix("debug-session-")
+    if not session_suffix or len(session_suffix) != 16:
+        raise HTTPException(status_code=422, detail="debug session identity is invalid")
+    return await accept_exact_resource_action(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        capability_id="node.debug.cleanup",
+        action=Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        reason=payload.reason or f"cleanup debug node/{node}",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        command_payload={
+            "namespace": payload.namespace,
+            "session_id": payload.session_id,
+            "debug_pod_name": f"opsia-node-debug-{session_suffix}",
+        },
+        resource_ref_key="node_ref",
+        resource_version_key="node_resource_version",
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+async def accept_exact_resource_action(
+    *,
+    cluster_id: str,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
+    capability_id: str,
+    action: str,
+    reason: str,
+    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+    idempotency_key: str,
+    command_payload: JsonObject,
+    resource_ref_key: str,
+    resource_version_key: str,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    if payload.confirmation is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    inventory_resource, current_resource = exact_action_capability_resource(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        capability_id=capability_id,
+        payload=payload,
+    )
+    resource_version = str(inventory_resource.get("resource_version") or "")
+    if not resource_version:
+        raise HTTPException(status_code=409, detail="resource action identity is stale")
+    fingerprint = exact_action_request_fingerprint(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        action=action,
+        reason=reason,
+        payload=payload,
+        command_payload=command_payload,
+    )
+    command_id = resource_action_command_id(workspace_id, str(current.user_id), idempotency_key)
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=fingerprint,
+    )
+    if replay is not None:
+        return replay
+    execution_payload = {
+        "name": resource_name,
+        resource_ref_key: current_resource.model_dump(),
+        resource_version_key: resource_version,
+    }
+    if namespace is not None:
+        execution_payload["namespace"] = namespace
+    execution_payload.update(command_payload)
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        action=action,
+        reason=reason,
+        payload=execution_payload,
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+        command_id=command_id,
+        diff_basis={
+            "resource_id": payload.resource_id,
+            "capability_snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "capability_id": capability_id,
+            "resource_ref": current_resource.model_dump(),
+            "inventory_resource_version": resource_version,
+            "request_fingerprint": fingerprint,
+            "options": command_payload,
+        },
+    )
+
+
+def exact_action_capability_resource(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
+    capability_id: str,
+    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+) -> tuple[dict[str, Any], ResourceRef]:
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    resource = (
+        reader(workspace_id=workspace_id, inventory_key=payload.resource_id)
+        if callable(reader)
+        else None
+    )
+    if not isinstance(resource, dict):
+        raise HTTPException(status_code=409, detail="resource action identity is stale")
+    current_resource = inventory_resource_ref(resource)
+    if (
+        str(resource.get("snapshot_id") or "") != payload.snapshot_id
+        or current_resource != payload.resource
+        or current_resource.kind.casefold() != resource_kind.casefold()
+        or current_resource.namespace != namespace
+        or current_resource.name != resource_name
+        or str(resource.get("cluster_id") or "") != cluster_id
+    ):
+        raise HTTPException(status_code=409, detail="resource action identity is stale")
+    decision = resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=resource,
+    )
+    if decision.revision != payload.capability_revision or capability_id not in {
+        item.capability_id for item in decision.capabilities
+    }:
+        raise HTTPException(status_code=409, detail="resource action capability is stale")
+    return resource, current_resource
+
+
+def exact_action_request_fingerprint(
+    *,
+    workspace_id: str,
+    user_id: str,
+    action: str,
+    reason: str,
+    payload: NodeDrainRequest | PodDebugRequest | NodeDebugRequest | NodeDebugCleanupRequest,
+    command_payload: JsonObject,
+) -> str:
+    encoded = json.dumps(
+        {
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            "action": action,
+            "reason": reason,
+            "resource_id": payload.resource_id,
+            "snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "resource": payload.resource.model_dump(),
+            "options": command_payload,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 async def accept_cronjob_control(
@@ -1959,6 +2299,23 @@ async def command_heartbeat(
         getattr(correlation_id, "operation_event", None),
         workspace_id=identity.workspace_id,
     )
+    if payload.progress is not None:
+        progress_event = await db.append_command_operation_event(
+            identity.workspace_id,
+            command_id,
+            "progress",
+            {
+                "cluster_id": identity.cluster_id,
+                "correlation_id": correlation,
+                "status": CommandStatus.RUNNING,
+                "progress": payload.progress.model_dump(),
+            },
+        )
+        await announce_staged_operation_event(
+            operation_events,
+            progress_event,
+            workspace_id=identity.workspace_id,
+        )
     return CommandHeartbeatResponse(
         accepted=True,
         correlation_id=correlation,

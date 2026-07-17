@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createRouteSmokeDiagnostics,
+  formatRouteSmokeFailureDiagnostics,
   isApiErrorResponse,
   isBenignNavigationAbort,
   isChangeTimelineLimitResponse,
@@ -8,6 +10,7 @@ import {
   normalizeSurfaceText,
   orderRoutesForTraversal,
   parseNetscapeSessionCookie,
+  withRouteSmokeDiagnostics,
 } from "./post-deploy-route-smoke.mjs";
 
 describe("post-deploy route smoke helpers", () => {
@@ -117,5 +120,68 @@ describe("post-deploy route smoke helpers", () => {
       "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\tone\ttoken-one",
       "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\ttwo\ttoken-two",
     ].join("\n"))).toThrow("exactly one HttpOnly root cookie");
+  });
+
+  it("emits bounded structured route diagnostics before preserving the smoke failure", async () => {
+    const diagnostics = createRouteSmokeDiagnostics();
+    diagnostics.failingRoute = "/traffic";
+    diagnostics.requestFailures.push({
+      error: "net::ERR_CONNECTION_RESET",
+      method: "GET",
+      url: "/api/traffic",
+    });
+    diagnostics.apiErrors.push({ status: 503, url: "/api/traffic" });
+    diagnostics.pageErrors.push("Traffic surface crashed");
+    const emitted = [];
+
+    await expect(
+      withRouteSmokeDiagnostics(
+        async () => {
+          throw new Error("route /traffic rendered product state error");
+        },
+        diagnostics,
+        (message) => emitted.push(message),
+      ),
+    ).rejects.toThrow("route /traffic rendered product state error");
+
+    expect(emitted).toHaveLength(1);
+    expect(JSON.parse(emitted[0])).toEqual({
+      event: "authenticated_route_smoke_failure",
+      failingRoute: "/traffic",
+      error: "route /traffic rendered product state error",
+      requestFailures: [{
+        error: "net::ERR_CONNECTION_RESET",
+        method: "GET",
+        url: "/api/traffic",
+      }],
+      apiErrors: [{ status: 503, url: "/api/traffic" }],
+      pageErrors: ["Traffic surface crashed"],
+      changeTimelineLimits: [],
+    });
+    expect(formatRouteSmokeFailureDiagnostics(
+      new Error("same failure"),
+      diagnostics,
+    )).toContain('"failingRoute":"/traffic"');
+  });
+
+  it("redacts credentials from structured browser diagnostics", () => {
+    const diagnostics = createRouteSmokeDiagnostics();
+    diagnostics.failingRoute = "/resources";
+    diagnostics.pageErrors.push("token=page-secret");
+    diagnostics.requestFailures.push({
+      error: "password=request-secret",
+      method: "GET",
+      url: "/api/resources",
+    });
+
+    const rendered = formatRouteSmokeFailureDiagnostics(
+      new Error("Authorization: Bearer header-secret"),
+      diagnostics,
+    );
+
+    expect(rendered).not.toContain("page-secret");
+    expect(rendered).not.toContain("request-secret");
+    expect(rendered).not.toContain("header-secret");
+    expect(rendered.match(/<redacted>/gu)).toHaveLength(3);
   });
 });

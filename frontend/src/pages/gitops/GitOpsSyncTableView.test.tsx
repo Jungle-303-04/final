@@ -3,6 +3,7 @@
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import { I18nProvider } from "../../shared/i18n";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
@@ -44,6 +45,41 @@ describe("GitOpsSyncTableView", () => {
 
     await user.click(screen.getByRole("button", { name: "Close: Checkout API" }));
     expect(screen.queryByLabelText("Checkout API Details")).toBeNull();
+  });
+
+  it("links controller evidence to the canonical resource detail route", async () => {
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([{
+      id: "controller:cluster-a:application-uid",
+      applicationId: "application-uid",
+      applicationName: "storefront",
+      clusterId: "cluster-a",
+      namespace: "argocd",
+      environment: null,
+      syncStatus: "Synced",
+      revision: "abc123",
+      observedAt: "2026-07-17T01:02:03Z",
+      authority: "controller",
+      provider: "argo",
+      kind: "Application",
+      health: "Healthy",
+      resourceLocator: {
+        clusterId: "cluster-a",
+        apiVersion: "argoproj.io/v1alpha1",
+        kind: "Application",
+        namespace: "argocd",
+        name: "storefront",
+      },
+      freshness: "partial",
+      partialReasonCodes: ["crd_discovery_forbidden"],
+    }]);
+    renderView(port);
+
+    const link = await screen.findByRole("link", { name: "storefront" });
+    expect(link.getAttribute("href")).toBe(
+      "/gitops/resource?cluster=cluster-a&apiVersion=argoproj.io%2Fv1alpha1&kind=Application&namespace=argocd&name=storefront",
+    );
+    expect(screen.getByText("crd_discovery_forbidden")).toBeTruthy();
   });
 
   it("keeps the no-target state informative and offers the real registration action", async () => {
@@ -141,8 +177,10 @@ function renderView(
   refreshPolicies = gitOpsRefreshPolicies(),
 ) {
   return render(
-    <I18nProvider navigatorLanguage="en-US" storage={null}>
-      <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} />
-    </I18nProvider>,
+    <MemoryRouter>
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} />
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }

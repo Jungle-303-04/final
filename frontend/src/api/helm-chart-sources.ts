@@ -6,12 +6,15 @@ import {
 import {
   helmChartSourcePageSchema,
   helmChartSourceSchema,
+  helmRepositoryRefreshSchema,
   type HelmChartSourceEndpoint,
   type HelmChartSourcePageEndpoint,
+  type HelmRepositoryRefreshEndpoint,
 } from "./helm-chart-sources-schemas";
-import { withQuery } from "./url";
+import { encodePathSegment, withQuery } from "./url";
 
 export const HELM_CHART_SOURCES_PATH = "/api/helm/chart-sources" as const;
+export const HELM_REPOSITORY_UPDATE_PATH = "/api/helm/repositories/{name}/update" as const;
 
 const SOURCE_PAGE_MAX = 100;
 const CURSOR_MAX = 4096;
@@ -91,6 +94,17 @@ export function deleteHelmChartSource(
     }),
     signal,
   });
+}
+
+export function refreshHelmRepository(
+  name: string,
+  signal?: AbortSignal,
+): Promise<HelmRepositoryRefreshEndpoint> {
+  const path = HELM_REPOSITORY_UPDATE_PATH.replace(
+    "{name}",
+    encodePathSegment(requiredText(name, "name", NAME_MAX)),
+  ) as ApiPath;
+  return apiRequest(path, helmRepositoryRefreshSchema, { method: "POST", signal });
 }
 
 function optionalLimit(value: number | undefined): number | undefined {

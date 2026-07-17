@@ -311,6 +311,39 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     assert "database_writer_freeze.py" not in rollback["run"]
 
 
+def test_browser_smoke_failure_captures_bounded_service_crash_evidence_before_rollback() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    browser_smoke = steps["Run authenticated browser route smoke"]
+    diagnostics = steps["Capture service crash diagnostics"]
+    rollback = steps["Restore previous release after failure"]
+    source = diagnostics["run"]
+
+    assert browser_smoke["id"] == "browser_smoke"
+    assert diagnostics["if"] == (
+        "failure() && steps.browser_smoke.outcome == 'failure' && env.DEPLOYMENT_SCOPE == 'FULL'"
+    )
+    assert "get pods --selector app=api-gateway --output json" in source
+    assert "restartCount" in source
+    assert "lastState" in source
+    assert "reason" in source
+    assert 'describe pod "${pod_name}"' in source
+    assert 'logs pod/"${pod_name}" --all-containers=true --previous' in source
+    assert 'logs pod/"${pod_name}" --all-containers=true --tail=500' in source
+    assert "involvedObject.uid=${pod_uid}" in source
+    assert "rollout status deployment/api-gateway" in source
+    assert "scripts/redact_diagnostic_stream.py" in source
+    assert "get secret" not in source
+    assert "describe secret" not in source
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Capture service crash diagnostics"
+    )
+    assert names.index("Capture service crash diagnostics") < names.index(
+        "Restore previous release after failure"
+    )
+    assert rollback["run"].count("revert_image_digests.py") == 2
+
+
 def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgrade() -> None:
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "imageDetails[0].imageDigest" in source

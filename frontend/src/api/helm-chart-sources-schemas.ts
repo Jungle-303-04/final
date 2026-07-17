@@ -8,7 +8,7 @@ export const helmChartSourceSchema = z.strictObject({
   name: z.string().min(1),
   reference: z.string().min(1),
   status: z.enum(["active", "disabled"]),
-  actions: z.array(z.literal("delete")).max(1),
+  actions: z.array(z.enum(["refresh", "delete"])).max(2),
   credentials_configured: z.boolean(),
   observed_at: nullableObservedAtSchema,
 });
@@ -30,3 +30,13 @@ export const helmChartSourcePageSchema = z.strictObject({
 
 export type HelmChartSourceEndpoint = z.infer<typeof helmChartSourceSchema>;
 export type HelmChartSourcePageEndpoint = z.infer<typeof helmChartSourcePageSchema>;
+
+export const helmRepositoryRefreshSchema = z.strictObject({
+  source_id: z.string().min(1).max(80),
+  chart_count: z.number().int().nonnegative().max(50_000),
+  observed_at: z.string().min(1),
+  event_id: z.string().min(1),
+  correlation_id: z.string().min(1),
+});
+
+export type HelmRepositoryRefreshEndpoint = z.infer<typeof helmRepositoryRefreshSchema>;

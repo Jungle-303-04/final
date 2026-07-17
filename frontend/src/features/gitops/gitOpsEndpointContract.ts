@@ -8,10 +8,32 @@ import type {
   ReleaseTargetInput,
   SafePrResult,
   GitOpsReasonCode,
+  GitOpsSyncTargetQuery,
 } from "./gitOpsContract";
 
 type EndpointResourceRef = GitOpsApplicationDetailEndpoint["application"]["resource"];
 type EndpointClusterScope = NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>;
+
+export interface GitOpsOverviewItemEndpoint {
+  id: string;
+  authority: "registered" | "controller";
+  provider: "internal" | "argo" | "flux";
+  display_name: string;
+  application_ids: string[];
+  binding_id: string | null;
+  scope: EndpointClusterScope;
+  resource: EndpointResourceRef | null;
+  environment: string | null;
+  status: string | null;
+  health: string | null;
+  revision: string | null;
+  observed_at: string | null;
+  partial_reason_codes: string[];
+}
+
+export interface GitOpsOverviewEndpoint {
+  items: GitOpsOverviewItemEndpoint[];
+}
 
 export interface GitOpsResourceTreeEndpoint {
   scope: EndpointClusterScope;
@@ -180,13 +202,13 @@ export interface GitOpsEndpointDependencies {
     idempotencyKey: string,
     signal?: AbortSignal,
   ): Promise<GitOpsCommandAcceptedEndpoint>;
+  listOverview(
+    query?: GitOpsSyncTargetQuery,
+    signal?: AbortSignal,
+  ): Promise<GitOpsOverviewEndpoint>;
   listApplications(signal?: AbortSignal): Promise<{
     applications: Record<string, unknown>[];
   }>;
-  listApplicationDeployments(
-    applicationId: string,
-    options?: { signal?: AbortSignal },
-  ): Promise<{ deployments: Record<string, unknown>[] }>;
   listClusters(signal?: AbortSignal): Promise<{ clusters: ReleaseClusterEndpoint[] }>;
   listPlans(signal?: AbortSignal): Promise<{ plans: ReleasePlan[] }>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<{ runs: ReleaseRun[] }>;

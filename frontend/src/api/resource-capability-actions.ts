@@ -3,7 +3,9 @@ import {
   resourceActionAcceptedSchema,
   type ResourceActionAccepted,
 } from "./resource-capability-actions-schemas";
-import type { ResourceActionExecutionContext } from "../features/resources/resourceCapabilitiesContract";
+import {
+  type ResourceActionExecutionContext,
+} from "../features/resources/resourceCapabilitiesContract";
 
 /** Submit one server-discovered resource command after the UI confirmation. */
 export function executeResourceCapability(
@@ -12,20 +14,12 @@ export function executeResourceCapability(
   context?: ResourceActionExecutionContext,
   signal?: AbortSignal,
 ): Promise<ResourceActionAccepted> {
-  const cronjob = /\/cronjobs\//u.test(path);
-  const rollback = /\/resource-rollbacks\//u.test(path);
-  if (cronjob && (
-    context === undefined
-    || !context.capabilityId.startsWith("cronjob.")
-    || context.idempotencyKey.trim().length < 8
-  )) {
-    throw new TypeError("CronJob action requires an exact idempotent execution context");
+  const exactContext = context?.requestContext === "exact-resource" ? context : undefined;
+  const rollbackContext = context?.requestContext === "rollback" ? context : undefined;
+  if (exactContext && exactContext.idempotencyKey.trim().length < 8) {
+    throw new TypeError("exact resource action requires an idempotent execution context");
   }
-  const cronjobContext = cronjob ? context : undefined;
-  const rollbackContext = rollback ? context : undefined;
-  if (rollback && (
-    rollbackContext === undefined ||
-    rollbackContext.capabilityId !== "workload.rollback" ||
+  if (rollbackContext && (
     rollbackContext.idempotencyKey.trim().length < 8 ||
     rollbackContext.rollback === undefined
   )) {
@@ -35,19 +29,40 @@ export function executeResourceCapability(
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(cronjobContext || rollbackContext
-        ? { "Idempotency-Key": (cronjobContext ?? rollbackContext)?.idempotencyKey ?? "" }
+      ...(exactContext || rollbackContext
+        ? { "Idempotency-Key": (exactContext ?? rollbackContext)?.idempotencyKey ?? "" }
         : {}),
     },
     body: JSON.stringify(
-      cronjobContext
-        ? cronjobPayload(cronjobContext)
-        : rollbackContext
+      rollbackContext
         ? workloadRollbackPayload(rollbackContext)
+        : exactContext
+        ? exactActionPayload(values, exactContext)
         : { ...values, confirmation: true },
     ),
     signal,
   });
+}
+
+function exactActionPayload(
+  values: Readonly<Record<string, unknown>>,
+  context: ResourceActionExecutionContext,
+) {
+  return {
+    ...values,
+    resource_id: context.resourceId,
+    snapshot_id: context.snapshotId,
+    capability_revision: context.revision,
+    resource: {
+      api_group: context.resource.apiGroup,
+      version: context.resource.version,
+      kind: context.resource.kind,
+      namespace: context.resource.namespace,
+      name: context.resource.name,
+      uid: context.resource.uid,
+    },
+    confirmation: true,
+  };
 }
 
 function workloadRollbackPayload(context: ResourceActionExecutionContext) {
@@ -72,23 +87,6 @@ function workloadRollbackPayload(context: ResourceActionExecutionContext) {
     preview_revision: rollback.previewRevision,
     confirmation: true,
     reason: "restore the selected observed workload revision",
-  };
-}
-
-function cronjobPayload(context: ResourceActionExecutionContext) {
-  return {
-    resource_id: context.resourceId,
-    snapshot_id: context.snapshotId,
-    capability_revision: context.revision,
-    resource: {
-      api_group: context.resource.apiGroup,
-      version: context.resource.version,
-      kind: context.resource.kind,
-      namespace: context.resource.namespace,
-      name: context.resource.name,
-      uid: context.resource.uid,
-    },
-    confirmation: true,
   };
 }
 

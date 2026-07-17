@@ -213,6 +213,8 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
             "input_schema": [],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/restart",
+            "request_context": "simple",
+            "result_intent": "refresh-resource",
         },
         {
             "capability_id": "deployment.scale",
@@ -230,10 +232,13 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
                     "minimum": 0,
                     "maximum": 100,
                     "default": 1,
+                    "prefill_result_key": None,
                 }
             ],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/scale",
+            "request_context": "simple",
+            "result_intent": "refresh-resource",
         },
     ]
     assert len(body["revision"]) == 64
@@ -347,6 +352,7 @@ def test_capabilities_are_server_owned_execution_descriptors() -> None:
             "minimum": 0,
             "maximum": 100,
             "default": 1,
+            "prefill_result_key": None,
         }
     ]
 
@@ -403,9 +409,52 @@ def test_node_capability_is_derived_from_observed_scheduling_state(
 
     assert response.status_code == 200
     capabilities = response.json()["capabilities"]
-    assert [item["capability_id"] for item in capabilities] == [capability_id]
-    assert capabilities[0]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
-    assert capabilities[0]["realtime"] is True
+    by_id = {item["capability_id"]: item for item in capabilities}
+    assert set(by_id) == {
+        capability_id,
+        "node.drain",
+        "node.debug",
+        "node.debug.cleanup",
+    }
+    assert by_id[capability_id]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
+    assert by_id["node.drain"]["path"].endswith("/nodes/worker-a/drain")
+    assert by_id["node.drain"]["request_context"] == "exact-resource"
+    assert by_id["node.drain"]["result_intent"] == "resource-summary"
+    assert by_id["node.debug"]["request_context"] == "exact-resource"
+    assert by_id["node.debug"]["result_intent"] == "terminal-session"
+    assert by_id["node.debug.cleanup"]["request_context"] == "exact-resource"
+    assert by_id["node.debug.cleanup"]["result_intent"] == "refresh-resource"
+    assert {
+        item["key"]: item["prefill_result_key"]
+        for item in by_id["node.debug.cleanup"]["input_schema"]
+    } == {
+        "namespace": "namespace",
+        "session_id": "session_id",
+    }
+    assert by_id["node.drain"]["input_schema"][0]["key"] == "timeout_seconds"
+    assert by_id["node.drain"]["input_schema"][-2:] == [
+        {
+            "key": "force",
+            "label": "Evict unmanaged Pods",
+            "type": "boolean",
+            "required": True,
+            "minimum": None,
+            "maximum": None,
+            "default": False,
+            "prefill_result_key": None,
+        },
+        {
+            "key": "delete_empty_dir_data",
+            "label": "Evict Pods using emptyDir",
+            "type": "boolean",
+            "required": True,
+            "minimum": None,
+            "maximum": None,
+            "default": False,
+            "prefill_result_key": None,
+        },
+    ]
+    assert all(item["realtime"] is True for item in capabilities)
 
 
 def test_node_capability_is_hidden_without_agent_node_control_capability() -> None:
@@ -490,6 +539,32 @@ def test_capabilities_include_management_cluster_actions_for_confirmed_direct_ex
     ]
 
 
+def test_capabilities_include_management_node_actions_only_with_agent_safety_capability() -> None:
+    allowed = client(
+        ResourceCapabilitiesDb(
+            management=True,
+            resource=node_resource(cordoned=False),
+        )
+    ).get("/capabilities", params={"resource": "resource-node-worker-a"})
+    unsupported = client(
+        ResourceCapabilitiesDb(
+            management=True,
+            node_control_supported=False,
+            resource=node_resource(cordoned=False),
+        )
+    ).get("/capabilities", params={"resource": "resource-node-worker-a"})
+
+    assert allowed.status_code == 200
+    assert {item["capability_id"] for item in allowed.json()["capabilities"]} == {
+        "node.cordon",
+        "node.drain",
+        "node.debug",
+        "node.debug.cleanup",
+    }
+    assert unsupported.status_code == 200
+    assert unsupported.json()["capabilities"] == []
+
+
 @pytest.mark.parametrize(
     "db",
     [
@@ -542,6 +617,8 @@ def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod()
             "input_schema": [],
             "method": "WEBSOCKET",
             "path": "/live/terminal",
+            "request_context": "simple",
+            "result_intent": "refresh-resource",
         }
     ]
     assert [check[-1] for check in db.access_checks] == ["inventory.read", "pod.exec"]

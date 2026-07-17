@@ -104,19 +104,30 @@ export {
 } from "./timeline";
 export {
   checkHelmReleaseUpgrades,
+  applyHelmReleaseValues,
   getHelmRelease,
   getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
+  HELM_INSTALL_TARGETS_PATH,
+  HELM_RELEASE_INSTALL_STREAM_PATH,
   HELM_RELEASE_PATH,
+  HELM_RELEASE_ROLLBACK_STREAM_PATH,
+  HELM_RELEASE_VALUES_PATH,
+  HELM_RELEASE_VALUES_PREVIEW_PATH,
   HELM_RELEASES_PATH,
   HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,
   HELM_RELEASE_VERSIONS_PATH,
   HELM_UPGRADE_CHECK_PATH,
   listHelmReleaseVersions,
+  listHelmInstallTargets,
   listHelmReleases,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
+  startHelmReleaseValuesPreview,
+  startHelmReleaseRollback,
+  startHelmReleaseUninstall,
+  startHelmReleaseInstall,
   type HelmReleaseListQuery,
 } from "./helm-releases";
 export {
@@ -134,10 +145,27 @@ export {
   type HelmReleaseVersionListEndpoint,
 } from "./helm-releases-schemas";
 export {
+  getArtifactHubChart,
+  HELM_ARTIFACTHUB_CHART_PATH,
+  HELM_ARTIFACTHUB_SEARCH_PATH,
+  searchArtifactHubCharts,
+  type ArtifactHubSearchQuery,
+} from "./helm-artifacthub";
+export {
+  artifactHubChartDetailSchema,
+  artifactHubChartSchema,
+  artifactHubSearchPageSchema,
+  type ArtifactHubChartDetailEndpoint,
+  type ArtifactHubChartEndpoint,
+  type ArtifactHubSearchPageEndpoint,
+} from "./helm-artifacthub-schemas";
+export {
   HELM_CHART_SOURCES_PATH,
+  HELM_REPOSITORY_UPDATE_PATH,
   deleteHelmChartSource,
   listHelmChartSources,
   registerHelmChartSource,
+  refreshHelmRepository,
   type HelmChartSourceCredentialRequest,
   type HelmChartSourceDeleteRequest,
   type HelmChartSourceListQuery,
@@ -147,8 +175,10 @@ export {
 export {
   helmChartSourcePageSchema,
   helmChartSourceSchema,
+  helmRepositoryRefreshSchema,
   type HelmChartSourceEndpoint,
   type HelmChartSourcePageEndpoint,
+  type HelmRepositoryRefreshEndpoint,
 } from "./helm-chart-sources-schemas";
 export {
   getTrafficOverview,

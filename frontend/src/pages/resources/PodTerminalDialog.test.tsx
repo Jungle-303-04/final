@@ -56,6 +56,8 @@ const CAPABILITY_DATA = {
       inputSchema: [],
       method: "WEBSOCKET" as const,
       path: "/live/terminal",
+      requestContext: "simple" as const,
+      resultIntent: "refresh-resource" as const,
     }],
   };
 
@@ -156,9 +158,112 @@ describe("PodTerminalDialog", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog", { name: "터미널 · checkout-api-0" })).toBeNull();
   });
+
+  it("opens the terminal on the completed debug container handoff", () => {
+    const debugContainer = "opsia-debug-session-42";
+    const facts = DETAIL.resource.facts;
+    if (facts.type !== "pod") throw new Error("Pod terminal fixture must contain Pod facts");
+    const detail: ResourceDetail = {
+      ...DETAIL,
+      resource: {
+        ...DETAIL.resource,
+        facts: {
+          ...facts,
+          containerNames: ["app", "sidecar", debugContainer],
+        },
+      },
+    };
+
+    renderTerminal(CAPABILITIES, { open: vi.fn() }, debugContainer, detail);
+
+    expect(screen.getByRole("dialog", { name: "터미널 · checkout-api-0" })).toBeTruthy();
+    expect(screen.getByLabelText("컨테이너")).toHaveProperty("value", debugContainer);
+  });
+
+  it("reuses the terminal for a descriptor-authorized Node debug result", () => {
+    const nodeDetail: ResourceDetail = {
+      ...DETAIL,
+      identity: {
+        kind: "Node",
+        name: "worker-a",
+        namespace: null,
+        resourceType: "node",
+      },
+      resource: {
+        ...DETAIL.resource,
+        apiVersion: "v1",
+        facts: {
+          type: "node",
+          ready: true,
+          podCapacity: 110,
+          cpuMillicores: 4000,
+          memoryMebibytes: 8192,
+          cpuRatio: null,
+          memoryRatio: null,
+        },
+        inventoryKey: "resource-node-worker-a",
+        kind: "Node",
+        name: "worker-a",
+        namespace: null,
+        resourceType: "node",
+        uid: "node-uid-1",
+      },
+    };
+    const nodeCapabilities: ResourceCapabilitiesFrame = {
+      phase: "ready",
+      failure: null,
+      data: {
+        revision: "b".repeat(64),
+        subject: {
+          resourceId: nodeDetail.resource.inventoryKey,
+          snapshotId: "snapshot-node-42",
+          clusterId: nodeDetail.clusterId,
+          resourceType: "node",
+          kind: "Node",
+          namespace: null,
+          name: "worker-a",
+        },
+        capabilities: [{
+          capabilityId: "maintenance.node-diagnostics",
+          label: "Debug node",
+          description: "Create one owned debug Pod.",
+          execution: "command",
+          confirmationRequired: true,
+          realtime: true,
+          inputSchema: [],
+          method: "POST",
+          path: "/clusters/cluster-1/nodes/worker-a/debug",
+          requestContext: "exact-resource",
+          resultIntent: "terminal-session",
+        }],
+      },
+    };
+    const port: PodTerminalPort = { open: vi.fn() };
+
+    renderTerminal(
+      nodeCapabilities,
+      port,
+      null,
+      nodeDetail,
+      {
+        namespace: "sandbox",
+        pod: "opsia-node-debug-abc123",
+        container: "debugger",
+      },
+    );
+
+    expect(screen.getByRole("dialog", { name: "터미널 · opsia-node-debug-abc123" })).toBeTruthy();
+    expect(screen.getByLabelText("컨테이너")).toHaveProperty("value", "debugger");
+  });
 });
 
-function renderTerminal(capabilities: ResourceCapabilitiesFrame, port: PodTerminalPort) {
+function renderTerminal(
+  capabilities: ResourceCapabilitiesFrame,
+  port: PodTerminalPort,
+  preferredContainer: string | null = null,
+  detail: ResourceDetail = DETAIL,
+  preferredTarget: { namespace: string; pod: string; container: string } | null = null,
+) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <ProductSessionProvider session={{
@@ -166,7 +271,13 @@ function renderTerminal(capabilities: ResourceCapabilitiesFrame, port: PodTermin
         roles: ["cluster_steward"],
         workspaceId: "workspace-main",
       }}>
-        <PodTerminalDialog capabilities={capabilities} detail={DETAIL} port={port} />
+        <PodTerminalDialog
+          capabilities={capabilities}
+          detail={detail}
+          port={port}
+          preferredContainer={preferredContainer}
+          preferredTarget={preferredTarget}
+        />
       </ProductSessionProvider>
     </I18nProvider>,
   );

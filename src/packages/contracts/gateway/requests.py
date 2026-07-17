@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.gateway.base import StrictModel
@@ -19,7 +19,11 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
-from packages.contracts.kubernetes_discovery import MAX_KUBERNETES_API_VERSION_LENGTH
+from packages.contracts.kubernetes_discovery import (
+    MAX_DYNAMIC_RESOURCE_NAMESPACES,
+    MAX_KUBERNETES_API_VERSION_LENGTH,
+    is_kubernetes_dns_label,
+)
 from packages.contracts.parity import ResourceRef
 from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
 
@@ -66,6 +70,21 @@ MAX_INVENTORY_PAYLOAD_BYTES = 16 * 1024 * 1024
 INVENTORY_PAYLOAD_TOO_LARGE_MESSAGE = "inventory payload exceeds size limit"
 MAX_DEPLOYMENT_REPLICAS = 100
 MAX_RESOURCE_MANIFEST_BYTES = 1_048_576
+
+
+def normalize_control_namespaces(value: str) -> str:
+    """Validate and canonicalize a bounded Kubernetes namespace CSV."""
+
+    namespaces = tuple(
+        dict.fromkeys(namespace.strip() for namespace in value.split(",") if namespace.strip())
+    )
+    if len(namespaces) > MAX_DYNAMIC_RESOURCE_NAMESPACES:
+        raise ValueError(
+            f"control_namespaces supports at most {MAX_DYNAMIC_RESOURCE_NAMESPACES} namespaces"
+        )
+    if any(not is_kubernetes_dns_label(namespace) for namespace in namespaces):
+        raise ValueError("control_namespaces must contain Kubernetes DNS label namespaces")
+    return ",".join(namespaces)
 
 
 class LoginRequest(StrictModel):
@@ -343,7 +362,7 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
     )
     # 제어(쓰기) 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만 허용.
     # 설치 manifest ConfigMap 의 CONTROL_ALLOWED_NAMESPACES 로 주입되어 클러스터별로 다르게 줄 수 있다.
-    control_namespaces: str = ""
+    control_namespaces: str = Field(default="", max_length=2_047)
     install_node_collector: bool = True
     install_sample_workload: bool = False
     sample_workload_name: str | None = Field(
@@ -353,6 +372,11 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
         pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
     )
     sample_workload_image: str | None = Field(default=None, min_length=1)
+
+    @field_validator("control_namespaces")
+    @classmethod
+    def validate_control_namespaces(cls, value: str) -> str:
+        return normalize_control_namespaces(value)
 
     @model_validator(mode="after")
     def _sample_workload_requires_explicit_config(self) -> TargetRegisterRequest:
@@ -418,6 +442,46 @@ class ConfirmedResourceActionRequest(StrictModel):
     confirmation: Literal[True] | None = None
     direct_execution: bool = False
     direct_execution_confirmed: bool = False
+
+
+class ExactResourceActionRequest(ConfirmedResourceActionRequest):
+    """Capability-bound mutation against one exact inventory observation."""
+
+    resource_id: str = Field(min_length=1, max_length=255)
+    snapshot_id: str = Field(min_length=1, max_length=255)
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resource: ResourceRef
+
+
+class NodeDrainRequest(ExactResourceActionRequest):
+    timeout_seconds: int = Field(default=60, ge=10, le=600)
+    max_parallel: int = Field(default=8, ge=1, le=32)
+    max_pods: int = Field(default=1000, ge=1, le=5000)
+    force: bool = False
+    delete_empty_dir_data: bool = False
+
+
+class PodDebugRequest(ExactResourceActionRequest):
+    target_container: str = Field(min_length=1, max_length=253)
+    image: str = Field(
+        min_length=1,
+        max_length=1024,
+        pattern=r"^\S+@sha256:[0-9a-f]{64}$",
+    )
+
+
+class NodeDebugRequest(ExactResourceActionRequest):
+    namespace: str = Field(min_length=1, max_length=253)
+    image: str = Field(
+        min_length=1,
+        max_length=1024,
+        pattern=r"^\S+@sha256:[0-9a-f]{64}$",
+    )
+
+
+class NodeDebugCleanupRequest(ExactResourceActionRequest):
+    namespace: str = Field(min_length=1, max_length=253)
+    session_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-z0-9-]+$")
 
 
 class CronJobControlRequest(ConfirmedResourceActionRequest):
@@ -673,11 +737,39 @@ class CommandStartRequest(StrictModel):
     attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
+class NodeDrainProgressResource(StrictModel):
+    namespace: str = Field(min_length=1, max_length=63)
+    name: str = Field(min_length=1, max_length=253)
+    uid: str = Field(min_length=1, max_length=253)
+    resource_version: str = Field(min_length=1, max_length=253)
+    status: Literal["evicted", "failed", "cancelled"]
+    error_code: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class NodeDrainProgress(StrictModel):
+    progress_id: str = Field(
+        min_length=1,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+    phase: Literal["node_drain_evictions"]
+    completed: int = Field(ge=0, le=5_000)
+    total: int = Field(ge=0, le=5_000)
+    resources: list[NodeDrainProgressResource] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_progress_counts(self) -> NodeDrainProgress:
+        if self.completed > self.total:
+            raise ValueError("node drain completed count cannot exceed total")
+        return self
+
+
 class CommandHeartbeatRequest(CommandStartRequest):
     attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
     # Agent only acknowledges a generation it actually observed.  The gateway
     # never treats a browser request as an agent cancellation acknowledgement.
     observed_cancel_generation: int | None = Field(default=None, ge=1)
+    progress: NodeDrainProgress | None = None
 
 
 class CommandControlRequest(StrictModel):

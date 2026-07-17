@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from pydantic import Field, model_validator
@@ -85,6 +86,83 @@ class KubernetesNodeSchedulingPayload(StrictModel):
         pattern=r"^[a-z0-9](?:[-.a-z0-9]*[a-z0-9])?$",
     )
     unschedulable: bool
+
+
+class KubernetesExactNodePayload(StrictModel):
+    name: str = Field(
+        min_length=1,
+        max_length=253,
+        pattern=r"^[a-z0-9](?:[-.a-z0-9]*[a-z0-9])?$",
+    )
+    node_ref: ResourceRef
+    node_resource_version: str = Field(min_length=1, max_length=253)
+
+    @model_validator(mode="after")
+    def validate_node_ref(self) -> KubernetesExactNodePayload:
+        resource = self.node_ref
+        if (
+            resource.api_group != ""
+            or resource.version != "v1"
+            or resource.kind.casefold() != "node"
+            or resource.namespace is not None
+            or resource.name != self.name
+        ):
+            raise ValueError("Node payload ResourceRef does not match the command target")
+        return self
+
+
+class KubernetesNodeDrainPayload(KubernetesExactNodePayload):
+    timeout_seconds: int = Field(ge=10, le=600)
+    max_parallel: int = Field(ge=1, le=32)
+    max_pods: int = Field(default=1000, ge=1, le=5000)
+    force: bool = False
+    delete_empty_dir_data: bool = False
+
+
+class KubernetesPodDebugPayload(KubernetesGetPayload):
+    pod_ref: ResourceRef
+    pod_resource_version: str = Field(min_length=1, max_length=253)
+    target_container: str = Field(min_length=1, max_length=253)
+    container_name: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    image: str = Field(pattern=r"^\S+@sha256:[0-9a-f]{64}$", max_length=1024)
+
+    @model_validator(mode="after")
+    def validate_pod_ref(self) -> KubernetesPodDebugPayload:
+        resource = self.pod_ref
+        if (
+            resource.api_group != ""
+            or resource.version != "v1"
+            or resource.kind.casefold() != "pod"
+            or resource.namespace != self.namespace
+            or resource.name != self.name
+        ):
+            raise ValueError("Pod payload ResourceRef does not match the command target")
+        return self
+
+
+class KubernetesNodeDebugPayload(KubernetesExactNodePayload):
+    namespace: str = Field(min_length=1, max_length=253)
+    session_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-z0-9-]+$")
+    debug_pod_name: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+    image: str = Field(pattern=r"^\S+@sha256:[0-9a-f]{64}$", max_length=1024)
+
+
+class KubernetesNodeDebugCleanupPayload(KubernetesExactNodePayload):
+    namespace: str = Field(min_length=1, max_length=253)
+    session_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-z0-9-]+$")
+    debug_pod_name: str = Field(
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
 
 
 class KubernetesCronJobPayload(KubernetesGetPayload):
@@ -297,6 +375,13 @@ class KubernetesCommandPolicy:
         if spec.scope == "service-access":
             self.ensure_service_access_allowed(spec, payload)
             return
+        if spec.scope == "resource-maintenance":
+            self.ensure_resource_maintenance_allowed(
+                spec,
+                payload,
+                direct_execution=direct_execution,
+            )
+            return
         if spec.scope != "target-agent":
             raise PermissionError(f"{spec.scope} Kubernetes commands are not enabled")
         self.ensure_target_agent_allowed(spec, payload)
@@ -378,6 +463,28 @@ class KubernetesCommandPolicy:
         ):
             raise PermissionError("cluster workload control permits only core/v1 Node patches")
         self.field(payload, "name")
+
+    def ensure_resource_maintenance_allowed(
+        self,
+        spec: KubernetesCommandSpec,
+        payload: object,
+        *,
+        direct_execution: bool = False,
+    ) -> None:
+        if self.cluster_role != TARGET_CLUSTER_ROLE and not direct_execution:
+            raise PermissionError("resource maintenance is only enabled on target clusters")
+        allowed = {
+            (CORE_API_GROUP, "v1", "nodes", "patch"),
+            (CORE_API_GROUP, "v1", "pods", "patch"),
+            (CORE_API_GROUP, "v1", "pods", "create"),
+            (CORE_API_GROUP, "v1", "pods", "delete"),
+        }
+        if (spec.api_group, spec.version, spec.resource, spec.verb) not in allowed:
+            raise PermissionError("resource maintenance command is outside the allowlist")
+        self.field(payload, "name")
+        namespace = getattr(payload, "namespace", None)
+        if isinstance(namespace, str) and namespace and not control_namespace_allowed(namespace):
+            raise PermissionError(CONTROL_NAMESPACE_DENIED_MESSAGE)
 
     def target_agent_namespace(self) -> str:
         if self.cluster_role == MANAGEMENT_CLUSTER_ROLE:
@@ -516,6 +623,49 @@ class KubernetesApiClient:
         )
         return self.response_body(response)
 
+    async def create_namespaced_subresource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+        name: str,
+        subresource: str,
+        body: JsonObject,
+    ) -> JsonObject:
+        response = await self.request(
+            "POST",
+            self.namespaced_resource_path(
+                api_group=api_group,
+                version=version,
+                namespace=namespace,
+                resource=resource,
+                name=name,
+                subresource=subresource,
+            ),
+            body=body,
+        )
+        return self.response_body(response)
+
+    async def list_cluster_resources(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        query: dict[str, str] | None = None,
+    ) -> JsonObject:
+        path = self.cluster_collection_path(
+            api_group=api_group,
+            version=version,
+            resource=resource,
+        )
+        if query:
+            path = f"{path}?{urlencode(query)}"
+        response = await self.request("GET", path)
+        return self.response_body(response)
+
     async def delete_namespaced_resource(
         self,
         *,
@@ -639,6 +789,20 @@ class KubernetesApiClient:
             else f"/apis/{api_group}/{version}"
         )
         return f"{prefix}/{resource}/{name}"
+
+    def cluster_collection_path(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+    ) -> str:
+        prefix = (
+            f"/api/{version}"
+            if api_group in {"", CORE_API_GROUP}
+            else f"/apis/{api_group}/{version}"
+        )
+        return f"{prefix}/{resource}"
 
     def base_url(self) -> str:
         if self._base_url is not None:

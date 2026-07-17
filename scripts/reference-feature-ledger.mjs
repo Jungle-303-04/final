@@ -5,6 +5,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import {
+  assertFeatureSourceAuthority,
+  validateFeatureSourceAuthority,
+} from "./reference-feature-source-identity.mjs";
+
+export { validateFeatureSourceAuthority };
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, "..");
 const DEFAULT_SOURCE = path.join(
@@ -34,6 +41,25 @@ const DEFAULT_SOURCE_KEY_ALIASES = path.join(
   "migration",
   "reference-feature-source-aliases.json",
 );
+const DEFAULT_SOURCE_IDENTITIES = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-feature-source-identities.json",
+);
+const DEFAULT_DELTA_CLASSIFICATIONS = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-ui-delta-classifications.json",
+);
+const DEFAULT_SOURCE_LEDGER = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-source-ledger.json",
+);
+const DEFAULT_FROZEN_SOURCE = path.join(REPOSITORY_ROOT, "references", "upstream");
 const DEFAULT_REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
 const DELIVERY_STATUSES = new Set([
   "implemented",
@@ -107,6 +133,9 @@ function featurePortMap(portMap, section, contractId) {
   }
   if (port.releasePhase !== undefined && !RELEASE_PHASES.has(port.releasePhase)) {
     throw new Error(`알 수 없는 출하 단계입니다: ${contractId} (${port.releasePhase})`);
+  }
+  if (port.streaming !== undefined && typeof port.streaming !== "boolean") {
+    throw new Error(`실시간 이식 증거는 boolean이어야 합니다: ${contractId}`);
   }
   return port;
 }
@@ -186,8 +215,8 @@ export function parseReferenceInventory(markdown, sourceRevision, portMap, sourc
     const number = String(features.length + 1).padStart(3, "0");
     const contractId = `reference.feature.${number}`;
     const sourceKey = sourceKeyFor(sourceKeyAliases, contractId);
-    const streaming = endpoints.some(isStreamingEndpoint);
     const port = featurePortMap(portMap, section, contractId);
+    const streaming = port.streaming ?? endpoints.some(isStreamingEndpoint);
     features.push({
       id: `reference-feature-${number}`,
       contractId,
@@ -261,6 +290,9 @@ export function validateFeatureLedger(ledger) {
     }
     if (!DELIVERY_STATUSES.has(feature.deliveryStatus)) {
       errors.push(`${id}: deliveryStatus must be a supported value`);
+    }
+    if (feature.deliveryStatus === "implemented" && !feature.sourceKey) {
+      errors.push(`${id}: implemented source identity is required`);
     }
     if (!feature.backendContract) errors.push(`${id}: backendContract is required`);
     if (!feature.frontendContract) errors.push(`${id}: frontendContract is required`);
@@ -359,6 +391,10 @@ function parseArguments(argv) {
     contractsOutput: DEFAULT_CONTRACTS_OUTPUT,
     portMap: DEFAULT_PORT_MAP,
     sourceKeyAliases: DEFAULT_SOURCE_KEY_ALIASES,
+    sourceIdentities: DEFAULT_SOURCE_IDENTITIES,
+    deltaClassifications: DEFAULT_DELTA_CLASSIFICATIONS,
+    sourceLedger: DEFAULT_SOURCE_LEDGER,
+    frozenSource: DEFAULT_FROZEN_SOURCE,
     sourceRevision: DEFAULT_REVISION,
     check: false,
     requireComplete: false,
@@ -386,7 +422,18 @@ function parseArguments(argv) {
       continue;
     }
     if (
-      !["--source", "--output", "--contracts-output", "--port-map", "--source-key-aliases", "--revision"].includes(flag)
+      ![
+        "--source",
+        "--output",
+        "--contracts-output",
+        "--port-map",
+        "--source-key-aliases",
+        "--source-identities",
+        "--delta-classifications",
+        "--source-ledger",
+        "--frozen-source",
+        "--revision",
+      ].includes(flag)
       || !argv[index + 1]
     ) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`);
@@ -396,6 +443,11 @@ function parseArguments(argv) {
     else if (flag === "--contracts-output") values.contractsOutput = path.resolve(value);
     else if (flag === "--port-map") values.portMap = path.resolve(value);
     else if (flag === "--source-key-aliases") values.sourceKeyAliases = path.resolve(value);
+    else if (flag === "--source-identities") values.sourceIdentities = path.resolve(value);
+    else if (flag === "--delta-classifications") {
+      values.deltaClassifications = path.resolve(value);
+    } else if (flag === "--source-ledger") values.sourceLedger = path.resolve(value);
+    else if (flag === "--frozen-source") values.frozenSource = path.resolve(value);
     else values[flag.slice(2)] = path.resolve(value);
     index += 1;
   }
@@ -453,6 +505,10 @@ export async function writeFeatureLedger({
   contractsOutput = DEFAULT_CONTRACTS_OUTPUT,
   portMap = DEFAULT_PORT_MAP,
   sourceKeyAliases = DEFAULT_SOURCE_KEY_ALIASES,
+  sourceIdentities = null,
+  deltaClassifications = null,
+  sourceLedger = null,
+  frozenSource = null,
   sourceRevision,
   check = false,
   requireComplete = false,
@@ -469,6 +525,32 @@ export async function writeFeatureLedger({
       ? validateSourceKeyAliasManifest(JSON.parse(await readFile(sourceKeyAliases, "utf8")))
       : { sourceRevision: null, aliases: sourceKeyAliases };
   const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap, sourceKeyAliasManifest.aliases);
+  const authorityInputs = [
+    sourceIdentities,
+    deltaClassifications,
+    sourceLedger,
+    frozenSource,
+  ];
+  if (authorityInputs.some(Boolean) && !authorityInputs.every(Boolean)) {
+    throw new Error("feature source authority inputs must be provided together");
+  }
+  if (authorityInputs.every(Boolean)) {
+    const [loadedSourceIdentities, loadedDeltaClassifications, loadedSourceLedger] =
+      await Promise.all([
+        readFile(sourceIdentities, "utf8").then(JSON.parse),
+        readFile(deltaClassifications, "utf8").then(JSON.parse),
+        readFile(sourceLedger, "utf8").then(JSON.parse),
+      ]);
+    await assertFeatureSourceAuthority({
+      sourceRevision,
+      aliases: sourceKeyAliasManifest,
+      deltaClassifications: loadedDeltaClassifications,
+      snapshotIdentities: loadedSourceIdentities,
+      featureLedger: ledger,
+      sourceLedger: loadedSourceLedger,
+      frozenSource,
+    });
+  }
   if (requireComplete) {
     assertSourceKeyAliasManifestRevisionMatchesTarget(sourceKeyAliasManifest, sourceRevision);
     assertFeatureDeliveryComplete(ledger, {

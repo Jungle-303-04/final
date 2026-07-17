@@ -1,6 +1,12 @@
 import { GitBranch, LayoutGrid, RefreshCw, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMatch } from "react-router-dom";
+import { parseProductFilterUrl } from "../../features/filters/filterUrl";
+import {
+  namespaceSelector,
+  normalizeLabels,
+  normalizeNamespaceRefs,
+} from "../../features/filters/filterUrlSyntax";
 import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type { GitOpsPort, ReleasePlan } from "../../features/gitops/gitOpsContract";
 import { gitOpsApplicationDetailIdFromRoute } from "../../features/gitops/gitOpsApplicationDetailRoute";
@@ -39,6 +45,19 @@ export function GitOpsPage({
   const detailMatch = useMatch("/gitops/detail/*");
   const resourceMatch = useMatch("/gitops/resource");
   const [section, setSection] = useState<GitOpsSection>("changes");
+  const syncTargetQuery = useMemo(() => {
+    const state = parseProductFilterUrl(searchParams.toString()).state;
+    return {
+      clusters: state.common.clusters,
+      namespaces: normalizeNamespaceRefs(state.common.namespaces).map(namespaceSelector),
+      applications: state.common.applications,
+      labels: Object.fromEntries(
+        normalizeLabels(state.common.labels)
+          .map(({ key, value }) => [key, value]),
+      ),
+      ...(state.gitops.query ? { q: state.gitops.query } : {}),
+    };
+  }, [searchParams]);
   const applicationId = gitOpsApplicationDetailIdFromRoute(detailMatch?.params["*"]);
   const resourceLocator = resourceMatch ? gitOpsResourceDetailLocator(searchParams) : null;
 
@@ -81,7 +100,13 @@ export function GitOpsPage({
           {section === "changes" ? <GitOpsChangesWorkspace port={port} /> : null}
         </TabsContent>
         <TabsContent className="min-w-0" value="sync">
-          {section === "sync" ? <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} /> : null}
+          {section === "sync" ? (
+            <GitOpsSyncTableView
+              port={port}
+              scopeQuery={syncTargetQuery}
+              refreshPolicies={refreshPolicies}
+            />
+          ) : null}
         </TabsContent>
       </Tabs>
     </ProductPageFrame>

@@ -19,3 +19,15 @@ class HelmChartSourceDeletedBody(EventBody):
     provider: str
     name: str
     reference: str
+
+
+@event(EventSubject.HELM_CHART_SOURCE_REFRESHED)
+@dataclass(frozen=True)
+class HelmChartSourceRefreshedBody(EventBody):
+    """Successful external index refresh evidence without chart or credential payloads."""
+
+    workspace_id: str
+    source_id: str
+    name: str
+    chart_count: int
+    observed_at: str

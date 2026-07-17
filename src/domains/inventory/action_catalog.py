@@ -28,6 +28,8 @@ from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
 NamespacePolicy = Literal["control", "terminal", "cluster", "resource"]
 ExecutionTransport = Literal["command", "terminal"]
+RequestContext = Literal["simple", "exact-resource", "rollback"]
+ResultIntent = Literal["refresh-resource", "resource-summary", "terminal-session"]
 ResourceState = Literal[
     "always",
     "deletable",
@@ -55,6 +57,8 @@ class ResourceActionDefinition:
     command_action: str | None = None
     inputs: tuple[ResourceCapabilityInput, ...] = ()
     resource_state: ResourceState = "always"
+    request_context: RequestContext = "simple"
+    result_intent: ResultIntent = "refresh-resource"
 
     def applies_to(
         self,
@@ -97,6 +101,7 @@ class ResourceActionDefinition:
             "kind": quote(subject.kind.casefold(), safe=""),
             "workload": quote(subject.name, safe=""),
             "node": quote(subject.name, safe=""),
+            "pod": quote(subject.name, safe=""),
             "resource_id": quote(subject.resource_id, safe=""),
         }
         return ResourceActionCapability(
@@ -109,6 +114,8 @@ class ResourceActionDefinition:
             input_schema=list(self.inputs),
             method=self.method,
             path=self.path_template.format(**values),
+            request_context=self.request_context,
+            result_intent=self.result_intent,
         )
 
 
@@ -132,6 +139,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
         resource_state="rollback-available",
+        request_context="rollback",
     ),
     ResourceActionDefinition(
         capability_id="workload.rollback",
@@ -147,6 +155,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
         resource_state="rollback-available",
+        request_context="rollback",
     ),
     ResourceActionDefinition(
         capability_id="workload.rollback",
@@ -162,6 +171,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
         resource_state="rollback-available",
+        request_context="rollback",
     ),
     ResourceActionDefinition(
         capability_id="resource.delete",
@@ -301,6 +311,178 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         resource_state="node-cordoned",
     ),
     ResourceActionDefinition(
+        capability_id="node.drain",
+        label="Drain",
+        description="Cordon this exact node and evict eligible Pods with bounded progress.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_DRAIN_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_DRAIN_ACTION,
+        request_context="exact-resource",
+        result_intent="resource-summary",
+        inputs=(
+            ResourceCapabilityInput(
+                key="timeout_seconds",
+                label="Timeout (seconds)",
+                type="integer",
+                required=True,
+                minimum=10,
+                maximum=600,
+                default=60,
+            ),
+            ResourceCapabilityInput(
+                key="max_parallel",
+                label="Parallel evictions",
+                type="integer",
+                required=True,
+                minimum=1,
+                maximum=32,
+                default=8,
+            ),
+            ResourceCapabilityInput(
+                key="max_pods",
+                label="Pod safety limit",
+                type="integer",
+                required=True,
+                minimum=1,
+                maximum=5000,
+                default=1000,
+            ),
+            ResourceCapabilityInput(
+                key="force",
+                label="Evict unmanaged Pods",
+                type="boolean",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default=False,
+            ),
+            ResourceCapabilityInput(
+                key="delete_empty_dir_data",
+                label="Evict Pods using emptyDir",
+                type="boolean",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default=False,
+            ),
+        ),
+    ),
+    ResourceActionDefinition(
+        capability_id="node.debug",
+        label="Debug node",
+        description="Create one owned, auditable debug Pod on this exact node.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_DEBUG_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_DEBUG_ACTION,
+        request_context="exact-resource",
+        result_intent="terminal-session",
+        inputs=(
+            ResourceCapabilityInput(
+                key="namespace",
+                label="Namespace",
+                type="string",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default="",
+            ),
+            ResourceCapabilityInput(
+                key="image",
+                label="Digest-pinned debug image",
+                type="string",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default="",
+            ),
+        ),
+    ),
+    ResourceActionDefinition(
+        capability_id="node.debug.cleanup",
+        label="Clean up debug Pod",
+        description="Delete only the debug Pod owned by the supplied session.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_DEBUG_CLEANUP_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_DEBUG_CLEANUP_ACTION,
+        request_context="exact-resource",
+        inputs=(
+            ResourceCapabilityInput(
+                key="namespace",
+                label="Namespace",
+                type="string",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default="",
+                prefill_result_key="namespace",
+            ),
+            ResourceCapabilityInput(
+                key="session_id",
+                label="Debug session ID",
+                type="string",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default="",
+                prefill_result_key="session_id",
+            ),
+        ),
+    ),
+    ResourceActionDefinition(
+        capability_id="pod.debug",
+        label="Debug container",
+        description="Attach an ephemeral debug container to this exact Pod and target container.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_POD_DEBUG_PATH,
+        resource_type="pod",
+        kind="pod",
+        permission=Permission.POD_EXEC.value,
+        agent_capability=Command.KUBERNETES_DEBUG_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_POD_DEBUG_ACTION,
+        request_context="exact-resource",
+        result_intent="terminal-session",
+        inputs=(
+            ResourceCapabilityInput(
+                key="target_container",
+                label="Target container",
+                type="string",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default="",
+            ),
+            ResourceCapabilityInput(
+                key="image",
+                label="Digest-pinned debug image",
+                type="string",
+                required=True,
+                minimum=None,
+                maximum=None,
+                default="",
+            ),
+        ),
+    ),
+    ResourceActionDefinition(
         capability_id="pod.exec",
         label="Terminal",
         description="Open an audited terminal session and stream its output.",
@@ -327,6 +509,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
         resource_state="cronjob-suspended",
+        request_context="exact-resource",
     ),
     ResourceActionDefinition(
         capability_id="cronjob.suspend",
@@ -342,6 +525,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         namespace_policy="control",
         command_action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         resource_state="cronjob-running",
+        request_context="exact-resource",
     ),
     ResourceActionDefinition(
         capability_id="cronjob.trigger",
@@ -356,6 +540,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
         namespace_policy="control",
         command_action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        request_context="exact-resource",
     ),
 )
 

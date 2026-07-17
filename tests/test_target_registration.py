@@ -12,6 +12,7 @@ import pytest
 import yaml
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
+from pydantic import ValidationError
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -479,6 +480,18 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'NODE_CONTROL_ENABLED: "true"' in manifest
     assert "name: cluster-agent-node-control" in manifest
     assert 'resources: ["nodes"]\n    verbs: ["get", "patch"]' in manifest
+    assert 'resources: ["pods/eviction"]\n    verbs: ["create"]' in manifest
+    assert "name: cluster-agent-resource-debug" in manifest
+    documents = [document for document in yaml.safe_load_all(manifest) if document]
+    debug_role = next(
+        document
+        for document in documents
+        if document.get("kind") == "Role"
+        and document.get("metadata", {}).get("name") == "cluster-agent-resource-debug"
+    )
+    assert {tuple(rule["resources"]): tuple(rule["verbs"]) for rule in debug_role["rules"]}[
+        "pods/ephemeralcontainers",
+    ] == ("get", "patch")
     assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
     assert (
         'name: REALTIME_GATEWAY_URL\n              value: "ws://management.local:30080"' in manifest
@@ -726,9 +739,10 @@ def test_management_install_manifest_limits_writes_to_gitops_controller_resource
     assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
     assert "cluster-agent-uninstall" not in manifest
-    assert "cluster-agent-node-control" not in manifest
+    assert "cluster-agent-node-control" in manifest
+    assert "cluster-agent-resource-debug" in manifest
     assert "cluster-agent-gitops-control" in manifest
-    assert 'NODE_CONTROL_ENABLED: "false"' in manifest
+    assert 'NODE_CONTROL_ENABLED: "true"' in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
@@ -754,6 +768,61 @@ def test_management_install_manifest_limits_writes_to_gitops_controller_resource
         ("source.toolkit.fluxcd.io",),
     }
     assert all(rule["verbs"] == ["get", "patch"] for rule in control_role["rules"])
+
+
+@pytest.mark.parametrize(
+    "control_namespaces",
+    [
+        "sandbox,Invalid_Name",
+        "sandbox,team\n---\nkind: Secret",
+        f"sandbox,{'a' * 64}",
+    ],
+)
+def test_target_registration_rejects_non_dns_control_namespaces(
+    control_namespaces: str,
+) -> None:
+    with pytest.raises(ValidationError, match="control_namespaces"):
+        TargetRegisterRequest.model_validate(
+            {
+                **target_request().model_dump(),
+                "control_namespaces": control_namespaces,
+            }
+        )
+
+
+def test_target_registration_canonicalizes_control_namespaces() -> None:
+    request = TargetRegisterRequest.model_validate(
+        {
+            **target_request().model_dump(),
+            "control_namespaces": " sandbox,prod-web,sandbox ",
+        }
+    )
+
+    assert request.control_namespaces == "sandbox,prod-web"
+
+
+def test_management_install_manifest_includes_direct_node_control_safety_rbac() -> None:
+    request = TargetRegisterRequest.model_validate(
+        {
+            **target_request().model_dump(),
+            "cluster_role": "management",
+            "control_namespaces": "sandbox",
+        }
+    )
+    normalized = normalize_target_provider_defaults(request)
+
+    manifest = target_install_manifest(normalized, "agent-secret")
+    documents = [document for document in yaml.safe_load_all(manifest) if document]
+    names = {
+        document.get("metadata", {}).get("name")
+        for document in documents
+        if isinstance(document, dict)
+    }
+
+    assert normalized.control_namespaces == "sandbox"
+    assert "cluster-agent-node-control" in names
+    assert "cluster-agent-resource-debug" in names
+    assert 'NODE_CONTROL_ENABLED: "true"' in manifest
 
 
 @pytest.mark.parametrize(
@@ -2556,10 +2625,16 @@ def test_target_registration_rejects_missing_management_url(monkeypatch) -> None
 def test_install_manifest_injects_control_namespaces_when_specified() -> None:
     request = target_request().model_copy(update={"control_namespaces": "sandbox,prod-web"})
     manifest = target_install_manifest(request, "agent-secret")
-    assert 'CONTROL_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
-    assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
 
     docs = [document for document in yaml.safe_load_all(manifest) if document]
+    runtime_config = next(
+        document
+        for document in docs
+        if document.get("kind") == "ConfigMap"
+        and document.get("metadata", {}).get("name") == "target-runtime-config"
+    )
+    assert runtime_config["data"]["CONTROL_ALLOWED_NAMESPACES"] == "sandbox,prod-web"
+    assert runtime_config["data"]["POD_EXEC_ALLOWED_NAMESPACES"] == "sandbox,prod-web"
     cronjob_roles = [
         document
         for document in docs
@@ -2589,8 +2664,15 @@ def test_install_manifest_injects_control_namespaces_when_specified() -> None:
 
 def test_install_manifest_omits_control_namespaces_by_default() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
-    assert "CONTROL_ALLOWED_NAMESPACES" not in manifest
-    assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox"' in manifest
+    docs = [document for document in yaml.safe_load_all(manifest) if document]
+    runtime_config = next(
+        document
+        for document in docs
+        if document.get("kind") == "ConfigMap"
+        and document.get("metadata", {}).get("name") == "target-runtime-config"
+    )
+    assert "CONTROL_ALLOWED_NAMESPACES" not in runtime_config["data"]
+    assert runtime_config["data"]["POD_EXEC_ALLOWED_NAMESPACES"] == "sandbox"
 
 
 @pytest.mark.parametrize(

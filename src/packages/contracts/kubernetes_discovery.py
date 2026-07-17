@@ -260,6 +260,12 @@ def _is_dns_label(value: str) -> bool:
     return len(value) <= 63 and DNS_LABEL_PATTERN.fullmatch(value) is not None
 
 
+def is_kubernetes_dns_label(value: str) -> bool:
+    """Return whether a value is one Kubernetes namespace-safe DNS label."""
+
+    return bool(value) and _is_dns_label(value)
+
+
 def _is_dns_subdomain(value: str) -> bool:
     return (
         len(value) <= 253

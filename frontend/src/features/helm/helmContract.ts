@@ -5,6 +5,7 @@ import type {
   HelmChartSourceListRequest,
   HelmChartSourcePage,
   HelmChartSourceRegisterRequest,
+  HelmRepositoryRefreshReceipt,
 } from "./helmChartSourcesContract";
 
 export type {
@@ -18,6 +19,7 @@ export type {
   HelmChartSourceProvider,
   HelmChartSourceRegisterRequest,
   HelmChartSourceStatus,
+  HelmRepositoryRefreshReceipt,
 } from "./helmChartSourcesContract";
 
 export type HelmAvailability = "available" | "partial" | "unavailable";
@@ -65,7 +67,7 @@ export interface HelmUpgradeTarget {
 
 export interface HelmReleaseCommands {
   availability: "available";
-  actions: readonly ["upgrade"];
+  actions: readonly ["upgrade", "rollback", "uninstall"];
   confirmationRequired: true;
   realtime: true;
   upgradeTargets: readonly HelmUpgradeTarget[];
@@ -210,6 +212,24 @@ export interface HelmResourcesDiff {
   parseErrorCount: number;
 }
 
+export type HelmValuesPreviewResources = Omit<HelmResourcesDiff, "revision1" | "revision2">;
+
+export interface HelmValuesPreviewResult {
+  namespace: string;
+  releaseName: string;
+  expectedRevision: number;
+  catalogItemId: string;
+  catalogVersion: string;
+  chartName: string;
+  chartVersion: string;
+  resources: HelmValuesPreviewResources;
+  projectionSha256: string;
+  projectionBytes: number;
+  sourceBytes: number;
+  redactionApplied: true;
+  truncated: boolean;
+}
+
 export interface HelmResourcesDiffArtifactResult extends HelmArtifactResultBase {
   artifact: "resources_diff";
   format: "structured";
@@ -283,6 +303,49 @@ export interface HelmReleaseUpgradeBatch {
   refreshAfterSeconds: number;
 }
 
+export interface ArtifactHubChart {
+  packageId: string;
+  name: string;
+  version: string;
+  appVersion: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verifiedPublisher: boolean;
+  };
+}
+
+export interface ArtifactHubSearchRequest {
+  query: string;
+  offset?: number;
+  limit?: number;
+  sort?: "relevance" | "stars" | "last_updated";
+  official?: boolean;
+  verified?: boolean;
+}
+
+export interface ArtifactHubSearchPage {
+  items: readonly ArtifactHubChart[];
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+  observedAt: string;
+}
+
+export interface ArtifactHubChartDetail {
+  chart: ArtifactHubChart;
+  readme: string | null;
+  availableVersions: readonly { version: string; appVersion: string | null }[];
+  versionsTruncated: boolean;
+  observedAt: string;
+}
+
 export interface HelmReleaseHistoryEntry {
   storage: HelmResourceRef;
   revision: number | null;
@@ -328,6 +391,50 @@ export interface HelmReleaseUpgradeRequest extends HelmReleaseDetailRequest {
   reason?: string;
 }
 
+export type HelmReleaseValuesPreviewRequest = Omit<
+  HelmReleaseUpgradeRequest,
+  "confirmation" | "reason"
+>;
+
+export interface HelmInstallTargets {
+  namespace: string;
+  targets: readonly HelmUpgradeTarget[];
+}
+
+export interface HelmReleaseInstallRequest {
+  clusterId: string;
+  namespace: string;
+  applicationName: string;
+  releaseName: string;
+  catalogItemId: string;
+  catalogVersion: string;
+  values: Readonly<Record<string, unknown>>;
+  confirmation: true;
+  idempotencyKey: string;
+}
+
+export interface HelmInstallReceipt {
+  accepted: true;
+  eventId: string;
+  auditEventId: string;
+  commandId: string;
+  correlationId: string;
+  status: string;
+}
+
+export interface HelmReleaseRollbackRequest extends HelmReleaseDetailRequest {
+  expectedRevision: number;
+  revision: number;
+  confirmation: true;
+  reason?: string;
+}
+
+export interface HelmReleaseUninstallRequest extends HelmReleaseDetailRequest {
+  expectedRevision: number;
+  confirmation: true;
+  reason?: string;
+}
+
 export type HelmFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -351,6 +458,19 @@ export class HelmPortFailure extends Error {
 }
 
 export interface HelmPort {
+  listInstallTargets(signal?: AbortSignal): Promise<HelmInstallTargets>;
+  installRelease(
+    request: HelmReleaseInstallRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmInstallReceipt>;
+  searchArtifactHub(
+    request: ArtifactHubSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubSearchPage>;
+  getArtifactHubChart(
+    request: { repository: string; chart: string; version?: string },
+    signal?: AbortSignal,
+  ): Promise<ArtifactHubChartDetail>;
   listReleases(request: HelmReleaseListRequest, signal?: AbortSignal): Promise<HelmReleaseList>;
   getRelease(request: HelmReleaseDetailRequest, signal?: AbortSignal): Promise<HelmReleaseDetail>;
   getReleaseUpgradeInfo(
@@ -369,8 +489,20 @@ export interface HelmPort {
     request: HelmArtifactReadRequest,
     signal?: AbortSignal,
   ): Promise<HelmArtifactReceipt>;
+  previewReleaseValues(
+    request: HelmReleaseValuesPreviewRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmArtifactReceipt>;
   upgradeRelease(
     request: HelmReleaseUpgradeRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeReceipt>;
+  rollbackRelease(
+    request: HelmReleaseRollbackRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeReceipt>;
+  uninstallRelease(
+    request: HelmReleaseUninstallRequest,
     signal?: AbortSignal,
   ): Promise<HelmReleaseUpgradeReceipt>;
   listChartSources(
@@ -385,4 +517,8 @@ export interface HelmPort {
     request: HelmChartSourceDeleteRequest,
     signal?: AbortSignal,
   ): Promise<HelmChartSourceDeleteReceipt>;
+  refreshChartSource(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<HelmRepositoryRefreshReceipt>;
 }

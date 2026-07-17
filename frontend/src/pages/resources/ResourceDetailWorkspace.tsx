@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2, ScrollText, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type {
@@ -28,6 +28,7 @@ import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
 import {
   EMPTY_POD_TERMINAL_PORT,
+  type PodTerminalCoordinates,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import { PodTerminalDialog } from "./PodTerminalDialog";
@@ -83,6 +84,10 @@ export function ResourceDetailWorkspace({
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
+  const [preferredTerminalTarget, setPreferredTerminalTarget] = useState<PodTerminalCoordinates | null>(null);
+  const clearPreferredTerminalTarget = useCallback(() => {
+    setPreferredTerminalTarget(null);
+  }, []);
   const title = identity
     ? t("resources.detail.title", { name: identity.name })
     : t("resources.detail.errorTitle");
@@ -213,6 +218,8 @@ export function ResourceDetailWorkspace({
               capabilities={capabilities}
               detail={detail.data}
               port={terminalPort}
+              preferredTarget={preferredTerminalTarget}
+              onPreferredTargetHandled={clearPreferredTerminalTarget}
             />
             {serviceAccessPort ? (
               <ServiceAccessActions
@@ -226,6 +233,7 @@ export function ResourceDetailWorkspace({
               capabilities={capabilities}
               detail={detail.data}
               onInvalidate={onResourceActionInvalidation}
+              onTerminalReady={setPreferredTerminalTarget}
             />
             {manifestPort ? (
               <ResourceManifestEditor

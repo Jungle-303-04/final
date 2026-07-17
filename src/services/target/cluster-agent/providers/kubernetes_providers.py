@@ -2081,6 +2081,20 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     cpu_request_mcores, mem_request_mib = pod_request_totals(pod_spec)
     cpu_limit_mcores, mem_limit_mib = pod_limit_totals(pod_spec)
     containers, container_ports_complete = pod_container_summaries(pod_spec, pod_status)
+    ephemeral_containers = (
+        [
+            {"name": name}
+            for name in sorted(
+                {
+                    str(item.get("name") or "")
+                    for item in pod_spec.get("ephemeralContainers", [])
+                    if isinstance(item, dict) and str(item.get("name") or "")
+                }
+            )
+        ]
+        if isinstance(pod_spec.get("ephemeralContainers"), list)
+        else []
+    )
     return {
         "uid": meta.get("uid"),
         "resource_version": meta.get("resourceVersion"),
@@ -2102,6 +2116,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "host_ip": pod_status.get("hostIP"),
         "conditions": pod_status.get("conditions", []),
         "containers": containers,
+        "ephemeral_containers": ephemeral_containers,
         "container_ports_complete": container_ports_complete,
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),

@@ -1,5 +1,14 @@
 """Typed contracts for Helm release observations and agent commands."""
 
+from packages.contracts.helm.artifacthub import (
+    ARTIFACTHUB_PAGE_MAX,
+    ARTIFACTHUB_VERSION_MAX,
+    ArtifactHubChart,
+    ArtifactHubChartDetail,
+    ArtifactHubChartVersion,
+    ArtifactHubRepository,
+    ArtifactHubSearchPage,
+)
 from packages.contracts.helm.artifacts import (
     HELM_ARTIFACT_CONTENT_MAX_BYTES,
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
@@ -15,10 +24,28 @@ from packages.contracts.helm.artifacts import (
     HelmResourceFieldChange,
     HelmResourcesDiff,
 )
+from packages.contracts.helm.operations import (
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
+    HelmReleaseGuard,
+    HelmReleaseOperationCommandPayload,
+    HelmReleaseRollbackRequest,
+    HelmReleaseUninstallRequest,
+)
+from packages.contracts.helm.previews import (
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
+    HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER,
+    HelmReleaseValuesPreviewRequest,
+    HelmValuesPreviewCommandPayload,
+    HelmValuesPreviewResources,
+    HelmValuesPreviewResult,
+)
 from packages.contracts.helm.releases import (
     HELM_UPGRADE_BATCH_MAX_RELEASES,
     HelmAvailability,
     HelmFeatureAvailability,
+    HelmInstallTargetsResponse,
     HelmObservationCoverage,
     HelmOwnedResource,
     HelmOwnedResourceObservation,
@@ -27,6 +54,7 @@ from packages.contracts.helm.releases import (
     HelmReleaseDetail,
     HelmReleaseDetailResponse,
     HelmReleaseHistoryEntry,
+    HelmReleaseInstallRequest,
     HelmReleaseListResponse,
     HelmReleaseUpgradeBatch,
     HelmReleaseUpgradeInfo,
@@ -48,9 +76,13 @@ from packages.contracts.helm.sources import (
     HelmChartVersion,
     HelmChartVersionObservation,
     HelmChartVersionResolution,
+    HelmRepositoryRefreshAccepted,
+    HelmRepositoryRefreshResult,
 )
 
 __all__ = [
+    "ARTIFACTHUB_PAGE_MAX",
+    "ARTIFACTHUB_VERSION_MAX",
     "HELM_ARTIFACT_CONTENT_MAX_BYTES",
     "HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER",
     "HELM_CHART_SOURCE_PAGE_MAX",
@@ -59,6 +91,11 @@ __all__ = [
     "HELM_RELEASE_ARTIFACT_READ_CAPABILITY",
     "HELM_UPGRADE_BATCH_MAX_RELEASES",
     "HelmAvailability",
+    "ArtifactHubChart",
+    "ArtifactHubChartDetail",
+    "ArtifactHubChartVersion",
+    "ArtifactHubRepository",
+    "ArtifactHubSearchPage",
     "HelmArtifactCommandPayload",
     "HelmArtifactReadRequest",
     "HelmArtifactResult",
@@ -70,6 +107,8 @@ __all__ = [
     "HelmChartVersion",
     "HelmChartVersionObservation",
     "HelmChartVersionResolution",
+    "HelmRepositoryRefreshResult",
+    "HelmRepositoryRefreshAccepted",
     "HelmHookDiffItem",
     "HelmHooksDiff",
     "HelmFeatureAvailability",
@@ -87,6 +126,18 @@ __all__ = [
     "HelmReleaseUpgradeInfo",
     "HelmReleaseUpgradeBatch",
     "HelmReleaseUpgradeRequest",
+    "HelmReleaseInstallRequest",
+    "HelmInstallTargetsResponse",
+    "HELM_RELEASE_OPERATION_ACTION",
+    "HELM_RELEASE_OPERATION_CAPABILITY",
+    "HELM_VALUES_PREVIEW_ACTION",
+    "HELM_VALUES_PREVIEW_CAPABILITY",
+    "HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER",
+    "HelmReleaseGuard",
+    "HelmReleaseOperationCommandPayload",
+    "HelmReleaseRollbackRequest",
+    "HelmReleaseUninstallRequest",
+    "HelmReleaseValuesPreviewRequest",
     "HelmReleaseVersionList",
     "HelmResourceFieldChange",
     "HelmResourceHealthAvailability",
@@ -94,4 +145,7 @@ __all__ = [
     "HelmResourcesDiff",
     "HelmUpgradeInput",
     "HelmUpgradeTarget",
+    "HelmValuesPreviewCommandPayload",
+    "HelmValuesPreviewResources",
+    "HelmValuesPreviewResult",
 ]

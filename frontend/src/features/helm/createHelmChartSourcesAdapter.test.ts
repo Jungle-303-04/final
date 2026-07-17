@@ -108,6 +108,10 @@ describe("createHelmAdapter chart sources", () => {
 
 function endpointDependencies() {
   return {
+    listHelmInstallTargets: vi.fn(),
+    startHelmReleaseInstall: vi.fn(),
+    searchArtifactHubCharts: vi.fn(),
+    getArtifactHubChart: vi.fn(),
     checkHelmReleaseUpgrades: vi.fn(),
     listHelmReleases: vi.fn(),
     getHelmRelease: vi.fn(),
@@ -115,6 +119,10 @@ function endpointDependencies() {
     listHelmReleaseVersions: vi.fn(),
     startHelmArtifactRead: vi.fn(),
     startHelmReleaseUpgrade: vi.fn(),
+    startHelmReleaseValuesPreview: vi.fn(),
+    startHelmReleaseRollback: vi.fn(),
+    startHelmReleaseUninstall: vi.fn(),
+    refreshHelmRepository: vi.fn(),
     deleteHelmChartSource: vi.fn().mockResolvedValue({
       accepted: true as const,
       event_id: "event-delete-source",

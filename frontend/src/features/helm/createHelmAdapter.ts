@@ -1,5 +1,6 @@
 import {
   type HelmArtifactReceipt,
+  type ArtifactHubChart,
   type HelmArtifactResult,
   type HelmClusterScope,
   type HelmObservationCoverage,
@@ -14,15 +15,84 @@ import {
   type HelmResourceRef,
   type HelmResourceHealth,
   type HelmUnavailableFeature,
+  type HelmValuesPreviewResult,
 } from "./helmContract";
 import { recordValue, withHelmPortFailure } from "./helmAdapterRuntime";
-import { helmArtifactResultSchema } from "./helmArtifactSchemas";
+import {
+  helmArtifactResultSchema,
+  helmValuesPreviewResultSchema,
+} from "./helmArtifactSchemas";
 import { createHelmChartSourcesPort, toChartSource } from "./createHelmChartSourcesPort";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
   return {
     ...createHelmChartSourcesPort(endpoints),
+    async listInstallTargets(signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.listHelmInstallTargets(signal);
+        return {
+          namespace: value.namespace,
+          targets: value.targets.map((target) => ({
+            itemId: target.item_id,
+            name: target.name,
+            version: target.version,
+            chartVersion: target.chart_version,
+            inputs: target.inputs.map((input) => ({
+              name: input.name,
+              valueType: input.value_type,
+              required: input.required,
+              defaultValue: input.default,
+              allowedValues: input.allowed_values,
+            })),
+          })),
+        };
+      });
+    },
+    async installRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseInstall(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm install audit identity is invalid");
+        }
+        return {
+          accepted: receipt.accepted,
+          eventId: receipt.event_id,
+          auditEventId: receipt.audit_event_id,
+          commandId: receipt.command_id,
+          correlationId: receipt.correlation_id,
+          status: receipt.status,
+        };
+      });
+    },
+    async searchArtifactHub(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.searchArtifactHubCharts(request, signal);
+        return {
+          items: value.items.map(toArtifactHubChart),
+          total: value.total,
+          offset: value.offset,
+          limit: value.limit,
+          hasMore: value.has_more,
+          observedAt: value.observed_at,
+        };
+      });
+    },
+    async getArtifactHubChart(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.getArtifactHubChart(request, signal);
+        return {
+          chart: toArtifactHubChart(value.chart),
+          readme: value.readme,
+          availableVersions: value.available_versions.map((item) => ({
+            version: item.version,
+            appVersion: item.app_version,
+          })),
+          versionsTruncated: value.versions_truncated,
+          observedAt: value.observed_at,
+        };
+      });
+    },
     async listReleases(request, signal) {
       return withHelmPortFailure(async () => {
         const response = await endpoints.listHelmReleases({
@@ -85,6 +155,67 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         return toArtifactReceipt(receipt);
       });
     },
+    async previewReleaseValues(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseValuesPreview(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm preview audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async rollbackRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseRollback(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm rollback audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async uninstallRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseUninstall(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm uninstall audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+  };
+}
+
+function toArtifactHubChart(value: {
+  package_id: string;
+  name: string;
+  version: string;
+  app_version: string | null;
+  description: string | null;
+  stars: number;
+  deprecated: boolean;
+  signed: boolean;
+  repository: {
+    name: string;
+    url: string;
+    official: boolean;
+    verified_publisher: boolean;
+  };
+}): ArtifactHubChart {
+  return {
+    packageId: value.package_id,
+    name: value.name,
+    version: value.version,
+    appVersion: value.app_version,
+    description: value.description,
+    stars: value.stars,
+    deprecated: value.deprecated,
+    signed: value.signed,
+    repository: {
+      name: value.repository.name,
+      url: value.repository.url,
+      official: value.repository.official,
+      verifiedPublisher: value.repository.verified_publisher,
+    },
   };
 }
 
@@ -135,16 +266,7 @@ export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResul
         revision2: artifact.resources_diff.revision2,
         added: artifact.resources_diff.added.map(toRenderedResourceRef),
         removed: artifact.resources_diff.removed.map(toRenderedResourceRef),
-        modified: artifact.resources_diff.modified.map((item) => ({
-          ...toRenderedResourceRef(item),
-          summary: item.summary,
-          fieldCount: item.field_count,
-          fields: item.fields.map((field) => ({
-            path: field.path,
-            oldValue: field.old_value,
-            newValue: field.new_value,
-          })),
-        })),
+        modified: artifact.resources_diff.modified.map(toRenderedResourceChange),
         unchanged: artifact.resources_diff.unchanged.map(toRenderedResourceRef),
         parseErrorCount: artifact.resources_diff.parse_error_count,
       },
@@ -157,6 +279,37 @@ export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResul
     content: artifact.content,
     contentSha256: artifact.content_sha256,
     contentBytes: artifact.content_bytes,
+  };
+}
+
+export function toHelmValuesPreviewOperationResult(
+  value: unknown,
+): HelmValuesPreviewResult | null {
+  const payload = recordValue(value);
+  const result = recordValue(payload?.result);
+  const parsed = helmValuesPreviewResultSchema.safeParse(result?.preview);
+  if (!parsed.success) return null;
+  const preview = parsed.data;
+  return {
+    namespace: preview.namespace,
+    releaseName: preview.release_name,
+    expectedRevision: preview.expected_revision,
+    catalogItemId: preview.catalog_item_id,
+    catalogVersion: preview.catalog_version,
+    chartName: preview.chart_name,
+    chartVersion: preview.chart_version,
+    resources: {
+      added: preview.resources.added.map(toRenderedResourceRef),
+      removed: preview.resources.removed.map(toRenderedResourceRef),
+      modified: preview.resources.modified.map(toRenderedResourceChange),
+      unchanged: preview.resources.unchanged.map(toRenderedResourceRef),
+      parseErrorCount: preview.resources.parse_error_count,
+    },
+    projectionSha256: preview.projection_sha256,
+    projectionBytes: preview.projection_bytes,
+    sourceBytes: preview.source_bytes,
+    redactionApplied: preview.redaction_applied,
+    truncated: preview.truncated,
   };
 }
 
@@ -195,6 +348,31 @@ function toRenderedResourceRef(value: {
     kind: value.kind,
     name: value.name,
     namespace: value.namespace,
+  };
+}
+
+function toRenderedResourceChange(value: {
+  api_version: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  summary: string;
+  field_count: number;
+  fields: Array<{
+    path: string;
+    old_value: string | number | boolean | null;
+    new_value: string | number | boolean | null;
+  }>;
+}) {
+  return {
+    ...toRenderedResourceRef(value),
+    summary: value.summary,
+    fieldCount: value.field_count,
+    fields: value.fields.map((field) => ({
+      path: field.path,
+      oldValue: field.old_value,
+      newValue: field.new_value,
+    })),
   };
 }
 
@@ -367,7 +545,9 @@ function toCommands(
 function toArtifactReceipt(
   value:
     | Awaited<ReturnType<HelmEndpointDependencies["startHelmArtifactRead"]>>
-    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUpgrade"]>>,
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUpgrade"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseRollback"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUninstall"]>>,
 ): HelmArtifactReceipt {
   return {
     accepted: value.accepted,

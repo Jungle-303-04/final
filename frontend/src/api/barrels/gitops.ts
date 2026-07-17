@@ -8,6 +8,16 @@ export {
   getGitOpsResourceTree,
 } from "../gitops-resource-detail";
 export {
+  GITOPS_OVERVIEW_PATH,
+  listGitOpsOverview,
+  type GitOpsOverviewQuery,
+} from "../gitops-overview";
+export {
+  gitOpsOverviewRowSchema,
+  gitOpsOverviewSchema,
+  type GitOpsOverviewEndpoint,
+} from "../gitops-overview-schemas";
+export {
   gitOpsActionCapabilitySchema,
   gitOpsApplicationDetailResponseSchema,
   gitOpsApplicationDetailSchema,

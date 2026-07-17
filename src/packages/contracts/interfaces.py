@@ -209,6 +209,7 @@ class ManagementPlaneClient(Protocol):
         agent_id: str,
         attempt_id: str | None = None,
         observed_cancel_generation: int | None = None,
+        progress: JsonObject | None = None,
     ) -> JsonObject: ...
 
     async def complete_command(

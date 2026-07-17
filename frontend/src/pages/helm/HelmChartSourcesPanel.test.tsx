@@ -84,6 +84,24 @@ describe("HelmChartSourcesPanel", () => {
     expect((screen.getByRole("textbox", { name: "Username" }) as HTMLInputElement).value).toBe("");
   });
 
+  it("refreshes only a server-advertised repository and then refetches the page", async () => {
+    const port = helmPort();
+    port.listChartSources.mockResolvedValue(sourcePage([source({ actions: ["refresh", "delete"] })]));
+    port.refreshChartSource.mockResolvedValue({
+      sourceId: "source-repository",
+      chartCount: 42,
+      observedAt: "2026-07-17T08:10:00Z",
+      eventId: "event-refresh-source",
+      correlationId: "correlation-refresh-source",
+    });
+    render(<HelmChartSourcesPanel port={port} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh Stable chart source" }));
+
+    await waitFor(() => expect(port.refreshChartSource).toHaveBeenCalledWith("Stable"));
+    await waitFor(() => expect(port.listChartSources).toHaveBeenCalledTimes(2));
+  });
+
   it("clears a rejected bearer token and keeps a safe permission error in the dialog", async () => {
     const user = userEvent.setup();
     const port = helmPort();
@@ -174,8 +192,21 @@ function helmPort(): HelmPort & {
   listChartSources: ReturnType<typeof vi.fn>;
   registerChartSource: ReturnType<typeof vi.fn>;
   deleteChartSource: ReturnType<typeof vi.fn>;
+  refreshChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    listInstallTargets: vi.fn().mockResolvedValue({ namespace: "sandbox", targets: [] }),
+    installRelease: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "event-install",
+      auditEventId: "event-install",
+      commandId: "cmd-install",
+      correlationId: "corr-install",
+      status: "queued",
+    }),
+    previewReleaseValues: vi.fn(),
+    searchArtifactHub: vi.fn(),
+    getArtifactHubChart: vi.fn(),
     checkReleaseUpgrades: vi.fn(),
     listReleases: vi.fn(),
     getRelease: vi.fn(),
@@ -183,6 +214,15 @@ function helmPort(): HelmPort & {
     listReleaseVersions: vi.fn(),
     readArtifact: vi.fn(),
     upgradeRelease: vi.fn(),
+    rollbackRelease: vi.fn(),
+    uninstallRelease: vi.fn(),
+    refreshChartSource: vi.fn().mockResolvedValue({
+      sourceId: "source-repository",
+      chartCount: 1,
+      observedAt: "2026-07-17T08:00:00Z",
+      eventId: "event-refresh-source",
+      correlationId: "correlation-refresh-source",
+    }),
     deleteChartSource: vi.fn().mockResolvedValue({
       accepted: true,
       eventId: "event-delete-source",

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createHelmAdapter, toHelmArtifactOperationResult } from "./createHelmAdapter";
+import {
+  createHelmAdapter,
+  toHelmArtifactOperationResult,
+  toHelmValuesPreviewOperationResult,
+} from "./createHelmAdapter";
 
 describe("createHelmAdapter", () => {
   it("keeps unavailable integrations explicit instead of casting provider data", async () => {
@@ -208,6 +212,7 @@ describe("createHelmAdapter", () => {
 
   it("maps only server-advertised upgrade targets and the shared command receipt", async () => {
     const startHelmReleaseUpgrade = vi.fn().mockResolvedValue(receipt());
+    const startHelmReleaseValuesPreview = vi.fn().mockResolvedValue(receipt());
     const currentDetail = detailEndpoint();
     const detail = {
       ...currentDetail,
@@ -215,7 +220,7 @@ describe("createHelmAdapter", () => {
         ...currentDetail.detail,
         commands: {
           availability: "available" as const,
-          actions: ["upgrade" as const] as ["upgrade"],
+          actions: ["upgrade", "rollback", "uninstall"] as const,
           confirmation_required: true as const,
           realtime: true as const,
           upgrade_targets: [{
@@ -243,6 +248,7 @@ describe("createHelmAdapter", () => {
       registerHelmChartSource: vi.fn(),
       startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
       startHelmReleaseUpgrade,
+      startHelmReleaseValuesPreview,
     });
 
     const release = await port.getRelease({
@@ -252,7 +258,7 @@ describe("createHelmAdapter", () => {
     });
     expect(release.commands).toMatchObject({
       availability: "available",
-      actions: ["upgrade"],
+      actions: ["upgrade", "rollback", "uninstall"],
       upgradeTargets: [{ itemId: "catalog-redis", inputs: [{ required: true }] }],
     });
 
@@ -272,6 +278,82 @@ describe("createHelmAdapter", () => {
       expectedRevision: 3,
       catalogItemId: "catalog-redis",
     }), undefined);
+
+    const preview = await port.previewReleaseValues({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "storefront",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+    });
+    expect(preview).toMatchObject({ commandId: "cmd-helm-1", auditEventId: "evt-helm-1" });
+    expect(startHelmReleaseValuesPreview).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+    }), undefined);
+  });
+
+  it("accepts only a strict redacted values preview from the terminal operation result", () => {
+    const resources = {
+      added: [{
+        api_version: "v1",
+        kind: "Service",
+        name: "storefront",
+        namespace: "sandbox",
+      }],
+      removed: [],
+      modified: [{
+        api_version: "apps/v1",
+        kind: "Deployment",
+        name: "storefront",
+        namespace: "sandbox",
+        summary: "1 fields changed",
+        field_count: 1,
+        fields: [{ path: "spec.replicas", old_value: 1, new_value: 3 }],
+      }],
+      unchanged: [],
+      parse_error_count: 0,
+    };
+    const preview = {
+      namespace: "sandbox",
+      release_name: "storefront",
+      expected_revision: 3,
+      catalog_item_id: "catalog-redis",
+      catalog_version: "1.0.0",
+      chart_name: "redis",
+      chart_version: "23.1.1",
+      resources,
+      projection_sha256: "0".repeat(64),
+      projection_bytes: new TextEncoder().encode(JSON.stringify(resources)).byteLength,
+      source_bytes: 1_024,
+      redaction_applied: true,
+      truncated: false,
+    };
+
+    const parsed = toHelmValuesPreviewOperationResult({ result: { preview } });
+    const unsafe = toHelmValuesPreviewOperationResult({
+      result: {
+        preview: {
+          ...preview,
+          redaction_applied: false,
+          raw_manifest: "password=must-not-leak",
+        },
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      expectedRevision: 3,
+      chartName: "redis",
+      chartVersion: "23.1.1",
+      resources: {
+        added: [{ kind: "Service", name: "storefront" }],
+        modified: [{ fields: [{ path: "spec.replicas", oldValue: 1, newValue: 3 }] }],
+      },
+      redactionApplied: true,
+    });
+    expect(unsafe).toBeNull();
   });
 
   it("maps only server-resolved chart source versions and batch availability", async () => {
@@ -410,6 +492,14 @@ function upgradeReadEndpoints() {
     refresh_after_seconds: 10,
   };
   return {
+    listHelmInstallTargets: vi.fn(),
+    startHelmReleaseInstall: vi.fn(),
+    searchArtifactHubCharts: vi.fn(),
+    getArtifactHubChart: vi.fn(),
+    startHelmReleaseRollback: vi.fn().mockResolvedValue(receipt()),
+    startHelmReleaseUninstall: vi.fn().mockResolvedValue(receipt()),
+    startHelmReleaseValuesPreview: vi.fn().mockResolvedValue(receipt()),
+    refreshHelmRepository: vi.fn(),
     getHelmReleaseUpgradeInfo: vi.fn().mockResolvedValue(info),
     listHelmReleaseVersions: vi.fn().mockResolvedValue({
       availability: "available" as const,

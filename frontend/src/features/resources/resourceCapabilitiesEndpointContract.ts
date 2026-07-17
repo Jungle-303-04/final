@@ -43,14 +43,17 @@ export interface ResourceCapabilitiesEndpointResponse {
     input_schema: Array<{
       key: string;
       label: string;
-      type: "integer" | "string";
+      type: "boolean" | "integer" | "string";
       required: boolean;
       minimum: number | null;
       maximum: number | null;
-      default: number | string | null;
+      default: boolean | number | string | null;
+      prefill_result_key: string | null;
     }>;
     method: "POST" | "WEBSOCKET";
     path: string;
+    request_context: "simple" | "exact-resource" | "rollback";
+    result_intent: "refresh-resource" | "resource-summary" | "terminal-session";
   }>;
 }
 

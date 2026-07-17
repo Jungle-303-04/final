@@ -101,15 +101,19 @@ class HelmUpgradeTarget(StrictModel):
 
 class HelmReleaseCommands(StrictModel):
     availability: Literal["available"] = "available"
-    actions: tuple[Literal["upgrade"], ...] = ("upgrade",)
+    actions: tuple[Literal["upgrade", "rollback", "uninstall"], ...] = (
+        "upgrade",
+        "rollback",
+        "uninstall",
+    )
     confirmation_required: Literal[True] = True
     realtime: Literal[True] = True
     upgrade_targets: tuple[HelmUpgradeTarget, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def executable_actions_are_exact(self) -> HelmReleaseCommands:
-        if self.actions != ("upgrade",):
-            raise ValueError("Helm release commands must expose only upgrade")
+        if self.actions != ("upgrade", "rollback", "uninstall"):
+            raise ValueError("Helm release commands must expose the reviewed action set")
         identities = tuple((item.item_id, item.version) for item in self.upgrade_targets)
         if len(set(identities)) != len(identities):
             raise ValueError("Helm upgrade targets must be unique")
@@ -120,25 +124,61 @@ class HelmReleaseCommands(StrictModel):
         return self
 
 
-class HelmReleaseUpgradeRequest(StrictModel):
+class HelmCandidateValues(StrictModel):
+    """Bounded server-owned catalog candidate shared by preview and apply."""
+
+    catalog_item_id: str = Field(min_length=1, max_length=120)
+    catalog_version: str = Field(min_length=1, max_length=80)
+    values: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def values_are_bounded(self) -> HelmCandidateValues:
+        if len(self.values) > 100:
+            raise ValueError("Helm candidate values exceed the field limit")
+        try:
+            encoded = json.dumps(self.values, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Helm candidate values must be JSON compatible") from error
+        if len(encoded.encode("utf-8")) > 65_536:
+            raise ValueError("Helm candidate values exceed the byte limit")
+        return self
+
+
+class HelmReleaseCandidateRequest(HelmCandidateValues):
     cluster_id: str = Field(min_length=1, max_length=253)
     expected_revision: int = Field(ge=1)
+
+
+class HelmReleaseUpgradeRequest(HelmReleaseCandidateRequest):
+    confirmation: Literal[True]
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class HelmInstallTargetsResponse(StrictModel):
+    namespace: str = Field(min_length=1, max_length=63)
+    targets: tuple[HelmUpgradeTarget, ...] = Field(default=(), max_length=100)
+
+
+class HelmReleaseInstallRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=253)
+    namespace: str = Field(min_length=1, max_length=63)
+    application_name: str = Field(min_length=1, max_length=120)
+    release_name: str = Field(min_length=1, max_length=120)
     catalog_item_id: str = Field(min_length=1, max_length=120)
     catalog_version: str = Field(min_length=1, max_length=80)
     values: dict[str, Any] = Field(default_factory=dict)
     confirmation: Literal[True]
-    reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def values_are_bounded(self) -> HelmReleaseUpgradeRequest:
-        if len(self.values) > 100:
-            raise ValueError("Helm upgrade values exceed the field limit")
-        try:
-            encoded = json.dumps(self.values, sort_keys=True, separators=(",", ":"))
-        except (TypeError, ValueError) as error:
-            raise ValueError("Helm upgrade values must be JSON compatible") from error
-        if len(encoded.encode("utf-8")) > 65_536:
-            raise ValueError("Helm upgrade values exceed the byte limit")
+    def values_are_bounded(self) -> HelmReleaseInstallRequest:
+        HelmReleaseUpgradeRequest(
+            cluster_id=self.cluster_id,
+            expected_revision=1,
+            catalog_item_id=self.catalog_item_id,
+            catalog_version=self.catalog_version,
+            values=self.values,
+            confirmation=True,
+        )
         return self
 
 

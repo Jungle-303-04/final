@@ -156,66 +156,115 @@ describe("createGitOpsAdapter", () => {
     });
   });
 
-  it("maps real deployment poll observations into the GitOps sync table", async () => {
+  it("maps the canonical overview in one call without deployment N+1", async () => {
     const endpoints = endpointFixture({
-      listApplications: vi.fn().mockResolvedValue({ applications: [{
-        application_id: "checkout-api",
-        name: "Checkout API",
-      }] }),
-      listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [{
-        binding_id: "binding-production",
-        cluster_id: "prod-east",
-        namespace: "checkout",
-        environment: "production",
-        gitops_poll: {
-          status: "synced",
-          last_seen_commit_sha: "81de44f",
-          last_polled_at: "2026-07-15T01:02:03Z",
+      listOverview: vi.fn().mockResolvedValue({
+        workspace_id: "workspace-a",
+        scopes: [],
+        items: [{
+          id: "controller:prod-east:application-uid",
+          authority: "controller",
+          provider: "argo",
+          role: "controller",
+          display_name: "Checkout API",
+          application_ids: [],
+          binding_id: null,
+          scope: {
+            workspace_id: "workspace-a",
+            cluster_id: "prod-east",
+            namespaces: ["checkout"],
+            freshness: "live",
+          },
+          resource: {
+            api_group: "argoproj.io",
+            version: "v1alpha1",
+            kind: "Application",
+            namespace: "checkout",
+            name: "checkout-api",
+            uid: "application-uid",
+          },
+          environment: null,
+          status: "Synced",
+          health: "Healthy",
+          revision: "81de44f",
+          observed_at: "2026-07-15T01:02:03Z",
+          labels: { team: "checkout" },
+          capabilities: {
+            scope: {
+              workspace_id: "workspace-a",
+              cluster_id: "prod-east",
+              namespaces: ["checkout"],
+              freshness: "live",
+            },
+            resource: {
+              api_group: "argoproj.io",
+              version: "v1alpha1",
+              kind: "Application",
+              namespace: "checkout",
+              name: "checkout-api",
+              uid: "application-uid",
+            },
+            revision: "17",
+            actions: [],
+          },
+          partial_reason_codes: [],
+        }],
+        kind_counts: [],
+        coverage: {
+          state: "complete",
+          registered_count: 0,
+          controller_count: 1,
+          returned_count: 1,
+          reason_codes: [],
         },
-      }, {
-        binding_id: "binding-staging",
-        cluster_id: "staging-east",
-        namespace: "checkout",
-        environment: "staging",
-      }] }),
+        observed_at: "2026-07-15T01:02:03Z",
+      }),
     });
 
     await expect(createGitOpsAdapter(endpoints).listSyncTargets()).resolves.toEqual([{
-      id: "checkout-api:binding-production",
-      applicationId: "checkout-api",
+      id: "controller:prod-east:application-uid",
+      applicationId: "application-uid",
       applicationName: "Checkout API",
       clusterId: "prod-east",
       namespace: "checkout",
-      environment: "production",
-      syncStatus: "synced",
+      environment: null,
+      syncStatus: "Synced",
       revision: "81de44f",
       observedAt: "2026-07-15T01:02:03Z",
-    }, {
-      id: "checkout-api:binding-staging",
-      applicationId: "checkout-api",
-      applicationName: "Checkout API",
-      clusterId: "staging-east",
-      namespace: "checkout",
-      environment: "staging",
-      syncStatus: null,
-      revision: null,
-      observedAt: null,
+      authority: "controller",
+      provider: "argo",
+      kind: "Application",
+      health: "Healthy",
+      resourceLocator: {
+        clusterId: "prod-east",
+        apiVersion: "argoproj.io/v1alpha1",
+        kind: "Application",
+        namespace: "checkout",
+        name: "checkout-api",
+      },
+      freshness: "live",
+      partialReasonCodes: [],
     }]);
-    expect(endpoints.listApplicationDeployments).toHaveBeenCalledWith(
-      "checkout-api",
-      { signal: undefined },
-    );
+    expect(endpoints.listOverview).toHaveBeenCalledTimes(1);
+    expect(endpoints.listApplications).not.toHaveBeenCalled();
   });
 
-  it("rejects deployment rows without a stable binding identity", async () => {
+  it("rejects overview rows without a stable identity", async () => {
     const endpoints = endpointFixture({
-      listApplications: vi.fn().mockResolvedValue({ applications: [{
-        application_id: "checkout-api",
-        name: "Checkout API",
-      }] }),
-      listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [{
-        cluster_id: "prod-east",
-      }] }),
+      listOverview: vi.fn().mockResolvedValue({
+        workspace_id: "workspace-a",
+        scopes: [],
+        items: [{ id: "" }],
+        kind_counts: [],
+        coverage: {
+          state: "complete",
+          registered_count: 0,
+          controller_count: 1,
+          returned_count: 1,
+          reason_codes: [],
+        },
+        observed_at: null,
+      }),
     });
 
     await expect(createGitOpsAdapter(endpoints).listSyncTargets()).rejects.toMatchObject({
@@ -282,8 +331,21 @@ function endpointFixture(
   const unsupported = vi.fn().mockRejectedValue(new Error("not implemented"));
   return {
     getApplicationDetail: vi.fn().mockResolvedValue({ application: detailFixture() }),
+    listOverview: vi.fn().mockResolvedValue({
+      workspace_id: "workspace-a",
+      scopes: [],
+      items: [],
+      kind_counts: [],
+      coverage: {
+        state: "complete",
+        registered_count: 0,
+        controller_count: 0,
+        returned_count: 0,
+        reason_codes: [],
+      },
+      observed_at: null,
+    }),
     listApplications: vi.fn().mockResolvedValue({ applications: [] }),
-    listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [] }),
     listClusters: vi.fn().mockResolvedValue({ clusters: [] }),
     connectApplication: unsupported,
     listPlans: vi.fn().mockResolvedValue({ plans: [] }),

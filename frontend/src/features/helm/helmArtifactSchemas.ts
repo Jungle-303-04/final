@@ -91,7 +91,7 @@ const hooksArtifactSchema = z.strictObject({
   );
 });
 
-const resourceRefSchema = z.strictObject({
+export const helmRenderedResourceRefSchema = z.strictObject({
   api_version: z.string().max(253),
   kind: z.string().min(1).max(253),
   name: z.string().min(1).max(253),
@@ -105,7 +105,7 @@ const resourceFieldValueSchema = z.union([
   z.null(),
 ]);
 
-const resourceChangeSchema = resourceRefSchema.extend({
+export const helmRenderedResourceChangeSchema = helmRenderedResourceRefSchema.extend({
   summary: z.string().max(1024),
   field_count: z.number().int().positive(),
   fields: z.array(z.strictObject({
@@ -125,10 +125,10 @@ const resourceChangeSchema = resourceRefSchema.extend({
 const resourcesDiffSchema = z.strictObject({
   revision1: z.number().int().positive(),
   revision2: z.number().int().positive(),
-  added: z.array(resourceRefSchema),
-  removed: z.array(resourceRefSchema),
-  modified: z.array(resourceChangeSchema),
-  unchanged: z.array(resourceRefSchema),
+  added: z.array(helmRenderedResourceRefSchema),
+  removed: z.array(helmRenderedResourceRefSchema),
+  modified: z.array(helmRenderedResourceChangeSchema),
+  unchanged: z.array(helmRenderedResourceRefSchema),
   parse_error_count: z.number().int().nonnegative(),
 });
 
@@ -155,7 +155,36 @@ export const helmArtifactResultSchema = z.union([
   resourcesArtifactSchema,
 ]);
 
+const helmValuesPreviewResourcesSchema = z.strictObject({
+  added: z.array(helmRenderedResourceRefSchema),
+  removed: z.array(helmRenderedResourceRefSchema),
+  modified: z.array(helmRenderedResourceChangeSchema),
+  unchanged: z.array(helmRenderedResourceRefSchema),
+  parse_error_count: z.number().int().nonnegative(),
+});
+
+export const helmValuesPreviewResultSchema = z.strictObject({
+  namespace: z.string().min(1).max(63),
+  release_name: z.string().min(1).max(53),
+  expected_revision: z.number().int().positive(),
+  catalog_item_id: z.string().min(1).max(120),
+  catalog_version: z.string().min(1).max(80),
+  chart_name: z.string().min(1).max(512),
+  chart_version: z.string().min(1).max(256),
+  resources: helmValuesPreviewResourcesSchema,
+  projection_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+  projection_bytes: z.number().int().nonnegative().max(MAX_ARTIFACT_BYTES),
+  source_bytes: z.number().int().nonnegative().max(32 * 1024 * 1024),
+  redaction_applied: z.literal(true),
+  truncated: z.boolean(),
+}).superRefine((value, context) => {
+  if (new TextEncoder().encode(JSON.stringify(value.resources)).byteLength !== value.projection_bytes) {
+    context.addIssue({ code: "custom", message: "Helm preview byte count is invalid" });
+  }
+});
+
 export type HelmArtifactResultEndpoint = z.infer<typeof helmArtifactResultSchema>;
+export type HelmValuesPreviewResultEndpoint = z.infer<typeof helmValuesPreviewResultSchema>;
 
 function validateStructuredArtifact(
   value: {

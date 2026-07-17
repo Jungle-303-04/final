@@ -126,16 +126,22 @@ function podFacts(
     containerNames: optionalFact(
       "containerNames",
       [],
-      () => podContainerNames(summary.containers),
+      () => podContainerNames(summary.containers, summary.ephemeral_containers),
       warn,
     ),
   };
 }
 
-function podContainerNames(value: unknown): string[] {
+function podContainerNames(value: unknown, ephemeralValue: unknown): string[] {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value)) invalidResponse();
-  return responseStringArray(value.map((item) => responseRecord(item).name));
+  const regular = responseStringArray(value.map((item) => responseRecord(item).name));
+  if (ephemeralValue === null || ephemeralValue === undefined) return regular;
+  if (!Array.isArray(ephemeralValue)) invalidResponse();
+  return Array.from(new Set([
+    ...regular,
+    ...responseStringArray(ephemeralValue.map((item) => responseRecord(item).name)),
+  ]));
 }
 
 function nodeFacts(

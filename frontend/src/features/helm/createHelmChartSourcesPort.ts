@@ -7,7 +7,7 @@ import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
 type HelmChartSourcesPort = Pick<
   HelmPort,
-  "deleteChartSource" | "listChartSources" | "registerChartSource"
+  "deleteChartSource" | "listChartSources" | "refreshChartSource" | "registerChartSource"
 >;
 
 export function createHelmChartSourcesPort(
@@ -41,6 +41,18 @@ export function createHelmChartSourcesPort(
           accepted: receipt.accepted,
           eventId: receipt.event_id,
           correlationId: receipt.correlation_id,
+        };
+      });
+    },
+    async refreshChartSource(name, signal) {
+      return withHelmPortFailure(async () => {
+        const result = await endpoints.refreshHelmRepository(name, signal);
+        return {
+          sourceId: result.source_id,
+          chartCount: result.chart_count,
+          observedAt: result.observed_at,
+          eventId: result.event_id,
+          correlationId: result.correlation_id,
         };
       });
     },

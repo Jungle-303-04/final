@@ -141,6 +141,44 @@ test("경로 접미사의 fetch progress stream도 실시간 계약으로 분류
   assert.equal(ledger.features[0].coverage.realtime, null);
 });
 
+test("동기 원본 endpoint를 durable OperationEvent로 이식한 행은 port map 실시간 증거를 따른다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## API",
+      "| Method·path | 요청 |",
+      "|---|---|",
+      "| `POST /nodes/{name}/drain` | 장시간 요청 |",
+    ].join("\n"),
+    REVISION,
+    {
+      ...PORT_MAP,
+      features: {
+        "reference.feature.001": {
+          streaming: true,
+          coverage: {
+            backend: { state: "implemented" },
+            frontend: { state: "implemented" },
+            realtime: {
+              state: "implemented",
+              destination: "frontend/src/features/operations/OperationStatusStore.tsx",
+              consumer: "frontend/src/api/operation-events.ts",
+              test: "frontend/src/features/operations/OperationStatusStore.test.ts",
+            },
+          },
+        },
+      },
+    },
+    {
+      "reference.feature.001":
+        "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
+    },
+  );
+
+  assert.equal(ledger.features[0].streaming, true);
+  assert.equal(ledger.features[0].coverage.realtime.state, "implemented");
+  assert.equal(ledger.features[0].identityStatus, "source-key");
+});
+
 test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태를 생성한다", () => {
   const ledger = parseReferenceInventory(
     [
@@ -469,7 +507,7 @@ test("baseline 웹 출하 게이트는 명시적 post-parity 기능을 제외하
   );
 });
 
-test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
+test("feature ledger는 누락된 source identity·계약과 중복 ID를 거부한다", () => {
   const errors = validateFeatureLedger({
     schemaVersion: 1,
     sourceRevision: REVISION,
@@ -529,9 +567,11 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
   });
 
   assert.deepEqual(errors, [
+    "reference-feature-001: implemented source identity is required",
     "reference-feature-001: backendContract is required",
     "reference-feature-001: frontendContract is required",
     "reference-feature-001: at least one verification target is required",
+    "reference-feature-001: implemented source identity is required",
     "reference-feature-001: id is duplicated",
   ]);
 });

@@ -319,6 +319,9 @@ def test_every_known_subject_has_an_explicit_canonical_journey_stage() -> None:
     assert audit_router.audit_journey_stage(EventSubject.COMMAND_COMPLETED.value) == "command"
     assert audit_router.audit_journey_stage(EventSubject.SAFE_PR_CREATED.value) == "pr"
     assert audit_router.audit_journey_stage(EventSubject.WORKFLOW_RUN_COMPLETED.value) == "workflow"
+    assert (
+        audit_router.audit_journey_stage(EventSubject.HELM_CHART_SOURCE_REFRESHED.value) == "system"
+    )
     assert audit_router.audit_journey_stage("extension.secret") == "unknown"
 
 

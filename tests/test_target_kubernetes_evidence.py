@@ -325,6 +325,33 @@ def test_pod_requests_survive_provider_inventory_and_physical_usage_projection()
     assert topology["pods"][0]["usage_pct"] == 50.0
 
 
+def test_pod_summary_preserves_ephemeral_debug_container_identity_for_terminal_handoff() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {
+                "uid": "pod-1",
+                "resourceVersion": "18",
+                "name": "checkout-0",
+                "namespace": "shop",
+            },
+            "spec": {
+                "containers": [{"name": "app"}],
+                "ephemeralContainers": [
+                    {
+                        "name": "opsia-debug-abc123",
+                        "targetContainerName": "app",
+                    }
+                ],
+            },
+            "status": {"phase": "Running", "containerStatuses": []},
+        }
+    )
+
+    assert summary["ephemeral_containers"] == [{"name": "opsia-debug-abc123"}]
+
+
 def test_pod_requests_and_limits_survive_one_provider_inventory_projection() -> None:
     _, kubernetes_module = load_evidence_modules()
     summary = kubernetes_module.pod_summary(

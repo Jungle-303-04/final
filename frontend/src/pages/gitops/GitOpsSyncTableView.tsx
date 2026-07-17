@@ -1,9 +1,11 @@
 import { ChevronDown, GitBranch, RefreshCw, Search } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import type {
   GitOpsPort,
   GitOpsSyncTarget,
+  GitOpsSyncTargetQuery,
   ReleaseApplication,
   ReleaseCluster,
   ReleaseTargetInput,
@@ -13,6 +15,7 @@ import {
   gitOpsSyncCategory,
   type GitOpsSyncCategory,
 } from "../../features/gitops/gitOpsPresentation";
+import { gitOpsResourceDetailPath } from "../../features/gitops/gitOpsResourceDetailRoute";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
@@ -40,9 +43,11 @@ type GitOpsRefreshPolicyKey = "gitops_rows" | "gitops_counts";
 
 export function GitOpsSyncTableView({
   port,
+  scopeQuery,
   refreshPolicies,
 }: {
   port: GitOpsPort;
+  scopeQuery?: GitOpsSyncTargetQuery;
   refreshPolicies: BrowserRefreshPolicyRegistry<GitOpsRefreshPolicyKey>;
 }) {
   const { formatDate, t } = useI18n();
@@ -96,7 +101,7 @@ export function GitOpsSyncTableView({
     const controller = new AbortController();
     rowsRefresh.backgroundFailure();
     countsRefresh.backgroundFailure();
-    void port.listSyncTargets(controller.signal).then((nextRows) => {
+    void port.listSyncTargets(controller.signal, scopeQuery).then((nextRows) => {
       setRows(nextRows);
       setSuccessfulRead((current) => ({
         sequence: (current?.sequence ?? 0) + 1,
@@ -111,7 +116,7 @@ export function GitOpsSyncTableView({
       setLoading(false);
     });
     return () => controller.abort();
-  }, [countsRefresh, port, request, rowsRefresh]);
+  }, [countsRefresh, port, request, rowsRefresh, scopeQuery]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -233,8 +238,22 @@ export function GitOpsSyncTableView({
                     <TableRow data-state={selected ? "selected" : undefined}>
                       <TableCell>
                         <span className="grid min-w-40 gap-0.5">
-                          <span className="font-medium">{row.applicationName}</span>
+                          {row.resourceLocator ? (
+                            <Link
+                              className="w-fit font-medium text-primary underline-offset-4 hover:underline"
+                              to={gitOpsResourceDetailPath(row.resourceLocator)}
+                            >
+                              {row.applicationName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{row.applicationName}</span>
+                          )}
                           <OverflowIdentity className="font-mono text-xs text-muted-foreground" value={row.applicationId} />
+                          {row.partialReasonCodes?.length ? (
+                            <span className="text-xs text-amber-700 dark:text-amber-300">
+                              {row.partialReasonCodes.join(", ")}
+                            </span>
+                          ) : null}
                         </span>
                       </TableCell>
                       <TableCell>

@@ -6783,124 +6783,163 @@
     },
     {
       "contractId": "reference.feature.174",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:nodes:drain:confirm-and-progress:v1",
       "legacyContractIds": [
         "reference.feature.174"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-174",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
         "POST /nodes/{name}/drain"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.NodeDrainRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_command_catalog.py",
+        "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/features/operations/OperationStatusStore.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/resource-capability-actions.test.ts",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No cancellable drain action, eviction option contract, PodDisruptionBudget handling, or progress-producing executor is registered.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#drain_node",
+          "consumer": "src/services/target/cluster-agent/agent.py#drain_node_command",
+          "reason": "The exact observed Node UID/resourceVersion is revalidated immediately before one bounded cordon-and-evict run; DaemonSet/static/unmanaged/emptyDir policy, PDB failures, cancellation boundaries, timeout, and per-Pod partial results are preserved in the durable operation stream.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "The common operation dock can stream progress, but no Node drain capability or option form is available.",
-          "test": "frontend/src/features/operations/OperationStatusStore.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "reason": "The server-owned capability descriptor supplies bounded drain inputs, one target-impact confirmation, exact snapshot context, idempotency, and reconnectable operation progress without a duplicated action list.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The accepted drain receipt resumes one durable SSE command stream and preserves bounded progress plus the terminal per-Pod result without replaying the mutation.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {
       "contractId": "reference.feature.175",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:pods:debug-terminal:ephemeral-container:v1",
       "legacyContractIds": [
         "reference.feature.175"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-175",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
         "POST /pods/{ns}/{name}/debug"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/PodTerminalDialog.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.PodDebugRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_pod_terminal.py",
-        "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
+        "tests/test_command_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_target_kubernetes_evidence.py",
+        "tests/test_target_registration.py",
+        "frontend/src/api/resource-capability-actions.test.ts",
+        "frontend/src/features/resources/resourceFacts.debug.test.ts",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/services/target/cluster-agent/terminal_exec.py#PodExecController",
-          "reason": "The current terminal opens an existing container; no ephemeral-container debug mutation or resulting debug session receipt exists.",
-          "test": "tests/test_pod_terminal.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#debug_pod",
+          "consumer": "src/services/target/cluster-agent/agent.py#debug_pod_command",
+          "reason": "A digest-pinned ephemeral container is attached only after exact Pod UID/resourceVersion and target-container revalidation; the server owns the collision-free container identity and streams its receipt and result.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/PodTerminalDialog.tsx",
-          "reason": "Existing Pod exec cannot be treated as an ephemeral debug container action.",
-          "test": "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/pages/resources/PodTerminalDialog.tsx#PodTerminalDialog",
+          "reason": "The debug mutation uses the shared exact action context; terminal completion invalidates inventory, and the observed ephemeral container identity is then merged into the existing audited Pod terminal selector.",
+          "test": "frontend/src/features/resources/resourceFacts.debug.test.ts"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The accepted Pod debug receipt resumes one durable SSE command stream and hands the server-owned terminal coordinates to the existing audited terminal only after observed completion.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {
       "contractId": "reference.feature.176",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:nodes:debug-terminal:session-lifecycle:v1",
       "legacyContractIds": [
         "reference.feature.176"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-176",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
         "POST /nodes/{name}/debug",
         "DELETE /nodes/{name}/debug"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.NodeDebugRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_command_catalog.py",
-        "tests/test_target_agent_commands.py"
+        "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_target_registration.py",
+        "frontend/src/api/resource-capability-actions.test.ts",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No Node debug Pod lifecycle, cleanup action, session ownership, or target-agent executor is registered.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#debug_node",
+          "consumer": "src/services/target/cluster-agent/agent.py#cleanup_node_debug_command",
+          "reason": "Create and cleanup use server-derived session/Pod names, exact Node UID/resourceVersion revalidation, namespace policy, digest-pinned images, owned labels, and UID/resourceVersion delete preconditions; cleanup cannot delete an unrelated same-name Pod.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "No Node debug session capability is exposed to the browser.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "reason": "Server-owned create and owned-cleanup capabilities share the resource action form, exact snapshot context, one confirmation, idempotency, and reconnectable operation events.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
+          "reason": "The accepted Node debug receipt resumes one durable SSE command stream, consumes terminal and cleanup coordinates from the observed result, and never reconstructs them in the browser.",
+          "test": "frontend/src/api/operation-events.test.ts"
+        }
       }
     },
     {
@@ -7599,26 +7638,30 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.sources.HelmRepositoryRefreshAccepted",
+      "frontendContract": "frontend/src/features/helm/helmChartSourcesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
-        "frontend/src/pages/helm/HelmPage.test.tsx"
+        "tests/test_helm_chart_source_router.py",
+        "tests/test_helm_chart_provider_fetch.py",
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/router.py",
-          "reason": "Curated server recipes have no browser-mutable repository cache or refresh operation.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#update_helm_repository",
+          "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.refresh_repository",
+          "reason": "The exact authorized repository cache is invalidated, refetched, and recorded with a durable CONFIG_UPDATE audit event.",
+          "test": "tests/test_helm_chart_source_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "No repository update control is exposed without an owner-authorized provider.",
-          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartSourcesPanel.tsx#ChartSourceTable",
+          "consumer": "frontend/src/features/helm/createHelmChartSourcesPort.ts#createHelmChartSourcesPort",
+          "reason": "Refresh appears only on the server-advertised repository action and refetches the page after success.",
+          "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -7814,25 +7857,28 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacthub.ArtifactHubSearchPage",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_artifacthub.py",
+        "frontend/src/api/helm-artifacthub.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/router.py",
-          "reason": "No external catalog provider, pagination contract, trust metadata, timeout, or cache policy exists.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#search_artifacthub_charts",
+          "consumer": "src/domains/helm/artifacthub_provider.py#ArtifactHubProvider.search",
+          "reason": "Fixed-host bounded transport projects only typed chart and trust metadata.",
+          "test": "tests/test_helm_artifacthub.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "External search results are not hardcoded into the browser.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmArtifactHubPanel.tsx#HelmArtifactHubPanel",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "Bounded search renders typed trust badges without promoting discovery to execution.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -7855,25 +7901,28 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacthub.ArtifactHubChartDetail",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_artifacthub.py",
+        "frontend/src/api/helm-artifacthub.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/router.py",
-          "reason": "The product has no external chart detail provider or verified mapping from external identity to an executable server recipe.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#get_artifacthub_chart_version",
+          "consumer": "src/domains/helm/artifacthub_provider.py#ArtifactHubProvider.chart",
+          "reason": "Latest and exact-version details are escaped and bounded without creating an executable mapping.",
+          "test": "tests/test_helm_artifacthub.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The curated catalog detail cannot be relabeled as arbitrary external chart detail.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmArtifactHubPanel.tsx#HelmArtifactHubPanel",
+          "consumer": "frontend/src/api/helm-artifacthub.ts#getArtifactHubChart",
+          "reason": "Exact read-only discovery details expose no external install action.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -7895,8 +7944,8 @@
       "streaming": true,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
       "desktopContract": null,
       "verification": [
@@ -7904,22 +7953,25 @@
         "tests/test_catalog_agent_runner.py",
         "tests/test_target_agent_commands.py",
         "tests/test_operation_event_hub.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/api/helm-releases.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx",
         "frontend/src/api/operation-events.test.ts"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/catalog/router.py#install_catalog_item",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_install_stream",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The idempotent Agent executor is complete for digest-pinned server recipes in the sandbox namespace, not arbitrary chart, repository, namespace, or credential input.",
-          "test": "tests/test_catalog_agent_runner.py"
+          "reason": "The digest-pinned server recipe now returns the common staged CommandReceipt, preserves catalog idempotency, and emits the first durable OperationEvent before Agent execution.",
+          "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseInstallDialog.tsx#HelmReleaseInstallDialog",
           "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "reason": "The durable operation reader exists, but no Helm wizard accepts the bounded catalog install receipt.",
-          "test": "frontend/src/api/operation-events.test.ts"
+          "reason": "The wizard consumes server-owned targets and hands the accepted command to the shared operation dock.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
         "realtime": {
@@ -7996,9 +8048,9 @@
       "streaming": true,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
-      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.operations.HelmReleaseRollbackRequest",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
@@ -8007,23 +8059,25 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The catalog installer has no observed-release identity, target revision payload, rollback capability, or Agent handler.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_rollback",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_release_operation",
+          "reason": "Server and Agent double-revalidate exact release CAS evidence before bounded rollback.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "No rollback control is rendered without an authorized action descriptor and receipt.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseOperationDialogs.tsx#HelmReleaseOperationDialogs",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "Only older observed revisions can be confirmed and sent to the shared operation dock.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
         "realtime": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "reason": "The shared stream is ready, but no rollback command can issue the first durable event.",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
+          "reason": "The audited receipt starts the shared resumable rollback operation stream.",
           "test": "tests/test_operation_event_hub.py"
         }
       }
@@ -8043,25 +8097,29 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.previews.HelmValuesPreviewResult",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_values_preview.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/install.py#validate_catalog_values",
-          "reason": "Catalog values schema validation exists, but no provider renders a revision-bound preview artifact or redacted manifest diff.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_values_preview",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_values_preview",
+          "reason": "The target Agent renders a digest-pinned revision-bound candidate and returns only a bounded redacted resource diff.",
+          "test": "tests/test_helm_values_preview.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The browser has no typed preview response to confirm.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#toHelmValuesPreviewOperationResult",
+          "reason": "The values editor strictly validates and renders the shared redacted resource diff while preserving the existing upgrade flow when preview is unavailable.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -8083,9 +8141,9 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
-      "frontendContract": "frontend/src/pages/helm",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
@@ -8093,15 +8151,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "reason": "Applying release values is an upgrade and requires the missing provider validation, executor, audit receipt, and operation stream handoff.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#apply_helm_release_values",
+          "consumer": "src/domains/helm/release_router.py#create_helm_release_upgrade",
+          "reason": "Values apply reuses the reviewed revision-bound upgrade, Agent CAS, audit, and stream.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "No values editor or Apply action is exposed against the read-only release projection.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "consumer": "frontend/src/api/helm-releases.ts#applyHelmReleaseValues",
+          "reason": "One shared typed values editor validates declared inputs and confirms the exact target diff.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -8123,9 +8183,9 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
-      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.operations.HelmReleaseUninstallRequest",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
@@ -8134,16 +8194,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The Agent has no uninstall action, observed-release ownership proof, capability, or command payload.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_uninstall",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_release_operation",
+          "reason": "Exact release CAS evidence is double-revalidated before bounded uninstall.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The release detail never exposes a destructive action without an exact server capability and one-time confirmation.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseOperationDialogs.tsx#HelmReleaseOperationDialogs",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "The destructive action is capability-gated and exact-target confirmed before dispatch.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -8167,29 +8228,33 @@
       "streaming": false,
       "area": "gitops-workspace",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gitops.detail",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gitops.overview",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_application_product_router.py",
-        "tests/test_gitops_application_detail_router.py",
+        "tests/test_gitops_overview_contract.py",
+        "tests/test_gitops_overview_projection.py",
+        "tests/test_gitops_overview_repository.py",
+        "tests/test_gitops_overview_router.py",
+        "frontend/src/api/gitops-overview.test.ts",
         "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+        "frontend/src/pages/gitops/GitOpsPage.test.tsx",
         "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/applications/router.py#list_applications",
-          "consumer": "src/domains/gitops/detail_router.py#get_gitops_application_detail",
-          "reason": "Authorized applications and deployment bindings replace raw controller CR discovery, but external GitOps kind, labels, health, and managed-resource inventory are not projected.",
-          "test": "tests/test_gitops_application_detail_router.py"
+          "state": "implemented",
+          "destination": "src/domains/gitops/overview_router.py#list_gitops_overview",
+          "consumer": "src/domains/gitops/overview_projection.py#project_gitops_overview",
+          "reason": "One authorized bounded aggregate preserves registered bindings and projects observed Argo and Flux controller/source identities, status, health, labels, freshness, capability evidence, and partial reasons without raw CR payloads or per-row reads.",
+          "test": "tests/test_gitops_overview_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
           "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
-          "reason": "The fleet table uses canonical application and binding identity without browser CR normalization; provider-specific facets remain unavailable.",
+          "reason": "The fleet table consumes the canonical mixed overview in one request, preserves registered rows, shows observed controller evidence and partial coverage, and links exact resources to the shared GitOps detail route without browser CR normalization.",
           "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
         },
         "desktop": null,

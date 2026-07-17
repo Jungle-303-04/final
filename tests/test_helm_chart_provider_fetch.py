@@ -636,6 +636,31 @@ def test_provider_absolute_deadline_includes_dns_resolution() -> None:
     assert transport_calls == 0
 
 
+def test_repository_refresh_invalidates_shared_index_and_returns_real_chart_count() -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        entries = {"redis": [{"version": "1.0.0"}]}
+        if calls > 1:
+            entries["postgresql"] = [{"version": "2.0.0"}]
+        return httpx.Response(200, json={"apiVersion": "v1", "entries": entries})
+
+    provider = HelmChartVersionProvider(
+        transport=httpx.MockTransport(handler),
+        resolver=_public_resolver,
+    )
+    source = _source()
+    first = asyncio.run(provider.fetch_versions(source, "redis"))
+    refreshed = asyncio.run(provider.refresh_repository(source))
+
+    assert first.availability == "available"
+    assert refreshed.chart_count == 2
+    assert refreshed.source_id == source.source_id
+    assert calls == 2
+
+
 def test_provider_rejects_encoded_response_before_decompression() -> None:
     stream_iterated = False
     compressed = gzip.compress(b"x" * (HELM_CHART_PROVIDER_MAX_RESPONSE_BYTES + 1))
