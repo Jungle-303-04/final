@@ -13,6 +13,7 @@ from domains.gitops.models import DeploymentBinding, GitRepository, WorkflowRun,
 from domains.rca_changes.models import WorkflowPrReference, WorkloadChange
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gitops import (
     DeploymentBindingStatus,
     RepositoryStatus,
@@ -222,7 +223,7 @@ class RcaChangesRepository(DatabaseConnection):
         resource_name: str,
         incident_id: str,
         *,
-        limit: int = 5,
+        limit: int = gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
     ) -> list[JsonObject]:
         change = WorkloadChange.__table__
         reference = WorkflowPrReference.__table__
@@ -401,7 +402,7 @@ class RcaChangesRepository(DatabaseConnection):
         resource_name: str,
         changed_before: str,
         *,
-        limit: int = 5,
+        limit: int = gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT,
     ) -> list[JsonObject]:
         """RCA evidence 생성 시점에 workload/time 기준 최근 GitOps 변경을 읽는다."""
 

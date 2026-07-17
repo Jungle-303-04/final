@@ -68,6 +68,30 @@ def test_filter_parser_rejects_ambiguous_or_empty_tokens(field: str, value: str)
 
 
 @pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("clusters", "cluster-a\ncluster-b"),
+        ("query", "checkout\r\nsecret"),
+    ],
+)
+def test_filter_parser_rejects_control_characters(field: str, value: str) -> None:
+    kwargs = {
+        "clusters": None,
+        "namespaces": None,
+        "applications": None,
+        "resource_types": None,
+        "health": None,
+        "labels": None,
+        "query": None,
+        "include_deleted": False,
+    }
+    kwargs[field] = value
+
+    with pytest.raises(ValueError, match="unsafe control characters"):
+        parse_resource_filters(**kwargs)
+
+
+@pytest.mark.parametrize(
     "selector",
     (
         "UPPER.example.com/team=checkout",

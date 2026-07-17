@@ -21,6 +21,7 @@ from domains.issue_filter.query import IssueFilters, parse_issue_filters
 from domains.rca_changes.router import recent_change_item
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
@@ -51,8 +52,9 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_TIMELINE_LIMIT = 50
-MAX_TIMELINE_LIMIT = 100
+DEFAULT_TIMELINE_LIMIT = gateway_limits.DASHBOARD_RCA_DEFAULT_LIMIT
+MAX_TIMELINE_LIMIT = gateway_limits.DASHBOARD_RCA_MAX_LIMIT
+DEFAULT_RESOURCE_ISSUE_LIMIT = gateway_limits.RESOURCE_ISSUE_DEFAULT_LIMIT
 NOT_FOUND_CODE = 404
 TIMELINE_ITEM_FIELDS = set(RcaTimelineItem.model_fields)
 METRIC_QUERY_FIELDS = set(MetricQueryPresetItem.model_fields)
@@ -373,7 +375,7 @@ async def resource_rca_issues(
     kind: str = Query(min_length=1, max_length=253),
     name: str = Query(min_length=1, max_length=253),
     namespace: str | None = Query(default=None, max_length=253),
-    limit: int = Query(default=25, ge=1, le=MAX_TIMELINE_LIMIT),
+    limit: int = Query(default=DEFAULT_RESOURCE_ISSUE_LIMIT, ge=1, le=MAX_TIMELINE_LIMIT),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ResourceIssueListResponse:

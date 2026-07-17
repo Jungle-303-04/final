@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.exc import IntegrityError
 
@@ -77,6 +77,7 @@ from packages.config.security import (
     test_fixture_purge_enabled,
 )
 from packages.config.settings import env
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.policy_merge import merge_agent_policy
 from packages.contracts.gateway.requests import (
@@ -1314,7 +1315,11 @@ async def target_rbac_manifest_for_admin(
 
 @router.get(gateway_routes.CLUSTERS_PATH, response_model=ClusterListResponse)
 async def list_clusters(
-    limit: int = 100,
+    limit: int = Query(
+        default=gateway_limits.CLUSTER_LIST_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.CLUSTER_LIST_MAX_LIMIT,
+    ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ClusterListResponse:

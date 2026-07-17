@@ -1,4 +1,4 @@
-from packages.contracts.gateway import routes
+from packages.contracts.gateway import evidence, limits, params, routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
@@ -146,4 +146,7 @@ __all__ = [
     "UserApprovalResponse",
     "ValidationErrorItem",
     "routes",
+    "limits",
+    "params",
+    "evidence",
 ]

@@ -328,6 +328,19 @@ def test_outbox_compat_migration_adds_relay_lease_columns() -> None:
     assert "ix_outbox_claim" in storage_engine.OUTBOX_CLAIM_INDEX
 
 
+def test_inventory_filter_compat_migration_adds_change_timeline_coverage() -> None:
+    assert "change_ledger_epoch" in storage_engine.INVENTORY_FILTER_COMPAT_COLUMNS
+    assert (
+        "alter table inventory_filter_revisions add column if not exists change_ledger_epoch text"
+        in storage_engine.INVENTORY_FILTER_COMPAT_COLUMNS["change_ledger_epoch"]
+    )
+    assert any(
+        "ix_inventory_filter_revisions_change_coverage" in statement
+        and "change_ledger_epoch" in statement
+        for statement in storage_engine.INVENTORY_CHANGE_TIMELINE_COMPAT_INDEXES
+    )
+
+
 def test_pool_options_env_defaults_remain_unchanged() -> None:
     # env 미설정 시 기존 기본값과 동일해야 함(배포 호환)
     assert storage_engine.POOL_OPTIONS["pool_size"] == 2

@@ -25,6 +25,7 @@ from domains.command.debug_queries import (
 )
 from domains.identity.dependencies import require_cluster_access
 from packages.config.constants import Command, CommandStatus
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway.requests import AgentDebugQueryRequest
 from packages.contracts.identity import Permission
 from packages.contracts.log_stream import (
@@ -104,7 +105,7 @@ class LogStreamTarget:
         return "/resources?" + urlencode(
             {
                 "clusters": self.cluster_id,
-                "resources.types": self.resource_type,
+                gateway_params.RESOURCE_TYPES_QUERY: self.resource_type,
                 "detail": detail,
             }
         )

@@ -202,7 +202,7 @@ smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행
 	bash scripts/smoke.sh
 
 demo: ## Kind에서 bad rollout → Safe PR 리뷰 병합 → 외부 GitOps 정상화 데모
-	bash scripts/oss-demo.sh
+	bash -c "DEMO_DRY_RUN='$(DEMO_DRY_RUN)' bash scripts/oss-demo.sh"
 
 local-smoke: ## .env.local-test를 source해서 로컬 smoke 실행
 	@test -f "$(LOCAL_TEST_ENV)" || { echo "missing $(LOCAL_TEST_ENV); run make local-test-env"; exit 1; }

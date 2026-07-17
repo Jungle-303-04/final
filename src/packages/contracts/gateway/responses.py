@@ -13,6 +13,7 @@ from packages.contracts.cost.observations import (
     CostWorkloadAllocation,
     CostWorkloadKind,
 )
+from packages.contracts.gateway import facets as gateway_facets
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
@@ -1085,7 +1086,7 @@ class ResourceManifestApproveResponse(StrictModel):
 
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
 FilterFacetAvailability = Literal["available", "restricted", "unresolved"]
-FilterFacetAxis = Literal["clusters", "namespaces", "applications"]
+FilterFacetAxis = Literal[*gateway_facets.RESOURCE_FILTER_FACET_AXES]
 FilterSurface = Literal["resources", "issues", "applications", "gitops", "checks"]
 
 
@@ -1747,14 +1748,7 @@ class LabelFacetPageResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
-ApplicationFilterAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "environment",
-    "status",
-    "pending_promotion",
-]
+ApplicationFilterAxis = Literal[*gateway_facets.APPLICATION_FILTER_FACET_AXES]
 ApplicationFilterAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -1795,15 +1789,7 @@ class ApplicationSurfaceFilterFacetItem(StrictModel):
 
 
 class ApplicationFilterCapability(StrictModel):
-    axis: Literal[
-        "clusters",
-        "namespaces",
-        "applications",
-        "environment",
-        "status",
-        "pending_promotion",
-        "labels",
-    ]
+    axis: Literal[*gateway_facets.APPLICATION_FILTER_CAPABILITY_AXES]
     availability: ApplicationFilterAvailability
     reason_code: str | None = None
     source_semantics: str = Field(min_length=1)
@@ -1863,14 +1849,7 @@ class ApplicationLabelFacetPageResponse(StrictModel):
     capabilities: list[ApplicationFilterCapability] = Field(default_factory=list)
 
 
-GitOpsFilterAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "environment",
-    "approval",
-    "change_type",
-]
+GitOpsFilterAxis = Literal[*gateway_facets.GITOPS_FILTER_FACET_AXES]
 GitOpsFilterAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -1913,15 +1892,7 @@ class GitOpsFilterFacetItem(StrictModel):
 
 
 class GitOpsFilterCapability(StrictModel):
-    axis: Literal[
-        "clusters",
-        "namespaces",
-        "applications",
-        "environment",
-        "approval",
-        "change_type",
-        "labels",
-    ]
+    axis: Literal[*gateway_facets.GITOPS_FILTER_CAPABILITY_AXES]
     availability: GitOpsFilterAvailability
     reason_code: str | None = None
     source_semantics: str = Field(min_length=1)
@@ -1970,15 +1941,7 @@ class GitOpsFilterFacetPageResponse(StrictModel):
     capabilities: list[GitOpsFilterCapability] = Field(default_factory=list)
 
 
-IssueFilterAxis = Literal[
-    "clusters",
-    "namespaces",
-    "applications",
-    "severity",
-    "category",
-    "status",
-    "environment",
-]
+IssueFilterAxis = Literal[*gateway_facets.ISSUE_FILTER_FACET_AXES]
 IssueFilterAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -2027,16 +1990,7 @@ class IssueFilterFacetItem(StrictModel):
 
 
 class IssueFilterCapability(StrictModel):
-    axis: Literal[
-        "clusters",
-        "namespaces",
-        "applications",
-        "severity",
-        "category",
-        "status",
-        "environment",
-        "labels",
-    ]
+    axis: Literal[*gateway_facets.ISSUE_FILTER_CAPABILITY_AXES]
     availability: IssueFilterAvailability
     reason_code: str | None = None
     source_semantics: str = Field(min_length=1)

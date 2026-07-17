@@ -15,6 +15,7 @@ from domains.audit.repository import AUDIT_TIMELINE_SUMMARY_FIELDS
 from domains.identity.dependencies import require_cluster_access, require_session
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     AuditJourneyStage,
@@ -24,8 +25,8 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_TIMELINE_LIMIT = 50
-MAX_TIMELINE_LIMIT = 200
+DEFAULT_TIMELINE_LIMIT = gateway_limits.AUDIT_TIMELINE_DEFAULT_LIMIT
+MAX_TIMELINE_LIMIT = gateway_limits.AUDIT_TIMELINE_MAX_LIMIT
 CURSOR_VERSION = 1
 HTTP_UNPROCESSABLE = 422
 INVALID_CURSOR_DETAIL = "cursor is invalid"

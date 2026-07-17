@@ -23,6 +23,8 @@ from domains.identity.dependencies import (
 )
 from domains.inventory_filter.cursor import CursorScope, FilterCursorCodec, authorization_revision
 from packages.config.settings import env
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     FilterResultCounts,
@@ -35,9 +37,10 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_PAGE_LIMIT = 50
-MAX_PAGE_LIMIT = 200
-MAX_CURSOR_LENGTH = 8192
+DEFAULT_PAGE_LIMIT = gateway_limits.FILTER_FACET_DEFAULT_LIMIT
+MAX_PAGE_LIMIT = gateway_limits.FILTER_FACET_MAX_LIMIT
+MAX_CURSOR_LENGTH = gateway_limits.FILTER_CURSOR_MAX_LENGTH
+MAX_FILTER_SEARCH_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "GitOps filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "GitOps filter scope not found"
@@ -68,10 +71,19 @@ async def list_filtered_gitops_changes(
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
-    gitops_environment: str | None = Query(default=None, alias="gitops.environment"),
-    gitops_approval: str | None = Query(default=None, alias="gitops.approval"),
-    gitops_change_type: str | None = Query(default=None, alias="gitops.changeType"),
-    gitops_q: str | None = Query(default=None, alias="gitops.q"),
+    gitops_environment: str | None = Query(
+        default=None,
+        alias=gateway_params.GITOPS_ENVIRONMENT_QUERY,
+    ),
+    gitops_approval: str | None = Query(
+        default=None,
+        alias=gateway_params.GITOPS_APPROVAL_QUERY,
+    ),
+    gitops_change_type: str | None = Query(
+        default=None,
+        alias=gateway_params.GITOPS_CHANGE_TYPE_QUERY,
+    ),
+    gitops_q: str | None = Query(default=None, alias=gateway_params.GITOPS_SEARCH_QUERY),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
@@ -133,11 +145,20 @@ async def list_gitops_filter_facets(
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
-    gitops_environment: str | None = Query(default=None, alias="gitops.environment"),
-    gitops_approval: str | None = Query(default=None, alias="gitops.approval"),
-    gitops_change_type: str | None = Query(default=None, alias="gitops.changeType"),
-    gitops_q: str | None = Query(default=None, alias="gitops.q"),
-    facet_q: str | None = Query(default=None, max_length=200),
+    gitops_environment: str | None = Query(
+        default=None,
+        alias=gateway_params.GITOPS_ENVIRONMENT_QUERY,
+    ),
+    gitops_approval: str | None = Query(
+        default=None,
+        alias=gateway_params.GITOPS_APPROVAL_QUERY,
+    ),
+    gitops_change_type: str | None = Query(
+        default=None,
+        alias=gateway_params.GITOPS_CHANGE_TYPE_QUERY,
+    ),
+    gitops_q: str | None = Query(default=None, alias=gateway_params.GITOPS_SEARCH_QUERY),
+    facet_q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
