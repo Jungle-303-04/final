@@ -162,7 +162,10 @@ class StubInventoryDb:
         self,
         _workspace_id: str,
         _cluster_id: str,
+        *,
+        namespaces: tuple[str, ...] = (),
     ) -> list[dict[str, object]]:
+        assert namespaces == ()
         return [{"resource_type": "workload", "health": "healthy", "count": 1}]
 
 
@@ -808,6 +811,142 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
 
     assert response.latest_snapshot == {"snapshot_id": "snapshot-1", "resource_count": 1}
     assert response.counts == [{"resource_type": "workload", "health": "healthy", "count": 1}]
+    assert response.counts_evidence.completeness == "unavailable"
+    assert response.counts_evidence.reason_codes == ("inventory_snapshot_evidence_unavailable",)
+
+
+def test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence() -> None:
+    class EvidenceInventoryDb(StubInventoryDb):
+        def latest_inventory_snapshot(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+        ) -> dict[str, object]:
+            assert (workspace_id, cluster_id) == ("ws-1", "cluster-1")
+            return {
+                "snapshot_id": "snapshot-visibility-1",
+                "agent_id": "cluster-agent-7d9",
+                "collected_at": "2026-07-17T12:00:00Z",
+                "summary": {
+                    "summary": {
+                        "resources_complete": True,
+                        "namespaces": ["shop"],
+                        "api_resource_discovery": {
+                            "observed_at": "2026-07-17T12:00:00Z",
+                            "completeness": "exact",
+                            "reason_codes": [],
+                            "resources": [
+                                {
+                                    "group": "",
+                                    "version": "v1",
+                                    "api_version": "v1",
+                                    "name": "pods",
+                                    "singular_name": "pod",
+                                    "kind": "Pod",
+                                    "namespaced": True,
+                                    "is_crd": False,
+                                    "verbs": ["get", "list", "watch"],
+                                },
+                                {
+                                    "group": "apps",
+                                    "version": "v1",
+                                    "api_version": "apps/v1",
+                                    "name": "deployments",
+                                    "singular_name": "deployment",
+                                    "kind": "Deployment",
+                                    "namespaced": True,
+                                    "is_crd": False,
+                                    "verbs": ["get", "list", "watch"],
+                                },
+                            ],
+                        },
+                        "resource_access": {
+                            "completeness": "exact",
+                            "observed_at": "2026-07-17T12:00:00Z",
+                            "reason_codes": [],
+                            "roles": [
+                                {
+                                    "kind": "Role",
+                                    "namespace": "shop",
+                                    "name": "pod-reader",
+                                    "rules": [
+                                        {
+                                            "verbs": ["get", "list"],
+                                            "apiGroups": [""],
+                                            "resources": ["pods"],
+                                        }
+                                    ],
+                                }
+                            ],
+                            "cluster_roles": [],
+                            "role_bindings": [
+                                {
+                                    "kind": "RoleBinding",
+                                    "namespace": "shop",
+                                    "name": "pod-reader",
+                                    "roleRef": {"kind": "Role", "name": "pod-reader"},
+                                    "subjects": [
+                                        {
+                                            "kind": "ServiceAccount",
+                                            "namespace": "agent-system",
+                                            "name": "cluster-agent",
+                                        }
+                                    ],
+                                }
+                            ],
+                            "cluster_role_bindings": [],
+                            "service_accounts": [
+                                {"namespace": "agent-system", "name": "cluster-agent"}
+                            ],
+                            "pod_subjects": [
+                                {
+                                    "uid": "agent-pod-uid",
+                                    "namespace": "agent-system",
+                                    "name": "cluster-agent-7d9",
+                                    "service_account_name": "cluster-agent",
+                                }
+                            ],
+                        },
+                    }
+                },
+            }
+
+        def inventory_resource_counts(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+            *,
+            namespaces: tuple[str, ...] = (),
+        ) -> list[dict[str, object]]:
+            assert (workspace_id, cluster_id, namespaces) == ("ws-1", "cluster-1", ("shop",))
+            return [{"resource_type": "pod", "health": "healthy", "count": 2}]
+
+    async def run():
+        return await get_inventory_summary(
+            "cluster-1",
+            namespaces="shop",
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=EvidenceInventoryDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.counts == [{"resource_type": "pod", "health": "healthy", "count": 2}]
+    assert response.counts_evidence.completeness == "observed"
+    assert response.counts_evidence.namespace_scope == ("shop",)
+    assert response.counts_evidence.reason_codes == ()
+    assert response.counts_evidence.observed_at == "2026-07-17T12:00:00+00:00"
+    assert [item.model_dump() for item in response.counts_evidence.forbidden] == [
+        {
+            "namespace": "shop",
+            "api_group": "apps",
+            "version": "v1",
+            "resource": "deployments",
+            "kind": "Deployment",
+            "namespaced": True,
+            "reason_code": "list_permission_not_observed",
+        }
+    ]
 
 
 def test_cluster_api_resources_returns_latest_dynamic_catalog() -> None:

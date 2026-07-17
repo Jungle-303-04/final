@@ -55,12 +55,6 @@ export type LogStreamFailureCode =
 
 export interface LogStreamDiagnostic {
   code: "no_matching_pods" | "no_log_lines";
-  recovery: {
-    kind: "copy-command";
-    command: string;
-    clusterId: string;
-    readOnly: true;
-  } | null;
 }
 
 export class LogStreamFailure extends Error {

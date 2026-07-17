@@ -248,7 +248,7 @@ Go 소스에서 추출한 실제 라우트:
 | `WS /api/pods/{ns}/{p}/exec` | 터미널 |
 | `GET/POST/DELETE /api/portforwards` | 포트포워드 |
 | `GET /api/prometheus/rightsizing/scan` | 리소스 적정화 제안 |
-| `/api/v1/query`, `/api/v1/query_range` | Prometheus 프록시 |
+| agent `telemetry.query.run` (`instant`/`range`) | cluster-agent 전용 Prometheus 질의 |
 | `GET /api/vitals`, `/api/health/detailed` | 진단 |
 | `GET /api/diagnose/runs` | 진단 실행 |
 | `GET /api/sessions` | exec/터미널/포트포워드 세션 집계 |

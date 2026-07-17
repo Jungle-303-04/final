@@ -122,6 +122,8 @@ def test_target_install_is_driven_by_registration_script() -> None:
     assert "/targets" in register_script
     assert "delete deploy/target-cluster-agent" in register_script
     assert "kubectl --context" in register_script
+    assert "PROMETHEUS_BASE_URL" not in register_script
+    assert "prometheus_base_url" not in register_script
 
 
 def test_up_script_starts_management_workers_after_gateway() -> None:

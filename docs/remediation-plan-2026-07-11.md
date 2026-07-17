@@ -199,8 +199,9 @@ cluster/resource/correlation 조건을 먼저 적용하고 그 뒤 limit/cursor�
 
 ### 최소 권한 ServiceAccount
 
-`node-collector` 전용 ServiceAccount와 읽기 전용 ClusterRole을 만든다. DaemonSet에
-`serviceAccountName: node-collector`를 명시하고 쓰기 동사는 부여하지 않는다. Downward API로
+`cluster-agent-node-collector` 전용 ServiceAccount와 읽기 전용
+`cluster-agent-node-collector-read` ClusterRole을 만든다. DaemonSet에
+`serviceAccountName: cluster-agent-node-collector`를 명시하고 쓰기 동사는 부여하지 않는다. Downward API로
 현재 `spec.nodeName`을 환경변수에 넣고 Pod 조회는
 `fieldSelector=spec.nodeName=<현재 노드>`로 제한한다. 노드마다 전체 cluster Pod 목록을 받으면
 노드 수에 비례해 API 부하가 증폭되므로 허용하지 않는다.

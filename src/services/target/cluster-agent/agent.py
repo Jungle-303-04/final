@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
+import socket
 import time
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 import httpx
 from commands import (
@@ -61,6 +64,7 @@ from kubernetes_api import (
 )
 from live_summary import LiveSummaryPublisher
 from node_collector_manager import NodeCollectorManager
+from port_forward_stream import KubernetesTcpTargetResolver, PortForwardController
 from providers import (
     KubernetesSnapshotProvider,
     LokiLogsProvider,
@@ -114,6 +118,7 @@ from config import (
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
     POLICY_SYNC_INTERVAL_ENV,
+    PROMETHEUS_PROBE_MAX_ATTEMPTS,
     QUERY_RUN_ACTION,
     RECONCILE_INTERVAL_ENV,
     RECONCILER_MODE_ARGOCD,
@@ -191,6 +196,10 @@ from packages.contracts.helm import (
     HelmValuesPreviewCommandPayload,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.integrations import (
+    AgentPrometheusIntegrationConfig,
+    AgentPrometheusIntegrationEnvelope,
+)
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
@@ -201,6 +210,11 @@ from packages.contracts.target import (
     TARGET_RBAC_VERSION_ANNOTATION,
 )
 from packages.contracts.traffic.control import TrafficSourceAgentCommandPayload
+from packages.security.credentials import (
+    CredentialEncryptionError,
+    agent_envelope_context,
+    open_agent_payload,
+)
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -311,6 +325,7 @@ class AgentConfig:
     EVIDENCE_INTERVAL_ENV = "EVIDENCE_INTERVAL_SECONDS"
     AGENT_TOKEN_ENV = "AGENT_TOKEN"
     AGENT_TOKEN_HEADER = "x-agent-token"
+    AGENT_ENVELOPE_PRIVATE_KEY_ENV = agent_config.AGENT_ENVELOPE_PRIVATE_KEY_ENV
     # 타이밍 튜닝값은 config 모듈이 단일 원천(env 오버라이드 가능) — 중복 리터럴 금지
     HTTP_TIMEOUT_SECONDS = agent_config.HTTP_TIMEOUT_SECONDS
     COMMAND_POLL_TIMEOUT_SECONDS = agent_config.COMMAND_POLL_TIMEOUT_SECONDS
@@ -359,6 +374,11 @@ class HttpManagementPlaneClient:
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=timeout_seconds)
         self.headers = {AgentConfig.AGENT_TOKEN_HEADER: env(AgentConfig.AGENT_TOKEN_ENV, "")}
+        self.workspace_id = env(AgentConfig.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
+        self.agent_envelope_private_key = env(
+            AgentConfig.AGENT_ENVELOPE_PRIVATE_KEY_ENV,
+            "",
+        )
 
     async def __aenter__(self) -> HttpManagementPlaneClient:
         return self
@@ -578,6 +598,50 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
 
+    async def fetch_prometheus_integration(self, revision: str) -> JsonObject:
+        response = await self.client.get(
+            f"{self.base_url}{gateway_routes.AGENT_PROMETHEUS_INTEGRATION_PATH}",
+            params={"revision": revision},
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        envelope = AgentPrometheusIntegrationEnvelope.model_validate(response.json())
+        try:
+            context = agent_envelope_context(
+                self.workspace_id,
+                envelope.cluster_id,
+                envelope.revision,
+                envelope.operation_id,
+                envelope.address,
+            )
+            secret = open_agent_payload(
+                envelope.sealed_headers,
+                self.agent_envelope_private_key,
+                context,
+            )
+        except CredentialEncryptionError as exc:
+            raise RuntimeError("prometheus integration envelope is invalid") from exc
+        headers = secret.get("headers")
+        if not isinstance(headers, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in headers.items()
+        ):
+            raise RuntimeError("prometheus integration envelope is invalid")
+        return AgentPrometheusIntegrationConfig(
+            cluster_id=envelope.cluster_id,
+            revision=envelope.revision,
+            operation_id=envelope.operation_id,
+            address=envelope.address,
+            headers=dict(headers),
+        ).model_dump()
+
+    async def report_prometheus_integration_status(self, status: JsonObject) -> None:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.AGENT_PROMETHEUS_INTEGRATION_STATUS_PATH}",
+            json=status,
+            headers=self.headers,
+        )
+        response.raise_for_status()
+
     async def report_reconcile_status(self, status: JsonObject) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.AGENT_RECONCILE_STATUS_PATH}",
@@ -585,6 +649,21 @@ class HttpManagementPlaneClient:
             headers=self.headers,
         )
         response.raise_for_status()
+
+
+class PrometheusRuntimeConfigurationError(RuntimeError):
+    def __init__(self, code: str, *, retryable: bool) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+
+
+def prometheus_transport_error_retryable(exc: Exception) -> bool:
+    if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in {408, 429} or exc.response.status_code >= 500
+    return False
 
 
 class TargetClusterAgent:
@@ -654,6 +733,9 @@ class TargetClusterAgent:
             management_base_url=self.base_url,
             kubernetes_transport=kubernetes_transport,
             terminal_controller=PodExecController(),
+            port_forward_controller=PortForwardController(
+                resolver=KubernetesTcpTargetResolver(kubernetes_transport)
+            ),
         )
         if providers is None:
             providers = (
@@ -661,13 +743,19 @@ class TargetClusterAgent:
                     cluster_id=self.cluster_id,
                     transport=kubernetes_transport,
                 ),
-                PrometheusMetricsProvider.from_config(env),
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
                 MetadataProvider.from_config(env),
             )
         self.query_registry = TelemetryQueryRegistry()
         self.evidence_collector = EvidenceCollector(providers, self.query_registry)
+        self.prometheus_integration_status: JsonObject = {
+            "state": "unconfigured",
+            "revision": None,
+            "operation_id": None,
+            "error_code": None,
+        }
+        self.prometheus_probe_attempts: dict[str, int] = {}
         self.control_store = AgentControlStore(self.agent_control_db_path)
         self.command_outbox = CommandResultOutbox(self.command_outbox_db_path)
         self.evidence_scheduler = EvidenceJobScheduler(
@@ -688,6 +776,7 @@ class TargetClusterAgent:
             apply_policy=self.apply_policy,
             interval_seconds=self.policy_sync_interval_seconds,
             status_details=self.policy_status_details,
+            apply_runtime_configuration=self.apply_runtime_configurations,
         )
         self.reconciler = DesiredStateReconciler(
             cluster_id=self.cluster_id,
@@ -756,7 +845,10 @@ class TargetClusterAgent:
                 provider_key,
                 base_policy.evidence.providers.get(
                     provider_key,
-                    self.default_policy.evidence.providers[provider_key],
+                    self.default_policy.evidence.providers.get(
+                        provider_key,
+                        EvidenceProviderPolicy(enabled=False),
+                    ),
                 ),
             )
             provider_intervals[provider_key] = provider_policy.interval_seconds
@@ -783,7 +875,228 @@ class TargetClusterAgent:
         }
 
     async def policy_status_details(self) -> JsonObject:
-        return {"target_rbac_manifest": await self.target_rbac_manifest_status()}
+        return {
+            "target_rbac_manifest": await self.target_rbac_manifest_status(),
+            "integrations": {"prometheus": dict(self.prometheus_integration_status)},
+        }
+
+    async def apply_runtime_configurations(
+        self,
+        client: ManagementPlaneClient,
+        policy: AgentPolicy,
+    ) -> JsonObject:
+        """Apply revision-bound provider secrets without persisting them in agent policy state."""
+        provider_policy = policy.evidence.providers.get("metrics")
+        revision = provider_policy.configuration_revision if provider_policy else None
+        operation_id = provider_policy.configuration_operation_id if provider_policy else None
+        if revision is None or operation_id is None:
+            self.evidence_collector.remove_provider("metrics")
+            self.evidence_scheduler.unregister_provider("metrics")
+            self.prometheus_probe_attempts.clear()
+            self.prometheus_integration_status = {
+                "state": "unconfigured",
+                "revision": None,
+                "operation_id": None,
+                "error_code": None,
+            }
+            return {"integrations": {"prometheus": dict(self.prometheus_integration_status)}}
+
+        current = self.prometheus_integration_status
+        if current.get("revision") == revision and current.get("operation_id") == operation_id:
+            if current.get("state") == "connected":
+                return {"integrations": {"prometheus": dict(current)}}
+            if current.get("state") == "failed":
+                raise RuntimeError(str(current.get("error_code") or "prometheus_probe_failed"))
+
+        try:
+            provider = await self.probe_prometheus_runtime_configuration(
+                client,
+                revision=revision,
+                operation_id=operation_id,
+            )
+        except PrometheusRuntimeConfigurationError as exc:
+            attempts = self.prometheus_probe_attempts.get(revision, 0) + 1
+            self.prometheus_probe_attempts = {revision: attempts}
+            terminal = not exc.retryable or attempts >= PROMETHEUS_PROBE_MAX_ATTEMPTS
+            state = "failed" if terminal else "retrying"
+            failed = {
+                "state": state,
+                "revision": revision,
+                "operation_id": operation_id,
+                "error_code": exc.code,
+            }
+            try:
+                await client.report_prometheus_integration_status(dict(failed))
+            except Exception as report_exc:
+                raise RuntimeError("prometheus_status_report_failed") from report_exc
+            self.prometheus_integration_status = failed
+            raise RuntimeError(exc.code) from exc
+
+        previous_provider = self.evidence_collector.providers.get("metrics")
+        previous_scheduled = "metrics" in self.evidence_scheduler.provider_keys
+        previous_worker_count = self.evidence_scheduler.provider_worker_counts.get("metrics", 0)
+        previous_interval = self.evidence_scheduler.provider_intervals.get(
+            "metrics", provider_policy.interval_seconds
+        )
+        previous_enabled = "metrics" in self.evidence_scheduler.enabled_provider_keys
+
+        def rollback_local_provider() -> None:
+            if previous_provider is None:
+                self.evidence_collector.remove_provider("metrics")
+            else:
+                self.evidence_collector.replace_provider(previous_provider)
+            if previous_scheduled:
+                self.evidence_scheduler.register_provider(
+                    "metrics",
+                    worker_count=previous_worker_count,
+                    interval_seconds=previous_interval,
+                    enabled=previous_enabled,
+                )
+            else:
+                self.evidence_scheduler.unregister_provider("metrics")
+
+        try:
+            self.evidence_collector.replace_provider(provider)
+            self.evidence_scheduler.register_provider(
+                "metrics",
+                worker_count=provider_policy.min_workers,
+                interval_seconds=provider_policy.interval_seconds,
+                enabled=provider_policy.enabled,
+            )
+        except Exception:
+            rollback_local_provider()
+            raise
+        try:
+            await client.report_prometheus_integration_status(
+                {
+                    "revision": revision,
+                    "operation_id": operation_id,
+                    "state": "connected",
+                }
+            )
+        except Exception as exc:
+            rollback_local_provider()
+            raise RuntimeError("prometheus_status_report_failed") from exc
+        self.prometheus_probe_attempts.clear()
+        self.prometheus_integration_status = {
+            "state": "connected",
+            "revision": revision,
+            "operation_id": operation_id,
+            "error_code": None,
+        }
+        return {"integrations": {"prometheus": dict(self.prometheus_integration_status)}}
+
+    async def probe_prometheus_runtime_configuration(
+        self,
+        client: ManagementPlaneClient,
+        *,
+        revision: str,
+        operation_id: str,
+    ) -> PrometheusMetricsProvider:
+        try:
+            raw_config = await client.fetch_prometheus_integration(revision)
+        except Exception as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_configuration_fetch_failed",
+                retryable=prometheus_transport_error_retryable(exc),
+            ) from exc
+        try:
+            config = AgentPrometheusIntegrationConfig.model_validate(raw_config)
+        except ValueError as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_configuration_invalid",
+                retryable=False,
+            ) from exc
+        if (
+            config.cluster_id != self.cluster_id
+            or config.revision != revision
+            or config.operation_id != operation_id
+        ):
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_configuration_invalid",
+                retryable=False,
+            )
+        resolved_address = await self.resolve_prometheus_destination(config.address)
+        provider = PrometheusMetricsProvider(
+            config.address,
+            headers=config.headers,
+            resolved_address=resolved_address,
+        )
+        try:
+            async with httpx.AsyncClient(
+                timeout=provider.timeout_seconds,
+                transport=self.telemetry_transport,
+            ) as probe_client:
+                response = await probe_client.get(
+                    provider.request_url("/api/v1/query"),
+                    params={"query": "up"},
+                    headers=provider.request_headers(),
+                    extensions=provider.request_extensions(),
+                )
+                response.raise_for_status()
+        except Exception as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_http_error",
+                retryable=prometheus_transport_error_retryable(exc),
+            ) from exc
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_invalid_response",
+                retryable=True,
+            ) from exc
+        if (
+            not isinstance(payload, dict)
+            or payload.get("status") != "success"
+            or not isinstance(payload.get("data"), dict)
+        ):
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_invalid_response",
+                retryable=True,
+            )
+        return provider
+
+    async def resolve_prometheus_destination(self, address: str) -> str:
+        """Resolve once, reject unsafe answers, and return one DNS-free connect address."""
+        parsed = urlsplit(address)
+        hostname = parsed.hostname or ""
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            infos = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM),
+            )
+        except OSError as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_dns_error",
+                retryable=True,
+            ) from exc
+        resolved_addresses: list[str] = []
+        for info in infos:
+            try:
+                resolved = ipaddress.ip_address(str(info[4][0]))
+            except ValueError:
+                continue
+            if (
+                resolved.is_loopback
+                or resolved.is_link_local
+                or resolved.is_multicast
+                or resolved.is_unspecified
+            ):
+                raise PrometheusRuntimeConfigurationError(
+                    "prometheus_destination_denied",
+                    retryable=False,
+                )
+            normalized = str(resolved)
+            if normalized not in resolved_addresses:
+                resolved_addresses.append(normalized)
+        if not resolved_addresses:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_dns_error",
+                retryable=True,
+            )
+        return resolved_addresses[0]
 
     async def target_rbac_manifest_status(self) -> JsonObject:
         """Observe the administrator-owned role without ever attempting RBAC writes."""

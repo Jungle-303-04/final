@@ -1202,7 +1202,7 @@
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
-        "tests/test_changes_router.py",
+        "tests/test_change_timeline_router.py",
         "frontend/src/api/refresh-policies.test.ts",
         "frontend/src/api/change-timeline.test.ts",
         "frontend/src/shared/data/browserRefreshPolicyRegistry.test.ts",
@@ -1763,7 +1763,6 @@
       "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
       "desktopContract": null,
       "verification": [
-        "tests/test_audit.py",
         "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
@@ -1772,7 +1771,7 @@
           "state": "blocked",
           "destination": "src/domains/audit/router.py",
           "reason": "The audit log is workspace action history and no collector-backed resource finding repository is keyed by an exact Kubernetes ResourceRef.",
-          "test": "tests/test_audit.py"
+          "test": "scripts/reference-resource-metrics-parity.test.mjs"
         },
         "frontend": {
           "state": "blocked",
@@ -2599,7 +2598,7 @@
       }
     },
     "reference.feature.160": {
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -2618,15 +2617,17 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "frontend": {
-          "state": "implemented",
-          "destination": "frontend/src/app/PortForwardSessionIndicator.tsx#PortForwardSessionIndicator",
+          "state": "blocked",
+          "destination": "frontend/src/features/service-access/createPortForwardSessionAdapter.ts#createPortForwardSessionAdapter",
           "consumer": "frontend/src/features/service-access/PortForwardSessionsProvider.tsx#PortForwardSessionsProvider",
+          "reason": "The session adapter is intentionally fail-closed until the audited gateway-to-agent stream exists; no empty or synthetic session registry is shown.",
           "test": "frontend/src/app/ProductShell.portForward.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
-          "destination": "desktop/src-tauri/src/port_forward.rs#PortForwardSessionRegistry",
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
           "consumer": "frontend/src/desktop/desktopBridge.ts#listPortForwardSessions",
+          "reason": "The desktop capability is unsupported until its loopback-only listener is connected to the agent stream; direct target processes were removed.",
           "test": "desktop/src-tauri/tests/reference_parity.rs"
         }
       }
@@ -2658,19 +2659,22 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
-          "state": "not_required",
-          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#buildKubectlPortForwardCommand",
-          "reason": "Exact Service port discovery and a manual loopback command are safe browser capabilities; only ownership of the listener requires Tauri.",
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "reason": "Exact port discovery remains implemented, but no browser command is exposed and the desktop action stays absent until the agent-backed tunnel is available.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         }
       }
     },
     "reference.feature.162": {
-      "deliveryStatus": "implemented",
-      "backendContract": "packages.contracts.service_access",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.port_forward",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
+        "tests/contracts/test_port_forward.py",
+        "tests/test_agent_port_forward.py",
+        "tests/test_realtime_gateway.py",
         "tests/contracts/test_service_access.py",
         "tests/test_service_access_router.py",
         "frontend/src/features/service-access/createPortForwardSessionAdapter.test.ts",
@@ -2680,27 +2684,35 @@
       ],
       "coverage": {
         "backend": {
-          "state": "not_required",
-          "destination": "src/packages/contracts/service_access.py#LocalPortForwardRequest",
-          "reason": "Python validates the portable request shape but must never own a workstation listener.",
-          "test": "tests/contracts/test_service_access.py"
+          "state": "implemented",
+          "destination": "src/packages/contracts/port_forward.py#PortForwardOpen",
+          "consumer": "src/services/target/cluster-agent/port_forward_stream.py#PortForwardController",
+          "test": "tests/test_agent_port_forward.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "frontend/src/pages/resources/PortForwardAction.tsx#PortForwardAction",
           "consumer": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
+          "reason": "The action is omitted instead of exposing a direct command or invoking an unavailable native adapter.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "desktop/src-tauri/src/port_forward.rs#desktop_port_forward_start",
           "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "The fail-closed command owns no target process; a future implementation may bind loopback only after receiving an agent tunnel receipt.",
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/agent_connections.py#AgentConnectionRegistry",
+          "consumer": "src/services/realtime/realtime-gateway/port_forward_sessions.py#PortForwardSessionBroker",
+          "test": "tests/test_realtime_gateway.py"
         }
       }
     },
     "reference.feature.163": {
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
@@ -2719,16 +2731,24 @@
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
           "consumer": "frontend/src/app/PortForwardSessionIndicator.tsx#PortForwardSessionIndicator",
+          "reason": "No session lifecycle is mounted while the canonical adapter is fail-closed.",
           "test": "frontend/src/features/service-access/usePortForwardSessions.test.tsx"
         },
         "desktop": {
-          "state": "implemented",
+          "state": "blocked",
           "destination": "desktop/src-tauri/src/port_forward.rs#desktop_port_forward_stop",
           "consumer": "frontend/src/desktop/desktopBridge.ts#recreatePortForward",
+          "reason": "Stop and recreate reject because there can be no native-owned target session before the agent tunnel exists.",
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
+        },
+        "realtime": {
+          "state": "blocked",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py#AgentChannel",
+          "reason": "Close, reconnect, generation fencing and audit completion events require the missing agent tunnel protocol.",
+          "test": "tests/test_pod_terminal.py"
         }
       }
     },
@@ -3231,6 +3251,7 @@
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
         "tests/test_helm_release_projection.py",
@@ -3256,6 +3277,7 @@
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
         "tests/test_helm_release_projection.py",
@@ -3953,7 +3975,7 @@
         "realtime": {
           "state": "implemented",
           "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "consumer": "frontend/src/features/operations/OperationStatusStore.ts",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx",
           "reason": "Upgrade acceptance stages the first durable OperationEvent in the command transaction and the existing resumable stream carries progress, cancellation, failure, and completion for the exact command ID.",
           "test": "tests/test_operation_event_hub.py"
         }
@@ -4395,11 +4417,12 @@
       }
     },
     "reference.feature.134": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
       "frontendContract": "frontend/src/features/settings/settingsContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_resource_access_projection.py",
         "tests/test_shell_state_router.py",
         "frontend/src/api/settings-access.test.ts",
         "frontend/src/features/settings/createSettingsAdapter.test.ts",
@@ -4407,17 +4430,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "consumer": "src/domains/identity/repository.py#effective_permissions_for_resource",
-          "reason": "Product RBAC decisions are implemented, but the cluster agent cannot run SelfSubjectRulesReview for the signed-in product subject.",
-          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+          "consumer": "src/domains/resource_access/projection.py#agent_execution_access_projection",
+          "reason": "The workspace-scoped response keeps signed-in product decisions under opsia_rbac and separately projects the actual cluster-agent ServiceAccount execution rules from retained outbound-agent RBAC and discovery evidence; absent, partial, or ambiguous evidence fails closed without claiming a user SelfSubjectRulesReview.",
+          "test": "tests/test_shell_state_router.py#test_settings_access_merges_product_rbac_with_agent_execution_authority"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
           "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
-          "reason": "The access panel shows explicit Kubernetes rule unavailability and never translates product permissions into Kubernetes verbs.",
+          "reason": "The selected namespace loads one typed access profile that labels product-user decisions and observed cluster-agent ServiceAccount rules as separate authorities, cancels superseded reads, and renders unavailable evidence without translating product permissions into Kubernetes verbs.",
           "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
         }
       }
@@ -4582,26 +4605,31 @@
       }
     },
     "reference.feature.223": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.shell_state",
-      "frontendContract": "frontend/src/pages/settings",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.integrations",
+      "frontendContract": "frontend/src/features/settings",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
+        "tests/test_prometheus_integration.py",
+        "tests/test_target_agent_client.py",
+        "frontend/src/api/prometheus-integration.test.ts",
+        "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
         "frontend/src/pages/settings/SettingsPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py",
-          "reason": "No workspace integration repository owns Prometheus URL metadata, write-only headers, owner authorization, live client replacement, bounded probe, or audit evidence.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/integrations/prometheus.py#update_prometheus_integration",
+          "consumer": "src/services/target/cluster-agent/agent.py#apply_runtime_configurations",
+          "reason": "The owner-authorized Python integration contract persists encrypted write-only headers, atomically versions policy and audit evidence, streams one superseding probe operation, and replaces the target-agent metrics provider only after a bounded live probe.",
+          "test": "tests/test_prometheus_integration.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/settings/SettingsPage.tsx",
-          "reason": "The settings route does not store provider credentials in browser state or claim that a metrics reader can reconfigure its provider.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/settings/PrometheusIntegrationCard.tsx#PrometheusIntegrationCard",
+          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "reason": "The typed settings adapter exposes configured header names without secret values, preserves omitted secrets only for the same origin, requires re-entry after origin changes, and follows the shared operation event stream for live probe feedback.",
+          "test": "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx"
         }
       }
     },

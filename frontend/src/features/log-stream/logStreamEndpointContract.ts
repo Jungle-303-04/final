@@ -16,12 +16,6 @@ export type LogStreamEndpointEvent =
       reason: string;
       diagnostic: {
         code: "no_matching_pods" | "no_log_lines";
-        recovery: {
-          kind: "copy_command";
-          command: string;
-          cluster_id: string;
-          read_only: true;
-        } | null;
       } | null;
     }
   | { type: "error"; code: string; retryable: boolean };

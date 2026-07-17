@@ -48,6 +48,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
+from domains.integrations.prometheus import router as prometheus_integration_router
 from domains.inventory.deletion import router as resource_deletion_router
 from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
@@ -354,6 +355,9 @@ class ApiGateway:
         app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API
         app.include_router(gitops_filter_router)  # workspace GitOps 변경·승인 필터·facet
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
+        app.include_router(
+            prometheus_integration_router
+        )  # Prometheus 암호화 설정 + agent revision/status 스트림
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         app.include_router(gitops_overview_router)  # mixed registered/controller fleet overview
         app.include_router(gitops_detail_router)  # browser GitOps detail (session + RBAC)
@@ -587,13 +591,30 @@ class ApiGateway:
                     capabilities=payload.capabilities,
                     details=payload.details,
                 )
-                status_updater = getattr(self.db, "update_cluster_registration_status", None)
-                if callable(status_updater):
-                    status_updater(
+                mark_connected = getattr(self.db, "mark_cluster_registration_connected", None)
+                if callable(mark_connected):
+                    mark_connected(
                         identity.workspace_id,
                         identity.cluster_id,
-                        ClusterRegistrationStatus.REGISTERED.value,
                     )
+                else:
+                    registration_getter = getattr(self.db, "get_cluster_registration", None)
+                    registration = (
+                        registration_getter(identity.workspace_id, identity.cluster_id)
+                        if callable(registration_getter)
+                        else None
+                    )
+                    status_updater = getattr(self.db, "update_cluster_registration_status", None)
+                    if (
+                        callable(status_updater)
+                        and str((registration or {}).get("status") or "")
+                        != ClusterRegistrationStatus.UNINSTALL_REQUESTED.value
+                    ):
+                        status_updater(
+                            identity.workspace_id,
+                            identity.cluster_id,
+                            ClusterRegistrationStatus.REGISTERED.value,
+                        )
                 accepted = await self.events.accept_body(
                     agent_connected_body_from_request(payload, identity)
                 )

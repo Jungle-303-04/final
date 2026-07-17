@@ -120,6 +120,15 @@ def test_operator_scripts_require_explicit_runtime_context() -> None:
     assert "kind-target" not in scripts
 
 
+def test_target_registration_does_not_override_agent_prometheus_integration() -> None:
+    registration_script = read("scripts/register-target.sh")
+    aws_script = read("scripts/aws-up.sh")
+
+    assert "PROMETHEUS_BASE_URL" not in registration_script
+    assert "prometheus_base_url" not in registration_script
+    assert "PROMETHEUS_BASE_URL" not in aws_script
+
+
 def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")

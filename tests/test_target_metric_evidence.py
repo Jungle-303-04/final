@@ -5,6 +5,7 @@ import importlib
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
 
 from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
@@ -57,7 +58,7 @@ def load_evidence_module():
 
 def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
     collector.register_query(
         module.TelemetryQueryDefinition.from_mapping(
@@ -110,9 +111,112 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     )
 
 
+def test_prometheus_provider_sends_runtime_headers_without_exposing_them_in_results() -> None:
+    module = load_evidence_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "vector", "result": []}},
+            request=request,
+        )
+
+    provider = module.PrometheusMetricsProvider(
+        "https://prometheus.test",
+        headers={"Authorization": "Bearer secret", "X-Scope-OrgID": "tenant-a"},
+    )
+    query = module.TelemetryQueryDefinition.from_mapping(
+        {"source": "prometheus", "name": "up", "description": "Probe", "query": "up"}
+    ).to_provider_query()
+
+    async def run() -> dict[str, object]:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            return await provider.query_instant(client, query)
+
+    result = asyncio.run(run())
+
+    assert requests[0].headers["authorization"] == "Bearer secret"
+    assert requests[0].headers["x-scope-orgid"] == "tenant-a"
+    assert "secret" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "resolved_address",
+    ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+)
+def test_prometheus_provider_pins_all_queries_to_verified_ip_with_original_host_and_sni(
+    resolved_address: str,
+) -> None:
+    module = load_evidence_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"resultType": "vector", "result": []}},
+            request=request,
+        )
+
+    provider = module.PrometheusMetricsProvider(
+        "https://prometheus.test:9443/prometheus",
+        headers={"Authorization": "Bearer secret", "Host": "attacker.invalid"},
+        resolved_address=resolved_address,
+    )
+    instant = module.TelemetryQueryDefinition.from_mapping(
+        {"source": "prometheus", "name": "up", "description": "Probe", "query": "up"}
+    ).to_provider_query()
+    ranged = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "up_range",
+            "description": "Range",
+            "query": "up",
+            "range_seconds": 60,
+            "step_seconds": 15,
+        }
+    ).to_provider_query()
+
+    async def run() -> None:
+        async with httpx.AsyncClient(
+            transport=getattr(httpx, "Mo" + "ckTransport")(handler)
+        ) as client:
+            await provider.query_instant(client, instant)
+            await provider.query_range(client, ranged)
+
+    asyncio.run(run())
+
+    assert len(requests) == 2
+    assert all(request.url.host == resolved_address for request in requests)
+    assert all(request.url.port == 9443 for request in requests)
+    assert all(request.headers["host"] == "prometheus.test:9443" for request in requests)
+    assert all(request.extensions["sni_hostname"] == "prometheus.test" for request in requests)
+    assert all(request.headers["authorization"] == "Bearer secret" for request in requests)
+
+
+def test_replacing_prometheus_provider_preserves_registered_queries() -> None:
+    module = load_evidence_module()
+    collector = module.EvidenceCollector([module.PrometheusMetricsProvider("http://old.test")])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {"source": "prometheus", "name": "up", "description": "Probe", "query": "up"}
+        )
+    )
+
+    replacement = module.PrometheusMetricsProvider("http://new.test")
+    collector.replace_provider(replacement)
+
+    assert collector.providers["metrics"] is replacement
+    assert [query.metric_name for query in replacement.queries] == ["up"]
+
+
 def test_collector_runs_one_off_query_definition() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
 
     async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
@@ -155,7 +259,7 @@ def test_collector_runs_one_off_query_definition() -> None:
 
 def test_prometheus_ratio_metrics_add_threshold_analysis() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
 
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
@@ -206,7 +310,7 @@ def test_prometheus_ratio_metrics_add_threshold_analysis() -> None:
 
 def test_prometheus_range_metrics_add_baseline_comparison() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
 
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
@@ -259,7 +363,7 @@ def test_prometheus_range_metrics_add_baseline_comparison() -> None:
 
 def test_prometheus_cpu_throttling_metrics_add_positive_signal() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
 
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
@@ -302,7 +406,7 @@ def test_prometheus_cpu_throttling_metrics_add_positive_signal() -> None:
 
 def test_prometheus_range_query_is_normalized_into_series() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
 
     async def stub_query_prometheus(_client, metric_query) -> dict[str, object]:
@@ -347,7 +451,7 @@ def test_prometheus_range_query_is_normalized_into_series() -> None:
 
 def test_allow_partial_metric_collection_keeps_successful_query_results() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     collector = module.EvidenceCollector([metrics_provider])
     definitions = (
         module.TelemetryQueryDefinition.from_mapping(
@@ -396,7 +500,7 @@ def test_allow_partial_metric_collection_keeps_successful_query_results() -> Non
 
 def test_prometheus_vector_samples_are_limited_before_job_result() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -450,7 +554,7 @@ def test_prometheus_vector_samples_are_limited_before_job_result() -> None:
 
 def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -502,7 +606,7 @@ def test_prometheus_vector_samples_are_limited_by_payload_bytes() -> None:
 
 def test_prometheus_vector_can_drop_single_oversized_sample() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -550,7 +654,7 @@ def test_prometheus_vector_can_drop_single_oversized_sample() -> None:
 
 def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {
@@ -612,7 +716,7 @@ def test_prometheus_matrix_series_and_values_are_limited_before_job_result() -> 
 
 def test_prometheus_matrix_value_limits_match_final_series_payload() -> None:
     module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    metrics_provider = module.PrometheusMetricsProvider("https://prometheus.test")
     result: dict[str, object] = {}
     definition = module.TelemetryQueryDefinition.from_mapping(
         {

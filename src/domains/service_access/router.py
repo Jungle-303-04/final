@@ -28,10 +28,11 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.contracts.parity import ClusterScope, CommandReceipt, ResourceRef
 from packages.contracts.service_access import (
-    LOCAL_PORT_FORWARD_DESKTOP_REASON,
-    POD_EXEC_CAPABILITY_UNAVAILABLE_REASON,
+    AGENT_PORT_FORWARD_DESKTOP_REASON,
+    AGENT_PORT_FORWARD_UNAVAILABLE_REASON,
     POD_SERVICE_REQUEST_UNSUPPORTED_REASON,
     PORT_DISCOVERY_PARTIAL_REASON,
+    PORT_FORWARD_AGENT_CAPABILITY,
     PORT_FORWARD_NO_TCP_PORTS_REASON,
     PORT_FORWARD_RESOURCE_UNAVAILABLE_REASON,
     SERVICE_HTTP_REQUEST_ACTION,
@@ -45,7 +46,6 @@ from packages.contracts.service_access import (
     ServicePort,
     ServiceRequestCreateRequest,
 )
-from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 
 router = APIRouter()
@@ -446,14 +446,14 @@ def _local_forward_availability(
         phase = str(summary.get("phase") or "") if isinstance(summary, Mapping) else ""
         if row.get("deleted_at") is not None or phase.casefold() != "running":
             return "unavailable", PORT_FORWARD_RESOURCE_UNAVAILABLE_REASON
-        if not _agent_supports_capability(
-            db,
-            workspace_id,
-            cluster_id,
-            POD_EXEC_AGENT_CAPABILITY,
-        ):
-            return "unavailable", POD_EXEC_CAPABILITY_UNAVAILABLE_REASON
-    return "desktop_required", LOCAL_PORT_FORWARD_DESKTOP_REASON
+    if not _agent_supports_capability(
+        db,
+        workspace_id,
+        cluster_id,
+        PORT_FORWARD_AGENT_CAPABILITY,
+    ):
+        return "unavailable", AGENT_PORT_FORWARD_UNAVAILABLE_REASON
+    return "desktop_required", AGENT_PORT_FORWARD_DESKTOP_REASON
 
 
 def _agent_supports(db: Any, workspace_id: str, cluster_id: str) -> bool:
@@ -530,8 +530,8 @@ def _capability_revision(
     ports: tuple[ServicePort, ...],
     availability: str,
     reason: str | None,
-    local_port_forward: str = "desktop_required",
-    local_port_forward_reason: str = LOCAL_PORT_FORWARD_DESKTOP_REASON,
+    local_port_forward: str = "unavailable",
+    local_port_forward_reason: str = AGENT_PORT_FORWARD_UNAVAILABLE_REASON,
     port_discovery: str = "complete",
     port_discovery_reason: str | None = None,
 ) -> str:

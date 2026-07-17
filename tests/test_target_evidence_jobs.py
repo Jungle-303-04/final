@@ -215,6 +215,33 @@ def test_central_scheduler_registers_due_provider_jobs_without_local_queue() -> 
     assert client.scheduled[0]["provider_keys"] == ["kubernetes", "metrics", "logs", "traces"]
 
 
+def test_scheduler_registers_dynamic_provider_without_rebuilding_workers() -> None:
+    module = load_evidence_module()
+    scheduler = module.EvidenceJobScheduler(
+        cluster_id="cluster-1",
+        workspace_id="workspace-1",
+        agent_id="agent-1",
+        source_id="cluster-snapshot",
+        collector=InMemoryEvidenceCollector(),
+        provider_keys=("kubernetes",),
+        provider_worker_counts={"kubernetes": 1},
+        interval_seconds=8,
+    )
+
+    scheduler.register_provider(
+        "metrics",
+        worker_count=2,
+        interval_seconds=15,
+        enabled=True,
+    )
+
+    assert scheduler.provider_keys == ("kubernetes", "metrics")
+    assert scheduler.provider_worker_counts["metrics"] == 2
+    assert scheduler.provider_intervals["metrics"] == 15
+    assert "metrics" in scheduler.enabled_provider_keys
+    assert scheduler.next_provider_runs["metrics"] == 0.0
+
+
 def test_central_worker_polls_job_and_reports_provider_result() -> None:
     module = load_evidence_module()
     client = StubEvidenceJobClient()

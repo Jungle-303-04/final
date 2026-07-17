@@ -47,6 +47,88 @@ class ShellStateDb:
             Permission.DEPLOY_RUN.value,
         }
 
+    def latest_inventory_snapshot(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, Any]:
+        assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
+        return {
+            "agent_id": "cluster-agent-7d9",
+            "summary": {
+                "summary": {
+                    "resource_access": {
+                        "completeness": "exact",
+                        "observed_at": "2026-07-17T00:00:00+00:00",
+                        "reason_codes": [],
+                        "roles": [
+                            {
+                                "kind": "Role",
+                                "namespace": "shop",
+                                "name": "reader",
+                                "rules": [
+                                    {
+                                        "verbs": ["get", "list"],
+                                        "apiGroups": [""],
+                                        "resources": ["pods"],
+                                    }
+                                ],
+                            }
+                        ],
+                        "cluster_roles": [],
+                        "role_bindings": [
+                            {
+                                "kind": "RoleBinding",
+                                "namespace": "shop",
+                                "name": "reader",
+                                "roleRef": {"kind": "Role", "name": "reader"},
+                                "subjects": [
+                                    {
+                                        "kind": "ServiceAccount",
+                                        "namespace": "agent-system",
+                                        "name": "cluster-agent",
+                                    }
+                                ],
+                            }
+                        ],
+                        "cluster_role_bindings": [],
+                        "service_accounts": [
+                            {
+                                "namespace": "agent-system",
+                                "name": "cluster-agent",
+                            }
+                        ],
+                        "pod_subjects": [
+                            {
+                                "uid": "agent-pod-uid",
+                                "namespace": "agent-system",
+                                "name": "cluster-agent-7d9",
+                                "service_account_name": "cluster-agent",
+                            }
+                        ],
+                    },
+                    "api_resource_discovery": {
+                        "observed_at": "2026-07-17T00:00:00+00:00",
+                        "completeness": "exact",
+                        "reason_codes": [],
+                        "resources": [
+                            {
+                                "group": "",
+                                "version": "v1",
+                                "api_version": "v1",
+                                "name": "pods",
+                                "singular_name": "pod",
+                                "kind": "Pod",
+                                "namespaced": True,
+                                "is_crd": False,
+                                "verbs": ["get", "list", "watch"],
+                            }
+                        ],
+                    },
+                }
+            },
+        }
+
     def filter_snapshot_context(
         self,
         workspace_id: str,
@@ -216,11 +298,11 @@ def test_refresh_policy_inventory_is_server_owned_and_complete() -> None:
     assert body["policies"]["port_sessions"]["pause_when_hidden"] is True
 
 
-def test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability() -> None:
+def test_settings_access_merges_product_rbac_with_agent_execution_authority() -> None:
     db = ShellStateDb()
     response = _client(db, ShellStateEvents()).get(
         "/settings/access",
-        params={"cluster_id": "cluster-a"},
+        params={"cluster_id": "cluster-a", "namespace": "shop"},
     )
 
     assert response.status_code == 200
@@ -232,16 +314,44 @@ def test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailabi
     assert decisions[Permission.CLUSTER_READ.value] is True
     assert decisions[Permission.DEPLOY_RUN.value] is True
     assert decisions[Permission.POD_EXEC.value] is False
-    assert body["kubernetes_rules"] == {
-        "status": "unavailable",
-        "reason_code": "subject_identity_not_delegated",
-        "detail": (
-            "The cluster agent authenticates as its own service account and cannot evaluate "
-            "Kubernetes rules for the signed-in product user."
-        ),
+    assert body["kubernetes_rules"]["status"] == "observed"
+    assert body["kubernetes_rules"]["authority"] == "cluster_agent_service_account"
+    assert body["kubernetes_rules"]["namespace"] == "shop"
+    assert body["kubernetes_rules"]["subject"] == {
+        "kind": "ServiceAccount",
+        "namespace": "agent-system",
+        "name": "cluster-agent",
     }
-    assert body["restricted_resource_types"]["reason_code"] == "visibility_cause_not_observed"
+    assert body["kubernetes_rules"]["resource_rules"][0]["resources"] == ["pods"]
+    assert body["restricted_resource_types"] == {
+        "status": "observed",
+        "authority": "cluster_agent_service_account",
+        "namespace": "shop",
+        "observed_at": "2026-07-17T00:00:00+00:00",
+        "completeness": "exact",
+        "reason_codes": [],
+        "items": [],
+    }
     assert len(body["revision"]) == 64
+
+
+def test_settings_access_fails_closed_when_agent_observation_is_missing() -> None:
+    db = ShellStateDb()
+    db.latest_inventory_snapshot = lambda *_args: None  # type: ignore[method-assign]
+
+    response = _client(db, ShellStateEvents()).get(
+        "/settings/access",
+        params={"cluster_id": "cluster-a", "namespace": "shop"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kubernetes_rules"]["status"] == "unavailable"
+    assert body["kubernetes_rules"]["reason_code"] == "agent_access_evidence_unavailable"
+    assert body["restricted_resource_types"]["status"] == "unavailable"
+    assert (
+        body["restricted_resource_types"]["reason_code"] == "agent_discovery_evidence_unavailable"
+    )
 
 
 def _client(db: ShellStateDb, events: ShellStateEvents) -> TestClient:

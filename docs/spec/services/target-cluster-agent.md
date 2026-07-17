@@ -169,7 +169,7 @@ async def wait_for_deployment_rollout(self, client: httpx.AsyncClient, base_url:
 
 #### `config.py` — 설정 단일 원천
 
-모듈 레벨 상수만 존재(클래스·함수 없음). 전체 목록과 기본값은 [설정](#설정-settings) 표 참조. 앵커: `src/services/target/cluster-agent/config.py`. 관측 스택 기본 URL(`DEFAULT_PROMETHEUS_BASE_URL`, `DEFAULT_LOKI_BASE_URL`, `DEFAULT_TEMPO_BASE_URL`, `DEFAULT_OTEL_SERVICE_NAME`)은 `packages.contracts.gateway.requests`에서 re-export만 한다(중복 정의 금지). 라이브 요약은 Kubernetes의 클러스터 범위 `/api/v1/pods`를 페이지 단위로 읽어 애플리케이션 네임스페이스를 누락하지 않으며, 페이지 500개·수집 5,000개 상한과 파드 수 기반 적응형 주기로 규모를 보호한다.
+모듈 레벨 상수만 존재(클래스·함수 없음). 전체 목록과 기본값은 [설정](#설정-settings) 표 참조. 앵커: `src/services/target/cluster-agent/config.py`. 정적 기본 URL은 Loki·Tempo·OTel에만 적용하고, Prometheus는 revision-bound integration이 제공한 주소와 header만 사용한다. 라이브 요약은 Kubernetes의 클러스터 범위 `/api/v1/pods`를 페이지 단위로 읽어 애플리케이션 네임스페이스를 누락하지 않으며, 페이지 500개·수집 5,000개 상한과 파드 수 기반 적응형 주기로 규모를 보호한다.
 
 #### `kubernetes_api.py` — in-cluster k8s API 접근 헬퍼
 
@@ -195,7 +195,7 @@ async def wait_for_deployment_rollout(self, client: httpx.AsyncClient, base_url:
 
 | 심볼 | 시그니처 | 앵커 |
 |---|---|---|
-| `NodeCollectorManagerConfig` | 상수: `NODE_COLLECTOR_ENABLED_ENV`, `NODE_COLLECTOR_IMAGE_ENV`, `NODE_COLLECTOR_NAMESPACE_ENV`, `NODE_COLLECTOR_NAME="optional-node-collector"`, `NODE_COLLECTOR_APP_LABEL="optional-node-collector"`, `NODE_COLLECTOR_CONTAINER_NAME="node-collector"`, `NODE_COLLECTOR_DEFAULT_IMAGE=""`, `NODE_COLLECTOR_DEFAULT_NAMESPACE="target"`, `NODE_COLLECTOR_PORT_ENV`, `NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV`, `NODE_COLLECTOR_PORT=int(env(..., "9100"))`, `NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS=int(env(..., "15"))`, 메시지 상수 5종(created/patched/dry-run/disabled/image-required), `NODE_COLLECTOR_MANAGED_BY_LABEL="ops.service/managed-by"`, `NODE_COLLECTOR_MANAGED_BY_VALUE="cluster-agent"` | `src/services/target/cluster-agent/node_collector_manager.py :: NodeCollectorManagerConfig` |
+| `NodeCollectorManagerConfig` | 상수: `NODE_COLLECTOR_ENABLED_ENV`, `NODE_COLLECTOR_IMAGE_ENV`, `NODE_COLLECTOR_NAMESPACE_ENV`, `NODE_COLLECTOR_NAME="optional-node-collector"`, `NODE_COLLECTOR_APP_LABEL="optional-node-collector"`, `NODE_COLLECTOR_CONTAINER_NAME="node-collector"`, `NODE_COLLECTOR_DEFAULT_IMAGE=""`, `NODE_COLLECTOR_DEFAULT_NAMESPACE="target"`, `NODE_COLLECTOR_PORT_ENV`, `NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV`, `NODE_COLLECTOR_PORT=int(env(..., "9100"))`, `NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS=int(env(..., "15"))`, 상태 메시지(created/patched/pending/identity-pending/dry-run/disabled/image-required), `NODE_COLLECTOR_MANAGED_BY_LABEL="ops.service/managed-by"`, `NODE_COLLECTOR_MANAGED_BY_VALUE="cluster-agent"` | `src/services/target/cluster-agent/node_collector_manager.py :: NodeCollectorManagerConfig` |
 | `NodeCollectorManager` | `def __init__(self, *, enabled: bool, image: str, namespace: str, transport: httpx.AsyncBaseTransport | None = None) -> None`; `@classmethod def from_env(cls, transport=None) -> NodeCollectorManager`; `async def reconcile(self) -> tuple[bool, str]`; `def daemonset(self) -> JsonObject` | `src/services/target/cluster-agent/node_collector_manager.py :: NodeCollectorManager` |
 | `truthy` | `def truthy(value: str) -> bool` — `{"1","true","yes","on"}`(대소문자 무시) | `src/services/target/cluster-agent/node_collector_manager.py :: truthy` |
 
@@ -206,7 +206,7 @@ async def wait_for_deployment_rollout(self, client: httpx.AsyncClient, base_url:
 | `node_collector_daemonset` | `def node_collector_daemonset(*, name: str, namespace: str, image: str, app_label: str, managed_by_label: str, managed_by_value: str, container_name: str, port: int, collect_interval_seconds: int) -> JsonObject` | `src/services/target/cluster-agent/node_collector_spec.py :: node_collector_daemonset` |
 | `node_collector_container` | `def node_collector_container(*, image: str, container_name: str, port: int, collect_interval_seconds: int) -> JsonObject` | `src/services/target/cluster-agent/node_collector_spec.py :: node_collector_container` |
 
-manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: <app_label>, <managed_by_label>: <managed_by_value>}`, `updateStrategy: RollingUpdate`, pod template annotations `prometheus.io/path=/metrics`, `prometheus.io/port=<port>`, `prometheus.io/scrape=true`, tolerations `[{operator: Exists}]`. 컨테이너: `imagePullPolicy: IfNotPresent`, `command: ["python", "src/services/target/node-collector/app.py"]`, env `PORT`, `COLLECT_INTERVAL_SECONDS`, `NODE_NAME`(fieldRef `spec.nodeName`), `POD_NAME`(`metadata.name`), `POD_NAMESPACE`(`metadata.namespace`), 포트 `{name: metrics, containerPort: <port>}`.
+manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: <app_label>, <managed_by_label>: <managed_by_value>}`, `updateStrategy: RollingUpdate`, pod template annotations `prometheus.io/path=/metrics`, `prometheus.io/port=<port>`, `prometheus.io/scrape=true`, `serviceAccountName=cluster-agent-node-collector`, tolerations `[{operator: Exists}]`. 전용 ServiceAccount는 `pods get/list` 전용 ClusterRole에만 바인딩되며 `cluster-agent` ServiceAccount를 재사용하지 않는다. 컨테이너: `imagePullPolicy: IfNotPresent`, `command: ["python", "src/services/target/node-collector/app.py"]`, env `PORT`, `COLLECT_INTERVAL_SECONDS`, `NODE_NAME`(fieldRef `spec.nodeName`), `POD_NAME`(`metadata.name`), `POD_NAMESPACE`(`metadata.namespace`), 포트 `{name: metrics, containerPort: <port>}`.
 
 #### `telemetry_registry.py` — 텔레메트리 소스 레지스트리(의존 없는 leaf)
 
@@ -409,8 +409,6 @@ def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
 
 ```python
 def __init__(self, base_url: str) -> None                     # rstrip("/")
-@classmethod
-def from_config(cls, read_config: ConfigReader) -> PrometheusMetricsProvider   # read_config("PROMETHEUS_BASE_URL", DEFAULT_PROMETHEUS_BASE_URL)
 async def query(self, client, telemetry_query: PrometheusInstantQuery | PrometheusRangeQuery) -> JsonObject
 async def query_instant(self, client, telemetry_query: PrometheusInstantQuery) -> JsonObject
 async def query_range(self, client, telemetry_query: PrometheusRangeQuery) -> JsonObject
@@ -595,7 +593,7 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
    - env 로드: `MANAGEMENT_BASE_URL`(빈 값이면 `RuntimeError("MANAGEMENT_BASE_URL is required")`), `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `HOSTNAME`(agent_id), `EVIDENCE_INTERVAL_SECONDS`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, OTEL 2종, worker counts 2종(`parse_provider_worker_counts`), failure policy, DB 경로 2종, sync/reconcile interval, `RECONCILER_MODE`.
    - `configure_tracing(otel_service_name, otel_traces_endpoint)` → `self.tracer`.
    - `NodeCollectorManager.from_env`, `LiveSummaryPublisher.from_env` 생성.
-   - `providers` 미주입 시 기본 5종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`, `MetadataProvider.from_config(env)`.
+   - `providers` 미주입 시 기본 4종: `KubernetesSnapshotProvider(cluster_id, transport)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`, `MetadataProvider.from_config(env)`. Prometheus provider는 integration revision을 검증한 후 collector·scheduler에 동적 등록한다.
    - `TelemetryQueryRegistry`, `EvidenceCollector(providers, registry)`, `AgentControlStore`, `CommandResultOutbox`, `EvidenceJobScheduler`(source_id=`"cluster-snapshot"`, provider_keys=collector의 evidence_key들) 생성.
    - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값 또는 fallback 1, max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값 또는 fallback 3, queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`. target role은 모든 provider를 기본 enabled로 시작하고, management role은 Kubernetes provider만 enabled로 시작한다.
    - `AgentPolicySync`, `DesiredStateReconciler`, `KubernetesApiClient`, `AgentCommandRegistry.from_instance(self, ..., default_handler=self.apply_default_command)` 생성 — 데코레이트된 6개 핸들러 자동 등록.
@@ -676,8 +674,8 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
 | provider | HTTP 호출 | 파라미터 |
 |---|---|---|
 | `KubernetesSnapshotProvider.query` | k8s API GET 9개: `/api/v1/namespaces/{ns}/pods`, `/api/v1/namespaces/{ns}/events`, `/api/v1/nodes`, `/apis/apps/v1/namespaces/{ns}/deployments`, `.../statefulsets`, `.../daemonsets`, `.../replicasets`, `/api/v1/namespaces/{ns}/services`, `/apis/discovery.k8s.io/v1/namespaces/{ns}/endpointslices`(403/404 허용→`{"items": []}`) | ns = `telemetry_query.namespace or "target"`. Bearer SA 토큰. API 미구성 시 `{"status": "unavailable", "reason": "kubernetes api is not configured", ...}` 반환(HTTP 호출 없음) |
-| `PrometheusMetricsProvider.query_instant` | `GET {PROMETHEUS_BASE_URL}/api/v1/query` | `query=<promql>` (span `prometheus.query`) |
-| `PrometheusMetricsProvider.query_range` | `GET {PROMETHEUS_BASE_URL}/api/v1/query_range` | `query=<promql>`, `start=now-range_seconds`(소수 3자리), `end=now`, `step=step_seconds or max(1, range_seconds//30)` (span `prometheus.query_range`) |
+| `PrometheusMetricsProvider.query_instant` | `GET {integration address}/api/v1/query` | `query=<promql>` (span `prometheus.query`) |
+| `PrometheusMetricsProvider.query_range` | `GET {integration address}/api/v1/query_range` | `query=<promql>`, `start=now-range_seconds`(소수 3자리), `end=now`, `step=step_seconds or max(1, range_seconds//30)` (span `prometheus.query_range`) |
 | `LokiLogsProvider.query` | `GET {LOKI_BASE_URL}/loki/api/v1/query_range` | `query=<logql>`, `limit=LOKI_QUERY_LIMIT(20)` (span `loki.query_range`) |
 | `TempoTracesProvider.query` | `GET {TEMPO_BASE_URL}/api/search` | `q=<traceql>`, `limit=TEMPO_QUERY_LIMIT(20)` (span `tempo.search`) |
 
@@ -699,8 +697,12 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 ### node-collector DaemonSet 관리
 
 - 주기: 기동 직후 1회 + `NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS`(30s)마다. 성공 시 `node_collector_reconciled` info(applied, message), 실패 시 `node_collector_reconcile_failed` 경고(루프 유지).
-- `NodeCollectorManager.reconcile()` 판정 순서: (1) `enabled=false` → `(False, "node collector reconcile disabled")`; (2) `image` 빈 값 → `(False, "node collector image is required")`; (3) k8s API 미구성 → `(False, "kubernetes api not configured; node collector dry-run only")`; (4) `GET /apis/apps/v1/namespaces/{ns}/daemonsets/optional-node-collector` — 404면 POST 생성 → `(True, "node collector daemonset created")`, 존재하면 `{metadata, spec}`만 strategic-merge PATCH → `(True, "node collector daemonset reconciled")`.
+- `NodeCollectorManager.reconcile()` 판정 순서: (1) `enabled=false` → `(False, "node collector reconcile disabled")`; (2) `image` 빈 값 → `(False, "node collector image is required")`; (3) k8s API 미구성 → `(False, "kubernetes api not configured; node collector dry-run only")`; (4) 전용 ServiceAccount·ClusterRole·ClusterRoleBinding 중 하나라도 GET 404면 DaemonSet을 변경하지 않고 `(False, "node collector identity requires administrator apply")`; (5) `GET /apis/apps/v1/namespaces/{ns}/daemonsets/optional-node-collector` — 404면 POST 생성 → `(True, "node collector daemonset created")`, 존재하면 `{metadata, spec}`만 strategic-merge PATCH → `(True, "node collector daemonset reconciled")`.
 - 인계 기준: target registration은 cluster-agent 설치까지만 담당하고, 이후 collector rollout·drift correction은 이 에이전트 경계에서 처리한다.
+- 등록/install manifest와 관리자 RBAC 업그레이드 artifact는 전용 ServiceAccount,
+  `cluster-agent-node-collector-read` ClusterRole/Binding을 함께 제공한다. RBAC 버전 drift가
+  있으면 기존 agent 정책 업그레이드는 관리자 apply 경로를 요구하므로 기존 클러스터에도
+  동일 권한 경계를 적용할 수 있다.
 
 ### live summary
 
@@ -758,7 +760,6 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 | `RECONCILE_INTERVAL_SECONDS` | int | `30` | desired state reconcile 주기 | `config.py` |
 | `RECONCILER_MODE` | str | `builtin` | desired state writer 선택. `builtin`은 기존 apply 경로, `argocd`는 built-in apply 0건 + Argo Application/Rollout GET 관측 | `config.py` / `control/reconciler.py` / `control/argocd_observer.py` |
 | `AGENT_DIRECT_COMMANDS_ENABLED` | str(bool) | `true` | `false`면 telemetry query 외 command를 Kubernetes 호출 전에 실패 처리. OSS profile은 `false` | `config.py` / `agent.py` |
-| `PROMETHEUS_BASE_URL` | str | `http://prometheus.target.svc:9090` | Prometheus 주소 (contracts re-export) | `config.py` |
 | `LOKI_BASE_URL` | str | `http://loki-gateway.target.svc` | Loki 주소 | `config.py` |
 | `TEMPO_BASE_URL` | str | `http://tempo.target.svc:3200` | Tempo 주소 | `config.py` |
 | `OTEL_SERVICE_NAME` | str | `target-cluster-agent` | 트레이싱 서비스명 | `config.py` |

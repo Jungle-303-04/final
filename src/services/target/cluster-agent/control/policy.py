@@ -17,6 +17,7 @@ LOGGER = get_logger(__name__)
 
 PolicyApplier = Callable[[AgentPolicy], JsonObject]
 PolicyStatusDetails = Callable[[], Awaitable[JsonObject]]
+RuntimeConfigurationApplier = Callable[[ManagementPlaneClient, AgentPolicy], Awaitable[JsonObject]]
 
 
 class AgentPolicySync:
@@ -29,6 +30,7 @@ class AgentPolicySync:
         apply_policy: PolicyApplier,
         interval_seconds: int,
         status_details: PolicyStatusDetails | None = None,
+        apply_runtime_configuration: RuntimeConfigurationApplier | None = None,
     ) -> None:
         self.cluster_id = cluster_id
         self.store = store
@@ -36,6 +38,12 @@ class AgentPolicySync:
         self.apply_policy = apply_policy
         self.interval_seconds = interval_seconds
         self.status_details = status_details
+        self.apply_runtime_configuration = apply_runtime_configuration
+
+    async def apply_runtime(self, client: ManagementPlaneClient, policy: AgentPolicy) -> JsonObject:
+        if self.apply_runtime_configuration is None:
+            return {}
+        return dict(await self.apply_runtime_configuration(client, policy))
 
     async def runtime_status_details(self) -> JsonObject:
         if self.status_details is None:
@@ -74,17 +82,32 @@ class AgentPolicySync:
             span.attr("policy.generation", generation)
             payload = await client.fetch_policy(self.cluster_id, generation)
             if payload is None:
-                details = await self.runtime_status_details()
-                await client.report_policy_status(
-                    {
-                        "cluster_id": self.cluster_id,
-                        "generation": generation,
-                        "status": "unchanged",
-                        "message": "policy unchanged",
-                        "details": details,
-                    }
-                )
-                return "unchanged"
+                policy = self.store.load_policy() or self.default_policy
+                try:
+                    details = await self.apply_runtime(client, policy)
+                    details.update(await self.runtime_status_details())
+                    await client.report_policy_status(
+                        {
+                            "cluster_id": self.cluster_id,
+                            "generation": generation,
+                            "status": "unchanged",
+                            "message": "policy unchanged",
+                            "details": details,
+                        }
+                    )
+                    return "unchanged"
+                except Exception as exc:
+                    span.error(exc)
+                    await client.report_policy_status(
+                        {
+                            "cluster_id": self.cluster_id,
+                            "generation": generation,
+                            "status": "failed",
+                            "message": str(exc),
+                            "details": await self.runtime_status_details(),
+                        }
+                    )
+                    return "failed"
 
             attempted_generation = self.payload_generation(payload, generation)
             try:
@@ -93,7 +116,8 @@ class AgentPolicySync:
                     self.store.load_policy() or self.default_policy,
                     incoming_policy,
                 )
-                details = self.apply_policy(policy)
+                details = await self.apply_runtime(client, policy)
+                details.update(self.apply_policy(policy))
                 details.update(await self.runtime_status_details())
                 self.store.save_policy(policy)
                 await client.report_policy_status(

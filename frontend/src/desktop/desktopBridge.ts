@@ -1,6 +1,11 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import type {
+  LocalPortForwardRequest,
+  PortForwardSession,
+} from "../features/service-access/portForwardSessionContract";
+
 export const DESKTOP_COMMAND = {
   capabilities: "desktop_capabilities",
   setActiveClusterTitle: "desktop_set_active_cluster_title",
@@ -96,48 +101,8 @@ export type DesktopLocalTerminalEvent =
   | { sessionId: string; kind: "exit"; exitCode: number; message?: string }
   | { sessionId: string; kind: "error"; message: string };
 
-export interface DesktopPortForwardSession {
-  id: string;
-  workspaceId: string;
-  clusterId: string;
-  freshness: "live" | "stale" | "partial" | "disconnected";
-  namespace: string;
-  resourceKind: "Pod" | "Service";
-  resourceName: string;
-  resourceUid: string;
-  podName: string | null;
-  podPort: number;
-  localPort: number;
-  listenAddress: "127.0.0.1" | "0.0.0.0";
-  serviceName: string | null;
-  servicePort: number | null;
-  scheme: "http" | "https" | null;
-  startedAt: string;
-  status: "starting" | "running" | "stopped" | "error";
-  error: string | null;
-  exitCode: number | null;
-}
-
-export interface DesktopLocalPortForwardRequest {
-  scope: {
-    workspaceId: string;
-    clusterId: string;
-    namespaces: string[];
-    freshness: "live" | "stale" | "partial" | "disconnected";
-  };
-  resource: {
-    apiGroup: "" | "core";
-    version: "v1";
-    kind: "Pod" | "Service";
-    namespace: string;
-    name: string;
-    uid: string;
-  };
-  remotePort: number;
-  localPort: number | null;
-  listenAddress: "127.0.0.1";
-  confirmation: true;
-}
+export type DesktopPortForwardSession = PortForwardSession;
+export type DesktopLocalPortForwardRequest = LocalPortForwardRequest;
 
 export interface DesktopPortForwardStartReceipt {
   sessionId: string;

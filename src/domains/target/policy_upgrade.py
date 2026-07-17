@@ -63,7 +63,6 @@ def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesi
                 "management_base_url": payload.management_base_url,
                 "cluster_role": payload.cluster_role,
                 "evidence_interval_seconds": payload.evidence_interval_seconds,
-                "prometheus_base_url": payload.prometheus_base_url,
                 "loki_base_url": payload.loki_base_url,
                 "tempo_base_url": payload.tempo_base_url,
                 "otel_traces_endpoint": payload.otel_traces_endpoint,

@@ -10,6 +10,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.identity.dependencies import require_cluster_access, require_session
+from domains.resource_access.projection import (
+    ResourceAccessUnavailable,
+    agent_execution_access_projection,
+)
 from domains.shell_state.events import NamespaceScopeUpdatedBody, UiPreferencesUpdatedBody
 from packages.config.refresh_policies import browser_refresh_policies
 from packages.contracts.auth import Actor
@@ -26,6 +30,8 @@ from packages.contracts.shell_state import (
     NamespaceScopeUpdateResponse,
     SettingsAccessDecision,
     SettingsAccessProfileResponse,
+    SettingsObservedKubernetesRules,
+    SettingsObservedRestrictedResourceTypes,
     SettingsUnavailableEvidence,
     ShellFreshness,
     UiPreferences,
@@ -238,10 +244,11 @@ async def update_settings(
 )
 async def get_settings_access(
     cluster_id: str = Query(min_length=1, max_length=255),
+    namespace: str = Query(default="default", min_length=1, max_length=253),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> SettingsAccessProfileResponse:
-    """Return product RBAC decisions without pretending they are Kubernetes user rules."""
+    """Return product RBAC beside the observed cluster-agent execution authority."""
     workspace_id = _workspace_id(current)
     _require_inventory_read(db, current, workspace_id, cluster_id)
     resolver = getattr(db, "effective_permissions_for_resource", None)
@@ -268,6 +275,49 @@ async def get_settings_access(
         for permission in sorted(Permission, key=lambda item: item.value)
     )
     roles = tuple(sorted({str(role) for role in (getattr(current, "roles", ()) or ())}))
+    snapshot_reader = getattr(db, "latest_inventory_snapshot", None)
+    execution_access = None
+    if callable(snapshot_reader):
+        snapshot = await asyncio.to_thread(snapshot_reader, workspace_id, cluster_id)
+        if isinstance(snapshot, dict):
+            try:
+                execution_access = agent_execution_access_projection(
+                    snapshot,
+                    namespace=namespace,
+                )
+            except (ResourceAccessUnavailable, ValueError):
+                execution_access = None
+    if execution_access is None:
+        kubernetes_rules = SettingsUnavailableEvidence(
+            reason_code="agent_access_evidence_unavailable",
+            detail=(
+                "The cluster agent has not produced a complete execution-authority "
+                "observation for this namespace."
+            ),
+        )
+        restricted_resource_types = SettingsUnavailableEvidence(
+            reason_code="agent_discovery_evidence_unavailable",
+            detail=(
+                "The cluster agent has not produced enough RBAC and discovery evidence "
+                "to classify restricted resource types."
+            ),
+        )
+    else:
+        kubernetes_rules = SettingsObservedKubernetesRules(
+            namespace=execution_access.namespace,
+            observed_at=execution_access.observed_at,
+            subject=execution_access.subject,
+            resource_rules=execution_access.resource_rules,
+            non_resource_rules=execution_access.non_resource_rules,
+            truncated=execution_access.truncated,
+        )
+        restricted_resource_types = SettingsObservedRestrictedResourceTypes(
+            namespace=execution_access.namespace,
+            observed_at=execution_access.observed_at,
+            completeness=execution_access.completeness,
+            reason_codes=execution_access.reason_codes,
+            items=execution_access.restricted_resource_types,
+        )
     revision_payload = {
         "workspace_id": workspace_id,
         "user_id": str(current.user_id),
@@ -276,6 +326,8 @@ async def get_settings_access(
         "permissions": [
             {"permission": item.permission, "allowed": item.allowed} for item in decisions
         ],
+        "kubernetes_rules": kubernetes_rules.model_dump(mode="json"),
+        "restricted_resource_types": restricted_resource_types.model_dump(mode="json"),
     }
     revision = hashlib.sha256(
         json.dumps(
@@ -291,20 +343,8 @@ async def get_settings_access(
         cluster_id=cluster_id,
         roles=roles,
         permissions=decisions,
-        kubernetes_rules=SettingsUnavailableEvidence(
-            reason_code="subject_identity_not_delegated",
-            detail=(
-                "The cluster agent authenticates as its own service account and cannot evaluate "
-                "Kubernetes rules for the signed-in product user."
-            ),
-        ),
-        restricted_resource_types=SettingsUnavailableEvidence(
-            reason_code="visibility_cause_not_observed",
-            detail=(
-                "Inventory does not yet preserve whether a missing resource type was denied, "
-                "not installed, or not watched."
-            ),
-        ),
+        kubernetes_rules=kubernetes_rules,
+        restricted_resource_types=restricted_resource_types,
         revision=revision,
     )
 

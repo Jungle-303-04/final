@@ -71,7 +71,7 @@ export const serviceAccessCapabilitiesSchema = z.strictObject({
   if (
     capabilities.local_port_forward === "desktop_required"
     && (
-      capabilities.local_port_forward_reason !== "desktop_port_forward_bridge_required"
+      capabilities.local_port_forward_reason !== "desktop_agent_port_forward_required"
       || capabilities.ports.length === 0
     )
   ) {
@@ -83,7 +83,7 @@ export const serviceAccessCapabilitiesSchema = z.strictObject({
   }
   if (
     capabilities.local_port_forward === "unavailable"
-    && capabilities.local_port_forward_reason === "desktop_port_forward_bridge_required"
+    && capabilities.local_port_forward_reason === "desktop_agent_port_forward_required"
   ) {
     context.addIssue({
       code: "custom",

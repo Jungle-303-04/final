@@ -20,6 +20,8 @@ const MAX_SAVE_FILE_BYTES: usize = 100 * 1024 * 1024;
 
 const UPDATER_BLOCKER: &str =
     "Updater is not implemented because signed release metadata and platform signing keys are not configured.";
+const PORT_FORWARD_BLOCKER: &str =
+    "Agent-backed port-forward transport is not implemented in this desktop build.";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -47,8 +49,9 @@ impl DesktopCapabilitySet {
             // The PTY is constructed and owned only by the local Tauri process.
             // It does not traverse the Python gateway or receive server-held credentials.
             local_terminal: CapabilityAvailability::available(),
-            // The registry and listener handles remain inside this Tauri process.
-            port_forward_sessions: CapabilityAvailability::available(),
+            // Desktop presence alone is not target-cluster authority. Enable
+            // only after a loopback listener is wired to the audited agent stream.
+            port_forward_sessions: CapabilityAvailability::unsupported(PORT_FORWARD_BLOCKER),
             updater: CapabilityAvailability::unsupported(UPDATER_BLOCKER),
         }
     }

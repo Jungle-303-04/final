@@ -1,6 +1,7 @@
 import { apiRequest } from "./client";
 import { rightsizingScanSchema, type RightsizingScanEndpoint } from "./rightsizing-schemas";
 import { withQuery } from "./url";
+import { canonicalKubernetesNamespaces } from "../shared/data/kubernetesNamespace";
 
 export const RIGHTSIZING_SCAN_PATH = "/api/rightsizing/workloads" as const;
 export const RIGHTSIZING_SCAN_LIMIT = 200;
@@ -29,15 +30,7 @@ export function getRightsizingScan(
 }
 
 export function canonicalNamespaces(namespaces: readonly string[]): readonly string[] {
-  if (namespaces.length > 100) throw new RangeError("Too many rightsizing namespaces");
-  const normalized = namespaces.map((namespace) => required(namespace, "namespace"));
-  if (normalized.some((namespace) =>
-    namespace.length > 63 ||
-    namespace.includes(",") ||
-    !/^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/.test(namespace))) {
-    throw new TypeError("Rightsizing namespace is invalid");
-  }
-  return [...new Set(normalized)].sort();
+  return canonicalKubernetesNamespaces(namespaces, 100);
 }
 
 function required(value: string, label: string): string {

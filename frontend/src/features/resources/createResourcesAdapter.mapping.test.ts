@@ -7,12 +7,24 @@ import { createResourcesAdapter } from "./createResourcesAdapter";
 import { endpoints } from "./createResourcesAdapter.testSupport";
 
 describe("canonical Resources catalog and list mapping", () => {
-  it("maps and aggregates the server inventory catalog without claiming completeness", async () => {
-    await expect(createResourcesAdapter(endpoints()).loadCatalog("cluster-1"))
+  it("maps namespace-scoped observed counts and agent visibility evidence", async () => {
+    const dependencies = endpoints();
+    await expect(createResourcesAdapter(dependencies).loadCatalog("cluster-1", ["shop"]))
       .resolves.toEqual({
         clusterId: "cluster-1",
-        completeness: "unknown",
+        completeness: "observed",
         observedAt: "2026-07-12T10:00:00.000Z",
+        namespaceScope: ["shop"],
+        reasonCodes: [],
+        forbidden: [{
+          namespace: "shop",
+          apiGroup: "apps",
+          version: "v1",
+          resource: "deployments",
+          kind: "Deployment",
+          namespaced: true,
+          reasonCode: "list_permission_not_observed",
+        }],
         apiDiscovery: {
           completeness: "exact",
           observedAt: "2026-07-12T10:00:00.000Z",
@@ -54,6 +66,11 @@ describe("canonical Resources catalog and list mapping", () => {
           },
         ],
       } satisfies ResourceCatalog);
+    expect(dependencies.getInventorySummary).toHaveBeenCalledWith(
+      "cluster-1",
+      ["shop"],
+      undefined,
+    );
   });
 
   it("maps UID and fallback identities, safe metadata, Pod facts, and limit state", async () => {

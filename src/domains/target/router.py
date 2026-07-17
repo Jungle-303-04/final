@@ -67,10 +67,7 @@ from domains.target.management_guard import (
 from domains.target.policy_upgrade import target_desired_components
 from domains.target.reconciler import desired_state_version
 from domains.target.uninstall import (
-    SELF_CLEANUP_RESIDUALS,
     queue_agent_uninstall,
-    target_uninstall_command,
-    target_uninstall_resources,
 )
 from packages.config.security import (
     TEST_FIXTURE_ENVIRONMENT,
@@ -123,6 +120,13 @@ from packages.runtime.dependencies import (
     get_db,
     get_events,
     get_timeline_fanout,
+)
+from packages.security.credentials import (
+    CredentialEncryptionError,
+    agent_envelope_public_key,
+    decrypt_credential,
+    encrypt_credential,
+    generate_agent_envelope_keypair,
 )
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
@@ -179,6 +183,7 @@ BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
 CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 AGENT_STATUS_NOT_REGISTERED = "not_registered"
 AGENT_STATUS_PENDING_INSTALL = ClusterRegistrationStatus.PENDING_INSTALL.value
+AGENT_STATUS_INSTALL_FAILED = ClusterRegistrationStatus.INSTALL_FAILED.value
 AGENT_STATUS_INSTALL_EXPIRED = ClusterRegistrationStatus.INSTALL_EXPIRED.value
 CONCRETE_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks", "kind"})
 GENERIC_ONPREM_PROVIDERS = frozenset({"existing-k8s", "minikube", "onprem"})
@@ -186,6 +191,7 @@ DETECTED_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks"})
 AGENT_ERROR_STATUSES = frozenset({"error", "failed"})
 TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
 MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
+AGENT_BOOTSTRAP_HTTPS_REQUIRED = "remote agent bootstrap requires an HTTPS management URL"
 EXTERNAL_ACCESS_REQUIRED = "external access URL is required to enroll another cluster"
 TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS"
 TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
@@ -334,7 +340,6 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
         updates["install_sample_workload"] = False
         updates["control_namespaces"] = payload.control_namespaces or SANDBOX_NAMESPACE
         for telemetry_field in (
-            "prometheus_base_url",
             "loki_base_url",
             "tempo_base_url",
             "otel_traces_endpoint",
@@ -420,8 +425,20 @@ def reject_test_target(payload: TargetRegisterRequest) -> None:
 
 
 def require_management_base_url(payload: TargetRegisterRequest) -> None:
-    if not normalized_management_base_url(payload.management_base_url):
+    normalized = normalized_management_base_url(payload.management_base_url)
+    if not normalized:
         raise HTTPException(status_code=422, detail=MANAGEMENT_BASE_URL_NOT_CONFIGURED)
+
+
+def require_secure_agent_bootstrap(payload: TargetRegisterRequest) -> None:
+    normalized = normalized_management_base_url(payload.management_base_url)
+    parsed = urlsplit(normalized)
+    hostname = (parsed.hostname or "").casefold()
+    local_development_host = hostname in {"localhost", "127.0.0.1", "::1"} or hostname.endswith(
+        ".local"
+    )
+    if parsed.scheme != "https" and not local_development_host:
+        raise HTTPException(status_code=422, detail=AGENT_BOOTSTRAP_HTTPS_REQUIRED)
 
 
 def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
@@ -742,11 +759,16 @@ def install_response(
     connect_expires_at: str | None = None,
 ) -> TargetInstallResponse:
     bootstrap_command = bootstrap_command_for(payload, agent_token)
+    applied = apply_output is not None
     return TargetInstallResponse(
         registered=True,
         cluster_id=payload.cluster_id,
-        status=ClusterRegistrationStatus.PENDING_INSTALL.value,
-        applied=apply_output is not None,
+        status=(
+            ClusterRegistrationStatus.INSTALL_APPLIED.value
+            if applied
+            else ClusterRegistrationStatus.PENDING_INSTALL.value
+        ),
+        applied=applied,
         apply_output=apply_output,
         install_manifest=manifest,
         agent_token=agent_token,
@@ -755,7 +777,7 @@ def install_response(
         bootstrap_steps=bootstrap_steps_for(payload, bootstrap_command),
         connect_timeout_seconds=connect_timeout_seconds,
         connect_expires_at=connect_expires_at,
-        connection_stage="token_issued",
+        connection_stage="awaiting_install" if applied else "token_issued",
         management_access=management_access_response(),
     )
 
@@ -794,10 +816,15 @@ def registration_connection_status(
         return AGENT_STATUS_NEVER_CONNECTED
     status = str(registration.get("status") or "")
     expires_at = parse_timestamp(registration_connect_expires_at(registration))
-    if status == ClusterRegistrationStatus.PENDING_INSTALL.value:
+    if status in {
+        ClusterRegistrationStatus.PENDING_INSTALL.value,
+        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+    }:
         if expires_at is not None and datetime.now(UTC) > expires_at:
             return AGENT_STATUS_INSTALL_EXPIRED
         return AGENT_STATUS_PENDING_INSTALL
+    if status == ClusterRegistrationStatus.INSTALL_FAILED.value:
+        return AGENT_STATUS_INSTALL_FAILED
     if status == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
         return AGENT_STATUS_INSTALL_EXPIRED
     return agent_status
@@ -873,6 +900,8 @@ def cluster_connection_stage(
         return "expired"
     if connection_status == AGENT_STATUS_PENDING_INSTALL:
         return "awaiting_install"
+    if connection_status == AGENT_STATUS_INSTALL_FAILED:
+        return "error"
     return "error"
 
 
@@ -1072,6 +1101,7 @@ async def register_target(
         and access.reachability == "self_only"
     ):
         raise HTTPException(status_code=422, detail=EXTERNAL_ACCESS_REQUIRED)
+    require_secure_agent_bootstrap(scoped_payload)
     require_target_registration_preflight(scoped_payload, workspace_id, db)
     validate_target_install_providers(scoped_payload)
     validate_target_bootstrap_config(scoped_payload)
@@ -1081,12 +1111,18 @@ async def register_target(
     # 클러스터별 agent 토큰 생성 — 원문은 이 클러스터 secret 에만 주입, 해시만 레지스트리에 저장.
     # 전역 AGENT_TOKEN 신뢰를 제거(토큰 1개로 전 워크스페이스 접근하던 구멍 차단). 재등록 시 회전.
     agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
-    manifest = target_install_manifest(scoped_payload, agent_token)
-    apply_output = (
-        apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
-        if scoped_payload.apply
-        else None
+    agent_envelope_public_key, agent_envelope_private_key = generate_agent_envelope_keypair()
+    encrypted_agent_envelope_private_key = encrypt_credential(agent_envelope_private_key)
+    manifest = target_install_manifest(
+        scoped_payload,
+        agent_token,
+        agent_envelope_private_key,
     )
+    status_updater = getattr(db, "update_cluster_registration_status", None)
+    if scoped_payload.apply and not callable(status_updater):
+        raise HTTPException(
+            status_code=503, detail="cluster registration status update unavailable"
+        )
     connect_timeout_seconds = target_registration_connect_timeout_seconds()
     created_at = datetime.now(UTC)
     connect_expires_at = connect_expires_at_from(created_at, connect_timeout_seconds)
@@ -1096,7 +1132,22 @@ async def register_target(
 
     # 클러스터 등록·정책·desired-state·이벤트 스테이징을 한 트랜잭션으로 —
     # 부분 실패 시 정책/desired-state 없는 반쪽 등록(고아)이 남지 않음.
-    with unit_of_work_or_null(db):
+    with unit_of_work_or_null(db) as registration_connection:
+        # 동시 등록은 같은 클러스터 advisory lock 아래에서 재확인해 후행 upsert가
+        # 먼저 commit된 agent key를 회전시키거나 두 agent를 apply하지 못하게 한다.
+        registration_lock = getattr(db, "lock_cluster_policy_for_update", None)
+        if callable(registration_lock):
+            registration_lock(
+                workspace_id,
+                scoped_payload.cluster_id,
+                conn=registration_connection,
+            )
+        registration_getter = getattr(db, "get_cluster_registration", None)
+        if (
+            callable(registration_getter)
+            and registration_getter(workspace_id, scoped_payload.cluster_id) is not None
+        ):
+            raise HTTPException(status_code=409, detail="cluster_id is already registered")
         db.register_target_cluster(
             {
                 "workspace_id": workspace_id,
@@ -1106,6 +1157,8 @@ async def register_target(
                 "environment": scoped_payload.environment,
                 "status": ClusterRegistrationStatus.PENDING_INSTALL.value,
                 "agent_token_hash": hash_agent_token(agent_token),
+                "agent_envelope_public_key": agent_envelope_public_key,
+                "agent_envelope_private_key_encrypted": (encrypted_agent_envelope_private_key),
                 "settings": registration_settings,
             }
         )
@@ -1139,6 +1192,27 @@ async def register_target(
                 requested_by=current.user_id,
             )
         )
+
+    # 외부 bootstrap은 pending 등록 commit 뒤에만 실행한다. kubectl apply는 같은
+    # manifest 재시도에 멱등이며, 부분 실패해도 저장된 per-cluster key를 유지한다.
+    apply_output: str | None = None
+    if scoped_payload.apply:
+        try:
+            apply_output = apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
+        except Exception:
+            with unit_of_work_or_null(db):
+                status_updater(
+                    workspace_id,
+                    scoped_payload.cluster_id,
+                    ClusterRegistrationStatus.INSTALL_FAILED.value,
+                )
+            raise
+        with unit_of_work_or_null(db):
+            status_updater(
+                workspace_id,
+                scoped_payload.cluster_id,
+                ClusterRegistrationStatus.INSTALL_APPLIED.value,
+            )
     return install_response(
         scoped_payload,
         manifest,
@@ -1205,6 +1279,8 @@ async def reissue_cluster_connect_command(
     status = str(registration.get("status") or "")
     if status not in {
         ClusterRegistrationStatus.PENDING_INSTALL.value,
+        ClusterRegistrationStatus.INSTALL_APPLIED.value,
+        ClusterRegistrationStatus.INSTALL_FAILED.value,
         ClusterRegistrationStatus.INSTALL_EXPIRED.value,
     }:
         raise HTTPException(
@@ -1229,7 +1305,10 @@ async def reissue_cluster_connect_command(
     payload = normalize_target_provider_defaults(
         target_register_payload_from_settings(registration.get("settings") or {})
     )
+    require_secure_agent_bootstrap(payload)
     agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
+    agent_envelope_public_key, agent_envelope_private_key = generate_agent_envelope_keypair()
+    encrypted_agent_envelope_private_key = encrypt_credential(agent_envelope_private_key)
     timeout_seconds = target_registration_connect_timeout_seconds()
     expires_at = connect_expires_at_from(datetime.now(UTC), timeout_seconds)
     settings = payload.model_dump(exclude={"apply", "kube_context"})
@@ -1245,6 +1324,8 @@ async def reissue_cluster_connect_command(
             workspace_id,
             cluster_id,
             agent_token_hash=hash_agent_token(agent_token),
+            agent_envelope_public_key=agent_envelope_public_key,
+            agent_envelope_private_key_encrypted=encrypted_agent_envelope_private_key,
             settings=settings,
         )
         if not rotated:
@@ -1279,8 +1360,18 @@ async def install_manifest_by_token(
     registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
     if registration is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    try:
+        agent_envelope_private_key = decrypt_credential(
+            str(registration.get("agent_envelope_private_key_encrypted") or "")
+        )
+        if agent_envelope_public_key(agent_envelope_private_key) != str(
+            registration.get("agent_envelope_public_key") or ""
+        ):
+            raise CredentialEncryptionError("agent envelope keypair does not match")
+    except CredentialEncryptionError as exc:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found") from exc
     payload = target_register_payload_from_settings(registration.get("settings") or {})
-    manifest = target_install_manifest(payload, agent_token)
+    manifest = target_install_manifest(payload, agent_token, agent_envelope_private_key)
     return PlainTextResponse(
         manifest,
         media_type="text/yaml",
@@ -1626,13 +1717,10 @@ async def update_cluster_scheduling_profiles(
 async def unregister_cluster(
     cluster_id: str,
     purge: bool = False,
-    manual_cleanup_attested: bool = False,
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> ClusterUnregisterResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    uninstall_command = target_uninstall_command()
-    resources = target_uninstall_resources()
     if purge:
         # 테스트 fixture 물리 삭제만 별도 UoW로 묶고 운영 soft-delete 경로는 그대로 둔다.
         with unit_of_work_or_null(db):
@@ -1657,85 +1745,58 @@ async def unregister_cluster(
         )
 
     unregisterable_registration(db, workspace_id, cluster_id)
-    if not manual_cleanup_attested:
-        agents = visible_cluster_agent_statuses(
-            db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
+    latest_agent = agents[0] if agents else None
+    online = cluster_connection_status(latest_agent) == AGENT_STATUS_ONLINE
+    status_updater = getattr(db, "update_cluster_registration_status", None)
+    if callable(status_updater):
+        status_updater(
+            workspace_id,
+            cluster_id,
+            ClusterRegistrationStatus.UNINSTALL_REQUESTED.value,
         )
-        latest_agent = agents[0] if agents else None
-        online = cluster_connection_status(latest_agent) == AGENT_STATUS_ONLINE
-        queue = getattr(db, "queue_agent_command", None)
-        failure_reason: str | None = None
-        if online and callable(queue):
-            try:
-                queued = queue_agent_uninstall(
-                    db,
-                    cluster_id=cluster_id,
-                    workspace_id=workspace_id,
-                    requested_by=str(current.user_id),
-                )
-            except Exception as exc:
-                failure_reason = f"agent cleanup queue failed: {type(exc).__name__}"
-            else:
-                if queued.inserted:
-                    status_updater = getattr(db, "update_cluster_registration_status", None)
-                    if callable(status_updater):
-                        status_updater(
-                            workspace_id,
-                            cluster_id,
-                            ClusterRegistrationStatus.UNINSTALL_REQUESTED.value,
-                        )
-                    return ClusterUnregisterResponse(
-                        cluster_id=cluster_id,
-                        status="uninstalling",
-                        stage="agent_cleanup_queued",
-                        command_id=queued.command_id,
-                        command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(
-                            command_id=queued.command_id
-                        ),
-                        uninstall_command=uninstall_command,
-                        resources=resources,
-                        residual_resources=list(SELF_CLEANUP_RESIDUALS),
-                    )
-                failure_reason = "agent cleanup command was not queued"
-        elif online:
-            failure_reason = "agent cleanup queue is unavailable"
-        else:
-            failure_reason = "agent is offline; run the uninstall command in the cluster"
+    queue = getattr(db, "queue_agent_command", None)
+    if not callable(queue):
         return ClusterUnregisterResponse(
             cluster_id=cluster_id,
             status="cleanup_required",
-            stage="manual_cleanup_required",
-            uninstall_command=uninstall_command,
-            resources=resources,
-            residual_resources=list(SELF_CLEANUP_RESIDUALS),
-            failure_reason=failure_reason,
+            stage="agent_cleanup_pending",
+            failure_reason="agent cleanup queue is unavailable",
         )
-
-    unregister = getattr(db, "unregister_target_cluster", None)
-    if callable(unregister):
-        if not unregister(workspace_id, cluster_id):
-            raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+    try:
+        queued = queue_agent_uninstall(
+            db,
+            cluster_id=cluster_id,
+            workspace_id=workspace_id,
+            requested_by=str(current.user_id),
+        )
+    except Exception as exc:
         return ClusterUnregisterResponse(
             cluster_id=cluster_id,
-            status="disconnected",
-            stage="registration_revoked",
-            cleanup_verified=False,
+            status="cleanup_required",
+            stage="agent_cleanup_pending",
+            failure_reason=f"agent cleanup queue failed: {type(exc).__name__}",
         )
-    status_updater = getattr(db, "update_cluster_registration_status", None)
-    if callable(status_updater):
-        status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.DISCONNECTED.value)
+    if not queued.inserted:
         return ClusterUnregisterResponse(
             cluster_id=cluster_id,
-            status="disconnected",
-            stage="registration_revoked",
-            cleanup_verified=False,
+            status="cleanup_required",
+            stage="agent_cleanup_pending",
+            command_id=queued.command_id,
+            command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(
+                command_id=queued.command_id
+            ),
+            failure_reason="agent cleanup command is already pending",
         )
-    raise HTTPException(
-        status_code=500,
-        detail={
-            "code": "cluster_unregister_unsupported",
-            "detail": "등록 해제를 처리할 수 없습니다",
-        },
+    return ClusterUnregisterResponse(
+        cluster_id=cluster_id,
+        status="uninstalling" if online else "cleanup_required",
+        stage="agent_cleanup_queued" if online else "agent_cleanup_pending",
+        command_id=queued.command_id,
+        command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(command_id=queued.command_id),
+        failure_reason=None if online else "agent is offline; cleanup waits for agent reconnect",
     )
 
 

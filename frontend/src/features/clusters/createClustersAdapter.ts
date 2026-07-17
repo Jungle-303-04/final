@@ -35,10 +35,7 @@ interface ClusterUnregisterWire {
   stage: string;
   command_id: string | null;
   command_status_path: string | null;
-  uninstall_command: string | null;
   cleanup_verified: boolean;
-  resources: string[];
-  residual_resources: string[];
   failure_reason: string | null;
 }
 
@@ -62,7 +59,6 @@ export interface ClustersEndpointDependencies {
   ): Promise<ClusterConnectWire>;
   unregisterCluster(
     clusterId: string,
-    options?: { manualCleanupAttested?: boolean },
     signal?: AbortSignal,
   ): Promise<ClusterUnregisterWire>;
   getCommandStatus(commandId: string, signal?: AbortSignal): Promise<CommandStatusWire>;
@@ -103,21 +99,12 @@ export function createClustersAdapter(
     },
     async disconnect(clusterId, signal) {
       return withFailure(async () => disconnectReceipt(
-        await endpoints.unregisterCluster(clusterId, {}, signal),
+        await endpoints.unregisterCluster(clusterId, signal),
       ));
     },
     async loadDisconnect(commandId, signal) {
       return withFailure(async () => disconnectProgress(
         await endpoints.getCommandStatus(commandId, signal),
-      ));
-    },
-    async confirmManualCleanup(clusterId, signal) {
-      return withFailure(async () => disconnectReceipt(
-        await endpoints.unregisterCluster(
-          clusterId,
-          { manualCleanupAttested: true },
-          signal,
-        ),
       ));
     },
   };
@@ -142,8 +129,6 @@ function disconnectReceipt(response: ClusterUnregisterWire): ClusterDisconnectRe
         ? "uninstalling"
         : "disconnected",
     commandId: response.command_id,
-    uninstallCommand: response.uninstall_command,
-    residualResources: response.residual_resources,
     failureReason: response.failure_reason,
   };
 }

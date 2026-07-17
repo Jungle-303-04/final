@@ -7,12 +7,12 @@ fn desktop_foundation_keeps_the_active_cluster_in_the_window_title() {
 }
 
 #[test]
-fn native_local_pty_and_unavailable_updater_are_honest_capabilities() {
+fn native_local_pty_and_unavailable_remote_transports_are_honest_capabilities() {
     let capabilities = desktop_capabilities();
     assert_eq!(format!("{:?}", capabilities.local_terminal.state), "Available");
     assert_eq!(
         format!("{:?}", capabilities.port_forward_sessions.state),
-        "Available"
+        "Unsupported"
     );
     assert_eq!(format!("{:?}", capabilities.updater.state), "Unsupported");
 }

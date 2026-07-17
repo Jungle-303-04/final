@@ -7,7 +7,7 @@ governing: docs/f-coordination-plan.md · docs/backend-f-workqueue.md
 
 # 백엔드 F 진행 현황
 
-현재 상태: **앵커 46건**
+현재 상태: **앵커 45건**
 
 ## 역사적 Delta-green baseline (BQ-001~003)
 
@@ -838,23 +838,11 @@ Bundle route는 200을 반환한다.
 
 ### 보조 대기열 S16 — kubectl server dry-run adapter 직접 테스트
 
-- 상태: landed
-- 담당 lane: `codex/kubernetes-dry-run-tests`
-- 테스트와 feature HEAD: `ccdcc1a08aef4d1aa30929dea717f455ea0a447e`
-- canonical no-ff merge: `01dc635583f45d058d0d324d70b0c02a42d66889`
-- `src/services/gitops/diff-worker/kubernetes_dry_run.py` 소스 변경 없이 직접 테스트 8개를 추가했다.
-- 실제 임시 `desired.json` 내용과 정리, custom kubectl·field manager·timeout 전달,
-  SSA apply 다음 live get의 정확한 argv와 kind/name/namespace 경계를 고정했다.
-- apply 실패 시 get 차단, get 실패 시 predicted 보존, kubectl 부재·timeout·process error·
-  invalid JSON 매핑, import-time timeout 기본값 binding을 검증했다.
-- 고유 검증: `tests/test_kubernetes_dry_run.py` 8 passed.
-- 전체 게이트: Ruff lint/format PASS, import-linter 8 kept/0 broken,
-  pytest `1942 passed, 3 skipped`; manifest management 69 / target 20.
-- 4조건: merge-tree exit 0/tree `68cb35ca8dc94ec15299e23824edd86d85e5ead4`;
-  파일 삭제·소유권 밖 변경·frozen 경로 변경 0건; test·merge commit의 `origin/dev`
-  ancestor exit 0.
-
-계약 완성: kubectl server dry-run subprocess and error mapping tests (ccdcc1a08aef4d1aa30929dea717f455ea0a447e) [green]
+- 상태: superseded
+- 당시 GitOps diff-worker의 gateway-side SSA adapter를 검증했으나, 현재 제품 경계에서는
+  target Kubernetes 실행을 cluster-agent로 단일화했다.
+- diff-worker의 직접 adapter와 전용 테스트는 제거됐고,
+  `tests/test_gitops_agent_boundary.py`가 SSA 실행자가 cluster-agent 하나뿐임을 강제한다.
 
 ### 보조 대기열 S17 — probe startup window 시나리오
 

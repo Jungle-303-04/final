@@ -34,9 +34,8 @@ DEFAULT_COMMAND_STATUS: Literal["completed", "failed"] = CommandStatus.COMPLETED
 EMPTY_COMMAND_MESSAGE = ""
 DEFAULT_TARGET_NAME = "target-cluster"
 DEFAULT_TARGET_ENVIRONMENT = "sandbox"
-# target cluster 실제 관측 스택 Service 주소(deploy/target/*.yaml Helm values와 정렬됨)
-# 관측 스택 기본 주소의 유일한 정의 지점 — 서비스 쪽에서는 여기서 import 함(중복 정의 금지)
-DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
+# target cluster static telemetry defaults. Prometheus is intentionally absent:
+# its revision-bound integration is the only runtime authority.
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
 DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
 DEFAULT_OTEL_SERVICE_NAME = "target-cluster-agent"
@@ -352,7 +351,6 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
     name: str = DEFAULT_TARGET_NAME
     environment: str = DEFAULT_TARGET_ENVIRONMENT
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    prometheus_base_url: str = DEFAULT_PROMETHEUS_BASE_URL
     loki_base_url: str = DEFAULT_LOKI_BASE_URL
     tempo_base_url: str = DEFAULT_TEMPO_BASE_URL
     otel_traces_endpoint: str = DEFAULT_OTEL_TRACES_ENDPOINT
@@ -511,8 +509,7 @@ class AgentDebugQueryRequest(StrictModel):
     reason: str | None = None
 
 
-class MetricQueryPresetUpsertRequest(StrictModel):
-    preset_id: str | None = Field(default=None, min_length=1, max_length=120)
+class PrometheusQueryDefinition(StrictModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
     source: Literal["prometheus"] = "prometheus"
@@ -527,17 +524,25 @@ class MetricQueryPresetUpsertRequest(StrictModel):
         ge=MIN_METRIC_STEP_SECONDS,
         le=MAX_METRIC_STEP_SECONDS,
     )
-    unit: str = Field(default="", max_length=40)
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _validate_bounds(self) -> MetricQueryPresetUpsertRequest:
+    def _validate_bounds(self) -> PrometheusQueryDefinition:
         if (
             self.range_seconds is not None
             and self.step_seconds is not None
             and self.step_seconds > self.range_seconds
         ):
             raise ValueError("step_seconds must be less than or equal to range_seconds")
+        return self
+
+
+class MetricQueryPresetUpsertRequest(PrometheusQueryDefinition):
+    preset_id: str | None = Field(default=None, min_length=1, max_length=120)
+    unit: str = Field(default="", max_length=40)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_metadata_bound(self) -> MetricQueryPresetUpsertRequest:
         _ensure_metric_json_bound({"metadata": self.metadata})
         return self
 
@@ -802,24 +807,6 @@ class RcaRuleValidateRequest(StrictModel):
     yaml_text: str = Field(min_length=1, max_length=100_000)
 
 
-class MetricsValidateRequest(StrictModel):
-    source: Literal["prometheus"] = "prometheus"
-    query: str = Field(min_length=1, max_length=MAX_METRIC_QUERY_LENGTH)
-    base_url: str | None = Field(default=None, max_length=500, deprecated=True)
-    range_seconds: int | None = Field(default=300, ge=MIN_METRIC_RANGE_SECONDS, le=3600)
-    step_seconds: int | None = Field(default=30, ge=MIN_METRIC_STEP_SECONDS, le=300)
-
-    @model_validator(mode="after")
-    def _validate_range(self) -> MetricsValidateRequest:
-        if (
-            self.range_seconds is not None
-            and self.step_seconds is not None
-            and self.step_seconds > self.range_seconds
-        ):
-            raise ValueError("step_seconds must be less than or equal to range_seconds")
-        return self
-
-
 class AlertmanagerAlert(StrictModel):
     """Alertmanager webhook payload 의 alert 항목 — 외부 계약이라 필드명 camelCase 유지."""
 
@@ -896,6 +883,18 @@ class EvidenceProviderPolicy(StrictModel):
     max_workers: int = Field(default=DEFAULT_PROVIDER_MAX_WORKERS, ge=0)
     queue_age_target_seconds: int = Field(default=DEFAULT_QUEUE_AGE_TARGET_SECONDS, ge=1)
     queries: list[dict[str, Any]] = Field(default_factory=list)
+    # Opaque management-plane revision only. Provider secrets never enter the
+    # durable policy or the agent's on-disk policy cache.
+    configuration_revision: str | None = Field(default=None, min_length=1, max_length=120)
+    configuration_operation_id: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @model_validator(mode="after")
+    def require_complete_configuration_identity(self) -> EvidenceProviderPolicy:
+        if (self.configuration_revision is None) != (self.configuration_operation_id is None):
+            raise ValueError(
+                "provider configuration revision and operation identity must be paired"
+            )
+        return self
 
 
 class EvidenceRuntimePolicy(StrictModel):

@@ -69,12 +69,7 @@ class DynamicResourceCollectionSpec(StrictModel):
     @field_validator("namespaces")
     @classmethod
     def validate_namespaces(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        normalized = tuple(value.strip() for value in values)
-        if any(not _is_dns_label(value) for value in normalized):
-            raise ValueError("dynamic Kubernetes resource namespace must be a DNS label")
-        if len(set(normalized)) != len(normalized):
-            raise ValueError("dynamic Kubernetes resource namespaces must be unique")
-        return tuple(sorted(normalized))
+        return canonical_kubernetes_namespaces(values)
 
 
 class ApiResourceDescriptor(StrictModel):
@@ -99,6 +94,19 @@ class ApiResourceDiscoveryObservation(StrictModel):
         default_factory=list,
         max_length=MAX_API_RESOURCES,
     )
+
+
+def canonical_kubernetes_namespaces(values: Sequence[str]) -> tuple[str, ...]:
+    """Validate one bounded namespace set shared by collection and read contracts."""
+
+    if len(values) > MAX_DYNAMIC_RESOURCE_NAMESPACES:
+        raise ValueError("too many Kubernetes namespaces")
+    normalized = tuple(value.strip() for value in values)
+    if any(not _is_dns_label(value) for value in normalized):
+        raise ValueError("Kubernetes namespace must be a DNS label")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("Kubernetes namespaces must be unique")
+    return tuple(sorted(normalized))
 
 
 def normalize_api_resource_discovery(

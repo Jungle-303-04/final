@@ -1,5 +1,5 @@
 meta {
-  name: 08 PromQL dry-run 검증
+  name: 08 PromQL agent 검증
   type: http
   seq: 8
   tags: [metrics, wizard, validation]
@@ -16,23 +16,28 @@ headers {
 
 body:json {
   {
-    "source": "prometheus",
-    "query": "up",
-    "range_seconds": 300,
-    "step_seconds": 30
+    "cluster_id": "{{cluster_id}}",
+    "query": {
+      "source": "prometheus",
+      "name": "promql_validation",
+      "query": "up",
+      "range_seconds": 300,
+      "step_seconds": 30
+    }
   }
 }
 
 tests {
-  test("session can validate promql or auth/config blocks clearly", function () {
-    expect([200, 401, 403, 422]).to.include(res.status);
+  test("agent validation is accepted or access is rejected clearly", function () {
+    expect([202, 401, 403, 409, 422]).to.include(res.status);
   });
 
-  test("success body has validation result", function () {
-    if (res.status === 200) {
+  test("accepted body has the resumable agent command identity", function () {
+    if (res.status === 202) {
       const body = res.getBody();
-      expect(body).to.have.property("valid");
-      expect(body).to.have.property("detail");
+      expect(body.accepted).to.equal(true);
+      expect(body.command_id).to.be.a("string").and.not.empty;
+      expect(body.correlation_id).to.be.a("string").and.not.empty;
     }
   });
 }

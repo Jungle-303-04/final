@@ -15,6 +15,13 @@ const INVENTORY_SUMMARY = {
     { resource_type: "pod", health: "warning", count: 3 },
     { resource_type: "node", health: "healthy", count: 3 },
   ],
+  counts_evidence: {
+    completeness: "observed",
+    observed_at: "2026-07-12T10:30:00Z",
+    namespace_scope: ["ops", "shop"],
+    reason_codes: [],
+    forbidden: [],
+  },
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -35,11 +42,11 @@ describe("inventory summary API", () => {
     );
 
     await expect(
-      getInventorySummary("prod/seoul-01"),
+      getInventorySummary("prod/seoul-01", ["shop", "ops"]),
     ).resolves.toEqual(INVENTORY_SUMMARY);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/clusters/prod%2Fseoul-01/inventory/summary",
+      "/api/clusters/prod%2Fseoul-01/inventory/summary?namespaces=ops%2Cshop",
       expect.objectContaining({ credentials: "include", method: "GET" }),
     );
   });
@@ -50,6 +57,13 @@ describe("inventory summary API", () => {
         cluster_id: "new-cluster",
         latest_snapshot: null,
         counts: [],
+        counts_evidence: {
+          completeness: "unavailable",
+          observed_at: null,
+          namespace_scope: [],
+          reason_codes: ["inventory_snapshot_evidence_unavailable"],
+          forbidden: [],
+        },
       }),
     );
 
@@ -57,6 +71,13 @@ describe("inventory summary API", () => {
       cluster_id: "new-cluster",
       latest_snapshot: null,
       counts: [],
+      counts_evidence: {
+        completeness: "unavailable",
+        observed_at: null,
+        namespace_scope: [],
+        reason_codes: ["inventory_snapshot_evidence_unavailable"],
+        forbidden: [],
+      },
     });
   });
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from kubernetes_api import KubernetesApiClient, count_not_ready_pods, pods_on_node
+from kubernetes_api import count_not_ready_pods, pods_on_node
 from prometheus_metrics import MetricSample
 
 
@@ -12,6 +12,12 @@ class MetricCollector(Protocol):
     collector_name: str
 
     async def collect(self, labels: dict[str, str]) -> list[MetricSample]: ...
+
+
+class NodeScopedKubernetesApi(Protocol):
+    """Kubernetes read contract for a cluster-agent-managed node subworker."""
+
+    async def list_pods_on_node(self, node_name: str) -> dict[str, object]: ...
 
 
 @dataclass(frozen=True)
@@ -39,13 +45,13 @@ class PodMetricCollector:
     # Pod 관련 Kubernetes API 읽기를 담당하고 MetricSample 값으로 바로 변환함.
     collector_name = "pod"
 
-    def __init__(self, kubernetes: KubernetesApiClient, node_name: str) -> None:
+    def __init__(self, kubernetes: NodeScopedKubernetesApi, node_name: str) -> None:
         self.kubernetes = kubernetes
         self.node_name = node_name
 
     async def collect_pod_summary(self) -> PodSummary:
-        # 전체 Pod 조회 후 이 collector 노드 값으로 축약.
-        pods_payload = await self.kubernetes.list_pods()
+        # API 서버에서 먼저 노드 범위를 제한하고 로컬 필터는 방어적으로 유지한다.
+        pods_payload = await self.kubernetes.list_pods_on_node(self.node_name)
         node_pods = pods_on_node(pods_payload, self.node_name)
         return PodSummary(
             pod_count=len(node_pods),

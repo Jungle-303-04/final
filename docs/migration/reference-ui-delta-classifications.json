@@ -932,8 +932,16 @@
       "rationale": "Host kubeconfig, listener, browser, MCP, and timeline mutation controls must remain explicitly unavailable until a Python-owned workspace contract replaces source runtime configuration."
     },
     "settings.integrations.gate": {
-      "destination": "frontend/src/pages/settings/SettingsPage.test.tsx",
-      "rationale": "Prometheus and Argo CD credential controls must remain unavailable until secrets, owner authorization, live probes, persistence, and audit semantics have typed Python contracts."
+      "destination": "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
+      "rationale": "Prometheus credentials now cross the owner-authorized Python boundary as encrypted write-only values with live probe receipts; integrations without the same typed persistence and audit semantics remain unavailable."
+    },
+    "settings.integrations.api": {
+      "destination": "tests/test_prometheus_integration.py",
+      "rationale": "The Python contract must preserve write-only credentials, exact policy revisions, transactional audit receipts, superseding probe state, and authorization boundaries."
+    },
+    "settings.integrations.agent": {
+      "destination": "tests/test_target_agent_client.py",
+      "rationale": "The target agent must apply only the exact revision, bound retry and probe work, redact secret material, and preserve the existing metrics query registry during live provider replacement."
     },
     "settings.diagnose.gate": {
       "destination": "frontend/src/features/diagnose/createDiagnoseAdapter.test.ts",
@@ -12804,9 +12812,9 @@
               "settings.access.surface",
               "settings.access.contract"
             ],
-            "state": "blocked",
-            "blockedReason": "The cluster agent authenticates as its own service account and no delegated or impersonated Kubernetes subject identity exists for the signed-in product user, so a SelfSubjectRulesReview would report the wrong principal.",
-            "rationale": "Explicit ServiceAccount, User, Group, Role, and Namespace reverse lookups use one complete retained RBAC index in resource detail. The signed-in user's SelfSubjectRulesReview remains unavailable because the product identity is not delegated, and agent service-account rules never impersonate user permissions."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia normalizes the source whoami semantics into two explicit authorities: authenticated product-user decisions remain under opsia_rbac, while the actual outbound cluster-agent ServiceAccount execution rules come from exact retained RBAC and discovery evidence for the selected namespace. The UI labels both authorities, cancels superseded namespace reads, and fails closed when agent evidence is missing without impersonating the product user or claiming a false SelfSubjectRulesReview."
           }
         },
         {
@@ -12971,18 +12979,30 @@
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
               "frontend/src/pages/settings/SettingsPage.test.tsx",
-              "src/packages/contracts/shell_state.py"
+              "frontend/src/pages/settings/PrometheusIntegrationCard.tsx",
+              "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
+              "frontend/src/api/prometheus-integration.ts",
+              "frontend/src/features/settings/createSettingsAdapter.ts",
+              "src/packages/contracts/integrations.py",
+              "src/domains/integrations/prometheus.py",
+              "src/services/target/cluster-agent/agent.py",
+              "tests/test_prometheus_integration.py",
+              "tests/test_target_agent_client.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.shell_state",
-              "packages.contracts.identity"
+              "packages.contracts.integrations",
+              "packages.contracts.identity",
+              "packages.runtime.operation_events",
+              "domains.integrations.prometheus"
             ],
             "plannedTestIds": [
-              "settings.integrations.gate"
+              "settings.integrations.gate",
+              "settings.integrations.api",
+              "settings.integrations.agent"
             ],
-            "state": "blocked",
-          "blockedReason": "The provider status and automatic audited connection probe are implemented through the scoped metrics runtime; only reference.feature.223 credential URL/header mutation remains blocked because no Python secret integration repository owns write-only preservation or live client replacement.",
-          "rationale": "Resource surfaces reuse real agent query receipts, source freshness, coverage, and failure reasons for connection feedback. Settings still exposes no fake credential editor and does not store provider secrets in browser state."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing metrics query registry is preserved while one typed settings contract updates encrypted write-only credentials, versions the exact agent policy, supersedes older probes, streams durable operation feedback, and swaps the live provider only after a bounded successful probe."
           }
         },
         {

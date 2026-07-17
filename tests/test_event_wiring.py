@@ -59,6 +59,10 @@ TERMINAL_SUBJECTS = {
     # through a worker would attempt the same mutation a second time.
     EventSubject.HELM_CHART_SOURCE_DELETED,
     EventSubject.HELM_CHART_SOURCE_REFRESHED,
+    # Configuration is committed with encrypted credential, policy revision,
+    # audit event, and initial operation event in one UoW. The agent consumes
+    # the revision through policy sync rather than replaying this fact.
+    EventSubject.PROMETHEUS_INTEGRATION_CONFIGURED,
 }
 
 

@@ -21,6 +21,9 @@ from packages.config.security import (
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import (
     NODE_COLLECTOR_IMAGE_KEY,
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
+    NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
+    NODE_COLLECTOR_SERVICE_ACCOUNT_NAME,
     SANDBOX_NAMESPACE,
     TARGET_AGENT_IMAGE_KEY,
     TARGET_NAMESPACE,
@@ -38,7 +41,11 @@ def yaml_string(value: str) -> str:
     return json.dumps(value)
 
 
-def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) -> str:
+def target_install_manifest(
+    payload: TargetRegisterRequest,
+    agent_token: str,
+    agent_envelope_private_key: str = "",
+) -> str:
     namespace = agent_namespace(payload)
     role = payload.cluster_role
     return "\n---\n".join(
@@ -50,7 +57,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             service_account_manifest(namespace),
             target_rbac_manifest(payload),
             runtime_config_manifest(payload),
-            runtime_secret_manifest(agent_token, namespace),
+            runtime_secret_manifest(agent_token, namespace, agent_envelope_private_key),
             sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
             cluster_agent_manifest(payload),
         ]
@@ -67,6 +74,9 @@ def target_rbac_manifest(payload: TargetRegisterRequest) -> str:
         block.strip()
         for block in (
             cluster_read_rbac_manifest(namespace),
+            node_collector_read_rbac_manifest(namespace)
+            if role != MANAGEMENT_CLUSTER_ROLE and payload.install_node_collector
+            else "",
             gitops_control_rbac_manifest(namespace),
             node_control_rbac_manifest(namespace),
             resource_debug_rbac_manifest(payload, namespace),
@@ -124,6 +134,40 @@ kind: ServiceAccount
 metadata:
   name: cluster-agent
   namespace: {namespace}
+"""
+
+
+def node_collector_read_rbac_manifest(namespace: str) -> str:
+    """Render the bounded identity used only by the agent-managed node worker."""
+
+    return f"""
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}
+  namespace: {namespace}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}
+subjects:
+  - kind: ServiceAccount
+    name: {NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}
+    namespace: {namespace}
 """
 
 
@@ -251,7 +295,7 @@ rules:
     verbs: ["delete"]
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    resourceNames: ["cluster-agent"]
+    resourceNames: ["cluster-agent", "{NODE_COLLECTOR_SERVICE_ACCOUNT_NAME}"]
     verbs: ["delete"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -273,11 +317,11 @@ rules:
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
-    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control", "{NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME}"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterrolebindings"]
-    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control", "cluster-agent-gitops-control", "{NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME}"]
     verbs: ["delete"]
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
@@ -626,7 +670,6 @@ data:
   WORKSPACE_ID: {yaml_string(payload.workspace_id)}{rca_test_runtime_config_lines(payload)}
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
   REALTIME_GATEWAY_URL: {yaml_string(derive_realtime_gateway_url(payload.management_base_url, management_cluster=payload.cluster_role == MANAGEMENT_CLUSTER_ROLE))}
-  PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}{pod_exec_namespaces_line(payload)}
@@ -641,7 +684,16 @@ data:
 """
 
 
-def runtime_secret_manifest(agent_token: str, namespace: str) -> str:
+def runtime_secret_manifest(
+    agent_token: str,
+    namespace: str,
+    agent_envelope_private_key: str = "",
+) -> str:
+    envelope_key_line = (
+        f"\n  AGENT_ENVELOPE_PRIVATE_KEY: {yaml_string(agent_envelope_private_key)}"
+        if agent_envelope_private_key
+        else ""
+    )
     return f"""
 apiVersion: v1
 kind: Secret
@@ -650,7 +702,7 @@ metadata:
   namespace: {namespace}
 type: Opaque
 stringData:
-  AGENT_TOKEN: {yaml_string(agent_token)}
+  AGENT_TOKEN: {yaml_string(agent_token)}{envelope_key_line}
 """
 
 

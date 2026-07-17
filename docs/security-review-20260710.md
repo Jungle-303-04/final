@@ -13,7 +13,7 @@
 | 항목 | 현재 상태 | 구현 |
 | --- | --- | --- |
 | C1/H1 개발 인증 우회 | 해결 | 환경 기반 우회 코드 삭제 + Cloudflare mTLS 전용 개발 프록시 분리 |
-| H2/L3 PromQL SSRF·오류 본문 | 해결 | 클라이언트 `base_url` 무시, 서버 `PROMETHEUS_VALIDATE_BASE_URL`만 사용, 오류 일반화 |
+| H2/L3 PromQL SSRF·오류 본문 | 해결 | 구형 gateway HTTP 검증 모듈·URL 계약 제거, explicit cluster RBAC 후 `telemetry.query.run`을 target agent에 큐잉 |
 | M2 alert webhook SSRF | 해결 | HTTPS·공인 IP·DNS 전체 결과·allowlist 검증, 전송 직전 재검증, redirect 차단 |
 | M3 `/metrics` 무인증 | 해결 | 환경과 무관하게 token 미설정 시 503, 설정 시 timing-safe Bearer 검증 |
 
@@ -58,7 +58,7 @@ H3, M1, M4~M6, L1/L2/L4~L6는 별도 환경·프론트·인프라 작업 범위�
 - 파일: `src/domains/dashboard/router.py:56-65` → `src/domains/dashboard/metrics_validation.py:25-56`; 스키마 `src/packages/contracts/gateway/requests.py:499`
 - 근거: `POST …/metrics/validate`는 `require_session`(로그인만 하면 됨)으로만 보호되고, 사용자가 보낸 `payload.base_url`을 그대로 `httpx GET {base_url}/api/v1/query_range`에 사용한다. `base_url`은 스킴/호스트 검증 없는 자유 문자열(`max_length=500`)이며 리다이렉트 차단도 없다.
 - 영향: 비관리자가 `http://169.254.169.254/...`(클라우드 메타데이터), `http://localhost:<내부포트>`, 클러스터 내부 서비스로 서버가 요청을 보내게 만들 수 있다. 게다가 오류 시 상단 응답 본문 일부를 `detail`로 되돌려줘(`metrics_validation.py:82`) blind SSRF가 semi-blind가 된다.
-- 권장: 검증용 base는 서버 설정값(`PROMETHEUS_VALIDATE_BASE_URL`)만 사용하고 클라이언트 `base_url`을 받지 않는다. 부득이하면 `https` + 호스트 allowlist 강제, RFC1918/loopback/link-local/메타데이터 IP 차단, 리다이렉트 비활성, 상단 오류 본문 미반환.
+- 현재 조치(2026-07-17): 이 gateway-side HTTP 모듈과 `base_url` 요청 계약은 삭제됐다. 검증 요청은 cluster `evidence.read` 권한을 검사하고 target agent의 `telemetry.query.run` 명령으로만 전달한다. Prometheus 주소·credential은 revision-bound integration 봉투로 해당 agent에만 제공된다.
 
 ### H3 — EKS API 서버가 CIDR 제한 없이 공개됨
 - 파일: `infra/eks.tf:16` `cluster_endpoint_public_access = true`(`_cidrs` 미설정) + `:18` `enable_cluster_creator_admin_permissions = true`
@@ -138,6 +138,6 @@ H3, M1, M4~M6, L1/L2/L4~L6는 별도 환경·프론트·인프라 작업 범위�
 ## 우선 조치 제안
 
 1. **C1/H1** — 배포 매니페스트 `APP_ENV=production` 전환 + `security.py` 구조적 fail-closed. (가장 시급)
-2. **H2** — `metrics/validate`에서 클라이언트 `base_url` 제거 또는 allowlist.
+2. **H2** — 완료: `metrics/validate`를 explicit cluster agent 명령 경계로 이관.
 3. **H3** — EKS 엔드포인트 CIDR 제한.
 4. M1~M6 순차 하드닝.

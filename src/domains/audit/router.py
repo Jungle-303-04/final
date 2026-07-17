@@ -180,6 +180,7 @@ _AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSub
                 EventSubject.UI_PREFERENCES_UPDATED,
                 EventSubject.HELM_CHART_SOURCE_DELETED,
                 EventSubject.HELM_CHART_SOURCE_REFRESHED,
+                EventSubject.PROMETHEUS_INTEGRATION_CONFIGURED,
             }
         ),
     ),
