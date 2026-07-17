@@ -57,7 +57,7 @@ ServiceRequestScheme = Literal["http", "https"]
 ServiceAccessAvailability = Literal["available", "forbidden", "unavailable"]
 LocalPortForwardAvailability = Literal["desktop_required", "unavailable"]
 PortDiscoveryAvailability = Literal["complete", "partial", "unavailable"]
-ListenAddress = Literal["127.0.0.1", "0.0.0.0"]
+ListenAddress = Literal["127.0.0.1"]
 _DNS_LABEL = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 
 
@@ -185,6 +185,7 @@ class LocalPortForwardRequest(StrictModel):
 
     scope: ClusterScope
     resource: ResourceRef
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
     remote_port: int = Field(ge=1, le=65_535)
     local_port: int | None = Field(default=None, ge=1, le=65_535)
     listen_address: ListenAddress = "127.0.0.1"

@@ -108,6 +108,7 @@ export function PortForwardAction({
           name: current.resource.name,
           uid: current.resource.uid,
         },
+        capabilityRevision: current.revision,
         remotePort: exactPort.port,
         localPort: localPortNumber,
         listenAddress: "127.0.0.1",

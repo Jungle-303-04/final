@@ -53,6 +53,10 @@ fn native_start_contract_requires_exact_capability_revision_and_loopback() {
     );
     assert!(validate_start_request(&request).is_ok());
 
+    let mut invalid_revision = request.clone();
+    invalid_revision.capability_revision = "A".repeat(64);
+    assert!(validate_start_request(&invalid_revision).is_err());
+
     let non_loopback = serde_json::from_value::<StartPortForwardRequest>(serde_json::json!({
         "scope": {
             "workspaceId": "workspace-a",

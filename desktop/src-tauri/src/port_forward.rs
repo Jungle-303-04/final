@@ -11,6 +11,7 @@ pub const AGENT_TUNNEL_UNAVAILABLE: &str =
 pub struct StartPortForwardRequest {
     pub scope: DesktopClusterScope,
     pub resource: DesktopPortForwardResourceRef,
+    pub capability_revision: String,
     pub remote_port: u16,
     pub local_port: Option<u16>,
     pub listen_address: DesktopListenAddress,
@@ -136,6 +137,7 @@ pub async fn desktop_port_forward_start(
     _request: StartPortForwardRequest,
 ) -> Result<PortForwardStartReceipt, String> {
     require_main_window(&window)?;
+    validate_start_request(&_request)?;
     Err(AGENT_TUNNEL_UNAVAILABLE.to_owned())
 }
 
@@ -176,6 +178,21 @@ pub async fn desktop_port_forward_recreate(
 fn require_session_id(session_id: &str) -> Result<(), String> {
     if session_id.trim().is_empty() || session_id.len() > 64 {
         return Err("invalid port-forward session id".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_start_request(request: &StartPortForwardRequest) -> Result<(), String> {
+    if request.capability_revision.len() != 64
+        || !request
+            .capability_revision
+            .bytes()
+            .all(|value| value.is_ascii_digit() || (b'a'..=b'f').contains(&value))
+    {
+        return Err("invalid port-forward capability revision".to_owned());
+    }
+    if !request.confirmation {
+        return Err("port-forward start requires confirmation".to_owned());
     }
     Ok(())
 }
