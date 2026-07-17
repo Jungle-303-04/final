@@ -6,6 +6,8 @@ import sys
 from dataclasses import dataclass
 from typing import Any, TextIO
 
+from packages.security.log_lines import redact_log_line
+from services.mcp.internal_control import limits as mcp_limits
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
 from services.mcp.internal_control.config import McpConfigurationError, load_settings
 from services.mcp.internal_control.tools import (
@@ -19,7 +21,7 @@ JSONRPC_VERSION = "2.0"
 SUPPORTED_PROTOCOL_VERSION = "2025-11-25"
 SERVER_NAME = "opsia-internal-control"
 SERVER_VERSION = "0.1.0"
-MAX_JSONRPC_LINE_BYTES = 256 * 1024
+MAX_JSONRPC_LINE_BYTES = mcp_limits.MAX_JSONRPC_LINE_BYTES
 
 PARSE_ERROR = -32700
 INVALID_REQUEST = -32600
@@ -106,7 +108,10 @@ class InternalControlMcpServer:
             result = await self.registry.call(name, arguments, self.client)
             return _tool_result(result, is_error=False)
         except ToolInputError as exc:
-            return _tool_result({"error": "invalid_tool_input", "detail": str(exc)}, is_error=True)
+            return _tool_result(
+                {"error": "invalid_tool_input", "detail": redact_log_line(str(exc))},
+                is_error=True,
+            )
         except ManagementApiError as exc:
             return _tool_result(
                 {

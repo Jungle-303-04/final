@@ -7,9 +7,10 @@ from typing import Any
 import httpx
 
 from packages.security.log_lines import redact_log_line
+from services.mcp.internal_control import limits as mcp_limits
 from services.mcp.internal_control.config import McpSettings
 
-MAX_ERROR_DETAIL_LENGTH = 500
+MAX_ERROR_DETAIL_LENGTH = mcp_limits.MAX_ERROR_DETAIL_LENGTH
 SUPPORTED_MANAGEMENT_API_METHODS = frozenset({"GET", "POST", "PATCH"})
 BODY_MANAGEMENT_API_METHODS = frozenset({"POST", "PATCH"})
 ALLOWED_MANAGEMENT_API_EXTRA_HEADERS = frozenset({"idempotency-key"})
@@ -187,10 +188,11 @@ def _has_unsafe_url_character(value: str) -> bool:
 
 
 def _error_detail(response: httpx.Response, content: bytes) -> str:
+    text = _decode_response_content(response, content)
     try:
-        payload = json.loads(content.decode(response.encoding or "utf-8"))
+        payload = json.loads(text)
     except ValueError:
-        return _safe_error_detail(response.text or response.reason_phrase)
+        return _safe_error_detail(text or response.reason_phrase)
     detail = payload.get("detail") if isinstance(payload, dict) else None
     if isinstance(detail, str) and detail:
         return _safe_error_detail(detail)
@@ -205,3 +207,11 @@ def _safe_error_detail(detail: str) -> str:
     if len(redacted) <= MAX_ERROR_DETAIL_LENGTH:
         return redacted
     return f"{redacted[:MAX_ERROR_DETAIL_LENGTH]}..."
+
+
+def _decode_response_content(response: httpx.Response, content: bytes) -> str:
+    encoding = response.encoding or "utf-8"
+    try:
+        return content.decode(encoding)
+    except (LookupError, UnicodeDecodeError):
+        return content.decode("utf-8", errors="replace")

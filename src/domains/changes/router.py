@@ -16,15 +16,17 @@ from domains.timeline.access import (
     resolve_authorized_timeline_scope,
     selected_timeline_cluster_ids,
 )
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import ChangeTimelineResponse
 from packages.runtime.dependencies import get_db
 
-MIN_BUCKET_MS = 1_000
-MAX_BUCKET_MS = 3_600_000
-MAX_RANGE_MS = 24 * 60 * 60 * 1_000
-MAX_BUCKETS = 1_440
-MAX_EPOCH_MS = 253_402_300_799_000
+MIN_BUCKET_MS = gateway_limits.CHANGE_TIMELINE_MIN_BUCKET_MS
+MAX_BUCKET_MS = gateway_limits.CHANGE_TIMELINE_MAX_BUCKET_MS
+MAX_RANGE_MS = gateway_limits.CHANGE_TIMELINE_MAX_RANGE_MS
+MAX_BUCKETS = gateway_limits.CHANGE_TIMELINE_MAX_BUCKETS
+MAX_EPOCH_MS = gateway_limits.CHANGE_TIMELINE_MAX_EPOCH_MS
 INVALID_REQUEST_DETAIL = "change timeline request is invalid"
 RESULT_LIMIT_DETAIL = "change timeline result exceeds the bounded read limit"
 
@@ -36,16 +38,26 @@ router = APIRouter()
     response_model=ChangeTimelineResponse,
 )
 async def list_changes(
-    from_ms: int = Query(alias="from", ge=0, le=MAX_EPOCH_MS),
-    to_ms: int = Query(alias="to", ge=1, le=MAX_EPOCH_MS),
-    bucket_ms: int = Query(alias="bucket", ge=MIN_BUCKET_MS, le=MAX_BUCKET_MS),
+    from_ms: int = Query(alias=gateway_params.TIME_RANGE_FROM_QUERY, ge=0, le=MAX_EPOCH_MS),
+    to_ms: int = Query(alias=gateway_params.TIME_RANGE_TO_QUERY, ge=1, le=MAX_EPOCH_MS),
+    bucket_ms: int = Query(
+        alias=gateway_params.CHANGE_BUCKET_QUERY,
+        ge=MIN_BUCKET_MS,
+        le=MAX_BUCKET_MS,
+    ),
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
-    resources_health: str | None = Query(default=None, alias="resources.health"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
+    resources_health: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_HEALTH_QUERY,
+    ),
     labels: str | None = Query(default=None),
-    resources_q: str | None = Query(default=None, alias="resources.q"),
+    resources_q: str | None = Query(default=None, alias=gateway_params.RESOURCE_SEARCH_QUERY),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ChangeTimelineResponse:

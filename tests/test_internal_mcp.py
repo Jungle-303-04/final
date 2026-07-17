@@ -6,8 +6,12 @@ from typing import Any
 
 import httpx
 
+from packages.contracts.gateway import evidence as gateway_evidence
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes
 from packages.security.trusted_proxy import TRUSTED_PROXY_AUTH_SECRET_ENV
+from services.mcp.internal_control import tools as mcp_tools
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
 from services.mcp.internal_control.config import (
     MANAGEMENT_BASE_URL_ENV,
@@ -42,6 +46,52 @@ MCP_ENV_NAMES = (
     MANAGEMENT_BASE_URL_ENV,
     TRUSTED_PROXY_AUTH_SECRET_ENV,
 )
+
+
+def test_mcp_read_tool_bounds_use_gateway_contract_limits() -> None:
+    assert mcp_tools.DEFAULT_LIST_CLUSTERS_LIMIT == gateway_limits.CLUSTER_LIST_DEFAULT_LIMIT
+    assert mcp_tools.MAX_LIST_CLUSTERS_LIMIT == gateway_limits.CLUSTER_LIST_MAX_LIMIT
+    assert mcp_tools.DEFAULT_LIST_RESOURCES_LIMIT == gateway_limits.INVENTORY_RESOURCE_DEFAULT_LIMIT
+    assert mcp_tools.MAX_LIST_RESOURCES_LIMIT == gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT
+    assert mcp_tools.DEFAULT_RELATED_LIMIT == gateway_limits.INVENTORY_RELATED_DEFAULT_LIMIT
+    assert mcp_tools.MAX_RELATED_LIMIT == gateway_limits.INVENTORY_RELATED_MAX_LIMIT
+    assert mcp_tools.DEFAULT_EVENT_LIMIT == gateway_limits.INVENTORY_EVENT_DEFAULT_LIMIT
+    assert mcp_tools.MAX_EVENT_LIMIT == gateway_limits.INVENTORY_EVENT_MAX_LIMIT
+    assert mcp_tools.DEFAULT_RECENT_INCIDENT_LIMIT == gateway_limits.RCA_QUERY_DEFAULT_LIMIT
+    assert mcp_tools.MAX_QUERY_LIMIT == gateway_limits.RCA_QUERY_MAX_LIMIT
+    assert mcp_tools.DEFAULT_APPLICATION_LIMIT == gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
+    assert mcp_tools.MAX_APPLICATION_LIMIT == gateway_limits.APPLICATION_LIST_MAX_LIMIT
+    assert (
+        mcp_tools.DEFAULT_APPLICATION_DEPLOYMENT_LIMIT
+        == gateway_limits.APPLICATION_DEPLOYMENT_DEFAULT_LIMIT
+    )
+    assert (
+        mcp_tools.MAX_APPLICATION_DEPLOYMENT_LIMIT
+        == gateway_limits.APPLICATION_DEPLOYMENT_MAX_LIMIT
+    )
+    assert mcp_tools.DEFAULT_ALERT_EVENT_LIMIT == gateway_limits.ALERT_EVENT_DEFAULT_LIMIT
+    assert mcp_tools.MAX_ALERT_EVENT_LIMIT == gateway_limits.ALERT_EVENT_MAX_LIMIT
+    assert mcp_tools.MAX_GRAPH_NODE_LIMIT == gateway_limits.RESOURCE_GRAPH_MAX_NODE_LIMIT
+    assert mcp_tools.MAX_GRAPH_EDGE_LIMIT == gateway_limits.RESOURCE_GRAPH_MAX_EDGE_LIMIT
+    assert mcp_tools.DEFAULT_DEAD_LETTER_LIMIT == gateway_limits.DEAD_LETTER_DEFAULT_LIMIT
+    assert mcp_tools.MAX_DEAD_LETTER_LIMIT == gateway_limits.DEAD_LETTER_MAX_LIMIT
+    assert mcp_tools.DEFAULT_RCA_ISSUE_LIMIT == gateway_limits.DASHBOARD_RCA_DEFAULT_LIMIT
+    assert mcp_tools.MAX_RCA_ISSUE_LIMIT == gateway_limits.DASHBOARD_RCA_MAX_LIMIT
+    assert mcp_tools.DEFAULT_RESOURCE_ISSUE_LIMIT == gateway_limits.RESOURCE_ISSUE_DEFAULT_LIMIT
+    assert (
+        mcp_tools.MAX_APPLICATION_WORKFLOW_RUN_LIMIT
+        == gateway_limits.APPLICATION_WORKFLOW_RUN_MAX_LIMIT
+    )
+    assert mcp_tools.MAX_RELEASE_PLAN_LIMIT == gateway_limits.RELEASE_PLAN_MAX_LIMIT
+    assert mcp_tools.MAX_RELEASE_RUN_LIMIT == gateway_limits.RELEASE_RUN_MAX_LIMIT
+    assert mcp_tools.MAX_RELEASE_AUDIT_LIMIT == gateway_limits.RELEASE_AUDIT_MAX_LIMIT
+    assert mcp_tools.DEFAULT_AUDIT_TIMELINE_LIMIT == gateway_limits.AUDIT_TIMELINE_DEFAULT_LIMIT
+    assert mcp_tools.MAX_AUDIT_TIMELINE_LIMIT == gateway_limits.AUDIT_TIMELINE_MAX_LIMIT
+    assert mcp_tools.MIN_CHANGE_BUCKET_MS == gateway_limits.CHANGE_TIMELINE_MIN_BUCKET_MS
+    assert mcp_tools.MAX_CHANGE_BUCKET_MS == gateway_limits.CHANGE_TIMELINE_MAX_BUCKET_MS
+    assert mcp_tools.MAX_CHANGE_RANGE_MS == gateway_limits.CHANGE_TIMELINE_MAX_RANGE_MS
+    assert mcp_tools.MAX_CHANGE_BUCKETS == gateway_limits.CHANGE_TIMELINE_MAX_BUCKETS
+    assert mcp_tools.MAX_EPOCH_MILLISECONDS == gateway_limits.CHANGE_TIMELINE_MAX_EPOCH_MS
 
 
 def test_settings_fail_closed_without_auth() -> None:
@@ -226,21 +276,39 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
         "create_release_plan",
         "disable_alert_rule",
         "get_alert_rule",
+        "get_application_drift",
         "get_application_detail",
+        "get_cluster_connection_status",
+        "get_cluster_inventory_summary",
         "get_cluster_summary",
         "get_command_status",
+        "get_fleet_summary",
         "get_log_evidence",
+        "get_rca_incident",
+        "get_release_plan",
+        "get_release_run_report",
+        "get_release_run_summary",
         "get_recovery_plan",
         "get_resource_capabilities",
         "get_resource_detail",
+        "get_resource_graph",
         "get_workflow_run",
+        "list_alert_events",
         "list_alert_rules",
+        "list_application_deployments",
         "list_applications",
         "list_audit_timeline",
+        "list_dead_letters",
         "list_evidence_windows",
         "list_clusters",
+        "list_metric_query_presets",
         "list_pending_approvals",
+        "list_rca_issues",
         "list_recent_incidents",
+        "list_recent_changes",
+        "list_release_audit",
+        "list_release_plans",
+        "list_resource_issues",
         "list_resources",
         "list_workflow_runs",
         "promote_alert_incident",
@@ -253,22 +321,40 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
     }
     assert all(tool["inputSchema"]["additionalProperties"] is False for tool in tools)
     read_tools = {
-        "get_cluster_summary",
         "get_alert_rule",
+        "get_application_drift",
         "get_application_detail",
+        "get_cluster_connection_status",
+        "get_cluster_inventory_summary",
+        "get_cluster_summary",
         "get_command_status",
+        "get_fleet_summary",
         "get_log_evidence",
+        "get_rca_incident",
+        "get_release_plan",
+        "get_release_run_report",
+        "get_release_run_summary",
         "get_recovery_plan",
         "get_resource_capabilities",
         "get_resource_detail",
+        "get_resource_graph",
         "get_workflow_run",
+        "list_alert_events",
         "list_alert_rules",
+        "list_application_deployments",
         "list_applications",
         "list_audit_timeline",
+        "list_dead_letters",
         "list_evidence_windows",
         "list_clusters",
+        "list_metric_query_presets",
         "list_pending_approvals",
+        "list_rca_issues",
         "list_recent_incidents",
+        "list_recent_changes",
+        "list_release_audit",
+        "list_release_plans",
+        "list_resource_issues",
         "list_resources",
         "list_workflow_runs",
     }
@@ -285,10 +371,15 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
     assert all(
         annotations_by_name[name] == {
             "readOnlyHint": False,
-            "destructiveHint": False,
+            "destructiveHint": True,
             "idempotentHint": False,
         }
         for name in write_tools
+    )
+    schemas_by_name = {tool["name"]: tool["inputSchema"] for tool in tools}
+    assert (
+        schemas_by_name["list_clusters"]["properties"]["limit"]["maximum"]
+        == gateway_limits.CLUSTER_LIST_MAX_LIMIT
     )
 
     tools[0]["inputSchema"]["additionalProperties"] = True
@@ -329,7 +420,18 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
         client = _client(handler)
 
         await registry.call("list_clusters", {}, client)
+        await registry.call("get_fleet_summary", {}, client)
         await registry.call("get_cluster_summary", {"cluster_id": "cluster-1"}, client)
+        await registry.call(
+            "get_cluster_connection_status",
+            {"cluster_id": "cluster-1"},
+            client,
+        )
+        await registry.call(
+            "get_cluster_inventory_summary",
+            {"cluster_id": "cluster-1"},
+            client,
+        )
         await registry.call("list_resources", {"cluster_id": "cluster-1"}, client)
         await registry.call(
             "get_resource_detail",
@@ -343,14 +445,29 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             client,
         )
         await registry.call("list_recent_incidents", {}, client)
+        await registry.call("list_dead_letters", {}, client)
+        await registry.call("list_rca_issues", {}, client)
+        await registry.call("get_rca_incident", {"incident_id": "incident-1"}, client)
+        await registry.call(
+            "list_resource_issues",
+            {"cluster_id": "cluster-1", "kind": "Pod", "name": "api"},
+            client,
+        )
         await registry.call("list_evidence_windows", {}, client)
         await registry.call("get_log_evidence", {"evidence_key": "evidence-1"}, client)
         await registry.call("get_command_status", {"command_id": "cmd-1"}, client)
         await registry.call("list_alert_rules", {}, client)
         await registry.call("get_alert_rule", {"rule_id": "rule-1"}, client)
+        await registry.call("list_alert_events", {}, client)
         await registry.call("get_recovery_plan", {"correlation_id": "corr-1"}, client)
         await registry.call("list_applications", {"limit": 2}, client)
         await registry.call("get_application_detail", {"application_id": "app-1"}, client)
+        await registry.call("get_application_drift", {"application_id": "app-1"}, client)
+        await registry.call(
+            "list_application_deployments",
+            {"application_id": "app-1"},
+            client,
+        )
         await registry.call("list_audit_timeline", {"correlation_id": "corr-1"}, client)
         await registry.call("list_workflow_runs", {"application_id": "app-1"}, client)
         await registry.call(
@@ -359,35 +476,413 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             client,
         )
         await registry.call("get_workflow_run", {"run_id": "run-1"}, client)
+        await registry.call("get_release_run_report", {"run_id": "run-1"}, client)
+        await registry.call("list_release_plans", {}, client)
+        await registry.call("get_release_plan", {"plan_id": "plan-1"}, client)
+        await registry.call("get_release_run_summary", {}, client)
+        await registry.call("list_release_audit", {}, client)
         await registry.call("list_pending_approvals", {}, client)
         await registry.call("get_resource_capabilities", {"resource": "resource-1"}, client)
+        await registry.call("get_resource_graph", {}, client)
+        await registry.call(
+            "list_recent_changes",
+            {
+                "from_ms": 1_700_000_000_000,
+                "to_ms": 1_700_003_600_000,
+                "bucket_ms": 60_000,
+            },
+            client,
+        )
+        await registry.call(
+            "list_metric_query_presets",
+            {"cluster_id": "cluster-1"},
+            client,
+        )
 
         expected_paths = [
             routes.CLUSTERS_PATH,
+            routes.FLEET_SUMMARY_PATH,
             routes.CLUSTER_SUMMARY_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_CONNECTION_STATUS_PATH.format(cluster_id="cluster-1"),
+            routes.CLUSTER_INVENTORY_SUMMARY_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_RESOURCES_PATH.format(cluster_id="cluster-1"),
             routes.CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH.format(cluster_id="cluster-1"),
             routes.RCA_REPORTS_PATH,
+            routes.DEAD_LETTERS_PATH,
+            routes.DASHBOARD_RCA_ISSUES_PATH,
+            routes.DASHBOARD_RCA_INCIDENT_PATH.format(incident_id="incident-1"),
+            routes.RESOURCE_RCA_ISSUES_PATH,
             routes.EVIDENCE_WINDOWS_PATH,
             routes.EVIDENCE_WINDOW_PATH.format(evidence_key="evidence-1"),
             routes.COMMAND_STATUS_PATH.format(command_id="cmd-1"),
             routes.ALERT_RULES_PATH,
             routes.ALERT_RULES_PATH,
+            routes.ALERT_EVENTS_PATH,
             routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH.format(correlation_id="corr-1"),
             routes.APPLICATIONS_PATH,
             routes.APPLICATION_PATH.format(application_id="app-1"),
+            routes.APPLICATION_DRIFT_PATH.format(application_id="app-1"),
+            routes.APPLICATION_DEPLOYMENTS_PATH.format(application_id="app-1"),
             routes.AUDIT_TIMELINE_PATH,
             routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
             routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
             routes.RELEASE_RUN_PATH.format(run_id="run-1"),
+            routes.RELEASE_RUN_REPORT_PATH.format(run_id="run-1"),
+            routes.RELEASE_PLANS_PATH,
+            routes.RELEASE_PLAN_PATH.format(plan_id="plan-1"),
+            routes.RELEASE_RUN_SUMMARY_PATH,
+            routes.RELEASE_AUDIT_PATH,
             routes.GITOPS_FILTER_RESULTS_PATH,
             routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
             routes.RELEASE_RUNS_PATH,
             routes.RESOURCE_CAPABILITIES_PATH,
+            routes.RESOURCES_GRAPH_PATH,
+            routes.CHANGES_PATH,
+            routes.CLUSTER_METRIC_QUERY_PRESETS_PATH.format(cluster_id="cluster-1"),
         ]
         assert [request.method for request in seen] == ["GET"] * len(expected_paths)
         assert [request.url.path for request in seen] == expected_paths
         assert all(request.content == b"" for request in seen)
+
+    asyncio.run(run())
+
+
+def test_new_read_tools_forward_gateway_query_aliases_without_mutation() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(200, json={"ok": True})
+
+        registry = default_tool_registry()
+        client = _client(handler)
+
+        await registry.call(
+            "list_alert_events",
+            {
+                "from_time": "2026-07-16T00:00:00Z",
+                "to_time": "2026-07-16T01:00:00Z",
+                "rule_id": "rule-1",
+                "severity": "high",
+                "status": "open",
+                "limit": 25,
+            },
+            client,
+        )
+        await registry.call(
+            "get_resource_graph",
+            {
+                "clusters": "cluster-1",
+                "namespaces": "shop",
+                "applications": "app-1",
+                "resource_types": "pod,service",
+                "health": "degraded",
+                "labels": "team=checkout",
+                "query": "api",
+                "include_deleted": True,
+                "snapshot_revision": 7,
+                "max_nodes": 20,
+                "max_edges": 40,
+            },
+            client,
+        )
+        await registry.call(
+            "list_recent_changes",
+            {
+                "from_ms": 1_700_000_000_000,
+                "to_ms": 1_700_000_060_000,
+                "bucket_ms": 10_000,
+                "clusters": "cluster-1",
+                "namespaces": "shop",
+                "applications": "app-1",
+                "resource_types": "deployment",
+                "health": "healthy",
+                "labels": "team=checkout",
+                "query": "api",
+            },
+            client,
+        )
+
+        assert [request.method for request in seen] == ["GET", "GET", "GET"]
+        assert seen[0].url.params == httpx.QueryParams(
+            {
+                gateway_params.TIME_RANGE_FROM_QUERY: "2026-07-16T00:00:00Z",
+                gateway_params.TIME_RANGE_TO_QUERY: "2026-07-16T01:00:00Z",
+                "rule_id": "rule-1",
+                "severity": "high",
+                "status": "open",
+                "limit": "25",
+            }
+        )
+        assert seen[1].url.params == httpx.QueryParams(
+            {
+                "clusters": "cluster-1",
+                "namespaces": "shop",
+                "applications": "app-1",
+                gateway_params.RESOURCE_TYPES_QUERY: "pod,service",
+                gateway_params.RESOURCE_HEALTH_QUERY: "degraded",
+                "labels": "team=checkout",
+                gateway_params.RESOURCE_SEARCH_QUERY: "api",
+                gateway_params.RESOURCE_INCLUDE_DELETED_QUERY: "true",
+                "snapshot_revision": "7",
+                "max_nodes": "20",
+                "max_edges": "40",
+            }
+        )
+        assert seen[2].url.params == httpx.QueryParams(
+            {
+                gateway_params.TIME_RANGE_FROM_QUERY: "1700000000000",
+                gateway_params.TIME_RANGE_TO_QUERY: "1700000060000",
+                gateway_params.CHANGE_BUCKET_QUERY: "10000",
+                "clusters": "cluster-1",
+                "namespaces": "shop",
+                "applications": "app-1",
+                gateway_params.RESOURCE_TYPES_QUERY: "deployment",
+                gateway_params.RESOURCE_HEALTH_QUERY: "healthy",
+                "labels": "team=checkout",
+                gateway_params.RESOURCE_SEARCH_QUERY: "api",
+            }
+        )
+        assert all(request.content == b"" for request in seen)
+
+    asyncio.run(run())
+
+
+def test_recent_changes_requires_explicit_bucket_without_http_request() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        try:
+            await default_tool_registry().call(
+                "list_recent_changes",
+                {
+                    "from_ms": 1_700_000_000_000,
+                    "to_ms": 1_700_000_060_000,
+                },
+                _client(lambda request: seen.append(request) or httpx.Response(500)),
+            )
+        except ValueError as exc:
+            assert "bucket_ms is required" in str(exc)
+        else:
+            raise AssertionError("list_recent_changes must require an explicit bucket_ms")
+
+        assert seen == []
+
+    asyncio.run(run())
+
+
+def test_recent_changes_rejects_unbounded_windows_without_http_request() -> None:
+    async def run() -> None:
+        cases = [
+            (
+                {
+                    "from_ms": 1_700_000_000_000,
+                    "to_ms": 1_700_000_000_000,
+                    "bucket_ms": 1_000,
+                },
+                "to_ms must be greater than from_ms",
+            ),
+            (
+                {
+                    "from_ms": 1_700_000_000_000,
+                    "to_ms": 1_700_086_400_001,
+                    "bucket_ms": 60_000,
+                },
+                "24 hours or less",
+            ),
+            (
+                {
+                    "from_ms": 1_700_000_000_000,
+                    "to_ms": 1_700_000_060_000,
+                    "bucket_ms": 120_000,
+                },
+                "bucket_ms must not be greater",
+            ),
+            (
+                {
+                    "from_ms": 1_700_000_000_000,
+                    "to_ms": 1_700_086_400_000,
+                    "bucket_ms": 30_000,
+                },
+                "bucket count",
+            ),
+        ]
+
+        for payload, expected_error in cases:
+            seen: list[httpx.Request] = []
+            try:
+                await default_tool_registry().call(
+                    "list_recent_changes",
+                    payload,
+                    _client(
+                        lambda request, seen=seen: seen.append(request)
+                        or httpx.Response(500)
+                    ),
+                )
+            except ValueError as exc:
+                assert expected_error in str(exc)
+            else:
+                raise AssertionError(f"expected list_recent_changes to reject {payload!r}")
+            assert seen == []
+
+    asyncio.run(run())
+
+
+def test_workflow_runs_use_source_specific_gateway_limits() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+        registry = default_tool_registry()
+        client = _client(
+            lambda request: seen.append(request)
+            or httpx.Response(200, json={"runs": []})
+        )
+
+        await registry.call(
+            "list_workflow_runs",
+            {"application_id": "app-1", "limit": 500},
+            client,
+        )
+        try:
+            await registry.call("list_workflow_runs", {"limit": 500}, client)
+        except ValueError as exc:
+            assert "limit must be between 1 and 200" in str(exc)
+        else:
+            raise AssertionError("release run listing must use the Gateway release-run limit")
+
+        assert len(seen) == 1
+        assert seen[0].url.path == routes.APPLICATION_RUNS_PATH.format(
+            application_id="app-1"
+        )
+        assert seen[0].url.params == httpx.QueryParams({"limit": "500"})
+
+    asyncio.run(run())
+
+
+def test_alert_events_default_limit_matches_gateway_contract() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        await default_tool_registry().call(
+            "list_alert_events",
+            {},
+            _client(
+                lambda request: seen.append(request)
+                or httpx.Response(200, json=[])
+            ),
+        )
+
+        assert len(seen) == 1
+        assert seen[0].method == "GET"
+        assert seen[0].url.path == routes.ALERT_EVENTS_PATH
+        assert seen[0].url.params == httpx.QueryParams(
+            {"limit": str(gateway_limits.ALERT_EVENT_DEFAULT_LIMIT)}
+        )
+        assert seen[0].content == b""
+
+    asyncio.run(run())
+
+
+def test_operational_read_tools_forward_existing_gateway_filters_only() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+        registry = default_tool_registry()
+        client = _client(
+            lambda request: seen.append(request) or httpx.Response(200, json={"ok": True})
+        )
+
+        await registry.call("list_dead_letters", {"limit": 9}, client)
+        await registry.call(
+            "list_rca_issues",
+            {"cluster_id": "cluster-1", "limit": 12},
+            client,
+        )
+        await registry.call(
+            "get_rca_incident",
+            {"incident_id": "incident-1", "cluster_id": "cluster-1"},
+            client,
+        )
+        await registry.call(
+            "list_resource_issues",
+            {
+                "cluster_id": "cluster-1",
+                "kind": "Pod",
+                "name": "api",
+                "namespace": "shop",
+                "limit": 7,
+            },
+            client,
+        )
+        await registry.call("list_release_plans", {"limit": 11}, client)
+        await registry.call("get_release_run_summary", {"plan_id": "plan-1"}, client)
+        await registry.call(
+            "list_release_audit",
+            {
+                "plan_id": "plan-1",
+                "run_id": "run-1",
+                "event_type": "release.started",
+                "limit": 21,
+            },
+            client,
+        )
+
+        assert [request.method for request in seen] == ["GET"] * 7
+        assert seen[0].url.path == routes.DEAD_LETTERS_PATH
+        assert seen[0].url.params == httpx.QueryParams({"limit": "9"})
+        assert seen[1].url.path == routes.DASHBOARD_RCA_ISSUES_PATH
+        assert seen[1].url.params == httpx.QueryParams(
+            {"cluster_id": "cluster-1", "limit": "12"}
+        )
+        assert seen[2].url.path == routes.DASHBOARD_RCA_INCIDENT_PATH.format(
+            incident_id="incident-1"
+        )
+        assert seen[2].url.params == httpx.QueryParams({"cluster_id": "cluster-1"})
+        assert seen[3].url.path == routes.RESOURCE_RCA_ISSUES_PATH
+        assert seen[3].url.params == httpx.QueryParams(
+            {
+                "cluster_id": "cluster-1",
+                "kind": "Pod",
+                "name": "api",
+                "namespace": "shop",
+                "limit": "7",
+            }
+        )
+        assert seen[4].url.path == routes.RELEASE_PLANS_PATH
+        assert seen[4].url.params == httpx.QueryParams({"limit": "11"})
+        assert seen[5].url.path == routes.RELEASE_RUN_SUMMARY_PATH
+        assert seen[5].url.params == httpx.QueryParams({"plan_id": "plan-1"})
+        assert seen[6].url.path == routes.RELEASE_AUDIT_PATH
+        assert seen[6].url.params == httpx.QueryParams(
+            {
+                "plan_id": "plan-1",
+                "run_id": "run-1",
+                "event_type": "release.started",
+                "limit": "21",
+            }
+        )
+        assert all(request.content == b"" for request in seen)
+
+    asyncio.run(run())
+
+
+def test_resource_graph_without_optional_arguments_forwards_no_default_query() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        await default_tool_registry().call(
+            "get_resource_graph",
+            {},
+            _client(
+                lambda request: seen.append(request)
+                or httpx.Response(200, json={"ok": True})
+            ),
+        )
+
+        assert len(seen) == 1
+        assert seen[0].method == "GET"
+        assert seen[0].url.path == routes.RESOURCES_GRAPH_PATH
+        assert seen[0].url.params == httpx.QueryParams()
+        assert seen[0].content == b""
 
     asyncio.run(run())
 
@@ -527,7 +1022,7 @@ def test_write_proposal_redacts_sensitive_payload_values_without_changing_post_b
         assert "token-value" not in json.dumps(proposal, ensure_ascii=False)
         assert "db-pass" not in json.dumps(proposal, ensure_ascii=False)
 
-        await default_tool_registry().call(
+        approved = await default_tool_registry().call(
             "create_command_request",
             {
                 "payload": payload,
@@ -545,6 +1040,11 @@ def test_write_proposal_redacts_sensitive_payload_values_without_changing_post_b
                         "audit_event_id": "event-1",
                         "correlation_id": "corr-1",
                         "status": "queued",
+                        "token": "queued-secret",
+                        "details": {
+                            "credential_ref": "github-token-ref",
+                            "message": "authorization: Bearer response-secret",
+                        },
                     },
                 ),
                 writes_enabled=True,
@@ -552,6 +1052,12 @@ def test_write_proposal_redacts_sensitive_payload_values_without_changing_post_b
         )
 
         assert json.loads(seen[0].content) == payload
+        approved_json = json.dumps(approved, ensure_ascii=False)
+        for leaked in ("queued-secret", "github-token-ref", "response-secret"):
+            assert leaked not in approved_json
+        assert approved["data"]["token"] == "[REDACTED]"
+        assert approved["data"]["details"]["credential_ref"] == "[REDACTED]"
+        assert approved["safety"]["operation_id"] == "cmd-1"
 
     asyncio.run(run())
 
@@ -853,6 +1359,28 @@ def test_create_command_request_blocks_direct_execution_and_posts_command_api() 
         else:
             raise AssertionError("MCP command requests must reject direct flag keys")
 
+        try:
+            await registry.call(
+                "create_command_request",
+                {
+                    "payload": {
+                        **payload,
+                        "metadata": {
+                            "policy": {
+                                "direct_execution_confirmed": True,
+                            }
+                        },
+                    },
+                    "dry_run": False,
+                    "approval_confirmed": True,
+                },
+                client,
+            )
+        except ValueError as exc:
+            assert "direct execution" in str(exc)
+        else:
+            raise AssertionError("MCP command requests must reject nested direct flags")
+
         result = await registry.call(
             "create_command_request",
             {
@@ -1001,6 +1529,14 @@ def test_manifest_change_preview_and_safe_pr_submission_are_separate() -> None:
                     "workflow_run_id": "workflow-1",
                     "approval_id": "approval-1",
                     "sync_state": "awaiting_pr_merge",
+                    "credential_ref": "github-token-ref",
+                    "payload": {
+                        "kind": "Secret",
+                        "metadata": {"name": "api-secret"},
+                        "data": {"password": "submitted-secret"},
+                        "token": "approval-secret",
+                    },
+                    "message": "password=db-pass admin@example.com",
                 },
             )
 
@@ -1053,6 +1589,18 @@ def test_manifest_change_preview_and_safe_pr_submission_are_separate() -> None:
             "reason": "reviewed yaml edit",
         }
         assert result["safety"]["operation_id"] == "event-1"
+        result_json = json.dumps(result, ensure_ascii=False)
+        for leaked in (
+            "github-token-ref",
+            "submitted-secret",
+            "approval-secret",
+            "db-pass",
+            "admin@example.com",
+        ):
+            assert leaked not in result_json
+        assert result["data"]["credential_ref"] == "[REDACTED]"
+        assert result["data"]["payload"]["data"] == "[REDACTED]"
+        assert result["data"]["payload"]["token"] == "[REDACTED]"
 
     asyncio.run(run())
 
@@ -1337,7 +1885,10 @@ def test_list_pending_approvals_uses_gitops_filter_then_existing_run_apis() -> N
             routes.APPLICATION_RUNS_PATH.format(application_id="app-2"),
             routes.RELEASE_RUNS_PATH,
         ]
-        assert dict(seen[0].url.params) == {"gitops.approval": "requested", "limit": "3"}
+        assert dict(seen[0].url.params) == {
+            gateway_params.GITOPS_APPROVAL_QUERY: "requested",
+            "limit": "3",
+        }
         assert dict(seen[3].url.params) == {
             "status": "waiting_for_approval",
             "limit": "3",
@@ -1380,7 +1931,9 @@ def test_incident_and_log_tools_use_sanitized_read_apis() -> None:
         assert str(seen[2].url).startswith(
             "https://opsia.test/evidence/windows/ws%3Acluster%3Aevidence-1"
         )
-        assert dict(seen[2].url.params) == {"source": "logs"}
+        assert dict(seen[2].url.params) == {
+            "source": gateway_evidence.EVIDENCE_SOURCE_LOGS
+        }
 
     asyncio.run(run())
 
@@ -1410,7 +1963,10 @@ def test_get_log_evidence_returns_unavailable_without_invented_payload_when_wind
 
         def handler(request: httpx.Request) -> httpx.Response:
             seen.append(request)
-            if dict(request.url.params).get("source") == "logs":
+            if (
+                dict(request.url.params).get("source")
+                == gateway_evidence.EVIDENCE_SOURCE_LOGS
+            ):
                 return httpx.Response(404, json={"detail": "source unavailable"})
             return httpx.Response(200, json={"evidence_key": "evidence-1", "payload": {"metrics": []}})
 
@@ -1422,10 +1978,9 @@ def test_get_log_evidence_returns_unavailable_without_invented_payload_when_wind
 
         assert result["data"] == {
             "evidence_key": "evidence-1",
-            "source": "logs",
+            "source": gateway_evidence.EVIDENCE_SOURCE_LOGS,
             "available": False,
             "payload": None,
-            "reason": "logs evidence source is not available for this evidence window",
         }
         assert len(seen) == 2
         assert result["safety"]["mutating"] is False
@@ -1477,6 +2032,103 @@ def test_management_api_error_detail_is_redacted() -> None:
             assert "[REDACTED]" in exc.detail
         else:
             raise AssertionError("management API errors should be raised")
+
+    asyncio.run(run())
+
+
+def test_management_api_non_json_error_detail_is_redacted_from_limited_body() -> None:
+    async def run() -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                502,
+                text=(
+                    "upstream failure authorization: Bearer secret-token "
+                    "cookie: service_session=session-token password=plain-secret"
+                ),
+            )
+
+        try:
+            await _client(handler).get_json("/clusters")
+        except ManagementApiError as exc:
+            assert exc.status_code == 502
+            assert "secret-token" not in exc.detail
+            assert "session-token" not in exc.detail
+            assert "plain-secret" not in exc.detail
+            assert "[REDACTED]" in exc.detail
+        else:
+            raise AssertionError("management API errors should be raised")
+
+    asyncio.run(run())
+
+
+def test_mcp_read_results_redact_sensitive_gateway_payloads() -> None:
+    async def run() -> None:
+        sensitive_response = {
+            "dead_letters": [
+                {
+                    "dead_letter_id": 7,
+                    "original_subject": "command.requested",
+                    "consumer": "command-worker",
+                    "payload": {
+                        "kind": "Secret",
+                        "metadata": {"name": "db-secret"},
+                        "data": {"password": "plain-secret"},
+                        "stringData": {"api_key": "token-value"},
+                        "token": "top-secret-token",
+                        "raw": "authorization: Bearer raw-secret cookie: session=raw-cookie",
+                        "env": [
+                            {"name": "DATABASE_PASSWORD", "value": "env-secret"},
+                            {"key": "api_token", "literal": "literal-secret"},
+                        ],
+                    },
+                    "error": "password=db-pass admin@example.com",
+                    "credential_ref": "github-token-ref",
+                }
+            ]
+        }
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=sensitive_response)
+
+        registry = default_tool_registry()
+        direct = await registry.call("list_dead_letters", {}, _client(handler))
+        server = InternalControlMcpServer(registry, _client(handler))
+        response = await server.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "list_dead_letters", "arguments": {}},
+            }
+        )
+
+        direct_json = json.dumps(direct, ensure_ascii=False)
+        server_json = json.dumps(response, ensure_ascii=False)
+        for leaked in (
+            "plain-secret",
+            "token-value",
+            "top-secret-token",
+            "raw-secret",
+            "raw-cookie",
+            "db-pass",
+            "env-secret",
+            "literal-secret",
+            "admin@example.com",
+            "github-token-ref",
+        ):
+            assert leaked not in direct_json
+            assert leaked not in server_json
+        assert direct["data"]["dead_letters"][0]["payload"]["data"] == "[REDACTED]"
+        assert direct["data"]["dead_letters"][0]["payload"]["stringData"] == "[REDACTED]"
+        assert direct["data"]["dead_letters"][0]["payload"]["token"] == "[REDACTED]"
+        assert direct["data"]["dead_letters"][0]["payload"]["raw"] == "[REDACTED]"
+        assert direct["data"]["dead_letters"][0]["payload"]["env"][0]["value"] == "[REDACTED]"
+        assert (
+            direct["data"]["dead_letters"][0]["payload"]["env"][1]["literal"]
+            == "[REDACTED]"
+        )
+        assert direct["data"]["dead_letters"][0]["credential_ref"] == "[REDACTED]"
+        assert "[REDACTED]" in server_json
 
     asyncio.run(run())
 
@@ -1644,6 +2296,33 @@ def test_server_reports_validation_errors_as_tool_errors() -> None:
         result = response["result"]
         assert result["isError"] is True
         assert result["structuredContent"]["error"] == "invalid_tool_input"
+
+    asyncio.run(run())
+
+
+def test_server_validation_errors_redact_sensitive_input_details() -> None:
+    async def run() -> None:
+        response = await InternalControlMcpServer(
+            default_tool_registry(),
+            _client(lambda _: httpx.Response(500)),
+        ).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_clusters",
+                    "arguments": {"authorization: Bearer secret-token": "ignored"},
+                },
+            }
+        )
+
+        payload = json.dumps(response, ensure_ascii=False)
+        detail = response["result"]["structuredContent"]["detail"]
+        assert response["result"]["isError"] is True
+        assert response["result"]["structuredContent"]["error"] == "invalid_tool_input"
+        assert "secret-token" not in payload
+        assert "[REDACTED]" in detail
 
     asyncio.run(run())
 

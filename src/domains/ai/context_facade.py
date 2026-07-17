@@ -21,6 +21,7 @@ from domains.ai.alert_actions import AlertActionDecision, propose_alert_rule_act
 from domains.identity.dependencies import resolve_allowed_cluster_ids
 from domains.log_stream.service import read_log_stream_evidence
 from packages.ai.llm import build_llm_client, describe_llm_client
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway.requests import AiAssistantContext
 from packages.contracts.gateway.responses import (
     AI_NO_DATA_ANSWER,
@@ -680,7 +681,7 @@ def _resource_link(resource: dict[str, Any]) -> str:
     query = urlencode(
         {
             "clusters": cluster_id,
-            "resources.types": resource_type,
+            gateway_params.RESOURCE_TYPES_QUERY: resource_type,
             "detail": detail,
         }
     )

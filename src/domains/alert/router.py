@@ -34,6 +34,8 @@ from domains.alert.service import (
 )
 from domains.identity.dependencies import require_admin_session
 from packages.contracts.auth import Actor
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
 from packages.contracts.gateway.responses import (
@@ -139,12 +141,22 @@ async def delete_alert_rule(
 
 @router.get(gateway_routes.ALERT_EVENTS_PATH, response_model=list[AlertEventResponse])
 async def list_alert_events(
-    from_time: datetime | None = Query(default=None, alias="from"),
-    to_time: datetime | None = Query(default=None, alias="to"),
+    from_time: datetime | None = Query(
+        default=None,
+        alias=gateway_params.TIME_RANGE_FROM_QUERY,
+    ),
+    to_time: datetime | None = Query(
+        default=None,
+        alias=gateway_params.TIME_RANGE_TO_QUERY,
+    ),
     rule_id: str | None = Query(default=None, min_length=1, max_length=120),
     severity: AlertEventSeverity | None = None,
     status: AlertEventStatus | None = None,
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(
+        default=gateway_limits.ALERT_EVENT_DEFAULT_LIMIT,
+        ge=1,
+        le=gateway_limits.ALERT_EVENT_MAX_LIMIT,
+    ),
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> list[AlertEventResponse]:

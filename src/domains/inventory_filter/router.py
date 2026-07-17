@@ -29,6 +29,8 @@ from domains.inventory_filter.query import (
     parse_resource_filters,
 )
 from packages.config.settings import env
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     FilteredInventoryResourceListResponse,
@@ -48,10 +50,10 @@ from packages.runtime.dependencies import get_db
 DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
 MAX_CURSOR_LENGTH = 8192
-DEFAULT_GRAPH_NODE_LIMIT = 200
-MAX_GRAPH_NODE_LIMIT = 200
-DEFAULT_GRAPH_EDGE_LIMIT = 1000
-MAX_GRAPH_EDGE_LIMIT = 2000
+DEFAULT_GRAPH_NODE_LIMIT = gateway_limits.RESOURCE_GRAPH_DEFAULT_NODE_LIMIT
+MAX_GRAPH_NODE_LIMIT = gateway_limits.RESOURCE_GRAPH_MAX_NODE_LIMIT
+DEFAULT_GRAPH_EDGE_LIMIT = gateway_limits.RESOURCE_GRAPH_DEFAULT_EDGE_LIMIT
+MAX_GRAPH_EDGE_LIMIT = gateway_limits.RESOURCE_GRAPH_MAX_EDGE_LIMIT
 MAX_METRIC_HISTORY_IDS = 100
 MAX_METRIC_HISTORY_QUERY_LENGTH = 8192
 METRIC_HISTORY_RANGE_SECONDS = {
@@ -99,7 +101,10 @@ async def list_global_filter_facets(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
     limit: int = Query(default=8, ge=1, le=20),
@@ -145,16 +150,22 @@ async def get_topology(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
-    resources_health: str | None = Query(default=None, alias="resources.health"),
+    resources_health: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_HEALTH_QUERY,
+    ),
     health: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
-    resources_q: str | None = Query(default=None, alias="resources.q"),
+    resources_q: str | None = Query(default=None, alias=gateway_params.RESOURCE_SEARCH_QUERY),
     q: str | None = Query(default=None, include_in_schema=False),
     resources_include_deleted: bool | None = Query(
         default=None,
-        alias="resources.includeDeleted",
+        alias=gateway_params.RESOURCE_INCLUDE_DELETED_QUERY,
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
     snapshot_revision: int | None = Query(default=None, ge=1),
@@ -293,16 +304,22 @@ async def get_resource_graph(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
-    resources_health: str | None = Query(default=None, alias="resources.health"),
+    resources_health: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_HEALTH_QUERY,
+    ),
     health: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
-    resources_q: str | None = Query(default=None, alias="resources.q"),
+    resources_q: str | None = Query(default=None, alias=gateway_params.RESOURCE_SEARCH_QUERY),
     q: str | None = Query(default=None, include_in_schema=False),
     resources_include_deleted: bool | None = Query(
         default=None,
-        alias="resources.includeDeleted",
+        alias=gateway_params.RESOURCE_INCLUDE_DELETED_QUERY,
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
     snapshot_revision: int | None = Query(default=None, ge=1),
@@ -496,16 +513,22 @@ async def list_filtered_resources(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
-    resources_health: str | None = Query(default=None, alias="resources.health"),
+    resources_health: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_HEALTH_QUERY,
+    ),
     health: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
-    resources_q: str | None = Query(default=None, alias="resources.q"),
+    resources_q: str | None = Query(default=None, alias=gateway_params.RESOURCE_SEARCH_QUERY),
     q: str | None = Query(default=None, include_in_schema=False),
     resources_include_deleted: bool | None = Query(
         default=None,
-        alias="resources.includeDeleted",
+        alias=gateway_params.RESOURCE_INCLUDE_DELETED_QUERY,
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
@@ -576,16 +599,22 @@ async def get_resource_metrics_history(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
-    resources_health: str | None = Query(default=None, alias="resources.health"),
+    resources_health: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_HEALTH_QUERY,
+    ),
     health: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
-    resources_q: str | None = Query(default=None, alias="resources.q"),
+    resources_q: str | None = Query(default=None, alias=gateway_params.RESOURCE_SEARCH_QUERY),
     q: str | None = Query(default=None, include_in_schema=False),
     resources_include_deleted: bool | None = Query(
         default=None,
-        alias="resources.includeDeleted",
+        alias=gateway_params.RESOURCE_INCLUDE_DELETED_QUERY,
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
     snapshot_revision: int | None = Query(default=None, ge=1),
@@ -685,16 +714,22 @@ async def list_resource_label_facets(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
-    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resources_types: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_TYPES_QUERY,
+    ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
-    resources_health: str | None = Query(default=None, alias="resources.health"),
+    resources_health: str | None = Query(
+        default=None,
+        alias=gateway_params.RESOURCE_HEALTH_QUERY,
+    ),
     health: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
-    resources_q: str | None = Query(default=None, alias="resources.q"),
+    resources_q: str | None = Query(default=None, alias=gateway_params.RESOURCE_SEARCH_QUERY),
     q: str | None = Query(default=None, include_in_schema=False),
     resources_include_deleted: bool | None = Query(
         default=None,
-        alias="resources.includeDeleted",
+        alias=gateway_params.RESOURCE_INCLUDE_DELETED_QUERY,
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
     facet_q: str | None = Query(default=None, max_length=200),

@@ -7,35 +7,63 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
+from packages.contracts.gateway import evidence as gateway_evidence
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes
 from packages.contracts.gitops import ApprovalStatus, WorkflowRunStatus
 from packages.security.log_lines import REDACTED_VALUE, redact_log_line
+from services.mcp.internal_control import limits as mcp_limits
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
 from services.mcp.internal_control.config import OPSIA_MCP_ENABLE_WRITES_ENV
 
 ToolHandler = Callable[[ManagementApiClient, dict[str, Any]], Awaitable[dict[str, Any]]]
 
-DEFAULT_LIST_CLUSTERS_LIMIT = 100
-DEFAULT_LIST_RESOURCES_LIMIT = 200
-DEFAULT_RECENT_INCIDENT_LIMIT = 20
-DEFAULT_RELATED_LIMIT = 100
-DEFAULT_EVENT_LIMIT = 50
-DEFAULT_APPLICATION_LIMIT = 100
-DEFAULT_RELEASE_RUN_LIMIT = 50
-DEFAULT_AUDIT_TIMELINE_LIMIT = 50
-MAX_PENDING_APPROVAL_APPLICATIONS = 50
-MAX_LIST_LIMIT = 1000
-MAX_QUERY_LIMIT = 200
-MAX_WRITE_PAYLOAD_BYTES = 64 * 1024
-LOG_EVIDENCE_SOURCE = "logs"
+DEFAULT_LIST_CLUSTERS_LIMIT = gateway_limits.CLUSTER_LIST_DEFAULT_LIMIT
+MAX_LIST_CLUSTERS_LIMIT = gateway_limits.CLUSTER_LIST_MAX_LIMIT
+DEFAULT_LIST_RESOURCES_LIMIT = gateway_limits.INVENTORY_RESOURCE_DEFAULT_LIMIT
+MAX_LIST_RESOURCES_LIMIT = gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT
+DEFAULT_RELATED_LIMIT = gateway_limits.INVENTORY_RELATED_DEFAULT_LIMIT
+MAX_RELATED_LIMIT = gateway_limits.INVENTORY_RELATED_MAX_LIMIT
+DEFAULT_EVENT_LIMIT = gateway_limits.INVENTORY_EVENT_DEFAULT_LIMIT
+MAX_EVENT_LIMIT = gateway_limits.INVENTORY_EVENT_MAX_LIMIT
+DEFAULT_RECENT_INCIDENT_LIMIT = gateway_limits.RCA_QUERY_DEFAULT_LIMIT
+MAX_QUERY_LIMIT = gateway_limits.RCA_QUERY_MAX_LIMIT
+DEFAULT_APPLICATION_LIMIT = gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
+MAX_APPLICATION_LIMIT = gateway_limits.APPLICATION_LIST_MAX_LIMIT
+DEFAULT_APPLICATION_DEPLOYMENT_LIMIT = gateway_limits.APPLICATION_DEPLOYMENT_DEFAULT_LIMIT
+MAX_APPLICATION_DEPLOYMENT_LIMIT = gateway_limits.APPLICATION_DEPLOYMENT_MAX_LIMIT
+DEFAULT_ALERT_EVENT_LIMIT = gateway_limits.ALERT_EVENT_DEFAULT_LIMIT
+MAX_ALERT_EVENT_LIMIT = gateway_limits.ALERT_EVENT_MAX_LIMIT
+DEFAULT_DEAD_LETTER_LIMIT = gateway_limits.DEAD_LETTER_DEFAULT_LIMIT
+MAX_DEAD_LETTER_LIMIT = gateway_limits.DEAD_LETTER_MAX_LIMIT
+DEFAULT_RCA_ISSUE_LIMIT = gateway_limits.DASHBOARD_RCA_DEFAULT_LIMIT
+MAX_RCA_ISSUE_LIMIT = gateway_limits.DASHBOARD_RCA_MAX_LIMIT
+DEFAULT_RESOURCE_ISSUE_LIMIT = gateway_limits.RESOURCE_ISSUE_DEFAULT_LIMIT
+DEFAULT_APPLICATION_WORKFLOW_RUN_LIMIT = gateway_limits.APPLICATION_WORKFLOW_RUN_DEFAULT_LIMIT
+MAX_APPLICATION_WORKFLOW_RUN_LIMIT = gateway_limits.APPLICATION_WORKFLOW_RUN_MAX_LIMIT
+DEFAULT_RELEASE_PLAN_LIMIT = gateway_limits.RELEASE_PLAN_DEFAULT_LIMIT
+MAX_RELEASE_PLAN_LIMIT = gateway_limits.RELEASE_PLAN_MAX_LIMIT
+DEFAULT_RELEASE_RUN_LIMIT = gateway_limits.RELEASE_RUN_DEFAULT_LIMIT
+MAX_RELEASE_RUN_LIMIT = gateway_limits.RELEASE_RUN_MAX_LIMIT
+DEFAULT_RELEASE_AUDIT_LIMIT = gateway_limits.RELEASE_AUDIT_DEFAULT_LIMIT
+MAX_RELEASE_AUDIT_LIMIT = gateway_limits.RELEASE_AUDIT_MAX_LIMIT
+DEFAULT_AUDIT_TIMELINE_LIMIT = gateway_limits.AUDIT_TIMELINE_DEFAULT_LIMIT
+MAX_AUDIT_TIMELINE_LIMIT = gateway_limits.AUDIT_TIMELINE_MAX_LIMIT
+MAX_PENDING_APPROVAL_APPLICATIONS = mcp_limits.MAX_PENDING_APPROVAL_APPLICATIONS
+MAX_GRAPH_NODE_LIMIT = gateway_limits.RESOURCE_GRAPH_MAX_NODE_LIMIT
+MAX_GRAPH_EDGE_LIMIT = gateway_limits.RESOURCE_GRAPH_MAX_EDGE_LIMIT
+MIN_CHANGE_BUCKET_MS = gateway_limits.CHANGE_TIMELINE_MIN_BUCKET_MS
+MAX_CHANGE_BUCKET_MS = gateway_limits.CHANGE_TIMELINE_MAX_BUCKET_MS
+MAX_CHANGE_RANGE_MS = gateway_limits.CHANGE_TIMELINE_MAX_RANGE_MS
+MAX_CHANGE_BUCKETS = gateway_limits.CHANGE_TIMELINE_MAX_BUCKETS
+MAX_EPOCH_MILLISECONDS = gateway_limits.CHANGE_TIMELINE_MAX_EPOCH_MS
+MAX_LEGACY_OFFSET = mcp_limits.MAX_LEGACY_OFFSET
+MAX_WRITE_PAYLOAD_BYTES = mcp_limits.MAX_WRITE_PAYLOAD_BYTES
+LOG_EVIDENCE_SOURCE = gateway_evidence.EVIDENCE_SOURCE_LOGS
 PENDING_APPROVAL_STATUS = ApprovalStatus.REQUESTED.value
 WAITING_FOR_APPROVAL_STATUS = WorkflowRunStatus.WAITING_FOR_APPROVAL.value
 IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
-APPLICATIONS_ENVIRONMENT_QUERY = "applications.environment"
-APPLICATIONS_STATUS_QUERY = "applications.status"
-APPLICATIONS_PENDING_PROMOTION_QUERY = "applications.pendingPromotion"
-APPLICATIONS_SEARCH_QUERY = "applications.q"
-GITOPS_APPROVAL_QUERY = "gitops.approval"
 RESPONSE_RULES_KEY = "rules"
 RESPONSE_RUNS_KEY = "runs"
 RESPONSE_ITEMS_KEY = "items"
@@ -49,7 +77,7 @@ READ_ONLY_TOOL_ANNOTATIONS = {
 }
 WRITE_TOOL_ANNOTATIONS = {
     "readOnlyHint": False,
-    "destructiveHint": False,
+    "destructiveHint": True,
     "idempotentHint": False,
 }
 SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
@@ -72,6 +100,8 @@ SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
 SENSITIVE_PROPOSAL_EXACT_KEYS = frozenset({"data", "edited_yaml", "stringdata"})
 SENSITIVE_PROPOSAL_MARKER_KEYS = frozenset({"key", "name"})
 SENSITIVE_PROPOSAL_MARKER_VALUE_KEYS = frozenset({"default", "literal", "value"})
+SENSITIVE_READ_EXACT_KEYS = frozenset({"binarydata", "edited_yaml", "raw", "stringdata"})
+SECRET_READ_DATA_KEYS = frozenset({"binarydata", "data", "stringdata"})
 DIRECT_EXECUTION_KEYS = frozenset(
     {"confirmation", "direct_execution", "direct_execution_confirmed"}
 )
@@ -140,12 +170,22 @@ def default_tool_registry() -> ToolRegistry:
                         "limit": _integer(
                             "Maximum number of clusters to return.",
                             minimum=1,
-                            maximum=200,
+                            maximum=MAX_LIST_CLUSTERS_LIMIT,
                             default=DEFAULT_LIST_CLUSTERS_LIMIT,
                         ),
                     }
                 ),
                 handler=list_clusters,
+            ),
+            McpTool(
+                name="get_fleet_summary",
+                title="Get Fleet Summary",
+                description=(
+                    "Return the existing authorized fleet roll-up summary without "
+                    "querying cluster state directly."
+                ),
+                input_schema=_schema(properties={}),
+                handler=get_fleet_summary,
             ),
             McpTool(
                 name="get_cluster_summary",
@@ -160,6 +200,36 @@ def default_tool_registry() -> ToolRegistry:
                     required=["cluster_id"],
                 ),
                 handler=get_cluster_summary,
+            ),
+            McpTool(
+                name="get_cluster_connection_status",
+                title="Get Cluster Connection Status",
+                description=(
+                    "Return one cluster's existing registration, agent heartbeat, and "
+                    "connection-stage projection through the target API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=get_cluster_connection_status,
+            ),
+            McpTool(
+                name="get_cluster_inventory_summary",
+                title="Get Cluster Inventory Summary",
+                description=(
+                    "Return the existing inventory snapshot metadata and resource counts "
+                    "for one authorized cluster."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=get_cluster_inventory_summary,
             ),
             McpTool(
                 name="list_resources",
@@ -184,7 +254,7 @@ def default_tool_registry() -> ToolRegistry:
                         "limit": _integer(
                             "Maximum number of resources to return.",
                             minimum=1,
-                            maximum=MAX_LIST_LIMIT,
+                            maximum=MAX_LIST_RESOURCES_LIMIT,
                             default=DEFAULT_LIST_RESOURCES_LIMIT,
                         ),
                     },
@@ -209,13 +279,13 @@ def default_tool_registry() -> ToolRegistry:
                         "related_limit": _integer(
                             "Maximum related resources to return.",
                             minimum=1,
-                            maximum=MAX_LIST_LIMIT,
+                            maximum=MAX_RELATED_LIMIT,
                             default=DEFAULT_RELATED_LIMIT,
                         ),
                         "event_limit": _integer(
                             "Maximum related events to return.",
                             minimum=1,
-                            maximum=MAX_QUERY_LIMIT,
+                            maximum=MAX_EVENT_LIMIT,
                             default=DEFAULT_EVENT_LIMIT,
                         ),
                     },
@@ -241,11 +311,100 @@ def default_tool_registry() -> ToolRegistry:
                             maximum=MAX_QUERY_LIMIT,
                             default=DEFAULT_RECENT_INCIDENT_LIMIT,
                         ),
-                        "offset": _integer("Offset for legacy pagination.", minimum=0, maximum=10000, default=0),
+                        "offset": _integer(
+                            "Offset for legacy pagination.",
+                            minimum=0,
+                            maximum=MAX_LEGACY_OFFSET,
+                            default=0,
+                        ),
                         "cursor": _string("Optional cursor returned by the API.", max_length=2048),
                     }
                 ),
                 handler=list_recent_incidents,
+            ),
+            McpTool(
+                name="list_dead_letters",
+                title="List Dead Letters",
+                description=(
+                    "List event dead-letter queue entries through the existing Gateway "
+                    "admin API. MCP does not inspect the event bus or storage directly."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "limit": _integer(
+                            "Maximum number of dead-letter entries to return.",
+                            minimum=1,
+                            maximum=MAX_DEAD_LETTER_LIMIT,
+                            default=DEFAULT_DEAD_LETTER_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_dead_letters,
+            ),
+            McpTool(
+                name="list_rca_issues",
+                title="List RCA Issues",
+                description=(
+                    "List the current RCA issue queue through the existing dashboard API "
+                    "using the authenticated session's cluster/RCA permissions."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string(
+                            "Optional cluster id from list_clusters.",
+                            max_length=512,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of RCA issues to return.",
+                            minimum=1,
+                            maximum=MAX_RCA_ISSUE_LIMIT,
+                            default=DEFAULT_RCA_ISSUE_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_rca_issues,
+            ),
+            McpTool(
+                name="get_rca_incident",
+                title="Get RCA Incident",
+                description=(
+                    "Fetch one RCA incident projection through the existing dashboard API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "incident_id": _string("Existing RCA incident id.", max_length=512),
+                        "cluster_id": _string(
+                            "Optional cluster id to constrain authorization and lookup.",
+                            max_length=512,
+                        ),
+                    },
+                    required=["incident_id"],
+                ),
+                handler=get_rca_incident,
+            ),
+            McpTool(
+                name="list_resource_issues",
+                title="List Resource Issues",
+                description=(
+                    "List RCA issues attached to one exact resource through the existing "
+                    "dashboard API. The Gateway verifies inventory and RCA read access."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "kind": _string("Existing Kubernetes resource kind.", max_length=253),
+                        "name": _string("Existing Kubernetes resource name.", max_length=253),
+                        "namespace": _string("Optional namespace for namespaced resources.", max_length=253),
+                        "limit": _integer(
+                            "Maximum number of resource issues to return.",
+                            minimum=1,
+                            maximum=MAX_RCA_ISSUE_LIMIT,
+                            default=DEFAULT_RESOURCE_ISSUE_LIMIT,
+                        ),
+                    },
+                    required=["cluster_id", "kind", "name"],
+                ),
+                handler=list_resource_issues,
             ),
             McpTool(
                 name="list_evidence_windows",
@@ -265,7 +424,7 @@ def default_tool_registry() -> ToolRegistry:
                         "offset": _integer(
                             "Offset for pagination.",
                             minimum=0,
-                            maximum=10000,
+                            maximum=MAX_LEGACY_OFFSET,
                             default=0,
                         ),
                     }
@@ -328,6 +487,30 @@ def default_tool_registry() -> ToolRegistry:
                 handler=get_alert_rule,
             ),
             McpTool(
+                name="list_alert_events",
+                title="List Alert Events",
+                description=(
+                    "List existing alert events through the alert-event API before "
+                    "acknowledging or promoting an event."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "from_time": _string("Optional ISO-8601 lower bound.", max_length=80),
+                        "to_time": _string("Optional ISO-8601 upper bound.", max_length=80),
+                        "rule_id": _string("Optional existing alert rule id.", max_length=120),
+                        "severity": _string("Optional alert event severity.", max_length=40),
+                        "status": _string("Optional alert event status.", max_length=40),
+                        "limit": _integer(
+                            "Maximum number of alert events to return.",
+                            minimum=1,
+                            maximum=MAX_ALERT_EVENT_LIMIT,
+                            default=DEFAULT_ALERT_EVENT_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_alert_events,
+            ),
+            McpTool(
                 name="get_recovery_plan",
                 title="Get Recovery Plan",
                 description=(
@@ -368,7 +551,7 @@ def default_tool_registry() -> ToolRegistry:
                         "limit": _integer(
                             "Maximum number of applications to return.",
                             minimum=1,
-                            maximum=200,
+                            maximum=MAX_APPLICATION_LIMIT,
                             default=DEFAULT_APPLICATION_LIMIT,
                         ),
                     }
@@ -393,6 +576,44 @@ def default_tool_registry() -> ToolRegistry:
                 handler=get_application_detail,
             ),
             McpTool(
+                name="get_application_drift",
+                title="Get Application Drift",
+                description=(
+                    "Return the existing drift projection for one authorized application "
+                    "and optional instance."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "application_id": _string("Existing application id.", max_length=200),
+                        "instance": _string("Optional application instance id.", max_length=200),
+                    },
+                    required=["application_id"],
+                ),
+                handler=get_application_drift,
+            ),
+            McpTool(
+                name="list_application_deployments",
+                title="List Application Deployments",
+                description=(
+                    "List deployment history for one authorized application through the "
+                    "existing application deployment API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "application_id": _string("Existing application id.", max_length=200),
+                        "instance": _string("Optional application instance id.", max_length=200),
+                        "limit": _integer(
+                            "Maximum number of deployments to return.",
+                            minimum=1,
+                            maximum=MAX_APPLICATION_DEPLOYMENT_LIMIT,
+                            default=DEFAULT_APPLICATION_DEPLOYMENT_LIMIT,
+                        ),
+                    },
+                    required=["application_id"],
+                ),
+                handler=list_application_deployments,
+            ),
+            McpTool(
                 name="list_audit_timeline",
                 title="List Audit Timeline",
                 description=(
@@ -406,7 +627,7 @@ def default_tool_registry() -> ToolRegistry:
                         "limit": _integer(
                             "Maximum number of audit items to return.",
                             minimum=1,
-                            maximum=MAX_QUERY_LIMIT,
+                            maximum=MAX_AUDIT_TIMELINE_LIMIT,
                             default=DEFAULT_AUDIT_TIMELINE_LIMIT,
                         ),
                     },
@@ -434,7 +655,7 @@ def default_tool_registry() -> ToolRegistry:
                         "limit": _integer(
                             "Maximum number of runs to return.",
                             minimum=1,
-                            maximum=500,
+                            maximum=MAX_APPLICATION_WORKFLOW_RUN_LIMIT,
                             default=DEFAULT_RELEASE_RUN_LIMIT,
                         ),
                     }
@@ -461,6 +682,91 @@ def default_tool_registry() -> ToolRegistry:
                 handler=get_workflow_run,
             ),
             McpTool(
+                name="get_release_run_report",
+                title="Get Release Run Report",
+                description=(
+                    "Fetch the existing release-run report projection for one authorized "
+                    "release run."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "run_id": _string("Existing release run id.", max_length=200),
+                    },
+                    required=["run_id"],
+                ),
+                handler=get_release_run_report,
+            ),
+            McpTool(
+                name="list_release_plans",
+                title="List Release Plans",
+                description=(
+                    "List release plans through the existing release-flow API. The "
+                    "Gateway enforces workspace and application read permissions."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "limit": _integer(
+                            "Maximum number of release plans to return.",
+                            minimum=1,
+                            maximum=MAX_RELEASE_PLAN_LIMIT,
+                            default=DEFAULT_RELEASE_PLAN_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_release_plans,
+            ),
+            McpTool(
+                name="get_release_plan",
+                title="Get Release Plan",
+                description=(
+                    "Fetch one release plan through the existing release-flow API before "
+                    "creating, starting, or reviewing related runs."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "plan_id": _string("Existing release plan id.", max_length=160),
+                    },
+                    required=["plan_id"],
+                ),
+                handler=get_release_plan,
+            ),
+            McpTool(
+                name="get_release_run_summary",
+                title="Get Release Run Summary",
+                description=(
+                    "Return the existing release-run summary roll-up, optionally scoped "
+                    "to one release plan."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "plan_id": _string("Optional existing release plan id.", max_length=160),
+                    }
+                ),
+                handler=get_release_run_summary,
+            ),
+            McpTool(
+                name="list_release_audit",
+                title="List Release Audit",
+                description=(
+                    "List release-flow audit events through the existing release audit "
+                    "API. This is read-only and uses Gateway permission checks."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "plan_id": _string("Optional existing release plan id.", max_length=160),
+                        "run_id": _string("Optional existing release run id.", max_length=200),
+                        "event_type": _string("Optional release audit event type.", max_length=120),
+                        "limit": _integer(
+                            "Maximum number of release audit events to return.",
+                            minimum=1,
+                            maximum=MAX_RELEASE_AUDIT_LIMIT,
+                            default=DEFAULT_RELEASE_AUDIT_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_release_audit,
+            ),
+            McpTool(
                 name="list_pending_approvals",
                 title="List Pending Approvals",
                 description=(
@@ -476,7 +782,7 @@ def default_tool_registry() -> ToolRegistry:
                         "limit": _integer(
                             "Maximum number of runs to inspect.",
                             minimum=1,
-                            maximum=500,
+                            maximum=MAX_APPLICATION_WORKFLOW_RUN_LIMIT,
                             default=DEFAULT_RELEASE_RUN_LIMIT,
                         ),
                     }
@@ -497,6 +803,106 @@ def default_tool_registry() -> ToolRegistry:
                     required=["resource"],
                 ),
                 handler=get_resource_capabilities,
+            ),
+            McpTool(
+                name="get_resource_graph",
+                title="Get Resource Graph",
+                description=(
+                    "Return the authorized resource graph snapshot from the existing "
+                    "filter graph API using only Gateway-supported filters."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "clusters": _string("Optional comma-separated cluster filter.", max_length=2048),
+                        "namespaces": _string("Optional comma-separated namespace filter.", max_length=2048),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "resource_types": _string(
+                            "Optional comma-separated resource type filter.",
+                            max_length=2048,
+                        ),
+                        "health": _string("Optional comma-separated health filter.", max_length=2048),
+                        "labels": _string("Optional comma-separated label filter.", max_length=2048),
+                        "query": _string("Optional resource graph search query.", max_length=200),
+                        "include_deleted": _optional_boolean(
+                            "Include deleted resources when retained by the Gateway."
+                        ),
+                        "snapshot_revision": _optional_integer(
+                            "Optional existing inventory snapshot revision to pin.",
+                            minimum=1,
+                        ),
+                        "max_nodes": _optional_integer(
+                            "Maximum graph nodes to return.",
+                            minimum=1,
+                            maximum=MAX_GRAPH_NODE_LIMIT,
+                        ),
+                        "max_edges": _optional_integer(
+                            "Maximum graph edges to return.",
+                            minimum=1,
+                            maximum=MAX_GRAPH_EDGE_LIMIT,
+                        ),
+                    }
+                ),
+                handler=get_resource_graph,
+            ),
+            McpTool(
+                name="list_recent_changes",
+                title="List Recent Changes",
+                description=(
+                    "List an authorized bounded change timeline through the existing "
+                    "changes API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "from_ms": _integer(
+                            "Inclusive epoch-millisecond lower bound.",
+                            minimum=0,
+                            maximum=MAX_EPOCH_MILLISECONDS,
+                        ),
+                        "to_ms": _integer(
+                            "Exclusive epoch-millisecond upper bound.",
+                            minimum=1,
+                            maximum=MAX_EPOCH_MILLISECONDS,
+                        ),
+                        "bucket_ms": _integer(
+                            "Timeline bucket size in milliseconds.",
+                            minimum=MIN_CHANGE_BUCKET_MS,
+                            maximum=MAX_CHANGE_BUCKET_MS,
+                        ),
+                        "clusters": _string("Optional comma-separated cluster filter.", max_length=2048),
+                        "namespaces": _string("Optional comma-separated namespace filter.", max_length=2048),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "resource_types": _string(
+                            "Optional comma-separated resource type filter.",
+                            max_length=2048,
+                        ),
+                        "health": _string("Optional comma-separated health filter.", max_length=2048),
+                        "labels": _string("Optional comma-separated label filter.", max_length=2048),
+                        "query": _string("Optional resource search query.", max_length=200),
+                    },
+                    required=["from_ms", "to_ms", "bucket_ms"],
+                ),
+                handler=list_recent_changes,
+            ),
+            McpTool(
+                name="list_metric_query_presets",
+                title="List Metric Query Presets",
+                description=(
+                    "List existing metric query presets for one authorized cluster before "
+                    "running a preset."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                    },
+                    required=["cluster_id"],
+                ),
+                handler=list_metric_query_presets,
             ),
             McpTool(
                 name="run_metric_query_preset",
@@ -897,9 +1303,23 @@ def default_tool_registry() -> ToolRegistry:
 
 async def list_clusters(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
     _reject_unknown(arguments, {"limit"})
-    limit = _bounded_int(arguments, "limit", DEFAULT_LIST_CLUSTERS_LIMIT, 1, 200)
+    limit = _bounded_int(
+        arguments,
+        "limit",
+        DEFAULT_LIST_CLUSTERS_LIMIT,
+        1,
+        MAX_LIST_CLUSTERS_LIMIT,
+    )
     data = await client.get_json(routes.CLUSTERS_PATH, {"limit": limit})
     return _read_result("list_clusters", routes.CLUSTERS_PATH, data)
+
+
+async def get_fleet_summary(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, set())
+    data = await client.get_json(routes.FLEET_SUMMARY_PATH)
+    return _read_result("get_fleet_summary", routes.FLEET_SUMMARY_PATH, data)
 
 
 async def get_cluster_summary(
@@ -912,6 +1332,26 @@ async def get_cluster_summary(
     return _read_result("get_cluster_summary", path, data)
 
 
+async def get_cluster_connection_status(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    path = _format_path(routes.CLUSTER_CONNECTION_STATUS_PATH, cluster_id=cluster_id)
+    data = await client.get_json(path)
+    return _read_result("get_cluster_connection_status", path, data)
+
+
+async def get_cluster_inventory_summary(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    path = _format_path(routes.CLUSTER_INVENTORY_SUMMARY_PATH, cluster_id=cluster_id)
+    data = await client.get_json(path)
+    return _read_result("get_cluster_inventory_summary", path, data)
+
+
 async def list_resources(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
     _reject_unknown(arguments, {"cluster_id", "resource_type", "namespace", "include_deleted", "limit"})
     cluster_id = _required_str(arguments, "cluster_id", max_length=512)
@@ -922,7 +1362,13 @@ async def list_resources(client: ManagementApiClient, arguments: dict[str, Any])
             "resource_type": _optional_str(arguments, "resource_type", max_length=80),
             "namespace": _optional_str(arguments, "namespace", max_length=253),
             "include_deleted": _optional_bool(arguments, "include_deleted", default=False),
-            "limit": _bounded_int(arguments, "limit", DEFAULT_LIST_RESOURCES_LIMIT, 1, MAX_LIST_LIMIT),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_LIST_RESOURCES_LIMIT,
+                1,
+                MAX_LIST_RESOURCES_LIMIT,
+            ),
         },
     )
     return _read_result("list_resources", path, data)
@@ -952,8 +1398,20 @@ async def get_resource_detail(
             "kind": _required_str(arguments, "kind", max_length=120),
             "name": _required_str(arguments, "name", max_length=253),
             "namespace": _optional_str(arguments, "namespace", max_length=253),
-            "related_limit": _bounded_int(arguments, "related_limit", DEFAULT_RELATED_LIMIT, 1, MAX_LIST_LIMIT),
-            "event_limit": _bounded_int(arguments, "event_limit", DEFAULT_EVENT_LIMIT, 1, MAX_QUERY_LIMIT),
+            "related_limit": _bounded_int(
+                arguments,
+                "related_limit",
+                DEFAULT_RELATED_LIMIT,
+                1,
+                MAX_RELATED_LIMIT,
+            ),
+            "event_limit": _bounded_int(
+                arguments,
+                "event_limit",
+                DEFAULT_EVENT_LIMIT,
+                1,
+                MAX_EVENT_LIMIT,
+            ),
         },
     )
     return _read_result("get_resource_detail", path, data)
@@ -970,11 +1428,86 @@ async def list_recent_incidents(
             "since": _optional_str(arguments, "since", max_length=80),
             "until": _optional_str(arguments, "until", max_length=80),
             "limit": _bounded_int(arguments, "limit", DEFAULT_RECENT_INCIDENT_LIMIT, 1, MAX_QUERY_LIMIT),
-            "offset": _bounded_int(arguments, "offset", 0, 0, 10000),
+            "offset": _bounded_int(arguments, "offset", 0, 0, MAX_LEGACY_OFFSET),
             "cursor": _optional_str(arguments, "cursor", max_length=2048),
         },
     )
     return _read_result("list_recent_incidents", routes.RCA_REPORTS_PATH, data)
+
+
+async def list_dead_letters(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"limit"})
+    data = await client.get_json(
+        routes.DEAD_LETTERS_PATH,
+        {
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_DEAD_LETTER_LIMIT,
+                1,
+                MAX_DEAD_LETTER_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_dead_letters", routes.DEAD_LETTERS_PATH, data)
+
+
+async def list_rca_issues(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "limit"})
+    data = await client.get_json(
+        routes.DASHBOARD_RCA_ISSUES_PATH,
+        {
+            "cluster_id": _optional_str(arguments, "cluster_id", max_length=512),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_RCA_ISSUE_LIMIT,
+                1,
+                MAX_RCA_ISSUE_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_rca_issues", routes.DASHBOARD_RCA_ISSUES_PATH, data)
+
+
+async def get_rca_incident(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"incident_id", "cluster_id"})
+    incident_id = _required_str(arguments, "incident_id", max_length=512)
+    path = _format_path(routes.DASHBOARD_RCA_INCIDENT_PATH, incident_id=incident_id)
+    data = await client.get_json(
+        path,
+        {"cluster_id": _optional_str(arguments, "cluster_id", max_length=512)},
+    )
+    return _read_result("get_rca_incident", path, data)
+
+
+async def list_resource_issues(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "kind", "name", "namespace", "limit"})
+    data = await client.get_json(
+        routes.RESOURCE_RCA_ISSUES_PATH,
+        {
+            "cluster_id": _required_str(arguments, "cluster_id", max_length=512),
+            "kind": _required_str(arguments, "kind", max_length=253),
+            "name": _required_str(arguments, "name", max_length=253),
+            "namespace": _optional_str(arguments, "namespace", max_length=253),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_RESOURCE_ISSUE_LIMIT,
+                1,
+                MAX_RCA_ISSUE_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_resource_issues", routes.RESOURCE_RCA_ISSUES_PATH, data)
 
 
 async def list_evidence_windows(
@@ -985,7 +1518,7 @@ async def list_evidence_windows(
         routes.EVIDENCE_WINDOWS_PATH,
         {
             "limit": _bounded_int(arguments, "limit", DEFAULT_RECENT_INCIDENT_LIMIT, 1, MAX_QUERY_LIMIT),
-            "offset": _bounded_int(arguments, "offset", 0, 0, 10000),
+            "offset": _bounded_int(arguments, "offset", 0, 0, MAX_LEGACY_OFFSET),
         },
     )
     return _read_result("list_evidence_windows", routes.EVIDENCE_WINDOWS_PATH, data)
@@ -1008,7 +1541,6 @@ async def get_log_evidence(
             "source": LOG_EVIDENCE_SOURCE,
             "available": False,
             "payload": None,
-            "reason": "logs evidence source is not available for this evidence window",
         }
     return _read_result("get_log_evidence", path, data)
 
@@ -1052,6 +1584,41 @@ async def get_alert_rule(
     )
 
 
+async def list_alert_events(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {"from_time", "to_time", "rule_id", "severity", "status", "limit"},
+    )
+    data = await client.get_json(
+        routes.ALERT_EVENTS_PATH,
+        {
+            gateway_params.TIME_RANGE_FROM_QUERY: _optional_str(
+                arguments,
+                "from_time",
+                max_length=80,
+            ),
+            gateway_params.TIME_RANGE_TO_QUERY: _optional_str(
+                arguments,
+                "to_time",
+                max_length=80,
+            ),
+            "rule_id": _optional_str(arguments, "rule_id", max_length=120),
+            "severity": _optional_str(arguments, "severity", max_length=40),
+            "status": _optional_str(arguments, "status", max_length=40),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_ALERT_EVENT_LIMIT,
+                1,
+                MAX_ALERT_EVENT_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_alert_events", routes.ALERT_EVENTS_PATH, data)
+
+
 async def get_recovery_plan(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1089,19 +1656,33 @@ async def list_applications(
             "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
             "applications": _optional_str(arguments, "applications", max_length=2048),
             "labels": _optional_str(arguments, "labels", max_length=2048),
-            APPLICATIONS_ENVIRONMENT_QUERY: _optional_str(
+            gateway_params.APPLICATIONS_ENVIRONMENT_QUERY: _optional_str(
                 arguments,
                 "environment",
                 max_length=120,
             ),
-            APPLICATIONS_STATUS_QUERY: _optional_str(arguments, "status", max_length=120),
-            APPLICATIONS_PENDING_PROMOTION_QUERY: _optional_str(
+            gateway_params.APPLICATIONS_STATUS_QUERY: _optional_str(
+                arguments,
+                "status",
+                max_length=120,
+            ),
+            gateway_params.APPLICATIONS_PENDING_PROMOTION_QUERY: _optional_str(
                 arguments,
                 "pending_promotion",
                 max_length=120,
             ),
-            APPLICATIONS_SEARCH_QUERY: _optional_str(arguments, "query", max_length=200),
-            "limit": _bounded_int(arguments, "limit", DEFAULT_APPLICATION_LIMIT, 1, 200),
+            gateway_params.APPLICATIONS_SEARCH_QUERY: _optional_str(
+                arguments,
+                "query",
+                max_length=200,
+            ),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_APPLICATION_LIMIT,
+                1,
+                MAX_APPLICATION_LIMIT,
+            ),
         },
     )
     return _read_result("list_applications", routes.APPLICATIONS_PATH, data)
@@ -1123,6 +1704,41 @@ async def get_application_detail(
     return _read_result("get_application_detail", path, data)
 
 
+async def get_application_drift(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"application_id", "instance"})
+    application_id = _required_str(arguments, "application_id", max_length=200)
+    path = _format_path(routes.APPLICATION_DRIFT_PATH, application_id=application_id)
+    data = await client.get_json(
+        path,
+        {"instance": _optional_str(arguments, "instance", max_length=200)},
+    )
+    return _read_result("get_application_drift", path, data)
+
+
+async def list_application_deployments(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"application_id", "instance", "limit"})
+    application_id = _required_str(arguments, "application_id", max_length=200)
+    path = _format_path(routes.APPLICATION_DEPLOYMENTS_PATH, application_id=application_id)
+    data = await client.get_json(
+        path,
+        {
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_APPLICATION_DEPLOYMENT_LIMIT,
+                1,
+                MAX_APPLICATION_DEPLOYMENT_LIMIT,
+            ),
+            "instance": _optional_str(arguments, "instance", max_length=200),
+        },
+    )
+    return _read_result("list_application_deployments", path, data)
+
+
 async def list_audit_timeline(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1137,7 +1753,7 @@ async def list_audit_timeline(
                 "limit",
                 DEFAULT_AUDIT_TIMELINE_LIMIT,
                 1,
-                MAX_QUERY_LIMIT,
+                MAX_AUDIT_TIMELINE_LIMIT,
             ),
         },
     )
@@ -1152,11 +1768,24 @@ async def list_workflow_runs(
         {"application_id", "plan_id", "status", "attention_only", "active_only", "limit"},
     )
     application_id = _optional_str(arguments, "application_id", max_length=200)
-    limit = _bounded_int(arguments, "limit", DEFAULT_RELEASE_RUN_LIMIT, 1, 500)
     if application_id is not None:
+        limit = _bounded_int(
+            arguments,
+            "limit",
+            DEFAULT_APPLICATION_WORKFLOW_RUN_LIMIT,
+            1,
+            MAX_APPLICATION_WORKFLOW_RUN_LIMIT,
+        )
         path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
         data = await client.get_json(path, {"limit": limit})
         return _read_result("list_workflow_runs", path, data)
+    limit = _bounded_int(
+        arguments,
+        "limit",
+        DEFAULT_RELEASE_RUN_LIMIT,
+        1,
+        MAX_RELEASE_RUN_LIMIT,
+    )
     data = await client.get_json(
         routes.RELEASE_RUNS_PATH,
         {
@@ -1178,7 +1807,7 @@ async def get_workflow_run(
     application_id = _optional_str(arguments, "application_id", max_length=200)
     if application_id is not None:
         path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
-        data = await client.get_json(path, {"limit": 500})
+        data = await client.get_json(path, {"limit": MAX_APPLICATION_WORKFLOW_RUN_LIMIT})
         run = _find_mapping_by_key(
             _list_from_response(data, RESPONSE_RUNS_KEY),
             WORKFLOW_RUN_ID_KEY,
@@ -1197,12 +1826,90 @@ async def get_workflow_run(
     return _read_result("get_workflow_run", path, data)
 
 
+async def get_release_run_report(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"run_id"})
+    run_id = _required_str(arguments, "run_id", max_length=200)
+    path = _format_path(routes.RELEASE_RUN_REPORT_PATH, run_id=run_id)
+    data = await client.get_json(path)
+    return _read_result("get_release_run_report", path, data)
+
+
+async def list_release_plans(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"limit"})
+    data = await client.get_json(
+        routes.RELEASE_PLANS_PATH,
+        {
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_RELEASE_PLAN_LIMIT,
+                1,
+                MAX_RELEASE_PLAN_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_release_plans", routes.RELEASE_PLANS_PATH, data)
+
+
+async def get_release_plan(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"plan_id"})
+    plan_id = _required_str(arguments, "plan_id", max_length=160)
+    path = _format_path(routes.RELEASE_PLAN_PATH, plan_id=plan_id)
+    data = await client.get_json(path)
+    return _read_result("get_release_plan", path, data)
+
+
+async def get_release_run_summary(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"plan_id"})
+    data = await client.get_json(
+        routes.RELEASE_RUN_SUMMARY_PATH,
+        {"plan_id": _optional_str(arguments, "plan_id", max_length=160)},
+    )
+    return _read_result("get_release_run_summary", routes.RELEASE_RUN_SUMMARY_PATH, data)
+
+
+async def list_release_audit(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"plan_id", "run_id", "event_type", "limit"})
+    data = await client.get_json(
+        routes.RELEASE_AUDIT_PATH,
+        {
+            "plan_id": _optional_str(arguments, "plan_id", max_length=160),
+            "run_id": _optional_str(arguments, "run_id", max_length=200),
+            "event_type": _optional_str(arguments, "event_type", max_length=120),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_RELEASE_AUDIT_LIMIT,
+                1,
+                MAX_RELEASE_AUDIT_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_release_audit", routes.RELEASE_AUDIT_PATH, data)
+
+
 async def list_pending_approvals(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     _reject_unknown(arguments, {"application_id", "limit"})
     application_id = _optional_str(arguments, "application_id", max_length=200)
-    limit = _bounded_int(arguments, "limit", DEFAULT_RELEASE_RUN_LIMIT, 1, 500)
+    limit = _bounded_int(
+        arguments,
+        "limit",
+        DEFAULT_RELEASE_RUN_LIMIT,
+        1,
+        MAX_APPLICATION_WORKFLOW_RUN_LIMIT,
+    )
     if application_id is not None:
         path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
         data = await client.get_json(path, {"limit": limit})
@@ -1220,8 +1927,8 @@ async def list_pending_approvals(
     gitops_data = await client.get_json(
         routes.GITOPS_FILTER_RESULTS_PATH,
         {
-            GITOPS_APPROVAL_QUERY: PENDING_APPROVAL_STATUS,
-            "limit": min(limit, MAX_QUERY_LIMIT),
+            gateway_params.GITOPS_APPROVAL_QUERY: PENDING_APPROVAL_STATUS,
+            "limit": min(limit, MAX_RELEASE_RUN_LIMIT),
         },
     )
     gitops_items = _list_from_response(gitops_data, RESPONSE_ITEMS_KEY)
@@ -1240,7 +1947,7 @@ async def list_pending_approvals(
         routes.RELEASE_RUNS_PATH,
         {
             "status": WAITING_FOR_APPROVAL_STATUS,
-            "limit": min(limit, MAX_QUERY_LIMIT),
+            "limit": min(limit, MAX_RELEASE_RUN_LIMIT),
         },
     )
     release_runs = _pending_runs(_list_from_response(release_data, RESPONSE_RUNS_KEY))
@@ -1273,6 +1980,150 @@ async def get_resource_capabilities(
         },
     )
     return _read_result("get_resource_capabilities", routes.RESOURCE_CAPABILITIES_PATH, data)
+
+
+async def get_resource_graph(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {
+            "clusters",
+            "namespaces",
+            "applications",
+            "resource_types",
+            "health",
+            "labels",
+            "query",
+            "include_deleted",
+            "snapshot_revision",
+            "max_nodes",
+            "max_edges",
+        },
+    )
+    data = await client.get_json(
+        routes.RESOURCES_GRAPH_PATH,
+        {
+            "clusters": _optional_str(arguments, "clusters", max_length=2048),
+            "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
+            "applications": _optional_str(arguments, "applications", max_length=2048),
+            gateway_params.RESOURCE_TYPES_QUERY: _optional_str(
+                arguments,
+                "resource_types",
+                max_length=2048,
+            ),
+            gateway_params.RESOURCE_HEALTH_QUERY: _optional_str(
+                arguments,
+                "health",
+                max_length=2048,
+            ),
+            "labels": _optional_str(arguments, "labels", max_length=2048),
+            gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
+                arguments,
+                "query",
+                max_length=200,
+            ),
+            gateway_params.RESOURCE_INCLUDE_DELETED_QUERY: _optional_bool_or_none(
+                arguments,
+                "include_deleted",
+            ),
+            "snapshot_revision": _optional_bounded_int(
+                arguments,
+                "snapshot_revision",
+                1,
+            ),
+            "max_nodes": _optional_bounded_int(
+                arguments,
+                "max_nodes",
+                1,
+                MAX_GRAPH_NODE_LIMIT,
+            ),
+            "max_edges": _optional_bounded_int(
+                arguments,
+                "max_edges",
+                1,
+                MAX_GRAPH_EDGE_LIMIT,
+            ),
+        },
+    )
+    return _read_result("get_resource_graph", routes.RESOURCES_GRAPH_PATH, data)
+
+
+async def list_recent_changes(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {
+            "from_ms",
+            "to_ms",
+            "bucket_ms",
+            "clusters",
+            "namespaces",
+            "applications",
+            "resource_types",
+            "health",
+            "labels",
+            "query",
+        },
+    )
+    from_ms = _required_bounded_int(
+        arguments,
+        "from_ms",
+        0,
+        MAX_EPOCH_MILLISECONDS,
+    )
+    to_ms = _required_bounded_int(
+        arguments,
+        "to_ms",
+        1,
+        MAX_EPOCH_MILLISECONDS,
+    )
+    bucket_ms = _required_bounded_int(
+        arguments,
+        "bucket_ms",
+        MIN_CHANGE_BUCKET_MS,
+        MAX_CHANGE_BUCKET_MS,
+    )
+    _validate_change_window(from_ms=from_ms, to_ms=to_ms, bucket_ms=bucket_ms)
+    data = await client.get_json(
+        routes.CHANGES_PATH,
+        {
+            gateway_params.TIME_RANGE_FROM_QUERY: from_ms,
+            gateway_params.TIME_RANGE_TO_QUERY: to_ms,
+            gateway_params.CHANGE_BUCKET_QUERY: bucket_ms,
+            "clusters": _optional_str(arguments, "clusters", max_length=2048),
+            "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
+            "applications": _optional_str(arguments, "applications", max_length=2048),
+            gateway_params.RESOURCE_TYPES_QUERY: _optional_str(
+                arguments,
+                "resource_types",
+                max_length=2048,
+            ),
+            gateway_params.RESOURCE_HEALTH_QUERY: _optional_str(
+                arguments,
+                "health",
+                max_length=2048,
+            ),
+            "labels": _optional_str(arguments, "labels", max_length=2048),
+            gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
+                arguments,
+                "query",
+                max_length=200,
+            ),
+        },
+    )
+    return _read_result("list_recent_changes", routes.CHANGES_PATH, data)
+
+
+async def list_metric_query_presets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    path = _format_path(routes.CLUSTER_METRIC_QUERY_PRESETS_PATH, cluster_id=cluster_id)
+    data = await client.get_json(path)
+    return _read_result("list_metric_query_presets", path, data)
 
 
 async def run_metric_query_preset(
@@ -1616,7 +2467,7 @@ async def propose_manifest_change(
         preview = _redact_manifest_preview_data(await client.post_json(preview_path, payload))
         return {
             "tool": "propose_manifest_change",
-            "data": preview,
+            "data": _redact_read_response_value(preview),
             "safety": {
                 "mutating": False,
                 "dry_run": True,
@@ -1638,7 +2489,12 @@ async def propose_manifest_change(
         raise ToolInputError(
             f"{OPSIA_MCP_ENABLE_WRITES_ENV}=true is required before MCP write tools can submit"
         )
-    data = await client.post_json(approve_path, approve_payload)
+    raw_data = await client.post_json(approve_path, approve_payload)
+    operation_id = _operation_id_from_response(
+        raw_data,
+        ("event_id", "correlation_id", "workflow_run_id", "approval_id"),
+    )
+    data = _redact_read_response_value(raw_data)
     return {
         "tool": "propose_manifest_change",
         "data": data,
@@ -1647,10 +2503,7 @@ async def propose_manifest_change(
             "dry_run": False,
             "proposal": proposal,
             "approval_required": False,
-            "operation_id": _operation_id_from_response(
-                data,
-                ("event_id", "correlation_id", "workflow_run_id", "approval_id"),
-            ),
+            "operation_id": operation_id,
             "api_path": approve_path,
             "reason": (
                 "The approved submission uses the existing manifest approve API. That "
@@ -1706,7 +2559,7 @@ async def start_release_run(
 def _read_result(tool_name: str, api_path: str, data: Any) -> dict[str, Any]:
     return {
         "tool": tool_name,
-        "data": data,
+        "data": _redact_read_response_value(data),
         "safety": {
             "mutating": False,
             "dry_run": None,
@@ -1762,9 +2615,14 @@ async def _post_or_propose(
             f"{OPSIA_MCP_ENABLE_WRITES_ENV}=true is required before MCP write tools can submit"
         )
     if method == "POST":
-        data = await client.post_json(api_path, payload, headers=headers)
+        raw_data = await client.post_json(api_path, payload, headers=headers)
     else:
-        data = await client.patch_json(api_path, payload, headers=headers)
+        raw_data = await client.patch_json(api_path, payload, headers=headers)
+    operation_id = _operation_id_from_response(
+        raw_data,
+        operation_keys,
+    )
+    data = _redact_read_response_value(raw_data)
     return {
         "tool": tool_name,
         "data": data,
@@ -1773,10 +2631,7 @@ async def _post_or_propose(
             "dry_run": False,
             "proposal": proposal,
             "approval_required": False,
-            "operation_id": _operation_id_from_response(
-                data,
-                operation_keys,
-            ),
+            "operation_id": operation_id,
             "api_path": api_path,
             "reason": reason,
         },
@@ -1825,6 +2680,44 @@ def _redact_response_strings(value: Any) -> Any:
     if isinstance(value, str):
         return redact_log_line(value)
     return deepcopy(value)
+
+
+def _redact_read_response_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        secret_context = _mapping_describes_secret(value)
+        has_sensitive_marker = _has_sensitive_proposal_marker(value)
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            normalized_key = _normalized_proposal_identifier(key_text)
+            if _is_sensitive_read_key(normalized_key) or (
+                secret_context and normalized_key in SECRET_READ_DATA_KEYS
+            ) or (
+                has_sensitive_marker and _is_sensitive_marker_value_key(key_text)
+            ):
+                redacted[key_text] = REDACTED_VALUE
+            else:
+                redacted[key_text] = _redact_read_response_value(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_read_response_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_log_line(value)
+    return deepcopy(value)
+
+
+def _is_sensitive_read_key(normalized_key: str) -> bool:
+    return normalized_key in SENSITIVE_READ_EXACT_KEYS or _contains_sensitive_proposal_part(
+        normalized_key
+    )
+
+
+def _mapping_describes_secret(value: dict[Any, Any]) -> bool:
+    kind = value.get("kind") or value.get("resource_kind")
+    if isinstance(kind, str) and kind.strip().casefold() == "secret":
+        return True
+    resource_type = value.get("resource_type") or value.get("type")
+    return isinstance(resource_type, str) and resource_type.strip().casefold() == "secret"
 
 
 def _operation_id_from_response(
@@ -1885,6 +2778,18 @@ def _unique_strings(values: Any) -> list[str]:
 
 def _pending_runs(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [value for value in values if _has_pending_approval(value)]
+
+
+def _validate_change_window(*, from_ms: int, to_ms: int, bucket_ms: int) -> None:
+    width = to_ms - from_ms
+    if width <= 0:
+        raise ToolInputError("to_ms must be greater than from_ms")
+    if width > MAX_CHANGE_RANGE_MS:
+        raise ToolInputError("change timeline range must be 24 hours or less")
+    if bucket_ms > width:
+        raise ToolInputError("bucket_ms must not be greater than the requested range")
+    if (width + bucket_ms - 1) // bucket_ms > MAX_CHANGE_BUCKETS:
+        raise ToolInputError("change timeline bucket count must be 1440 or less")
 
 
 def _has_pending_approval(value: dict[str, Any]) -> bool:
@@ -2007,20 +2912,39 @@ def _boolean(description: str, *, default: bool) -> dict[str, Any]:
     }
 
 
+def _optional_boolean(description: str) -> dict[str, Any]:
+    return {
+        "type": "boolean",
+        "description": description,
+    }
+
+
 def _integer(
     description: str,
     *,
     minimum: int,
-    maximum: int,
-    default: int,
+    maximum: int | None = None,
+    default: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    schema: dict[str, Any] = {
         "type": "integer",
         "description": description,
         "minimum": minimum,
-        "maximum": maximum,
-        "default": default,
     }
+    if maximum is not None:
+        schema["maximum"] = maximum
+    if default is not None:
+        schema["default"] = default
+    return schema
+
+
+def _optional_integer(
+    description: str,
+    *,
+    minimum: int,
+    maximum: int | None = None,
+) -> dict[str, Any]:
+    return _integer(description, minimum=minimum, maximum=maximum)
 
 
 def _reject_unknown(arguments: dict[str, Any], allowed: set[str]) -> None:
@@ -2074,11 +2998,46 @@ def _bounded_int(
     return value
 
 
+def _required_bounded_int(
+    arguments: dict[str, Any],
+    name: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if name not in arguments:
+        raise ToolInputError(f"{name} is required")
+    return _bounded_int(arguments, name, minimum, minimum, maximum)
+
+
+def _optional_bounded_int(
+    arguments: dict[str, Any],
+    name: str,
+    minimum: int,
+    maximum: int | None = None,
+) -> int | None:
+    if name not in arguments or arguments[name] is None:
+        return None
+    value = arguments[name]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ToolInputError(f"{name} must be an integer")
+    if value < minimum:
+        raise ToolInputError(f"{name} must be at least {minimum}")
+    if maximum is not None and value > maximum:
+        raise ToolInputError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
 def _optional_bool(arguments: dict[str, Any], name: str, *, default: bool) -> bool:
     value = arguments.get(name, default)
     if not isinstance(value, bool):
         raise ToolInputError(f"{name} must be a boolean")
     return value
+
+
+def _optional_bool_or_none(arguments: dict[str, Any], name: str) -> bool | None:
+    if name not in arguments or arguments[name] is None:
+        return None
+    return _optional_bool(arguments, name, default=False)
 
 
 def _validate_json_payload(value: dict[str, Any], name: str) -> dict[str, Any]:
@@ -2099,10 +3058,21 @@ def _validate_json_payload(value: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def _reject_direct_execution_flags(payload: dict[str, Any]) -> None:
-    if DIRECT_EXECUTION_KEYS.intersection(payload):
+    if _contains_direct_execution_flag(payload):
         raise ToolInputError(
             "create_command_request cannot set direct execution confirmation flags"
         )
+
+
+def _contains_direct_execution_flag(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(
+            str(key) in DIRECT_EXECUTION_KEYS or _contains_direct_execution_flag(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_direct_execution_flag(item) for item in value)
+    return False
 
 
 def _format_path(template: str, **values: str) -> str:
