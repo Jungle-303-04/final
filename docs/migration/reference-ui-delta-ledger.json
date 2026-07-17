@@ -2257,7 +2257,11 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.097",
+            "reference.feature.102",
+            "reference.feature.103"
+          ],
           "symbol": "NamespacePicker cache-scoped rescope",
           "interaction": "a cache-scoped namespace selector exposes only authorized namespaces, applies one replacement scope, communicates the rescope lifecycle, and invalidates incompatible active sessions",
           "transport": "none",
@@ -2308,10 +2312,7 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:provider-detail:aws-machine:v1",
-          "legacyContractIds": [
-            "reference.feature.102",
-            "reference.feature.103"
-          ],
+          "legacyContractIds": [],
           "symbol": "AWSMachineRenderer",
           "interaction": "an authorized AWSMachine detail presents observed instance identity, lifecycle state, configuration, addresses, and Cluster API conditions without exposing the raw object",
           "transport": "poll",
@@ -16044,7 +16045,9 @@
           "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
           "legacyContractIds": [
             "reference.feature.064",
-            "reference.feature.065"
+            "reference.feature.065",
+            "reference.feature.093",
+            "reference.feature.094"
           ],
           "symbol": "ConnectionProvider status, reconnect, and cache refresh",
           "interaction": "the authenticated shell observes selected-cluster connection stage and freshness, preserves the last safe projection during a transient refresh, and exposes one bounded refresh action without letting browser state switch kubeconfig or impersonate an agent reconnect",
