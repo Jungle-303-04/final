@@ -33,6 +33,16 @@ import { useHelmChartSources } from "./useHelmChartSources";
 
 export function HelmChartSourcesPanel({ port }: { port: HelmPort }) {
   const data = useHelmChartSources(port);
+  return <HelmChartSourcesPanelContent data={data} port={port} />;
+}
+
+export function HelmChartSourcesPanelContent({
+  data,
+  port,
+}: {
+  data: ReturnType<typeof useHelmChartSources>;
+  port: HelmPort;
+}) {
   return (
     <Card>
       <CardHeader>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,7 @@ from pydantic import Field
 from domains.catalog.repository import BOOTSTRAP_CATALOG_ITEMS
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.helm.releases import HelmUpgradeInput, HelmUpgradeTarget
 from packages.contracts.parity import ResourceRef
 
 DNS_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
@@ -127,6 +129,78 @@ def server_helm_recipes() -> tuple[ServerHelmRecipe, ...]:
                 )
             )
     return tuple(sorted(recipes, key=lambda item: (item.display_name, item.version)))
+
+
+def helm_upgrade_inputs(schema: Mapping[str, Any]) -> tuple[HelmUpgradeInput, ...] | None:
+    """Project a bounded server-owned values schema into reusable UI inputs."""
+
+    properties_value = schema.get("properties")
+    properties = properties_value if isinstance(properties_value, Mapping) else {}
+    required_value = schema.get("required")
+    required = {str(name) for name in required_value} if isinstance(required_value, list) else set()
+    inputs: list[HelmUpgradeInput] = []
+    for name, rule_value in sorted(properties.items(), key=lambda item: str(item[0])):
+        rule = rule_value if isinstance(rule_value, Mapping) else {}
+        value_type = str(rule.get("type") or "")
+        if value_type not in {"string", "integer", "number", "boolean"}:
+            if str(name) in required:
+                return None
+            continue
+        default = rule.get("default")
+        if not isinstance(default, (str, int, float, bool)):
+            default = None
+        allowed = rule.get("enum")
+        allowed_values = (
+            tuple(value for value in allowed if isinstance(value, (str, int, float, bool)))
+            if isinstance(allowed, list)
+            else ()
+        )
+        inputs.append(
+            HelmUpgradeInput(
+                name=str(name),
+                value_type=value_type,
+                required=str(name) in required,
+                default=default,
+                allowed_values=allowed_values,
+            )
+        )
+    if not required.issubset({item.name for item in inputs}):
+        return None
+    return tuple(inputs)
+
+
+def helm_upgrade_target(recipe: ServerHelmRecipe) -> HelmUpgradeTarget | None:
+    """Return one executable target only when its values contract is representable."""
+
+    inputs = helm_upgrade_inputs(recipe.values_schema)
+    if inputs is None:
+        return None
+    return HelmUpgradeTarget(
+        item_id=recipe.item_id,
+        name=recipe.display_name,
+        version=recipe.version,
+        chart_version=recipe.chart_version,
+        inputs=inputs,
+    )
+
+
+def matching_helm_recipe(
+    *,
+    source_reference: str,
+    chart_name: str,
+    chart_version: str,
+) -> ServerHelmRecipe | None:
+    """Resolve an exact OCI chart/version to an existing digest-pinned recipe."""
+
+    package_ref = f"{source_reference.rstrip('/')}/{chart_name}"
+    return next(
+        (
+            recipe
+            for recipe in server_helm_recipes()
+            if recipe.package_ref == package_ref and recipe.chart_version == chart_version
+        ),
+        None,
+    )
 
 
 def validate_install_name(field: str, value: str, *, max_length: int) -> None:

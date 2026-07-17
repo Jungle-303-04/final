@@ -195,6 +195,8 @@ function helmPort(): HelmPort & {
   refreshChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    searchCharts: vi.fn(),
+    getChartDetail: vi.fn(),
     listInstallTargets: vi.fn().mockResolvedValue({ namespace: "sandbox", targets: [] }),
     installRelease: vi.fn().mockResolvedValue({
       accepted: true,

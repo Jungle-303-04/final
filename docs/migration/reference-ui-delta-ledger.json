@@ -13281,31 +13281,58 @@
           "legacyContractIds": [
             "reference.feature.192",
             "reference.feature.193",
-            "reference.feature.196",
             "reference.feature.198"
           ],
           "symbol": "ChartBrowser search input",
-          "interaction": "chart and repository search uses the shared identifier-safe input, while repository refresh, local chart search, and external catalog results require typed Python providers",
+          "interaction": "chart and repository identifiers use the shared exact-text input policy",
           "transport": "none",
           "realtime": null,
           "motion": null,
           "opsiaPort": {
             "destinations": [
               "frontend/src/shared/ui/primitives/input.tsx",
-              "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
-              "frontend/src/pages/helm/HelmPage.tsx"
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.helm.releases",
-              "domains.helm.release_router"
+              "packages.contracts.helm.sources"
+            ],
+            "plannedTestIds": [
+              "helm.chart-catalog.input-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Shared exact-text controls preserve chart and repository identifiers without a Helm-specific input primitive."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:helm:chart-catalog:authorized-provider:v1",
+          "legacyContractIds": [
+            "reference.feature.196"
+          ],
+          "symbol": "ChartBrowser catalog search and selection",
+          "interaction": "registered source metadata drives bounded search, filter, selection, and exact URL identity without a browser-owned chart list",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "frontend/src/features/helm/createHelmChartSourcesPort.ts",
+              "src/domains/helm/source_router.py",
+              "src/domains/helm/source_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.catalog",
+              "domains.helm.source_router"
             ],
             "plannedTestIds": [
               "helm.chart-catalog.input-policy",
-              "helm.release-detail.availability"
+              "helm.source-tracking.provider-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "The Python Helm domain exposes authorized release storage metadata only; it has no repository cache, chart index, external catalog search, or repository refresh contract.",
-            "rationale": "The shared input policy is complete, but an inert chart browser or fabricated repository list would violate the product data boundary."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Registered workspace sources, exact RBAC, provider-backed metadata, strict bounded schemas, partial observations, and URL identity now drive the chart browser without a hardcoded chart list."
           }
         }
       ]
@@ -13533,12 +13560,37 @@
         {
           "sourceKey": "upstream-ui:helm:install-wizard:identifier-inputs:v1",
           "legacyContractIds": [
-            "reference.feature.197",
             "reference.feature.199",
             "reference.feature.200"
           ],
           "symbol": "InstallWizard release and namespace inputs",
-          "interaction": "release and namespace identifiers use the shared exact-text input before a validated install is handed to the existing command receipt and OperationEvent pipeline",
+          "interaction": "release and namespace identifiers use the shared exact-text input policy",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases"
+            ],
+            "plannedTestIds": [
+              "helm.install-wizard.input-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The install form reuses shared identifier controls and typed server validation."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:helm:chart-detail:recipe-gated-install:v1",
+          "legacyContractIds": [
+            "reference.feature.197"
+          ],
+          "symbol": "InstallWizard chart detail and executable recipe gate",
+          "interaction": "exact chart detail exposes a validated install only when it matches a server-owned recipe handed to the existing command receipt and OperationEvent pipeline",
           "transport": "fetch_sse",
           "realtime": {
             "resume": "resume the accepted command from the durable OperationEvent cursor rather than replaying an install request",
@@ -13548,23 +13600,25 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/primitives/input.tsx",
-              "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/HelmReleaseInstallDialog.tsx",
               "frontend/src/features/operations/OperationStatusStore.tsx",
-              "src/domains/catalog/router.py",
+              "src/domains/helm/source_router.py",
+              "src/domains/catalog/install.py",
               "src/services/target/cluster-agent/commands/helm.py"
             ],
             "requiredBackendContracts": [
-              "domains.catalog.router",
-              "packages.contracts.parity"
+              "packages.contracts.helm.catalog",
+              "packages.contracts.parity",
+              "packages.contracts.events"
             ],
             "plannedTestIds": [
               "helm.install-wizard.input-policy",
               "helm.install-wizard.provider-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "The safe existing install path accepts server-owned catalog recipes in the sandbox namespace; arbitrary local or external charts, chart README/default values, and an install-stream endpoint do not exist.",
-            "rationale": "Opsia reuses the real idempotent catalog command and durable OperationEvent stream, but does not relabel that bounded path as a general chart installer."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Exact registered chart detail exposes installation only for a matching server-owned digest-pinned recipe and reuses the audited Agent command receipt and durable OperationEvent stream."
           }
         }
       ]

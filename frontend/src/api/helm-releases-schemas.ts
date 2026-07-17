@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 import { helmChartSourceSchema } from "./helm-chart-sources-schemas";
+import { helmUpgradeTargetSchema } from "./helm-common-schemas";
+
+export { helmUpgradeInputSchema, helmUpgradeTargetSchema } from "./helm-common-schemas";
 
 const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
 const nullableTextSchema = z.string().min(1).nullable();
@@ -24,35 +27,6 @@ export const helmResourceRefSchema = z.strictObject({
 export const helmUnavailableFeatureSchema = z.strictObject({
   availability: z.literal("unavailable"),
   reason_code: z.string().min(1),
-});
-
-const helmUpgradeScalarSchema = z.union([
-  z.string(),
-  z.number().finite(),
-  z.boolean(),
-  z.null(),
-]);
-
-export const helmUpgradeInputSchema = z.strictObject({
-  name: z.string().min(1).max(253),
-  value_type: z.enum(["string", "integer", "number", "boolean"]),
-  required: z.boolean(),
-  default: helmUpgradeScalarSchema,
-  allowed_values: z.array(helmUpgradeScalarSchema),
-}).superRefine((value, context) => {
-  for (const candidate of [value.default, ...value.allowed_values]) {
-    if (candidate !== null && !upgradeScalarMatches(value.value_type, candidate)) {
-      context.addIssue({ code: "custom", message: "Helm upgrade input scalar type is inconsistent" });
-    }
-  }
-});
-
-export const helmUpgradeTargetSchema = z.strictObject({
-  item_id: z.string().min(1).max(120),
-  name: z.string().min(1).max(120),
-  version: z.string().min(1).max(80),
-  chart_version: z.string().min(1).max(80),
-  inputs: z.array(helmUpgradeInputSchema),
 });
 
 export const helmInstallTargetsSchema = z.strictObject({
@@ -266,13 +240,3 @@ export type HelmReleaseDetailEndpoint = z.infer<typeof helmReleaseDetailSchema>;
 export type HelmReleaseUpgradeInfoEndpoint = z.infer<typeof helmReleaseUpgradeInfoSchema>;
 export type HelmReleaseVersionListEndpoint = z.infer<typeof helmReleaseVersionListSchema>;
 export type HelmReleaseUpgradeBatchEndpoint = z.infer<typeof helmReleaseUpgradeBatchSchema>;
-
-function upgradeScalarMatches(
-  valueType: "string" | "integer" | "number" | "boolean",
-  value: string | number | boolean,
-): boolean {
-  if (valueType === "string") return typeof value === "string";
-  if (valueType === "integer") return typeof value === "number" && Number.isInteger(value);
-  if (valueType === "number") return typeof value === "number" && Number.isFinite(value);
-  return typeof value === "boolean";
-}

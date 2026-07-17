@@ -818,7 +818,16 @@ function helmPort(): HelmPort & {
       truncated: false,
       reasonCodes: [],
     }),
-    getChartDetail: vi.fn(),
+    getChartDetail: vi.fn().mockResolvedValue({
+      availability: "unavailable",
+      chart: null,
+      versions: [],
+      valuesSchema: { availability: "unavailable", schema: null, reasonCode: "unavailable" },
+      install: { availability: "unavailable", target: null, reasonCode: "unavailable" },
+      observedAt: null,
+      truncated: false,
+      reasonCodes: ["unavailable"],
+    }),
     previewReleaseValues: vi.fn().mockResolvedValue({
       accepted: true,
       eventId: "evt-preview",

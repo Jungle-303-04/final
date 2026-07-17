@@ -22,7 +22,11 @@ import {
   helmArtifactResultSchema,
   helmValuesPreviewResultSchema,
 } from "./helmArtifactSchemas";
-import { createHelmChartSourcesPort, toChartSource } from "./createHelmChartSourcesPort";
+import {
+  createHelmChartSourcesPort,
+  toChartSource,
+  toUpgradeTarget,
+} from "./createHelmChartSourcesPort";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
@@ -33,19 +37,7 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         const value = await endpoints.listHelmInstallTargets(signal);
         return {
           namespace: value.namespace,
-          targets: value.targets.map((target) => ({
-            itemId: target.item_id,
-            name: target.name,
-            version: target.version,
-            chartVersion: target.chart_version,
-            inputs: target.inputs.map((input) => ({
-              name: input.name,
-              valueType: input.value_type,
-              required: input.required,
-              defaultValue: input.default,
-              allowedValues: input.allowed_values,
-            })),
-          })),
+          targets: value.targets.map(toUpgradeTarget),
         };
       });
     },

@@ -6,6 +6,10 @@ from types import SimpleNamespace
 import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from domains.helm.source_provider import HelmChartVersionProvider
+from domains.helm.source_router import get_helm_chart_version_provider, router
+from domains.identity.dependencies import require_session
 from packages.contracts.helm.catalog import (
     HelmChartCatalogObservation,
     HelmChartDetail,
@@ -13,11 +17,7 @@ from packages.contracts.helm.catalog import (
     HelmChartSummary,
     HelmChartValuesSchemaUnavailable,
 )
-
-from domains.helm.source_provider import HelmChartVersionProvider
-from domains.helm.source_router import get_helm_chart_version_provider, router
-from domains.identity.dependencies import require_session
-from packages.contracts.helm.sources import HelmChartSource
+from packages.contracts.helm.sources import HelmChartSource, HelmChartVersion
 from packages.runtime.dependencies import get_db
 
 
@@ -271,6 +271,61 @@ def test_chart_detail_requires_exact_source_access_and_keeps_install_capability_
         "source-a",
         "catalog.read",
     )
+
+
+def test_oci_chart_detail_exposes_only_an_exact_existing_digest_pinned_recipe() -> None:
+    source = _source(
+        provider="oci",
+        name="Bitnami",
+        reference="oci://registry-1.docker.io/bitnamicharts",
+    )
+
+    class Db:
+        def can_access(self, *_args: str) -> bool:
+            return True
+
+        def get_helm_chart_source_record(self, **_payload: object) -> dict[str, object]:
+            return _row(source)
+
+    class Provider:
+        async def get_chart_detail(
+            self,
+            selected: HelmChartSource,
+            chart_name: str,
+            *,
+            version: str | None,
+            credential: object | None = None,
+        ) -> HelmChartDetail:
+            assert (selected, chart_name, version, credential) == (
+                source,
+                "redis",
+                "23.1.1",
+                None,
+            )
+            return HelmChartDetail(
+                availability="available",
+                chart=HelmChartSummary(
+                    source=source,
+                    name="redis",
+                    version="23.1.1",
+                    deprecated=False,
+                ),
+                versions=(HelmChartVersion(version="23.1.1"),),
+                values_schema=HelmChartValuesSchemaUnavailable(
+                    reason_code="helm_chart_values_schema_unavailable"
+                ),
+                install=HelmChartInstallUnavailable(
+                    reason_code="helm_chart_install_recipe_unavailable"
+                ),
+            )
+
+    response = _client(Db(), Provider()).get("/helm/charts/source-a/redis/23.1.1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["install"]["availability"] == "available"
+    assert body["install"]["target"]["item_id"] == "catalog-redis"
+    assert body["values_schema"]["availability"] == "available"
 
 
 def _client(db: object, provider: object) -> TestClient:

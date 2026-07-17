@@ -172,12 +172,17 @@ export {
   type ArtifactHubSearchPageEndpoint,
 } from "./helm-artifacthub-schemas";
 export {
+  getHelmChartDetail,
+  HELM_CHARTS_PATH,
   HELM_CHART_SOURCES_PATH,
   HELM_REPOSITORY_UPDATE_PATH,
   deleteHelmChartSource,
   listHelmChartSources,
   registerHelmChartSource,
   refreshHelmRepository,
+  searchHelmCharts,
+  type HelmChartDetailRequest,
+  type HelmChartSearchQuery,
   type HelmChartSourceCredentialRequest,
   type HelmChartSourceDeleteRequest,
   type HelmChartSourceListQuery,
@@ -185,9 +190,15 @@ export {
   type HelmChartSourceRegisterRequest,
 } from "./helm-chart-sources";
 export {
+  helmChartCatalogPageSchema,
+  helmChartDetailSchema,
+  helmChartSummarySchema,
   helmChartSourcePageSchema,
   helmChartSourceSchema,
   helmRepositoryRefreshSchema,
+  type HelmChartCatalogPageEndpoint,
+  type HelmChartDetailEndpoint,
+  type HelmChartSummaryEndpoint,
   type HelmChartSourceEndpoint,
   type HelmChartSourcePageEndpoint,
   type HelmRepositoryRefreshEndpoint,

@@ -15,6 +15,7 @@ from domains.catalog.install import (
     CatalogInstallValidationError,
     CatalogRecipeUnsupported,
     ServerHelmRecipe,
+    helm_upgrade_target,
     server_helm_recipe,
     server_helm_recipes,
     validate_catalog_values,
@@ -90,7 +91,6 @@ from packages.contracts.helm import (
     HelmReleaseUpgradeRequest,
     HelmReleaseValuesPreviewRequest,
     HelmReleaseVersionList,
-    HelmUpgradeInput,
     HelmUpgradeTarget,
     HelmValuesPreviewCommandPayload,
 )
@@ -570,18 +570,10 @@ async def list_helm_install_targets(
     _ = current
     targets: list[HelmUpgradeTarget] = []
     for recipe in server_helm_recipes():
-        inputs = _upgrade_inputs(recipe.values_schema)
-        if inputs is None:
+        target = helm_upgrade_target(recipe)
+        if target is None:
             continue
-        targets.append(
-            HelmUpgradeTarget(
-                item_id=recipe.item_id,
-                name=recipe.display_name,
-                version=recipe.version,
-                chart_version=recipe.chart_version,
-                inputs=inputs,
-            )
-        )
+        targets.append(target)
     return HelmInstallTargetsResponse(namespace=Sandbox.NAMESPACE, targets=tuple(targets))
 
 
@@ -1239,18 +1231,10 @@ def _helm_upgrade_targets(
     for recipe in server_helm_recipes():
         if not _recipe_matches_release(recipe, chart_name, current_version):
             continue
-        inputs = _upgrade_inputs(recipe.values_schema)
-        if inputs is None:
+        target = helm_upgrade_target(recipe)
+        if target is None:
             continue
-        targets.append(
-            HelmUpgradeTarget(
-                item_id=recipe.item_id,
-                name=recipe.display_name,
-                version=recipe.version,
-                chart_version=recipe.chart_version,
-                inputs=inputs,
-            )
-        )
+        targets.append(target)
     return tuple(targets)
 
 
@@ -1265,42 +1249,6 @@ def _recipe_matches_release(
         and recipe.chart_name == chart_name
         and compare_helm_chart_versions(recipe.chart_version, current_version) > 0
     )
-
-
-def _upgrade_inputs(schema: Mapping[str, Any]) -> tuple[HelmUpgradeInput, ...] | None:
-    properties_value = schema.get("properties")
-    properties = properties_value if isinstance(properties_value, Mapping) else {}
-    required_value = schema.get("required")
-    required = {str(name) for name in required_value} if isinstance(required_value, list) else set()
-    inputs: list[HelmUpgradeInput] = []
-    for name, rule_value in sorted(properties.items(), key=lambda item: str(item[0])):
-        rule = rule_value if isinstance(rule_value, Mapping) else {}
-        value_type = str(rule.get("type") or "")
-        if value_type not in {"string", "integer", "number", "boolean"}:
-            if str(name) in required:
-                return None
-            continue
-        default = rule.get("default")
-        if not isinstance(default, (str, int, float, bool)):
-            default = None
-        allowed = rule.get("enum")
-        allowed_values = (
-            tuple(value for value in allowed if isinstance(value, (str, int, float, bool)))
-            if isinstance(allowed, list)
-            else ()
-        )
-        inputs.append(
-            HelmUpgradeInput(
-                name=str(name),
-                value_type=value_type,
-                required=str(name) in required,
-                default=default,
-                allowed_values=allowed_values,
-            )
-        )
-    if not required.issubset({item.name for item in inputs}):
-        return None
-    return tuple(inputs)
 
 
 def _agent_supports_release_upgrade(

@@ -4,9 +4,13 @@ import {
   type AcceptedConfigMutationEndpoint,
 } from "./accepted-event-schemas";
 import {
+  helmChartCatalogPageSchema,
+  helmChartDetailSchema,
   helmChartSourcePageSchema,
   helmChartSourceSchema,
   helmRepositoryRefreshSchema,
+  type HelmChartCatalogPageEndpoint,
+  type HelmChartDetailEndpoint,
   type HelmChartSourceEndpoint,
   type HelmChartSourcePageEndpoint,
   type HelmRepositoryRefreshEndpoint,
@@ -14,6 +18,7 @@ import {
 import { encodePathSegment, withQuery } from "./url";
 
 export const HELM_CHART_SOURCES_PATH = "/api/helm/chart-sources" as const;
+export const HELM_CHARTS_PATH = "/api/helm/charts" as const;
 export const HELM_REPOSITORY_UPDATE_PATH = "/api/helm/repositories/{name}/update" as const;
 
 const SOURCE_PAGE_MAX = 100;
@@ -45,6 +50,20 @@ export interface HelmChartSourceDeleteRequest {
   provider: HelmChartSourceProviderEndpoint;
   name: string;
   reference: string;
+}
+
+export interface HelmChartSearchQuery {
+  query?: string;
+  sourceId?: string;
+  provider?: HelmChartSourceProviderEndpoint;
+  allVersions?: boolean;
+  limit?: number;
+}
+
+export interface HelmChartDetailRequest {
+  sourceId: string;
+  chart: string;
+  version?: string;
 }
 
 export function listHelmChartSources(
@@ -107,6 +126,39 @@ export function refreshHelmRepository(
   return apiRequest(path, helmRepositoryRefreshSchema, { method: "POST", signal });
 }
 
+export function searchHelmCharts(
+  query: HelmChartSearchQuery = {},
+  signal?: AbortSignal,
+): Promise<HelmChartCatalogPageEndpoint> {
+  const text = (query.query ?? "").trim();
+  if (text.length > 200) throw new TypeError("query must not exceed 200 characters");
+  const sourceId = query.sourceId === undefined ? undefined : requiredSourceId(query.sourceId);
+  const limit = query.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new RangeError("limit must be an integer between 1 and 100");
+  }
+  return apiRequest(withQuery(HELM_CHARTS_PATH, [
+    ["query", text],
+    ["source_id", sourceId],
+    ["provider", query.provider],
+    ["allVersions", String(query.allVersions ?? false)],
+    ["limit", String(limit)],
+  ]), helmChartCatalogPageSchema, { signal });
+}
+
+export function getHelmChartDetail(
+  input: HelmChartDetailRequest,
+  signal?: AbortSignal,
+): Promise<HelmChartDetailEndpoint> {
+  const sourceId = requiredSourceId(input.sourceId);
+  const chart = requiredChartName(input.chart);
+  const version = input.version === undefined
+    ? ""
+    : `/${encodePathSegment(requiredText(input.version, "version", 256))}`;
+  const path = `${HELM_CHARTS_PATH}/${sourceId}/${encodePathSegment(chart)}${version}` as ApiPath;
+  return apiRequest(path, helmChartDetailSchema, { signal });
+}
+
 function optionalLimit(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isInteger(value) || value < 1 || value > SOURCE_PAGE_MAX) {
@@ -135,6 +187,17 @@ function requiredSourceId(value: string): string {
   const normalized = value.trim();
   if (!/^[a-z0-9-]{1,80}$/.test(normalized)) {
     throw new TypeError("sourceId must be a canonical Helm chart source ID");
+  }
+  return normalized;
+}
+
+function requiredChartName(value: string): string {
+  const normalized = value.trim();
+  if (
+    normalized.length > 512
+    || !/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(normalized)
+  ) {
+    throw new TypeError("chart must be a canonical Helm chart name");
   }
   return normalized;
 }

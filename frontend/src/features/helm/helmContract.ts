@@ -271,6 +271,56 @@ export interface HelmChartVersion {
   deprecated: boolean;
 }
 
+export interface HelmChartSummary {
+  source: HelmChartSource;
+  name: string;
+  version: string;
+  appVersion: string | null;
+  description: string | null;
+  deprecated: boolean;
+}
+
+export interface HelmChartSearchRequest {
+  query?: string;
+  sourceId?: string;
+  provider?: "repository" | "oci";
+  allVersions?: boolean;
+  limit?: number;
+}
+
+export interface HelmChartCatalogPage {
+  availability: HelmAvailability;
+  items: readonly HelmChartSummary[];
+  total: number;
+  limit: number;
+  query: string;
+  sourceId: string | null;
+  provider: "repository" | "oci" | null;
+  allVersions: boolean;
+  observedAt: string | null;
+  truncated: boolean;
+  reasonCodes: readonly string[];
+}
+
+export type HelmChartValuesSchema =
+  | { availability: "available"; schema: Readonly<Record<string, unknown>> }
+  | { availability: "unavailable"; schema: null; reasonCode: string };
+
+export type HelmChartInstall =
+  | { availability: "available"; target: HelmUpgradeTarget }
+  | { availability: "unavailable"; target: null; reasonCode: string };
+
+export interface HelmChartDetail {
+  availability: HelmAvailability;
+  chart: HelmChartSummary | null;
+  versions: readonly HelmChartVersion[];
+  valuesSchema: HelmChartValuesSchema;
+  install: HelmChartInstall;
+  observedAt: string | null;
+  truncated: boolean;
+  reasonCodes: readonly string[];
+}
+
 export interface HelmReleaseUpgradeInfo {
   availability: HelmAvailability;
   chartName: string | null;
@@ -458,6 +508,14 @@ export class HelmPortFailure extends Error {
 }
 
 export interface HelmPort {
+  searchCharts(
+    request?: HelmChartSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmChartCatalogPage>;
+  getChartDetail(
+    request: { sourceId: string; chart: string; version?: string },
+    signal?: AbortSignal,
+  ): Promise<HelmChartDetail>;
   listInstallTargets(signal?: AbortSignal): Promise<HelmInstallTargets>;
   installRelease(
     request: HelmReleaseInstallRequest,

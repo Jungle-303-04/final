@@ -8061,7 +8061,7 @@
     },
     {
       "contractId": "reference.feature.196",
-      "sourceKey": "upstream-ui:helm:chart-browser:shared-input:v1",
+      "sourceKey": "upstream-ui:helm:chart-catalog:authorized-provider:v1",
       "legacyContractIds": [
         "reference.feature.196"
       ],
@@ -8074,27 +8074,31 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/api/catalog.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.catalog",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
-        "frontend/src/api/catalog.test.ts"
+        "tests/test_helm_chart_catalog.py",
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/features/helm/createHelmChartSourcesAdapter.test.ts",
+        "frontend/src/features/filters/helmChartCatalogUrlState.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/catalog/router.py#list_catalog_items",
-          "consumer": "src/domains/catalog/repository.py#BOOTSTRAP_CATALOG_ITEMS",
-          "reason": "Curated Helm items are available, but repository, search, and filter semantics are not yet a typed server contract.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#search_helm_charts",
+          "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.search_catalog",
+          "reason": "Workspace RBAC resolves registered source identities and bounded provider observations; repository metadata supports name and description search, OCI requires an exact chart query, and partial source failures remain explicit.",
+          "test": "tests/test_helm_chart_catalog.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/api/catalog.ts#listCatalogItems",
-          "reason": "The browser consumes the strict catalog envelope but has no Helm chart browser route.",
-          "test": "frontend/src/api/catalog.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartCatalogPanel.tsx#HelmChartCatalogPanel",
+          "consumer": "frontend/src/features/helm/createHelmChartSourcesPort.ts#searchCharts",
+          "reason": "The Helm surface searches registered sources without a hardcoded chart list and preserves query, source, provider, all-version, chart, and version identity in validated URL state.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8102,7 +8106,7 @@
     },
     {
       "contractId": "reference.feature.197",
-      "sourceKey": "upstream-ui:helm:install-wizard:identifier-inputs:v1",
+      "sourceKey": "upstream-ui:helm:chart-detail:recipe-gated-install:v1",
       "legacyContractIds": [
         "reference.feature.197"
       ],
@@ -8116,28 +8120,30 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/api/catalog.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.catalog",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_chart_catalog.py",
         "tests/test_catalog_agent_runner.py",
-        "frontend/src/api/catalog.test.ts"
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
           "state": "implemented",
-          "destination": "src/domains/catalog/router.py#get_catalog_item",
-          "consumer": "src/domains/catalog/install.py#server_helm_recipe",
-          "reason": "Curated item detail includes server-owned versions and a validated values schema for executable recipes.",
-          "test": "tests/test_catalog_domain.py"
+          "destination": "src/domains/helm/source_router.py#get_helm_chart_version_detail",
+          "consumer": "src/domains/catalog/install.py#matching_helm_recipe",
+          "reason": "Exact source, chart, and version detail remains read-only unless it matches an existing server-owned digest-pinned OCI recipe; available installation reuses the current Agent command and durable OperationEvent contract.",
+          "test": "tests/test_helm_chart_catalog.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/api/catalog.ts#getCatalogItem",
-          "reason": "The strict detail client is implemented, but no Helm install wizard consumes it yet.",
-          "test": "frontend/src/api/catalog.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartCatalogPanel.tsx#DetailBoundary",
+          "consumer": "frontend/src/pages/helm/HelmReleaseInstallDialog.tsx#HelmReleaseInstallDialog",
+          "reason": "Strict chart detail, values-schema availability, and recipe-gated installation share the existing confirmation dialog, typed target, command receipt, and operation-status stream.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

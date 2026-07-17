@@ -15,7 +15,17 @@ import {
   type HelmFormValues,
 } from "./HelmReleaseUpgradeDialog";
 
-export function HelmReleaseInstallDialog({ clusterId, port }: { clusterId: string; port: HelmPort }) {
+export function HelmReleaseInstallDialog({
+  clusterId,
+  port,
+  preferredTarget,
+  triggerLabel = HELM_COPY.install,
+}: {
+  clusterId: string;
+  port: HelmPort;
+  preferredTarget?: Pick<HelmUpgradeTarget, "itemId" | "version">;
+  triggerLabel?: string;
+}) {
   const operationStore = useOptionalOperationStatusStore();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -39,7 +49,9 @@ export function HelmReleaseInstallDialog({ clusterId, port }: { clusterId: strin
     setOpen(true);
     try {
       const result = await port.listInstallTargets(controller.signal);
-      const first = result.targets[0] ?? null;
+      const first = result.targets.find((item) => preferredTarget
+        && item.itemId === preferredTarget.itemId
+        && item.version === preferredTarget.version) ?? result.targets[0] ?? null;
       setNamespace(result.namespace);
       setTargets(result.targets);
       setTargetKey(first ? key(first) : "");
@@ -87,7 +99,7 @@ export function HelmReleaseInstallDialog({ clusterId, port }: { clusterId: strin
 
   return (
     <>
-      <Button onClick={() => void show()} size="sm" type="button">{HELM_COPY.install}</Button>
+      <Button onClick={() => void show()} size="sm" type="button">{triggerLabel}</Button>
       <ConfirmationDialog
         cancelLabel={HELM_COPY.chartSourceCancel}
         confirmDisabled={target === null || releaseName.trim() === "" || !valuesAreValid(target, values)}

@@ -17,6 +17,11 @@ import {
   writeHelmArtifactSearchParams,
   type HelmArtifactUrlState,
 } from "../../features/filters/helmArtifactUrlState";
+import {
+  parseHelmChartCatalogUrlState,
+  writeHelmChartCatalogSearchParams,
+  type HelmChartCatalogUrlState,
+} from "../../features/filters/helmChartCatalogUrlState";
 import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type {
   HelmArtifactKind,
@@ -54,7 +59,8 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
-import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
+import { HelmChartCatalogPanel } from "./HelmChartCatalogPanel";
+import { HelmChartSourcesPanelContent } from "./HelmChartSourcesPanel";
 import { HelmArtifactHubPanel } from "./HelmArtifactHubPanel";
 import { HelmReleaseInstallDialog } from "./HelmReleaseInstallDialog";
 import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
@@ -65,6 +71,7 @@ import {
   useHelmReleaseList,
   type HelmReleaseDetailView,
 } from "./useHelmReleaseData";
+import { useHelmChartSources } from "./useHelmChartSources";
 
 const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
   helm_manifest_provider_not_integrated: HELM_COPY.manifestUnavailable,
@@ -93,8 +100,17 @@ export function HelmPage({ port }: { port: HelmPort }) {
     () => parseHelmArtifactUrlState(searchParams),
     [searchParams],
   );
+  const chartCatalogUrlState = useMemo(
+    () => parseHelmChartCatalogUrlState(searchParams),
+    [searchParams],
+  );
   const updateArtifactUrlState = useCallback((next: HelmArtifactUrlState) => {
     const params = writeHelmArtifactSearchParams(searchParams, next);
+    const nextSearch = params.toString();
+    navigate({ search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+  }, [navigate, searchParams]);
+  const updateChartCatalogUrlState = useCallback((next: HelmChartCatalogUrlState) => {
+    const params = writeHelmChartCatalogSearchParams(searchParams, next);
     const nextSearch = params.toString();
     navigate({ search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
   }, [navigate, searchParams]);
@@ -117,17 +133,28 @@ export function HelmPage({ port }: { port: HelmPort }) {
       />
     );
   }
-  return <HelmReleaseListPage onOpen={(release) => navigate(helmReleaseDetailHref({
-    clusterId: release.scope.clusterId,
-    namespace: release.storageNamespace,
-    releaseName: release.name,
-  }))} port={port} />;
+  return (
+    <HelmReleaseListPage
+      chartCatalogUrlState={chartCatalogUrlState}
+      onChartCatalogUrlStateChange={updateChartCatalogUrlState}
+      onOpen={(release) => navigate(helmReleaseDetailHref({
+        clusterId: release.scope.clusterId,
+        namespace: release.storageNamespace,
+        releaseName: release.name,
+      }))}
+      port={port}
+    />
+  );
 }
 
 function HelmReleaseListPage({
+  chartCatalogUrlState,
+  onChartCatalogUrlStateChange,
   onOpen,
   port,
 }: {
+  chartCatalogUrlState: HelmChartCatalogUrlState;
+  onChartCatalogUrlStateChange: (state: HelmChartCatalogUrlState) => void;
   onOpen: (release: HelmRelease) => void;
   port: HelmPort;
 }) {
@@ -136,6 +163,7 @@ function HelmReleaseListPage({
   const [query, setQuery] = useState("");
   const scopeResolution = helmScopeClusterIds(scope);
   const data = useHelmReleaseList(port, scopeResolution.clusterIds);
+  const chartSources = useHelmChartSources(port);
 
   if (scopeResolution.kind === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (scopeResolution.kind === "empty") return <ProductStateScreen kind="empty" placement="content" />;
@@ -162,7 +190,15 @@ function HelmReleaseListPage({
         searchInputRef={searchInputRef}
         setQuery={setQuery}
       />
-      <HelmChartSourcesPanel port={port} />
+      <HelmChartCatalogPanel
+        chartSources={chartSources}
+        clusterId={scopeResolution.clusterIds.length === 1 ? scopeResolution.clusterIds[0] ?? null : null}
+        key={`${chartCatalogUrlState.query}\u001f${chartCatalogUrlState.sourceId ?? ""}\u001f${chartCatalogUrlState.provider ?? ""}\u001f${chartCatalogUrlState.allVersions}`}
+        onUrlStateChange={onChartCatalogUrlStateChange}
+        port={port}
+        urlState={chartCatalogUrlState}
+      />
+      <HelmChartSourcesPanelContent data={chartSources} port={port} />
       <HelmArtifactHubPanel port={port} />
     </ProductPageFrame>
   );

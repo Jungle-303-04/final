@@ -12,6 +12,7 @@ from fastapi.routing import APIRoute
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from domains.catalog.install import helm_upgrade_target, matching_helm_recipe
 from domains.helm.artifacthub_provider import ArtifactHubProvider
 from domains.helm.events import HelmChartSourceDeletedBody, HelmChartSourceRefreshedBody
 from domains.helm.repository import (
@@ -41,6 +42,17 @@ from packages.contracts.helm.artifacthub import (
     ARTIFACTHUB_PAGE_MAX,
     ArtifactHubChartDetail,
     ArtifactHubSearchPage,
+)
+from packages.contracts.helm.catalog import (
+    HELM_CHART_CATALOG_PAGE_MAX,
+    HELM_CHART_CATALOG_TOTAL_MAX,
+    HelmChartCatalogObservation,
+    HelmChartCatalogPage,
+    HelmChartDetail,
+    HelmChartInstallAvailable,
+    HelmChartInstallUnavailable,
+    HelmChartValuesSchemaAvailable,
+    HelmChartValuesSchemaUnavailable,
 )
 from packages.contracts.helm.sources import (
     HELM_CHART_SOURCE_PAGE_MAX,
@@ -104,6 +116,199 @@ def get_helm_chart_version_provider() -> HelmChartVersionProvider:
 
 def get_artifacthub_provider() -> ArtifactHubProvider:
     return _artifacthub_provider
+
+
+@router.get(
+    gateway_routes.HELM_CHARTS_PATH,
+    response_model=HelmChartCatalogPage,
+)
+async def search_helm_charts(
+    query: str = Query(default="", max_length=200),
+    source_id: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=80,
+        pattern=r"^[a-z0-9-]+$",
+    ),
+    provider_filter: str | None = Query(
+        default=None,
+        alias="provider",
+        pattern=r"^(repository|oci)$",
+    ),
+    all_versions: bool = Query(default=False, alias="allVersions"),
+    limit: int = Query(default=20, ge=1, le=HELM_CHART_CATALOG_PAGE_MAX),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmChartCatalogPage:
+    workspace_id = _workspace_id(current)
+    rows, source_scope_truncated = await _authorized_chart_source_rows(
+        db,
+        current,
+        workspace_id,
+        source_id,
+    )
+    if provider_filter is not None:
+        rows = tuple(row for row in rows if str(row.get("provider") or "") == provider_filter)
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def observe(row: dict[str, Any]) -> HelmChartCatalogObservation:
+        source = helm_chart_source_from_row(row)
+        try:
+            credential = await asyncio.to_thread(
+                load_helm_provider_credential,
+                db,
+                workspace_id,
+                row,
+            )
+        except CredentialEncryptionError:
+            return HelmChartCatalogObservation(
+                source=source,
+                availability="unavailable",
+                items=(),
+                total=0,
+                reason_codes=(HELM_CHART_CREDENTIAL_UNAVAILABLE,),
+            )
+        async with semaphore:
+            return await provider.search_catalog(
+                source,
+                query=query.strip(),
+                all_versions=all_versions,
+                limit=limit,
+                credential=credential,
+            )
+
+    observations = tuple(await asyncio.gather(*(observe(dict(row)) for row in rows)))
+    return _chart_catalog_page(
+        observations,
+        query=query.strip(),
+        source_id=source_id,
+        provider_filter=provider_filter,
+        all_versions=all_versions,
+        limit=limit,
+        source_scope_truncated=source_scope_truncated,
+    )
+
+
+@router.get(
+    gateway_routes.HELM_CHART_PATH,
+    response_model=HelmChartDetail,
+)
+async def get_helm_chart_detail(
+    source_id: str = Path(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$"),
+    chart_name: str = Path(
+        min_length=1,
+        max_length=512,
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$",
+    ),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmChartDetail:
+    return await _get_helm_chart_detail(
+        source_id,
+        chart_name,
+        None,
+        current=current,
+        db=db,
+        provider=provider,
+    )
+
+
+@router.get(
+    gateway_routes.HELM_CHART_VERSION_PATH,
+    response_model=HelmChartDetail,
+)
+async def get_helm_chart_version_detail(
+    source_id: str = Path(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$"),
+    chart_name: str = Path(
+        min_length=1,
+        max_length=512,
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$",
+    ),
+    version: str = Path(min_length=1, max_length=256),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmChartDetail:
+    return await _get_helm_chart_detail(
+        source_id,
+        chart_name,
+        version,
+        current=current,
+        db=db,
+        provider=provider,
+    )
+
+
+async def _get_helm_chart_detail(
+    source_id: str,
+    chart_name: str,
+    version: str | None,
+    *,
+    current: Any,
+    db: Any,
+    provider: HelmChartVersionProvider,
+) -> HelmChartDetail:
+    workspace_id = _workspace_id(current)
+    await asyncio.to_thread(
+        require_resource_access,
+        db,
+        current,
+        workspace_id,
+        HELM_CHART_SOURCE_RESOURCE_TYPE,
+        source_id,
+        Permission.CATALOG_READ.value,
+    )
+    row = await asyncio.to_thread(
+        db.get_helm_chart_source_record,
+        workspace_id=workspace_id,
+        source_id=source_id,
+    )
+    if row is None or str(row.get("status") or "") != "active":
+        raise HTTPException(status_code=404, detail=HELM_CHART_SOURCE_NOT_FOUND)
+    source = helm_chart_source_from_row(row)
+    try:
+        credential = await asyncio.to_thread(
+            load_helm_provider_credential,
+            db,
+            workspace_id,
+            row,
+        )
+    except CredentialEncryptionError:
+        return HelmChartDetail(
+            availability="unavailable",
+            values_schema=HelmChartValuesSchemaUnavailable(
+                reason_code=HELM_CHART_CREDENTIAL_UNAVAILABLE
+            ),
+            install=HelmChartInstallUnavailable(
+                reason_code="helm_chart_install_recipe_unavailable"
+            ),
+            reason_codes=(HELM_CHART_CREDENTIAL_UNAVAILABLE,),
+        )
+    detail = await provider.get_chart_detail(
+        source,
+        chart_name,
+        version=version,
+        credential=credential,
+    )
+    if source.provider != "oci" or detail.chart is None:
+        return detail
+    recipe = matching_helm_recipe(
+        source_reference=source.reference,
+        chart_name=detail.chart.name,
+        chart_version=detail.chart.version,
+    )
+    target = helm_upgrade_target(recipe) if recipe is not None else None
+    if recipe is None or target is None:
+        return detail
+    return detail.model_copy(
+        update={
+            "values_schema": HelmChartValuesSchemaAvailable(schema=recipe.values_schema),
+            "install": HelmChartInstallAvailable(target=target),
+        }
+    )
 
 
 @router.get(
@@ -453,6 +658,107 @@ async def get_helm_chart_source_versions(
         source,
         chart_name,
         credential=credential,
+    )
+
+
+async def _authorized_chart_source_rows(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    source_id: str | None,
+) -> tuple[tuple[dict[str, Any], ...], bool]:
+    if source_id is not None:
+        await asyncio.to_thread(
+            require_resource_access,
+            db,
+            current,
+            workspace_id,
+            HELM_CHART_SOURCE_RESOURCE_TYPE,
+            source_id,
+            Permission.CATALOG_READ.value,
+        )
+        row = await asyncio.to_thread(
+            db.get_helm_chart_source_record,
+            workspace_id=workspace_id,
+            source_id=source_id,
+        )
+        if row is None or str(row.get("status") or "") != "active":
+            raise HTTPException(status_code=404, detail=HELM_CHART_SOURCE_NOT_FOUND)
+        return (dict(row),), False
+    source_ids = await accessible_helm_chart_source_ids(
+        db,
+        current,
+        workspace_id,
+        Permission.CATALOG_READ.value,
+    )
+    batch = await asyncio.to_thread(
+        db.list_helm_chart_source_records,
+        workspace_id=workspace_id,
+        source_ids=source_ids,
+        limit=HELM_CHART_SOURCE_PAGE_MAX,
+    )
+    return tuple(dict(row) for row in batch.rows), bool(batch.truncated)
+
+
+def _chart_catalog_page(
+    observations: tuple[HelmChartCatalogObservation, ...],
+    *,
+    query: str,
+    source_id: str | None,
+    provider_filter: str | None,
+    all_versions: bool,
+    limit: int,
+    source_scope_truncated: bool,
+) -> HelmChartCatalogPage:
+    ordered = tuple(
+        item
+        for observation in sorted(
+            observations,
+            key=lambda value: (value.source.name.casefold(), value.source.source_id),
+        )
+        for item in observation.items
+    )
+    total = min(
+        sum(observation.total for observation in observations),
+        HELM_CHART_CATALOG_TOTAL_MAX,
+    )
+    items = ordered[:limit]
+    reasons = {reason for observation in observations for reason in observation.reason_codes}
+    truncated = (
+        source_scope_truncated
+        or any(observation.truncated for observation in observations)
+        or total > len(items)
+    )
+    if source_scope_truncated:
+        reasons.add("helm_chart_source_scope_truncated")
+    if truncated:
+        reasons.add("helm_chart_catalog_truncated")
+    available_count = sum(observation.availability != "unavailable" for observation in observations)
+    if observations and available_count == 0:
+        availability = "unavailable"
+        items = ()
+        total = 0
+    elif reasons:
+        availability = "partial"
+    else:
+        availability = "available"
+    observed_values = tuple(
+        observation.observed_at
+        for observation in observations
+        if observation.observed_at is not None
+    )
+    return HelmChartCatalogPage(
+        availability=availability,
+        items=items,
+        total=total,
+        limit=limit,
+        query=query,
+        source_id=source_id,
+        provider=provider_filter,
+        all_versions=all_versions,
+        observed_at=max(observed_values) if observed_values else None,
+        truncated=truncated,
+        reason_codes=tuple(sorted(reasons)),
     )
 
 

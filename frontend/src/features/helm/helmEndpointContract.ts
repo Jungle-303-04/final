@@ -167,6 +167,53 @@ export interface HelmChartSourcePageEndpoint {
   next_cursor: string | null;
 }
 
+export interface HelmChartSummaryEndpoint {
+  source: HelmChartSourceEndpoint;
+  name: string;
+  version: string;
+  app_version: string | null;
+  description: string | null;
+  deprecated: boolean;
+}
+
+export interface HelmChartCatalogPageEndpoint {
+  availability: "available" | "partial" | "unavailable";
+  items: HelmChartSummaryEndpoint[];
+  total: number;
+  limit: number;
+  query: string;
+  source_id: string | null;
+  provider: "repository" | "oci" | null;
+  all_versions: boolean;
+  observed_at: string | null;
+  truncated: boolean;
+  reason_codes: string[];
+}
+
+export interface HelmChartDetailEndpoint {
+  availability: "available" | "partial" | "unavailable";
+  chart: HelmChartSummaryEndpoint | null;
+  versions: HelmEndpointChartVersion[];
+  values_schema:
+    | { availability: "available"; schema: Record<string, unknown> }
+    | { availability: "unavailable"; schema: null; reason_code: string };
+  install:
+    | {
+      availability: "available";
+      target: {
+        item_id: string;
+        name: string;
+        version: string;
+        chart_version: string;
+        inputs: HelmEndpointUpgradeInput[];
+      };
+    }
+    | { availability: "unavailable"; target: null; reason_code: string };
+  observed_at: string | null;
+  truncated: boolean;
+  reason_codes: string[];
+}
+
 export type HelmChartSourceCredentialEndpointInput =
   | { kind: "bearer"; token: string }
   | { kind: "basic"; username: string; password: string };
@@ -201,6 +248,20 @@ export interface HelmEndpointCommandReceipt {
 }
 
 export interface HelmEndpointDependencies {
+  searchHelmCharts(
+    query?: {
+      query?: string;
+      sourceId?: string;
+      provider?: "repository" | "oci";
+      allVersions?: boolean;
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<HelmChartCatalogPageEndpoint>;
+  getHelmChartDetail(
+    input: { sourceId: string; chart: string; version?: string },
+    signal?: AbortSignal,
+  ): Promise<HelmChartDetailEndpoint>;
   listHelmInstallTargets(signal?: AbortSignal): Promise<{
     namespace: string;
     targets: Array<{

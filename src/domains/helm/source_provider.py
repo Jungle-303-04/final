@@ -21,6 +21,14 @@ from yaml.events import AliasEvent
 from yaml.nodes import MappingNode, Node
 
 from packages.config.settings import env
+from packages.contracts.helm.catalog import (
+    HELM_CHART_CATALOG_PAGE_MAX,
+    HelmChartCatalogObservation,
+    HelmChartDetail,
+    HelmChartInstallUnavailable,
+    HelmChartSummary,
+    HelmChartValuesSchemaUnavailable,
+)
 from packages.contracts.helm.sources import (
     HELM_CHART_PROVIDER_MAX_CHARTS,
     HELM_CHART_VERSION_PAGE_MAX,
@@ -195,6 +203,229 @@ class HelmChartVersionProvider:
             reason_codes=reasons,
         )
 
+    async def search_catalog(
+        self,
+        source: HelmChartSource,
+        *,
+        query: str,
+        all_versions: bool,
+        limit: int,
+        credential: HelmProviderCredential | None = None,
+    ) -> HelmChartCatalogObservation:
+        """Search one exact registered source without synthesizing chart identities."""
+
+        effective_limit = min(max(int(limit), 1), HELM_CHART_CATALOG_PAGE_MAX)
+        normalized_query = query.strip().casefold()
+        if len(normalized_query) > 200:
+            return _unavailable_catalog(source, "helm_chart_catalog_query_invalid")
+        if source.provider == "oci":
+            if not normalized_query or _CHART_NAME.fullmatch(query.strip()) is None:
+                return _unavailable_catalog(
+                    source,
+                    "helm_oci_catalog_requires_exact_query",
+                )
+            return await self._oci_catalog(
+                source,
+                query.strip(),
+                all_versions=all_versions,
+                limit=effective_limit,
+                credential=credential,
+            )
+        try:
+            entries = await self._repository_entries(source, credential)
+        except _HelmProviderFailure as exc:
+            return _unavailable_catalog(source, exc.reason_code)
+        return await self._repository_catalog(
+            source,
+            entries,
+            query=normalized_query,
+            all_versions=all_versions,
+            limit=effective_limit,
+        )
+
+    async def get_chart_detail(
+        self,
+        source: HelmChartSource,
+        chart_name: str,
+        *,
+        version: str | None,
+        credential: HelmProviderCredential | None = None,
+    ) -> HelmChartDetail:
+        """Resolve one source/chart/version identity with explicit unavailable content."""
+
+        observation = await self.fetch_versions(
+            source,
+            chart_name,
+            credential=credential,
+        )
+        unavailable_values = HelmChartValuesSchemaUnavailable(
+            reason_code="helm_chart_values_schema_unavailable"
+        )
+        unavailable_install = HelmChartInstallUnavailable(
+            reason_code="helm_chart_install_recipe_unavailable"
+        )
+        if observation.availability == "unavailable":
+            return HelmChartDetail(
+                availability="unavailable",
+                chart=None,
+                versions=(),
+                values_schema=unavailable_values,
+                install=unavailable_install,
+                observed_at=observation.observed_at,
+                reason_codes=observation.reason_codes,
+            )
+        selected = _selected_chart_version(observation.versions, version)
+        if selected is None:
+            return HelmChartDetail(
+                availability="unavailable",
+                chart=None,
+                versions=(),
+                values_schema=unavailable_values,
+                install=unavailable_install,
+                observed_at=observation.observed_at,
+                reason_codes=("helm_chart_source_chart_not_found",),
+            )
+        description = None
+        if source.provider == "repository":
+            try:
+                entries = await self._repository_entries(source, credential)
+                description = _repository_description(entries, chart_name, selected.version)
+            except _HelmProviderFailure:
+                description = None
+        return HelmChartDetail(
+            availability=observation.availability,
+            chart=HelmChartSummary(
+                source=source,
+                name=chart_name,
+                version=selected.version,
+                app_version=selected.app_version,
+                description=description,
+                deprecated=selected.deprecated,
+            ),
+            versions=observation.versions,
+            values_schema=unavailable_values,
+            install=unavailable_install,
+            observed_at=observation.observed_at,
+            truncated=observation.truncated,
+            reason_codes=observation.reason_codes,
+        )
+
+    async def _repository_catalog(
+        self,
+        source: HelmChartSource,
+        entries: Mapping[Any, Any],
+        *,
+        query: str,
+        all_versions: bool,
+        limit: int,
+    ) -> HelmChartCatalogObservation:
+        observed_at = datetime.now(UTC).isoformat()
+        items: list[HelmChartSummary] = []
+        total = 0
+        invalid_entries = False
+        source_truncated = len(entries) > HELM_CHART_PROVIDER_MAX_CHARTS
+        chart_names = sorted(
+            str(name)
+            for name in tuple(entries.keys())[:HELM_CHART_PROVIDER_MAX_CHARTS]
+            if isinstance(name, str) and _CHART_NAME.fullmatch(name)
+        )
+        for chart_name in chart_names:
+            raw_versions = entries.get(chart_name)
+            if not _catalog_query_matches(query, chart_name, raw_versions):
+                continue
+            try:
+                versions, versions_truncated, invalid_reasons = await _parse_repository_versions(
+                    raw_versions
+                )
+            except _HelmProviderFailure:
+                invalid_entries = True
+                continue
+            selected_versions = versions if all_versions else versions[:1]
+            total += len(selected_versions)
+            for selected in selected_versions:
+                if len(items) >= limit:
+                    continue
+                items.append(
+                    HelmChartSummary(
+                        source=source,
+                        name=chart_name,
+                        version=selected.version,
+                        app_version=selected.app_version,
+                        description=_repository_description(
+                            entries,
+                            chart_name,
+                            selected.version,
+                        ),
+                        deprecated=selected.deprecated,
+                    )
+                )
+            source_truncated = source_truncated or versions_truncated
+            invalid_entries = invalid_entries or bool(invalid_reasons)
+        truncated = source_truncated or total > len(items)
+        reasons: list[str] = []
+        if invalid_entries:
+            reasons.append("helm_chart_catalog_invalid_entries")
+        if truncated:
+            reasons.append("helm_chart_catalog_truncated")
+        return HelmChartCatalogObservation(
+            source=source,
+            availability="partial" if reasons else "available",
+            items=tuple(items),
+            total=total,
+            observed_at=observed_at,
+            truncated=truncated,
+            reason_codes=tuple(reasons),
+        )
+
+    async def _oci_catalog(
+        self,
+        source: HelmChartSource,
+        chart_name: str,
+        *,
+        all_versions: bool,
+        limit: int,
+        credential: HelmProviderCredential | None,
+    ) -> HelmChartCatalogObservation:
+        observation = await self.fetch_versions(
+            source,
+            chart_name,
+            credential=credential,
+        )
+        if observation.availability == "unavailable":
+            return HelmChartCatalogObservation(
+                source=source,
+                availability="unavailable",
+                items=(),
+                total=0,
+                observed_at=observation.observed_at,
+                reason_codes=observation.reason_codes,
+            )
+        selected_versions = observation.versions if all_versions else observation.versions[:1]
+        items = tuple(
+            HelmChartSummary(
+                source=source,
+                name=chart_name,
+                version=item.version,
+                app_version=item.app_version,
+                description=None,
+                deprecated=item.deprecated,
+            )
+            for item in selected_versions[:limit]
+        )
+        truncated = observation.truncated or len(selected_versions) > len(items)
+        reasons = set(observation.reason_codes)
+        if truncated:
+            reasons.add("helm_chart_catalog_truncated")
+        return HelmChartCatalogObservation(
+            source=source,
+            availability="partial" if reasons else "available",
+            items=items,
+            total=len(selected_versions),
+            observed_at=observation.observed_at,
+            truncated=truncated,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
     async def refresh_repository(
         self,
         source: HelmChartSource,
@@ -238,56 +469,7 @@ class HelmChartVersionProvider:
         raw_versions = entries.get(chart_name)
         if raw_versions is None:
             raise _HelmProviderFailure("helm_chart_source_chart_not_found")
-        if not isinstance(raw_versions, list):
-            raise _HelmProviderFailure("helm_chart_source_invalid_response")
-
-        versions: list[HelmChartVersion] = []
-        invalid_entries = False
-        seen: set[str] = set()
-        source_truncated = len(raw_versions) > HELM_CHART_PROVIDER_MAX_VERSION_ENTRIES
-        for raw in raw_versions[:HELM_CHART_PROVIDER_MAX_VERSION_ENTRIES]:
-            if not isinstance(raw, Mapping):
-                invalid_entries = True
-                continue
-            version = str(raw.get("version") or "").strip()
-            if version in seen or _semver(version) is None:
-                invalid_entries = True
-                continue
-            seen.add(version)
-            app_version = str(raw.get("appVersion") or "").strip() or None
-            if app_version is not None and len(app_version) > 256:
-                app_version = None
-                invalid_entries = True
-            deprecated = raw.get("deprecated", False)
-            if not isinstance(deprecated, bool):
-                deprecated = False
-                invalid_entries = True
-            versions.append(
-                HelmChartVersion(
-                    version=version,
-                    app_version=app_version,
-                    deprecated=deprecated,
-                )
-            )
-        if not versions:
-            reason = (
-                "helm_chart_source_chart_not_found"
-                if not raw_versions
-                else "helm_chart_source_invalid_response"
-            )
-            raise _HelmProviderFailure(reason)
-        ordered = await asyncio.to_thread(_sort_chart_versions, versions)
-        truncated = source_truncated or len(ordered) > HELM_CHART_VERSION_PAGE_MAX
-        reasons: list[str] = []
-        if invalid_entries:
-            reasons.append("helm_chart_versions_invalid_entries")
-        if truncated:
-            reasons.append("helm_chart_versions_truncated")
-        return (
-            tuple(ordered[:HELM_CHART_VERSION_PAGE_MAX]),
-            truncated,
-            tuple(reasons),
-        )
+        return await _parse_repository_versions(raw_versions)
 
     async def _repository_entries(
         self,
@@ -511,6 +693,116 @@ class HelmChartVersionProvider:
             host_header=host_header,
             sni_hostname=hostname,
         )
+
+
+async def _parse_repository_versions(
+    raw_versions: object,
+) -> tuple[tuple[HelmChartVersion, ...], bool, tuple[str, ...]]:
+    if not isinstance(raw_versions, list):
+        raise _HelmProviderFailure("helm_chart_source_invalid_response")
+    versions: list[HelmChartVersion] = []
+    invalid_entries = False
+    seen: set[str] = set()
+    source_truncated = len(raw_versions) > HELM_CHART_PROVIDER_MAX_VERSION_ENTRIES
+    for raw in raw_versions[:HELM_CHART_PROVIDER_MAX_VERSION_ENTRIES]:
+        if not isinstance(raw, Mapping):
+            invalid_entries = True
+            continue
+        version = str(raw.get("version") or "").strip()
+        if version in seen or _semver(version) is None:
+            invalid_entries = True
+            continue
+        seen.add(version)
+        app_version = str(raw.get("appVersion") or "").strip() or None
+        if app_version is not None and len(app_version) > 256:
+            app_version = None
+            invalid_entries = True
+        deprecated = raw.get("deprecated", False)
+        if not isinstance(deprecated, bool):
+            deprecated = False
+            invalid_entries = True
+        versions.append(
+            HelmChartVersion(
+                version=version,
+                app_version=app_version,
+                deprecated=deprecated,
+            )
+        )
+    if not versions:
+        reason = (
+            "helm_chart_source_chart_not_found"
+            if not raw_versions
+            else "helm_chart_source_invalid_response"
+        )
+        raise _HelmProviderFailure(reason)
+    ordered = await asyncio.to_thread(_sort_chart_versions, versions)
+    truncated = source_truncated or len(ordered) > HELM_CHART_VERSION_PAGE_MAX
+    reasons: list[str] = []
+    if invalid_entries:
+        reasons.append("helm_chart_versions_invalid_entries")
+    if truncated:
+        reasons.append("helm_chart_versions_truncated")
+    return (
+        tuple(ordered[:HELM_CHART_VERSION_PAGE_MAX]),
+        truncated,
+        tuple(reasons),
+    )
+
+
+def _catalog_query_matches(query: str, chart_name: str, raw_versions: object) -> bool:
+    if not query:
+        return True
+    if query in chart_name.casefold():
+        return True
+    if not isinstance(raw_versions, list):
+        return False
+    return any(
+        query in str(raw.get("description") or "")[:4096].casefold()
+        for raw in raw_versions[:HELM_CHART_PROVIDER_MAX_VERSION_ENTRIES]
+        if isinstance(raw, Mapping)
+    )
+
+
+def _repository_description(
+    entries: Mapping[Any, Any],
+    chart_name: str,
+    version: str,
+) -> str | None:
+    raw_versions = entries.get(chart_name)
+    if not isinstance(raw_versions, list):
+        return None
+    for raw in raw_versions[:HELM_CHART_PROVIDER_MAX_VERSION_ENTRIES]:
+        if not isinstance(raw, Mapping) or str(raw.get("version") or "").strip() != version:
+            continue
+        description = str(raw.get("description") or "").strip()
+        return description[:4096] or None
+    return None
+
+
+def _selected_chart_version(
+    versions: Sequence[HelmChartVersion],
+    requested: str | None,
+) -> HelmChartVersion | None:
+    if not versions:
+        return None
+    if requested is None or requested == "latest":
+        return versions[0]
+    normalized = requested.strip().replace("_", "+")
+    return next((item for item in versions if item.version == normalized), None)
+
+
+def _unavailable_catalog(
+    source: HelmChartSource,
+    reason_code: str,
+) -> HelmChartCatalogObservation:
+    return HelmChartCatalogObservation(
+        source=source,
+        availability="unavailable",
+        items=(),
+        total=0,
+        observed_at=datetime.now(UTC).isoformat(),
+        reason_codes=(reason_code,),
+    )
 
 
 def _host_authority(

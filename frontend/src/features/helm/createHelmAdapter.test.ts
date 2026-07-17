@@ -492,6 +492,8 @@ function upgradeReadEndpoints() {
     refresh_after_seconds: 10,
   };
   return {
+    searchHelmCharts: vi.fn(),
+    getHelmChartDetail: vi.fn(),
     listHelmInstallTargets: vi.fn(),
     startHelmReleaseInstall: vi.fn(),
     searchArtifactHubCharts: vi.fn(),
