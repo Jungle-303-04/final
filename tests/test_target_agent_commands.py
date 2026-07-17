@@ -3223,6 +3223,73 @@ def test_gitops_command_rejects_stale_uid_and_resource_version_without_patch() -
     assert agent.kubernetes.patches == []
 
 
+def test_gitops_argo_selective_sync_revalidates_live_controller_ownership() -> None:
+    module = load_agent_module()
+    root = {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "namespace": "argocd",
+            "name": "storefront",
+            "uid": "root-uid",
+            "resourceVersion": "17",
+        },
+        "status": {
+            "resources": [
+                {
+                    "group": "apps",
+                    "kind": "Deployment",
+                    "namespace": "shop",
+                    "name": "checkout",
+                }
+            ]
+        },
+    }
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = GitOpsKubernetesClient(root)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.GITOPS_RESOURCE_CONTROL_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "action": "sync",
+                    "requested_at": "2026-07-17T04:15:00Z",
+                    "resource_ref": {
+                        "api_group": "argoproj.io",
+                        "version": "v1alpha1",
+                        "kind": "Application",
+                        "namespace": "argocd",
+                        "name": "storefront",
+                        "uid": "root-uid",
+                    },
+                    "resource_version": "17",
+                    "sync_options": {
+                        "resources": [
+                            {
+                                "api_group": "apps",
+                                "kind": "Deployment",
+                                "namespace": "shop",
+                                "name": "payments",
+                            }
+                        ]
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "ownership" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
 def test_gitops_capability_tracks_direct_command_policy() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

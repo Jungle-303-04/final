@@ -4,8 +4,15 @@ import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
+from fastapi import HTTPException
+
 from domains.gitops import detail_router
-from packages.contracts.gitops.detail import GitOpsResourceActionRequest
+from packages.contracts.gitops.detail import (
+    GitOpsResourceActionRequest,
+    GitOpsSyncOptions,
+    GitOpsSyncResource,
+)
 from packages.contracts.parity import CommandReceipt, ResourceRef
 
 
@@ -31,6 +38,7 @@ def _root() -> dict[str, object]:
 class GitOpsResourceDb:
     def __init__(self) -> None:
         self.root = _root()
+        self.resources = [self.root]
         self.list_calls = 0
 
     def user_has_resource_access(self, *_args: object) -> bool:
@@ -57,7 +65,7 @@ class GitOpsResourceDb:
             "limit": 1000,
         }
         self.list_calls += 1
-        return [self.root]
+        return self.resources
 
     def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
         assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
@@ -193,3 +201,83 @@ def test_action_revalidates_capability_revision_and_dispatches_existing_receipt_
     assert command.payload["resource_version"] == "17"
     assert command.payload["refresh_mode"] == "hard"
     assert command.direct_execution is True
+
+
+def test_selective_sync_rejects_resource_outside_complete_controller_tree() -> None:
+    db = GitOpsResourceDb()
+    db.root["raw"] = {
+        "status": {
+            "sync": {"revision": "main@sha1:abc"},
+            "resources": [
+                {
+                    "group": "apps",
+                    "version": "v1",
+                    "kind": "Deployment",
+                    "namespace": "shop",
+                    "name": "checkout",
+                }
+            ],
+        }
+    }
+    db.resources.append(
+        {
+            "snapshot_id": "snapshot-1",
+            "workspace_id": "workspace-a",
+            "cluster_id": "cluster-a",
+            "resource_type": "workload",
+            "api_version": "apps/v1",
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout",
+            "uid": "checkout-uid",
+            "resource_version": "5",
+            "raw": {},
+        }
+    )
+    insights = asyncio.run(
+        detail_router.get_gitops_resource_insights(
+            kind="Application",
+            namespace="argocd",
+            name="storefront",
+            cluster_id="cluster-a",
+            api_version="argoproj.io/v1alpha1",
+            current=_current(),
+            db=db,
+        )
+    ).insights
+    request = GitOpsResourceActionRequest(
+        cluster_id="cluster-a",
+        resource=insights.resource,
+        resource_version=insights.resource_version,
+        capability_revision=insights.capabilities.revision,
+        action="sync",
+        confirmation=True,
+        reason="selectively sync reviewed workload",
+        options=GitOpsSyncOptions(
+            resources=(
+                GitOpsSyncResource(
+                    api_group="apps",
+                    kind="Deployment",
+                    namespace="shop",
+                    name="payments",
+                ),
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException, match="selective sync resource") as error:
+        asyncio.run(
+            detail_router.create_gitops_resource_action(
+                kind="Application",
+                namespace="argocd",
+                name="storefront",
+                payload=request,
+                idempotency_key="sync-storefront-selective-17",
+                current=_current(),
+                db=db,
+                events=object(),
+                operation_events=object(),
+            )
+        )
+
+    assert error.value.status_code == 409
