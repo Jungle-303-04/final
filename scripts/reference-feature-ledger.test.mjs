@@ -848,7 +848,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "implemented");
 });
 
-test("포트 전달 registry와 전역 표시는 agent stream 전까지 fail-closed 상태를 공유한다", async () => {
+test("포트 전달 UI registry와 전역 표시는 native listener 전까지 fail-closed 상태를 공유한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
     readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
@@ -878,7 +878,8 @@ test("포트 전달 registry와 전역 표시는 agent stream 전까지 fail-clo
   }
 
   assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "in_progress");
-  assert.equal(portMap.features["reference.feature.162"].coverage.backend.state, "blocked");
+  assert.equal(portMap.features["reference.feature.162"].coverage.backend.state, "implemented");
+  assert.equal(portMap.features["reference.feature.162"].coverage.realtime.state, "implemented");
   assert.equal(portMap.features["reference.feature.162"].coverage.frontend.state, "blocked");
   assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "blocked");
 });

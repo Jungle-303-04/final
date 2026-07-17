@@ -2668,10 +2668,13 @@
     },
     "reference.feature.162": {
       "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.service_access",
+      "backendContract": "packages.contracts.port_forward",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
+        "tests/contracts/test_port_forward.py",
+        "tests/test_agent_port_forward.py",
+        "tests/test_realtime_gateway.py",
         "tests/contracts/test_service_access.py",
         "tests/test_service_access_router.py",
         "frontend/src/features/service-access/createPortForwardSessionAdapter.test.ts",
@@ -2681,10 +2684,10 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/packages/contracts/service_access.py#PORT_FORWARD_AGENT_CAPABILITY",
-          "reason": "A bounded bidirectional gateway-to-agent tunnel contract and audit lifecycle are not implemented yet; the capability therefore remains unavailable.",
-          "test": "tests/contracts/test_service_access.py"
+          "state": "implemented",
+          "destination": "src/packages/contracts/port_forward.py#PortForwardOpen",
+          "consumer": "src/services/target/cluster-agent/port_forward_stream.py#PortForwardController",
+          "test": "tests/test_agent_port_forward.py"
         },
         "frontend": {
           "state": "blocked",
@@ -2701,10 +2704,10 @@
           "test": "desktop/src-tauri/src/port_forward/tests.rs"
         },
         "realtime": {
-          "state": "blocked",
-          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py#AgentChannel",
-          "reason": "Port-forward multiplexing, bounded backpressure, reconnect and terminal audit events are not yet part of the outbound agent session protocol.",
-          "test": "tests/test_pod_terminal.py"
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/agent_connections.py#AgentConnectionRegistry",
+          "consumer": "src/services/realtime/realtime-gateway/port_forward_sessions.py#PortForwardSessionBroker",
+          "test": "tests/test_realtime_gateway.py"
         }
       }
     },
