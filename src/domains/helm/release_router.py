@@ -18,7 +18,12 @@ from domains.catalog.install import (
     validate_catalog_values,
     validate_install_names,
 )
-from domains.catalog.router import install_catalog_item
+from domains.catalog.router import (
+    CATALOG_INSTALL_VALIDATION_ERROR,
+    IDEMPOTENCY_KEY_PATTERN,
+    canonical_hash,
+    install_error,
+)
 from domains.command.events import CommandRequestedBody
 from domains.command.repository import AgentCommandCapacityExceeded
 from domains.command.router import (
@@ -28,6 +33,7 @@ from domains.command.router import (
     command_accepted_response,
     new_command_id,
     publish_accepted_operation,
+    replay_resource_action_receipt,
 )
 from domains.gitops.events import Diff
 from domains.helm.release_projection import helm_release_detail, helm_release_list
@@ -56,8 +62,6 @@ from packages.config.control import control_namespace_allowed
 from packages.config.helm import helm_owned_resource_query_limit
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import CatalogInstallRequest
-from packages.contracts.gateway.responses import CatalogInstallAcceptedResponse
 from packages.contracts.helm import (
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
     HELM_RELEASE_ARTIFACT_READ_ACTION,
@@ -512,7 +516,8 @@ async def list_helm_install_targets(
 
 @router.post(
     gateway_routes.HELM_RELEASE_INSTALL_STREAM_PATH,
-    response_model=CatalogInstallAcceptedResponse,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
     status_code=202,
 )
 async def create_helm_release_install_stream(
@@ -524,23 +529,118 @@ async def create_helm_release_install_stream(
     ),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> CatalogInstallAcceptedResponse:
-    """Compatibility path backed by the existing idempotent catalog installer."""
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    """Accept one digest-pinned install with a durable audited operation receipt."""
 
-    return await install_catalog_item(
-        item_id=payload.catalog_item_id,
-        payload=CatalogInstallRequest(
-            cluster_id=payload.cluster_id,
-            namespace=payload.namespace,
-            application_name=payload.application_name,
-            release_name=payload.release_name,
-            version=payload.catalog_version,
-            values=payload.values,
-        ),
-        idempotency_key=idempotency_key,
-        current=current,
-        db=db,
+    workspace_id = _workspace_id(current)
+    cluster_id = _single_scope_value(payload.cluster_id)
+    namespace = _single_scope_value(payload.namespace)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.DEPLOY_RUN.value,
     )
+    if namespace != Sandbox.NAMESPACE or not control_namespace_allowed(namespace):
+        raise HTTPException(status_code=409, detail=UPGRADE_NAMESPACE_UNAVAILABLE)
+    if not await asyncio.to_thread(_agent_supports_catalog_install, db, workspace_id, cluster_id):
+        raise HTTPException(status_code=409, detail=UPGRADE_AGENT_UNAVAILABLE_DETAIL)
+    if IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
+        raise install_error(CATALOG_INSTALL_VALIDATION_ERROR, "invalid Idempotency-Key")
+    try:
+        recipe = server_helm_recipe(payload.catalog_item_id, payload.catalog_version)
+        validate_install_names(
+            application_name=payload.application_name,
+            namespace=namespace,
+            release_name=payload.release_name,
+        )
+        values = validate_catalog_values(recipe.values_schema, payload.values)
+    except (CatalogRecipeUnsupported, CatalogInstallValidationError) as error:
+        raise HTTPException(status_code=422, detail=UPGRADE_RECIPE_INVALID_DETAIL) from error
+    command_payload = CatalogHelmInstallPayload(
+        catalog_item_id=recipe.item_id,
+        catalog_version=recipe.version,
+        namespace=namespace,
+        application_name=payload.application_name,
+        release_name=payload.release_name,
+        values=values,
+    )
+    request_fingerprint = canonical_hash(
+        {
+            "cluster_id": cluster_id,
+            "payload": command_payload.model_dump(exclude_none=True),
+            "recipe_digest": recipe.chart_digest,
+            "recipe_fixed_values": recipe.fixed_values,
+        }
+    )
+    identity = canonical_hash(
+        {
+            "idempotency_key": idempotency_key,
+            "requested_by": str(getattr(current, "user_id", "")),
+            "workspace_id": workspace_id,
+        }
+    )
+    command_id = f"cmd-catalog-{identity[:24]}"
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=request_fingerprint,
+        idempotency_reused_code="helm_install_idempotency_key_reused",
+    )
+    if replay is not None:
+        return replay
+    command = CommandRequestedBody(
+        cluster_id=cluster_id,
+        action=Command.CATALOG_HELM_INSTALL_ACTION,
+        namespace=namespace,
+        reason=f"install Helm release {payload.release_name}",
+        diff=Diff(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource=f"helm-release/{namespace}/{payload.release_name}",
+            namespace=namespace,
+            desired_image=f"catalog:{recipe.item_id}@{recipe.version}",
+            actual_image="release-not-installed",
+            risk=RiskLevel.SANDBOX_ONLY,
+            status="install",
+            basis={
+                "catalog_item_id": recipe.item_id,
+                "catalog_version": recipe.version,
+                "chart_version": recipe.chart_version,
+                "request_fingerprint": request_fingerprint,
+            },
+        ),
+        command_id=command_id,
+        payload=command_payload.model_dump(mode="json"),
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=str(getattr(current, "user_id", "")),
+        direct_execution=True,
+        direct_execution_confirmed=True,
+    )
+    try:
+        accepted, receipt_event = await accept_command_with_receipt_stage(
+            events,
+            command,
+            actor=Actor(
+                str(getattr(current, "user_id", "")),
+                tuple(getattr(current, "roles", ()) or ()),
+            ),
+        )
+    except AgentCommandCapacityExceeded as error:
+        raise HTTPException(status_code=429, detail="Helm install capacity exceeded") from error
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events,
+        receipt_event,
+        workspace_id=workspace_id,
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
 
 
 @router.post(
@@ -1043,20 +1143,26 @@ def _agent_supports_release_upgrade(
     workspace_id: str,
     cluster_id: str,
 ) -> bool:
-    reader = getattr(db, "list_cluster_agent_statuses", None)
-    if not callable(reader):
-        return False
-    required = {
-        "command_receiver",
+    return _agent_supports_capabilities(
+        db,
+        workspace_id,
+        cluster_id,
         Command.CATALOG_HELM_INSTALL_CAPABILITY,
         Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
         HELM_RELEASE_OPERATION_CAPABILITY,
-    }
-    return any(
-        isinstance(item, Mapping)
-        and cluster_connection_status(item) == AGENT_STATUS_ONLINE
-        and required.issubset(set(item.get("capabilities") or ()))
-        for item in reader(workspace_id, cluster_id)
+    )
+
+
+def _agent_supports_catalog_install(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> bool:
+    return _agent_supports_capabilities(
+        db,
+        workspace_id,
+        cluster_id,
+        Command.CATALOG_HELM_INSTALL_CAPABILITY,
     )
 
 
@@ -1082,10 +1188,24 @@ def _agent_supports_release_operation(
     workspace_id: str,
     cluster_id: str,
 ) -> bool:
+    return _agent_supports_capabilities(
+        db,
+        workspace_id,
+        cluster_id,
+        HELM_RELEASE_OPERATION_CAPABILITY,
+    )
+
+
+def _agent_supports_capabilities(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    *capabilities: str,
+) -> bool:
     reader = getattr(db, "list_cluster_agent_statuses", None)
     if not callable(reader):
         return False
-    required = {"command_receiver", HELM_RELEASE_OPERATION_CAPABILITY}
+    required = {"command_receiver", *capabilities}
     return any(
         isinstance(item, Mapping)
         and cluster_connection_status(item) == AGENT_STATUS_ONLINE

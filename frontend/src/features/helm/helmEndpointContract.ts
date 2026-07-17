@@ -217,9 +217,11 @@ export interface HelmEndpointDependencies {
     signal?: AbortSignal,
   ): Promise<{
     accepted: true;
+    event_id: string;
+    audit_event_id: string;
     command_id: string;
     correlation_id: string;
-    status: string;
+    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
   }>;
   searchArtifactHubCharts(
     query: {

@@ -48,8 +48,13 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
     async installRelease(request, signal) {
       return withHelmPortFailure(async () => {
         const receipt = await endpoints.startHelmReleaseInstall(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm install audit identity is invalid");
+        }
         return {
           accepted: receipt.accepted,
+          eventId: receipt.event_id,
+          auditEventId: receipt.audit_event_id,
           commandId: receipt.command_id,
           correlationId: receipt.correlation_id,
           status: receipt.status,

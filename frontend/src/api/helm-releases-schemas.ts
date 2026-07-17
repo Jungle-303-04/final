@@ -60,13 +60,6 @@ export const helmInstallTargetsSchema = z.strictObject({
   targets: z.array(helmUpgradeTargetSchema).max(100),
 });
 
-export const helmInstallAcceptedSchema = z.strictObject({
-  accepted: z.literal(true),
-  command_id: z.string().min(1),
-  correlation_id: z.string().min(1),
-  status: z.string().min(1),
-});
-
 export const helmReleaseCommandsSchema = z.strictObject({
   availability: z.literal("available"),
   actions: z.tuple([z.literal("upgrade"), z.literal("rollback"), z.literal("uninstall")]),

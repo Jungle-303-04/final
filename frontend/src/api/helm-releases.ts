@@ -1,6 +1,5 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
-  helmInstallAcceptedSchema,
   helmInstallTargetsSchema,
   helmReleaseDetailSchema,
   helmReleaseListSchema,
@@ -65,7 +64,7 @@ export function startHelmReleaseInstall(
   if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
     throw new RangeError("idempotencyKey length is invalid");
   }
-  return apiRequest(HELM_RELEASE_INSTALL_STREAM_PATH, helmInstallAcceptedSchema, {
+  return apiRequest(HELM_RELEASE_INSTALL_STREAM_PATH, resourceActionAcceptedSchema, {
     method: "POST",
     headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify({

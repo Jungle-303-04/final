@@ -654,7 +654,14 @@ function helmPort(): HelmPort & {
 } {
   return {
     listInstallTargets: vi.fn().mockResolvedValue({ namespace: "sandbox", targets: [] }),
-    installRelease: vi.fn().mockResolvedValue({ accepted: true, commandId: "cmd-install", correlationId: "corr-install", status: "queued" }),
+    installRelease: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "event-install",
+      auditEventId: "event-install",
+      commandId: "cmd-install",
+      correlationId: "corr-install",
+      status: "queued",
+    }),
     searchArtifactHub: vi.fn().mockResolvedValue({
       items: [], total: 0, offset: 0, limit: 20, hasMore: false,
       observedAt: "2026-07-17T08:00:00Z",

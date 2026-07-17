@@ -48,6 +48,8 @@ describe("Helm release API", () => {
       .mockResolvedValueOnce(jsonResponse({ namespace: "sandbox", targets: [] }))
       .mockResolvedValueOnce(jsonResponse({
         accepted: true,
+        event_id: "event-install-1",
+        audit_event_id: "event-install-1",
         command_id: "cmd-install-1",
         correlation_id: "corr-install-1",
         status: "queued",

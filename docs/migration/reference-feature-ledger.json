@@ -517,8 +517,8 @@
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/app",
       "desktopContract": "desktop",
       "verification": [
@@ -9390,15 +9390,18 @@
         "tests/test_catalog_agent_runner.py",
         "tests/test_target_agent_commands.py",
         "tests/test_operation_event_hub.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/api/helm-releases.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx",
         "frontend/src/api/operation-events.test.ts"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/helm/release_router.py#create_helm_release_install_stream",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The compatibility path and wizard are complete for digest-pinned server recipes in the server-declared namespace; the catalog queue still needs the common first-stage audited CommandReceipt instead of its legacy accepted envelope.",
-          "test": "tests/test_catalog_agent_runner.py"
+          "reason": "The digest-pinned server recipe is accepted through the common staged CommandReceipt, preserves the catalog idempotency identity, and publishes the first durable OperationEvent before Agent execution.",
+          "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
           "state": "implemented",

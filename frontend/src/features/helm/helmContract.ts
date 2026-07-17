@@ -392,6 +392,8 @@ export interface HelmReleaseInstallRequest {
 
 export interface HelmInstallReceipt {
   accepted: true;
+  eventId: string;
+  auditEventId: string;
   commandId: string;
   correlationId: string;
   status: string;
