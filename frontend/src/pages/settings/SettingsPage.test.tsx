@@ -15,6 +15,10 @@ import type { SettingsPort } from "../../features/settings/settingsContract";
 import type { ShellStatePort } from "../../features/shell-state/shellStateContract";
 import { I18nProvider } from "../../shared/i18n";
 import { SettingsPage } from "./SettingsPage";
+import {
+  OperationStatusStoreProvider,
+  type OperationStatusStore,
+} from "../../features/operations/OperationStatusStore";
 
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -49,9 +53,9 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(screen.getByText("표시 가능한 클러스터 2개")).toBeTruthy());
 
     await user.click(screen.getByRole("tab", { name: "관리" }));
-    expect(screen.getAllByText("준비 중")).toHaveLength(6);
+    expect(screen.getAllByText("준비 중")).toHaveLength(5);
     expect(screen.getByText("호스트 설정")).toBeTruthy();
-    expect(screen.getByText("실시간 통합")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Prometheus" })).toBeTruthy();
   });
 
   it("renders server-owned access decisions and never fabricates Kubernetes rules", async () => {
@@ -83,6 +87,64 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Changes are saved automatically with optimistic revision checks."))
       .toBeTruthy();
   });
+
+  it("updates dynamic Prometheus headers, clears their values, and starts shared streaming feedback", async () => {
+    const user = userEvent.setup();
+    renderSettings("/settings?clusters=cluster-1#administration", operationStatusStore);
+
+    expect(await screen.findByDisplayValue("https://prometheus.example.com")).toBeTruthy();
+    expect(screen.getByDisplayValue("Authorization")).toBeTruthy();
+    const initialSecret = screen.getByLabelText("Authorization 값") as HTMLInputElement;
+    expect(initialSecret.type).toBe("password");
+    expect(initialSecret.value).toBe("");
+    expect(screen.queryByText("Bearer server-secret")).toBeNull();
+
+    await user.type(initialSecret, "Bearer replacement");
+    await user.click(screen.getByRole("button", { name: "헤더 추가" }));
+    const nameInputs = screen.getAllByLabelText("헤더 이름");
+    await user.type(nameInputs[1], "X-Scope-OrgID");
+    await user.type(screen.getByLabelText("X-Scope-OrgID 값"), "tenant-a");
+    await user.click(screen.getByRole("button", { name: "Prometheus 설정 저장" }));
+
+    await waitFor(() => expect(settingsPort.updatePrometheusIntegration).toHaveBeenCalledWith({
+      clusterId: "cluster-1",
+      url: "https://prometheus.example.com",
+      headers: [
+        { name: "Authorization", value: "Bearer replacement" },
+        { name: "X-Scope-OrgID", value: "tenant-a" },
+      ],
+    }, expect.any(AbortSignal)));
+    expect(operationStatusStore.start).toHaveBeenCalledWith("operation-b");
+    expect(screen.queryByDisplayValue("Bearer replacement")).toBeNull();
+    expect(screen.queryByDisplayValue("tenant-a")).toBeNull();
+    expect(screen.getByText(/correlation-b/)).toBeTruthy();
+  });
+
+  it("keeps empty input local and renders update failures without discarding the form", async () => {
+    const user = userEvent.setup();
+    vi.mocked(settingsPort.getPrometheusIntegration).mockResolvedValueOnce({
+      clusterId: "cluster-1",
+      configurationRevision: null,
+      operationId: null,
+      url: null,
+      headerNames: [],
+      state: "unconfigured",
+      errorCode: null,
+      receipt: null,
+    });
+    vi.mocked(settingsPort.updatePrometheusIntegration).mockRejectedValueOnce(new Error("offline"));
+    renderSettings("/settings?clusters=cluster-1#administration", operationStatusStore);
+
+    const save = await screen.findByRole("button", { name: "Prometheus 설정 저장" });
+    expect(save).toBeDisabled();
+    expect(settingsPort.updatePrometheusIntegration).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText("Prometheus URL"), "https://prometheus.example.com");
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(await screen.findByText("Prometheus 설정을 저장하지 못했습니다.")).toBeTruthy();
+    expect(screen.getByDisplayValue("https://prometheus.example.com")).toBeTruthy();
+  });
 });
 
 const settingsPort: SettingsPort = {
@@ -108,6 +170,33 @@ const settingsPort: SettingsPort = {
     },
     revision: "a".repeat(64),
   }),
+  getPrometheusIntegration: vi.fn().mockResolvedValue({
+    clusterId: "cluster-1",
+    configurationRevision: "revision-a",
+    operationId: "operation-a",
+    url: "https://prometheus.example.com",
+    headerNames: ["Authorization"],
+    state: "connected",
+    errorCode: null,
+    receipt: null,
+  }),
+  updatePrometheusIntegration: vi.fn().mockResolvedValue({
+    clusterId: "cluster-1",
+    configurationRevision: "revision-b",
+    operationId: "operation-b",
+    url: "https://prometheus.example.com",
+    headerNames: ["Authorization", "X-Scope-OrgID"],
+    state: "pending",
+    errorCode: null,
+    receipt: {
+      accepted: true,
+      commandId: "operation-b",
+      eventId: "event-b",
+      auditEventId: "event-b",
+      correlationId: "correlation-b",
+      status: "queued",
+    },
+  }),
 };
 
 const shellStatePort: ShellStatePort = {
@@ -125,7 +214,10 @@ const shellStatePort: ShellStatePort = {
   updateUiPreferences: vi.fn(),
 };
 
-function renderSettings(initialEntry: string) {
+function renderSettings(initialEntry: string, store?: OperationStatusStore) {
+  const page = (
+    <SettingsPage settingsPort={settingsPort} shellStatePort={shellStatePort} />
+  );
   render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
@@ -140,7 +232,7 @@ function renderSettings(initialEntry: string) {
                 workspaceId: "default",
               }}>
                 <ClusterScopeProvider authorityKey="default:user" port={clusterScopePort}>
-                  <SettingsPage settingsPort={settingsPort} shellStatePort={shellStatePort} />
+                  {store ? <OperationStatusStoreProvider store={store}>{page}</OperationStatusStoreProvider> : page}
                 </ClusterScopeProvider>
               </ProductSessionProvider>
             </UnifiedFilterProvider>
@@ -150,6 +242,24 @@ function renderSettings(initialEntry: string) {
     </I18nProvider>,
   );
 }
+
+const operationStatusStore: OperationStatusStore = {
+  dispose: vi.fn(),
+  getSnapshot: vi.fn((commandId: string) => ({
+    commandId,
+    event: null,
+    failure: null,
+    retry: null,
+    sequence: null,
+    status: "connecting",
+    updatedAt: 0,
+  })),
+  getSnapshots: vi.fn(() => []),
+  reobserve: vi.fn(),
+  start: vi.fn(),
+  subscribe: vi.fn(() => () => undefined),
+  subscribeAll: vi.fn(() => () => undefined),
+};
 
 const clusterScopePort: ClusterScopePort = {
   listClusterChoices: async () => ({
