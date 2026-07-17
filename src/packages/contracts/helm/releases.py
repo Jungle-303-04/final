@@ -124,26 +124,34 @@ class HelmReleaseCommands(StrictModel):
         return self
 
 
-class HelmReleaseUpgradeRequest(StrictModel):
-    cluster_id: str = Field(min_length=1, max_length=253)
-    expected_revision: int = Field(ge=1)
+class HelmCandidateValues(StrictModel):
+    """Bounded server-owned catalog candidate shared by preview and apply."""
+
     catalog_item_id: str = Field(min_length=1, max_length=120)
     catalog_version: str = Field(min_length=1, max_length=80)
     values: dict[str, Any] = Field(default_factory=dict)
-    confirmation: Literal[True]
-    reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def values_are_bounded(self) -> HelmReleaseUpgradeRequest:
+    def values_are_bounded(self) -> HelmCandidateValues:
         if len(self.values) > 100:
-            raise ValueError("Helm upgrade values exceed the field limit")
+            raise ValueError("Helm candidate values exceed the field limit")
         try:
             encoded = json.dumps(self.values, sort_keys=True, separators=(",", ":"))
         except (TypeError, ValueError) as error:
-            raise ValueError("Helm upgrade values must be JSON compatible") from error
+            raise ValueError("Helm candidate values must be JSON compatible") from error
         if len(encoded.encode("utf-8")) > 65_536:
-            raise ValueError("Helm upgrade values exceed the byte limit")
+            raise ValueError("Helm candidate values exceed the byte limit")
         return self
+
+
+class HelmReleaseCandidateRequest(HelmCandidateValues):
+    cluster_id: str = Field(min_length=1, max_length=253)
+    expected_revision: int = Field(ge=1)
+
+
+class HelmReleaseUpgradeRequest(HelmReleaseCandidateRequest):
+    confirmation: Literal[True]
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class HelmInstallTargetsResponse(StrictModel):

@@ -9,6 +9,7 @@ from packages.contracts.gateway import requests as gateway_requests
 from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HELM_RELEASE_OPERATION_CAPABILITY,
+    HELM_VALUES_PREVIEW_CAPABILITY,
 )
 from packages.contracts.service_access import SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
 from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
@@ -146,6 +147,7 @@ AGENT_CAPABILITIES = [
     Command.GITOPS_RESOURCE_CONTROL_CAPABILITY,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HELM_RELEASE_OPERATION_CAPABILITY,
+    HELM_VALUES_PREVIEW_CAPABILITY,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
 ]
 

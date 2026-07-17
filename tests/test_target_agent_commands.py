@@ -1061,7 +1061,9 @@ def test_helm_values_preview_rejects_stale_storage_before_runner(monkeypatch) ->
 def test_target_agent_advertises_helm_values_preview_capability() -> None:
     module = load_agent_module()
 
-    assert module.HELM_VALUES_PREVIEW_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
+    assert (
+        module.agent_config.HELM_VALUES_PREVIEW_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
+    )
 
 
 def test_catalog_helm_upgrade_rejects_stale_secret_before_runner(monkeypatch) -> None:

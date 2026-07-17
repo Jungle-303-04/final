@@ -32,6 +32,15 @@ from packages.contracts.helm.operations import (
     HelmReleaseRollbackRequest,
     HelmReleaseUninstallRequest,
 )
+from packages.contracts.helm.previews import (
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
+    HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER,
+    HelmReleaseValuesPreviewRequest,
+    HelmValuesPreviewCommandPayload,
+    HelmValuesPreviewResources,
+    HelmValuesPreviewResult,
+)
 from packages.contracts.helm.releases import (
     HELM_UPGRADE_BATCH_MAX_RELEASES,
     HelmAvailability,
@@ -121,10 +130,14 @@ __all__ = [
     "HelmInstallTargetsResponse",
     "HELM_RELEASE_OPERATION_ACTION",
     "HELM_RELEASE_OPERATION_CAPABILITY",
+    "HELM_VALUES_PREVIEW_ACTION",
+    "HELM_VALUES_PREVIEW_CAPABILITY",
+    "HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER",
     "HelmReleaseGuard",
     "HelmReleaseOperationCommandPayload",
     "HelmReleaseRollbackRequest",
     "HelmReleaseUninstallRequest",
+    "HelmReleaseValuesPreviewRequest",
     "HelmReleaseVersionList",
     "HelmResourceFieldChange",
     "HelmResourceHealthAvailability",
@@ -132,4 +145,7 @@ __all__ = [
     "HelmResourcesDiff",
     "HelmUpgradeInput",
     "HelmUpgradeTarget",
+    "HelmValuesPreviewCommandPayload",
+    "HelmValuesPreviewResources",
+    "HelmValuesPreviewResult",
 ]

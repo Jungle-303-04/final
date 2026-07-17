@@ -11,6 +11,8 @@ from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HELM_RELEASE_OPERATION_ACTION,
     HELM_RELEASE_OPERATION_CAPABILITY,
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
 )
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
@@ -289,3 +291,16 @@ class ServiceHttpRequestCommand:
 )
 class HelmReleaseArtifactReadCommand:
     """Read one revision-bound Helm artifact through the target agent."""
+
+
+@command.action(
+    HELM_VALUES_PREVIEW_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    read_only=True,
+    required_agent_capability=HELM_VALUES_PREVIEW_CAPABILITY,
+)
+class HelmValuesPreviewCommand:
+    """Render a revision-bound digest-pinned candidate without applying it."""

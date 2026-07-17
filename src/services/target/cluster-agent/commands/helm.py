@@ -19,6 +19,7 @@ from domains.catalog.install import (
     CatalogHelmInstallPayload,
     CatalogInstallValidationError,
     CatalogRecipeUnsupported,
+    ServerHelmRecipe,
     server_helm_recipe,
     validate_catalog_values,
     validate_install_names,
@@ -43,6 +44,9 @@ from packages.contracts.helm import (
     HelmRenderedResourceRef,
     HelmResourceFieldChange,
     HelmResourcesDiff,
+    HelmValuesPreviewCommandPayload,
+    HelmValuesPreviewResources,
+    HelmValuesPreviewResult,
 )
 from packages.security.log_lines import redact_log_line
 
@@ -79,6 +83,14 @@ class HelmRunResult:
 class HelmArtifactRunResult:
     succeeded: bool
     artifact: HelmArtifactResult | None = None
+    error_code: str = ""
+    returncode: int | None = None
+
+
+@dataclass(frozen=True)
+class HelmValuesPreviewRunResult:
+    succeeded: bool
+    preview: HelmValuesPreviewResult | None = None
     error_code: str = ""
     returncode: int | None = None
 
@@ -153,39 +165,20 @@ def run_catalog_helm_install(
         return HelmRunResult(False, "helm_not_available")
 
     try:
-        recipe = server_helm_recipe(payload.catalog_item_id, payload.catalog_version)
-        validate_install_names(
-            application_name=payload.application_name,
+        guard = (
+            HelmReleaseGuard.model_validate(payload.upgrade_guard.model_dump(mode="json"))
+            if payload.upgrade_guard is not None
+            else None
+        )
+        recipe, values = _catalog_helm_candidate(
+            catalog_item_id=payload.catalog_item_id,
+            catalog_version=payload.catalog_version,
             namespace=payload.namespace,
+            application_name=payload.application_name,
             release_name=payload.release_name,
+            submitted_values=payload.values,
+            guard=guard,
         )
-        if payload.namespace != Sandbox.NAMESPACE or not control_namespace_allowed(
-            payload.namespace
-        ):
-            raise CatalogInstallValidationError(
-                "catalog installs are limited to the sandbox control namespace"
-            )
-        if payload.upgrade_guard is not None:
-            payload.upgrade_guard.validate_target(
-                namespace=payload.namespace,
-                release_name=payload.release_name,
-            )
-            if (
-                recipe.chart_name != payload.upgrade_guard.chart_name
-                or compare_helm_chart_versions(
-                    recipe.chart_version,
-                    payload.upgrade_guard.chart_version,
-                )
-                <= 0
-            ):
-                raise CatalogInstallValidationError(
-                    "catalog recipe does not upgrade the guarded Helm chart"
-                )
-        user_values = nested_helm_values(
-            validate_catalog_values(recipe.values_schema, payload.values)
-        )
-        fixed_values = nested_helm_values(dict(recipe.fixed_values))
-        values = merge_helm_values(user_values, fixed_values)
     except CatalogRecipeUnsupported:
         return HelmRunResult(False, "catalog_recipe_unsupported")
     except CatalogInstallValidationError:
@@ -248,6 +241,218 @@ def run_catalog_helm_install(
     if completed.returncode != 0:
         return HelmRunResult(False, "helm_exit_nonzero", completed.returncode)
     return HelmRunResult(True, returncode=completed.returncode)
+
+
+def _catalog_helm_candidate(
+    *,
+    catalog_item_id: str,
+    catalog_version: str,
+    namespace: str,
+    application_name: str,
+    release_name: str,
+    submitted_values: Mapping[str, Any],
+    guard: HelmReleaseGuard | None,
+) -> tuple[ServerHelmRecipe, dict[str, Any]]:
+    """Resolve and validate the one server-owned chart candidate used by preview and apply."""
+
+    recipe = server_helm_recipe(catalog_item_id, catalog_version)
+    validate_install_names(
+        application_name=application_name,
+        namespace=namespace,
+        release_name=release_name,
+    )
+    if namespace != Sandbox.NAMESPACE or not control_namespace_allowed(namespace):
+        raise CatalogInstallValidationError(
+            "catalog Helm execution is limited to the sandbox control namespace"
+        )
+    if guard is not None:
+        guard.validate_target(namespace=namespace, release_name=release_name)
+        if (
+            recipe.chart_name != guard.chart_name
+            or compare_helm_chart_versions(recipe.chart_version, guard.chart_version) <= 0
+        ):
+            raise CatalogInstallValidationError(
+                "catalog recipe does not upgrade the guarded Helm chart"
+            )
+    user_values = nested_helm_values(
+        validate_catalog_values(recipe.values_schema, dict(submitted_values))
+    )
+    fixed_values = nested_helm_values(dict(recipe.fixed_values))
+    return recipe, merge_helm_values(user_values, fixed_values)
+
+
+def run_helm_values_preview(
+    payload: HelmValuesPreviewCommandPayload,
+    *,
+    helm_binary: str | None = None,
+    run: RunCommand = subprocess.run,
+    limits: HelmArtifactLimits | None = None,
+) -> HelmValuesPreviewRunResult:
+    """Render one digest-pinned candidate and compare it with the guarded live revision."""
+
+    executable = helm_binary or shutil.which("helm")
+    if not executable:
+        return HelmValuesPreviewRunResult(False, error_code="helm_not_available")
+    effective_limits = limits or helm_artifact_limits()
+    try:
+        recipe, values = _catalog_helm_candidate(
+            catalog_item_id=payload.catalog_item_id,
+            catalog_version=payload.catalog_version,
+            namespace=payload.namespace,
+            application_name=payload.release_name,
+            release_name=payload.release_name,
+            submitted_values=payload.values,
+            guard=payload.guard,
+        )
+    except CatalogRecipeUnsupported:
+        return HelmValuesPreviewRunResult(
+            False,
+            error_code="catalog_recipe_unsupported",
+        )
+    except (CatalogInstallValidationError, ValueError):
+        return HelmValuesPreviewRunResult(
+            False,
+            error_code="helm_values_preview_validation_error",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="helm-values-preview-") as tmp:
+        runtime_dir = Path(tmp)
+        runtime_dir.chmod(0o700)
+        values_path = runtime_dir / "values.yaml"
+        values_path.write_text(
+            yaml.safe_dump(values, sort_keys=True, allow_unicode=False),
+            encoding="utf-8",
+        )
+        values_path.chmod(0o600)
+        env = helm_subprocess_env(runtime_dir)
+        guard_result = _validate_release_status(
+            executable,
+            release_name=payload.release_name,
+            namespace=payload.namespace,
+            guard=payload.guard,
+            run=run,
+            env=env,
+        )
+        if guard_result is not None:
+            return HelmValuesPreviewRunResult(
+                False,
+                error_code=guard_result.error_code,
+                returncode=guard_result.returncode,
+            )
+        current = _run_helm_preview_source(
+            [
+                executable,
+                "get",
+                "manifest",
+                payload.release_name,
+                "--namespace",
+                payload.namespace,
+                "--revision",
+                str(payload.guard.expected_revision),
+            ],
+            run=run,
+            env=env,
+            limits=effective_limits,
+        )
+        if isinstance(current, HelmValuesPreviewRunResult):
+            return current
+        candidate = _run_helm_preview_source(
+            [
+                executable,
+                "template",
+                payload.release_name,
+                recipe.digest_reference,
+                "--version",
+                recipe.chart_version,
+                "--namespace",
+                payload.namespace,
+                "--values",
+                str(values_path),
+                "--is-upgrade",
+                "--include-crds",
+            ],
+            run=run,
+            env=env,
+            limits=effective_limits,
+        )
+        if isinstance(candidate, HelmValuesPreviewRunResult):
+            return candidate
+
+    current_documents, current_errors = _sanitized_yaml_documents(current)
+    candidate_documents, candidate_errors = _sanitized_yaml_documents(candidate)
+    resources = _values_preview_resources(
+        _rendered_resources(current_documents),
+        _rendered_resources(candidate_documents),
+        parse_error_count=current_errors + candidate_errors,
+    )
+    bounded = _bounded_structured_projection(
+        "resources_diff",
+        resources.model_dump(mode="json"),
+        effective_limits.output_max_bytes,
+    )
+    if bounded is None:
+        return HelmValuesPreviewRunResult(
+            False,
+            error_code="helm_values_preview_projection_too_large",
+        )
+    projection, encoded, truncated = bounded
+    preview = HelmValuesPreviewResult(
+        namespace=payload.namespace,
+        release_name=payload.release_name,
+        expected_revision=payload.guard.expected_revision,
+        catalog_item_id=recipe.item_id,
+        catalog_version=recipe.version,
+        chart_name=recipe.chart_name,
+        chart_version=recipe.chart_version,
+        resources=HelmValuesPreviewResources.model_validate(projection),
+        projection_sha256=hashlib.sha256(encoded).hexdigest(),
+        projection_bytes=len(encoded),
+        source_bytes=len(current.encode("utf-8")) + len(candidate.encode("utf-8")),
+        redaction_applied=True,
+        truncated=truncated,
+    )
+    return HelmValuesPreviewRunResult(True, preview=preview)
+
+
+def _run_helm_preview_source(
+    args: list[str],
+    *,
+    run: RunCommand,
+    env: dict[str, str],
+    limits: HelmArtifactLimits,
+) -> str | HelmValuesPreviewRunResult:
+    try:
+        completed = run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=limits.timeout_seconds,
+            shell=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return HelmValuesPreviewRunResult(False, error_code="helm_values_preview_timeout")
+    except (FileNotFoundError, PermissionError):
+        return HelmValuesPreviewRunResult(False, error_code="helm_not_available")
+    except OSError:
+        return HelmValuesPreviewRunResult(
+            False,
+            error_code="helm_values_preview_execution_error",
+        )
+    if completed.returncode != 0:
+        return HelmValuesPreviewRunResult(
+            False,
+            error_code="helm_values_preview_exit_nonzero",
+            returncode=completed.returncode,
+        )
+    output = completed.stdout or ""
+    if len(output.encode("utf-8")) > limits.source_max_bytes:
+        return HelmValuesPreviewRunResult(
+            False,
+            error_code="helm_values_preview_source_too_large",
+        )
+    return output
 
 
 def validate_catalog_helm_upgrade_secret(
@@ -899,6 +1104,43 @@ def _diff_rendered_resources(
     revision2: int,
     parse_error_count: int,
 ) -> HelmResourcesDiff:
+    added, removed, modified, unchanged = _rendered_resource_changes(left, right)
+    return HelmResourcesDiff(
+        revision1=revision1,
+        revision2=revision2,
+        added=added,
+        removed=removed,
+        modified=modified,
+        unchanged=unchanged,
+        parse_error_count=parse_error_count,
+    )
+
+
+def _values_preview_resources(
+    current: Sequence[_RenderedResource],
+    candidate: Sequence[_RenderedResource],
+    *,
+    parse_error_count: int,
+) -> HelmValuesPreviewResources:
+    added, removed, modified, unchanged = _rendered_resource_changes(current, candidate)
+    return HelmValuesPreviewResources(
+        added=added,
+        removed=removed,
+        modified=modified,
+        unchanged=unchanged,
+        parse_error_count=parse_error_count,
+    )
+
+
+def _rendered_resource_changes(
+    left: Sequence[_RenderedResource],
+    right: Sequence[_RenderedResource],
+) -> tuple[
+    tuple[HelmRenderedResourceRef, ...],
+    tuple[HelmRenderedResourceRef, ...],
+    tuple[HelmRenderedResourceChange, ...],
+    tuple[HelmRenderedResourceRef, ...],
+]:
     left_by_key = {_resource_key(resource.ref): resource for resource in left}
     right_by_key = {_resource_key(resource.ref): resource for resource in right}
     added: list[HelmRenderedResourceRef] = []
@@ -928,15 +1170,7 @@ def _diff_rendered_resources(
                 fields=tuple(fields),
             )
         )
-    return HelmResourcesDiff(
-        revision1=revision1,
-        revision2=revision2,
-        added=tuple(added),
-        removed=tuple(removed),
-        modified=tuple(modified),
-        unchanged=tuple(unchanged),
-        parse_error_count=parse_error_count,
-    )
+    return tuple(added), tuple(removed), tuple(modified), tuple(unchanged)
 
 
 def _resource_key(item: HelmRenderedResourceRef) -> tuple[str, str, str, str]:

@@ -32,8 +32,10 @@ from commands.helm import (
     run_catalog_helm_install,
     run_helm_artifact_query,
     run_helm_release_operation,
+    run_helm_values_preview,
     validate_catalog_helm_upgrade_secret,
     validate_helm_release_operation_secret,
+    validate_helm_release_secret,
 )
 from commands.service_access import (
     ServiceAccessExecutionError,
@@ -178,8 +180,10 @@ from packages.contracts.gitops import supported_kubernetes_resource
 from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_OPERATION_ACTION,
+    HELM_VALUES_PREVIEW_ACTION,
     HelmArtifactCommandPayload,
     HelmReleaseOperationCommandPayload,
+    HelmValuesPreviewCommandPayload,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
@@ -1433,6 +1437,53 @@ class TargetClusterAgent:
         return ctx.ok(
             "Helm artifact read completed",
             artifact=result.artifact.model_dump(mode="json", exclude_none=True),
+        )
+
+    @command.handler(
+        HELM_VALUES_PREVIEW_ACTION,
+        payload_model=HelmValuesPreviewCommandPayload,
+    )
+    async def helm_values_preview_command(
+        self,
+        ctx: CommandContext[HelmValuesPreviewCommandPayload],
+    ) -> JsonObject:
+        try:
+            live_storage = await ctx.kubernetes.get_namespaced_resource(
+                api_group="core",
+                version="v1",
+                namespace=ctx.payload.namespace,
+                resource="secrets",
+                name=ctx.payload.guard.storage.name,
+            )
+            validate_helm_release_secret(
+                live_storage,
+                namespace=ctx.payload.namespace,
+                release_name=ctx.payload.release_name,
+                guard=ctx.payload.guard,
+            )
+        except ValueError:
+            return ctx.fail(
+                "Helm values preview rejected stale release evidence",
+                error_code="helm_release_guard_stale",
+                retryable=False,
+            )
+        except Exception:
+            return ctx.fail(
+                "Helm values preview could not verify release evidence",
+                error_code="helm_release_guard_unavailable",
+                retryable=False,
+            )
+        result = await asyncio.to_thread(run_helm_values_preview, ctx.payload)
+        if not result.succeeded or result.preview is None:
+            return ctx.fail(
+                "Helm values preview failed",
+                error_code=result.error_code or "helm_values_preview_failed",
+                retryable=False,
+                returncode=result.returncode,
+            )
+        return ctx.ok(
+            "Helm values preview completed",
+            preview=result.preview.model_dump(mode="json", exclude_none=True),
         )
 
     @command.handler(

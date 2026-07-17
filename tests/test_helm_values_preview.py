@@ -157,8 +157,9 @@ def test_preview_revalidates_live_status_and_compares_real_template_to_current_m
     assert "gp3" not in template_args
     assert captured_values == [
         {
+            "architecture": "standalone",
             "image": {
-                "digest": "sha256:87cc5d23547ba3603f1f19619b78de29101ef765379ae6905cc1349dca1365ed",
+                "digest": "sha256:25bf63f3caf75af4628c0dfcf39859ad1ac8abe135be85e99699f9637b16dc28",
                 "registry": "registry-1.docker.io",
                 "repository": "bitnamilegacy/redis",
             },
