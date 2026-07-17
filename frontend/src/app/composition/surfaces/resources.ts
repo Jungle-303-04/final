@@ -44,10 +44,13 @@ import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserR
 import type { ResourcesRefreshPolicyKey } from "../../../features/resources/resourceMetricsHistoryContract";
 import type { TimelinePort } from "../../../features/timeline/timelineContract";
 import type { PortForwardSessionPort } from "../../../features/service-access/portForwardSessionContract";
+import { createChecksProductPort } from "./checks";
 
 export function loadResourcesSurface(
   homePort: HomePort,
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey | "port_sessions">,
+  refreshPolicies: BrowserRefreshPolicyRegistry<
+    ResourcesRefreshPolicyKey | "port_sessions" | "issues_audit"
+  >,
   timelinePort: TimelinePort,
   portForwardSessions: PortForwardSessionPort,
 ): ComponentType {
@@ -94,6 +97,7 @@ export function loadResourcesSurface(
       previewResourceManifestEdit,
     }),
     createResourceIssuesAdapter({ getResourceIssues }),
+    createChecksProductPort(refreshPolicies),
     createServiceAccessAdapter({
       resolveServiceAccess,
       startServiceRequest,

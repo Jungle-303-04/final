@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from domains.checks.observation_projection import checks_detail, checks_overview
 from packages.contracts.checks import ChecksSettingsPolicy
+from packages.contracts.parity import ResourceRef
 
 NOW = datetime(2026, 7, 17, 6, 0, tzinfo=UTC)
 
@@ -162,6 +163,52 @@ def test_checks_projection_filters_agent_observations_to_the_requested_namespace
         "deployments": "allowed",
         "secrets": "namespace_limited",
     }
+
+
+def test_checks_projection_filters_one_exact_resource_ref_without_name_fallback() -> None:
+    resource = ResourceRef(
+        api_group="apps",
+        version="v1",
+        kind="Deployment",
+        namespace="storefront",
+        name="checkout",
+        uid="uid-checkout",
+    )
+    scope = {
+        "workspace_id": "workspace-a",
+        "selected_cluster_ids": ("cluster-a",),
+        "namespace_refs": (("cluster-a", "storefront"),),
+        "contexts": {
+            "cluster-a": {
+                "snapshot_revision": 8,
+                "observed_at": "2026-07-17T05:59:30Z",
+                "resources_complete": True,
+                "labels_complete": True,
+                "partial_reason_codes": [],
+            }
+        },
+        "snapshots": {"cluster-a": _snapshot(namespaces=["storefront"])},
+        "resource_cluster_id": "cluster-a",
+        "now": NOW,
+    }
+
+    body = checks_overview(resource=resource, **scope)
+    changed_uid = checks_overview(
+        resource=resource.model_copy(update={"uid": "replacement-uid"}),
+        **scope,
+    )
+
+    assert body.result_set.total_finding_count == 1
+    assert body.result_set.total_check_count == 1
+    assert body.result_set.checks is not None
+    assert body.result_set.checks[0].resource == resource
+    assert body.catalog.entries is not None
+    assert [entry.check_id for entry in body.catalog.entries] == ["workload-limits"]
+    assert changed_uid.result_set.availability == "available"
+    assert changed_uid.result_set.total_finding_count == 0
+    assert changed_uid.result_set.total_check_count == 0
+    assert changed_uid.result_set.checks == ()
+    assert changed_uid.catalog.entries == ()
 
 
 def test_checks_projection_retains_fresh_evidence_when_another_cluster_is_stale() -> None:

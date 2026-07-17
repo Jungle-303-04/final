@@ -25,6 +25,25 @@ describe("Checks API", () => {
       "/api/checks/overview?clusters=cluster-a%2Ccluster-b&namespaces=cluster-a%2Fstorefront",
     );
 
+    fetchMock.mockResolvedValueOnce(jsonResponse(overview()));
+    await getChecksOverview({
+      clusterIds: ["cluster-a"],
+      namespaces: ["cluster-a/storefront"],
+      resource: {
+        apiGroup: "apps",
+        version: "v1",
+        kind: "Deployment",
+        namespace: "storefront",
+        name: "checkout",
+        uid: "uid-checkout",
+      },
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "/api/checks/overview?clusters=cluster-a&namespaces=cluster-a%2Fstorefront"
+      + "&resource_group=apps&resource_version=v1&resource_kind=Deployment"
+      + "&resource_namespace=storefront&resource_name=checkout&resource_uid=uid-checkout",
+    );
+
     fetchMock.mockResolvedValueOnce(jsonResponse(detail("workload-limits")));
     await expect(getChecksDetail("workload-limits", { clusterIds: ["cluster-a"] })).resolves.toMatchObject({
       detail: { requested_check_id: "workload-limits", findings: null },

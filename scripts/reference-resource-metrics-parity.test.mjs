@@ -14,7 +14,6 @@ const FEATURE_IDS = Array.from(
 );
 
 const PROVIDER_BLOCKED = new Set([
-  "reference.feature.129",
   "reference.feature.136",
   "reference.feature.137",
   "reference.feature.138",
@@ -32,10 +31,11 @@ const PROMETHEUS_RESOURCE_IMPLEMENTED = new Set([
 ]);
 
 test("resource, metrics, logs, and service access rows own immutable source evidence", async () => {
-  const [ports, aliases, classifications, ledger] = await Promise.all([
+  const [ports, aliases, classifications, identities, ledger] = await Promise.all([
     readJson("docs/migration/reference-feature-port-map.json"),
     readJson("docs/migration/reference-feature-source-aliases.json"),
     readJson("docs/migration/reference-ui-delta-classifications.json"),
+    readJson("docs/migration/reference-feature-source-identities.json"),
     readJson("docs/migration/reference-feature-ledger.json"),
   ]);
   const sourceOwners = new Map();
@@ -46,6 +46,18 @@ test("resource, metrics, logs, and service access rows own immutable source evid
         sourceOwners.set(contractId, { path, sourceKey: interaction.sourceKey });
       }
     }
+  }
+  for (const identity of identities.identities) {
+    if (!identity.legacyContractId) continue;
+    assert.equal(
+      sourceOwners.has(identity.legacyContractId),
+      false,
+      `${identity.legacyContractId} source owner is duplicated`,
+    );
+    sourceOwners.set(identity.legacyContractId, {
+      path: identity.evidence[0]?.path,
+      sourceKey: identity.sourceKey,
+    });
   }
   const ledgerById = new Map(
     ledger.features.map((feature) => [feature.contractId, feature]),
@@ -109,8 +121,10 @@ test("unavailable providers and native port authority remain explicit", async ()
   const resourceAudit = ports.features["reference.feature.129"];
   assert.equal(
     resourceAudit.coverage.backend.test,
-    "scripts/reference-resource-metrics-parity.test.mjs",
+    "tests/test_checks_router.py#test_checks_overview_filters_exact_resource_identity_and_rejects_ambiguous_scope",
   );
+  assert.equal(resourceAudit.deliveryStatus, "implemented");
+  assert.equal(resourceAudit.coverage.frontend.state, "implemented");
   assert.equal(resourceAudit.verification.includes("tests/test_audit.py"), false);
 });
 

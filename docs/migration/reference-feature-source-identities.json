@@ -243,6 +243,28 @@
           "symbol": "PolicyCorrelation"
         }
       ]
+    },
+    {
+      "sourceKey": "upstream-ui:audit:resource:exact-agent-findings:v1",
+      "legacyContractId": "reference.feature.129",
+      "interaction": "A resource detail reads only outbound-agent findings that match one authorized cluster, namespace scope and immutable Kubernetes ResourceRef including UID; an observed empty set remains distinct from unavailable evidence.",
+      "evidence": [
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "useResourceAudit"
+        },
+        {
+          "path": "internal/server/audit_handlers.go",
+          "sha256": "4b9128ed39bfc73249d738bae6ab5a9c0a978cd7851b69a716fb74183567bdf9",
+          "symbol": "handleAuditResource"
+        },
+        {
+          "path": "web/src/components/workload/WorkloadView.tsx",
+          "sha256": "f4f446c932feb5813d888349d5ce17c1f3f92eba84330525e898906d0d99300a",
+          "symbol": "useResourceAudit"
+        }
+      ]
     }
   ]
 }

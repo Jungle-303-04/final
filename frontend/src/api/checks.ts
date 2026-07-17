@@ -11,6 +11,7 @@ import {
   type ChecksSettingsUpdateEndpoint,
 } from "./checks-schemas";
 import { withQuery } from "./url";
+import type { ResourceRef } from "../shared/parity/referenceParity";
 
 export const CHECKS_OVERVIEW_PATH = "/api/checks/overview" as const;
 export const CHECKS_SETTINGS_PATH = "/api/settings/audit" as const;
@@ -19,6 +20,7 @@ export const checksDetailPath = (checkId: string): ApiPath => `/api/checks/${enc
 export interface ChecksQuery {
   clusterIds?: readonly string[];
   namespaces?: readonly string[];
+  resource?: ResourceRef;
 }
 
 export function getChecksOverview(
@@ -59,6 +61,12 @@ function withScope(path: ApiPath, query: ChecksQuery): ApiPath {
   return withQuery(path, [
     ["clusters", joined("clusters", query.clusterIds)],
     ["namespaces", joined("namespaces", query.namespaces)],
+    ["resource_group", query.resource?.apiGroup],
+    ["resource_version", query.resource?.version],
+    ["resource_kind", query.resource?.kind],
+    ["resource_namespace", query.resource?.namespace ?? undefined],
+    ["resource_name", query.resource?.name],
+    ["resource_uid", query.resource?.uid],
   ]);
 }
 

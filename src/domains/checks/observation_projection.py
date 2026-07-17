@@ -28,7 +28,7 @@ from packages.contracts.checks.observations import (
     ChecksVisibilitySummary,
 )
 from packages.contracts.checks.settings import ChecksSettingsPolicy
-from packages.contracts.parity import ClusterScope
+from packages.contracts.parity import ClusterScope, ResourceRef
 
 CHECKS_OBSERVATION_UNAVAILABLE = "checks_observation_unavailable"
 CHECKS_DEFINITION_UNAVAILABLE = "checks_definition_unavailable"
@@ -53,6 +53,8 @@ def checks_overview(
     snapshots: Mapping[str, Mapping[str, Any]] | None = None,
     namespace_refs: Iterable[tuple[str, str]],
     selected_cluster_ids: Iterable[str],
+    resource: ResourceRef | None = None,
+    resource_cluster_id: str | None = None,
     settings: ChecksSettingsPolicy | None = None,
     now: datetime | None = None,
 ) -> ChecksOverviewResponse:
@@ -67,6 +69,12 @@ def checks_overview(
         now=now or datetime.now(UTC),
         settings=settings,
     )
+    if resource is not None:
+        projected = _filter_resource(
+            projected,
+            cluster_id=resource_cluster_id or "",
+            resource=resource,
+        )
     if projected.evaluated_at is None:
         reasons = projected.reason_codes or (CHECKS_OBSERVATION_UNAVAILABLE,)
         return ChecksOverviewResponse(
@@ -102,6 +110,31 @@ def checks_overview(
             clusters=projected.visibility,
             reason_codes=projected.reason_codes,
         ),
+    )
+
+
+def _filter_resource(
+    projected: _ProjectedChecks,
+    *,
+    cluster_id: str,
+    resource: ResourceRef,
+) -> _ProjectedChecks:
+    """Keep exact agent findings for one immutable Kubernetes resource identity."""
+
+    findings = tuple(
+        finding
+        for finding in projected.findings
+        if finding.cluster_id == cluster_id and finding.resource == resource
+    )
+    visible_check_ids = {finding.check_id for finding in findings}
+    return _ProjectedChecks(
+        coverage=projected.coverage,
+        findings=findings,
+        catalog=tuple(entry for entry in projected.catalog if entry.check_id in visible_check_ids),
+        visibility=projected.visibility,
+        evaluated_at=projected.evaluated_at,
+        availability=projected.availability,
+        reason_codes=projected.reason_codes,
     )
 
 

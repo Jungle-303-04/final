@@ -1,4 +1,5 @@
 import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
+import type { ResourceRef } from "../../shared/parity/referenceParity";
 
 export type ChecksAvailability = "available" | "partial" | "unavailable";
 export type ChecksFreshness = "live" | "stale" | "partial" | "disconnected";
@@ -35,14 +36,7 @@ export interface ChecksFinding {
   category: string;
   severity: ChecksSeverity;
   message: string;
-  resource: {
-    apiGroup: string;
-    version: string;
-    kind: string;
-    namespace: string | null;
-    name: string;
-    uid: string;
-  };
+  resource: ResourceRef;
 }
 
 export interface ChecksObservedResultSet {
@@ -136,6 +130,7 @@ export interface ChecksDetailResponse {
 export interface ChecksRequest {
   clusterIds: readonly string[];
   namespaces: readonly string[];
+  resource?: ResourceRef;
 }
 
 export interface ChecksSettingsPolicy {

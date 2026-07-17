@@ -17,6 +17,7 @@ import {
   type ChecksPort,
   type ChecksRequest,
 } from "../../features/checks/checksContract";
+import type { ResourceRef } from "../../shared/parity/referenceParity";
 
 export function useChecksOverview(
   port: ChecksPort,
@@ -108,6 +109,7 @@ function requestScopeKey(request: ChecksRequest): string {
   return JSON.stringify({
     clusterIds: canonicalValues(request.clusterIds),
     namespaces: canonicalValues(request.namespaces),
+    resource: canonicalResource(request.resource),
   });
 }
 
@@ -115,10 +117,24 @@ function requestFromScopeKey(scopeKey: string): ChecksRequest {
   const value = JSON.parse(scopeKey) as {
     clusterIds: string[];
     namespaces: string[];
+    resource: ResourceRef | null;
   };
   return {
     clusterIds: value.clusterIds,
     namespaces: value.namespaces,
+    ...(value.resource === null ? {} : { resource: value.resource }),
+  };
+}
+
+function canonicalResource(resource: ResourceRef | undefined): ResourceRef | null {
+  if (resource === undefined) return null;
+  return {
+    apiGroup: resource.apiGroup ?? "",
+    version: resource.version ?? "",
+    kind: resource.kind,
+    namespace: resource.namespace,
+    name: resource.name,
+    uid: resource.uid,
   };
 }
 

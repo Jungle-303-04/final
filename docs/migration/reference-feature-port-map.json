@@ -2015,26 +2015,29 @@
       }
     },
     "reference.feature.129": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.audit",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.checks.observations.ChecksOverviewResponse",
+      "frontendContract": "frontend/src/features/checks/checksContract.ts#ChecksRequest.resource",
       "desktopContract": null,
       "verification": [
-        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "tests/test_checks_observation_projection.py",
+        "tests/test_checks_router.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/pages/resources/ResourceChecksSection.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/audit/router.py",
-          "reason": "The audit log is workspace action history and no collector-backed resource finding repository is keyed by an exact Kubernetes ResourceRef.",
-          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/checks/router.py#get_checks_overview",
+          "consumer": "src/domains/checks/observation_projection.py#checks_overview",
+          "test": "tests/test_checks_router.py#test_checks_overview_filters_exact_resource_identity_and_rejects_ambiguous_scope"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "Provider security reports may render when observed, but they cannot impersonate a generic resource audit finding endpoint.",
-          "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceChecksSection.tsx#ResourceChecksSection",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "test": "frontend/src/pages/resources/ResourceChecksSection.test.tsx"
         }
       }
     },

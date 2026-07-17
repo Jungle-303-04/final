@@ -26,11 +26,13 @@ from packages.contracts.identity import (
     OrganizationRole,
     Permission,
 )
+from packages.contracts.parity import ResourceRef
 from packages.runtime.dependencies import get_db, get_events
 
 router = APIRouter()
 
 INVALID_SCOPE_DETAIL = "Checks scope is invalid"
+INVALID_RESOURCE_DETAIL = "Checks resource identity is invalid"
 SCOPE_NOT_FOUND_DETAIL = "Checks scope not found"
 INVALID_CHECK_ID_DETAIL = "Check identifier is invalid"
 CHECKS_SETTINGS_UNAVAILABLE_DETAIL = "Checks settings repository is unavailable"
@@ -44,14 +46,39 @@ CHECKS_SETTINGS_NAMESPACE_UNAVAILABLE_DETAIL = "Checks namespace authority is un
 async def get_checks_overview(
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
+    resource_group: str | None = Query(default=None),
+    resource_version: str | None = Query(default=None),
+    resource_kind: str | None = Query(default=None),
+    resource_namespace: str | None = Query(default=None),
+    resource_name: str | None = Query(default=None),
+    resource_uid: str | None = Query(default=None),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ChecksOverviewResponse:
     """Read authorized Checks evidence persisted from outbound agents."""
 
+    resource = _resource_ref(
+        api_group=resource_group,
+        version=resource_version,
+        kind=resource_kind,
+        namespace=resource_namespace,
+        name=resource_name,
+        uid=resource_uid,
+    )
     scope = await _authorized_scope(
         clusters=clusters, namespaces=namespaces, current=current, db=db
     )
+    if resource is not None:
+        selected_cluster_ids = tuple(scope["selected_cluster_ids"])
+        if len(selected_cluster_ids) != 1:
+            raise HTTPException(status_code=422, detail=INVALID_RESOURCE_DETAIL)
+        if resource.namespace is not None and (
+            selected_cluster_ids[0],
+            resource.namespace,
+        ) not in set(scope["namespace_refs"]):
+            raise HTTPException(status_code=422, detail=INVALID_RESOURCE_DETAIL)
+        scope["resource"] = resource
+        scope["resource_cluster_id"] = selected_cluster_ids[0]
     return checks_overview(**scope)
 
 
@@ -331,6 +358,39 @@ def _selected(axis: str, value: str | None) -> tuple[str, ...]:
 def _namespace_refs(value: str | None) -> tuple[tuple[str, str], ...]:
     selected = _selected("namespaces", value)
     return tuple(token.rpartition("/")[::2] for token in selected)
+
+
+def _resource_ref(
+    *,
+    api_group: str | None,
+    version: str | None,
+    kind: str | None,
+    namespace: str | None,
+    name: str | None,
+    uid: str | None,
+) -> ResourceRef | None:
+    raw = (api_group, version, kind, namespace, name, uid)
+    if all(value is None for value in raw):
+        return None
+    required = (version, kind, name, uid)
+    if any(value is None or value.strip() != value or not value for value in required):
+        raise HTTPException(status_code=422, detail=INVALID_RESOURCE_DETAIL)
+    if any(
+        value is not None and (value.strip() != value or any(ord(char) < 32 for char in value))
+        for value in raw
+    ):
+        raise HTTPException(status_code=422, detail=INVALID_RESOURCE_DETAIL)
+    try:
+        return ResourceRef(
+            api_group=api_group or "",
+            version=version or "",
+            kind=kind or "",
+            namespace=namespace or None,
+            name=name or "",
+            uid=uid or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=INVALID_RESOURCE_DETAIL) from exc
 
 
 def _require_requested_clusters(requested: Iterable[str], allowed: set[str]) -> None:

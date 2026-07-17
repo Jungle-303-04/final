@@ -16,6 +16,7 @@ import type {
 } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
+import type { ChecksPort } from "../../features/checks/checksContract";
 import { ResourcesPage } from "./ResourcesPage";
 import {
   EMPTY_POD_TERMINAL_PORT,
@@ -42,6 +43,7 @@ export function createResourcesSurface(
   podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort?: ResourceManifestPort,
   resourceIssuesPort?: ResourceIssuesPort,
+  checksPort?: ChecksPort,
   serviceAccessPort?: ServiceAccessPort,
   portForwardSessions?: PortForwardSessionPort,
 ): ComponentType {
@@ -62,6 +64,7 @@ export function createResourcesSurface(
         podTerminalPort={podTerminalPort}
         resourceManifestPort={resourceManifestPort}
         resourceIssuesPort={resourceIssuesPort}
+        checksPort={checksPort}
         serviceAccessPort={serviceAccessPort}
         portForwardSessions={portForwardSessions}
         port={port}

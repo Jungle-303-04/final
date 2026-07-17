@@ -92,7 +92,7 @@
     "reference.feature.126": "upstream-ui:resources:renderers:public-contract-boundary:v1",
     "reference.feature.127": "upstream-ui:api:client-boundary:request-orchestration:v1",
     "reference.feature.128": "upstream-ui:issues:resource:bounded-disclosure:v1",
-    "reference.feature.129": "upstream-ui:api:client-boundary:request-orchestration:v1",
+    "reference.feature.129": "upstream-ui:audit:resource:exact-agent-findings:v1",
     "reference.feature.130": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
     "reference.feature.131": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
     "reference.feature.132": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",

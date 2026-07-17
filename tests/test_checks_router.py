@@ -201,6 +201,36 @@ def test_checks_overview_is_scope_and_permission_bound_to_agent_observations() -
     assert body["visibility"]["clusters"][0]["state"] == "ok"
 
 
+def test_checks_overview_filters_exact_resource_identity_and_rejects_ambiguous_scope() -> None:
+    client = _client()
+    query = (
+        "clusters=cluster-a&namespaces=cluster-a/storefront"
+        "&resource_group=apps&resource_version=v1&resource_kind=Deployment"
+        "&resource_namespace=storefront&resource_name=checkout&resource_uid=uid-cluster-a"
+    )
+
+    response = client.get(f"/checks/overview?{query}")
+    wrong_uid = client.get(f"/checks/overview?{query.replace('uid-cluster-a', 'replacement-uid')}")
+    incomplete = client.get("/checks/overview?clusters=cluster-a&resource_kind=Deployment")
+    ambiguous = client.get(
+        "/checks/overview?clusters=cluster-a,cluster-b"
+        "&resource_version=v1&resource_kind=Node&resource_name=node-a&resource_uid=uid-node-a"
+    )
+    unbounded_namespace = client.get(
+        "/checks/overview?clusters=cluster-a"
+        "&resource_group=apps&resource_version=v1&resource_kind=Deployment"
+        "&resource_namespace=storefront&resource_name=checkout&resource_uid=uid-cluster-a"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["result_set"]["total_finding_count"] == 1
+    assert wrong_uid.status_code == 200
+    assert wrong_uid.json()["result_set"]["total_finding_count"] == 0
+    assert incomplete.status_code == 422
+    assert ambiguous.status_code == 422
+    assert unbounded_namespace.status_code == 422
+
+
 def test_checks_detail_resolves_an_agent_reported_catalog_entry() -> None:
     response = _client().get("/checks/workload-limits?clusters=cluster-a")
 

@@ -37,6 +37,8 @@ import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
 import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { ResourceIssuesSection } from "../../features/issues/ResourceIssuesSection";
 import { ResourceAccessPanel } from "./ResourceAccessPanel";
+import type { ChecksPort } from "../../features/checks/checksContract";
+import { ResourceChecksSection } from "./ResourceChecksSection";
 
 export function ResourceDetailBody({
   detail,
@@ -47,6 +49,7 @@ export function ResourceDetailBody({
   onMetricRangeChange,
   onNavigateResource,
   resourceIssues,
+  checksPort,
   onTabChange,
   tab,
 }: {
@@ -58,6 +61,7 @@ export function ResourceDetailBody({
   onMetricRangeChange: (range: ResourceMetricTimeRange) => void;
   onNavigateResource: (identity: ResourceIdentity) => void;
   resourceIssues: ResourceIssuesFrame;
+  checksPort?: ChecksPort;
   onTabChange: (tab: string) => void;
   tab: string;
 }) {
@@ -163,6 +167,7 @@ export function ResourceDetailBody({
           />
         ) : null}
         <ResourceIssuesSection frame={resourceIssues} />
+        {checksPort ? <ResourceChecksSection detail={detail.data} port={checksPort} /> : null}
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
           <ResourceMetricsCharts
             frame={metricHistory}

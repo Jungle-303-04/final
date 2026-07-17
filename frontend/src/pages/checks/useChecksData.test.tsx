@@ -15,6 +15,14 @@ describe("useChecksOverview", () => {
     const rendered = renderHook(() => useChecksOverview(port, {
       clusterIds: ["cluster-a"],
       namespaces: ["cluster-a/storefront"],
+      resource: {
+        apiGroup: "apps",
+        version: "v1",
+        kind: "Deployment",
+        namespace: "storefront",
+        name: "checkout",
+        uid: "uid-checkout",
+      },
     }));
 
     await act(async () => {
@@ -27,6 +35,9 @@ describe("useChecksOverview", () => {
     expect(port.getOverview).toHaveBeenCalledTimes(1);
     await act(async () => vi.advanceTimersByTime(1));
     expect(port.getOverview).toHaveBeenCalledTimes(2);
+    expect(port.getOverview).toHaveBeenLastCalledWith(expect.objectContaining({
+      resource: expect.objectContaining({ uid: "uid-checkout" }),
+    }), expect.any(AbortSignal));
     rendered.unmount();
   });
 });

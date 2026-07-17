@@ -28,6 +28,7 @@ import type {
   ResourceManifestPort,
 } from "../../features/resources/resourceManifestContract";
 import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
+import type { ChecksPort } from "../../features/checks/checksContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -86,6 +87,7 @@ export function ResourcesPage({
   portForwardSessions,
   resourceManifestPort,
   resourceIssuesPort,
+  checksPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
@@ -104,6 +106,7 @@ export function ResourcesPage({
   portForwardSessions?: PortForwardSessionPort;
   resourceManifestPort?: ResourceManifestPort;
   resourceIssuesPort?: ResourceIssuesPort;
+  checksPort?: ChecksPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -423,6 +426,7 @@ export function ResourcesPage({
             identity={state.detailIdentity}
             metricHistory={metricHistory}
             resourceIssues={resourceIssues}
+            checksPort={checksPort}
             manifestPort={resourceManifestPort}
             onUnauthorized={reportUnauthorized}
             onClose={state.closeDetail}
