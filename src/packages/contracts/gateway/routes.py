@@ -116,6 +116,7 @@ HELM_CHART_SOURCE_VERSIONS_PATH = "/helm/chart-sources/{source_id}/charts/{chart
 HELM_ARTIFACTHUB_SEARCH_PATH = "/helm/artifacthub/search"
 HELM_ARTIFACTHUB_CHART_PATH = "/helm/artifacthub/charts/{repository}/{chart}"
 HELM_ARTIFACTHUB_CHART_VERSION_PATH = "/helm/artifacthub/charts/{repository}/{chart}/{version}"
+HELM_REPOSITORY_UPDATE_PATH = "/helm/repositories/{name}/update"
 CLUSTER_HOME_INSIGHTS_PATH = "/clusters/{cluster_id}/home/insights"
 TRAFFIC_OVERVIEW_PATH = "/traffic/overview"
 COST_OVERVIEW_PATH = "/cost/overview"

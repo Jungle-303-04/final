@@ -146,3 +146,8 @@ class HelmRepositoryRefreshResult(StrictModel):
     source_id: str = Field(min_length=1, max_length=80)
     chart_count: int = Field(ge=0, le=HELM_CHART_PROVIDER_MAX_CHARTS)
     observed_at: str
+
+
+class HelmRepositoryRefreshAccepted(HelmRepositoryRefreshResult):
+    event_id: str = Field(min_length=1)
+    correlation_id: str = Field(min_length=1)

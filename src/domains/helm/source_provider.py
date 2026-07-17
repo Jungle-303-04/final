@@ -86,6 +86,12 @@ class _HelmProviderFailure(RuntimeError):
         self.reason_code = reason_code
 
 
+class HelmRepositoryRefreshError(RuntimeError):
+    def __init__(self, reason_code: str) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+
+
 class _BoundedSafeLoader(yaml.SafeLoader):
     """Reject YAML graph reuse and bound composition and construction work."""
 
@@ -205,14 +211,17 @@ class HelmChartVersionProvider:
             (source.source_id, source.reference, fingerprint),
             None,
         )
-        entries = await self._repository_entries(source, credential)
+        try:
+            entries = await self._repository_entries(source, credential)
+        except _HelmProviderFailure as exc:
+            raise HelmRepositoryRefreshError(exc.reason_code) from exc
         count = sum(
             1
             for name, versions in entries.items()
             if isinstance(name, str) and name.strip() and isinstance(versions, list)
         )
         if count > HELM_CHART_PROVIDER_MAX_CHARTS:
-            raise _HelmProviderFailure("helm_chart_source_response_too_large")
+            raise HelmRepositoryRefreshError("helm_chart_source_response_too_large")
         return HelmRepositoryRefreshResult(
             source_id=source.source_id,
             chart_count=count,

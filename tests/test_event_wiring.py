@@ -58,6 +58,7 @@ TERMINAL_SUBJECTS = {
     # Source deletion is committed configuration/audit evidence. Replaying it
     # through a worker would attempt the same mutation a second time.
     EventSubject.HELM_CHART_SOURCE_DELETED,
+    EventSubject.HELM_CHART_SOURCE_REFRESHED,
 }
 
 

@@ -13,7 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from domains.helm.artifacthub_provider import ArtifactHubProvider
-from domains.helm.events import HelmChartSourceDeletedBody
+from domains.helm.events import HelmChartSourceDeletedBody, HelmChartSourceRefreshedBody
 from domains.helm.repository import (
     HelmChartSourceConflict,
     HelmChartSourceIdentityConflict,
@@ -22,6 +22,7 @@ from domains.helm.repository import (
 from domains.helm.source_provider import (
     HelmChartVersionProvider,
     HelmProviderCredential,
+    HelmRepositoryRefreshError,
     helm_chart_credential_provider,
     helm_chart_credential_scope,
     helm_chart_source_from_row,
@@ -49,6 +50,7 @@ from packages.contracts.helm.sources import (
     HelmChartSourcePage,
     HelmChartSourceRegisterRequest,
     HelmChartVersionObservation,
+    HelmRepositoryRefreshAccepted,
 )
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -184,6 +186,75 @@ def _artifacthub_http_error(error: RuntimeError) -> HTTPException:
     }:
         return HTTPException(status_code=422, detail=code)
     return HTTPException(status_code=502, detail=code)
+
+
+@router.post(
+    gateway_routes.HELM_REPOSITORY_UPDATE_PATH,
+    response_model=HelmRepositoryRefreshAccepted,
+)
+async def update_helm_repository(
+    name: str = Path(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$",
+    ),
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmRepositoryRefreshAccepted:
+    workspace_id = _workspace_id(current)
+    source_ids = await accessible_helm_chart_source_ids(
+        db,
+        current,
+        workspace_id,
+        Permission.CONFIG_UPDATE.value,
+    )
+    batch = await asyncio.to_thread(
+        db.list_helm_chart_source_records,
+        workspace_id=workspace_id,
+        source_ids=source_ids,
+        limit=HELM_CHART_SOURCE_PAGE_MAX,
+    )
+    matches = tuple(
+        row
+        for row in batch.rows
+        if str(row.get("name") or "") == name
+        and str(row.get("provider") or "") == "repository"
+        and str(row.get("status") or "") == "active"
+    )
+    if len(matches) != 1:
+        raise HTTPException(status_code=404, detail=HELM_CHART_SOURCE_NOT_FOUND)
+    row = dict(matches[0])
+    source = helm_chart_source_from_row(row)
+    try:
+        credential = await asyncio.to_thread(
+            load_helm_provider_credential,
+            db,
+            workspace_id,
+            row,
+        )
+        refreshed = await provider.refresh_repository(source, credential=credential)
+    except CredentialEncryptionError as exc:
+        raise HTTPException(status_code=503, detail=HELM_CHART_CREDENTIAL_UNAVAILABLE) from exc
+    except HelmRepositoryRefreshError as exc:
+        raise HTTPException(status_code=502, detail=exc.reason_code) from exc
+    with event_workspace(workspace_id):
+        accepted = await events.accept_body(
+            HelmChartSourceRefreshedBody(
+                workspace_id=workspace_id,
+                source_id=refreshed.source_id,
+                name=source.name,
+                chart_count=refreshed.chart_count,
+                observed_at=refreshed.observed_at,
+            ),
+            actor=Actor(str(current.user_id), tuple(current.roles)),
+        )
+    return HelmRepositoryRefreshAccepted(
+        **refreshed.model_dump(mode="json"),
+        event_id=str(accepted.event.event_id),
+        correlation_id=str(accepted.event.correlation_id),
+    )
 
 
 @router.get(
