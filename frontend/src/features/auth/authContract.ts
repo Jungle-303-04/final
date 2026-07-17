@@ -1,8 +1,16 @@
 import type { MessageKey, TranslationParameters } from "../../shared/i18n";
 
 export interface ProductSession {
+  authEnabled: true;
+  authMode: "password" | "trusted_proxy";
   displayName?: string | null;
   email?: string | null;
+  groups: readonly string[];
+  logout: {
+    action: "end_session" | "upstream_identity_required";
+    supported: boolean;
+    reauthenticationExpected: boolean;
+  };
   userId: string;
   roles: readonly string[];
   workspaceId: string;

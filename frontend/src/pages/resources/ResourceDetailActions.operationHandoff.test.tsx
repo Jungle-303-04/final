@@ -58,6 +58,10 @@ describe("ResourceDetailActions operation handoff", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ProductSessionProvider session={{
+          authEnabled: true,
+          authMode: "password",
+          groups: [],
+          logout: { action: "end_session", supported: true, reauthenticationExpected: false },
           roles: ["viewer"],
           userId: "user-1",
           workspaceId: "workspace-1",

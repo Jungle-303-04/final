@@ -12,7 +12,19 @@ import { UnifiedFilterProvider } from "../features/filters/UnifiedFilterProvider
 import { I18nProvider } from "../shared/i18n";
 
 const testAuth: AuthenticatedAuthState = {
-  session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
+  session: {
+    authEnabled: true,
+    authMode: "password",
+    groups: [],
+    logout: {
+      action: "end_session",
+      supported: true,
+      reauthenticationExpected: false,
+    },
+    userId: "test-user",
+    roles: ["viewer"],
+    workspaceId: "test-workspace",
+  },
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,

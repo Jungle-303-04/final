@@ -252,8 +252,16 @@ function renderSettings(initialEntry: string, store?: OperationStatusStore) {
           <AuthSessionGateProvider reportUnauthorized={() => undefined}>
             <UnifiedFilterProvider>
               <ProductSessionProvider session={{
+                authEnabled: true,
+                authMode: "password",
                 displayName: "Woo Nyong",
                 email: "woonyong.kr@gmail.com",
+                groups: ["group-platform"],
+                logout: {
+                  action: "end_session",
+                  supported: true,
+                  reauthenticationExpected: false,
+                },
                 roles: ["service_admin"],
                 userId: "user-bf4f9d6a-acf5-5612-bcd9-00d938e4a063",
                 workspaceId: "default",

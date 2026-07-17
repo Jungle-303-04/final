@@ -47,6 +47,28 @@
       "interaction": "The browser resolves exact resource, namespace, and operation authority from product RBAC plus the connected outbound Agent capability before exposing resource actions, logs, service access, port forwarding, Helm operations, or observed resource kinds."
     },
     {
+      "sourceKey": "upstream-ui:auth:session:server-authority:v1",
+      "legacyContractId": "reference.feature.091",
+      "evidence": [
+        {
+          "path": "internal/server/server.go",
+          "sha256": "e5df3ea4ea2a5a7e0c8f3e4c63527be12890b84595c909b0631bdd96fb2c4129",
+          "symbol": "handleAuthMe"
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "useAuthMe"
+        },
+        {
+          "path": "web/src/components/UserMenu.tsx",
+          "sha256": "ef33803b4863fc498a2745075d55fff191410aebe96be66387a7a220e2e52b50",
+          "symbol": "UserMenu"
+        }
+      ],
+      "interaction": "The authenticated shell consumes one server-owned session identity with authentication mode, persistent groups and roles, and semantic logout capability; source-only cloud tiers and raw proxy logout URLs are deliberately excluded."
+    },
+    {
       "sourceKey": "upstream-ui:nodes:drain:confirm-and-progress:v1",
       "legacyContractId": "reference.feature.174",
       "evidence": [

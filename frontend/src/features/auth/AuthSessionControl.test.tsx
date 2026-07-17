@@ -36,6 +36,14 @@ describe("AuthSessionControl", () => {
 function renderControl(mode: "panel" | "toolbar") {
   const auth: AuthenticatedAuthState = {
     session: {
+      authEnabled: true,
+      authMode: "password",
+      groups: [],
+      logout: {
+        action: "end_session",
+        supported: true,
+        reauthenticationExpected: false,
+      },
       roles: ["viewer"],
       userId: "operator@example.com",
       workspaceId: "production-workspace-with-a-long-identifier",

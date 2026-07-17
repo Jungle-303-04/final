@@ -3838,11 +3838,11 @@
     {
       "id": "reference-feature-091",
       "contractId": "reference.feature.091",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:auth:session:server-authority:v1",
       "legacyContractIds": [
         "reference.feature.091"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 362,
       "cells": [
@@ -3858,17 +3858,34 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.AuthSessionResponse",
+      "frontendContract": "frontend/src/features/auth/authContract.ts#ProductSession",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_identity_auth_routes.py",
+        "tests/test_password_auth.py",
+        "tests/test_identity_repository.py",
+        "frontend/src/api/auth.test.ts",
+        "frontend/src/features/auth/createAuthAdapter.test.ts",
+        "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx",
+        "scripts/reference-feature-ledger.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/identity/router.py#session",
+          "consumer": "src/services/gateway/api-gateway/auth.py#PasswordAuthService.session_identity",
+          "reason": "The existing authenticated session endpoint derives password versus trusted-proxy mode from the validated session authority, projects persistent workspace groups and roles, and exposes logout effects without a proxy URL or secret.",
+          "test": "tests/test_identity_auth_routes.py#test_password_session_exposes_storage_owned_auth_context_without_source_only_role"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/ui/blocks/SidebarProfileMenu.tsx#SidebarProfileMenu",
+          "consumer": "frontend/src/features/auth/createAuthAdapter.ts#createAuthAdapter",
+          "reason": "The strict session schema and existing AuthBarrier carry server-owned identity and prevent the user menu from claiming a sign-out that trusted-proxy injection cannot perform.",
+          "test": "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

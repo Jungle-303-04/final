@@ -592,6 +592,37 @@
         }
       }
     },
+    "reference.feature.091": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.AuthSessionResponse",
+      "frontendContract": "frontend/src/features/auth/authContract.ts#ProductSession",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_identity_auth_routes.py",
+        "tests/test_password_auth.py",
+        "tests/test_identity_repository.py",
+        "frontend/src/api/auth.test.ts",
+        "frontend/src/features/auth/createAuthAdapter.test.ts",
+        "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx",
+        "scripts/reference-feature-ledger.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/identity/router.py#session",
+          "consumer": "src/services/gateway/api-gateway/auth.py#PasswordAuthService.session_identity",
+          "reason": "The existing authenticated session endpoint derives password versus trusted-proxy mode from the validated session authority, projects persistent workspace groups and roles, and exposes logout effects without a proxy URL or secret.",
+          "test": "tests/test_identity_auth_routes.py#test_password_session_exposes_storage_owned_auth_context_without_source_only_role"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/ui/blocks/SidebarProfileMenu.tsx#SidebarProfileMenu",
+          "consumer": "frontend/src/features/auth/createAuthAdapter.ts#createAuthAdapter",
+          "reason": "The strict session schema and existing AuthBarrier carry server-owned identity and prevent the user menu from claiming a sign-out that trusted-proxy injection cannot perform.",
+          "test": "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx"
+        }
+      }
+    },
     "reference.feature.092": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.bootstrap.VersionCheckResponse",

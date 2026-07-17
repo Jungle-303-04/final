@@ -14,6 +14,14 @@ export function homeApiResponse(path: string): Response {
   const responses: Record<string, unknown> = {
     "/api/auth/session": {
       authenticated: true,
+      auth_enabled: true,
+      auth_mode: "password",
+      groups: ["group-platform"],
+      logout: {
+        action: "end_session",
+        supported: true,
+        reauthentication_expected: false,
+      },
       user_id: "test-user",
       roles: ["viewer"],
       workspace_id: "test-workspace",

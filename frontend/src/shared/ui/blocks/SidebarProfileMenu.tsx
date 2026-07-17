@@ -33,6 +33,7 @@ export function SidebarProfileMenu({
   const { t } = useI18n();
   const { isMobile } = useSidebar();
   const issueId = useId();
+  const logoutCapabilityId = useId();
   const profile = presentProductSession(auth.session);
   const openLabel = t("shell.profile.open", { name: profile.displayName });
   const issueMessage = auth.signOutIssue
@@ -96,10 +97,14 @@ export function SidebarProfileMenu({
         <ThemeSelectionList controller={themeController} />
         <Separator className="my-1" />
         <Button
-          aria-describedby={auth.signOutIssue ? issueId : undefined}
+          aria-describedby={auth.signOutIssue
+            ? issueId
+            : auth.session.logout.supported
+              ? undefined
+              : logoutCapabilityId}
           aria-busy={auth.signOutPending || undefined}
           className="w-full justify-start"
-          disabled={auth.signOutPending}
+          disabled={auth.signOutPending || !auth.session.logout.supported}
           onClick={auth.onSignOut}
           variant="ghost"
         >
@@ -113,6 +118,11 @@ export function SidebarProfileMenu({
             <AlertTitle>{t("auth.logout.error.title")}</AlertTitle>
             <AlertDescription>{issueMessage}</AlertDescription>
           </Alert>
+        ) : null}
+        {!auth.session.logout.supported ? (
+          <p className="px-2 py-1.5 text-xs text-muted-foreground" id={logoutCapabilityId}>
+            {t("auth.logout.upstreamManaged")}
+          </p>
         ) : null}
       </PopoverContent>
     </Popover>

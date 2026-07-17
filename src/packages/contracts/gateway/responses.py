@@ -58,13 +58,39 @@ class EventIdAcceptedResponse(StrictModel):
     event_id: str
 
 
+class AuthLogoutCapability(StrictModel):
+    action: Literal["end_session", "upstream_identity_required"]
+    supported: bool
+    reauthentication_expected: bool
+
+
 class AuthSessionResponse(StrictModel):
-    authenticated: bool
+    authenticated: Literal[True]
+    auth_enabled: Literal[True]
+    auth_mode: Literal["password", "trusted_proxy"]
     display_name: str | None = None
     email: str | None = None
-    user_id: str
-    roles: list[str]
-    workspace_id: str
+    user_id: str = Field(min_length=1)
+    groups: list[str]
+    roles: list[str] = Field(min_length=1)
+    workspace_id: str = Field(min_length=1)
+    logout: AuthLogoutCapability
+
+    @model_validator(mode="after")
+    def validate_logout_semantics(self) -> Self:
+        expected = (
+            ("end_session", True, False)
+            if self.auth_mode == "password"
+            else ("upstream_identity_required", False, True)
+        )
+        actual = (
+            self.logout.action,
+            self.logout.supported,
+            self.logout.reauthentication_expected,
+        )
+        if actual != expected:
+            raise ValueError("logout capability must match the authentication authority")
+        return self
 
 
 class EmailCheckResponse(StrictModel):

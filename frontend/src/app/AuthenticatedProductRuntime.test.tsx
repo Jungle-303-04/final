@@ -25,7 +25,19 @@ vi.mock("./ProductRouter", () => ({
 import { AuthenticatedProductRuntime } from "./AuthenticatedProductRuntime";
 
 const auth: AuthenticatedAuthState = {
-  session: { userId: "qa-user", roles: ["viewer"], workspaceId: "qa-workspace" },
+  session: {
+    authEnabled: true,
+    authMode: "password",
+    groups: [],
+    logout: {
+      action: "end_session",
+      supported: true,
+      reauthenticationExpected: false,
+    },
+    userId: "qa-user",
+    roles: ["viewer"],
+    workspaceId: "qa-workspace",
+  },
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,

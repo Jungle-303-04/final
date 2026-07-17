@@ -255,6 +255,7 @@ export const en = {
   "auth.logout.error.message": "We could not complete the sign-out request. Check the connection and try again.",
   "auth.logout.error.title": "Session sign-out error",
   "auth.logout.pending": "Signing out",
+  "auth.logout.upstreamManaged": "Sign-out is managed by the trusted proxy. This session cannot end the upstream identity.",
   "auth.password.error.required": "Enter your password.",
   "auth.password.label": "Password",
   "auth.session.retry": "Check session again",

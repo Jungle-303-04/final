@@ -1,17 +1,44 @@
 import { z } from "zod";
 import { recentChangeItemSchema } from "./recent-changes-schemas";
+import type { AuthEndpointSession } from "../features/auth/authEndpointContract";
 
 const nullableStringSchema = z.string().nullable();
 const integerSchema = z.number().int();
 
+const authLogoutCapabilitySchema = z.strictObject({
+  action: z.enum(["end_session", "upstream_identity_required"]),
+  supported: z.boolean(),
+  reauthentication_expected: z.boolean(),
+});
+
 export const authSessionSchema = z.strictObject({
-  authenticated: z.boolean(),
+  authenticated: z.literal(true),
+  auth_enabled: z.literal(true),
+  auth_mode: z.enum(["password", "trusted_proxy"]),
   display_name: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
-  user_id: z.string(),
-  roles: z.array(z.string()),
-  workspace_id: z.string(),
-});
+  user_id: z.string().min(1),
+  groups: z.array(z.string().min(1)),
+  roles: z.array(z.string().min(1)).min(1),
+  workspace_id: z.string().min(1),
+  logout: authLogoutCapabilitySchema,
+}).superRefine((session, context) => {
+  const expected = session.auth_mode === "password"
+    ? ["end_session", true, false] as const
+    : ["upstream_identity_required", false, true] as const;
+  const actual = [
+    session.logout.action,
+    session.logout.supported,
+    session.logout.reauthentication_expected,
+  ] as const;
+  if (actual.some((value, index) => value !== expected[index])) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "logout capability must match the authentication authority",
+      path: ["logout"],
+    });
+  }
+}) satisfies z.ZodType<AuthEndpointSession>;
 
 export const logoutResponseSchema = z.strictObject({
   authenticated: z.literal(false),

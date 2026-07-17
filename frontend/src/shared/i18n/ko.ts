@@ -255,6 +255,7 @@ export const ko = {
   "auth.logout.error.message": "로그아웃 요청을 완료하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
   "auth.logout.error.title": "세션 종료 오류",
   "auth.logout.pending": "로그아웃 중",
+  "auth.logout.upstreamManaged": "로그아웃은 신뢰 프록시가 관리합니다. 이 세션에서는 외부 신원을 종료할 수 없습니다.",
   "auth.password.error.required": "비밀번호를 입력하세요.",
   "auth.password.label": "비밀번호",
   "auth.session.retry": "세션 다시 확인",

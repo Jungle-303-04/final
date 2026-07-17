@@ -1060,6 +1060,50 @@ test("런타임 health는 공개 준비 상태와 인증 진단 경계를 분리
   assert.equal(feature.sourceKey, sourceKey);
 });
 
+test("인증 세션은 원본 auth identity와 저장소 권위 로그아웃 의미를 연결한다", async () => {
+  const [portMap, aliases, identities, sourceLedger, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-identities.json"),
+    readRepositoryJson("../docs/migration/reference-source-ledger.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.091";
+  const sourceKey = "upstream-ui:auth:session:server-authority:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  const identity = identities.identities.find((candidate) => candidate.sourceKey === sourceKey);
+  const hashes = new Map(sourceLedger.files.map((file) => [file.path, file.sha256]));
+
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(identity.legacyContractId, contractId);
+  assert.deepEqual(
+    identity.evidence.map(({ path, sha256, symbol }) => ({ path, sha256, symbol })),
+    [
+      {
+        path: "internal/server/server.go",
+        sha256: hashes.get("internal/server/server.go"),
+        symbol: "handleAuthMe",
+      },
+      {
+        path: "web/src/api/client.ts",
+        sha256: hashes.get("web/src/api/client.ts"),
+        symbol: "useAuthMe",
+      },
+      {
+        path: "web/src/components/UserMenu.tsx",
+        sha256: hashes.get("web/src/components/UserMenu.tsx"),
+        symbol: "UserMenu",
+      },
+    ],
+  );
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+});
+
 test("Helm 리비전 비교는 URL 재개와 Python artifact 증거로 완결한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),

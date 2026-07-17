@@ -478,7 +478,7 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `AcceptedResponse` | `accepted: bool`, `event_id: str`, `correlation_id: str` |
 | `AcceptedEventResponse` | `AcceptedResponse` + `event: JsonMap` |
 | `EventIdAcceptedResponse` | `accepted: bool`, `event_id: str` |
-| `AuthSessionResponse` | `authenticated: bool`, `user_id: str`, `roles: list[str]`, `workspace_id: str` |
+| `AuthSessionResponse` | `authenticated: true`, `auth_enabled: true`, `auth_mode: password | trusted_proxy`, `user_id`, `groups`, `roles`, `workspace_id`, typed `logout` capability |
 | `EmailVerificationResponse` | `accepted: bool`, `verification_required: bool`, `email: str \| None = None` |
 | `UserApprovalResponse` | `accepted: bool`, `user_id: str`, `status: str`, `role: str`, `workspace_id: str` |
 | `LogoutResponse` | `authenticated: bool` |

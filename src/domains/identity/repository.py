@@ -381,6 +381,26 @@ class IdentityAccessRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
 
+    def list_active_group_ids_for_user(self, user_id: str, workspace_id: str) -> list[str]:
+        """Return persistent RBAC group identities for one exact workspace subject."""
+
+        group = self.group_table
+        member = self.group_member_table
+        statement = (
+            select(group.c.group_id)
+            .select_from(member.join(group, member.c.group_id == group.c.group_id))
+            .where(
+                member.c.user_id == user_id,
+                member.c.status == AccessStatus.ACTIVE.value,
+                group.c.organization_id == workspace_id,
+                group.c.status == AccessStatus.ACTIVE.value,
+            )
+            .order_by(group.c.group_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [str(row["group_id"]) for row in rows]
+
     def create_user(
         self,
         user_id: str,

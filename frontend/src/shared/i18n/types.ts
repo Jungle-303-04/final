@@ -211,6 +211,7 @@ type CoreMessageKey =
   | "auth.logout.error.message"
   | "auth.logout.error.title"
   | "auth.logout.pending"
+  | "auth.logout.upstreamManaged"
   | "auth.password.label"
   | "auth.password.error.required"
   | "auth.session.retry"

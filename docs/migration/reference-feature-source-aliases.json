@@ -60,6 +60,7 @@
     "reference.feature.077": "upstream-ui:service-access:port-session:list-and-layout:v1",
     "reference.feature.089": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
     "reference.feature.090": "upstream-ui:api:client-boundary:request-orchestration:v1",
+    "reference.feature.091": "upstream-ui:auth:session:server-authority:v1",
     "reference.feature.092": "upstream-ui:api:client-boundary:request-orchestration:v1",
     "reference.feature.093": "upstream-ui:shell:connection-state:authorized-refresh:v1",
     "reference.feature.094": "upstream-ui:shell:connection-state:authorized-refresh:v1",

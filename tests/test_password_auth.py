@@ -52,7 +52,7 @@ def test_session_identity_uses_active_user_role_and_workspace_groups() -> None:
     assert service.session_identity("user-1", "workspace-a") == {
         "display_name": "Operator",
         "email": "operator@example.com",
-        "groups": ["group-release", "group-platform"],
+        "groups": ["group-platform", "group-release"],
         "roles": ["user"],
     }
 

@@ -234,6 +234,29 @@ class PasswordAuthService:
             "email": str(user["email"]),
         }
 
+    def session_identity(self, user_id: str, workspace_id: str) -> dict[str, object] | None:
+        """Resolve profile and RBAC identity from persistent authority, not browser/session hints."""
+
+        user = self.db.get_user_by_id(user_id)
+        if user is None or str(user.get("status")) != UserStatus.ACTIVE.value:
+            return None
+        role = str(user.get("role") or "").strip()
+        if not role:
+            return None
+        groups = sorted(
+            {
+                str(group_id).strip()
+                for group_id in self.db.list_active_group_ids_for_user(user_id, workspace_id)
+                if str(group_id).strip()
+            }
+        )
+        return {
+            "display_name": str(user["display_name"]),
+            "email": str(user["email"]) if user.get("email") is not None else None,
+            "groups": groups,
+            "roles": [role],
+        }
+
 
 def user_id_from_record(user: dict[str, object]) -> str:
     return str(user.get("user_id") or user["id"])
