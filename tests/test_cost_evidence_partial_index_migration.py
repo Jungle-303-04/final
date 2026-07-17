@@ -16,6 +16,7 @@ from domains.target.models import EvidenceWindow
 from packages.contracts.cost.observations import COST_EVIDENCE_METRICS
 
 ROOT = Path(__file__).resolve().parents[1]
+HEAD_REVISION = "20260718_0100"
 REVISION = "20260718_0010"
 DOWN_REVISION = "20260717_2000"
 INDEX_NAME = "ix_evidence_windows_cost_workspace_cluster_updated"
@@ -86,7 +87,7 @@ def test_cost_evidence_partial_index_upgrade_and_downgrade_are_online_safe(
 ) -> None:
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
-    assert tuple(script.get_heads()) == (REVISION,)
+    assert tuple(script.get_heads()) == (HEAD_REVISION,)
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
     assert COST_EVIDENCE_KEYS == COST_EVIDENCE_METRICS
 

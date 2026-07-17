@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import Text, and_, column, func, or_, select, true, update, values
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.inventory.change_correlation import correlate_inventory_timeline_events
@@ -24,6 +24,7 @@ from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
     ClusterUsageSampleRecord,
+    live_inventory_snapshot_clause,
 )
 from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
@@ -102,12 +103,49 @@ class InventorySnapshotMutation:
     timeline_events: tuple[TimelineEvent, ...] = ()
 
 
-def live_inventory_snapshot_clause(table: Any) -> Any:
-    """Legacy/normal snapshots are fleet truth; label-scoped RCA snapshots are not."""
-    return func.coalesce(
-        table.c.summary["summary"]["live_inventory"].as_boolean(),
-        True,
-    ).is_(True)
+def _latest_inventory_snapshots_statement(
+    workspace_id: str,
+    cluster_ids: Iterable[str],
+) -> Any:
+    """Build one bounded index lookup per requested cluster inside one SQL statement.
+
+    A window rank over the append-only snapshot history reads every historical row
+    for every selected cluster before it can retain rank one.  The lateral lookup
+    instead performs one ordered probe against
+    ``ix_inventory_snapshots_live_scope_latest`` and stops at the first live
+    snapshot for each distinct requested cluster.
+    """
+
+    canonical_ids = tuple(sorted(set(cluster_ids)))
+    requested = (
+        values(column("cluster_id", Text), name="requested_inventory_clusters")
+        .data([(cluster_id,) for cluster_id in canonical_ids])
+        .alias("requested_inventory_clusters")
+    )
+    table = ClusterInventorySnapshotRecord.__table__
+    latest = (
+        select(
+            table.c.snapshot_id,
+            table.c.workspace_id,
+            table.c.cluster_id,
+            table.c.agent_id,
+            table.c.source,
+            table.c.status,
+            table.c.collected_at,
+            table.c.resource_count,
+            table.c.summary,
+            table.c.created_at,
+        )
+        .where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == requested.c.cluster_id,
+            live_inventory_snapshot_clause(table),
+        )
+        .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
+        .limit(1)
+        .lateral("latest_inventory_snapshot")
+    )
+    return select(latest).select_from(requested.join(latest, true()))
 
 
 def parse_timestamp(value: str | None) -> datetime | None:
@@ -2013,44 +2051,14 @@ class InventoryRepository(DatabaseConnection):
         workspace_id: str,
         cluster_ids: set[str],
     ) -> dict[str, JsonObject]:
-        """클러스터별 최신 snapshot을 한 번의 window query로 반환한다."""
+        """클러스터별 최신 snapshot을 인덱스 기반 lateral lookup 한 번으로 반환한다."""
         if not cluster_ids:
             return {}
-        table = ClusterInventorySnapshotRecord.__table__
-        ranked = (
-            select(
-                table.c.snapshot_id,
-                table.c.workspace_id,
-                table.c.cluster_id,
-                table.c.agent_id,
-                table.c.source,
-                table.c.status,
-                table.c.collected_at,
-                table.c.resource_count,
-                table.c.summary,
-                table.c.created_at,
-                func.row_number()
-                .over(
-                    partition_by=table.c.cluster_id,
-                    order_by=(table.c.created_at.desc(), table.c.snapshot_id.desc()),
-                )
-                .label("snapshot_rank"),
-            )
-            .where(
-                table.c.workspace_id == workspace_id,
-                table.c.cluster_id.in_(cluster_ids),
-                live_inventory_snapshot_clause(table),
-            )
-            .subquery()
-        )
-        statement = select(ranked).where(ranked.c.snapshot_rank == 1)
+        statement = _latest_inventory_snapshots_statement(workspace_id, cluster_ids)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return {
-            str(row["cluster_id"]): self.serialize_inventory_snapshot(
-                {key: value for key, value in dict(row).items() if key != "snapshot_rank"}
-            )
-            for row in rows
+            str(row["cluster_id"]): self.serialize_inventory_snapshot(dict(row)) for row in rows
         }
 
     def inventory_resource_counts(

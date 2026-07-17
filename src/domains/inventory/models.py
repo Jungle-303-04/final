@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, Integer, Text, text
+from sqlalchemy import BigInteger, Index, Integer, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,14 @@ from packages.storage.base import (
     text_column,
     updated_at_column,
 )
+
+
+def live_inventory_snapshot_clause(table: Any) -> Any:
+    """Legacy and normal snapshots are fleet truth; scoped RCA snapshots are not."""
+    return func.coalesce(
+        table.c.summary["summary"]["live_inventory"].as_boolean(),
+        True,
+    ).is_(True)
 
 
 class ClusterInventorySnapshotRecord(Base):
@@ -33,6 +41,16 @@ class ClusterInventorySnapshotRecord(Base):
     resource_count: Mapped[int] = mapped_column(Integer, nullable=False)
     summary: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
+
+
+Index(
+    "ix_inventory_snapshots_live_scope_latest",
+    ClusterInventorySnapshotRecord.workspace_id,
+    ClusterInventorySnapshotRecord.cluster_id,
+    ClusterInventorySnapshotRecord.created_at.desc(),
+    ClusterInventorySnapshotRecord.snapshot_id.desc(),
+    postgresql_where=live_inventory_snapshot_clause(ClusterInventorySnapshotRecord.__table__),
+)
 
 
 class ClusterInventoryResourceRecord(Base):
