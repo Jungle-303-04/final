@@ -16,6 +16,7 @@ from domains.inventory_filter.repository import (
     _current_versions,
     _physical_topology_statements,
     _resource_metric_history_statements,
+    _resource_page_statements,
 )
 
 
@@ -83,6 +84,11 @@ class _MappedResult:
     def all(self) -> list[dict[str, Any]]:
         return self.rows
 
+    def one(self) -> dict[str, Any]:
+        if len(self.rows) != 1:
+            raise AssertionError("expected exactly one test row")
+        return self.rows[0]
+
 
 def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> None:
     sql = _sql(
@@ -95,7 +101,15 @@ def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> N
     )
 
     assert "inventory_filter_revisions.workspace_id = 'workspace-a'" in sql
-    assert "inventory_filter_revisions.cluster_id in ('cluster-a', 'cluster-b')" in sql
+    assert "values ('cluster-a'), ('cluster-b')" in sql
+    assert "join lateral" in sql
+    assert (
+        "inventory_filter_revisions.cluster_id = "
+        "latest_inventory_revisions_at_cursor_clusters.cluster_id"
+    ) in sql
+    assert "order by inventory_filter_revisions.revision_id desc" in sql
+    assert "limit 1" in sql
+    assert "row_number" not in sql
     assert "inventory_filter_revisions.revision_id <= 42" in sql
     assert "inventory_resource_versions.workspace_id = 'workspace-a'" in sql
     assert "inventory_resource_versions.cluster_id in ('cluster-a', 'cluster-b')" in sql
@@ -257,7 +271,141 @@ def test_filter_snapshot_contexts_reads_each_cluster_freshness_in_one_scoped_que
     }
     sql = _sql(connection_instance.statements[0])
     assert "workspace_id = 'workspace-a'" in sql
-    assert "cluster_id in ('cluster-a', 'cluster-b')" in sql
+    assert "values ('cluster-a'), ('cluster-b')" in sql
+    assert "join lateral" in sql
+    assert (
+        "inventory_filter_revisions.cluster_id = "
+        "latest_inventory_filter_revisions_clusters.cluster_id"
+    ) in sql
+    assert "order by inventory_filter_revisions.revision_id desc" in sql
+    assert "limit 1" in sql
+    assert "row_number" not in sql
+
+
+def test_resource_page_limits_scalar_keys_before_full_row_expansion() -> None:
+    page, counts_equivalent, empty_count = _resource_page_statements(
+        workspace_id="workspace-private",
+        cluster_ids=("cluster-a", "tenant/eu/prod"),
+        allowed_application_ids=("app-a",),
+        filters=_filters(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            resource_types=None,
+            health=None,
+            labels=None,
+            query=None,
+        ),
+        snapshot_revision=42,
+        position=None,
+        limit=1,
+        graph_priority=False,
+    )
+
+    sql = _sql(page)
+    count_sql = _sql(empty_count)
+    page_projection = sql.partition("select inventory_resource_versions.version_id")[0]
+
+    assert counts_equivalent is True
+    assert "values ('cluster-a'), ('tenant/eu/prod')" in sql
+    assert "join lateral" in sql
+    assert "workspace_id = 'workspace-private'" in sql
+    assert "cluster_id in ('cluster-a', 'tenant/eu/prod')" in sql
+    assert "filtered_inventory_page as" in sql
+    assert "limit 2" in sql
+    assert "inventory_resource_versions.version_id = filtered_inventory_page.version_id" in sql
+    assert "inventory_resource_versions.labels" not in page_projection
+    assert "inventory_resource_versions.summary" not in page_projection
+    assert "inventory_resource_versions.labels" not in count_sql
+    assert "inventory_resource_versions.summary" not in count_sql
+    assert sql.count("count(*)") == 1
+    assert count_sql.count("count(*)") == 1
+    assert "row_number" not in sql
+
+
+def test_resource_page_counts_filtered_and_authorized_multi_cluster_scopes() -> None:
+    page, counts_equivalent, empty_count = _resource_page_statements(
+        workspace_id="workspace-private",
+        cluster_ids=("cluster-a", "tenant/eu/prod"),
+        allowed_application_ids=("app-a", "app-private"),
+        filters=_filters(
+            clusters="tenant/eu/prod",
+            namespaces="tenant/eu/prod/shop",
+            applications="app-private",
+            resource_types="workload",
+            health="healthy",
+            labels="team=payments",
+            query="checkout",
+        ),
+        snapshot_revision=42,
+        position=None,
+        limit=20,
+        graph_priority=False,
+    )
+
+    sql = _sql(page)
+    count_sql = _sql(empty_count)
+
+    assert counts_equivalent is False
+    for statement_sql in (sql, count_sql):
+        assert "workspace_id = 'workspace-private'" in statement_sql
+        assert "cluster_id in ('cluster-a', 'tenant/eu/prod')" in statement_sql
+        assert "cluster_id in ('tenant/eu/prod')" in statement_sql
+        assert "namespace = 'shop'" in statement_sql
+        assert "application_id in ('app-private')" in statement_sql
+        assert "selected_label_0.key = 'team'" in statement_sql
+        assert "selected_label_0.value = 'payments'" in statement_sql
+        assert "search_text like '%%checkout%%'" in statement_sql
+        assert statement_sql.count("count(*)") == 2
+
+
+def test_empty_resource_page_resolves_equal_counts_with_one_fallback_query() -> None:
+    class Connection:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
+        def execute(self, statement: Any) -> _MappedResult:
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                return _MappedResult([])
+            return _MappedResult([{"filtered_count": 7}])
+
+    connection_instance = Connection()
+
+    @contextmanager
+    def connection() -> Iterator[Connection]:
+        yield connection_instance
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+
+    result = repository.list_filtered_resources(
+        workspace_id="workspace-private",
+        allowed_cluster_ids={"cluster-a", "tenant/eu/prod"},
+        allowed_application_ids={"app-a"},
+        filters=_filters(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            resource_types=None,
+            health=None,
+            labels=None,
+            query=None,
+        ),
+        snapshot_revision=42,
+        position=None,
+        limit=1,
+    )
+
+    assert result == {
+        "items": [],
+        "filtered_count": 7,
+        "unfiltered_count": 7,
+        "has_more": False,
+        "next_position": None,
+    }
+    assert len(connection_instance.statements) == 2
+    assert _sql(connection_instance.statements[1]).count("count(*)") == 1
 
 
 def test_resource_filter_sql_uses_same_axis_or_cross_axis_and_and_label_and() -> None:

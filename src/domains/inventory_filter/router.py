@@ -1062,23 +1062,22 @@ async def _authorized_scope(db: Any, current: Any) -> AuthorizedFilterScope:
     if not workspace_id or not user_id:
         raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
 
-    def resolve() -> tuple[set[str], set[str]]:
-        return (
-            resolve_allowed_cluster_ids(
-                db,
-                current,
-                workspace_id,
-                Permission.INVENTORY_READ.value,
-            ),
-            resolve_allowed_application_ids(
-                db,
-                current,
-                workspace_id,
-                Permission.APPLICATION_READ.value,
-            ),
-        )
-
-    cluster_ids, application_ids = await asyncio.to_thread(resolve)
+    cluster_ids, application_ids = await asyncio.gather(
+        asyncio.to_thread(
+            resolve_allowed_cluster_ids,
+            db,
+            current,
+            workspace_id,
+            Permission.INVENTORY_READ.value,
+        ),
+        asyncio.to_thread(
+            resolve_allowed_application_ids,
+            db,
+            current,
+            workspace_id,
+            Permission.APPLICATION_READ.value,
+        ),
+    )
     revision = authorization_revision(
         user_id=user_id,
         workspace_id=workspace_id,

@@ -10,7 +10,23 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Integer, Select, and_, case, cast, func, literal, or_, select, tuple_, update
+from sqlalchemy import (
+    Integer,
+    Select,
+    Text,
+    and_,
+    case,
+    cast,
+    column,
+    func,
+    literal,
+    or_,
+    select,
+    true,
+    tuple_,
+    update,
+    values,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
@@ -594,25 +610,12 @@ class InventoryFilterRepository(DatabaseConnection):
         cluster_ids = _ids(allowed_cluster_ids)
         if not workspace_id or not cluster_ids:
             return {}
-        table = InventoryFilterRevision.__table__
-        ranked = (
-            select(
-                table,
-                func.row_number()
-                .over(
-                    partition_by=table.c.cluster_id,
-                    order_by=table.c.revision_id.desc(),
-                )
-                .label("rank"),
-            )
-            .where(
-                table.c.workspace_id == workspace_id,
-                table.c.cluster_id.in_(cluster_ids),
-                *((table.c.revision_id <= at_revision,) if at_revision is not None else ()),
-            )
-            .cte("latest_inventory_filter_revisions")
+        statement = _latest_filter_revisions_statement(
+            workspace_id,
+            cluster_ids,
+            at_revision=at_revision,
+            name="latest_inventory_filter_revisions",
         )
-        statement = select(ranked).where(ranked.c.rank == 1)
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(statement).mappings().all()]
         by_cluster = {str(row["cluster_id"]): row for row in rows}
@@ -1227,45 +1230,16 @@ class InventoryFilterRepository(DatabaseConnection):
         if not workspace_id or not cluster_ids or snapshot_revision <= 0:
             return _empty_page()
         effective_limit = max(1, min(limit, 200))
-        current = _current_versions(
-            workspace_id,
-            cluster_ids,
-            snapshot_revision,
-            include_deleted=filters.include_deleted,
-        )
-        base = select(current).where(current.c.rank == 1)
-        base_cte = base.cte("authorized_inventory_versions")
-        filtered = _apply_resource_filters(
-            base_cte,
-            filters=filters,
+        page, counts_equivalent, count_statement = _resource_page_statements(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
             allowed_application_ids=application_ids,
-        ).cte("filtered_inventory_versions")
-        unfiltered_count = select(func.count()).select_from(base_cte).scalar_subquery()
-        filtered_count = select(func.count()).select_from(filtered).scalar_subquery()
-        page = select(
-            filtered,
-            filtered_count.label("filtered_count"),
-            unfiltered_count.label("unfiltered_count"),
+            filters=filters,
+            snapshot_revision=snapshot_revision,
+            position=position,
+            limit=effective_limit,
+            graph_priority=graph_priority,
         )
-        if graph_priority and position:
-            raise ValueError("graph-priority resource pages do not support a cursor position")
-        if position:
-            page = page.where(_sort_tuple(filtered) > _position_tuple(position))
-        order = _sort_columns(filtered)
-        if graph_priority:
-            order = (
-                case(
-                    (
-                        filtered.c.resource_type.in_(
-                            ("workload", "pod", "node", "service", "endpoint")
-                        ),
-                        0,
-                    ),
-                    else_=1,
-                ),
-                *order,
-            )
-        page = page.order_by(*order).limit(effective_limit + 1)
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(page).mappings().all()]
             has_more = len(rows) > effective_limit
@@ -1281,10 +1255,17 @@ class InventoryFilterRepository(DatabaseConnection):
                 workspace_id,
                 {str(row["cluster_id"]) for row in rows},
             )
-        filtered_total = int(rows[0]["filtered_count"]) if rows else _count(filtered_count, self)
-        unfiltered_total = (
-            int(rows[0]["unfiltered_count"]) if rows else _count(unfiltered_count, self)
-        )
+            if rows:
+                filtered_total = int(rows[0]["filtered_count"])
+                unfiltered_total = (
+                    filtered_total if counts_equivalent else int(rows[0]["unfiltered_count"])
+                )
+            else:
+                count_row = conn.execute(count_statement).mappings().one()
+                filtered_total = int(count_row["filtered_count"])
+                unfiltered_total = (
+                    filtered_total if counts_equivalent else int(count_row["unfiltered_count"])
+                )
         items = [
             _serialize_version_row(
                 row,
@@ -1537,9 +1518,229 @@ class InventoryFilterRepository(DatabaseConnection):
         }
 
 
-def _count(scalar_statement: Any, repository: DatabaseConnection) -> int:
-    with repository.connection() as conn:
-        return int(conn.execute(select(scalar_statement)).scalar_one())
+def _latest_filter_revisions_statement(
+    workspace_id: str,
+    cluster_ids: Collection[str],
+    *,
+    at_revision: int | None,
+    name: str,
+) -> Select[Any]:
+    """Read one latest revision per authorized cluster with bounded index probes."""
+
+    canonical_ids = _ids(cluster_ids)
+    requested = (
+        values(column("cluster_id", Text), name=f"{name}_clusters")
+        .data([(cluster_id,) for cluster_id in canonical_ids])
+        .alias(f"{name}_clusters")
+    )
+    table = InventoryFilterRevision.__table__
+    latest = (
+        select(table)
+        .where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == requested.c.cluster_id,
+            *((table.c.revision_id <= at_revision,) if at_revision is not None else ()),
+        )
+        .order_by(table.c.revision_id.desc())
+        .limit(1)
+        .lateral(f"{name}_row")
+    )
+    return select(latest).select_from(requested.join(latest, true()))
+
+
+def _inventory_versions_at_revision_statement(
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    snapshot_revision: int,
+    *,
+    include_deleted: bool,
+    latest_revisions: Any,
+    projection: Sequence[Any],
+) -> Select[Any]:
+    table = InventoryResourceVersion.__table__
+    predicates = [
+        table.c.workspace_id == workspace_id,
+        table.c.cluster_id.in_(cluster_ids),
+        table.c.valid_from_revision <= snapshot_revision,
+    ]
+    if not include_deleted:
+        predicates.append(
+            or_(
+                table.c.valid_to_revision.is_(None),
+                table.c.valid_to_revision > snapshot_revision,
+            )
+        )
+    rank = (
+        func.row_number()
+        .over(
+            partition_by=table.c.inventory_key,
+            order_by=table.c.valid_from_revision.desc(),
+        )
+        .label("rank")
+        if include_deleted
+        else literal(1).label("rank")
+    )
+    return (
+        select(
+            *projection,
+            latest_revisions.c.snapshot_id.label("as_of_snapshot_id"),
+            latest_revisions.c.observed_at.label("as_of_observed_at"),
+            rank,
+        )
+        .select_from(
+            table.join(
+                latest_revisions,
+                and_(
+                    latest_revisions.c.workspace_id == table.c.workspace_id,
+                    latest_revisions.c.cluster_id == table.c.cluster_id,
+                ),
+            )
+        )
+        .where(*predicates)
+    )
+
+
+def _resource_version_index_statement(
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    snapshot_revision: int,
+    *,
+    include_deleted: bool,
+    latest_revisions: Any,
+) -> Select[Any]:
+    """Project only scalar filter/page keys before expanding bounded result rows."""
+
+    table = InventoryResourceVersion.__table__
+    return _inventory_versions_at_revision_statement(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=include_deleted,
+        latest_revisions=latest_revisions,
+        projection=(
+            table.c.version_id,
+            table.c.inventory_key,
+            table.c.workspace_id,
+            table.c.cluster_id,
+            table.c.resource_type,
+            table.c.kind,
+            table.c.namespace,
+            table.c.name,
+            table.c.health,
+            table.c.search_text,
+        ),
+    )
+
+
+def _has_resource_selection(filters: ResourceFilters) -> bool:
+    return bool(
+        filters.clusters
+        or filters.namespaces
+        or filters.applications
+        or filters.resource_types
+        or filters.health
+        or filters.labels
+        or filters.query
+    )
+
+
+def _resource_page_order(table: Any, *, graph_priority: bool) -> tuple[Any, ...]:
+    order = _sort_columns(table)
+    if not graph_priority:
+        return order
+    return (
+        case(
+            (
+                table.c.resource_type.in_(("workload", "pod", "node", "service", "endpoint")),
+                0,
+            ),
+            else_=1,
+        ),
+        *order,
+    )
+
+
+def _resource_page_statements(
+    *,
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    allowed_application_ids: tuple[str, ...],
+    filters: ResourceFilters,
+    snapshot_revision: int,
+    position: Mapping[str, Any] | None,
+    limit: int,
+    graph_priority: bool,
+) -> tuple[Select[Any], bool, Select[Any]]:
+    """Build a narrow count/keyset plan and expand only the bounded page by PK."""
+
+    if graph_priority and position:
+        raise ValueError("graph-priority resource pages do not support a cursor position")
+
+    latest_revisions = _latest_filter_revisions_statement(
+        workspace_id,
+        cluster_ids,
+        at_revision=snapshot_revision,
+        name="resource_page_latest_revisions",
+    ).cte("resource_page_revisions_at_cursor")
+
+    page_source = _resource_version_index_statement(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=filters.include_deleted,
+        latest_revisions=latest_revisions,
+    ).subquery("resource_page_candidates")
+    page_selection = _apply_resource_filters(
+        page_source,
+        filters=filters,
+        allowed_application_ids=allowed_application_ids,
+    ).where(page_source.c.rank == 1)
+    if position:
+        page_selection = page_selection.where(_sort_tuple(page_source) > _position_tuple(position))
+    page_ids = (
+        page_selection.order_by(*_resource_page_order(page_source, graph_priority=graph_priority))
+        .limit(limit + 1)
+        .cte("filtered_inventory_page")
+    )
+
+    count_source = _resource_version_index_statement(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=filters.include_deleted,
+        latest_revisions=latest_revisions,
+    ).subquery("resource_count_candidates")
+    unfiltered = select(count_source).where(count_source.c.rank == 1)
+    counts_equivalent = not _has_resource_selection(filters)
+    if counts_equivalent:
+        filtered_count = select(func.count()).select_from(unfiltered.subquery()).scalar_subquery()
+        count_columns = (filtered_count.label("filtered_count"),)
+    else:
+        unfiltered_cte = unfiltered.cte("authorized_inventory_count_versions")
+        filtered = _apply_resource_filters(
+            unfiltered_cte,
+            filters=filters,
+            allowed_application_ids=allowed_application_ids,
+        ).subquery("filtered_inventory_count_versions")
+        filtered_count = select(func.count()).select_from(filtered).scalar_subquery()
+        unfiltered_count = select(func.count()).select_from(unfiltered_cte).scalar_subquery()
+        count_columns = (
+            filtered_count.label("filtered_count"),
+            unfiltered_count.label("unfiltered_count"),
+        )
+
+    table = InventoryResourceVersion.__table__
+    page = (
+        select(
+            table,
+            page_ids.c.as_of_snapshot_id,
+            page_ids.c.as_of_observed_at,
+            *count_columns,
+        )
+        .select_from(page_ids.join(table, table.c.version_id == page_ids.c.version_id))
+        .order_by(*_resource_page_order(page_ids, graph_priority=graph_priority))
+    )
+    return page, counts_equivalent, select(*count_columns)
 
 
 def _selected_label_match_counts(
@@ -1584,73 +1785,20 @@ def _current_versions(
     include_deleted: bool,
 ) -> Any:
     table = InventoryResourceVersion.__table__
-    revision = InventoryFilterRevision.__table__
-    ranked_revisions = (
-        select(
-            revision.c.workspace_id,
-            revision.c.cluster_id,
-            revision.c.snapshot_id,
-            revision.c.observed_at,
-            func.row_number()
-            .over(
-                partition_by=revision.c.cluster_id,
-                order_by=revision.c.revision_id.desc(),
-            )
-            .label("rank"),
-        )
-        .where(
-            revision.c.workspace_id == workspace_id,
-            revision.c.cluster_id.in_(cluster_ids),
-            revision.c.revision_id <= snapshot_revision,
-        )
-        .cte("ranked_inventory_revisions_at_cursor")
-    )
-    latest_revisions = (
-        select(ranked_revisions)
-        .where(ranked_revisions.c.rank == 1)
-        .cte("inventory_revisions_at_cursor")
-    )
-    predicates = [
-        table.c.workspace_id == workspace_id,
-        table.c.cluster_id.in_(cluster_ids),
-        table.c.valid_from_revision <= snapshot_revision,
-    ]
-    if not include_deleted:
-        predicates.append(
-            or_(
-                table.c.valid_to_revision.is_(None),
-                table.c.valid_to_revision > snapshot_revision,
-            )
-        )
-    rank = (
-        func.row_number()
-        .over(
-            partition_by=table.c.inventory_key,
-            order_by=table.c.valid_from_revision.desc(),
-        )
-        .label("rank")
-        if include_deleted
-        else literal(1).label("rank")
-    )
-    return (
-        select(
-            table,
-            latest_revisions.c.snapshot_id.label("as_of_snapshot_id"),
-            latest_revisions.c.observed_at.label("as_of_observed_at"),
-            rank,
-        )
-        .select_from(
-            table.join(
-                latest_revisions,
-                and_(
-                    latest_revisions.c.workspace_id == table.c.workspace_id,
-                    latest_revisions.c.cluster_id == table.c.cluster_id,
-                ),
-            )
-        )
-        .where(*predicates)
-        .cte("inventory_versions_at_revision")
-    )
+    latest_revisions = _latest_filter_revisions_statement(
+        workspace_id,
+        cluster_ids,
+        at_revision=snapshot_revision,
+        name="latest_inventory_revisions_at_cursor",
+    ).cte("inventory_revisions_at_cursor")
+    return _inventory_versions_at_revision_statement(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=include_deleted,
+        latest_revisions=latest_revisions,
+        projection=(table,),
+    ).cte("inventory_versions_at_revision")
 
 
 def current_inventory_versions(
