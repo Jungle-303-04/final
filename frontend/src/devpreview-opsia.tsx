@@ -5,12 +5,19 @@
 import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Box, ChevronRight, X, Layers3, FileCog, GitBranch, Cpu, Activity, Server } from "lucide-react";
+import { Box, ChevronRight, X, Layers3, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Database, Network } from "lucide-react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
+
+// GitHub 마크 (인라인 SVG — 의존성 없음)
+const GithubIcon = ({ size = 14, style }: { size?: number; style?: React.CSSProperties }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" style={style} aria-hidden>
+    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+  </svg>
+);
+
 const BLUE = "#0A6CFF";
-const RED = "#E5484D";
 const HP = { ok: "#9FDDB2", warn: "#FFC069", crit: "#FF6B5E", pending: "#E3E6EB", ghost: "#F1F3F7" } as const;
 const SPRING = { type: "spring", bounce: 0.18, visualDuration: 0.45 } as const;
 const SOFT = { type: "spring", bounce: 0.14, visualDuration: 0.3 } as const;
@@ -40,6 +47,18 @@ const SERVICES = [
   { id: "worker", color: "#25B8A8", repo: "opsia/platform" },
 ];
 const SVC = Object.fromEntries(SERVICES.map((s) => [s.id, s])) as Record<string, (typeof SERVICES)[number]>;
+function ServiceIcon({ id, size = 14 }: { id: string; size?: number }) {
+  const style = { color: SVC[id].color, flexShrink: 0 };
+  if (id === "shop-api") return <Braces size={size} style={style} />;
+  if (id === "shop-web") return <Globe size={size} style={style} />;
+  if (id === "checkout") return <ShoppingCart size={size} style={style} />;
+  if (id === "payments") return <CreditCard size={size} style={style} />;
+  if (id === "search") return <Search size={size} style={style} />;
+  if (id === "auth") return <KeyRound size={size} style={style} />;
+  if (id === "redis") return <Database size={size} style={style} />;
+  if (id === "gateway") return <Network size={size} style={style} />;
+  return <Box size={size} style={style} />;
+}
 const CONFIGS = [
   { id: "app-config", kind: "ConfigMap" }, { id: "redis-config", kind: "ConfigMap" },
   { id: "feature-flags", kind: "ConfigMap" }, { id: "db-credentials", kind: "Secret" }, { id: "tls-cert", kind: "Secret" },
@@ -61,7 +80,7 @@ function makeRng(seed: number) { let s = seed >>> 0; return () => { s = (s * 166
 function genPods(): Pod[] {
   const r = makeRng(23); const pods: Pod[] = []; let k = 0;
   NODES.forEach((node) => {
-    const count = Math.min(node.cap - 2, node.cluster === "prod-eks" ? 15 + Math.floor(r() * 7) : 7 + Math.floor(r() * 3));
+    const count = node.cap - Math.floor(r() * 2); // 거의 가득 (빈 슬롯 0~1)
     for (let i = 0; i < count; i++) {
       const svc = SERVICES[Math.floor(r() * SERVICES.length)].id;
       const pending = r() < 0.03, hot = r() < 0.045;
@@ -80,63 +99,42 @@ const spanOf = (cap: number) => Math.min(3, Math.max(1, Math.ceil(cap / 10)));
 
 type Lens = { kind: "svc" | "cfg" | "git"; id: string } | null;
 
-// ── 연결선: 실선 노선 스타일 (스파인 + 파드 분기 + 정션 도트) ─────────────────────────────
-function SpineOverlay({ containerRef, ids, red }: { containerRef: React.RefObject<HTMLDivElement | null>; ids: string[]; red: boolean }) {
-  const [d, setD] = useState("");
-  const [dots, setDots] = useState<{ x: number; y: number }[]>([]);
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      const root = containerRef.current;
-      if (!root || ids.length === 0) { setD(""); setDots([]); return; }
-      const rb = root.getBoundingClientRect();
-      const pts = ids
-        .map((id) => root.querySelector(`[data-pod="${id}"]`))
-        .filter((el): el is Element => !!el)
-        .map((el) => { const b = el.getBoundingClientRect(); return { x: b.left - rb.left, y: b.top + b.height / 2 - rb.top }; })
-        .sort((a, b) => a.y - b.y || a.x - b.x);
-      if (pts.length === 0) { setD(""); setDots([]); return; }
-      const spineX = 8;
-      let path = "";
-      if (pts.length > 1) path += `M ${spineX} ${pts[0].y} L ${spineX} ${pts[pts.length - 1].y} `;
-      pts.forEach((p) => { path += `M ${spineX} ${p.y} C ${spineX + 14} ${p.y}, ${p.x - 14} ${p.y}, ${p.x - 3} ${p.y} `; });
-      setD(path);
-      setDots(pts.map((p) => ({ x: spineX, y: p.y })));
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [ids.join(","), red]);
-  if (!d) return null;
-  const col = red ? RED : BLUE;
-  return (
-    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 6, overflow: "visible" }}>
-      <path d={d} fill="none" stroke={col} strokeWidth={5} strokeOpacity={0.09} strokeLinecap="round" />
-      <path d={d} fill="none" stroke={col} strokeWidth={1.6} strokeOpacity={0.8} strokeLinecap="round" />
-      {dots.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={2.8} fill="#fff" stroke={col} strokeWidth={1.6} />)}
-    </svg>
-  );
-}
-
-// ── 파드 타일 ─────────────────────────────
+// ── 파드 타일: CPU 사용율을 "물 채움"으로 표현 ─────────────────────────────
 function PodTile({ p, big, dim, lit, live, onClick }: { p: Pod; big: boolean; dim: boolean; lit: boolean; live: number; onClick: () => void }) {
-  const h = p.status === "Running" ? Math.max(5, Math.min(99, health(p) + live)) : health(p);
+  const cpuV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.cpu + live));
+  const c = healthColor(p);
+  const seed = p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
+  const dur = 2.6 + (seed % 18) / 8; // 파드마다 출렁임 주기·위상이 다르게
+  const dur2 = 3.4 + (seed % 13) / 6; // 뒷물결은 다른 주기로 간섭
+  const delay = -((seed % 37) / 7);
+  const bobDur = 2.2 + (seed % 11) / 9;
+  const fillH = p.status === "Pending" ? 0 : Math.max(8, cpuV);
   return (
     <motion.button layout data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
       initial={false}
       animate={{ opacity: dim ? 0.16 : 1, scale: 1 }} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.96 }} transition={SOFT}
-      title={`${p.name} · ${p.status === "Running" ? `${h}%` : p.status}`}
+      title={`${p.name} · ${p.status === "Running" ? `CPU ${cpuV}%` : p.status}`}
       className={isCrit(p) ? "tile crit" : "tile"}
       style={{
-        aspectRatio: "1", border: "none", borderRadius: big ? 12 : 7, cursor: "pointer", background: healthColor(p), position: "relative",
-        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : "inset 0 0 0 1px rgba(255,255,255,0.55)",
+        aspectRatio: "1", border: "none", borderRadius: big ? 12 : 7, cursor: "pointer", position: "relative", overflow: "hidden",
+        background: `color-mix(in srgb, ${c} 20%, #fff)`,
+        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : `inset 0 0 0 1px color-mix(in srgb, ${c} 45%, #fff)`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: big ? 2 : 0, padding: 0, minWidth: 0,
       }}>
-      {big && (
+      {/* 물 채움: 2겹 물결(반대 방향 회전) + 수면 전체가 숨쉬듯 오르내림 */}
+      {fillH > 0 && (
+        <div className="waveWrap" style={{ animationDuration: `${bobDur}s`, animationDelay: `${delay}s` }}>
+          <div className="wave" style={{ top: `calc(${100 - fillH}% - 2px)`, background: c, opacity: 0.4, borderRadius: "47%", animationDuration: `${dur2}s`, animationDelay: `${delay * 1.7}s`, animationDirection: "reverse" }} />
+          <div className="wave" style={{ top: `${100 - fillH}%`, background: c, animationDuration: `${dur}s`, animationDelay: `${delay}s` }} />
+        </div>
+      )}
+      {big ? (
         <>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(10,14,20,0.75)", letterSpacing: "-0.01em", maxWidth: "92%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.svc}</span>
-          <span style={{ fontSize: 9.5, fontWeight: 600, color: "rgba(10,14,20,0.45)", fontVariantNumeric: "tabular-nums" }}>{p.status === "Running" ? `${h}%` : p.status}</span>
+          <span style={{ position: "relative", zIndex: 1, fontSize: 11, fontWeight: 700, color: "rgba(10,14,20,0.78)", letterSpacing: "-0.01em", maxWidth: "92%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.svc}</span>
+          <span style={{ position: "relative", zIndex: 1, fontSize: 9.5, fontWeight: 700, color: "rgba(10,14,20,0.5)", fontVariantNumeric: "tabular-nums" }}>{p.status === "Running" ? `${cpuV}%` : p.status}</span>
         </>
+      ) : (
+        <span style={{ position: "relative", zIndex: 1, fontSize: 8.5, fontWeight: 800, color: "rgba(10,14,20,0.6)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>{p.status === "Pending" ? "–" : cpuV}</span>
       )}
     </motion.button>
   );
@@ -178,12 +176,12 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, onOpen, onPod }:
       whileHover={expanded ? undefined : { y: -2, boxShadow: "0 2px 4px rgba(10,14,20,0.05), 0 16px 36px -18px rgba(10,14,20,0.22)" }}
       className="widget">
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        {expanded && <span style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(10,108,255,0.09)", display: "grid", placeItems: "center", flexShrink: 0 }}><Server size={15} style={{ color: BLUE }} /></span>}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <Server size={expanded ? 15 : 13} strokeWidth={2} style={{ color: "#8A93A0", flexShrink: 0 }} />
             <span style={{ fontSize: expanded ? 16 : 12.5, fontWeight: 700, letterSpacing: "-0.02em", color: "#0B0E14", fontFamily: "ui-monospace, SFMono-Regular, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.id}</span>
           </div>
-          <div style={{ fontSize: expanded ? 11.5 : 9.5, color: "#98A0AC", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.instance} · {node.zone} · Ready</div>
+          <div style={{ fontSize: expanded ? 11.5 : 9.5, color: "#98A0AC", marginTop: 1, marginLeft: expanded ? 21 : 19, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.instance} · {node.zone} · Ready</div>
         </div>
         <span style={{ fontSize: expanded ? 12 : 10.5, fontWeight: 700, color: hot ? "#D2372E" : "#6B7280", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{hot > 0 && <span>⚠{hot} · </span>}{np.length}<span style={{ color: "#B9BFC9", fontWeight: 500 }}>/{node.cap}</span></span>
       </div>
@@ -246,13 +244,12 @@ function App() {
         </header>
 
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-          <div ref={mapRef} style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column", gap: 18, paddingLeft: 26 }}>
-            {effLens && !openNode && <SpineOverlay containerRef={mapRef} ids={[...related]} red={!!incident && !lens && !pin} />}
+          <div ref={mapRef} style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column", gap: 18 }}>
             <AnimatePresence>
               {effLens && (
                 <motion.div key="chip" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={SOFT}
                   style={{ position: "absolute", top: -6, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 7, background: incident && !lens && !pin ? "#FFECEA" : "#E8F0FF", borderRadius: 999, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, color: incident && !lens && !pin ? "#D2372E" : BLUE, boxShadow: "0 2px 8px rgba(10,14,20,0.08)" }}>
-                  {incident && !lens && !pin ? <Activity size={13} /> : effLens.kind === "svc" ? <Layers3 size={13} /> : effLens.kind === "cfg" ? <FileCog size={13} /> : <GitBranch size={13} />}
+                  {incident && !lens && !pin ? <Activity size={13} /> : effLens.kind === "svc" ? <Layers3 size={13} /> : effLens.kind === "cfg" ? <FileCog size={13} /> : <GithubIcon size={13} />}
                   {incident && !lens && !pin ? `장애 조사 · ${incident.name}` : effLens.id}
                   <span style={{ fontWeight: 600, opacity: 0.65 }}>{related.size} 파드</span>
                   {pin && <button onClick={() => setPin(null)} style={{ border: "none", background: "rgba(10,14,20,0.08)", borderRadius: 999, width: 16, height: 16, cursor: "pointer", fontSize: 10, lineHeight: 1, color: "inherit" }}>✕</button>}
@@ -307,6 +304,10 @@ function App() {
         html, body { background: #F2F4F8; }
         .op { min-height: 100vh; background: #F2F4F8; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .op .tile.crit { animation: critp 1.2s ease-in-out infinite; }
+        .op .waveWrap { position: absolute; inset: 0; animation-name: bob; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
+        @keyframes bob { from { transform: translateY(0); } to { transform: translateY(1.8px); } }
+        .op .wave { position: absolute; left: -50%; width: 200%; aspect-ratio: 1; border-radius: 44%; transition: top .9s cubic-bezier(.4,0,.2,1); animation-name: slosh; animation-timing-function: linear; animation-iteration-count: infinite; }
+        @keyframes slosh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.14) saturate(1.2); } }
         .pulsedot { animation: pd 1.4s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -354,7 +355,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
               <div style={{ fontSize: 11, color: "#98A0AC", marginTop: 2 }}>올리면 지도에 연결이 그려집니다 · 클릭 = 고정</div>
             </div>
             <div style={{ display: "flex", gap: 4, background: "#F0F2F6", borderRadius: 11, padding: 3 }}>
-              {([["svc", "서비스", Layers3], ["cfg", "설정", FileCog], ["git", "배포", GitBranch]] as const).map(([id, label, I]) => {
+              {([["svc", "서비스", Layers3], ["cfg", "설정", FileCog], ["git", "배포", GithubIcon]] as const).map(([id, label, I]) => {
                 const on = tab === id;
                 return (
                   <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 0", borderRadius: 9, border: "none", background: "transparent", cursor: "pointer", fontSize: 11.5, fontWeight: 600, color: on ? "#0B0E14" : "#98A0AC" }}>
@@ -365,9 +366,9 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
               })}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {tab === "svc" && SERVICES.map((s) => <Row key={s.id} l={{ kind: "svc", id: s.id }} dot={s.color} label={s.id} sub={s.repo} />)}
+              {tab === "svc" && SERVICES.map((s) => <Row key={s.id} l={{ kind: "svc", id: s.id }} icon={<ServiceIcon id={s.id} />} label={s.id} sub={s.repo} />)}
               {tab === "cfg" && CONFIGS.map((c) => <Row key={c.id} l={{ kind: "cfg", id: c.id }} icon={<FileCog size={14} style={{ color: c.kind === "Secret" ? "#9D5CE8" : BLUE, flexShrink: 0 }} />} label={c.id} sub={c.kind} />)}
-              {tab === "git" && REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GitBranch size={14} style={{ color: "#6B7280", flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
+              {tab === "git" && REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
             </div>
           </motion.div>
         )}
@@ -416,12 +417,12 @@ function PodDetail({ pod, setLens, setPin, clearPod, openNode }: { pod: Pod; set
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#3C4350", display: "flex", alignItems: "center", gap: 6 }}><Activity size={12} style={{ color: BLUE }} />연결된 것들</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        <PodDetailLink l={{ kind: "svc", id: pod.svc }} icon={<span style={{ width: 10, height: 10, borderRadius: 3.5, background: SVC[pod.svc].color, flexShrink: 0 }} />} label={pod.svc} sub="서비스 · 형제 파드" setLens={setLens} setPin={setPin} />
+        <PodDetailLink l={{ kind: "svc", id: pod.svc }} icon={<ServiceIcon id={pod.svc} />} label={pod.svc} sub="서비스 · 형제 파드" setLens={setLens} setPin={setPin} />
         {(SVC_CFG[pod.svc] || []).map((c) => {
           const cfg = CONFIGS.find((x) => x.id === c)!;
           return <PodDetailLink key={c} l={{ kind: "cfg", id: c }} icon={<FileCog size={14} style={{ color: cfg.kind === "Secret" ? "#9D5CE8" : BLUE, flexShrink: 0 }} />} label={c} sub={cfg.kind} setLens={setLens} setPin={setPin} />;
         })}
-        <PodDetailLink l={{ kind: "git", id: SVC[pod.svc].repo }} icon={<GitBranch size={14} style={{ color: "#6B7280", flexShrink: 0 }} />} label={SVC[pod.svc].repo} sub={`${REPO_META[SVC[pod.svc].repo].rev} · ${REPO_META[SVC[pod.svc].repo].sync}`} setLens={setLens} setPin={setPin} />
+        <PodDetailLink l={{ kind: "git", id: SVC[pod.svc].repo }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={SVC[pod.svc].repo} sub={`${REPO_META[SVC[pod.svc].repo].rev} · ${REPO_META[SVC[pod.svc].repo].sync}`} setLens={setLens} setPin={setPin} />
         <PodDetailLink icon={<Server size={14} style={{ color: "#6B7280", flexShrink: 0 }} />} label={pod.node} sub={`물리 노드 · ${pod.cluster}`} onClick={() => openNode(pod.node)} setLens={setLens} setPin={setPin} />
       </div>
     </>
