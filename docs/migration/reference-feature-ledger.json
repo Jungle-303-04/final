@@ -1545,11 +1545,11 @@
     {
       "id": "reference-feature-037",
       "contractId": "reference.feature.037",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:auth:navigation:server-session-handoff:v1",
       "legacyContractIds": [
         "reference.feature.037"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 121,
       "cells": [
@@ -1563,17 +1563,33 @@
       "streaming": false,
       "area": "application-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.AuthSessionResponse",
+      "frontendContract": "frontend/src/features/auth/authContract.ts#ProductSession",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_identity_auth_routes.py",
+        "tests/test_password_auth.py",
+        "frontend/src/api/auth.test.ts",
+        "frontend/src/features/auth/AuthBarrier.test.tsx",
+        "frontend/src/features/auth/createAuthAdapter.test.ts",
+        "scripts/reference-feature-source-identity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/identity/router.py#login",
+          "consumer": "src/services/gateway/api-gateway/auth.py#PasswordAuthService",
+          "reason": "The existing Python password and trusted-proxy authorities own login, server session refresh, and capability-aware logout. The frozen source OIDC callback runtime is not recreated because external identity handoff is intentionally delegated to the configured trusted proxy rather than becoming a second product authentication authority.",
+          "test": "tests/test_identity_auth_routes.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/auth/AuthBarrier.tsx#AuthBarrier",
+          "consumer": "frontend/src/features/auth/createAuthAdapter.ts#createAuthAdapter",
+          "reason": "The authentication barrier preserves the requested browser route across sign-in, consumes the strict server-owned session contract, and exposes sign-out only when the server capability supports ending that session.",
+          "test": "frontend/src/features/auth/AuthBarrier.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

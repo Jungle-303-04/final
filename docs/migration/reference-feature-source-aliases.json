@@ -25,6 +25,7 @@
     "reference.feature.034": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
     "reference.feature.035": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
     "reference.feature.036": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
+    "reference.feature.037": "upstream-ui:auth:navigation:server-session-handoff:v1",
     "reference.feature.038": "upstream-ui:home:load-state:section-authority:v1",
     "reference.feature.039": "upstream-ui:home:live-band:topology-timeline-preview:v1",
     "reference.feature.040": "upstream-ui:home:explore:capability-gated-cards:v1",
