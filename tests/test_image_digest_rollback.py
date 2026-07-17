@@ -606,6 +606,30 @@ def test_manifest_targets_include_live_legacy_repository_for_safe_rollout(tmp_pa
     )
 
 
+def test_rendered_management_manifest_captures_separately_declared_workers(
+    tmp_path: Path,
+) -> None:
+    rendered = subprocess.run(
+        ("kubectl", "kustomize", str(ROOT / "deploy" / "management")),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    manifest = tmp_path / "management.yaml"
+    manifest.write_text(rendered, encoding="utf-8")
+    targets = set(
+        capture_image_digests.expected_deployment_containers(
+            manifest,
+            managed_repository=(
+                "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service"
+            ),
+        )
+    )
+
+    assert ("auto-revert-worker", "worker") in targets
+    assert ("change-correlation-worker", "worker") in targets
+
+
 def test_rollout_repository_verification_fails_closed_on_stale_or_extra_target(
     tmp_path: Path,
 ) -> None:

@@ -280,9 +280,12 @@ jobs:
               -o jsonpath='{.data.dev_sha}')"
           fi
           [[ "${previous_sha}" =~ ^[0-9a-f]{40}$ ]]
+          kubectl kustomize deploy/management \
+            >"${RUNNER_TEMP}/management-rendered.yaml"
           uv run python scripts/capture_image_digests.py \
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
+            --manifest "${RUNNER_TEMP}/management-rendered.yaml" \
             --managed-repository "${SERVICE_DEPLOY_IMAGE%@*}" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/service-rollback-plan.json"

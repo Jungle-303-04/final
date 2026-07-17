@@ -81,6 +81,15 @@ class EventConsumerMetrics:
     redelivered: int
 
 
+@dataclass(frozen=True)
+class EventConsumerLagSnapshot:
+    """Bounded lag rows plus independent metric and lagging cardinalities."""
+
+    samples: tuple[EventConsumerMetrics, ...]
+    metric_count: int
+    lagging_count: int
+
+
 class EventPublisher(Protocol):
     async def emit(
         self,

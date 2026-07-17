@@ -15,6 +15,7 @@ from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import (
     EventClient,
     EventConsumerBus,
+    EventConsumerMetrics,
     EventEnvelope,
     EventHandler,
     EventMessage,
@@ -127,20 +128,49 @@ async def record_consumer_lag_metrics(
     spec: EventHandlerSpec,
 ) -> None:
     consumer_metrics = getattr(bus, "consumer_metrics", None)
+    record_metrics_batch = getattr(store, "record_event_consumer_metrics_batch", None)
     record_metrics = getattr(store, "record_event_consumer_metrics", None)
-    if not callable(consumer_metrics) or not callable(record_metrics):
+    if not callable(consumer_metrics) or not (
+        callable(record_metrics_batch) or callable(record_metrics)
+    ):
         return
-    for subject in spec.subjects:
+
+    semaphore = asyncio.Semaphore(spec.retry_policy.max_concurrency)
+
+    async def collect(subject: str) -> EventConsumerMetrics | None:
         durable = spec.durable_for(subject)
         try:
-            sample = await consumer_metrics(subject, durable)
-            record_metrics(sample)
+            async with semaphore:
+                return await consumer_metrics(subject, durable)
         except Exception as exc:
             LOGGER.warning(
                 "consumer_metrics_error",
                 extra={"context": {"consumer": durable, "subject": subject}},
                 exc_info=exc,
             )
+            return None
+
+    samples = tuple(
+        sample
+        for sample in await asyncio.gather(*(collect(subject) for subject in spec.subjects))
+        if sample is not None
+    )
+    if not samples:
+        return
+
+    try:
+        if callable(record_metrics_batch):
+            record_metrics_batch(samples)
+        else:
+            assert callable(record_metrics)
+            for sample in samples:
+                record_metrics(sample)
+    except Exception as exc:
+        LOGGER.warning(
+            "consumer_metrics_persist_error",
+            extra={"context": {"consumer": spec.service_name, "sample_count": len(samples)}},
+            exc_info=exc,
+        )
 
 
 class Codec(Protocol):
