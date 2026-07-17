@@ -42,8 +42,17 @@ class StubPasswordAuth:
             "email": "local@example.com",
         }
 
+        self.session_authority = {
+            **self.identity,
+            "groups": ["group-platform", "group-release"],
+            "roles": ["user"],
+        }
+
     def user_identity(self, _user_id: str) -> dict[str, str] | None:
         return self.identity
+
+    def session_identity(self, _user_id: str, _workspace_id: str) -> dict[str, Any] | None:
+        return self.session_authority
 
     async def signup(
         self, email: str, password: str, password_confirm: str, client_key: str
@@ -241,6 +250,50 @@ def test_existing_session_resolves_human_profile_identity() -> None:
 
     assert body.display_name == "Local User"
     assert body.email == "local@example.com"
+
+
+def test_password_session_exposes_storage_owned_auth_context_without_source_only_role() -> None:
+    password_auth = StubPasswordAuth()
+    current = SimpleNamespace(
+        token="existing-token",
+        user_id="user-1",
+        roles=["stale-session-role"],
+        workspace_id="default",
+    )
+
+    body = asyncio.run(identity_router.session(current=current, password_auth=password_auth))
+
+    assert body.auth_enabled is True
+    assert body.auth_mode == "password"
+    assert body.user_id == "user-1"
+    assert body.groups == ["group-platform", "group-release"]
+    assert body.roles == ["user"]
+    assert body.logout.action == "end_session"
+    assert body.logout.supported is True
+    assert body.logout.reauthentication_expected is False
+    assert "cloud_role" not in body.model_dump()
+    assert "redirect_url" not in body.logout.model_dump()
+
+
+def test_trusted_proxy_session_exposes_non_terminating_logout_semantics() -> None:
+    password_auth = StubPasswordAuth()
+    password_auth.session_authority = None
+    current = SimpleNamespace(
+        token="mtls-dev-console",
+        user_id="operator-dev",
+        roles=["service_admin"],
+        workspace_id="default",
+    )
+
+    body = asyncio.run(identity_router.session(current=current, password_auth=password_auth))
+
+    assert body.auth_enabled is True
+    assert body.auth_mode == "trusted_proxy"
+    assert body.groups == []
+    assert body.roles == ["service_admin"]
+    assert body.logout.action == "upstream_identity_required"
+    assert body.logout.supported is False
+    assert body.logout.reauthentication_expected is True
 
 
 def test_session_refresh_route_is_guarded_by_require_session() -> None:

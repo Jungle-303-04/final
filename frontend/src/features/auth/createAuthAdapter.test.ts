@@ -8,6 +8,14 @@ import {
 
 const AUTHENTICATED_WIRE_SESSION: AuthEndpointSession = {
   authenticated: true,
+  auth_enabled: true,
+  auth_mode: "password",
+  groups: ["group-release", "group-platform", "group-release"],
+  logout: {
+    action: "end_session",
+    supported: true,
+    reauthentication_expected: false,
+  },
   user_id: "operator-17",
   roles: ["viewer", "admin", "viewer"],
   workspace_id: "workspace-main",
@@ -21,6 +29,14 @@ describe("canonical auth adapter", () => {
     await expect(port.loadSession()).resolves.toEqual({
       status: "authenticated",
       session: {
+        authEnabled: true,
+        authMode: "password",
+        groups: ["group-platform", "group-release"],
+        logout: {
+          action: "end_session",
+          supported: true,
+          reauthenticationExpected: false,
+        },
         userId: "operator-17",
         roles: ["admin", "viewer"],
         workspaceId: "workspace-main",
