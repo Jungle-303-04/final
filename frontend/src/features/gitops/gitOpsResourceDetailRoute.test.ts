@@ -13,10 +13,12 @@ describe("GitOps resource detail route", () => {
     };
     const path = gitOpsResourceDetailPath(locator);
 
-    expect(gitOpsResourceDetailLocator(path.slice(path.indexOf("?")))).toEqual(locator);
+    expect(gitOpsResourceDetailLocator(new URLSearchParams(path.slice(path.indexOf("?"))))).toEqual(locator);
   });
 
   it("rejects incomplete resource identity", () => {
-    expect(gitOpsResourceDetailLocator("?cluster=cluster-a&kind=Application")).toBeNull();
+    expect(gitOpsResourceDetailLocator(
+      new URLSearchParams("?cluster=cluster-a&kind=Application"),
+    )).toBeNull();
   });
 });

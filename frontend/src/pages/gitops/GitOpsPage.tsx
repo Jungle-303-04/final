@@ -1,6 +1,7 @@
 import { GitBranch, LayoutGrid, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
-import { useLocation, useMatch } from "react-router-dom";
+import { useMatch } from "react-router-dom";
+import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type { GitOpsPort, ReleasePlan } from "../../features/gitops/gitOpsContract";
 import { gitOpsApplicationDetailIdFromRoute } from "../../features/gitops/gitOpsApplicationDetailRoute";
 import { gitOpsResourceDetailLocator } from "../../features/gitops/gitOpsResourceDetailRoute";
@@ -34,12 +35,12 @@ export function GitOpsPage({
   refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts">;
 }) {
   const { t } = useI18n();
-  const location = useLocation();
+  const searchParams = useFilterSearchParams();
   const detailMatch = useMatch("/gitops/detail/*");
   const resourceMatch = useMatch("/gitops/resource");
   const [section, setSection] = useState<GitOpsSection>("changes");
   const applicationId = gitOpsApplicationDetailIdFromRoute(detailMatch?.params["*"]);
-  const resourceLocator = resourceMatch ? gitOpsResourceDetailLocator(location.search) : null;
+  const resourceLocator = resourceMatch ? gitOpsResourceDetailLocator(searchParams) : null;
 
   if (resourceMatch) {
     return resourceLocator
