@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import os
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from packages.config.settings import env
 
 CREDENTIAL_ENCRYPTION_KEY_ENV = "CREDENTIAL_ENCRYPTION_KEY"
 TOKEN_PREFIX = "fernet:v1:"
 DB_CREDENTIAL_REF_PREFIX = "db:"
+AGENT_SEALED_PREFIX = "aesgcm:v1:"
 
 
 class CredentialEncryptionError(RuntimeError):
@@ -46,6 +51,43 @@ def decrypt_credential(value: str) -> str:
         return fernet().decrypt(token).decode("utf-8")
     except InvalidToken as exc:
         raise CredentialEncryptionError("자격증명 복호화에 실패했습니다.") from exc
+
+
+def seal_agent_payload(payload: dict[str, Any], token: str, context: str) -> str:
+    if not token or not context:
+        raise CredentialEncryptionError("agent payload sealing identity is unavailable")
+    nonce = os.urandom(12)
+    plaintext = json.dumps(
+        payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode()
+    ciphertext = AESGCM(_agent_sealing_key(token, context)).encrypt(
+        nonce,
+        plaintext,
+        context.encode(),
+    )
+    return AGENT_SEALED_PREFIX + base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+
+
+def open_agent_payload(value: str, token: str, context: str) -> dict[str, Any]:
+    if not value.startswith(AGENT_SEALED_PREFIX) or not token or not context:
+        raise CredentialEncryptionError("agent payload envelope is unavailable")
+    try:
+        packed = base64.urlsafe_b64decode(value.removeprefix(AGENT_SEALED_PREFIX).encode("ascii"))
+        plaintext = AESGCM(_agent_sealing_key(token, context)).decrypt(
+            packed[:12],
+            packed[12:],
+            context.encode(),
+        )
+        payload = json.loads(plaintext)
+    except Exception as exc:
+        raise CredentialEncryptionError("agent payload envelope is invalid") from exc
+    if not isinstance(payload, dict):
+        raise CredentialEncryptionError("agent payload envelope is invalid")
+    return payload
+
+
+def _agent_sealing_key(token: str, context: str) -> bytes:
+    return hashlib.sha256(f"opsia-agent-envelope-v1\0{context}\0{token}".encode()).digest()
 
 
 def fernet() -> Fernet:

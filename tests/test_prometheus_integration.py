@@ -15,7 +15,7 @@ from domains.integrations.prometheus import router
 from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
 from packages.contracts.parity import OperationEvent
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
-from packages.security.credentials import decrypt_credential
+from packages.security.credentials import decrypt_credential, open_agent_payload
 
 
 @pytest.fixture(autouse=True)
@@ -411,10 +411,16 @@ def test_browser_status_redacts_values_and_agent_fetch_is_revision_bound() -> No
     agent = client.get(
         "/agent/integrations/prometheus",
         params={"revision": created["revision"]},
-        headers={"Authorization": "Bearer agent"},
+        headers={"x-agent-token": "agent-test-token"},
     )
     assert agent.status_code == 200
-    assert agent.json()["headers"] == {"Authorization": "Bearer secret-value"}
+    assert "headers" not in agent.json()
+    assert "secret-value" not in agent.text
+    assert open_agent_payload(
+        agent.json()["sealed_headers"],
+        "agent-test-token",
+        created["revision"],
+    )["headers"] == {"Authorization": "Bearer secret-value"}
     assert agent.json()["operation_id"] == created["operation_id"]
 
 

@@ -19,11 +19,13 @@ from packages.contracts.gateway.requests import (
     EvidenceRuntimePolicy,
 )
 from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
+from packages.security.credentials import seal_agent_payload
 
 
 @pytest.fixture(autouse=True)
 def management_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MANAGEMENT_BASE_URL", "http://management.local")
+    monkeypatch.setenv("AGENT_TOKEN", "agent-test-token")
 
 
 @pytest.fixture(autouse=True)
@@ -248,12 +250,16 @@ def test_management_client_fetches_revision_bound_prometheus_configuration() -> 
                 "revision": "revision-1",
                 "operation_id": "operation-1",
                 "address": "https://prometheus.test",
-                "headers": {"Authorization": "Bearer secret"},
+                "sealed_headers": seal_agent_payload(
+                    {"headers": {"Authorization": "Bearer secret"}},
+                    "agent-test-token",
+                    "revision-1",
+                ),
             },
             request=request,
         )
 
-    client = agent_module.HttpManagementPlaneClient("https://management.local")
+    client = agent_module.HttpManagementPlaneClient("http://management.local")
     asyncio.run(client.client.aclose())
     client.client = httpx.AsyncClient(
         transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
@@ -269,20 +275,6 @@ def test_management_client_fetches_revision_bound_prometheus_configuration() -> 
 
     assert result["headers"] == {"Authorization": "Bearer secret"}
     assert requests[0].url.params["revision"] == "revision-1"
-
-
-def test_management_client_refuses_prometheus_secrets_over_plain_http() -> None:
-    agent_module = load_agent_module()
-    client = agent_module.HttpManagementPlaneClient("http://management.local")
-
-    async def run() -> None:
-        try:
-            with pytest.raises(RuntimeError, match="requires https management"):
-                await client.fetch_prometheus_integration("revision-1")
-        finally:
-            await close_client(client)
-
-    asyncio.run(run())
 
 
 def test_target_agent_applies_revision_once_and_reports_probe_status(
@@ -430,6 +422,62 @@ def test_prometheus_probe_http_retry_classification(status_code: int, expected: 
     error = httpx.HTTPStatusError("probe failed", request=request, response=response)
 
     assert agent_module.prometheus_transport_error_retryable(error) is expected
+
+
+def test_target_agent_rejects_dns_resolution_to_link_local_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    target_agent_factory: Callable[..., Any],
+) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setattr(
+        agent_module.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                agent_module.socket.AF_INET,
+                agent_module.socket.SOCK_STREAM,
+                6,
+                "",
+                ("169.254.169.254", 443),
+            )
+        ],
+    )
+    agent = target_agent_factory(agent_module)
+
+    class IntegrationClient:
+        def __init__(self) -> None:
+            self.statuses: list[dict[str, object]] = []
+
+        async def fetch_prometheus_integration(self, revision: str) -> dict[str, object]:
+            return {
+                "cluster_id": agent.cluster_id,
+                "revision": revision,
+                "operation_id": "operation-dns",
+                "address": "https://prometheus.monitoring.svc",
+                "headers": {},
+            }
+
+        async def report_prometheus_integration_status(self, status: dict[str, object]) -> None:
+            self.statuses.append(status)
+
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    configuration_revision="revision-dns",
+                    configuration_operation_id="operation-dns",
+                )
+            }
+        ),
+    )
+    client = IntegrationClient()
+
+    with pytest.raises(RuntimeError, match="^prometheus_destination_denied$"):
+        asyncio.run(agent.apply_runtime_configurations(client, policy))
+
+    assert client.statuses[-1]["state"] == "failed"
+    assert client.statuses[-1]["error_code"] == "prometheus_destination_denied"
 
 
 def test_target_agent_builds_apply_manifest_patch() -> None:

@@ -31,6 +31,13 @@ FORBIDDEN_INTEGRATION_HEADERS = frozenset(
         "upgrade",
     }
 )
+FORBIDDEN_PROMETHEUS_HOSTS = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata.azure.internal",
+        "instance-data.ec2.internal",
+    }
+)
 
 
 class PrometheusIntegrationUpdateRequest(StrictModel):
@@ -51,7 +58,11 @@ class PrometheusIntegrationUpdateRequest(StrictModel):
         if parsed.query or parsed.fragment:
             raise ValueError("prometheus_url cannot contain a query or fragment")
         hostname = (parsed.hostname or "").casefold()
-        if hostname == "localhost" or hostname.endswith(".localhost"):
+        if (
+            hostname == "localhost"
+            or hostname.endswith(".localhost")
+            or hostname in FORBIDDEN_PROMETHEUS_HOSTS
+        ):
             raise ValueError("prometheus_url cannot target a local-only address")
         try:
             address = ipaddress.ip_address(hostname)
@@ -119,6 +130,14 @@ class PrometheusIntegrationStatus(StrictModel):
     state: PrometheusIntegrationState
     error_code: str | None = None
     receipt: CommandReceipt | None = None
+
+
+class AgentPrometheusIntegrationEnvelope(StrictModel):
+    cluster_id: str = Field(min_length=1)
+    revision: str = Field(min_length=1)
+    operation_id: str = Field(min_length=1)
+    address: str = Field(min_length=1)
+    sealed_headers: str = Field(min_length=1, repr=False)
 
 
 class AgentPrometheusIntegrationConfig(StrictModel):

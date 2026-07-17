@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
+import socket
 import time
 from contextlib import suppress
 from dataclasses import dataclass
@@ -193,7 +195,10 @@ from packages.contracts.helm import (
     HelmValuesPreviewCommandPayload,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
-from packages.contracts.integrations import AgentPrometheusIntegrationConfig
+from packages.contracts.integrations import (
+    AgentPrometheusIntegrationConfig,
+    AgentPrometheusIntegrationEnvelope,
+)
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
@@ -204,6 +209,7 @@ from packages.contracts.target import (
     TARGET_RBAC_VERSION_ANNOTATION,
 )
 from packages.contracts.traffic.control import TrafficSourceAgentCommandPayload
+from packages.security.credentials import CredentialEncryptionError, open_agent_payload
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -582,16 +588,30 @@ class HttpManagementPlaneClient:
         response.raise_for_status()
 
     async def fetch_prometheus_integration(self, revision: str) -> JsonObject:
-        if urlsplit(self.base_url).scheme != "https":
-            raise RuntimeError("prometheus integration configuration requires https management")
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_PROMETHEUS_INTEGRATION_PATH}",
             params={"revision": revision},
             headers=self.headers,
         )
         response.raise_for_status()
-        payload = response.json()
-        return payload if isinstance(payload, dict) else {}
+        envelope = AgentPrometheusIntegrationEnvelope.model_validate(response.json())
+        token = self.headers.get(AgentConfig.AGENT_TOKEN_HEADER, "")
+        try:
+            secret = open_agent_payload(envelope.sealed_headers, token, revision)
+        except CredentialEncryptionError as exc:
+            raise RuntimeError("prometheus integration envelope is invalid") from exc
+        headers = secret.get("headers")
+        if not isinstance(headers, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in headers.items()
+        ):
+            raise RuntimeError("prometheus integration envelope is invalid")
+        return AgentPrometheusIntegrationConfig(
+            cluster_id=envelope.cluster_id,
+            revision=envelope.revision,
+            operation_id=envelope.operation_id,
+            address=envelope.address,
+            headers=dict(headers),
+        ).model_dump()
 
     async def report_prometheus_integration_status(self, status: JsonObject) -> None:
         response = await self.client.post(
@@ -935,6 +955,7 @@ class TargetClusterAgent:
                 retryable=False,
             )
         provider = PrometheusMetricsProvider(config.address, headers=config.headers)
+        await self.assert_prometheus_destination_safe(provider.base_url)
         try:
             async with httpx.AsyncClient(
                 timeout=provider.timeout_seconds,
@@ -968,6 +989,39 @@ class TargetClusterAgent:
                 retryable=True,
             )
         return provider
+
+    async def assert_prometheus_destination_safe(self, address: str) -> None:
+        """Reject resolved local/link-local destinations while allowing private cluster networks."""
+        if self.telemetry_transport is not None:
+            return
+        parsed = urlsplit(address)
+        hostname = parsed.hostname or ""
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            infos = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM),
+            )
+        except OSError as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_dns_error",
+                retryable=True,
+            ) from exc
+        for info in infos:
+            try:
+                resolved = ipaddress.ip_address(str(info[4][0]))
+            except ValueError:
+                continue
+            if (
+                resolved.is_loopback
+                or resolved.is_link_local
+                or resolved.is_multicast
+                or resolved.is_unspecified
+            ):
+                raise PrometheusRuntimeConfigurationError(
+                    "prometheus_destination_denied",
+                    retryable=False,
+                )
 
     async def target_rbac_manifest_status(self) -> JsonObject:
         """Observe the administrator-owned role without ever attempting RBAC writes."""

@@ -7,9 +7,10 @@ import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from domains.identity.dependencies import (
+    AGENT_TOKEN_HEADER,
     ClusterAgentIdentity,
     require_cluster_access,
     require_cluster_agent,
@@ -25,7 +26,7 @@ from packages.contracts.identity import (
     Permission,
 )
 from packages.contracts.integrations import (
-    AgentPrometheusIntegrationConfig,
+    AgentPrometheusIntegrationEnvelope,
     AgentPrometheusIntegrationStatus,
     PrometheusIntegrationStatus,
     PrometheusIntegrationUpdateRequest,
@@ -36,6 +37,7 @@ from packages.security.credentials import (
     CredentialEncryptionError,
     decrypt_credential,
     encrypt_credential,
+    seal_agent_payload,
 )
 
 router = APIRouter()
@@ -352,13 +354,14 @@ async def update_prometheus_integration(
 
 @agent_router.get(
     gateway_routes.AGENT_PROMETHEUS_INTEGRATION_PATH,
-    response_model=AgentPrometheusIntegrationConfig,
+    response_model=AgentPrometheusIntegrationEnvelope,
 )
 async def agent_prometheus_integration(
+    request: Request,
     revision: str = Query(min_length=1, max_length=120),
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
-) -> AgentPrometheusIntegrationConfig:
+) -> AgentPrometheusIntegrationEnvelope:
     row = _stored_integration(db, identity.workspace_id, identity.cluster_id)
     if row is None:
         raise HTTPException(status_code=404, detail=PROMETHEUS_NOT_CONFIGURED)
@@ -374,12 +377,17 @@ async def agent_prometheus_integration(
         isinstance(key, str) and isinstance(value, str) for key, value in headers.items()
     ):
         raise HTTPException(status_code=409, detail=PROMETHEUS_CREDENTIAL_UNAVAILABLE)
-    return AgentPrometheusIntegrationConfig(
+    token = request.headers.get(AGENT_TOKEN_HEADER, "")
+    try:
+        sealed_headers = seal_agent_payload({"headers": dict(headers)}, token, revision)
+    except CredentialEncryptionError as exc:
+        raise HTTPException(status_code=401, detail="invalid agent token") from exc
+    return AgentPrometheusIntegrationEnvelope(
         cluster_id=identity.cluster_id,
         revision=revision,
         operation_id=str(metadata.get("operation_id") or ""),
         address=str(metadata.get("address") or ""),
-        headers=dict(headers),
+        sealed_headers=sealed_headers,
     )
 
 
