@@ -25,7 +25,7 @@ const TRAFFIC: [string, string, number][] = [["gateway", "shop-web", 700], ["gat
 type Status = "Running" | "OOMKilled" | "CrashLoopBackOff" | "Pending";
 // cpu/mem = 한도(limit) 대비 사용률(%) — 건강도의 기준
 type Pod = { id: string; name: string; node: string; svc: string; cpu: number; mem: number; cpuLimM: number; memLimMi: number; status: Status; restarts: number; ageMin: number; image: string };
-const STCOLOR: Record<Status, string> = { Running: "#22C55E", OOMKilled: "#EF4444", CrashLoopBackOff: "#EF4444", Pending: "#9AA1AC" };
+const STCOLOR: Record<Status, string> = { Running: "#34C759", OOMKilled: "#FF3B30", CrashLoopBackOff: "#FF3B30", Pending: "#9AA1AC" };
 const CPU_LIMS = [250, 500, 1000], MEM_LIMS = [256, 512, 1024];
 function makeRng(seed: number) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 function genPods(): Pod[] {
@@ -33,53 +33,29 @@ function genPods(): Pod[] {
   NODES.forEach((node) => {
     const count = 14 + Math.floor(r() * 7);
     for (let i = 0; i < count; i++) {
-      const svc = SERVICES[Math.floor(r() * SERVICES.length)].id; const pending = r() < 0.03; const hot = r() < 0.08;
-      let cpu = Math.floor(r() * 55) + 14, mem = Math.floor(r() * 52) + 20; if (hot) { cpu = 88 + Math.floor(r() * 11); mem = 90 + Math.floor(r() * 9); }
+      const svc = SERVICES[Math.floor(r() * SERVICES.length)].id; const pending = r() < 0.03; const hot = r() < 0.04;
+      let cpu = Math.floor(r() * 46) + 12, mem = Math.floor(r() * 44) + 16; if (hot) { cpu = 90 + Math.floor(r() * 9); mem = 92 + Math.floor(r() * 7); }
       const status: Status = pending ? "Pending" : hot ? (r() < 0.5 ? "OOMKilled" : "CrashLoopBackOff") : "Running";
       pods.push({ id: `p${k++}`, name: `${svc}-${Math.floor(r() * 900) + 100}-${["x7f", "q2d", "m9k", "b4t", "z1p"][Math.floor(r() * 5)]}`, node: node.id, svc, cpu: pending ? 0 : cpu, mem: pending ? 0 : mem, cpuLimM: CPU_LIMS[Math.floor(r() * 3)], memLimMi: MEM_LIMS[Math.floor(r() * 3)], status, restarts: status === "Running" ? 0 : 3 + Math.floor(r() * 8), ageMin: 8 + Math.floor(r() * 5000), image: `registry.opsia.io/${svc}:1.${Math.floor(r() * 18)}.${Math.floor(r() * 9)}` });
     }
   });
   return pods;
 }
-// 건강도 = 한도 대비 사용률(여유→임박) + 상태 오버라이드
+// 건강도 = 한도 대비 사용률 → 애플식 3단계(정상/경고/임계) + 상태 오버라이드
 const health = (p: Pod) => Math.max(p.cpu, p.mem);
 const isCrit = (p: Pod) => p.status === "OOMKilled" || p.status === "CrashLoopBackOff";
-const healthColor = (p: Pod) => (p.status === "Pending" ? "#C7CBD3" : isCrit(p) ? "#EF4444" : heat(health(p)));
+// 뮤트 팔레트 — 정상은 조용하게, 경고/임계만 빛나게 (레퍼런스식 절제)
+const AP = { green: "#A5DDB7", orange: "#FFB340", red: "#FF5D52", gray: "#E2E5EA" } as const;
+const gcolor = (v: number) => (v >= 90 ? AP.red : v >= 75 ? AP.orange : AP.green);
+const healthColor = (p: Pod) => (p.status === "Pending" ? AP.gray : isCrit(p) ? AP.red : gcolor(health(p)));
 
-// ── 영역(convex hull) 유틸 ─────────────────────────────
-type Pt = { x: number; y: number };
-function convexHull(pts: Pt[]): Pt[] {
-  if (pts.length < 3) return pts;
-  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
-  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const lo: Pt[] = []; for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
-  const up: Pt[] = []; for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
-  lo.pop(); up.pop(); return lo.concat(up);
-}
-function territoryPath(pts: Pt[], grow: number): string {
-  if (pts.length < 3) { const c = pts[0] || { x: 0, y: 0 }; const rr = grow + 20; return `M ${c.x - rr} ${c.y} a ${rr} ${rr} 0 1 0 ${rr * 2} 0 a ${rr} ${rr} 0 1 0 ${-rr * 2} 0 Z`; }
-  const h = convexHull(pts);
-  const cx = h.reduce((s, q) => s + q.x, 0) / h.length, cy = h.reduce((s, q) => s + q.y, 0) / h.length;
-  const e = h.map((q) => { const dx = q.x - cx, dy = q.y - cy, L = Math.hypot(dx, dy) || 1; return { x: q.x + (dx / L) * grow, y: q.y + (dy / L) * grow }; });
-  const n = e.length; let d = `M ${(e[0].x + e[n - 1].x) / 2} ${(e[0].y + e[n - 1].y) / 2}`;
-  for (let i = 0; i < n; i++) { const p0 = e[i], p1 = e[(i + 1) % n]; d += ` Q ${p0.x.toFixed(1)} ${p0.y.toFixed(1)}, ${((p0.x + p1.x) / 2).toFixed(1)} ${((p0.y + p1.y) / 2).toFixed(1)}`; }
-  return d + " Z";
-}
-const NODE_TINT = ["rgba(47,91,255,0.05)", "rgba(6,182,212,0.055)", "rgba(245,158,11,0.06)"];
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-function heat(u: number): string {
-  const st: [number, number[]][] = [[0, [96, 165, 250]], [30, [59, 130, 246]], [55, [45, 212, 191]], [72, [250, 204, 21]], [86, [249, 115, 22]], [100, [239, 68, 68]]];
-  u = Math.max(0, Math.min(100, u));
-  for (let i = 0; i < st.length - 1; i++) { const [u0, c0] = st[i], [u1, c1] = st[i + 1]; if (u <= u1) { const t = (u - u0) / (u1 - u0 || 1); return `rgb(${Math.round(lerp(c0[0], c1[0], t))},${Math.round(lerp(c0[1], c1[1], t))},${Math.round(lerp(c0[2], c1[2], t))})`; } }
-  return "rgb(239,68,68)";
-}
 const age = (m: number) => (m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`);
 function hexSpiral(n: number) { const out = [{ q: 0, r: 0 }]; const d = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]; for (let k = 1; out.length < n; k++) { let q = d[4][0] * k, r = d[4][1] * k; for (let s = 0; s < 6 && out.length < n; s++) for (let st = 0; st < k && out.length < n; st++) { out.push({ q, r }); q += d[s][0]; r += d[s][1]; } } return out.slice(0, n); }
 const hpx = (q: number, r: number, s: number) => s * Math.sqrt(3) * (q + r / 2);
 const hpy = (q: number, r: number, s: number) => s * 1.5 * r;
 const hpts = (cx: number, cy: number, rad: number) => Array.from({ length: 6 }, (_, i) => { const a = (Math.PI / 180) * (60 * i - 30); return `${(cx + rad * Math.cos(a)).toFixed(1)},${(cy + rad * Math.sin(a)).toFixed(1)}`; }).join(" ");
 
-const S = 22, PAD = 26, HEADER = 46, GAP = 96;
+const S = 16, PAD = 20, HEADER = 46, GAP = 84;
 type Focus = { t: "cluster" } | { t: "node"; id: string } | { t: "pod"; id: string };
 const CANVAS_W = 952, CANVAS_H = 560, ASPECT = CANVAS_W / CANVAS_H;
 function fit(b: { x: number; y: number; w: number; h: number }) { let W = b.w, H = b.h; if (W / H < ASPECT) W = H * ASPECT; else H = W / ASPECT; return { x: b.x + b.w / 2 - W / 2, y: b.y + b.h / 2 - H / 2, w: W, h: H }; }
@@ -92,11 +68,12 @@ function App() {
   const [, setBeat] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // 레이아웃 (파드 개수 고정 → 위치 고정)
+  // 레이아웃 — 노드 = 벌집 프레임. 링 단위(1,7,19,37…)로 확장, 파드가 채워지고 남은 칸은 빈 슬롯(고스트).
   const layout = useMemo(() => {
+    const frameOf = (n: number) => { let f = 1, k = 1; while (f < n) { f += 6 * k; k++; } return f; };
     const nodeLayouts = NODES.map((node) => {
       const np = pods.filter((p) => p.node === node.id);
-      const cells = hexSpiral(np.length);
+      const cells = hexSpiral(frameOf(np.length));
       const rel = cells.map((c) => ({ x: hpx(c.q, c.r, S), y: hpy(c.q, c.r, S) }));
       const minX = Math.min(...rel.map((r) => r.x)) - S, maxX = Math.max(...rel.map((r) => r.x)) + S, minY = Math.min(...rel.map((r) => r.y)) - S, maxY = Math.max(...rel.map((r) => r.y)) + S;
       const hw = maxX - minX, hh = maxY - minY, rw = hw + PAD * 2, rh = hh + PAD + HEADER;
@@ -108,9 +85,10 @@ function App() {
     const regions = nodeLayouts.map(({ node, np, rel, minX, maxX, minY, maxY, rw, rh, hh }, index) => {
       const ox = offsets[index];
       const oy = 0, hcx = ox + rw / 2, hcy = oy + HEADER + PAD + hh / 2;
+      const abs = rel.map((r) => ({ x: hcx + (r.x - (minX + maxX) / 2), y: hcy + (r.y - (minY + maxY) / 2) }));
       const pp: Record<string, { x: number; y: number }> = {};
-      np.forEach((p, i) => { pp[p.id] = { x: hcx + (rel[i].x - (minX + maxX) / 2), y: hcy + (rel[i].y - (minY + maxY) / 2) }; });
-      return { node, x: ox, y: oy, w: rw, h: rh, ids: np.map((p) => p.id), pp };
+      np.forEach((p, i) => { pp[p.id] = abs[i]; });
+      return { node, x: ox, y: oy, w: rw, h: rh, cx: hcx, cy: hcy, ids: np.map((p) => p.id), pp, ghosts: abs.slice(np.length) };
     });
     const lastRegion = regions[regions.length - 1];
     const worldW = lastRegion ? lastRegion.x + lastRegion.w : 0, worldH = Math.max(...regions.map((r) => r.h));
@@ -142,10 +120,10 @@ function App() {
       const news: { kind: "crit" | "ok"; msg: string }[] = [];
       setPods((prev) => prev.map((p) => {
         if (p.status === "Pending") return p;
-        const j = () => Math.random() * 16 - 8;
+        const j = () => Math.random() * 7 - 3.5;
         let cpu = Math.max(6, Math.min(99, Math.round(p.cpu + j()))), mem = Math.max(8, Math.min(99, Math.round(p.mem + j())));
         let status = p.status, restarts = p.restarts;
-        if (Math.random() < 0.03) {
+        if (Math.random() < 0.012) {
           if (isCrit(p)) { status = "Running"; cpu = 40 + Math.floor(Math.random() * 20); mem = 45 + Math.floor(Math.random() * 20); news.push({ kind: "ok", msg: `${p.name} 복구됨 → Running` }); }
           else { status = Math.random() < 0.5 ? "OOMKilled" : "CrashLoopBackOff"; cpu = 90 + Math.floor(Math.random() * 9); mem = 92 + Math.floor(Math.random() * 7); restarts = p.restarts + 1; news.push({ kind: "crit", msg: `${p.name} ${status}` }); }
         }
@@ -198,20 +176,26 @@ function App() {
           <svg ref={svgRef} width="100%" height={CANVAS_H} viewBox={`${target.x} ${target.y} ${target.w} ${target.h}`} style={{ display: "block", background: "radial-gradient(circle at 30% 20%, rgba(47,91,255,0.04), transparent 60%)" }} onClick={() => setFocus({ t: "cluster" })}>
             <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" stopOpacity="0.42" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.08" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient></defs>
 
-            {/* 노드 = 영역(territory) */}
+            {/* 노드 그룹 간 연결 */}
+            {layout.regions.slice(0, -1).map((r, i) => {
+              const b = layout.regions[i + 1];
+              return <line key={`lnk${i}`} x1={r.x + r.w - 10} y1={r.cy} x2={b.x + 10} y2={b.cy} stroke="rgba(17,19,24,0.14)" strokeWidth={2.2} strokeDasharray="0.5 8" strokeLinecap="round" />;
+            })}
+
+            {/* 노드 = 벌집 그룹 (빈 칸 = 남은 슬롯) */}
             {layout.regions.map((r) => {
-              const np = pods.filter((p) => p.node === r.node.id); const act = np.filter((p) => p.status !== "Pending");
-              const avg = Math.round(act.reduce((s, p) => s + health(p), 0) / (act.length || 1)); const hot = np.filter(isCrit).length;
+              const np = pods.filter((p) => p.node === r.node.id);
+              const hot = np.filter(isCrit).length;
+              const allPts = [...r.ids.map((id) => posOf(id)), ...r.ghosts];
+              const labelY = Math.min(...allPts.map((p) => p.y)) - S - 22;
               const on = focusNode === r.node.id || (focus.t === "pod" && focusPod!.node === r.node.id);
-              const idx = NODES.findIndex((n) => n.id === r.node.id);
-              const hullPts = r.ids.map((id) => posOf(id));
-              const cxx = hullPts.reduce((s, p) => s + p.x, 0) / hullPts.length;
-              const labelY = Math.min(...hullPts.map((p) => p.y)) - S - 28;
               return (
                 <g key={r.node.id} onClick={(e) => { e.stopPropagation(); setFocus({ t: "node", id: r.node.id }); }} style={{ cursor: "pointer" }}>
-                  <path d={territoryPath(hullPts, S + 16)} fill={on ? "rgba(47,91,255,0.08)" : NODE_TINT[idx % 3]} stroke={on ? BLUE : "rgba(17,19,24,0.13)"} strokeWidth={on ? 2.5 : 1.5} />
-                  <text x={cxx} y={labelY} textAnchor="middle" fontSize="14" fontWeight="700" fill="#111318" fontFamily="ui-monospace,monospace">{r.node.id}</text>
-                  <text x={cxx} y={labelY + 16} textAnchor="middle" fontSize="11" fill="#9AA1AC">{r.node.instance} · {r.node.zone} · {np.length} pods · 평균 {avg}%{hot ? ` · 핫스팟 ${hot}` : ""}</text>
+                  <text x={r.cx} y={labelY} textAnchor="middle" fontSize="14" fontWeight="700" fill={on ? BLUE : "#111318"} fontFamily="ui-monospace,monospace">{r.node.id}</text>
+                  <text x={r.cx} y={labelY + 16} textAnchor="middle" fontSize="11" fill="#9AA1AC">{r.node.instance} · {r.node.zone} · {np.length}/{np.length + r.ghosts.length} 슬롯{hot ? ` · 핫스팟 ${hot}` : ""}</text>
+                  {r.ghosts.map((g, gi) => (
+                    <polygon key={gi} points={hpts(g.x, g.y, S - 1)} fill="#EEF0F4" stroke="#fff" strokeWidth={1.1} strokeLinejoin="round" />
+                  ))}
                 </g>
               );
             })}
@@ -219,10 +203,10 @@ function App() {
             {/* 트래픽 오버레이 */}
             {showTraffic && TRAFFIC.map(([a, b, rps]) => {
               const ca = centroids[a], cb = centroids[b]; if (!ca || !cb) return null;
-              const mx = (ca.x + cb.x) / 2, my = (ca.y + cb.y) / 2 - 40;
-              const d = `M ${ca.x} ${ca.y} Q ${mx} ${my}, ${cb.x} ${cb.y}`; const w = Math.max(1.2, Math.min(6, rps / 190));
-              const tgtCrit = pods.some((p) => p.svc === b && isCrit(p)); const col = tgtCrit ? "#EF4444" : "#9DB0D8";
-              return <g key={`${a}-${b}`} style={{ opacity: 0.7 }}><path d={d} fill="none" stroke={col} strokeWidth={w} strokeOpacity={0.35} strokeLinecap="round" /><path d={d} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" strokeDasharray="2 10" className="flow" style={{ animationDuration: `${Math.max(0.6, 1.6 - rps / 1000)}s` }} /></g>;
+              const mx = (ca.x + cb.x) / 2, my = (ca.y + cb.y) / 2 - 34;
+              const d = `M ${ca.x} ${ca.y} Q ${mx} ${my}, ${cb.x} ${cb.y}`; const w = Math.max(1, Math.min(3.2, rps / 340));
+              const tgtCrit = pods.some((p) => p.svc === b && isCrit(p)); const col = tgtCrit ? "#F4A9A3" : "#C9D3E2";
+              return <g key={`${a}-${b}`} style={{ opacity: 0.55 }}><path d={d} fill="none" stroke={col} strokeWidth={w} strokeOpacity={0.4} strokeLinecap="round" /><path d={d} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" strokeDasharray="1.5 8" className="flow" style={{ animationDuration: `${Math.max(0.7, 1.7 - rps / 1000)}s` }} /></g>;
             })}
 
             {/* 파드 */}
@@ -234,11 +218,10 @@ function App() {
               const showLabel = (focus.t === "node" && p.node === focus.id) || foc;
               return (
                 <g key={p.id} onClick={(e) => { e.stopPropagation(); setFocus({ t: "pod", id: p.id }); }} style={{ cursor: "pointer", opacity: dim ? 0.22 : 1, transition: "opacity .3s" }} className="hx">
-                  <polygon points={pts} fill={fillOf(p)} stroke={foc ? BLUE : "#fff"} strokeWidth={foc ? 3 : 1.7} strokeLinejoin="round" />
-                  <polygon points={pts} fill="url(#lg)" strokeLinejoin="round" style={{ pointerEvents: "none" }} />
-                  {isCrit(p) && <polygon points={pts} fill="none" stroke="#EF4444" strokeWidth={2.6} strokeLinejoin="round" className="critpulse" style={{ pointerEvents: "none" }} />}
-                  {showLabel && <text x={q.x} y={q.y + 2.5} textAnchor="middle" fontSize="6.2" fontWeight="700" fill="rgba(255,255,255,0.95)" style={{ pointerEvents: "none", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>{p.svc}</text>}
-                  {showLabel && <text x={q.x} y={q.y + 9.5} textAnchor="middle" fontSize="4.6" fontWeight="500" fill="rgba(255,255,255,0.8)" style={{ pointerEvents: "none" }}>{p.status === "Running" ? `${health(p)}%` : p.status}</text>}
+                  <polygon points={pts} fill={fillOf(p)} stroke={foc ? BLUE : "#fff"} strokeWidth={foc ? 2.4 : 1.1} strokeLinejoin="round" />
+                  {isCrit(p) && <polygon points={pts} fill="none" stroke="#E5484D" strokeWidth={1.8} strokeLinejoin="round" className="critpulse" style={{ pointerEvents: "none" }} />}
+                  {showLabel && <text x={q.x} y={q.y + 2} textAnchor="middle" fontSize="4.6" fontWeight="700" fill="rgba(17,19,24,0.72)" style={{ pointerEvents: "none" }}>{p.svc}</text>}
+                  {showLabel && <text x={q.x} y={q.y + 7.5} textAnchor="middle" fontSize="3.6" fontWeight="500" fill="rgba(17,19,24,0.45)" style={{ pointerEvents: "none" }}>{p.status === "Running" ? `${health(p)}%` : p.status}</text>}
                 </g>
               );
             })}
@@ -246,8 +229,15 @@ function App() {
 
           {/* 하단 상태바 */}
           <div style={{ position: "absolute", left: 16, bottom: 14, display: "flex", gap: 14, alignItems: "center", fontSize: 11.5, color: "#8A93A0", background: "rgba(255,255,255,0.85)", backdropFilter: "blur(6px)", padding: "7px 12px", borderRadius: 11, border: "1px solid rgba(17,19,24,0.06)" }}>
-            {colorBy === "load" ? <span style={{ display: "flex", alignItems: "center", gap: 7 }}>여유<span style={{ width: 90, height: 7, borderRadius: 999, background: "linear-gradient(90deg,#60A5FA,#3B82F6,#2DD4BF,#FACC15,#F97316,#EF4444)" }} />한도 임박</span>
-              : <span>색 = 서비스</span>}
+            {colorBy === "load" ? (
+              <span style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 999, background: AP.green }} />정상</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 999, background: AP.orange }} />경고</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 999, background: AP.red }} />임계</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 999, background: AP.gray }} />대기</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#B4BBC6" }}><span style={{ width: 9, height: 9, borderRadius: 3, background: "#EEF0F4", border: "1px solid rgba(17,19,24,0.08)" }} />빈 슬롯</span>
+              </span>
+            ) : <span>색 = 서비스</span>}
             <span style={{ color: "#C3CAD5" }}>|</span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span className="pulse" style={{ width: 7, height: 7, borderRadius: 999, background: "#22C55E" }} />실시간 · {NODES.length}노드 {pods.length}파드 · 임계 <b style={{ color: crit ? "#EF4444" : "#111318" }}>{crit}</b></span>
           </div>
@@ -291,7 +281,7 @@ function App() {
 }
 
 function Bar({ label, v, sub, detail }: { label: string; v: number; sub?: string; detail?: string }) {
-  return <div><div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}><span style={{ color: "#8A93A0" }}>{label} <span style={{ color: "#B4BBC6" }}>(한도 대비)</span></span><span style={{ fontWeight: 700, color: "#111318" }}>{v}%{detail && <span style={{ color: "#9AA1AC", fontWeight: 500 }}> · {detail}</span>}{sub && <span style={{ color: "#EF4444", fontWeight: 600 }}> {sub}</span>}</span></div><div style={{ height: 8, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}><motion.div animate={{ width: `${v}%` }} transition={{ duration: 0.6 }} style={{ height: "100%", borderRadius: 999, background: heat(v) }} /></div></div>;
+  return <div><div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}><span style={{ color: "#8A93A0" }}>{label} <span style={{ color: "#B4BBC6" }}>(한도 대비)</span></span><span style={{ fontWeight: 700, color: "#111318" }}>{v}%{detail && <span style={{ color: "#9AA1AC", fontWeight: 500 }}> · {detail}</span>}{sub && <span style={{ color: AP.red, fontWeight: 600 }}> {sub}</span>}</span></div><div style={{ height: 8, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}><motion.div animate={{ width: `${v}%`, backgroundColor: gcolor(v) }} transition={{ duration: 0.6 }} style={{ height: "100%", borderRadius: 999 }} /></div></div>;
 }
 function DetailPanel({ pod, onClose }: { pod: Pod; onClose: () => void }) {
   const crit = isCrit(pod);
