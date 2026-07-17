@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -14,20 +14,28 @@ from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.cost.observations import (
     COST_NAMESPACE_HOURLY_METRIC,
     COST_NAMESPACE_STORAGE_METRIC,
+    COST_POD_CPU_HOURLY_METRIC,
+    COST_POD_CPU_USE_METRIC,
+    COST_POD_MEMORY_HOURLY_METRIC,
+    COST_POD_MEMORY_USE_METRIC,
     MAX_COST_TREND_POINTS,
     MAX_COST_TREND_SERIES,
     MAX_SAFE_JSON_INTEGER,
+    CostCurrentAllocation,
     CostObservationStatus,
     CostObservationSummary,
     CostObservedObservationStatus,
     CostObservedObservationSummary,
     CostObservedTrend,
+    CostObservedWorkloadAllocation,
     CostOverviewResponse,
     CostScopeCoverage,
     CostTimeRange,
     CostTrendPoint,
     CostTrendSeries,
     CostUnavailableTrend,
+    CostUnavailableWorkloadAllocation,
+    CostWorkloadAllocation,
 )
 
 COST_OBSERVATION_UNAVAILABLE = "cost_observation_unavailable"
@@ -36,10 +44,17 @@ COST_STORAGE_OBSERVATION_PARTIAL = "cost_storage_observation_partial"
 COST_SCOPE_PARTIAL = "cost_scope_partial"
 COST_TREND_HISTORY_INSUFFICIENT = "cost_trend_history_insufficient"
 COST_TREND_SERIES_TRUNCATED = "cost_trend_series_truncated"
+COST_WORKLOAD_OBSERVATION_UNAVAILABLE = "cost_workload_observation_unavailable"
+COST_WORKLOAD_OBSERVATION_PARTIAL = "cost_workload_observation_partial"
+COST_WORKLOAD_HISTORY_INSUFFICIENT = "cost_workload_history_insufficient"
+COST_WORKLOAD_USAGE_PARTIAL = "cost_workload_usage_partial"
 COST_CURRENCY = "USD"
 COST_ALLOCATION_WINDOW = "1h"
 MONTHLY_PROJECTION_HOURS = 730
+DAILY_PROJECTION_HOURS = 24
+WORKLOAD_USAGE_WINDOW_SECONDS = 300
 MICROS_PER_UNIT = Decimal("1000000")
+BASIS_POINTS_PER_UNIT = Decimal("10000")
 
 
 @dataclass(frozen=True)
@@ -50,6 +65,18 @@ class _CostWindow:
     rates: Mapping[str, int]
     storage_rates: Mapping[str, int] | None
     invalid: bool
+
+
+@dataclass(frozen=True)
+class _WorkloadCostWindow:
+    timestamp: int
+    observed_at: str
+    cpu_rates: Mapping[str, int]
+    memory_rates: Mapping[str, int]
+    cpu_use_basis_points: Mapping[str, int] | None
+    memory_use_basis_points: Mapping[str, int] | None
+    invalid: bool
+    missing_pods: tuple[str, ...]
 
 
 def cost_overview(
@@ -71,6 +98,7 @@ def cost_overview(
         selected_cluster_ids=selected,
         namespace_refs=namespaces,
     )
+
     windows = tuple(
         window
         for row in evidence_windows
@@ -135,6 +163,291 @@ def cost_overview(
         refresh_after_seconds=integral_refresh_after_seconds("cost_summary"),
         trend_refresh_after_seconds=integral_refresh_after_seconds("cost_trend"),
         nodes_refresh_after_seconds=integral_refresh_after_seconds("cost_nodes"),
+    )
+
+
+def cost_workload_allocation(
+    *,
+    cluster_id: str,
+    namespace: str,
+    workload_name: str,
+    pod_names: Iterable[str],
+    replicas: int | None,
+    evidence_windows: Sequence[Mapping[str, Any]] = (),
+    time_range: CostTimeRange = "24h",
+    membership_complete: bool = True,
+) -> CostWorkloadAllocation:
+    """Project one authorized workload from agent-persisted pod allocation evidence."""
+
+    selected_pods = tuple(sorted({pod for pod in pod_names if pod}))
+    if (
+        not cluster_id
+        or not namespace
+        or not workload_name
+        or not selected_pods
+        or replicas is None
+    ):
+        return CostUnavailableWorkloadAllocation(
+            reason_codes=(COST_WORKLOAD_OBSERVATION_UNAVAILABLE,)
+        )
+    windows = tuple(
+        window
+        for row in evidence_windows
+        if (
+            window := _workload_cost_window(
+                row,
+                cluster_id=cluster_id,
+                namespace=namespace,
+                pod_names=selected_pods,
+            )
+        )
+        is not None
+    )
+    if not windows:
+        return CostUnavailableWorkloadAllocation(
+            reason_codes=(COST_WORKLOAD_OBSERVATION_UNAVAILABLE,)
+        )
+    latest = max(windows, key=lambda window: window.timestamp)
+    cpu_rate = _safe_total(latest.cpu_rates.values())
+    memory_rate = _safe_total(latest.memory_rates.values())
+    if cpu_rate is None or memory_rate is None:
+        return CostUnavailableWorkloadAllocation(
+            reason_codes=(COST_WORKLOAD_OBSERVATION_UNAVAILABLE,)
+        )
+    hourly_rate = _safe_total((cpu_rate, memory_rate))
+    if hourly_rate is None:
+        return CostUnavailableWorkloadAllocation(
+            reason_codes=(COST_WORKLOAD_OBSERVATION_UNAVAILABLE,)
+        )
+    projected_daily = _safe_multiply(hourly_rate, DAILY_PROJECTION_HOURS)
+    projected_monthly = _safe_multiply(hourly_rate, MONTHLY_PROJECTION_HOURS)
+    if projected_daily is None or projected_monthly is None:
+        return CostUnavailableWorkloadAllocation(
+            reason_codes=(COST_WORKLOAD_OBSERVATION_UNAVAILABLE,)
+        )
+
+    cpu_use = _weighted_basis_points(latest.cpu_use_basis_points, latest.cpu_rates)
+    memory_use = _weighted_basis_points(latest.memory_use_basis_points, latest.memory_rates)
+    reasons = _unique_reasons(
+        (COST_WORKLOAD_OBSERVATION_PARTIAL,)
+        if latest.invalid or latest.missing_pods or not membership_complete
+        else (),
+        (COST_WORKLOAD_USAGE_PARTIAL,) if cpu_use is None or memory_use is None else (),
+    )
+    trend = _workload_cost_trend(
+        windows=windows,
+        workload_name=workload_name,
+        time_range=time_range,
+        partial_reasons=reasons,
+    )
+    if isinstance(trend, CostUnavailableTrend):
+        reasons = _unique_reasons(reasons, (COST_WORKLOAD_HISTORY_INSUFFICIENT,))
+    return CostObservedWorkloadAllocation(
+        availability="partial" if reasons else "available",
+        observed_at=latest.observed_at,
+        currency=COST_CURRENCY,
+        current=CostCurrentAllocation(
+            replicas=replicas,
+            hourly_rate_micros=hourly_rate,
+            projected_daily_micros=projected_daily,
+            projected_monthly_micros=projected_monthly,
+            cpu_rate_micros=cpu_rate,
+            memory_rate_micros=memory_rate,
+            cpu_allocation_use_basis_points=cpu_use,
+            memory_allocation_use_basis_points=memory_use,
+            cpu_usage_window_seconds=(
+                WORKLOAD_USAGE_WINDOW_SECONDS if cpu_use is not None else None
+            ),
+            memory_usage_window_seconds=(
+                WORKLOAD_USAGE_WINDOW_SECONDS if memory_use is not None else None
+            ),
+        ),
+        trend=trend,
+        reason_codes=reasons,
+    )
+
+
+def _workload_cost_window(
+    row: Mapping[str, Any],
+    *,
+    cluster_id: str,
+    namespace: str,
+    pod_names: tuple[str, ...],
+) -> _WorkloadCostWindow | None:
+    row_cluster_id = row.get("cluster_id")
+    payload = row.get("payload")
+    if row_cluster_id != cluster_id or not isinstance(payload, Mapping):
+        return None
+    if payload.get("cluster_id") not in (None, cluster_id):
+        return None
+    timestamp = _timestamp(row.get("updated_at"))
+    results = _metric_results(payload)
+    if timestamp is None or results is None:
+        return None
+    cpu_rates, cpu_invalid = _pod_micros(
+        results.get(COST_POD_CPU_HOURLY_METRIC),
+        namespace=namespace,
+        pod_names=pod_names,
+    )
+    memory_rates, memory_invalid = _pod_micros(
+        results.get(COST_POD_MEMORY_HOURLY_METRIC),
+        namespace=namespace,
+        pod_names=pod_names,
+    )
+    if not cpu_rates or not memory_rates:
+        return None
+    cpu_use, cpu_use_invalid = _pod_basis_points(
+        results.get(COST_POD_CPU_USE_METRIC),
+        namespace=namespace,
+        pod_names=pod_names,
+    )
+    memory_use, memory_use_invalid = _pod_basis_points(
+        results.get(COST_POD_MEMORY_USE_METRIC),
+        namespace=namespace,
+        pod_names=pod_names,
+    )
+    observed_pods = set(cpu_rates) & set(memory_rates)
+    return _WorkloadCostWindow(
+        timestamp=timestamp,
+        observed_at=datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z"),
+        cpu_rates=cpu_rates,
+        memory_rates=memory_rates,
+        cpu_use_basis_points=cpu_use,
+        memory_use_basis_points=memory_use,
+        invalid=cpu_invalid or memory_invalid or cpu_use_invalid or memory_use_invalid,
+        missing_pods=tuple(sorted(set(pod_names) - observed_pods)),
+    )
+
+
+def _pod_micros(
+    result: Any,
+    *,
+    namespace: str,
+    pod_names: tuple[str, ...],
+) -> tuple[dict[str, int] | None, bool]:
+    return _pod_values(
+        result,
+        namespace=namespace,
+        pod_names=pod_names,
+        convert=_to_micros,
+    )
+
+
+def _pod_basis_points(
+    result: Any,
+    *,
+    namespace: str,
+    pod_names: tuple[str, ...],
+) -> tuple[dict[str, int] | None, bool]:
+    return _pod_values(
+        result,
+        namespace=namespace,
+        pod_names=pod_names,
+        convert=_to_basis_points,
+    )
+
+
+def _pod_values(
+    result: Any,
+    *,
+    namespace: str,
+    pod_names: tuple[str, ...],
+    convert: Callable[[Any], int | None],
+) -> tuple[dict[str, int] | None, bool]:
+    if not isinstance(result, Mapping):
+        return None, False
+    samples = result.get("samples")
+    if not isinstance(samples, list):
+        return None, True
+    allowed_pods = set(pod_names)
+    values: dict[str, int] = {}
+    invalid = False
+    for sample in samples:
+        if not isinstance(sample, Mapping):
+            invalid = True
+            continue
+        metric = sample.get("metric")
+        if not isinstance(metric, Mapping):
+            invalid = True
+            continue
+        sample_namespace = metric.get("namespace") or metric.get("exported_namespace")
+        pod = metric.get("pod") or metric.get("pod_name")
+        if sample_namespace != namespace or pod not in allowed_pods:
+            continue
+        value = convert(sample.get("value"))
+        if value is None:
+            invalid = True
+            continue
+        previous = values.get(str(pod), 0)
+        if previous > MAX_SAFE_JSON_INTEGER - value:
+            invalid = True
+            continue
+        values[str(pod)] = previous + value
+    return values, invalid
+
+
+def _to_basis_points(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+        return None
+    try:
+        decimal = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    if not decimal.is_finite() or decimal < 0 or decimal > 1:
+        return None
+    return int((decimal * BASIS_POINTS_PER_UNIT).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _weighted_basis_points(
+    values: Mapping[str, int] | None,
+    weights: Mapping[str, int],
+) -> int | None:
+    if values is None or set(weights) - set(values):
+        return None
+    weight_total = sum(weights.values())
+    if weight_total == 0:
+        return 0
+    numerator = sum(values[pod] * weight for pod, weight in weights.items())
+    weighted = (Decimal(numerator) / Decimal(weight_total)).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    return min(10_000, int(weighted))
+
+
+def _workload_cost_trend(
+    *,
+    windows: Sequence[_WorkloadCostWindow],
+    workload_name: str,
+    time_range: CostTimeRange,
+    partial_reasons: tuple[str, ...],
+) -> CostObservedTrend | CostUnavailableTrend:
+    points: dict[int, int] = {}
+    historical_partial = False
+    for window in windows:
+        cpu_rate = _safe_total(window.cpu_rates.values())
+        memory_rate = _safe_total(window.memory_rates.values())
+        total = _safe_total(value for value in (cpu_rate, memory_rate) if value is not None)
+        if cpu_rate is None or memory_rate is None or total is None:
+            historical_partial = True
+            continue
+        points[window.timestamp] = total
+        historical_partial = historical_partial or window.invalid or bool(window.missing_pods)
+    ordered = tuple(sorted(points.items()))[-MAX_COST_TREND_POINTS:]
+    if len(ordered) < 2:
+        return CostUnavailableTrend(
+            range=time_range,
+            reason_codes=(COST_WORKLOAD_HISTORY_INSUFFICIENT,),
+        )
+    reasons = _unique_reasons(
+        partial_reasons,
+        (COST_WORKLOAD_OBSERVATION_PARTIAL,) if historical_partial else (),
+    )
+    return CostObservedTrend(
+        availability="partial" if reasons else "available",
+        range=time_range,
+        currency=COST_CURRENCY,
+        series=(_trend_series("workload", workload_name, ordered),),
+        reason_codes=reasons,
     )
 
 

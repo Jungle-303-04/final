@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
+from domains.cost.observation_projection import cost_workload_allocation
 from domains.inventory_filter.graph import build_resource_graph
 
 JsonObject = dict[str, Any]
@@ -85,6 +86,7 @@ def application_detail(
     workload_scope: Mapping[str, Any] | None = None,
     workload_runtime_rows: Sequence[Mapping[str, Any]] = (),
     workload_runtime_truncated: bool = False,
+    workload_cost_evidence: Sequence[Mapping[str, Any]] = (),
 ) -> JsonObject:
     card = application_card(
         application,
@@ -104,6 +106,7 @@ def application_detail(
         runtime_truncated=workload_runtime_truncated,
         inventory_context=inventory_context,
         application_id=str(application.get("application_id") or ""),
+        cost_evidence=workload_cost_evidence,
     )
     selected_scope = "workload" if workload is not None else "application"
     return {
@@ -243,6 +246,7 @@ def workload_detail_projection(
     runtime_truncated: bool,
     inventory_context: Mapping[str, Any],
     application_id: str,
+    cost_evidence: Sequence[Mapping[str, Any]] = (),
 ) -> JsonObject | None:
     """Project a selected workload without borrowing app-level channels."""
 
@@ -272,6 +276,23 @@ def workload_detail_projection(
         topology=topology,
         inventory_context=inventory_context,
     )
+    resource = _mapping(workload.get("resource"))
+    workload_scope_contract = _mapping(workload.get("scope"))
+    pod_names = tuple(
+        str(node.get("name") or "")
+        for node in topology.get("nodes") or []
+        if isinstance(node, Mapping) and str(node.get("resource_type") or "") == "pod"
+    )
+    replicas_value = _mapping(runtime.get("runtime_readiness")).get("total_pods")
+    cost = cost_workload_allocation(
+        cluster_id=str(workload_scope_contract.get("cluster_id") or ""),
+        namespace=str(resource.get("namespace") or ""),
+        workload_name=str(resource.get("name") or ""),
+        pod_names=pod_names,
+        replicas=replicas_value if isinstance(replicas_value, int) else None,
+        evidence_windows=cost_evidence,
+        membership_complete=topology.get("completeness") == "exact",
+    )
     return {
         "workload": dict(workload),
         "runtime_readiness": runtime["runtime_readiness"],
@@ -282,10 +303,7 @@ def workload_detail_projection(
             "availability": "unavailable",
             "reason_codes": ["workload_history_link_not_persisted"],
         },
-        "cost": {
-            "availability": "unavailable",
-            "reason_codes": ["cost_observation_not_integrated"],
-        },
+        "cost": cost.model_dump(mode="json"),
         "actions": {
             "availability": "unavailable",
             "reason_codes": ["workload_action_capabilities_not_connected"],

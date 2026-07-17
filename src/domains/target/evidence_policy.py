@@ -5,6 +5,10 @@ from packages.config.security import RCA_TEST_TARGET_ENVIRONMENTS
 from packages.contracts.cost.observations import (
     COST_NAMESPACE_HOURLY_METRIC,
     COST_NAMESPACE_STORAGE_METRIC,
+    COST_POD_CPU_HOURLY_METRIC,
+    COST_POD_CPU_USE_METRIC,
+    COST_POD_MEMORY_HOURLY_METRIC,
+    COST_POD_MEMORY_USE_METRIC,
 )
 from packages.contracts.evidence_policy import (
     EvidencePolicyQuery,
@@ -56,6 +60,32 @@ COST_NAMESPACE_STORAGE_QUERY = """sum by (namespace) (
   max by (persistentvolume, namespace) (
     label_replace(kube_persistentvolume_claim_ref{claim_namespace!=""}, "namespace", "$1", "claim_namespace", "(.+)")
   )
+)"""
+COST_POD_CPU_HOURLY_QUERY = """sum by (namespace, pod) (
+  avg_over_time(container_cpu_allocation{namespace!="",pod!=""}[1h])
+  * on(node) group_left() max by (node) (node_cpu_hourly_cost)
+)"""
+COST_POD_MEMORY_HOURLY_QUERY = """sum by (namespace, pod) (
+  avg_over_time(container_memory_allocation_bytes{namespace!="",pod!=""}[1h])
+  / 1073741824 * on(node) group_left() max by (node) (node_ram_hourly_cost)
+)"""
+COST_POD_CPU_USE_QUERY = """clamp_max(
+  sum by (namespace, pod) (
+    rate(container_cpu_usage_seconds_total{namespace!="",pod!="",container!=""}[5m])
+  )
+  / clamp_min(sum by (namespace, pod) (
+    container_cpu_allocation{namespace!="",pod!=""}
+  ), 0.001),
+  1
+)"""
+COST_POD_MEMORY_USE_QUERY = """clamp_max(
+  sum by (namespace, pod) (
+    avg_over_time(container_memory_working_set_bytes{namespace!="",pod!="",container!=""}[5m])
+  )
+  / clamp_min(sum by (namespace, pod) (
+    avg_over_time(container_memory_allocation_bytes{namespace!="",pod!=""}[5m])
+  ), 1),
+  1
 )"""
 
 
@@ -315,6 +345,38 @@ def evidence_provider_queries(
                     '(increase(istio_requests_total{reporter="destination"}[5m]))'
                 ),
                 provenance=cluster_provenance,
+            ),
+            _query(
+                source="prometheus",
+                name=COST_POD_CPU_HOURLY_METRIC,
+                description="Pod CPU allocation hourly rate from OpenCost metrics.",
+                query=COST_POD_CPU_HOURLY_QUERY,
+                provenance=cost_provenance,
+                collection_scope="cluster_cost_observation",
+            ),
+            _query(
+                source="prometheus",
+                name=COST_POD_MEMORY_HOURLY_METRIC,
+                description="Pod memory allocation hourly rate from OpenCost metrics.",
+                query=COST_POD_MEMORY_HOURLY_QUERY,
+                provenance=cost_provenance,
+                collection_scope="cluster_cost_observation",
+            ),
+            _query(
+                source="prometheus",
+                name=COST_POD_CPU_USE_METRIC,
+                description="Pod CPU use as a bounded fraction of observed allocation.",
+                query=COST_POD_CPU_USE_QUERY,
+                provenance=cost_provenance,
+                collection_scope="cluster_cost_observation",
+            ),
+            _query(
+                source="prometheus",
+                name=COST_POD_MEMORY_USE_METRIC,
+                description="Pod memory use as a bounded fraction of observed allocation.",
+                query=COST_POD_MEMORY_USE_QUERY,
+                provenance=cost_provenance,
+                collection_scope="cluster_cost_observation",
             ),
         ]
         if evidence_profile == DEMO_EVIDENCE_PROFILE:

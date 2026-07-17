@@ -21,7 +21,7 @@ def query_payloads(policy: AgentPolicy) -> list[dict[str, object]]:
     return [query for provider in evidence.providers.values() for query in provider.queries]
 
 
-def test_standard_profile_excludes_demo_and_unscoped_telemetry_queries() -> None:
+def test_standard_profile_excludes_demo_and_shared_unscoped_telemetry_queries() -> None:
     policy = default_agent_policy(cluster_id="customer-cluster")
     queries = query_payloads(policy)
     rendered = repr(queries).casefold()
@@ -34,7 +34,7 @@ def test_standard_profile_excludes_demo_and_unscoped_telemetry_queries() -> None
         provenance = query["provenance"]
         assert provenance["cluster_id"] == "customer-cluster"
         if query["source"] in {"prometheus", "loki", "tempo"}:
-            assert provenance["required_matchers"]
+            assert provenance["backend_scope"] == "cluster_local"
             assert all(matcher in query["query"] for matcher in provenance["required_matchers"])
 
 

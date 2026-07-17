@@ -3,6 +3,10 @@ from __future__ import annotations
 from domains.target.evidence_policy import (
     COST_NAMESPACE_HOURLY_QUERY,
     COST_NAMESPACE_STORAGE_QUERY,
+    COST_POD_CPU_HOURLY_QUERY,
+    COST_POD_CPU_USE_QUERY,
+    COST_POD_MEMORY_HOURLY_QUERY,
+    COST_POD_MEMORY_USE_QUERY,
     DEMO_EVIDENCE_PROFILE,
     STANDARD_EVIDENCE_PROFILE,
     default_agent_policy,
@@ -10,6 +14,10 @@ from domains.target.evidence_policy import (
 from packages.contracts.cost.observations import (
     COST_NAMESPACE_HOURLY_METRIC,
     COST_NAMESPACE_STORAGE_METRIC,
+    COST_POD_CPU_HOURLY_METRIC,
+    COST_POD_CPU_USE_METRIC,
+    COST_POD_MEMORY_HOURLY_METRIC,
+    COST_POD_MEMORY_USE_METRIC,
 )
 from packages.contracts.traffic.observations import (
     TRAFFIC_CARETTA_FLOW_METRIC,
@@ -46,11 +54,19 @@ def test_standard_agent_policy_collects_server_owned_opencost_observations() -> 
 
     assert by_name[COST_NAMESPACE_HOURLY_METRIC]["query"] == COST_NAMESPACE_HOURLY_QUERY
     assert by_name[COST_NAMESPACE_STORAGE_METRIC]["query"] == COST_NAMESPACE_STORAGE_QUERY
-    expected_matchers = {
-        COST_NAMESPACE_HOURLY_METRIC: ['namespace!=""'],
-        COST_NAMESPACE_STORAGE_METRIC: ['claim_namespace!=""'],
+    expected = {
+        COST_NAMESPACE_HOURLY_METRIC: (COST_NAMESPACE_HOURLY_QUERY, ['namespace!=""']),
+        COST_NAMESPACE_STORAGE_METRIC: (
+            COST_NAMESPACE_STORAGE_QUERY,
+            ['claim_namespace!=""'],
+        ),
+        COST_POD_CPU_HOURLY_METRIC: (COST_POD_CPU_HOURLY_QUERY, ['namespace!=""']),
+        COST_POD_MEMORY_HOURLY_METRIC: (COST_POD_MEMORY_HOURLY_QUERY, ['namespace!=""']),
+        COST_POD_CPU_USE_METRIC: (COST_POD_CPU_USE_QUERY, ['namespace!=""']),
+        COST_POD_MEMORY_USE_METRIC: (COST_POD_MEMORY_USE_QUERY, ['namespace!=""']),
     }
-    for name in (COST_NAMESPACE_HOURLY_METRIC, COST_NAMESPACE_STORAGE_METRIC):
+    for name, (query, matchers) in expected.items():
+        assert by_name[name]["query"] == query
         assert by_name[name]["collection_scope"] == "cluster_cost_observation"
         assert by_name[name]["provenance"] == {
             "cluster_id": "cluster-prod",
@@ -58,7 +74,7 @@ def test_standard_agent_policy_collects_server_owned_opencost_observations() -> 
             "backend_scope": "cluster_local",
             "query_scope": "cluster",
             "namespaces": [],
-            "required_matchers": expected_matchers[name],
+            "required_matchers": matchers,
         }
 
 

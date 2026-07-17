@@ -12,10 +12,23 @@ from domains.target.models import EvidenceWindow
 from packages.contracts.cost.observations import (
     COST_NAMESPACE_HOURLY_METRIC,
     COST_NAMESPACE_STORAGE_METRIC,
+    COST_POD_CPU_HOURLY_METRIC,
+    COST_POD_CPU_USE_METRIC,
+    COST_POD_MEMORY_HOURLY_METRIC,
+    COST_POD_MEMORY_USE_METRIC,
     MAX_COST_TREND_POINTS,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection
+
+COST_EVIDENCE_METRICS = (
+    COST_NAMESPACE_HOURLY_METRIC,
+    COST_NAMESPACE_STORAGE_METRIC,
+    COST_POD_CPU_HOURLY_METRIC,
+    COST_POD_MEMORY_HOURLY_METRIC,
+    COST_POD_CPU_USE_METRIC,
+    COST_POD_MEMORY_USE_METRIC,
+)
 
 
 def _normalized_cluster_ids(cluster_ids: Collection[str] | None) -> tuple[str, ...]:
@@ -60,10 +73,7 @@ def cost_evidence_statement(
             table.c.workspace_id == workspace_id,
             table.c.cluster_id.in_(cluster_ids),
             table.c.updated_at >= since,
-            or_(
-                metric_results.has_key(COST_NAMESPACE_HOURLY_METRIC),  # noqa: W601
-                metric_results.has_key(COST_NAMESPACE_STORAGE_METRIC),  # noqa: W601
-            ),
+            or_(*(metric_results.has_key(metric) for metric in COST_EVIDENCE_METRICS)),  # noqa: W601
         )
         .subquery("ranked_cost_evidence")
     )

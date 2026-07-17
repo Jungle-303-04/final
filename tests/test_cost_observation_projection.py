@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.cost.observation_projection import cost_overview
+from domains.cost.observation_projection import cost_overview, cost_workload_allocation
 from packages.contracts.cost.observations import (
     CostCurrentAllocation,
     CostObservedTrend,
@@ -126,6 +126,101 @@ def _window(cluster_id: str, observed_at: str, hourly: float) -> dict[str, objec
                     },
                     "opencost_namespace_storage_rate": {"samples": []},
                 },
+            },
+        },
+    }
+
+
+def test_workload_cost_projects_authorized_pods_with_usage_and_history() -> None:
+    allocation = cost_workload_allocation(
+        cluster_id="cluster-a",
+        namespace="shop",
+        workload_name="checkout",
+        pod_names=("checkout-a",),
+        replicas=2,
+        evidence_windows=(
+            _workload_window("2026-07-17T08:00:00Z", cpu=0.15, memory=0.1),
+            _workload_window("2026-07-17T09:00:00Z", cpu=0.18, memory=0.12),
+        ),
+    )
+
+    assert allocation.availability == "available"
+    assert allocation.observed_at == "2026-07-17T09:00:00Z"
+    assert allocation.current.model_dump() == {
+        "replicas": 2,
+        "hourly_rate_micros": 300_000,
+        "projected_daily_micros": 7_200_000,
+        "projected_monthly_micros": 219_000_000,
+        "cpu_rate_micros": 180_000,
+        "memory_rate_micros": 120_000,
+        "cpu_allocation_use_basis_points": 2_500,
+        "memory_allocation_use_basis_points": 4_000,
+        "cpu_usage_window_seconds": 300,
+        "memory_usage_window_seconds": 300,
+    }
+    assert allocation.trend.availability == "available"
+    assert allocation.trend.series[0].model_dump() == {
+        "key": "workload",
+        "label": "checkout",
+        "points": (
+            {"timestamp": 1_784_275_200, "rate_micros": 250_000},
+            {"timestamp": 1_784_278_800, "rate_micros": 300_000},
+        ),
+    }
+
+
+def test_workload_cost_does_not_borrow_other_pod_or_invent_missing_allocation() -> None:
+    unavailable = cost_workload_allocation(
+        cluster_id="cluster-a",
+        namespace="shop",
+        workload_name="checkout",
+        pod_names=("checkout-a",),
+        replicas=1,
+        evidence_windows=(
+            _workload_window(
+                "2026-07-17T09:00:00Z",
+                cpu=0.18,
+                memory=0.12,
+                pod="another-workload-a",
+            ),
+        ),
+    )
+
+    assert unavailable.model_dump() == {
+        "availability": "unavailable",
+        "reason_codes": ("cost_workload_observation_unavailable",),
+    }
+
+
+def _workload_window(
+    observed_at: str,
+    *,
+    cpu: float,
+    memory: float,
+    pod: str = "checkout-a",
+) -> dict[str, object]:
+    def result(value: float) -> dict[str, object]:
+        return {
+            "samples": [
+                {
+                    "metric": {"namespace": "shop", "pod": pod},
+                    "value": value,
+                }
+            ]
+        }
+
+    return {
+        "cluster_id": "cluster-a",
+        "updated_at": observed_at,
+        "payload": {
+            "cluster_id": "cluster-a",
+            "metrics": {
+                "results": {
+                    "opencost_pod_cpu_hourly_rate": result(cpu),
+                    "opencost_pod_memory_hourly_rate": result(memory),
+                    "opencost_pod_cpu_allocation_use": result(0.25),
+                    "opencost_pod_memory_allocation_use": result(0.4),
+                }
             },
         },
     }

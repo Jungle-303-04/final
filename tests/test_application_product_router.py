@@ -332,6 +332,51 @@ class WorkloadProductApplicationsDb(ProductApplicationsDb):
             ],
         }
 
+    def list_cost_evidence_windows(
+        self,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+        *,
+        since: Any,
+        limit_per_cluster: int = 480,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "workspace-a"
+        assert cluster_ids == ("cluster-a",)
+        assert limit_per_cluster == 480
+        assert since.tzinfo is not None
+
+        def window(observed_at: str, cpu: float, memory: float) -> dict[str, object]:
+            def result(value: float) -> dict[str, object]:
+                return {
+                    "samples": [
+                        {
+                            "metric": {"namespace": "shop", "pod": "checkout-a"},
+                            "value": value,
+                        }
+                    ]
+                }
+
+            return {
+                "cluster_id": "cluster-a",
+                "updated_at": observed_at,
+                "payload": {
+                    "cluster_id": "cluster-a",
+                    "metrics": {
+                        "results": {
+                            "opencost_pod_cpu_hourly_rate": result(cpu),
+                            "opencost_pod_memory_hourly_rate": result(memory),
+                            "opencost_pod_cpu_allocation_use": result(0.25),
+                            "opencost_pod_memory_allocation_use": result(0.4),
+                        }
+                    },
+                },
+            }
+
+        return [
+            window("2026-07-14T09:00:00Z", 0.15, 0.1),
+            window("2026-07-14T10:00:00Z", 0.18, 0.12),
+        ]
+
 
 def _client(
     db: ProductApplicationsDb,
@@ -489,7 +534,40 @@ def test_product_application_workload_scope_is_bound_to_authorized_manifest_evid
         "availability": "unavailable",
         "reason_codes": ["workload_history_link_not_persisted"],
     }
-    assert selected_application["workload"]["cost"]["availability"] == "unavailable"
+    assert selected_application["workload"]["cost"] == {
+        "availability": "available",
+        "observed_at": "2026-07-14T10:00:00Z",
+        "currency": "USD",
+        "current": {
+            "replicas": 1,
+            "hourly_rate_micros": 300000,
+            "projected_daily_micros": 7200000,
+            "projected_monthly_micros": 219000000,
+            "cpu_rate_micros": 180000,
+            "memory_rate_micros": 120000,
+            "cpu_allocation_use_basis_points": 2500,
+            "memory_allocation_use_basis_points": 4000,
+            "cpu_usage_window_seconds": 300,
+            "memory_usage_window_seconds": 300,
+        },
+        "trend": {
+            "availability": "available",
+            "range": "24h",
+            "currency": "USD",
+            "series": [
+                {
+                    "key": "workload",
+                    "label": "checkout",
+                    "points": [
+                        {"timestamp": 1784019600, "rate_micros": 250000},
+                        {"timestamp": 1784023200, "rate_micros": 300000},
+                    ],
+                }
+            ],
+            "reason_codes": [],
+        },
+        "reason_codes": [],
+    }
     assert selected_application["workload"]["actions"]["availability"] == "unavailable"
     assert invalid.json()["application"]["scope"]["selected_scope"] == "application"
     assert invalid.json()["application"]["scope"]["workload_scope"]["selected_workload_key"] is None

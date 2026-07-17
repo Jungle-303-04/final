@@ -17,6 +17,10 @@ from domains.target.policy_upgrade import (
 from packages.contracts.cost.observations import (
     COST_NAMESPACE_HOURLY_METRIC,
     COST_NAMESPACE_STORAGE_METRIC,
+    COST_POD_CPU_HOURLY_METRIC,
+    COST_POD_CPU_USE_METRIC,
+    COST_POD_MEMORY_HOURLY_METRIC,
+    COST_POD_MEMORY_USE_METRIC,
 )
 from packages.contracts.gateway.requests import AgentPolicy
 from packages.contracts.target import (
@@ -180,6 +184,10 @@ def test_upgrade_plan_rebases_only_named_defaults_and_preserves_custom_configura
     assert {
         COST_NAMESPACE_HOURLY_METRIC,
         COST_NAMESPACE_STORAGE_METRIC,
+        COST_POD_CPU_HOURLY_METRIC,
+        COST_POD_MEMORY_HOURLY_METRIC,
+        COST_POD_CPU_USE_METRIC,
+        COST_POD_MEMORY_USE_METRIC,
     }.issubset(metrics_query_names)
     assert plan.policy.evidence.providers["customer-provider"].model_dump() == (
         _policy().evidence.providers["customer-provider"].model_dump()

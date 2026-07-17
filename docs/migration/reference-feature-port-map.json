@@ -5043,28 +5043,33 @@
       }
     },
     "reference.feature.218": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.cost.observations",
       "frontendContract": "frontend/src/features/cost/costContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_cost_observation_projection.py",
         "tests/test_application_product_contract.py",
+        "tests/test_application_product_router.py",
+        "tests/test_cost_repository.py",
+        "tests/test_target_evidence_policy.py",
+        "tests/test_target_policy_upgrade.py",
         "frontend/src/features/cost/costWorkloadAdapter.test.ts",
         "frontend/src/features/cost/WorkloadCostPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/packages/contracts/cost/observations.py#CostWorkloadAllocation",
-          "consumer": "src/domains/applications/product_projection.py#application_detail",
-          "reason": "The strict allocation contract exists, but no authorized provider-backed workload cost observation repository supplies production values.",
-          "test": "tests/test_cost_observation_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/cost/observation_projection.py#cost_workload_allocation",
+          "consumer": "src/domains/applications/router.py#_product_state",
+          "reason": "The server compiles fixed pod allocation and use queries into the outbound cluster-agent policy, reads one workspace/cluster/time/rank-bounded evidence batch alongside the authorized workload graph, and projects only graph-selected pod costs in integer micro-units without direct Prometheus access.",
+          "test": "tests/test_application_product_router.py#test_product_application_workload_scope_is_bound_to_authorized_manifest_evidence"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/features/cost/WorkloadCostPanel.tsx#WorkloadCostPanel",
           "consumer": "frontend/src/features/cost/costWorkloadAdapter.ts#toCostWorkloadAllocation",
+          "reason": "The shared workload Cost tab validates observed, partial, and unavailable contracts, renders server-computed current allocation and bounded history, and never derives currency or rates in the browser.",
           "test": "frontend/src/features/cost/WorkloadCostPanel.test.tsx"
         }
       }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -695,6 +696,7 @@ async def _product_state(
         )
         selected_workload_key = str(workload_scope.get("selected_workload_key") or "")
         workload_runtime_rows: list[dict[str, Any]] = []
+        workload_cost_evidence: list[dict[str, Any]] = []
         workload_runtime_truncated = False
         if selected_workload_key:
             root = next(
@@ -702,15 +704,26 @@ async def _product_state(
                 None,
             )
             if root is not None:
-                runtime = await asyncio.to_thread(
-                    db.get_application_workload_runtime_evidence,
-                    workspace_id=workspace_id,
-                    cluster_id=str(root.get("cluster_id") or ""),
-                    namespace=(
-                        str(root.get("namespace")) if root.get("namespace") is not None else None
+                root_cluster_id = str(root.get("cluster_id") or "")
+                runtime, workload_cost_evidence = await asyncio.gather(
+                    asyncio.to_thread(
+                        db.get_application_workload_runtime_evidence,
+                        workspace_id=workspace_id,
+                        cluster_id=root_cluster_id,
+                        namespace=(
+                            str(root.get("namespace"))
+                            if root.get("namespace") is not None
+                            else None
+                        ),
+                        # One root occupies the same bounded topology response.
+                        pod_limit=max(1, APPLICATION_TOPOLOGY_NODE_LIMIT - 1),
                     ),
-                    # One root occupies the same bounded topology response.
-                    pod_limit=max(1, APPLICATION_TOPOLOGY_NODE_LIMIT - 1),
+                    asyncio.to_thread(
+                        db.list_cost_evidence_windows,
+                        workspace_id,
+                        (root_cluster_id,),
+                        since=datetime.now(tz=UTC) - timedelta(hours=24),
+                    ),
                 )
                 by_id = {str(root.get("id") or ""): dict(root)}
                 for row in runtime.get("rows") or []:
@@ -728,6 +741,7 @@ async def _product_state(
         **({"workload_scope": workload_scope} if select_instance else {}),
         **({"workload_runtime_rows": workload_runtime_rows} if select_instance else {}),
         **({"workload_runtime_truncated": workload_runtime_truncated} if select_instance else {}),
+        **({"workload_cost_evidence": workload_cost_evidence} if select_instance else {}),
     }
 
 

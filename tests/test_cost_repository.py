@@ -27,3 +27,7 @@ def test_cost_evidence_batch_is_workspace_cluster_time_and_rank_bounded() -> Non
     assert "ranked_cost_evidence.recency_rank <= 480" in sql
     assert "opencost_namespace_hourly_rate" in sql
     assert "opencost_namespace_storage_rate" in sql
+    assert "opencost_pod_cpu_hourly_rate" in sql
+    assert "opencost_pod_memory_hourly_rate" in sql
+    assert "opencost_pod_cpu_allocation_use" in sql
+    assert "opencost_pod_memory_allocation_use" in sql
