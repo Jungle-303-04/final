@@ -690,6 +690,16 @@ def kustomize_local_references(document: Mapping[str, Any]) -> list[tuple[str, s
             raise ManifestRenderValidationError(
                 "Kustomize remote reference is not allowed: helmCharts.repo"
             )
+        chart_name = chart.get("name")
+        if isinstance(chart_name, str) and (
+            is_remote_kustomize_reference(chart_name.strip())
+            or "/" in chart_name
+            or "\\" in chart_name
+            or chart_name.strip() in {"", ".", ".."}
+        ):
+            raise ManifestRenderValidationError(
+                "Kustomize remote or path-based chart name is not allowed: helmCharts.name"
+            )
         values_file = chart.get("valuesFile")
         if isinstance(values_file, str) and values_file.strip():
             references.append(("helmCharts.valuesFile", values_file, False))

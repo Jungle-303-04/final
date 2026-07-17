@@ -103,6 +103,12 @@ async def validate_demo_gitops_sources(
             for source in gitops.sources
         )
     )
+    confirmed_revision = await discovery.resolve_branch_revision(
+        normalized_repo_ref,
+        gitops.default_branch,
+    )
+    if confirmed_revision != gitops.revision:
+        raise RuntimeError("demo GitOps repository changed during source validation")
     evidence: list[dict[str, object]] = []
     for source, validation in zip(gitops.sources, validations, strict=True):
         if (
@@ -279,7 +285,8 @@ async def seed_demo_workspace(
 
     gitops_evidence = await validate_demo_gitops_sources(descriptor, discovery)
     result: Mapping[str, object] = snapshot if isinstance(snapshot, Mapping) else {}
-    with unit_of_work_or_null(db):
+
+    async def register_demo_target() -> None:
         if not registration_current:
             db.register_target_cluster(
                 {
@@ -297,57 +304,66 @@ async def seed_demo_workspace(
                 }
             )
 
-        if not snapshot_current:
-            collected_at = observed_at or datetime.now(UTC)
-            inventory = InventorySnapshotRequest.model_validate(
-                {
-                    "cluster_id": cluster_id,
-                    "agent_id": descriptor.cluster.agent_id,
-                    "source": f"{DEMO_EVENT_SOURCE}:v{descriptor.schema_version}",
-                    "collected_at": collected_at.isoformat(),
-                    "replace": descriptor.inventory.replace,
-                    "resources": [
-                        item.model_dump(mode="json") for item in descriptor.inventory.resources
-                    ],
-                    "summary": {
-                        **descriptor.inventory.summary,
-                        DEMO_SEED_MARKER_KEY: marker,
-                    },
-                    "health": descriptor.inventory.health,
-                    "usage": descriptor.inventory.usage,
-                }
-            )
-
-            async def record_snapshot_event(saved: dict[str, Any]) -> None:
-                if saved.get("accepted") is not True:
-                    raise RuntimeError("demo inventory snapshot was not accepted")
-                await events.accept_body(
-                    InventorySnapshotRecordedBody(
-                        workspace_id=workspace_id,
-                        cluster_id=cluster_id,
-                        snapshot_id=str(saved["snapshot_id"]),
-                        agent_id=descriptor.cluster.agent_id,
-                        resource_count=int(saved["resource_count"]),
-                        resource_types=list(saved["resource_types"]),
-                    )
-                )
-
-            with event_workspace(workspace_id):
-                result = await ingest_inventory_snapshot(
-                    db=db,
-                    workspace_id=workspace_id,
-                    cluster_id=cluster_id,
-                    agent_id=descriptor.cluster.agent_id,
-                    payload=inventory.model_dump(mode="json"),
-                    after_persist=record_snapshot_event,
-                )
-
-        gitops_source_count = persist_demo_gitops_sources(
+    def persist_gitops() -> int:
+        return persist_demo_gitops_sources(
             db,
             descriptor,
             marker=marker,
             evidence=gitops_evidence,
         )
+
+    gitops_source_count = 0
+    if snapshot_current:
+        with unit_of_work_or_null(db):
+            await register_demo_target()
+            gitops_source_count = persist_gitops()
+    else:
+        collected_at = observed_at or datetime.now(UTC)
+        inventory = InventorySnapshotRequest.model_validate(
+            {
+                "cluster_id": cluster_id,
+                "agent_id": descriptor.cluster.agent_id,
+                "source": f"{DEMO_EVENT_SOURCE}:v{descriptor.schema_version}",
+                "collected_at": collected_at.isoformat(),
+                "replace": descriptor.inventory.replace,
+                "resources": [
+                    item.model_dump(mode="json") for item in descriptor.inventory.resources
+                ],
+                "summary": {
+                    **descriptor.inventory.summary,
+                    DEMO_SEED_MARKER_KEY: marker,
+                },
+                "health": descriptor.inventory.health,
+                "usage": descriptor.inventory.usage,
+            }
+        )
+
+        async def persist_snapshot_dependencies(saved: dict[str, Any]) -> None:
+            nonlocal gitops_source_count
+            if saved.get("accepted") is not True:
+                raise RuntimeError("demo inventory snapshot was not accepted")
+            gitops_source_count = persist_gitops()
+            await events.accept_body(
+                InventorySnapshotRecordedBody(
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    snapshot_id=str(saved["snapshot_id"]),
+                    agent_id=descriptor.cluster.agent_id,
+                    resource_count=int(saved["resource_count"]),
+                    resource_types=list(saved["resource_types"]),
+                )
+            )
+
+        with event_workspace(workspace_id):
+            result = await ingest_inventory_snapshot(
+                db=db,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                agent_id=descriptor.cluster.agent_id,
+                payload=inventory.model_dump(mode="json"),
+                before_persist=register_demo_target,
+                after_persist=persist_snapshot_dependencies,
+            )
 
     return {
         "action": "seeded",

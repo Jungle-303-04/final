@@ -15,6 +15,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import has_active_connection, unit_of_work_or_null
 
 InventorySnapshotAfterPersist = Callable[[JsonObject], Awaitable[None]]
+InventorySnapshotBeforePersist = Callable[[], Awaitable[None]]
 
 
 async def ingest_inventory_snapshot(
@@ -26,6 +27,7 @@ async def ingest_inventory_snapshot(
     payload: JsonObject,
     fanout: TimelineEventFanout | object | None = None,
     ready_fanout: object | None = None,
+    before_persist: InventorySnapshotBeforePersist | None = None,
     after_persist: InventorySnapshotAfterPersist | None = None,
 ) -> JsonObject:
     """Persist, ledger-append, and only then announce one inventory snapshot.
@@ -39,6 +41,8 @@ async def ingest_inventory_snapshot(
 
     appends: tuple[TimelineLedgerAppend, ...] = ()
     with unit_of_work_or_null(db):
+        if before_persist is not None:
+            await before_persist()
         mutation_writer = getattr(db, "save_inventory_snapshot_mutation", None)
         if callable(mutation_writer):
             mutation = mutation_writer(

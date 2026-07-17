@@ -135,15 +135,50 @@ class FakeDemoDatabase:
         return stored
 
 
+class TransactionalFakeDemoDatabase(FakeDemoDatabase):
+    """Fail on nested units and restore all writes when the outer seed fails."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unit_of_work_depth = 0
+
+    @contextmanager
+    def unit_of_work(self):
+        if self.unit_of_work_depth:
+            raise AssertionError("demo seed opened a nested unit of work")
+        state = deepcopy(
+            {key: value for key, value in vars(self).items() if key != "unit_of_work_depth"}
+        )
+        self.unit_of_work_depth = 1
+        try:
+            yield self
+        except Exception:
+            for key, value in state.items():
+                setattr(self, key, value)
+            raise
+        finally:
+            self.unit_of_work_depth = 0
+
+
+class FailingTransactionalDemoDatabase(TransactionalFakeDemoDatabase):
+    def register_deployment_binding(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if len(self.binding_writes) == 2:
+            raise RuntimeError("demo binding write failed")
+        return super().register_deployment_binding(payload)
+
+
 class FakeRepositoryDiscovery:
     def __init__(
         self,
         *,
         reachable: bool = True,
         revision: str = "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef",
+        confirmed_revision: str | None = None,
     ) -> None:
         self.reachable = reachable
         self.revision = revision
+        self.confirmed_revision = confirmed_revision or revision
+        self.revision_calls = 0
         self.validation_requests: list[Any] = []
 
     async def probe_repository(self, _payload: Any) -> RepositoryProbeResponse:
@@ -165,7 +200,8 @@ class FakeRepositoryDiscovery:
         )
 
     async def resolve_branch_revision(self, _repo_ref: str, _branch: str) -> str:
-        return self.revision
+        self.revision_calls += 1
+        return self.revision if self.revision_calls == 1 else self.confirmed_revision
 
     async def list_manifest_candidates(
         self, repo_ref: str, branch: str
@@ -340,7 +376,7 @@ def test_descriptor_rejects_default_workspace_and_incomplete_inventory(tmp_path:
 
 def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
-    db = FakeDemoDatabase()
+    db = TransactionalFakeDemoDatabase()
     events = FakeEvents()
     discovery = FakeRepositoryDiscovery()
     observed_at = datetime(2026, 7, 18, 1, 2, 3, tzinfo=UTC)
@@ -415,6 +451,32 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert all(binding["deploy_policy"]["read_only"] for binding in db.binding_writes)
 
 
+def test_seed_rolls_back_inventory_and_gitops_when_one_binding_fails() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FailingTransactionalDemoDatabase()
+    events = FakeEvents()
+
+    with pytest.raises(RuntimeError, match="binding write failed"):
+        asyncio.run(
+            seed_demo_workspace(
+                db,
+                descriptor,
+                events=events,
+                discovery=FakeRepositoryDiscovery(),
+            )
+        )
+
+    assert db.registration is None
+    assert db.snapshot is None
+    assert db.registration_writes == []
+    assert db.inventory_writes == []
+    assert db.repository_writes == []
+    assert db.application_writes == []
+    assert db.watch_writes == []
+    assert db.binding_writes == []
+    assert events.bodies == []
+
+
 def test_seed_rejects_unreachable_demo_repository_before_any_write() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
     db = FakeDemoDatabase()
@@ -445,6 +507,25 @@ def test_seed_rejects_unpinned_demo_repository_revision_before_any_write() -> No
                 descriptor,
                 events=FakeEvents(),
                 discovery=FakeRepositoryDiscovery(revision="a" * 40),
+            )
+        )
+
+    assert db.registration_writes == []
+    assert db.inventory_writes == []
+    assert db.repository_writes == []
+
+
+def test_seed_rejects_repository_change_during_validation_before_any_write() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+
+    with pytest.raises(RuntimeError, match="changed during source validation"):
+        asyncio.run(
+            seed_demo_workspace(
+                db,
+                descriptor,
+                events=FakeEvents(),
+                discovery=FakeRepositoryDiscovery(confirmed_revision="b" * 40),
             )
         )
 

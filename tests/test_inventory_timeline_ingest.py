@@ -527,6 +527,31 @@ def test_ingest_announces_only_after_the_unit_of_work_commits() -> None:
     asyncio.run(run())
 
 
+def test_ingest_runs_atomic_dependencies_inside_its_owned_unit_of_work() -> None:
+    async def run() -> None:
+        db = _TransactionDb(_mutation_with_add())
+
+        async def before_persist() -> None:
+            db.steps.append("before")
+
+        async def after_persist(_result: dict[str, object]) -> None:
+            db.steps.append("after")
+
+        await ingest_inventory_snapshot(
+            db=db,
+            workspace_id="workspace-1",
+            cluster_id="cluster-1",
+            agent_id="agent-1",
+            payload={},
+            before_persist=before_persist,
+            after_persist=after_persist,
+        )
+
+        assert db.steps == ["begin", "before", "mutation", "append", "after", "commit"]
+
+    asyncio.run(run())
+
+
 def test_ingest_announces_dashboard_ready_after_commit_even_without_timeline_changes() -> None:
     async def run() -> None:
         mutation = InventorySnapshotMutation(

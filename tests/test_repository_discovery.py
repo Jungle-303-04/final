@@ -603,6 +603,41 @@ def test_kustomize_validation_rejects_remote_and_repository_escape_references(
     assert client.content_paths == [path]
 
 
+def test_kustomize_validation_rejects_remote_helm_chart_name() -> None:
+    contents = {
+        "overlays/dev/kustomization.yaml": b"""
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+helmCharts:
+  - name: oci://registry.example.com/charts/unsafe
+""",
+    }
+    client = StubGitHubClient(
+        contents=contents,
+        tree_items=[{"type": "blob", "path": path} for path in contents],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("renderer must not execute for a remote chart")
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client, render_executor=executor).validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="overlays/dev",
+                source_type="kustomize",
+            )
+        )
+    )
+
+    assert response.valid is False
+    assert "path-based chart name" in response.errors[0]
+    assert client.content_paths == ["overlays/dev/kustomization.yaml"]
+
+
 def test_kustomize_dependency_export_enforces_total_byte_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
