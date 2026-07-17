@@ -96,7 +96,12 @@ export function ProductRouter({
                 />
               )))}
             <Route
-              element={<WorkloadDetailRoute port={composition.workloadDetail} />}
+              element={(
+                <WorkloadDetailRoute
+                  port={composition.workloadDetail}
+                  rcaContextPort={composition.rcaContext}
+                />
+              )}
               path="/workload/:kind/:namespace/:name"
             />
             <Route element={<CompareRoute port={composition.compare} />} path="/compare" />

@@ -10,9 +10,11 @@ import {
 import { createGitOpsAdapter } from "../../../features/gitops/createGitOpsAdapter";
 import { createGitOpsSurface } from "../../../pages/gitops/createGitOpsSurface";
 import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
+import type { RcaContextPort } from "../../../features/issues/rcaContextContract";
 
 export function loadGitOpsSurface(
   refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts">,
+  rcaContextPort: RcaContextPort,
 ): ComponentType {
   return createGitOpsSurface(
     createGitOpsAdapter({
@@ -24,5 +26,6 @@ export function loadGitOpsSurface(
       listOverview: listGitOpsOverview,
     }),
     refreshPolicies,
+    rcaContextPort,
   );
 }

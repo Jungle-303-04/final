@@ -20,8 +20,16 @@ import { WorkloadExecution } from "./WorkloadExecution";
 import { RightsizingStrip } from "../../features/rightsizing/RightsizingStrip";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import type { TranslationFunction } from "../../shared/i18n/types";
+import { RcaContextPanel } from "../../features/issues/RcaContextPanel";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
-export function WorkloadDetailRoute({ port }: { port: WorkloadDetailPort }) {
+export function WorkloadDetailRoute({
+  port,
+  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
+}: {
+  port: WorkloadDetailPort;
+  rcaContextPort?: RcaContextPort;
+}) {
   const params = useParams();
   const search = useFilterSearchParams();
   const navigate = useNavigate();
@@ -47,6 +55,7 @@ export function WorkloadDetailRoute({ port }: { port: WorkloadDetailPort }) {
       tab={identity.tab}
       port={port}
       request={identity}
+      rcaContextPort={rcaContextPort}
     />
   );
 }
@@ -60,6 +69,7 @@ function WorkloadDetailPage({
   tab,
   port,
   request,
+  rcaContextPort,
 }: {
   detail: WorkloadDetail;
   onBack: () => void;
@@ -69,6 +79,7 @@ function WorkloadDetailPage({
   tab: WorkloadDetailTab;
   port: WorkloadDetailPort;
   request: import("../../features/workload-detail/workloadDetailContract").WorkloadDetailRequest;
+  rcaContextPort: RcaContextPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
@@ -136,7 +147,7 @@ function WorkloadDetailPage({
       </div>
       {tab === "overview" ? <Overview detail={detail} /> : null}
       {tab === "pods" ? <Pods detail={detail} /> : null}
-      {tab === "events" ? <Events detail={detail} /> : null}
+      {tab === "events" ? <Events detail={detail} rcaContextPort={rcaContextPort} /> : null}
       {tab === "logs" ? <Logs detail={detail} onOpen={openLogs} /> : null}
       {tab === "execution" && executionAvailable ? <WorkloadExecution port={port} request={request} /> : null}
     </ProductPageFrame>
@@ -172,9 +183,9 @@ function Pods({ detail }: { detail: WorkloadDetail }) {
   return <section className="grid gap-3" aria-labelledby="workload-pods-title"><h2 className="text-base font-semibold" id="workload-pods-title">{t("workloadDetail.pods.title")}</h2>{detail.pods.items.length === 0 ? <EmptyNotice text={t("workloadDetail.pods.empty")} /> : <ul className="grid gap-2">{detail.pods.items.map((pod) => <li className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2" key={pod.resource.uid}><span className="truncate font-medium">{pod.resource.name}</span><Badge variant="outline">{pod.health}</Badge></li>)}</ul>}</section>;
 }
 
-function Events({ detail }: { detail: WorkloadDetail }) {
+function Events({ detail, rcaContextPort }: { detail: WorkloadDetail; rcaContextPort: RcaContextPort }) {
   const { t } = useI18n();
-  return <section className="grid gap-3" aria-labelledby="workload-events-title"><h2 className="text-base font-semibold" id="workload-events-title">{t("workloadDetail.events.title")}</h2>{detail.events.items.length === 0 ? <EmptyNotice text={t("workloadDetail.events.empty")} /> : <ul className="grid gap-2">{detail.events.items.map((event) => <li className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2" key={event.resource.uid}><span className="truncate font-medium">{event.reason ?? event.resource.name}</span><span className="text-sm text-muted-foreground">{event.eventType ?? "Event"}{event.occurrenceCount === null ? "" : ` · ${event.occurrenceCount}`}</span></li>)}</ul>}</section>;
+  return <section className="grid gap-3" aria-labelledby="workload-events-title"><h2 className="text-base font-semibold" id="workload-events-title">{t("workloadDetail.events.title")}</h2>{detail.events.items.length === 0 ? <EmptyNotice text={t("workloadDetail.events.empty")} /> : <ul className="grid gap-2">{detail.events.items.map((event) => <li className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2" key={event.resource.uid}><span className="truncate font-medium">{event.reason ?? event.resource.name}</span><span className="text-sm text-muted-foreground">{event.eventType ?? "Event"}{event.occurrenceCount === null ? "" : ` · ${event.occurrenceCount}`}</span></li>)}</ul>}<RcaContextPanel port={rcaContextPort} subject={{ kind: "resource", scope: detail.scope, resource: detail.observation.resource }} /></section>;
 }
 
 function Logs({ detail, onOpen }: { detail: WorkloadDetail; onOpen: () => void }) {

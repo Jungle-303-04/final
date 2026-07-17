@@ -19,6 +19,8 @@ import {
 import type { TimelineEvent } from "../../features/timeline/timelineContract";
 import { TimelinePinsFeedback } from "./TimelinePinsFeedback";
 import type { TimelinePinsController } from "./useTimelinePins";
+import { RcaContextPanel } from "../../features/issues/RcaContextPanel";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort, type RcaContextSubject } from "../../features/issues/rcaContextContract";
 
 export function TimelineEventDetailSheet({
   event,
@@ -26,6 +28,7 @@ export function TimelineEventDetailSheet({
   onClose,
   onNavigate,
   pins,
+  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
   t,
 }: {
   event: TimelineEvent | null;
@@ -33,6 +36,7 @@ export function TimelineEventDetailSheet({
   onClose: () => void;
   onNavigate: (direction: -1 | 1) => void;
   pins: TimelinePinsController | null;
+  rcaContextPort?: RcaContextPort;
   t: I18nController["t"];
 }) {
   const pinTarget = event === null ? null : timelinePinTargetForEvent(event);
@@ -41,6 +45,7 @@ export function TimelineEventDetailSheet({
     : null;
   const targetPending = pinTarget !== null && pins?.pendingTargetKey === timelinePinTargetKey(pinTarget);
   const removalPending = existingPin !== null && pins?.pendingPinId === existingPin.pinId;
+  const rcaSubject = event === null ? null : rcaSubjectForEvent(event);
   return (
     <Sheet onOpenChange={(open) => { if (!open) onClose(); }} open={event !== null}>
       {event === null ? null : (
@@ -77,6 +82,7 @@ export function TimelineEventDetailSheet({
               <DetailSection heading={t("timeline.details.subject")}>
                 <DetailRows rows={subjectRows(event, t)} />
               </DetailSection>
+              {rcaSubject ? <RcaContextPanel port={rcaContextPort} subject={rcaSubject} /> : null}
               {pins?.phase === "ready" && pinTarget !== null ? (
                 <DetailSection heading={t("timeline.pins.title")}>
                   <div className="grid gap-2">
@@ -124,6 +130,19 @@ export function TimelineEventDetailSheet({
       )}
     </Sheet>
   );
+}
+
+function rcaSubjectForEvent(event: TimelineEvent): RcaContextSubject | null {
+  if (event.subject.kind === "incident") {
+    return {
+      kind: "incident",
+      scope: event.scope,
+      incidentId: event.subject.incidentId,
+      correlationId: event.subject.correlationId,
+    };
+  }
+  const resource = event.resource ?? (event.subject.kind === "resource" ? event.subject.resource : null);
+  return resource === null ? null : { kind: "resource", scope: event.scope, resource };
 }
 
 function DetailSection({ children, heading }: { children: ReactNode; heading: string }) {

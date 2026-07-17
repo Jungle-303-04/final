@@ -9821,84 +9821,143 @@
     },
     {
       "contractId": "reference.feature.238",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:rca-extension:workload-detail:verified-context:v1",
       "legacyContractIds": [
         "reference.feature.238"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-238",
       "section": "9. RCA 후속 삽입 후보",
-      "endpoints": [],
+      "endpoints": [
+        "GET /dashboard/resources/issues",
+        "GET /rca-reports"
+      ],
       "streaming": false,
       "area": "rca-extension",
       "releasePhase": "post_parity",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.rca",
-      "frontendContract": "frontend/src/features/rca",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIssueListResponse+RcaReportListResponse",
+      "frontendContract": "frontend/src/features/issues/rcaContextContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_dashboard_router.py",
+        "tests/test_evidence_query_api.py",
+        "frontend/src/api/resource-issues.test.ts",
+        "frontend/src/api/evidence.test.ts",
+        "frontend/src/features/issues/createRcaContextAdapter.test.ts",
+        "frontend/src/features/issues/RcaContextPanel.test.tsx",
+        "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "consumer": "src/domains/rca/query_router.py#list_rca_reports",
+          "reason": "Both bounded reads are authenticated workspace projections over persisted outbound-Agent evidence; the browser never opens a cluster or Prometheus connection.",
+          "test": "tests/test_dashboard_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx#Events",
+          "consumer": "frontend/src/features/issues/createRcaContextAdapter.ts#createRcaContextAdapter",
+          "reason": "The existing Events tab appends one shared context panel, validates exact workspace, cluster, and workload identity, and omits verified-empty RCA instead of creating a placeholder card.",
+          "test": "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.239",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:rca-extension:gitops-detail:verified-context:v1",
       "legacyContractIds": [
         "reference.feature.239"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-239",
       "section": "9. RCA 후속 삽입 후보",
-      "endpoints": [],
+      "endpoints": [
+        "GET /dashboard/resources/issues",
+        "GET /rca-reports"
+      ],
       "streaming": false,
       "area": "rca-extension",
       "releasePhase": "post_parity",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.rca",
-      "frontendContract": "frontend/src/features/rca",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIssueListResponse+RcaReportListResponse",
+      "frontendContract": "frontend/src/features/issues/rcaContextContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_dashboard_router.py",
+        "tests/test_evidence_query_api.py",
+        "frontend/src/features/issues/createRcaContextAdapter.test.ts",
+        "frontend/src/features/issues/RcaContextPanel.test.tsx",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "consumer": "src/domains/rca/query_router.py#list_rca_reports",
+          "reason": "The existing issue and report projections bind persisted Agent evidence to the authenticated workspace and preserve explicit unavailable narrative fields.",
+          "test": "tests/test_evidence_query_api.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/issues/RcaContextPanel.tsx#RcaContextPanel",
+          "reason": "Application and resource detail reuse the same scope-checked panel without changing GitOps routes, actions, or refresh semantics.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.240",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:rca-extension:timeline-detail:verified-context:v1",
       "legacyContractIds": [
         "reference.feature.240"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-240",
       "section": "9. RCA 후속 삽입 후보",
-      "endpoints": [],
+      "endpoints": [
+        "GET /dashboard/rca/incidents/{incident_id}",
+        "GET /dashboard/resources/issues",
+        "GET /rca-reports"
+      ],
       "streaming": false,
       "area": "rca-extension",
       "releasePhase": "post_parity",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.rca",
-      "frontendContract": "frontend/src/features/rca",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.RcaIssueDetailResponse+ResourceIssueListResponse+RcaReportListResponse",
+      "frontendContract": "frontend/src/features/issues/rcaContextContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_dashboard_router.py",
+        "tests/test_evidence_query_api.py",
+        "frontend/src/api/rca-detail.test.ts",
+        "frontend/src/features/issues/createRcaContextAdapter.test.ts",
+        "frontend/src/features/issues/RcaContextPanel.test.tsx",
+        "frontend/src/pages/timeline/TimelineEventDetailSheet.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#rca_incident",
+          "consumer": "src/domains/rca/query_router.py#list_rca_reports",
+          "reason": "Incident detail and resource issue reads preserve the event's authenticated workspace/cluster identity while reports are joined only by the verified correlation.",
+          "test": "tests/test_dashboard_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx#TimelineEventDetailSheet",
+          "consumer": "frontend/src/features/issues/createRcaContextAdapter.ts#createRcaContextAdapter",
+          "reason": "The existing selected-event URL, keyboard navigation, and live Timeline stay unchanged; only incident or exact resource subjects receive the shared evidence panel.",
+          "test": "frontend/src/pages/timeline/TimelineEventDetailSheet.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

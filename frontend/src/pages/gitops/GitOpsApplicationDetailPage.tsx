@@ -19,13 +19,17 @@ import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { RcaContextPanel } from "../../features/issues/RcaContextPanel";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
 export function GitOpsApplicationDetailPage({
   applicationId,
   port,
+  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
 }: {
   applicationId: string;
   port: GitOpsPort;
+  rcaContextPort?: RcaContextPort;
 }) {
   const { t } = useI18n();
   const [request, setRequest] = useState(0);
@@ -132,6 +136,12 @@ export function GitOpsApplicationDetailPage({
           </div>
         </EvidenceCard>
       </div>
+      {detail.scope.scope ? (
+        <RcaContextPanel
+          port={rcaContextPort}
+          subject={{ kind: "resource", scope: detail.scope.scope, resource: detail.resource }}
+        />
+      ) : null}
     </ProductPageFrame>
   );
 }

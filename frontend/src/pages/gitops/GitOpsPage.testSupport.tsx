@@ -12,6 +12,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import { I18nProvider } from "../../shared/i18n";
 import { GitOpsPage } from "./GitOpsPage";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
+import type { RcaContextPort } from "../../features/issues/rcaContextContract";
 
 export function installWorkflowGraphDomStubs() {
   vi.stubGlobal(
@@ -30,13 +31,17 @@ export function installWorkflowGraphDomStubs() {
   );
 }
 
-export function renderGitOps(initialEntry: string, port: GitOpsPort = gitOpsPort()) {
+export function renderGitOps(
+  initialEntry: string,
+  port: GitOpsPort = gitOpsPort(),
+  rcaContextPort?: RcaContextPort,
+) {
   const router = createMemoryRouter([{
     path: "/gitops/*",
     element: (
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <UnifiedFilterProvider>
-          <GitOpsPage port={port} refreshPolicies={gitOpsRefreshPolicies()} />
+          <GitOpsPage port={port} rcaContextPort={rcaContextPort} refreshPolicies={gitOpsRefreshPolicies()} />
           <LocationProbe />
         </UnifiedFilterProvider>
       </I18nProvider>

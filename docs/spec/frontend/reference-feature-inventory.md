@@ -619,12 +619,12 @@ RCA를 새 top-level menu로 만들지 않는다. P1에서 확인한 정보 구�
 | Home Active Issues row/detail | 사용자가 cluster 문제를 처음 발견하는 지점 | cluster, namespace, resource, issue evidence | 위치만 예약 |
 | Issues resource row 확장 또는 detail | issue→원인→근거→복구의 주 서사 | issue ID, correlation ID, resource ref | 위치만 예약 |
 | Resource drawer의 issue/audit 다음 section | 단일 resource 진단 context가 완성됨 | resource UID/ref, events, metrics, relations | `POST /diagnose/runs`, `GET /diagnose/runs`, `SSE /diagnose/runs/{run_id}/stream`; exact identity와 durable replay |
-| Workload detail의 Events/Metrics 인접 tab | workload 단위 RCA evidence와 같은 scope | workload ref, pod members, time range | 위치만 예약 |
-| GitOps detail Resources/Activity | drift·operation failure의 원인과 recovery가 자연스럽게 연결 | app ref, revision, changes, history | 위치만 예약 |
-| Timeline event/resource change detail | 시간 순 인과와 correlation을 보여 주는 지점 | event ID, occurredAt, resource ref | 위치만 예약 |
+| Workload detail의 Events/Metrics 인접 tab | workload 단위 RCA evidence와 같은 scope | workload ref, pod members, time range | `GET /dashboard/resources/issues`, `GET /rca-reports`; exact workspace·cluster·resource 범위의 원인·영향·근거 패널 |
+| GitOps detail Resources/Activity | drift·operation failure의 원인과 recovery가 자연스럽게 연결 | app ref, revision, changes, history | `GET /dashboard/resources/issues`, `GET /rca-reports`; application/resource detail 공용 RCA context 연결 |
+| Timeline event/resource change detail | 시간 순 인과와 correlation을 보여 주는 지점 | event ID, occurredAt, resource ref | `GET /dashboard/rca/incidents/{incident_id}`, `GET /dashboard/resources/issues`, `GET /rca-reports`; incident correlation 또는 exact resource context 연결 |
 
-RCA가 없는 대상에는 빈 card나 가짜 요약을 만들지 않는다. P2에서 우리 RCA endpoint와 binding을
-확정하기 전에는 어떤 후보도 구현하지 않는다.
+RCA가 없는 대상에는 빈 card나 가짜 요약을 만들지 않는다. P2 endpoint와 binding이 확인된
+Workload·GitOps·Timeline 후보만 공용 strict adapter로 연결하며, 범위가 불완전하면 추론 없이 부분 상태를 표시한다.
 
 ## 10. P1 완료·P2 인계 조건
 

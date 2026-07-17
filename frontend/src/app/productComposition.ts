@@ -50,6 +50,10 @@ import {
   EMPTY_PORT_FORWARD_SESSION_PORT,
   type PortForwardSessionPort,
 } from "../features/service-access/portForwardSessionContract";
+import {
+  EMPTY_RCA_CONTEXT_PORT,
+  type RcaContextPort,
+} from "../features/issues/rcaContextContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -69,6 +73,7 @@ export interface ProductComposition {
   shellState: ShellStatePort;
   runtimeStatus: RuntimeStatusPort;
   portForwardSessions: PortForwardSessionPort;
+  rcaContext: RcaContextPort;
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -91,6 +96,7 @@ export function createProductComposition(
   shellState: ShellStatePort = EMPTY_SHELL_STATE_PORT,
   runtimeStatus: RuntimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
   portForwardSessions: PortForwardSessionPort = EMPTY_PORT_FORWARD_SESSION_PORT,
+  rcaContext: RcaContextPort = EMPTY_RCA_CONTEXT_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -125,6 +131,7 @@ export function createProductComposition(
     shellState,
     runtimeStatus,
     portForwardSessions,
+    rcaContext,
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),

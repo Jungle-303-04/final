@@ -30,10 +30,13 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { RcaContextPanel } from "../../features/issues/RcaContextPanel";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
-export function GitOpsResourceDetailPage({ locator, port }: {
+export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY_RCA_CONTEXT_PORT }: {
   locator: GitOpsResourceLocator;
   port: GitOpsPort;
+  rcaContextPort?: RcaContextPort;
 }) {
   const { t } = useI18n();
   const operationStore = useOptionalOperationStatusStore();
@@ -229,6 +232,11 @@ export function GitOpsResourceDetailPage({ locator, port }: {
           ) : null}
         </div>
       </div>
+
+      <RcaContextPanel
+        port={rcaContextPort}
+        subject={{ kind: "resource", scope: insights.scope, resource: insights.resource }}
+      />
 
       <Dialog onOpenChange={(open) => { if (!open && !pending) setAction(null); }} open={action !== null}>
         <DialogContent>

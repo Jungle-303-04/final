@@ -1,5 +1,12 @@
-import type { ResourceIdentity } from "../resources/resourcesContract";
 import type { IssueSummary } from "./issuesContract";
+
+export interface ResourceIssueIdentity {
+  /** Compatibility metadata for the resource list; the RCA query uses GVK identity. */
+  resourceType?: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
 
 export interface ResourceIssueOnset {
   firstObservedAt: string;
@@ -33,7 +40,7 @@ export interface ResourceIssueList {
 export interface ResourceIssuesPort {
   loadResourceIssues(
     clusterId: string,
-    identity: ResourceIdentity,
+    identity: ResourceIssueIdentity,
     signal?: AbortSignal,
   ): Promise<ResourceIssueList>;
 }

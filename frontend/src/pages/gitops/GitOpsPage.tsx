@@ -30,14 +30,17 @@ import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
 import { GitOpsApplicationDetailPage } from "./GitOpsApplicationDetailPage";
 import { GitOpsResourceDetailPage } from "./GitOpsResourceDetailPage";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
 type GitOpsSection = "changes" | "sync";
 
 export function GitOpsPage({
   port,
+  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
   refreshPolicies,
 }: {
   port: GitOpsPort;
+  rcaContextPort?: RcaContextPort;
   refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts">;
 }) {
   const { t } = useI18n();
@@ -63,12 +66,12 @@ export function GitOpsPage({
 
   if (resourceMatch) {
     return resourceLocator
-      ? <GitOpsResourceDetailPage locator={resourceLocator} port={port} />
+      ? <GitOpsResourceDetailPage locator={resourceLocator} port={port} rcaContextPort={rcaContextPort} />
       : <ProductStateScreen kind="error" issue={{ code: "invalid-response" }} placement="content" />;
   }
 
   if (applicationId !== null) {
-    return <GitOpsApplicationDetailPage applicationId={applicationId} port={port} />;
+    return <GitOpsApplicationDetailPage applicationId={applicationId} port={port} rcaContextPort={rcaContextPort} />;
   }
 
   return (

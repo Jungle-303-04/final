@@ -189,4 +189,8 @@ export const issuesEn = {
   "issues.evidence.count.entries": "{count} log entries",
   "issues.evidence.count.queries": "{count} queries",
   "issues.evidence.summary.collected": "Evidence collected",
+  "issues.context.title": "Related cause and impact",
+  "issues.context.open": "Open related issue",
+  "issues.context.failed": "Related cause and impact could not be verified.",
+  "issues.context.coverageUnavailable": "Related issue coverage is incomplete for this exact scope.",
 } satisfies Record<IssuesMessageKey, string>;

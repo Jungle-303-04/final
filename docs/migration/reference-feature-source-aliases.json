@@ -196,6 +196,9 @@
     "reference.feature.223": "upstream-ui:settings:prometheus:live-apply:v1",
     "reference.feature.224": "upstream-ui:events:scoped:durable-streams:v1",
     "reference.feature.154": "upstream-ui:rightsizing:workload-guidance:server-evidence:v1",
-    "reference.feature.237": "upstream-ui:diagnose:resource-investigation:durable-stream:v1"
+    "reference.feature.237": "upstream-ui:diagnose:resource-investigation:durable-stream:v1",
+    "reference.feature.238": "upstream-ui:rca-extension:workload-detail:verified-context:v1",
+    "reference.feature.239": "upstream-ui:rca-extension:gitops-detail:verified-context:v1",
+    "reference.feature.240": "upstream-ui:rca-extension:timeline-detail:verified-context:v1"
   }
 }

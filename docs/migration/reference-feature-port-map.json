@@ -5326,6 +5326,112 @@
           "test": "frontend/src/api/diagnose.test.ts"
         }
       }
+    },
+    "reference.feature.238": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIssueListResponse+RcaReportListResponse",
+      "frontendContract": "frontend/src/features/issues/rcaContextContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_dashboard_router.py",
+        "tests/test_evidence_query_api.py",
+        "frontend/src/api/resource-issues.test.ts",
+        "frontend/src/api/evidence.test.ts",
+        "frontend/src/features/issues/createRcaContextAdapter.test.ts",
+        "frontend/src/features/issues/RcaContextPanel.test.tsx",
+        "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "consumer": "src/domains/rca/query_router.py#list_rca_reports",
+          "reason": "Both bounded reads are authenticated workspace projections over persisted outbound-Agent evidence; the browser never opens a cluster or Prometheus connection.",
+          "test": "tests/test_dashboard_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx#Events",
+          "consumer": "frontend/src/features/issues/createRcaContextAdapter.ts#createRcaContextAdapter",
+          "reason": "The existing Events tab appends one shared context panel, validates exact workspace, cluster, and workload identity, and omits verified-empty RCA instead of creating a placeholder card.",
+          "test": "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
+        },
+        "realtime": {
+          "state": "not_required",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "reason": "The panel is a bounded contextual read adjacent to the existing workload observation; it does not add a second stream or direct target transport."
+        }
+      }
+    },
+    "reference.feature.239": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIssueListResponse+RcaReportListResponse",
+      "frontendContract": "frontend/src/features/issues/rcaContextContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_dashboard_router.py",
+        "tests/test_evidence_query_api.py",
+        "frontend/src/features/issues/createRcaContextAdapter.test.ts",
+        "frontend/src/features/issues/RcaContextPanel.test.tsx",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "consumer": "src/domains/rca/query_router.py#list_rca_reports",
+          "reason": "The existing issue and report projections bind persisted Agent evidence to the authenticated workspace and preserve explicit unavailable narrative fields.",
+          "test": "tests/test_evidence_query_api.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "consumer": "frontend/src/features/issues/RcaContextPanel.tsx#RcaContextPanel",
+          "reason": "Application and resource detail reuse the same scope-checked panel without changing GitOps routes, actions, or refresh semantics.",
+          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        },
+        "realtime": {
+          "state": "not_required",
+          "destination": "src/domains/dashboard/router.py#resource_rca_issues",
+          "reason": "GitOps operation streaming remains owned by its existing command path; related RCA is a bounded evidence lookup."
+        }
+      }
+    },
+    "reference.feature.240": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.RcaIssueDetailResponse+ResourceIssueListResponse+RcaReportListResponse",
+      "frontendContract": "frontend/src/features/issues/rcaContextContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_dashboard_router.py",
+        "tests/test_evidence_query_api.py",
+        "frontend/src/api/rca-detail.test.ts",
+        "frontend/src/features/issues/createRcaContextAdapter.test.ts",
+        "frontend/src/features/issues/RcaContextPanel.test.tsx",
+        "frontend/src/pages/timeline/TimelineEventDetailSheet.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/router.py#rca_incident",
+          "consumer": "src/domains/rca/query_router.py#list_rca_reports",
+          "reason": "Incident detail and resource issue reads preserve the event's authenticated workspace/cluster identity while reports are joined only by the verified correlation.",
+          "test": "tests/test_dashboard_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx#TimelineEventDetailSheet",
+          "consumer": "frontend/src/features/issues/createRcaContextAdapter.ts#createRcaContextAdapter",
+          "reason": "The existing selected-event URL, keyboard navigation, and live Timeline stay unchanged; only incident or exact resource subjects receive the shared evidence panel.",
+          "test": "frontend/src/pages/timeline/TimelineEventDetailSheet.test.tsx"
+        },
+        "realtime": {
+          "state": "not_required",
+          "destination": "frontend/src/features/timeline/timelineContract.ts#TimelinePort",
+          "reason": "Timeline keeps its existing bounded live stream; opening a detail performs one contextual RCA read and never creates a duplicate stream."
+        }
+      }
     }
   },
   "sections": {
@@ -5488,7 +5594,7 @@
     },
     "7.7 Live Traffic": {
       "area": "traffic-analysis",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "in_progress",
       "backendContract": "domains.traffic",
       "frontendContract": "frontend/src/pages/traffic",
       "desktopContract": "desktop",

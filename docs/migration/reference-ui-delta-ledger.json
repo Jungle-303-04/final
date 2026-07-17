@@ -13214,6 +13214,41 @@
             "blockedReason": null,
             "rationale": "The current product surface reuses authorized applications and deployment bindings rather than raw controller objects, and the new search/status model contains no provider logic or fake rows. External GitOps CR discovery, labels, topology, health, and managed-resource inventory remain separate typed contract work."
           }
+        },
+        {
+          "sourceKey": "upstream-ui:rca-extension:gitops-detail:verified-context:v1",
+          "legacyContractIds": [
+            "reference.feature.239"
+          ],
+          "symbol": "GitOpsView issue navigation and exact application detail",
+          "interaction": "application and managed-resource details connect exact drift or operation context to verified RCA cause, impact, and evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload only when the exact GitOps resource scope changes",
+            "backpressure": "one abortable issue lookup and one bounded report lookup are shared by the active detail",
+            "merge": "accept context only for the authenticated workspace, cluster, and exact GitOps resource identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "frontend/src/features/issues/RcaContextPanel.tsx",
+              "src/domains/dashboard/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.rca.query_router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.rca-context",
+              "issues.rca-context.adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The extension reuses GitOps scope evidence and does not alter provider actions, routes, or operation progress."
+          }
         }
       ]
     },
@@ -15854,6 +15889,41 @@
             "blockedReason": "The route lacks the server-described toolbar and retained overview contracts required for full parity.",
             "rationale": "The existing route is the migration destination, but must retain its Python/SSE architecture rather than execute upstream code."
           }
+        },
+        {
+          "sourceKey": "upstream-ui:rca-extension:timeline-detail:verified-context:v1",
+          "legacyContractIds": [
+            "reference.feature.240"
+          ],
+          "symbol": "TimelineView selected event detail context",
+          "interaction": "an exact selected incident or resource event exposes related verified cause, impact, and evidence without changing the event URL, keyboard navigation, or live stream",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the bounded context only when the selected exact event subject changes",
+            "backpressure": "one abortable issue lookup and one bounded report lookup are allowed for the open detail",
+            "merge": "accept context only when workspace, cluster, incident or resource identity, and correlation match the selected event"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx",
+              "frontend/src/features/issues/createRcaContextAdapter.ts",
+              "src/domains/dashboard/router.py",
+              "src/domains/rca/query_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.rca.query_router"
+            ],
+            "plannedTestIds": [
+              "timeline.detail.rca-context",
+              "issues.rca-context.adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared adapter fails closed on scope or correlation mismatch and preserves the existing Timeline transport authority."
+          }
         }
       ]
     },
@@ -16114,6 +16184,41 @@
             "state": "blocked",
             "blockedReason": "The current workload detail contract does not expose these provider evidence sections or a duplicate-resource workflow, and provider-backed cost and rightsizing observations are not connected.",
             "rationale": "The product does not copy source hooks, raw-object ownership parsing, local mutations, or placeholder tabs. Each section remains explicitly unavailable until its Python contract and capability gate exist."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:rca-extension:workload-detail:verified-context:v1",
+          "legacyContractIds": [
+            "reference.feature.238"
+          ],
+          "symbol": "WorkloadView resource issues adjacent to events and metrics",
+          "interaction": "the workload Events context exposes related verified RCA cause, impact, and evidence for the exact authorized workload",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload only when the exact workload observation identity changes",
+            "backpressure": "one abortable resource issue lookup and one bounded report lookup are allowed for the visible Events context",
+            "merge": "accept context only for the authenticated workspace, cluster, namespace, kind, and workload name"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/features/issues/createRcaContextAdapter.ts",
+              "src/domains/dashboard/router.py",
+              "src/domains/rca/query_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.rca.query_router"
+            ],
+            "plannedTestIds": [
+              "workload.detail.rca-context",
+              "issues.rca-context.adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Verified-empty results remain absent and partial coverage remains explicit; no placeholder card or direct target transport is introduced."
           }
         }
       ]

@@ -19,6 +19,11 @@ import {
   getPrometheusIntegration,
   getRuntimeDiagnostics,
   getVersionCheck,
+  getAuditTimeline,
+  getIncidentRecentChanges,
+  getRcaIncident,
+  getRecoveryPlanByCorrelation,
+  getResourceIssues,
   getNodePodsSummary,
   getNamespaceScope,
   getUiPreferences,
@@ -26,6 +31,10 @@ import {
   listAlertRules,
   listClusters,
   listGlobalFilterFacets,
+  listRcaIssues,
+  listEvidence,
+  listRcaReports,
+  listRcaTimeline,
   searchResourceIdentities,
   subscribeHomeDashboardEvents,
   listDiagnoseRuns,
@@ -39,6 +48,7 @@ import {
   subscribeCommandOperationEvents,
   stopDiagnoseRun,
   subscribeDiagnoseEvents,
+  selectRecoveryAction,
   updateAlertRule,
   updateNamespaceScope,
   updateUiPreferences,
@@ -66,6 +76,9 @@ import { createApiBrowserRefreshPolicyRegistry } from "./composition/browserRefr
 import { createApiTimelinePort } from "./composition/timelinePort";
 import { createPortForwardSessionAdapter } from "../features/service-access/createPortForwardSessionAdapter";
 import { desktopBridge } from "../desktop/desktopBridge";
+import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
+import { createResourceIssuesAdapter } from "../features/issues/createResourceIssuesAdapter";
+import { createRcaContextAdapter } from "../features/issues/createRcaContextAdapter";
 
 /**
  * The authenticated composition is intentionally small: global providers and
@@ -148,6 +161,22 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getRuntimeDiagnostics,
     getVersionCheck,
   });
+  const issuesPort = createIssuesAdapter({
+    getAuditTimeline,
+    getIncidentRecentChanges,
+    getRcaIncident,
+    getRecoveryPlanByCorrelation,
+    listRcaIssues,
+    listEvidence,
+    listRcaReports,
+    listRcaTimeline,
+    selectRecoveryAction,
+  }, refreshPolicies);
+  const resourceIssuesPort = createResourceIssuesAdapter({ getResourceIssues });
+  const rcaContextPort = createRcaContextAdapter({
+    issues: issuesPort,
+    resourceIssues: resourceIssuesPort,
+  });
 
   return createProductComposition([
     {
@@ -171,19 +200,23 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           timelinePort,
           portForwardSessions,
           resourceFilesPort,
+          resourceIssuesPort,
         ),
       })),
     },
     {
       id: "issues",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(refreshPolicies),
+        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(issuesPort),
       })),
     },
     {
       id: "timeline",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(timelinePort),
+        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(
+          timelinePort,
+          rcaContextPort,
+        ),
       })),
     },
     {
@@ -201,7 +234,10 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "gitops",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(refreshPolicies),
+        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(
+          refreshPolicies,
+          rcaContextPort,
+        ),
       })),
     },
     {
@@ -239,5 +275,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions);
+  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions, rcaContextPort);
 }

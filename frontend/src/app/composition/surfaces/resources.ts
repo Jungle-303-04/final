@@ -11,7 +11,6 @@ import {
   getKubernetesApiResources,
   getInventoryResourceDetail,
   getInventorySummary,
-  getResourceIssues,
   getResourceCapabilities,
   getResourceDeletionPreview,
   getWorkloadRollbackPreview,
@@ -37,7 +36,6 @@ import { createResourceMetricsHistoryAdapter } from "../../../features/resources
 import { createResourcesAdapter } from "../../../features/resources/createResourcesAdapter";
 import { createResourcesFilterAdapter } from "../../../features/resources/createResourcesFilterAdapter";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
-import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
 import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
 import { createTopologyPorts } from "../topologyPorts";
 import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
@@ -46,6 +44,7 @@ import type { TimelinePort } from "../../../features/timeline/timelineContract";
 import type { PortForwardSessionPort } from "../../../features/service-access/portForwardSessionContract";
 import type { ResourceFilesPort } from "../../../features/resource-files/resourceFilesContract";
 import { createChecksProductPort } from "./checks";
+import type { ResourceIssuesPort } from "../../../features/issues/resourceIssuesContract";
 
 export function loadResourcesSurface(
   homePort: HomePort,
@@ -55,6 +54,7 @@ export function loadResourcesSurface(
   timelinePort: TimelinePort,
   portForwardSessions: PortForwardSessionPort,
   resourceFilesPort: ResourceFilesPort,
+  resourceIssuesPort: ResourceIssuesPort,
 ): ComponentType {
   const topologyPorts = createTopologyPorts();
   return createResourcesSurface(
@@ -98,7 +98,7 @@ export function loadResourcesSurface(
       getResourceManifestCreateCapability,
       previewResourceManifestEdit,
     }),
-    createResourceIssuesAdapter({ getResourceIssues }),
+    resourceIssuesPort,
     createChecksProductPort(refreshPolicies),
     createServiceAccessAdapter({
       resolveServiceAccess,

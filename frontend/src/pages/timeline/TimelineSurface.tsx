@@ -45,12 +45,15 @@ import { useTimelineOverviewFrame } from "./useTimelineOverviewFrame";
 import { useTimelinePins, type TimelinePinsController } from "./useTimelinePins";
 import { filterTimelineEventsForLens, resolveTimelineLens } from "./timelineStripModel";
 import type { TimelineLens } from "../../features/filters/timelineUrlState";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
 export function TimelineSurface({
   port,
+  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
   scopes,
 }: {
   port: TimelinePort;
+  rcaContextPort?: RcaContextPort;
   scopes: readonly ClusterScope[];
 }) {
   const { formatDate, formatNumber, t } = useI18n();
@@ -165,6 +168,7 @@ export function TimelineSurface({
           lens={normalizedState.lens}
           coverageSources={overview.frame.phase === "ready" ? overview.frame.overview.coverageSources : []}
           pins={pinsSupported ? pins : null}
+          rcaContextPort={rcaContextPort}
           onRetry={timeline.retry}
           onSelectedEventKeyChange={url.setSelectedEventKey}
           selectedEventKey={normalizedState.selectedEventKey}
@@ -232,6 +236,7 @@ function TimelineDataBoundary({
   lens,
   coverageSources,
   pins,
+  rcaContextPort,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -246,6 +251,7 @@ function TimelineDataBoundary({
   lens: TimelineLens;
   coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
   pins: TimelinePinsController | null;
+  rcaContextPort: RcaContextPort;
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -276,6 +282,7 @@ function TimelineDataBoundary({
       lens={lens}
       coverageSources={coverageSources}
       pins={pins}
+      rcaContextPort={rcaContextPort}
       onRetry={onRetry}
       onSelectedEventKeyChange={onSelectedEventKeyChange}
       selectedEventKey={selectedEventKey}
@@ -294,6 +301,7 @@ function TimelineReadyData({
   lens,
   coverageSources,
   pins,
+  rcaContextPort,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -308,6 +316,7 @@ function TimelineReadyData({
   lens: TimelineLens;
   coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
   pins: TimelinePinsController | null;
+  rcaContextPort: RcaContextPort;
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -435,6 +444,7 @@ function TimelineReadyData({
         onClose={closeEvent}
         onNavigate={(direction) => { if (selectedEvent !== null) navigateEvent(selectedEvent, direction); }}
         pins={pins}
+        rcaContextPort={rcaContextPort}
         t={t}
       />
     </>

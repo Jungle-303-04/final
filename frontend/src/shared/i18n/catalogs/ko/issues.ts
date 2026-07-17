@@ -189,4 +189,8 @@ export const issuesKo = {
   "issues.evidence.count.entries": "로그 {count}건",
   "issues.evidence.count.queries": "검색 조건 {count}개",
   "issues.evidence.summary.collected": "근거 수집 완료",
+  "issues.context.title": "연결된 원인과 영향",
+  "issues.context.open": "연결된 이슈 열기",
+  "issues.context.failed": "연결된 원인과 영향을 검증하지 못했습니다.",
+  "issues.context.coverageUnavailable": "이 정확한 범위의 연관 이슈 수집 범위가 불완전합니다.",
 } satisfies Record<IssuesMessageKey, string>;

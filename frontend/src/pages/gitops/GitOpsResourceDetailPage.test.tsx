@@ -71,7 +71,65 @@ describe("GitOpsResourceDetailPage", () => {
     );
     expect(await screen.findByText("Controller action accepted · correlation-1")).toBeTruthy();
   });
+
+  it("connects exact GitOps resource scope to the shared RCA context", async () => {
+    const port = gitOpsPort();
+    port.getResourceTree = vi.fn().mockResolvedValue(treeFixture());
+    port.getResourceInsights = vi.fn().mockResolvedValue(insightsFixture());
+    const load = vi.fn().mockResolvedValue({
+      state: "available",
+      scope: scope(),
+      coverageAvailability: "available",
+      reasonCodes: [],
+      record: {
+        issue: issueFixture(),
+        report: null,
+        rootCause: "controller reconciliation failed",
+        impact: "deployment remained out of sync",
+        evidence: ["controller condition"],
+        missingEvidence: [],
+      },
+    });
+    renderGitOps(
+      "/gitops/resource?cluster=cluster-a&apiVersion=argoproj.io%2Fv1alpha1&kind=Application&namespace=argocd&name=storefront",
+      port,
+      { load },
+    );
+
+    expect(await screen.findByText("deployment remained out of sync")).toBeTruthy();
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "resource",
+      scope: scope(),
+      resource: insightsFixture().resource,
+    }), expect.any(AbortSignal));
+  });
 });
+
+function issueFixture() {
+  return {
+    id: "workspace-a:correlation-a",
+    incidentId: "incident-a",
+    correlationId: "correlation-a",
+    workspaceId: "workspace-a",
+    clusterId: "cluster-a",
+    namespace: "argocd",
+    resourceKind: "Application",
+    resourceName: "storefront",
+    symptom: "out of sync",
+    currentSubject: "rca.completed",
+    status: "rca_completed",
+    rootCause: "controller reconciliation failed",
+    confidence: 0.9,
+    supportingEvidence: ["controller condition"],
+    missingEvidence: [],
+    evidenceRef: "evidence://gitops",
+    actionRoute: null,
+    commandId: null,
+    pullRequestUrl: null,
+    errorReason: null,
+    updatedAt: "2026-07-18T01:00:00Z",
+  };
+}
 
 function treeFixture(): GitOpsResourceTree {
   const root = resource("argoproj.io", "v1alpha1", "Application", "argocd", "storefront", "app-uid");

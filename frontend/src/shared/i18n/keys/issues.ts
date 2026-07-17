@@ -186,4 +186,8 @@ export type IssuesMessageKey =
   | "issues.evidence.count.results"
   | "issues.evidence.count.entries"
   | "issues.evidence.count.queries"
-  | "issues.evidence.summary.collected";
+  | "issues.evidence.summary.collected"
+  | "issues.context.title"
+  | "issues.context.open"
+  | "issues.context.failed"
+  | "issues.context.coverageUnavailable";
