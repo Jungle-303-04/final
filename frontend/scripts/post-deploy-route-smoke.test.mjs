@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  createRouteNetworkObserver,
   createRouteSmokeDiagnostics,
   formatRouteSmokeFailureDiagnostics,
   isApiErrorResponse,
   isBenignNavigationAbort,
   isChangeTimelineLimitResponse,
   isFailureProductState,
+  isObservedRouteApiRequest,
+  isRouteNetworkSettled,
   isStableRouteSurfaceSample,
   normalizeSurfaceText,
   orderRoutesForTraversal,
@@ -116,6 +119,85 @@ describe("post-deploy route smoke helpers", () => {
     expect(isFailureProductState("release")).toBe(true);
     expect(isFailureProductState("loading")).toBe(false);
     expect(isFailureProductState("empty")).toBe(false);
+  });
+
+  it("observes only same-origin API traffic for route completion", () => {
+    expect(isObservedRouteApiRequest(
+      "https://example.test/api/applications?cluster=one",
+      "https://example.test",
+    )).toBe(true);
+    expect(isObservedRouteApiRequest(
+      "https://agent.example.test/api/applications",
+      "https://example.test",
+    )).toBe(false);
+    expect(isObservedRouteApiRequest(
+      "https://example.test/assets/applications.js",
+      "https://example.test",
+    )).toBe(false);
+  });
+
+  it("requires both API completion and a bounded quiet window", () => {
+    const observation = {
+      lastActivityAt: 1_000,
+      now: 1_500,
+      pendingRequestCount: 0,
+      quietWindowMs: 500,
+    };
+    expect(isRouteNetworkSettled(observation)).toBe(true);
+    expect(isRouteNetworkSettled({
+      ...observation,
+      now: 1_499,
+    })).toBe(false);
+    expect(isRouteNetworkSettled({
+      ...observation,
+      pendingRequestCount: 1,
+    })).toBe(false);
+  });
+
+  it("settles on API response completion and reports bounded request timing", async () => {
+    let now = 1_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const listeners = new Map();
+    const page = {
+      off(event, listener) {
+        listeners.get(event)?.delete(listener);
+      },
+      on(event, listener) {
+        const eventListeners = listeners.get(event) ?? new Set();
+        eventListeners.add(listener);
+        listeners.set(event, eventListeners);
+      },
+      async waitForTimeout(durationMs) {
+        now += durationMs;
+      },
+    };
+    const emit = (event, value) => {
+      listeners.get(event)?.forEach((listener) => listener(value));
+    };
+    const request = {
+      url: () => "https://example.test/api/checks?secret=redacted",
+    };
+    const observer = createRouteNetworkObserver(page, "https://example.test");
+
+    try {
+      const phase = observer.beginPhase();
+      now += 25;
+      emit("request", request);
+      now += 125;
+      emit("response", { request: () => request, status: () => 200 });
+
+      await observer.waitForSettled(phase, 1_000);
+      expect(observer.summarize(phase, now - phase.startedAt)).toEqual({
+        apiRequestCount: 1,
+        durationMs: 650,
+        slowApi: [{ durationMs: 125, path: "/api/checks", status: 200 }],
+      });
+
+      observer.dispose();
+      expect([...listeners.values()].every((eventListeners) => eventListeners.size === 0)).toBe(true);
+    } finally {
+      dateNow.mockRestore();
+    }
   });
 
   it("accepts one HttpOnly root handoff and leaves transport security to the public browser origin", () => {

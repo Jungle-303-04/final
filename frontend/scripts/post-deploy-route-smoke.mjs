@@ -8,8 +8,10 @@ const SIDEBAR_SELECTOR = 'aside[data-slot="sidebar"]';
 const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
-const NETWORK_OBSERVATION_MS = 3_000;
+const NETWORK_QUIET_WINDOW_MS = 500;
+const NETWORK_SAMPLE_INTERVAL_MS = 100;
 const ROUTE_STABLE_SAMPLE_COUNT = 3;
+const SLOW_API_LIMIT = 5;
 const DIAGNOSTIC_ITEM_LIMIT = 50;
 const SENSITIVE_ASSIGNMENT_PATTERN = /\b(authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)\s*([:=])\s*(?:Bearer\s+)?[^\s,"']+/giu;
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+\/=-]+/giu;
@@ -74,6 +76,28 @@ export function isApiErrorResponse(status, rawUrl, baseUrl) {
 
 export function isFailureProductState(state) {
   return FAILURE_PRODUCT_STATES.has(state);
+}
+
+export function isObservedRouteApiRequest(rawUrl, baseUrl) {
+  try {
+    const requestUrl = new URL(rawUrl);
+    const applicationUrl = new URL(baseUrl);
+    return requestUrl.origin === applicationUrl.origin && (
+      requestUrl.pathname === "/api"
+      || requestUrl.pathname.startsWith("/api/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isRouteNetworkSettled({
+  lastActivityAt,
+  now,
+  pendingRequestCount,
+  quietWindowMs,
+}) {
+  return pendingRequestCount === 0 && now - lastActivityAt >= quietWindowMs;
 }
 
 export function createRouteSmokeDiagnostics() {
@@ -168,6 +192,7 @@ async function runWithDiagnostics(diagnostics) {
     args: ["--disable-dev-shm-usage", "--no-sandbox"],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const routeNetwork = createRouteNetworkObserver(page, baseUrl);
 
   page.on("pageerror", (error) => {
     diagnostics.pageErrors.push(error.message);
@@ -206,6 +231,7 @@ async function runWithDiagnostics(diagnostics) {
 
     let previous = initial;
     for (const route of traversal) {
+      const routeStartedAt = Date.now();
       diagnostics.failingRoute = route.pathname;
       const link = await releasedRouteLink(page, route.pathname);
       const observedHref = await link.getAttribute("href");
@@ -216,6 +242,8 @@ async function runWithDiagnostics(diagnostics) {
         `released route DOM order changed before ${route.pathname}`,
       );
 
+      const spaStartedAt = Date.now();
+      const spaNetworkPhase = routeNetwork.beginPhase();
       await Promise.all([
         page.waitForURL(
           (url) => url.pathname === route.pathname,
@@ -223,35 +251,176 @@ async function runWithDiagnostics(diagnostics) {
         ),
         link.click(),
       ]);
-      await waitForRouteSurface(page, previous, route.pathname);
-      await page.waitForTimeout(NETWORK_OBSERVATION_MS);
-      const spaFrame = await waitForRouteSurface(page, previous, route.pathname);
+      const spaFrame = await waitForObservedRouteSurface(
+        page,
+        routeNetwork,
+        spaNetworkPhase,
+        previous,
+        route.pathname,
+      );
+      const spaDurationMs = Date.now() - spaStartedAt;
+      const spaSummary = routeNetwork.summarize(spaNetworkPhase, spaDurationMs);
       assertDiagnostics(diagnostics);
 
       const directUrl = new URL(observedHref, baseUrl);
+      const directStartedAt = Date.now();
+      const directNetworkPhase = routeNetwork.beginPhase();
       await page.goto(directUrl.href, { waitUntil: "domcontentloaded" });
-      await waitForRouteSurface(
+      previous = await waitForObservedRouteSurface(
         page,
+        routeNetwork,
+        directNetworkPhase,
         null,
         route.pathname,
         AUTH_BOOTSTRAP_TIMEOUT_MS,
       );
-      await page.waitForTimeout(NETWORK_OBSERVATION_MS);
-      previous = await waitForRouteSurface(page, null, route.pathname);
+      const directDurationMs = Date.now() - directStartedAt;
+      const directSummary = routeNetwork.summarize(
+        directNetworkPhase,
+        directDurationMs,
+      );
       assert.equal(
         previous.routeTitle,
         spaFrame.routeTitle,
         `direct route title changed for ${route.pathname}`,
       );
       assertDiagnostics(diagnostics);
-      process.stdout.write(`route smoke passed: ${route.pathname} (spa+direct)\n`);
+      process.stdout.write(`${formatRouteTiming({
+        direct: directSummary,
+        pathname: route.pathname,
+        spa: spaSummary,
+        totalDurationMs: Date.now() - routeStartedAt,
+      })}\n`);
     }
 
     assertDiagnostics(diagnostics);
     process.stdout.write(`authenticated route smoke passed: ${routes.length} routes\n`);
   } finally {
+    routeNetwork.dispose();
     await browser.close();
   }
+}
+
+async function waitForObservedRouteSurface(
+  page,
+  routeNetwork,
+  networkPhase,
+  previous,
+  expectedPathname,
+  timeoutMs = ROUTE_SETTLE_TIMEOUT_MS,
+) {
+  await waitForRouteSurface(page, previous, expectedPathname, timeoutMs);
+  await routeNetwork.waitForSettled(networkPhase, timeoutMs);
+  return waitForRouteSurface(page, previous, expectedPathname, timeoutMs);
+}
+
+export function createRouteNetworkObserver(page, baseUrl) {
+  let sequence = 0;
+  const pendingRequests = new Map();
+  const completedRequests = [];
+  const onRequest = (request) => {
+    if (!isObservedRouteApiRequest(request.url(), baseUrl)) return;
+    sequence += 1;
+    pendingRequests.set(request, {
+      path: safeUrl(request.url()),
+      sequence,
+      startedAt: Date.now(),
+    });
+  };
+  const onResponse = (response) => {
+    completeRequest(response.request(), response.status());
+  };
+  const onRequestFailed = (request) => {
+    completeRequest(request, null);
+  };
+  const completeRequest = (request, status) => {
+    const pending = pendingRequests.get(request);
+    if (pending === undefined) return;
+    pendingRequests.delete(request);
+    sequence += 1;
+    completedRequests.push({
+      durationMs: Date.now() - pending.startedAt,
+      path: pending.path,
+      requestSequence: pending.sequence,
+      status,
+    });
+  };
+
+  page.on("request", onRequest);
+  page.on("response", onResponse);
+  page.on("requestfailed", onRequestFailed);
+
+  return {
+    beginPhase() {
+      return {
+        completedOffset: completedRequests.length,
+        sequence,
+        startedAt: Date.now(),
+      };
+    },
+    dispose() {
+      page.off("request", onRequest);
+      page.off("response", onResponse);
+      page.off("requestfailed", onRequestFailed);
+    },
+    summarize(phase, durationMs) {
+      const requests = completedRequests
+        .slice(phase.completedOffset)
+        .filter((request) => request.requestSequence > phase.sequence);
+      return {
+        apiRequestCount: requests.length,
+        durationMs,
+        slowApi: [...requests]
+          .sort((left, right) => right.durationMs - left.durationMs)
+          .slice(0, SLOW_API_LIMIT)
+          .map(({ durationMs: apiDurationMs, path, status }) => ({
+            durationMs: apiDurationMs,
+            path,
+            status,
+          })),
+      };
+    },
+    async waitForSettled(phase, timeoutMs) {
+      const deadline = Date.now() + timeoutMs;
+      let lastActivityAt = phase.startedAt;
+      let observedSequence = phase.sequence;
+      while (Date.now() < deadline) {
+        if (sequence !== observedSequence) {
+          observedSequence = sequence;
+          lastActivityAt = Date.now();
+        }
+        const pendingRequestCount = [...pendingRequests.values()]
+          .filter((request) => request.sequence > phase.sequence)
+          .length;
+        if (isRouteNetworkSettled({
+          lastActivityAt,
+          now: Date.now(),
+          pendingRequestCount,
+          quietWindowMs: NETWORK_QUIET_WINDOW_MS,
+        })) return;
+        await page.waitForTimeout(NETWORK_SAMPLE_INTERVAL_MS);
+      }
+      throw new Error(
+        `route API requests did not settle: ${JSON.stringify({
+          pending: [...pendingRequests.values()]
+            .filter((request) => request.sequence > phase.sequence)
+            .map((request) => request.path),
+        })}`,
+      );
+    },
+  };
+}
+
+function formatRouteTiming({ direct, pathname, spa, totalDurationMs }) {
+  return `route smoke passed: ${pathname} (spa+direct) ${JSON.stringify({
+    direct_ms: direct.durationMs,
+    direct_api_requests: direct.apiRequestCount,
+    direct_slow_api: direct.slowApi,
+    spa_ms: spa.durationMs,
+    spa_api_requests: spa.apiRequestCount,
+    spa_slow_api: spa.slowApi,
+    total_ms: totalDurationMs,
+  })}`;
 }
 
 async function authenticate(page, baseUrl, email, password) {
