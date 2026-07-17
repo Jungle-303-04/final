@@ -61,6 +61,10 @@ class RecoveryActionSpec:
     rollback_plan: str
     params: JsonObject
     approval_required_outside_sandbox: bool = False
+    recommendation_reason: str = ""
+    expected_outcome: str = ""
+    risk_explanation: str = ""
+    rollback_reason: str = ""
 
     def to_candidate(
         self,
@@ -107,6 +111,10 @@ class RecoveryActionSpec:
             validation_checks=list(self.validation_checks),
             rollback_plan=self.rollback_plan,
             evidence_refs=[context.evidence_ref, *detail.supporting_evidence],
+            recommendation_reason=self.recommendation_reason,
+            expected_outcome=self.expected_outcome,
+            risk_explanation=self.risk_explanation,
+            rollback_reason=self.rollback_reason,
         )
 
 

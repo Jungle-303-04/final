@@ -13,6 +13,7 @@ from domains.dashboard.repository import (
     incident_logical_key,
     incident_logical_key_from_projection,
     issue_severity_projection,
+    serialize_timeline_row,
     timeline_update_from_event,
 )
 from domains.rca.timeline import issue_presentation_severity
@@ -105,6 +106,16 @@ def test_dashboard_worker_upserts_timeline_row_without_chaining() -> None:
     assert row["confidence"] == 0.92
     assert row["supporting_evidence"] == ["pod waiting reason", "registry 401"]
     assert row["missing_evidence"] == ["trace-span"]
+    item = serialize_timeline_row(row)
+    assert item["situation_summary"] == (
+        "이미지 가져오기 실패로 ImagePullBackOff 상태가 감지되었습니다. "
+        "현재 조치 검토가 필요한 상태입니다."
+    )
+    assert item["recommended_action_summary"] == (
+        "이미지 태그와 레지스트리 접근 상태를 확인하세요."
+    )
+    assert item["evidence_summary"] == "확인된 근거 2개, 추가 확인 필요 1개를 기준으로 판단했습니다."
+    assert item["evidence_bundle_summary"] == "확인/추가 확인 근거 3개를 분석했습니다."
 
 
 def test_issue_severity_projection_reuses_the_shared_typed_timeline_policy() -> None:

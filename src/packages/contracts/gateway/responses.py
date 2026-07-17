@@ -204,6 +204,10 @@ class RcaIssueItem(RcaTimelineItem):
     issue_severity: Literal["critical", "warning"] | None = None
     severity_availability: Literal["available", "unavailable"]
     severity_reason_code: Literal["source_incomplete", "outside_two_tier_scale"] | None = None
+    situation_summary: str | None = None
+    recommended_action_summary: str | None = None
+    evidence_summary: str | None = None
+    evidence_bundle_summary: str | None = None
 
     @model_validator(mode="after")
     def validate_severity_projection(self) -> Self:
@@ -469,6 +473,8 @@ class RcaReportSummaryItem(StrictModel):
     evidence_ref: str | None = None
     supporting_evidence: list[str] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
+    evidence_summary: str | None = None
+    evidence_bundle_summary: str | None = None
     created_at: str | None = None
     # ── 분석 심화(화이트리스트) — 대상 리소스·부증상·후보 점수·근거 쿼리 트레일 ──
     resource_kind: str | None = None
@@ -505,6 +511,10 @@ class RecoveryActionCandidateItem(StrictModel):
     validation_checks: list[str] = Field(default_factory=list)
     rollback_plan: str
     evidence_refs: list[str] = Field(default_factory=list)
+    recommendation_reason: str | None = None
+    expected_outcome: str | None = None
+    risk_explanation: str | None = None
+    rollback_reason: str | None = None
 
 
 class RecoveryPlanStatusResponse(StrictModel):

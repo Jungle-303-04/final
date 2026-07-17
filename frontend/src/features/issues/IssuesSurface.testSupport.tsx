@@ -26,6 +26,10 @@ const issue: IssueSummary = {
   pullRequestUrl: null,
   errorReason: null,
   updatedAt: "2026-07-13T01:30:00Z",
+  situationSummary: null,
+  recommendedActionSummary: null,
+  evidenceSummary: null,
+  evidenceBundleSummary: null,
 };
 
 export function issuesPort(overrides: Partial<IssuesPort> = {}): IssuesPort {
@@ -166,6 +170,10 @@ export function issuesPort(overrides: Partial<IssuesPort> = {}): IssuesPort {
         validationChecks: [],
         rollbackPlan: "Restore the previous limit",
         evidenceRefs: [],
+        recommendationReason: null,
+        expectedOutcome: null,
+        riskExplanation: null,
+        rollbackReason: null,
       }],
     }),
     selectRecoveryAction: vi.fn().mockResolvedValue({

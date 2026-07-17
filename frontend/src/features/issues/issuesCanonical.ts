@@ -174,6 +174,25 @@ function projectIssue(
     pullRequestUrl: pullRequestUrl(item.pr_url, rowIndex, warnings),
     errorReason: optionalString(item.error_reason, "error_reason", rowIndex, warnings),
     updatedAt: timestamp(item.updated_at, rowIndex, warnings),
+    situationSummary: optionalString(
+      item.situation_summary,
+      "situation_summary",
+      rowIndex,
+      warnings,
+    ),
+    recommendedActionSummary: optionalString(
+      item.recommended_action_summary,
+      "recommended_action_summary",
+      rowIndex,
+      warnings,
+    ),
+    evidenceSummary: optionalString(item.evidence_summary, "evidence_summary", rowIndex, warnings),
+    evidenceBundleSummary: optionalString(
+      item.evidence_bundle_summary,
+      "evidence_bundle_summary",
+      rowIndex,
+      warnings,
+    ),
   };
 
   if (options.requireIncidentId && issue.incidentId === null) return null;

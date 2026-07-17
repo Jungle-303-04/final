@@ -40,6 +40,10 @@ export interface IssuesEndpointTimelineItem {
   issue_severity?: unknown;
   severity_availability?: unknown;
   severity_reason_code?: unknown;
+  situation_summary?: unknown;
+  recommended_action_summary?: unknown;
+  evidence_summary?: unknown;
+  evidence_bundle_summary?: unknown;
 }
 
 export interface IssuesEndpointTimelineResponse {
@@ -81,6 +85,10 @@ export interface IssueSummary {
   pullRequestUrl: string | null;
   errorReason: string | null;
   updatedAt: string | null;
+  situationSummary?: string | null;
+  recommendedActionSummary?: string | null;
+  evidenceSummary?: string | null;
+  evidenceBundleSummary?: string | null;
 }
 
 export type IssuePresentationSeverity = "critical" | "warning";

@@ -33,6 +33,11 @@ def rca_report_projection(payload: JsonObject) -> JsonObject:
         "evidence_ref": payload.get("evidence_ref"),
         "supporting_evidence": _str_list(detail.get("supporting_evidence")),
         "missing_evidence": _str_list(detail.get("missing_evidence")),
+        "evidence_summary": _evidence_summary(
+            _str_list(detail.get("supporting_evidence")),
+            _str_list(detail.get("missing_evidence")),
+        ),
+        "evidence_bundle_summary": _evidence_bundle_summary(payload),
         "resource_kind": incident.get("resource_kind"),
         "resource_name": incident.get("resource_name"),
         "namespace": incident.get("namespace"),
@@ -74,6 +79,13 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
         "evidence_ref": value("evidence_ref"),
         "supporting_evidence": _str_list(value("supporting_evidence", [])),
         "missing_evidence": _str_list(value("missing_evidence", [])),
+        "evidence_summary": value("evidence_summary")
+        or _evidence_summary(
+            _str_list(value("supporting_evidence", [])),
+            _str_list(value("missing_evidence", [])),
+        ),
+        "evidence_bundle_summary": value("evidence_bundle_summary")
+        or _evidence_bundle_summary(payload),
         "created_at": row.get("created_at"),
         "resource_kind": value("resource_kind"),
         "resource_name": value("resource_name"),
@@ -107,6 +119,34 @@ def _object_list(value: Any) -> list[JsonObject]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _evidence_summary(supporting: list[str], missing: list[str]) -> str | None:
+    if not supporting and not missing:
+        return None
+    parts: list[str] = []
+    if supporting:
+        parts.append(f"확인된 근거 {len(supporting)}개")
+    if missing:
+        parts.append(f"추가 확인 필요 {len(missing)}개")
+    return ", ".join(parts) + "를 기준으로 판단했습니다."
+
+
+def _evidence_bundle_summary(payload: JsonObject) -> str | None:
+    bundle = payload.get("evidence_bundle")
+    if not isinstance(bundle, dict):
+        return None
+    items = bundle.get("items")
+    item_count = len(items) if isinstance(items, list) else 0
+    missing = _str_list(bundle.get("missing_evidence"))
+    if item_count <= 0 and not missing:
+        return None
+    parts: list[str] = []
+    if item_count > 0:
+        parts.append(f"근거 묶음 {item_count}건")
+    if missing:
+        parts.append(f"추가 확인 필요 {len(missing)}개")
+    return ", ".join(parts) + "를 분석했습니다."
 
 
 def _candidate_scores(payload: JsonObject) -> list[JsonObject]:

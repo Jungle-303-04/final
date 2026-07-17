@@ -999,6 +999,10 @@ def recovery_action_candidate_item(
         validation_checks=candidate.validation_checks,
         rollback_plan=candidate.rollback_plan,
         evidence_refs=candidate.evidence_refs,
+        recommendation_reason=candidate.recommendation_reason or None,
+        expected_outcome=candidate.expected_outcome or None,
+        risk_explanation=candidate.risk_explanation or None,
+        rollback_reason=candidate.rollback_reason or None,
     )
 
 

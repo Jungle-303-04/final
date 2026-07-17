@@ -900,7 +900,85 @@ def serialize_timeline_row(row: Any) -> JsonObject:
         item[key] = _iso_or_none(item.get(key))
     item["supporting_evidence"] = item.get("supporting_evidence") or []
     item["missing_evidence"] = item.get("missing_evidence") or []
+    item["situation_summary"] = issue_situation_summary(item)
+    item["recommended_action_summary"] = issue_recommended_action_summary(item)
+    item["evidence_summary"] = issue_evidence_summary(item)
+    item["evidence_bundle_summary"] = issue_evidence_bundle_summary(item)
     return item
+
+
+def issue_situation_summary(row: JsonObject) -> str:
+    symptom = str(row.get("incident_symptom") or "").strip()
+    root_cause = str(row.get("root_cause") or "").strip()
+    status = str(row.get("status") or "").strip()
+    cause = _root_cause_label(root_cause)
+    resolved = status in {"incident_resolved", "resolved", "closed", "recovered", "healthy"}
+    if symptom.casefold() == "crashloopbackoff":
+        base = "컨테이너가 반복적으로 종료되어 CrashLoopBackOff가 발생했습니다."
+    elif symptom:
+        base = f"{symptom} 상태가 감지되었습니다."
+    else:
+        base = "이상 상태가 감지되었습니다."
+    prefix = f"{cause}로 " if cause else ""
+    state = "현재는 닫힌 상태입니다." if resolved else "현재 조치 검토가 필요한 상태입니다."
+    return f"{prefix}{base} {state}"
+
+
+def issue_recommended_action_summary(row: JsonObject) -> str | None:
+    root_cause = str(row.get("root_cause") or "").strip().casefold()
+    status = str(row.get("status") or "").strip().casefold()
+    if status in {"incident_resolved", "resolved", "closed", "recovered", "healthy"}:
+        return "추가 조치 없음"
+    if root_cause == "oom_killed":
+        return "메모리 제한 상향 검토가 필요합니다."
+    if root_cause in {"wrong_image_tag", "bad_image_version", "image_pull_backoff"}:
+        return "이미지 태그와 레지스트리 접근 상태를 확인하세요."
+    if root_cause in {"bad_config", "config_error", "missing_config"}:
+        return "최근 설정 변경과 환경변수 값을 확인하세요."
+    if root_cause in {"command_error", "app_exception", "startup_crash"}:
+        return "시작 로그와 최근 배포 변경을 확인하세요."
+    route = str(row.get("action_route") or "").strip().casefold()
+    if route in {"auto", "auto_approve"}:
+        return "자동 승인 가능한 복구 조치를 검토하세요."
+    return "복구 조치 검토가 필요합니다."
+
+
+def issue_evidence_summary(row: JsonObject) -> str | None:
+    supporting = row.get("supporting_evidence") if isinstance(row.get("supporting_evidence"), list) else []
+    missing = row.get("missing_evidence") if isinstance(row.get("missing_evidence"), list) else []
+    if not supporting and not missing:
+        return None
+    parts: list[str] = []
+    if supporting:
+        parts.append(f"확인된 근거 {len(supporting)}개")
+    if missing:
+        parts.append(f"추가 확인 필요 {len(missing)}개")
+    return ", ".join(parts) + "를 기준으로 판단했습니다."
+
+
+def issue_evidence_bundle_summary(row: JsonObject) -> str | None:
+    supporting = row.get("supporting_evidence") if isinstance(row.get("supporting_evidence"), list) else []
+    missing = row.get("missing_evidence") if isinstance(row.get("missing_evidence"), list) else []
+    total = len(supporting) + len(missing)
+    if total <= 0:
+        return None
+    return f"확인/추가 확인 근거 {total}개를 분석했습니다."
+
+
+def _root_cause_label(value: str) -> str | None:
+    labels = {
+        "oom_killed": "메모리 한도 초과",
+        "wrong_image_tag": "잘못된 컨테이너 이미지 태그",
+        "bad_image_version": "배포 이미지 태그 오류",
+        "image_pull_backoff": "이미지 가져오기 실패",
+        "bad_config": "설정 오류",
+        "config_error": "설정 오류",
+        "missing_config": "설정 누락",
+        "command_error": "시작 명령 오류",
+        "app_exception": "애플리케이션 예외",
+        "startup_crash": "애플리케이션 시작 실패",
+    }
+    return labels.get(value.strip().casefold())
 
 
 def issue_severity_projection(row: Any) -> JsonObject:

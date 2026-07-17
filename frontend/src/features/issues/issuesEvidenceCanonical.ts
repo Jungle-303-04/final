@@ -114,6 +114,8 @@ function rcaReport(
     evidenceRef: optional(item.evidence_ref),
     supportingEvidence: [...item.supporting_evidence],
     missingEvidence: [...item.missing_evidence],
+    evidenceSummary: optional(item.evidence_summary ?? null),
+    evidenceBundleSummary: optional(item.evidence_bundle_summary ?? null),
     secondarySymptoms: [...item.secondary_symptoms],
     selectedCandidateId: optional(item.selected_candidate_id),
     candidates: item.candidates.map(candidateScore),
