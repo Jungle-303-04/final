@@ -793,6 +793,7 @@ class AgentCommandRepository(DatabaseConnection):
         operation_id: str,
         cluster_id: str,
         payload: JsonObject,
+        kind: OperationEventKind = "progress",
     ) -> OperationEvent | None:
         """Stage a non-command configuration operation in the shared durable stream."""
 
@@ -800,7 +801,7 @@ class AgentCommandRepository(DatabaseConnection):
             conn,
             workspace_id=workspace_id,
             command_id=operation_id,
-            kind="progress",
+            kind=kind,
             payload={"cluster_id": cluster_id, **dict(payload)},
         )
 

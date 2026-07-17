@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -64,11 +65,18 @@ def _metadata(row: dict[str, Any]) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _stored_integration(db: Any, workspace_id: str, cluster_id: str) -> dict[str, Any] | None:
+def _stored_integration(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    *,
+    conn: Any | None = None,
+) -> dict[str, Any] | None:
     row = db.get_workspace_credential(
         workspace_id,
         PROMETHEUS_CREDENTIAL_PROVIDER,
         prometheus_credential_scope(cluster_id),
+        **({"conn": conn} if conn is not None else {}),
     )
     if not isinstance(row, dict):
         return None
@@ -113,6 +121,12 @@ def _stored_headers(row: dict[str, Any] | None) -> dict[str, str]:
     ):
         raise HTTPException(status_code=409, detail=PROMETHEUS_CREDENTIAL_UNAVAILABLE)
     return dict(headers)
+
+
+def _url_origin(value: str) -> tuple[str, str, int | None]:
+    parsed = urlsplit(value)
+    default_port = 443 if parsed.scheme.casefold() == "https" else 80
+    return parsed.scheme.casefold(), (parsed.hostname or "").casefold(), parsed.port or default_port
 
 
 @router.get(
@@ -163,11 +177,40 @@ async def update_prometheus_integration(
 
     revision = str(uuid.uuid4())
     operation_id = f"{PROMETHEUS_OPERATION_PREFIX}-{uuid.uuid4()}"
-    existing_integration = _stored_integration(db, workspace_id, payload.cluster_id)
-    effective_headers = (
-        _stored_headers(existing_integration) if payload.headers is None else payload.headers
-    )
-    try:
+    staged: list[OperationEvent] = []
+    effective_headers_box: list[dict[str, str]] = []
+
+    def stage(conn: Any, _event: Any) -> None:
+        db.lock_cluster_policy_for_update(
+            workspace_id,
+            payload.cluster_id,
+            conn=conn,
+        )
+        db.lock_workspace_credential_scope(
+            workspace_id,
+            PROMETHEUS_CREDENTIAL_PROVIDER,
+            prometheus_credential_scope(payload.cluster_id),
+            conn=conn,
+        )
+        existing_integration = _stored_integration(
+            db,
+            workspace_id,
+            payload.cluster_id,
+            conn=conn,
+        )
+        existing_metadata = _metadata(existing_integration) if existing_integration else {}
+        if payload.headers is None and existing_integration is not None:
+            existing_address = str(_metadata(existing_integration).get("address") or "")
+            if existing_address and _url_origin(existing_address) != _url_origin(
+                payload.prometheus_url
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="prometheus headers must be re-entered when the URL origin changes",
+                )
+        effective_headers = (
+            _stored_headers(existing_integration) if payload.headers is None else payload.headers
+        )
         encrypted = encrypt_credential(
             json.dumps(
                 {"headers": effective_headers},
@@ -176,43 +219,57 @@ async def update_prometheus_integration(
                 sort_keys=True,
             )
         )
-    except CredentialEncryptionError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="prometheus credential encryption unavailable",
-        ) from exc
-    existing = db.get_cluster_policy(workspace_id, payload.cluster_id)
-    base_policy = (
-        AgentPolicy.model_validate(existing)
-        if isinstance(existing, dict)
-        else default_agent_policy(cluster_id=payload.cluster_id)
-    )
-    providers = dict(base_policy.evidence.providers)
-    provider = providers.get(PROMETHEUS_POLICY_PROVIDER, EvidenceProviderPolicy())
-    providers[PROMETHEUS_POLICY_PROVIDER] = provider.model_copy(
-        update={
-            "configuration_revision": revision,
-            "configuration_operation_id": operation_id,
+        existing = db.get_cluster_policy(workspace_id, payload.cluster_id, conn=conn)
+        base_policy = (
+            AgentPolicy.model_validate(existing)
+            if isinstance(existing, dict)
+            else default_agent_policy(cluster_id=payload.cluster_id)
+        )
+        providers = dict(base_policy.evidence.providers)
+        provider = providers.get(PROMETHEUS_POLICY_PROVIDER, EvidenceProviderPolicy())
+        providers[PROMETHEUS_POLICY_PROVIDER] = provider.model_copy(
+            update={
+                "configuration_revision": revision,
+                "configuration_operation_id": operation_id,
+            }
+        )
+        next_policy = base_policy.model_copy(
+            update={
+                "generation": base_policy.generation + 1,
+                "evidence": base_policy.evidence.model_copy(update={"providers": providers}),
+            }
+        )
+        metadata = {
+            "cluster_id": payload.cluster_id,
+            "revision": revision,
+            "operation_id": operation_id,
+            "address": payload.prometheus_url,
+            "header_keys": list(effective_headers),
+            "state": "pending",
+            "error_code": None,
         }
-    )
-    next_policy = base_policy.model_copy(
-        update={
-            "generation": base_policy.generation + 1,
-            "evidence": base_policy.evidence.model_copy(update={"providers": providers}),
-        }
-    )
-    metadata = {
-        "cluster_id": payload.cluster_id,
-        "revision": revision,
-        "operation_id": operation_id,
-        "address": payload.prometheus_url,
-        "header_keys": list(effective_headers),
-        "state": "pending",
-        "error_code": None,
-    }
-    staged: list[OperationEvent] = []
-
-    def stage(conn: Any, _event: Any) -> None:
+        previous_operation_id = str(existing_metadata.get("operation_id") or "")
+        if (
+            str(existing_metadata.get("state") or "") == "pending"
+            and previous_operation_id
+            and previous_operation_id != operation_id
+        ):
+            superseded = db.stage_integration_operation_event(
+                conn,
+                workspace_id=workspace_id,
+                operation_id=previous_operation_id,
+                cluster_id=payload.cluster_id,
+                kind="cancelled",
+                payload={
+                    "cluster_id": payload.cluster_id,
+                    "status": "cancelled",
+                    "state": "superseded",
+                    "revision": str(existing_metadata.get("revision") or ""),
+                    "superseded_by": operation_id,
+                },
+            )
+            if superseded is not None:
+                staged.append(superseded)
         db.upsert_workspace_credential(
             {
                 "workspace_id": workspace_id,
@@ -244,6 +301,7 @@ async def update_prometheus_integration(
         )
         if operation_event is not None:
             staged.append(operation_event)
+        effective_headers_box.append(dict(effective_headers))
 
     try:
         accepted = await events.accept_body(
@@ -253,17 +311,24 @@ async def update_prometheus_integration(
                 revision=revision,
                 operation_id=operation_id,
                 address=payload.prometheus_url,
-                header_keys=list(effective_headers),
+                submitted_header_keys=list(payload.headers or {}),
+                preserve_stored_headers=payload.headers is None,
             ),
             actor=Actor(str(current.user_id), tuple(current.roles)),
             transactional_stage=stage,
         )
+    except CredentialEncryptionError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="prometheus credential encryption unavailable",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="integration configuration conflict") from exc
 
     announce = getattr(operation_events, "announce", None)
-    if staged and callable(announce):
-        await announce(staged[0], workspace_id=workspace_id)
+    if callable(announce):
+        for operation_event in staged:
+            await announce(operation_event, workspace_id=workspace_id)
     event_id = str(accepted.event.event_id)
     correlation_id = str(accepted.event.correlation_id)
     receipt = CommandReceipt(
@@ -273,6 +338,7 @@ async def update_prometheus_integration(
         correlation_id=correlation_id,
         status="queued",
     )
+    effective_headers = effective_headers_box[0] if effective_headers_box else {}
     return PrometheusIntegrationStatus(
         cluster_id=payload.cluster_id,
         revision=revision,
@@ -324,43 +390,76 @@ async def report_agent_prometheus_integration_status(
     db: Any = Depends(get_db),
     operation_events: Any = Depends(get_operation_events),
 ) -> dict[str, bool]:
-    row = _stored_integration(db, identity.workspace_id, identity.cluster_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail=PROMETHEUS_NOT_CONFIGURED)
-    metadata = _metadata(row)
-    if (
-        str(metadata.get("revision") or "") != payload.revision
-        or str(metadata.get("operation_id") or "") != payload.operation_id
-    ):
-        raise HTTPException(status_code=409, detail=PROMETHEUS_REVISION_CONFLICT)
-    updated = db.update_workspace_credential_metadata(
-        workspace_id=identity.workspace_id,
-        provider=PROMETHEUS_CREDENTIAL_PROVIDER,
-        scope=prometheus_credential_scope(identity.cluster_id),
-        expected_revision=payload.revision,
-        metadata={
-            "state": payload.state,
-            "error_code": payload.error_code,
-        },
+    event_kind = (
+        "completed"
+        if payload.state == "connected"
+        else "progress"
+        if payload.state == "retrying"
+        else "failed"
     )
-    if updated is None:
-        raise HTTPException(status_code=409, detail=PROMETHEUS_REVISION_CONFLICT)
-    terminal = "completed" if payload.state == "connected" else "failed"
-    publish = getattr(operation_events, "publish", None)
-    if callable(publish):
-        await publish(
-            command_id=payload.operation_id,
-            kind=terminal,
+    stored_state = "pending" if payload.state == "retrying" else payload.state
+    staged: list[OperationEvent] = []
+    with db.connection() as conn:
+        db.lock_workspace_credential_scope(
+            identity.workspace_id,
+            PROMETHEUS_CREDENTIAL_PROVIDER,
+            prometheus_credential_scope(identity.cluster_id),
+            conn=conn,
+        )
+        row = _stored_integration(
+            db,
+            identity.workspace_id,
+            identity.cluster_id,
+            conn=conn,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail=PROMETHEUS_NOT_CONFIGURED)
+        metadata = _metadata(row)
+        if (
+            str(metadata.get("revision") or "") != payload.revision
+            or str(metadata.get("operation_id") or "") != payload.operation_id
+        ):
+            raise HTTPException(status_code=409, detail=PROMETHEUS_REVISION_CONFLICT)
+        current_state = str(metadata.get("state") or "pending")
+        current_error = str(metadata.get("error_code") or "") or None
+        if current_state in {"connected", "failed"}:
+            if current_state == payload.state and current_error == payload.error_code:
+                return {"accepted": True}
+            raise HTTPException(status_code=409, detail=PROMETHEUS_REVISION_CONFLICT)
+        updated = db.update_workspace_credential_metadata(
+            workspace_id=identity.workspace_id,
+            provider=PROMETHEUS_CREDENTIAL_PROVIDER,
+            scope=prometheus_credential_scope(identity.cluster_id),
+            expected_revision=payload.revision,
+            expected_state="pending",
+            metadata={
+                "state": stored_state,
+                "error_code": payload.error_code,
+            },
+            conn=conn,
+        )
+        if updated is None:
+            raise HTTPException(status_code=409, detail=PROMETHEUS_REVISION_CONFLICT)
+        operation_event = db.stage_integration_operation_event(
+            conn,
+            workspace_id=identity.workspace_id,
+            operation_id=payload.operation_id,
+            cluster_id=identity.cluster_id,
+            kind=event_kind,
             payload={
                 "cluster_id": identity.cluster_id,
-                "status": terminal,
+                "status": event_kind,
                 "state": payload.state,
                 "revision": payload.revision,
                 "address": str(metadata.get("address") or ""),
                 "error_code": payload.error_code,
             },
-            workspace_id=identity.workspace_id,
         )
+        if operation_event is not None:
+            staged.append(operation_event)
+    announce = getattr(operation_events, "announce", None)
+    if staged and callable(announce):
+        await announce(staged[0], workspace_id=identity.workspace_id)
     return {"accepted": True}
 
 

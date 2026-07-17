@@ -6,6 +6,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 import httpx
 from commands import (
@@ -114,6 +115,7 @@ from config import (
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
     POLICY_SYNC_INTERVAL_ENV,
+    PROMETHEUS_PROBE_MAX_ATTEMPTS,
     QUERY_RUN_ACTION,
     RECONCILE_INTERVAL_ENV,
     RECONCILER_MODE_ARGOCD,
@@ -580,6 +582,8 @@ class HttpManagementPlaneClient:
         response.raise_for_status()
 
     async def fetch_prometheus_integration(self, revision: str) -> JsonObject:
+        if urlsplit(self.base_url).scheme != "https":
+            raise RuntimeError("prometheus integration configuration requires https management")
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_PROMETHEUS_INTEGRATION_PATH}",
             params={"revision": revision},
@@ -604,6 +608,21 @@ class HttpManagementPlaneClient:
             headers=self.headers,
         )
         response.raise_for_status()
+
+
+class PrometheusRuntimeConfigurationError(RuntimeError):
+    def __init__(self, code: str, *, retryable: bool) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+
+
+def prometheus_transport_error_retryable(exc: Exception) -> bool:
+    if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in {408, 429} or exc.response.status_code >= 500
+    return False
 
 
 class TargetClusterAgent:
@@ -693,6 +712,7 @@ class TargetClusterAgent:
             "operation_id": None,
             "error_code": None,
         }
+        self.prometheus_probe_attempts: dict[str, int] = {}
         self.control_store = AgentControlStore(self.agent_control_db_path)
         self.command_outbox = CommandResultOutbox(self.command_outbox_db_path)
         self.evidence_scheduler = EvidenceJobScheduler(
@@ -824,6 +844,7 @@ class TargetClusterAgent:
         revision = provider_policy.configuration_revision if provider_policy else None
         operation_id = provider_policy.configuration_operation_id if provider_policy else None
         if revision is None or operation_id is None:
+            self.prometheus_probe_attempts.clear()
             self.prometheus_integration_status = {
                 "state": "unconfigured",
                 "revision": None,
@@ -839,17 +860,82 @@ class TargetClusterAgent:
             if current.get("state") == "failed":
                 raise RuntimeError(str(current.get("error_code") or "prometheus_probe_failed"))
 
-        failure_code = "prometheus_configuration_invalid"
+        try:
+            provider = await self.probe_prometheus_runtime_configuration(
+                client,
+                revision=revision,
+                operation_id=operation_id,
+            )
+        except PrometheusRuntimeConfigurationError as exc:
+            attempts = self.prometheus_probe_attempts.get(revision, 0) + 1
+            self.prometheus_probe_attempts = {revision: attempts}
+            terminal = not exc.retryable or attempts >= PROMETHEUS_PROBE_MAX_ATTEMPTS
+            state = "failed" if terminal else "retrying"
+            failed = {
+                "state": state,
+                "revision": revision,
+                "operation_id": operation_id,
+                "error_code": exc.code,
+            }
+            try:
+                await client.report_prometheus_integration_status(dict(failed))
+            except Exception as report_exc:
+                raise RuntimeError("prometheus_status_report_failed") from report_exc
+            self.prometheus_integration_status = failed
+            raise RuntimeError(exc.code) from exc
+
+        try:
+            await client.report_prometheus_integration_status(
+                {
+                    "revision": revision,
+                    "operation_id": operation_id,
+                    "state": "connected",
+                }
+            )
+        except Exception as exc:
+            raise RuntimeError("prometheus_status_report_failed") from exc
+        self.evidence_collector.replace_provider(provider)
+        self.prometheus_probe_attempts.clear()
+        self.prometheus_integration_status = {
+            "state": "connected",
+            "revision": revision,
+            "operation_id": operation_id,
+            "error_code": None,
+        }
+        return {"integrations": {"prometheus": dict(self.prometheus_integration_status)}}
+
+    async def probe_prometheus_runtime_configuration(
+        self,
+        client: ManagementPlaneClient,
+        *,
+        revision: str,
+        operation_id: str,
+    ) -> PrometheusMetricsProvider:
         try:
             raw_config = await client.fetch_prometheus_integration(revision)
+        except Exception as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_configuration_fetch_failed",
+                retryable=prometheus_transport_error_retryable(exc),
+            ) from exc
+        try:
             config = AgentPrometheusIntegrationConfig.model_validate(raw_config)
-            if (
-                config.cluster_id != self.cluster_id
-                or config.revision != revision
-                or config.operation_id != operation_id
-            ):
-                raise ValueError("prometheus configuration identity mismatch")
-            provider = PrometheusMetricsProvider(config.address, headers=config.headers)
+        except ValueError as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_configuration_invalid",
+                retryable=False,
+            ) from exc
+        if (
+            config.cluster_id != self.cluster_id
+            or config.revision != revision
+            or config.operation_id != operation_id
+        ):
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_configuration_invalid",
+                retryable=False,
+            )
+        provider = PrometheusMetricsProvider(config.address, headers=config.headers)
+        try:
             async with httpx.AsyncClient(
                 timeout=provider.timeout_seconds,
                 transport=self.telemetry_transport,
@@ -859,45 +945,29 @@ class TargetClusterAgent:
                     params={"query": "up"},
                     headers=provider.headers,
                 )
-                failure_code = "prometheus_probe_http_error"
                 response.raise_for_status()
-                payload = response.json()
-            failure_code = "prometheus_probe_invalid_response"
-            if (
-                not isinstance(payload, dict)
-                or payload.get("status") != "success"
-                or not isinstance(payload.get("data"), dict)
-            ):
-                raise ValueError("prometheus probe response is invalid")
-
-            await client.report_prometheus_integration_status(
-                {
-                    "revision": revision,
-                    "operation_id": operation_id,
-                    "state": "connected",
-                }
-            )
-            self.evidence_collector.replace_provider(provider)
-            self.prometheus_integration_status = {
-                "state": "connected",
-                "revision": revision,
-                "operation_id": operation_id,
-                "error_code": None,
-            }
-            return {"integrations": {"prometheus": dict(self.prometheus_integration_status)}}
         except Exception as exc:
-            failed = {
-                "state": "failed",
-                "revision": revision,
-                "operation_id": operation_id,
-                "error_code": failure_code,
-            }
-            try:
-                await client.report_prometheus_integration_status(dict(failed))
-            except Exception as report_exc:
-                raise RuntimeError("prometheus_status_report_failed") from report_exc
-            self.prometheus_integration_status = failed
-            raise RuntimeError(failure_code) from exc
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_http_error",
+                retryable=prometheus_transport_error_retryable(exc),
+            ) from exc
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_invalid_response",
+                retryable=True,
+            ) from exc
+        if (
+            not isinstance(payload, dict)
+            or payload.get("status") != "success"
+            or not isinstance(payload.get("data"), dict)
+        ):
+            raise PrometheusRuntimeConfigurationError(
+                "prometheus_probe_invalid_response",
+                retryable=True,
+            )
+        return provider
 
     async def target_rbac_manifest_status(self) -> JsonObject:
         """Observe the administrator-owned role without ever attempting RBAC writes."""

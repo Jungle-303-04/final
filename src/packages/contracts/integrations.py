@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from typing import Literal
@@ -49,6 +50,20 @@ class PrometheusIntegrationUpdateRequest(StrictModel):
             raise ValueError("prometheus_url cannot contain credentials")
         if parsed.query or parsed.fragment:
             raise ValueError("prometheus_url cannot contain a query or fragment")
+        hostname = (parsed.hostname or "").casefold()
+        if hostname == "localhost" or hostname.endswith(".localhost"):
+            raise ValueError("prometheus_url cannot target a local-only address")
+        try:
+            address = ipaddress.ip_address(hostname)
+        except ValueError:
+            address = None
+        if address is not None and (
+            address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_unspecified
+        ):
+            raise ValueError("prometheus_url cannot target a local-only address")
         path = parsed.path.rstrip("/")
         return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
@@ -79,6 +94,8 @@ class PrometheusIntegrationUpdateRequest(StrictModel):
 
     @model_validator(mode="after")
     def bound_secret_payload(self) -> PrometheusIntegrationUpdateRequest:
+        if self.headers and urlsplit(self.prometheus_url).scheme != "https":
+            raise ValueError("prometheus_url must use https when secret headers are configured")
         encoded = json.dumps(
             {"headers": self.headers or {}},
             ensure_ascii=True,
@@ -115,13 +132,13 @@ class AgentPrometheusIntegrationConfig(StrictModel):
 class AgentPrometheusIntegrationStatus(StrictModel):
     revision: str = Field(min_length=1)
     operation_id: str = Field(min_length=1)
-    state: Literal["connected", "failed"]
+    state: Literal["connected", "retrying", "failed"]
     error_code: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
     def require_failure_reason(self) -> AgentPrometheusIntegrationStatus:
-        if self.state == "failed" and not self.error_code:
-            raise ValueError("failed integration status requires error_code")
+        if self.state in {"retrying", "failed"} and not self.error_code:
+            raise ValueError("non-connected integration status requires error_code")
         if self.state == "connected" and self.error_code is not None:
             raise ValueError("connected integration status cannot include error_code")
         return self

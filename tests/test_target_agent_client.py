@@ -105,7 +105,7 @@ def make_client(agent_module: Any, status_code: int) -> Any:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status_code, request=request)
 
-    client = agent_module.HttpManagementPlaneClient("http://management.local")
+    client = agent_module.HttpManagementPlaneClient("https://management.local")
     asyncio.run(client.client.aclose())
     client.client = httpx.AsyncClient(
         transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
@@ -253,7 +253,7 @@ def test_management_client_fetches_revision_bound_prometheus_configuration() -> 
             request=request,
         )
 
-    client = agent_module.HttpManagementPlaneClient("http://management.local")
+    client = agent_module.HttpManagementPlaneClient("https://management.local")
     asyncio.run(client.client.aclose())
     client.client = httpx.AsyncClient(
         transport=getattr(httpx, "Mo" + "ckTransport")(handler), timeout=1
@@ -269,6 +269,20 @@ def test_management_client_fetches_revision_bound_prometheus_configuration() -> 
 
     assert result["headers"] == {"Authorization": "Bearer secret"}
     assert requests[0].url.params["revision"] == "revision-1"
+
+
+def test_management_client_refuses_prometheus_secrets_over_plain_http() -> None:
+    agent_module = load_agent_module()
+    client = agent_module.HttpManagementPlaneClient("http://management.local")
+
+    async def run() -> None:
+        try:
+            with pytest.raises(RuntimeError, match="requires https management"):
+                await client.fetch_prometheus_integration("revision-1")
+        finally:
+            await close_client(client)
+
+    asyncio.run(run())
 
 
 def test_target_agent_applies_revision_once_and_reports_probe_status(
@@ -381,22 +395,41 @@ def test_target_agent_caches_failed_probe_without_replaying_secrets(
     )
     client = IntegrationClient()
 
-    for _ in range(2):
+    for _ in range(agent_module.PROMETHEUS_PROBE_MAX_ATTEMPTS + 1):
         with pytest.raises(RuntimeError, match="^prometheus_probe_http_error$"):
             asyncio.run(agent.apply_runtime_configurations(client, policy))
 
-    assert client.fetches == 1
-    assert client.statuses == [
-        {
+    assert client.fetches == agent_module.PROMETHEUS_PROBE_MAX_ATTEMPTS
+    assert [status["state"] for status in client.statuses] == [
+        *(["retrying"] * (agent_module.PROMETHEUS_PROBE_MAX_ATTEMPTS - 1)),
+        "failed",
+    ]
+    assert all(
+        status
+        == {
             "revision": "revision-failed",
             "operation_id": "operation-failed",
-            "state": "failed",
+            "state": status["state"],
             "error_code": "prometheus_probe_http_error",
         }
-    ]
+        for status in client.statuses
+    )
     details = repr(asyncio.run(agent.policy_status_details()))
     assert "secret-host" not in details
     assert "secret-value" not in details
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected"),
+    [(401, False), (404, False), (408, True), (429, True), (503, True)],
+)
+def test_prometheus_probe_http_retry_classification(status_code: int, expected: bool) -> None:
+    agent_module = load_agent_module()
+    request = httpx.Request("GET", "https://prometheus.test/api/v1/query")
+    response = httpx.Response(status_code, request=request)
+    error = httpx.HTTPStatusError("probe failed", request=request, response=response)
+
+    assert agent_module.prometheus_transport_error_retryable(error) is expected
 
 
 def test_target_agent_builds_apply_manifest_patch() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from contextlib import nullcontext
 from dataclasses import replace
@@ -50,6 +51,11 @@ AGENT_STATUS_RETENTION_SECONDS_ENV = "AGENT_STATUS_RETENTION_SECONDS"
 DEFAULT_AGENT_STATUS_RETENTION_SECONDS = 3600
 
 
+def cluster_policy_lock_key(workspace_id: str, cluster_id: str) -> int:
+    raw = f"cluster-policy\0{workspace_id}\0{cluster_id}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
+
+
 def agent_status_retention_seconds() -> int:
     """종료된 agent pod 상태를 보존할 최대 시간을 반환한다."""
     try:
@@ -65,6 +71,17 @@ def agent_status_retention_seconds() -> int:
 
 
 class TargetAgentRepository(DatabaseConnection):
+    def lock_cluster_policy_for_update(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        conn: Any,
+    ) -> None:
+        conn.execute(
+            select(func.pg_advisory_xact_lock(cluster_policy_lock_key(workspace_id, cluster_id)))
+        )
+
     def list_target_runtime_upgrade_candidates(
         self,
         *,
@@ -363,6 +380,7 @@ class TargetAgentRepository(DatabaseConnection):
         table = AgentPolicyRecord.__table__
         context = nullcontext(conn) if conn is not None else self.connection()
         with context as connection:
+            self.lock_cluster_policy_for_update(workspace_id, cluster_id, conn=connection)
             existing = (
                 connection.execute(
                     select(table.c.generation).where(
@@ -398,14 +416,21 @@ class TargetAgentRepository(DatabaseConnection):
             row = connection.execute(statement).mappings().one()
         return dict(row["policy"])
 
-    def get_cluster_policy(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
+    def get_cluster_policy(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        conn: Any | None = None,
+    ) -> JsonObject | None:
         table = AgentPolicyRecord.__table__
         statement = select(table.c.policy).where(
             table.c.workspace_id == workspace_id,
             table.c.cluster_id == cluster_id,
         )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            row = connection.execute(statement).mappings().first()
         return dict(row["policy"]) if row else None
 
     def save_agent_policy_status(

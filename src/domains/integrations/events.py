@@ -17,4 +17,5 @@ class PrometheusIntegrationConfiguredBody(EventBody):
     revision: str
     operation_id: str
     address: str
-    header_keys: list[str] = field(default_factory=list)
+    submitted_header_keys: list[str] = field(default_factory=list)
+    preserve_stored_headers: bool = False

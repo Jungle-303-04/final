@@ -220,10 +220,13 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         workspace_id: str,
         provider: str,
         scope: str,
+        *,
+        conn: Any | None = None,
     ) -> None:
         lock_key = workspace_credential_lock_key(workspace_id, provider, scope)
-        with self.connection() as conn:
-            conn.execute(select(func.pg_advisory_xact_lock(lock_key)))
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            connection.execute(select(func.pg_advisory_xact_lock(lock_key)))
 
     def upsert_workspace_credential(
         self,
@@ -263,7 +266,12 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         return row_dict(row)
 
     def get_workspace_credential(
-        self, workspace_id: str, provider: str, scope: str
+        self,
+        workspace_id: str,
+        provider: str,
+        scope: str,
+        *,
+        conn: Any | None = None,
     ) -> JsonObject | None:
         table = WorkspaceCredential.__table__
         statement = select(table).where(
@@ -272,8 +280,9 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             table.c.scope == scope,
             table.c.status == "active",
         )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            row = connection.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
     def update_workspace_credential_metadata(
@@ -284,6 +293,8 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         scope: str,
         expected_revision: str,
         metadata: JsonObject,
+        expected_state: str | None = None,
+        conn: Any | None = None,
     ) -> JsonObject | None:
         """Merge non-secret probe evidence only for the exact active revision."""
 
@@ -305,8 +316,11 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             )
             .returning(table)
         )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
+        if expected_state is not None:
+            statement = statement.where(table.c.metadata["state"].astext == expected_state)
+        context = nullcontext(conn) if conn is not None else self.connection()
+        with context as connection:
+            row = connection.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
     def delete_workspace_credential(self, workspace_id: str, provider: str, scope: str) -> bool:
