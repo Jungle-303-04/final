@@ -20,6 +20,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
 import { Surface } from "../../shared/ui/Surface";
 import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
+import { DeploymentBlueprintEditor } from "./DeploymentBlueprintEditor";
 import { PlanStepEditor } from "./PlanStepEditor";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
@@ -149,6 +150,14 @@ export function PlanEditor({
           </FormField>
         </div>
       </Surface>
+
+      <DeploymentBlueprintEditor
+        applications={applications}
+        clusters={clusters}
+        key={plan.plan_id || "draft-release-plan"}
+        onChange={onChange}
+        plan={plan}
+      />
 
       <section aria-labelledby="workflow-editor-steps" className="grid min-w-0 gap-3">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
