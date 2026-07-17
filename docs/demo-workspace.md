@@ -18,8 +18,11 @@ public and reachable, `main` is its default branch at descriptor-pinned revision
 component Kustomize, Helm, and Helm values override sources are discoverable and renderable. The
 descriptor records the repository's 17-scenario catalog count. The seed then persists the
 repository, applications,
-poll targets, and deployment bindings through the existing GitOps repositories in the same
-transaction as the inventory cut.
+poll targets, deployment bindings, one successful read-only validation WorkflowRun per source,
+its canonical steps, and identity-only rendered ManifestArtifact rows through the existing GitOps
+repositories in the same transaction as the inventory cut. The runtime evidence version is part of
+the descriptor digest, so deploying this extension produces a new seed cut instead of treating the
+older source-only marker as current.
 
 The public demo repository has no credential row or stored secret. Its canonical repository row
 keeps `credential_ref` null. Discovery uses anonymous GitHub access by default; the deployment Job
@@ -102,15 +105,17 @@ The descriptor intentionally does not fabricate evidence that belongs to another
 
 - Issues remains empty because that surface reads incident/RCA projections, and an inventory
   snapshot or Warning Event is not itself an incident.
-- Applications can list the five descriptor-owned Application and DeploymentBinding rows, but
-  workload runtime membership and rollout state remain unavailable until a successful
-  WorkflowRun and rendered ManifestArtifact provide that evidence.
+- Applications lists the five descriptor-owned Application and DeploymentBinding rows and shows
+  their successful repository-render validation deliveries. Apply, live diff, rollout health, and
+  workload runtime membership stay unavailable: the successful WorkflowRun is explicitly
+  read-only, while its apply and health steps are skipped.
 - Cost overview remains unavailable because monetary observations belong to bounded
   `EvidenceWindow` records, not inventory usage.
-- GitOps can show the validated repository and source registrations, but it does not claim a
-  synchronization run or rendered deployment result. Helm release state, Traffic, and RCA/Issues
-  remain unavailable because their storage/controller/evidence contracts are separate from
-  inventory and source discovery.
+- GitOps shows the validated repository, source registrations, pinned revision, rendered resource
+  identities, and the successful read-only validation operation. It still does not claim a target
+  synchronization, live comparison, or rollout. Helm release state, Traffic, and RCA/Issues remain
+  unavailable because their storage/controller/evidence contracts are separate from inventory and
+  source discovery.
 
 Those unavailable states are part of the fixture's evidence boundary. Extending them requires a
 separate descriptor-owned slice through their canonical write contracts; they must not be

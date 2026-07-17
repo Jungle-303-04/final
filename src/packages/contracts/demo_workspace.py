@@ -96,6 +96,7 @@ class DemoGitOpsSourceDescriptor(StrictModel):
 class DemoGitOpsRepositoryDescriptor(StrictModel):
     """Credential-free public GitHub repository attached by the seed CLI."""
 
+    runtime_evidence_version: Literal[1]
     repo_ref: str = Field(
         min_length=3,
         max_length=240,

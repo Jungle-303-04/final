@@ -6,9 +6,12 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import (
     JSON,
@@ -33,6 +36,7 @@ from controller.demo_workspace import (
     reset_demo_workspace,
     seed_demo_workspace,
 )
+from domains.applications.router import router as applications_router
 from domains.checks.observation_projection import checks_overview
 from domains.cost.node_projection import cost_node_page
 from domains.cost.observation_projection import cost_overview
@@ -44,6 +48,8 @@ from domains.demo_workspace.policy import (
     DEMO_WORKSPACE_MUTATIONS_OPT_IN,
 )
 from domains.demo_workspace.repository import DemoWorkspaceRepository
+from domains.gitops.detail_router import router as gitops_detail_router
+from domains.identity.dependencies import require_session
 from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.kubernetes_events import KubernetesEventFactBatch
 from domains.inventory.repository import (
@@ -64,6 +70,7 @@ from packages.contracts.gateway.responses import (
     RepositoryManifestValidationResponse,
     RepositoryProbeResponse,
 )
+from packages.runtime.dependencies import get_db
 from packages.runtime.gateway import ApiEventGateway
 
 
@@ -86,6 +93,9 @@ class FakeDemoDatabase:
         self.application_writes: list[dict[str, Any]] = []
         self.watch_writes: list[dict[str, Any]] = []
         self.binding_writes: list[dict[str, Any]] = []
+        self.workflow_writes: list[dict[str, Any]] = []
+        self.workflow_step_writes: list[dict[str, Any]] = []
+        self.manifest_artifact_writes: list[dict[str, Any]] = []
 
     def get_cluster_registration(self, _workspace_id: str, _cluster_id: str) -> object:
         return self.registration
@@ -138,14 +148,209 @@ class FakeDemoDatabase:
         return stored
 
     def register_watch_target(self, payload: dict[str, Any]) -> dict[str, Any]:
-        stored = deepcopy(payload)
+        stored = {
+            **deepcopy(payload),
+            "watch_target_id": f"watch-{payload['name']}",
+        }
         self.watch_writes.append(stored)
         return stored
 
     def register_deployment_binding(self, payload: dict[str, Any]) -> dict[str, Any]:
-        stored = deepcopy(payload)
+        stored = {
+            **deepcopy(payload),
+            "watch_target_id": f"watch-{payload['name']}",
+            "binding_id": f"binding-{payload['name']}",
+        }
         self.binding_writes.append(stored)
         return stored
+
+    def start_workflow_run(self, payload: dict[str, Any]) -> object:
+        stored = {
+            **deepcopy(payload),
+            "created_at": "2026-07-18T01:02:03+00:00",
+            "updated_at": "2026-07-18T01:02:03+00:00",
+        }
+        self.workflow_writes.append(stored)
+        return object()
+
+    def record_workflow_step(self, payload: dict[str, Any]) -> object:
+        stored = {
+            **deepcopy(payload),
+            "updated_at": "2026-07-18T01:02:03+00:00",
+        }
+        self.workflow_step_writes.append(stored)
+        return object()
+
+    def record_manifest_artifact(self, payload: dict[str, Any]) -> dict[str, Any]:
+        stored = deepcopy(payload)
+        self.manifest_artifact_writes.append(stored)
+        return stored
+
+    def accessible_resource_ids(
+        self,
+        _user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        _permission: str,
+    ) -> set[str]:
+        if workspace_id != self.registration_writes[0]["workspace_id"]:
+            return set()
+        if resource_type == "cluster":
+            return {str(self.registration_writes[0]["cluster_id"])}
+        if resource_type == "application":
+            return {str(application["application_id"]) for application in self.application_writes}
+        return set()
+
+    def can_access(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+        permission: str,
+    ) -> bool:
+        return resource_id in self.accessible_resource_ids(
+            user_id,
+            workspace_id,
+            resource_type,
+            permission,
+        )
+
+    def list_filtered_applications(self, **_kwargs: object) -> dict[str, object]:
+        return {
+            "items": [
+                {"application_id": application["application_id"]}
+                for application in self.application_writes
+            ],
+            "has_more": False,
+        }
+
+    def list_applications(
+        self,
+        workspace_id: str,
+        *,
+        application_ids: set[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        items = [
+            application
+            for application in self.application_writes
+            if application["workspace_id"] == workspace_id
+            and (application_ids is None or str(application["application_id"]) in application_ids)
+        ]
+        return deepcopy(items[:limit])
+
+    def get_application(self, workspace_id: str, application_id: str) -> dict[str, Any] | None:
+        return next(
+            (
+                deepcopy(application)
+                for application in self.application_writes
+                if application["workspace_id"] == workspace_id
+                and application["application_id"] == application_id
+            ),
+            None,
+        )
+
+    def list_application_deployment_bindings(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        application = self.get_application(workspace_id, application_id)
+        if application is None:
+            return []
+        rows = []
+        for binding in self.binding_writes:
+            if (
+                binding["workspace_id"] != workspace_id
+                or binding["app_name"] != application["name"]
+            ):
+                continue
+            watch = next(
+                (
+                    item
+                    for item in self.watch_writes
+                    if item["watch_target_id"] == binding["watch_target_id"]
+                ),
+                {},
+            )
+            rows.append(
+                {
+                    **deepcopy(binding),
+                    "gitops_poll": {
+                        "status": watch.get("settings", {}).get("poll_status", "unknown"),
+                        "last_seen_commit_sha": watch.get("last_seen_commit_sha", ""),
+                        "last_polled_at": (
+                            watch.get("last_polled_at").isoformat()
+                            if isinstance(watch.get("last_polled_at"), datetime)
+                            else watch.get("last_polled_at")
+                        ),
+                    },
+                }
+            )
+        return rows[:limit]
+
+    def list_application_workflow_runs(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        rows = []
+        for run in self.workflow_writes:
+            if run["workspace_id"] != workspace_id or run["application_id"] != application_id:
+                continue
+            steps = [
+                deepcopy(step)
+                for step in self.workflow_step_writes
+                if step["workflow_run_id"] == run["workflow_run_id"]
+            ]
+            rows.append({**deepcopy(run), "steps": steps})
+        return rows[:limit]
+
+    def get_application_catalog_states(
+        self,
+        *,
+        workspace_id: str,
+        application_ids: list[str],
+        allowed_cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        return {
+            application_id: {
+                "bindings": self.list_application_deployment_bindings(
+                    workspace_id,
+                    application_id,
+                    limit=500,
+                ),
+                "runs": [
+                    run
+                    for run in self.list_application_workflow_runs(
+                        workspace_id,
+                        application_id,
+                        limit=100,
+                    )
+                    if run["cluster_id"] in allowed_cluster_ids
+                ],
+                "inventory_rows": [],
+                "inventory_context": {
+                    "snapshot_revision": 0,
+                    "observed_at": None,
+                    "labels_complete": True,
+                    "resources_complete": True,
+                    "application_bindings_complete": False,
+                    "partial_reason_codes": ["application_runtime_membership_unavailable"],
+                },
+                "incident_evidence": {
+                    "complete": False,
+                    "open_count": None,
+                    "items": [],
+                },
+            }
+            for application_id in application_ids
+        }
 
 
 class TransactionalFakeDemoDatabase(FakeDemoDatabase):
@@ -248,6 +453,12 @@ class FakeRepositoryDiscovery:
 
     async def validate_manifest(self, payload: Any) -> RepositoryManifestValidationResponse:
         self.validation_requests.append(payload)
+        resource_count = {
+            "manifests/base/workloads.yaml": 3,
+            "manifests/overlays/dev": 14,
+            "manifests/overlays/diagnostics": 15,
+            "charts/demo-app": 2,
+        }[payload.manifest_path]
         return RepositoryManifestValidationResponse(
             repo_ref="jungle-303-04/yaml-demo",
             branch=payload.branch,
@@ -255,21 +466,25 @@ class FakeRepositoryDiscovery:
             valid=True,
             status="valid",
             validation_mode=payload.source_type,
-            resource_count={
-                "manifests/base/workloads.yaml": 3,
-                "manifests/overlays/dev": 14,
-                "manifests/overlays/diagnostics": 15,
-                "charts/demo-app": 2,
-            }[payload.manifest_path],
+            resource_count=resource_count,
             resources=[
                 RepositoryManifestResource(
                     api_version="apps/v1",
                     kind="Deployment",
                     namespace="demo-shop",
-                    name=payload.source_type,
+                    name=f"{payload.source_type}-{index}",
                 )
+                for index in range(resource_count)
             ],
         )
+
+
+class IncompleteRepositoryDiscovery(FakeRepositoryDiscovery):
+    async def validate_manifest(self, payload: Any) -> RepositoryManifestValidationResponse:
+        validation = await super().validate_manifest(payload)
+        if payload.manifest_path != "manifests/base/workloads.yaml":
+            return validation
+        return validation.model_copy(update={"resource_count": validation.resource_count + 1})
 
 
 class FakeOutboxDemoDatabase(FakeDemoDatabase):
@@ -312,6 +527,7 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
         "unknown",
     }
     assert descriptor.gitops is not None
+    assert descriptor.gitops.runtime_evidence_version == 1
     assert descriptor.gitops.repo_ref == "jungle-303-04/yaml-demo"
     assert descriptor.gitops.revision == "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef"
     assert descriptor.gitops.catalog_scenario_count == 17
@@ -394,6 +610,16 @@ def test_descriptor_rejects_default_workspace_and_incomplete_inventory(tmp_path:
 
     assert "only for Helm" in str(error.value)
 
+    raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
+    del raw["gitops"]["runtime_evidence_version"]
+    legacy_runtime = tmp_path / "legacy-runtime-evidence.json"
+    legacy_runtime.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValidationError) as error:
+        load_descriptor(legacy_runtime)
+
+    assert "runtime_evidence_version" in str(error.value)
+
 
 def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> None:
     descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
@@ -431,6 +657,9 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert len(db.application_writes) == 5
     assert len(db.watch_writes) == 5
     assert len(db.binding_writes) == 5
+    assert len(db.workflow_writes) == 5
+    assert len(db.workflow_step_writes) == 35
+    assert len(db.manifest_artifact_writes) == 36
     assert len(discovery.validation_requests) == 5
     assert first["gitops_source_count"] == 5
     assert second["gitops_source_count"] == 5
@@ -470,6 +699,71 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert helm_override["metadata"]["values_path"] == ("charts/demo-app/values-staging.yaml")
     assert helm_override["deploy_policy"]["values_path"] == ("charts/demo-app/values-staging.yaml")
     assert all(binding["deploy_policy"]["read_only"] for binding in db.binding_writes)
+    assert {run["status"] for run in db.workflow_writes} == {"succeeded"}
+    assert {run["current_step"] for run in db.workflow_writes} == {"render"}
+    assert all(run["metadata"]["runtime_mode"] == "read-only-demo" for run in db.workflow_writes)
+    assert {step["name"]: step["status"] for step in db.workflow_step_writes[:7]} == {
+        "git": "succeeded",
+        "render": "succeeded",
+        "diff": "skipped",
+        "policy": "succeeded",
+        "approval": "skipped",
+        "apply": "skipped",
+        "health": "skipped",
+    }
+    assert all(
+        artifact["source_summary"][DEMO_SEED_MARKER_KEY] == descriptor.seed_marker()
+        for artifact in db.manifest_artifact_writes
+    )
+    assert all(
+        str(artifact["rendered_manifest"]["artifact_digest"]).startswith("sha256:")
+        for artifact in db.manifest_artifact_writes
+    )
+
+
+def test_seeded_runtime_is_visible_through_applications_and_gitops_reads() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+    asyncio.run(
+        seed_demo_workspace(
+            db,
+            descriptor,
+            events=FakeEvents(),
+            discovery=FakeRepositoryDiscovery(),
+            observed_at=datetime(2026, 7, 18, 1, 2, 3, tzinfo=UTC),
+        )
+    )
+    app = FastAPI()
+    app.include_router(applications_router)
+    app.include_router(gitops_detail_router)
+    app.dependency_overrides[require_session] = lambda: SimpleNamespace(
+        user_id=descriptor.workspace.owner_user_id,
+        workspace_id=descriptor.workspace.workspace_id,
+        roles=("user",),
+    )
+    app.dependency_overrides[get_db] = lambda: db
+    client = TestClient(app)
+
+    applications_response = client.get("/applications")
+    assert applications_response.status_code == 200
+    applications = applications_response.json()["applications"]
+    assert len(applications) == 5
+    assert {item["delivery"]["status"] for item in applications} == {"succeeded"}
+    assert all(
+        item["current_deployment"]["git_sha"] == descriptor.gitops.revision for item in applications
+    )
+    assert all(item["runtime_readiness"]["completeness"] == "unavailable" for item in applications)
+    assert all(item["has_drift"] is None for item in applications)
+
+    application = db.application_writes[0]
+    gitops_response = client.get(f"/gitops/applications/{application['application_id']}")
+    assert gitops_response.status_code == 200
+    gitops = gitops_response.json()["application"]
+    assert gitops["source"]["repository_ref"] == descriptor.gitops.repo_ref
+    assert gitops["desired_live_diff"]["source_revision"] == descriptor.gitops.revision
+    assert gitops["operation"]["status"] == "succeeded"
+    assert gitops["operation"]["in_progress"] is False
+    assert gitops["operation"]["reason_code"] == "provider_operation_not_integrated"
 
 
 def test_seed_rolls_back_inventory_and_gitops_when_one_binding_fails() -> None:
@@ -553,6 +847,26 @@ def test_seed_rejects_repository_change_during_validation_before_any_write() -> 
     assert db.registration_writes == []
     assert db.inventory_writes == []
     assert db.repository_writes == []
+
+
+def test_seed_rejects_incomplete_render_evidence_before_any_write() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    db = FakeDemoDatabase()
+
+    with pytest.raises(RuntimeError, match="validation evidence is incomplete"):
+        asyncio.run(
+            seed_demo_workspace(
+                db,
+                descriptor,
+                events=FakeEvents(),
+                discovery=IncompleteRepositoryDiscovery(),
+            )
+        )
+
+    assert db.registration_writes == []
+    assert db.inventory_writes == []
+    assert db.repository_writes == []
+    assert db.workflow_writes == []
 
 
 def test_seed_rejects_missing_opt_in_before_any_write(monkeypatch: pytest.MonkeyPatch) -> None:

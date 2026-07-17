@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from collections.abc import Mapping, Sequence
@@ -17,6 +18,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from domains.demo_workspace.policy import require_demo_workspace_mutation_opt_in  # noqa: E402
+from domains.gitops.repository import derive_workflow_run_id  # noqa: E402
 from domains.gitops.repository_discovery import RepositoryDiscoveryService  # noqa: E402
 from domains.inventory.events import InventorySnapshotRecordedBody  # noqa: E402
 from domains.inventory.ingest import ingest_inventory_snapshot  # noqa: E402
@@ -29,6 +31,12 @@ from packages.contracts.gateway.requests import (  # noqa: E402
     InventorySnapshotRequest,
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
+)
+from packages.contracts.gitops import (  # noqa: E402
+    ManifestArtifactStatus,
+    WorkflowRunStatus,
+    WorkflowStepName,
+    WorkflowStepStatus,
 )
 from packages.events.context import event_workspace  # noqa: E402
 from packages.runtime.gateway import ApiEventGateway  # noqa: E402
@@ -119,12 +127,39 @@ async def validate_demo_gitops_sources(
         ):
             detail = validation.errors[0] if validation.errors else "manifest validation failed"
             raise RuntimeError(f"demo GitOps source validation failed ({source.name}): {detail}")
+        resources = [resource.model_dump(mode="json") for resource in validation.resources]
+        identities = {
+            (
+                str(resource.get("kind") or "").casefold(),
+                str(resource.get("name") or ""),
+            )
+            for resource in resources
+        }
+        if (
+            validation.resource_count < 1
+            or validation.resource_count != len(resources)
+            or len(identities) != len(resources)
+            or any(
+                not all(
+                    (
+                        str(resource.get("api_version") or ""),
+                        str(resource.get("kind") or ""),
+                        str(resource.get("name") or ""),
+                    )
+                )
+                for resource in resources
+            )
+        ):
+            raise RuntimeError(
+                f"demo GitOps source validation evidence is incomplete ({source.name})"
+            )
         evidence.append(
             {
                 "source": source,
                 "repo_ref": normalized_repo_ref,
                 "validation_mode": validation.validation_mode,
                 "resource_count": validation.resource_count,
+                "resources": resources,
                 "warnings": list(validation.warnings),
             }
         )
@@ -138,7 +173,7 @@ def persist_demo_gitops_sources(
     marker: Mapping[str, object],
     evidence: Sequence[Mapping[str, object]],
 ) -> int:
-    """Persist validated sources through the canonical repository/application stores."""
+    """Persist validated sources and read-only runtime evidence through canonical stores."""
 
     gitops = descriptor.gitops
     if gitops is None:
@@ -150,6 +185,7 @@ def persist_demo_gitops_sources(
         raise RuntimeError("demo GitOps repository identity is incomplete")
 
     workspace_id = descriptor.workspace.workspace_id
+    validated_at = datetime.now(UTC)
     repository = db.register_repository(
         {
             "workspace_id": workspace_id,
@@ -202,8 +238,14 @@ def persist_demo_gitops_sources(
             "interval_seconds": source.interval_seconds,
             "settings": {
                 "source_type": source.source_type,
+                "poll_status": "ok",
+                "poll_status_code": 200,
+                "poll_error_kind": "",
+                "poll_error": "",
                 DEMO_SEED_MARKER_KEY: dict(marker),
             },
+            "last_seen_commit_sha": gitops.revision,
+            "last_polled_at": validated_at,
             "deploy_policy": {
                 "manifest_source": source.source_type,
                 "validation_mode": validation_metadata["validation_mode"],
@@ -221,9 +263,214 @@ def persist_demo_gitops_sources(
             "application_id": str(application["application_id"]),
             "app_name": str(application.get("name") or source.name),
         }
-        db.register_watch_target(binding_body)
-        db.register_deployment_binding(binding_body)
+        watch_target = db.register_watch_target(binding_body)
+        binding = db.register_deployment_binding(binding_body)
+        _persist_demo_gitops_runtime(
+            db,
+            descriptor,
+            source=source,
+            application=application,
+            binding=binding,
+            watch_target=watch_target,
+            validation=item,
+            marker=marker,
+        )
     return len(evidence)
+
+
+def _persist_demo_gitops_runtime(
+    db: Any,
+    descriptor: DemoWorkspaceDescriptor,
+    *,
+    source: DemoGitOpsSourceDescriptor,
+    application: Mapping[str, object],
+    binding: Mapping[str, object],
+    watch_target: Mapping[str, object],
+    validation: Mapping[str, object],
+    marker: Mapping[str, object],
+) -> None:
+    """Record one idempotent, read-only validation run for an attached source.
+
+    The run proves repository access and server-side rendering only. Apply, live
+    diff, and rollout steps stay explicitly skipped so the demo cannot be
+    mistaken for a target-cluster mutation.
+    """
+
+    gitops = descriptor.gitops
+    if gitops is None:
+        raise RuntimeError("demo GitOps runtime requires repository evidence")
+    resources = validation.get("resources")
+    resource_rows = (
+        [dict(resource) for resource in resources if isinstance(resource, Mapping)]
+        if isinstance(resources, Sequence) and not isinstance(resources, (str, bytes))
+        else []
+    )
+    resource_count = int(validation.get("resource_count") or 0)
+    if resource_count < 1 or len(resource_rows) != resource_count:
+        raise RuntimeError("demo GitOps render evidence is incomplete")
+
+    application_id = str(application.get("application_id") or "")
+    binding_id = str(binding.get("binding_id") or "")
+    watch_target_id = str(watch_target.get("watch_target_id") or "")
+    repository_id = str(application.get("repository_id") or binding.get("repository_id") or "")
+    if not all((application_id, binding_id, watch_target_id, repository_id)):
+        raise RuntimeError("demo GitOps runtime identity is incomplete")
+
+    identity = {
+        "workspace_id": descriptor.workspace.workspace_id,
+        "repository_id": repository_id,
+        "watch_target_id": watch_target_id,
+        "binding_id": binding_id,
+        "application_id": application_id,
+        "environment": source.environment,
+        "cluster_id": descriptor.cluster.cluster_id,
+        "commit_sha": gitops.revision,
+        "manifest_path": source.manifest_path,
+        "repo_ref": str(validation.get("repo_ref") or gitops.repo_ref),
+        "branch": gitops.default_branch,
+    }
+    workflow_run_id = derive_workflow_run_id(identity)
+    runtime_metadata = {
+        "runtime_mode": "read-only-demo",
+        "evidence_kind": "repository_manifest_validation",
+        "version": gitops.revision[:12],
+        "deployed_by": DEMO_EVENT_SOURCE,
+        "source_type": source.source_type,
+        "validation_mode": str(validation.get("validation_mode") or ""),
+        "validated_resource_count": resource_count,
+        "repository_revision": gitops.revision,
+        DEMO_SEED_MARKER_KEY: dict(marker),
+    }
+    db.start_workflow_run(
+        {
+            **identity,
+            "workflow_run_id": workflow_run_id,
+            "status": WorkflowRunStatus.SUCCEEDED.value,
+            "current_step": WorkflowStepName.RENDER.value,
+            "summary": (
+                f"Validated {resource_count} rendered resources from {source.manifest_path}; "
+                "read-only demo, no cluster mutation"
+            ),
+            "metadata": runtime_metadata,
+        }
+    )
+
+    common_step = {
+        **identity,
+        "workflow_run_id": workflow_run_id,
+    }
+    for name, status, message, details in (
+        (
+            WorkflowStepName.GIT.value,
+            WorkflowStepStatus.SUCCEEDED.value,
+            "Pinned public repository revision validated",
+            {
+                "repo_ref": identity["repo_ref"],
+                "branch": gitops.default_branch,
+                "commit_sha": gitops.revision,
+            },
+        ),
+        (
+            WorkflowStepName.RENDER.value,
+            WorkflowStepStatus.SUCCEEDED.value,
+            "Repository source rendered and validated",
+            {
+                "source_type": source.source_type,
+                "validation_mode": runtime_metadata["validation_mode"],
+                "resource_count": resource_count,
+                "warnings": list(validation.get("warnings") or []),
+            },
+        ),
+        (
+            WorkflowStepName.DIFF.value,
+            WorkflowStepStatus.SKIPPED.value,
+            "Live comparison is not claimed by the read-only demo seed",
+            {"reason_code": "live_observation_not_seeded"},
+        ),
+        (
+            WorkflowStepName.POLICY.value,
+            WorkflowStepStatus.SUCCEEDED.value,
+            "Read-only demo policy validated",
+            {"read_only": True, "mutation": "read-only-demo"},
+        ),
+        (
+            WorkflowStepName.APPROVAL.value,
+            WorkflowStepStatus.SKIPPED.value,
+            "Approval is not required for repository validation",
+            {"reason_code": "no_cluster_mutation"},
+        ),
+        (
+            WorkflowStepName.APPLY.value,
+            WorkflowStepStatus.SKIPPED.value,
+            "Cluster apply is disabled for the read-only demo seed",
+            {"reason_code": "read_only_demo"},
+        ),
+        (
+            WorkflowStepName.HEALTH.value,
+            WorkflowStepStatus.SKIPPED.value,
+            "Rollout health is unavailable without a cluster apply",
+            {"reason_code": "rollout_not_started"},
+        ),
+    ):
+        db.record_workflow_step(
+            {
+                **common_step,
+                "name": name,
+                "status": status,
+                "message": message,
+                "details": details,
+            }
+        )
+
+    source_summary = {
+        "repo_ref": identity["repo_ref"],
+        "branch": gitops.default_branch,
+        "manifest_path": source.manifest_path,
+        "source_type": source.source_type,
+        "source_origin": "repository_manifest_validation",
+        "source_document_count": resource_count,
+        "validation_mode": runtime_metadata["validation_mode"],
+        "cluster_id": descriptor.cluster.cluster_id,
+        "application_id": application_id,
+        "workflow_run_id": workflow_run_id,
+        "environment": source.environment,
+        DEMO_SEED_MARKER_KEY: dict(marker),
+    }
+    for resource in resource_rows:
+        api_version = str(resource.get("api_version") or "")
+        kind = str(resource.get("kind") or "")
+        name = str(resource.get("name") or "")
+        namespace = resource.get("namespace")
+        if not all((api_version, kind, name)):
+            raise RuntimeError("demo GitOps rendered resource identity is incomplete")
+        rendered = {
+            "apiVersion": api_version,
+            "kind": kind,
+            "metadata": {
+                "name": name,
+                **({"namespace": str(namespace)} if namespace is not None else {}),
+            },
+        }
+        artifact_digest = (
+            "sha256:"
+            + hashlib.sha256(
+                json.dumps(rendered, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
+        db.record_manifest_artifact(
+            {
+                **identity,
+                "workflow_run_id": workflow_run_id,
+                "manifest_path": f"{source.manifest_path}#{kind.casefold()}/{name}",
+                "status": ManifestArtifactStatus.RENDERED.value,
+                "rendered_manifest": {**rendered, "artifact_digest": artifact_digest},
+                "source_summary": {
+                    **source_summary,
+                    "resource": f"{kind.casefold()}/{name}",
+                    "artifact_digest": artifact_digest,
+                },
+            }
+        )
 
 
 def load_descriptor(

@@ -928,6 +928,7 @@
     ]
   },
   "gitops": {
+    "runtime_evidence_version": 1,
     "repo_ref": "jungle-303-04/yaml-demo",
     "default_branch": "main",
     "revision": "3bc4084ee8a0bff5bbee54cd6a826b1ecd10dbef",
