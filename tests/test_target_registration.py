@@ -484,6 +484,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         'name: REALTIME_GATEWAY_URL\n              value: "ws://management.local:30080"' in manifest
     )
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
+    assert 'TARGET_AGENT_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
     assert 'resources: ["pods", "nodes"]' in manifest
@@ -509,6 +510,19 @@ def test_target_install_manifest_versions_admin_applied_rbac() -> None:
     assert read_role["metadata"]["annotations"][TARGET_RBAC_VERSION_ANNOTATION] == (
         TARGET_RBAC_MANIFEST_VERSION
     )
+    self_manage = next(
+        item
+        for item in documents
+        if item.get("kind") == "Role"
+        and item.get("metadata", {}).get("name") == "cluster-agent-self-manage"
+    )
+    config_rule = next(
+        rule for rule in self_manage["rules"] if rule.get("resources") == ["configmaps"]
+    )
+    assert set(config_rule["resourceNames"]) == {
+        "target-agent-policy",
+        "target-runtime-config",
+    }
 
 
 class _AdminRbacManifestDb:

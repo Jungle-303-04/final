@@ -85,6 +85,13 @@ class FailsOnceApplier(StubApplier):
         await super().apply(resource)
 
 
+class FailsRuntimeConfigApplier(StubApplier):
+    async def apply(self, resource: DesiredResource) -> None:
+        self.applied.append(resource.resource_id)
+        if resource.name == "target-runtime-config":
+            raise PermissionError("runtime config RBAC upgrade required")
+
+
 class StubArgoObserver:
     def __init__(
         self,
@@ -297,6 +304,52 @@ def test_reconciler_applies_target_agent_owned_configmap(tmp_path: Path) -> None
     assert report["status"] == "applied"
     assert applier.applied == ["target-agent-policy"]
     assert observer.calls == 0
+
+
+def test_reconciler_blocks_agent_rollout_when_runtime_config_patch_fails(tmp_path: Path) -> None:
+    control = load_control_module()
+    store = control.AgentControlStore(str(tmp_path / "agent-control.db"))
+    resources = [
+        DesiredResource(
+            resource_id="target-runtime-config-images",
+            scope="target-agent",
+            kind="ConfigMap",
+            namespace="target",
+            name="target-runtime-config",
+            action="apply",
+            state={"data": {"TARGET_AGENT_IMAGE": "image:new"}},
+        ),
+        DesiredResource(
+            resource_id="target-agent-deployment",
+            scope="target-agent",
+            kind="Deployment",
+            namespace="target",
+            name="cluster-agent",
+            action="apply",
+            state={"spec": {"template": {"metadata": {"annotations": {"rollout": "new"}}}}},
+        ),
+    ]
+    store.save_policy(
+        AgentPolicy(
+            cluster_id="cluster-1",
+            desired_state=DesiredStatePolicy(resources=resources),
+        )
+    )
+    applier = FailsRuntimeConfigApplier()
+    reconciler = control.DesiredStateReconciler(
+        cluster_id="cluster-1",
+        cluster_role="target",
+        store=store,
+        interval_seconds=30,
+        resource_applier=applier,
+    )
+
+    report = asyncio.run(reconciler.reconcile_once())
+
+    assert report["status"] == "failed"
+    assert applier.applied == ["target-runtime-config-images"]
+    assert len(report["details"]["resources"]) == 1
+    assert "RBAC upgrade required" in report["details"]["resources"][0]["message"]
 
 
 def test_argocd_reconciler_observes_apply_without_emitting_apply(tmp_path: Path) -> None:

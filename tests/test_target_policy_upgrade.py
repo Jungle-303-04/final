@@ -12,7 +12,13 @@ from domains.target.policy_upgrade import (
     build_target_upgrade_plan,
 )
 from packages.contracts.gateway.requests import AgentPolicy
-from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
+from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
+    TARGET_AGENT_IMAGE_KEY,
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RUNTIME_CONFIG_NAME,
+    TARGET_RUNTIME_IMAGE_ANNOTATION,
+)
 
 OLD_IMAGE = "registry.example.com/opsia@sha256:" + ("1" * 64)
 NEW_IMAGE = "registry.example.com/opsia@sha256:" + ("2" * 64)
@@ -181,6 +187,95 @@ def test_upgrade_plan_rebases_only_named_defaults_and_preserves_custom_configura
     assert plan.admin_manifest_path == TARGET_RBAC_ADMIN_MANIFEST_PATH.format(
         cluster_id="customer-cluster"
     )
+
+
+def test_upgrade_plan_patches_runtime_image_leaves_before_forced_agent_rollout() -> None:
+    current = _policy().model_dump()
+    current["generation"] = 1408
+    deployment = current["desired_state"]["resources"][0]
+    deployment["state"]["spec"]["template"]["spec"]["containers"][0]["image"] = NEW_IMAGE
+    deployment["state"]["metadata"]["annotations"]["custom.example/preserved"] = "yes"
+    current["desired_state"]["resources"].append(
+        {
+            "resource_id": "legacy-runtime-config",
+            "scope": "target-agent",
+            "kind": "ConfigMap",
+            "namespace": "target",
+            "name": TARGET_RUNTIME_CONFIG_NAME,
+            "action": "apply",
+            "state": {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": TARGET_RUNTIME_CONFIG_NAME, "namespace": "target"},
+                "data": {
+                    "CUSTOM_SETTING": "must-remain-live",
+                    NODE_COLLECTOR_IMAGE_KEY: OLD_IMAGE,
+                },
+            },
+        }
+    )
+    registration = _registration()
+    registration["settings"]["image"] = NEW_IMAGE
+
+    plan = build_target_upgrade_plan(
+        registration=registration,
+        policy=AgentPolicy.model_validate(current),
+        desired_states=[
+            {
+                "component": "cluster-agent",
+                "namespace": "target",
+                "version": NEW_IMAGE,
+                "spec": {"deployment": "cluster-agent", "custom": "keep"},
+            },
+            {
+                "component": "node-collector",
+                "namespace": "target",
+                "version": NEW_IMAGE,
+                "spec": {"enabled": False, "custom": "keep"},
+            },
+        ],
+        target_image=NEW_IMAGE,
+        rbac_actual_version=TARGET_RBAC_MANIFEST_VERSION,
+    )
+
+    assert plan.changed is True
+    assert plan.current_generation == 1408
+    assert plan.next_generation == 1409
+    assert plan.settings_patch == {}
+    assert plan.policy is not None
+    resources = [*plan.policy.bootstrap.resources, *plan.policy.desired_state.resources]
+    identities = [(item.kind, item.name) for item in resources]
+    assert identities.index(("ConfigMap", TARGET_RUNTIME_CONFIG_NAME)) < identities.index(
+        ("Deployment", "cluster-agent")
+    )
+    runtime_config = next(
+        item
+        for item in resources
+        if item.kind == "ConfigMap" and item.name == TARGET_RUNTIME_CONFIG_NAME
+    )
+    assert runtime_config.state == {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": TARGET_RUNTIME_CONFIG_NAME, "namespace": "target"},
+        "data": {
+            TARGET_AGENT_IMAGE_KEY: NEW_IMAGE,
+            NODE_COLLECTOR_IMAGE_KEY: NEW_IMAGE,
+        },
+    }
+    assert "CUSTOM_SETTING" not in runtime_config.state["data"]
+    upgraded_deployment = next(item for item in resources if item.kind == "Deployment")
+    annotations = upgraded_deployment.state["spec"]["template"]["metadata"]["annotations"]
+    assert annotations[TARGET_RUNTIME_IMAGE_ANNOTATION] == NEW_IMAGE
+    assert upgraded_deployment.state["metadata"]["annotations"]["custom.example/preserved"] == (
+        "yes"
+    )
+    custom_queries = plan.policy.evidence.providers["kubernetes"].queries
+    assert next(item for item in custom_queries if item["name"] == "customer_query") == {
+        "name": "customer_query",
+        "description": "customer-owned",
+        "query": "custom-value",
+        "custom_option": {"keep": True},
+    }
 
 
 def test_upgrade_plan_is_idempotent_and_reports_current_rbac() -> None:
