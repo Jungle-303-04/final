@@ -55,6 +55,7 @@ export const rightsizingEn = {
   "rightsizing.scan.cpu": "CPU request",
   "rightsizing.scan.memory": "Memory request",
   "rightsizing.scan.impact": "Server impact",
+  "rightsizing.scan.impactValues": "CPU {cpu} mCPU · Memory {memory} bytes",
   "rightsizing.scan.open": "Open workload",
   "rightsizing.scan.showMore": "Show {count} more",
   "rightsizing.scan.replicas": "{count} replicas",

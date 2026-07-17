@@ -25,4 +25,5 @@ export const helmKo = {
   "helm.upgrade.diff.target": "대상: {target} {version} · 차트 {chartVersion}",
   "helm.upgrade.diff.values": "값: {count}개",
   "helm.upgrade.selectValue": "값 선택",
+  "helm.releaseList.noMatches": "필터와 일치하는 릴리스가 없습니다.",
 } satisfies Record<HelmMessageKey, string>;

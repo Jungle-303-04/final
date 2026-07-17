@@ -957,4 +957,7 @@ export type ResourcesMessageKey =
   | "resources.detail.provider.templateMetadata"
   | "resources.detail.provider.volumeMode"
   | "resources.detail.provider.volumeName"
-  | "resources.detail.provider.zone";
+  | "resources.detail.provider.zone"
+  | "resources.graph.view.label"
+  | "resources.serviceAccess.response.truncated"
+  | "resources.serviceAccess.response.emptyBody";

@@ -50,41 +50,9 @@ interface MetricPoint {
   time: number;
 }
 
-const CPU_CONFIG = {
-  value: { color: "var(--primary)", label: "CPU" },
-} satisfies ChartConfig;
-
-const MEMORY_CONFIG = {
-  value: { color: "var(--chart-2)", label: "Memory" },
-} satisfies ChartConfig;
-
-const VOLUME_CONFIG = {
-  value: { color: "var(--chart-3)", label: "Storage" },
-} satisfies ChartConfig;
-
-const NETWORK_RX_CONFIG = {
-  value: { color: "var(--chart-4)", label: "Network receive" },
-} satisfies ChartConfig;
-
-const NETWORK_TX_CONFIG = {
-  value: { color: "var(--chart-5)", label: "Network transmit" },
-} satisfies ChartConfig;
-
-const FILESYSTEM_CONFIG = {
-  value: { color: "var(--chart-3)", label: "Filesystem" },
-} satisfies ChartConfig;
-
-const RESTART_CONFIG = {
-  value: { color: "var(--warning)", label: "Restarts" },
-} satisfies ChartConfig;
-
-const HPA_CURRENT_CONFIG = {
-  value: { color: "var(--primary)", label: "Current replicas" },
-} satisfies ChartConfig;
-
-const HPA_DESIRED_CONFIG = {
-  value: { color: "var(--chart-2)", label: "Desired replicas" },
-} satisfies ChartConfig;
+function metricConfig(color: string, label: string): ChartConfig {
+  return { value: { color, label } };
+}
 
 export function ResourceMetricsCharts({
   frame,
@@ -163,7 +131,7 @@ export function ResourceMetricsCharts({
       <div className={cn("grid gap-4", wide && "xl:grid-cols-2")}>
         {hasCpu ? (
           <ResourceMetricChart
-            config={CPU_CONFIG}
+            config={metricConfig("var(--primary)", t("resources.detail.metricsCpu"))}
             currentValue={series.currentObservation?.cpuMillicores}
             data={points}
             dataKey="cpu"
@@ -178,7 +146,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasMemory ? (
           <ResourceMetricChart
-            config={MEMORY_CONFIG}
+            config={metricConfig("var(--chart-2)", t("resources.detail.metricsMemory"))}
             currentValue={series.currentObservation?.memoryMebibytes}
             data={points}
             dataKey="memory"
@@ -193,7 +161,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasVolume ? (
           <ResourceMetricChart
-            config={VOLUME_CONFIG}
+            config={metricConfig("var(--chart-3)", t("resources.detail.metricsVolume"))}
             data={points}
             dataKey="volume"
             icon={HardDrive}
@@ -203,7 +171,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasNetworkRx ? (
           <ResourceMetricChart
-            config={NETWORK_RX_CONFIG}
+            config={metricConfig("var(--chart-4)", t("resources.detail.metricsNetworkReceive"))}
             data={points}
             dataKey="networkRx"
             icon={Network}
@@ -213,7 +181,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasNetworkTx ? (
           <ResourceMetricChart
-            config={NETWORK_TX_CONFIG}
+            config={metricConfig("var(--chart-5)", t("resources.detail.metricsNetworkTransmit"))}
             data={points}
             dataKey="networkTx"
             icon={Network}
@@ -223,7 +191,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasFilesystem ? (
           <ResourceMetricChart
-            config={FILESYSTEM_CONFIG}
+            config={metricConfig("var(--chart-3)", t("resources.detail.metricsFilesystem"))}
             data={points}
             dataKey="filesystem"
             icon={HardDrive}
@@ -233,7 +201,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasRestarts ? (
           <ResourceMetricChart
-            config={RESTART_CONFIG}
+            config={metricConfig("var(--warning)", t("resources.detail.metricsRestarts"))}
             data={points}
             dataKey="restarts"
             icon={RotateCcw}
@@ -243,7 +211,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasHpaCurrent ? (
           <ResourceMetricChart
-            config={HPA_CURRENT_CONFIG}
+            config={metricConfig("var(--primary)", t("resources.detail.metricsHpaCurrent"))}
             data={points}
             dataKey="hpaCurrent"
             icon={Gauge}
@@ -253,7 +221,7 @@ export function ResourceMetricsCharts({
         ) : null}
         {hasHpaDesired ? (
           <ResourceMetricChart
-            config={HPA_DESIRED_CONFIG}
+            config={metricConfig("var(--chart-2)", t("resources.detail.metricsHpaDesired"))}
             data={points}
             dataKey="hpaDesired"
             icon={Gauge}
@@ -324,7 +292,7 @@ function ContainerMetricsHistory({
             </h4>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               <ContainerMetricHistoryChart
-                config={CPU_CONFIG}
+                config={metricConfig("var(--primary)", t("resources.detail.metricsCpu"))}
                 data={container.points.map((point) => ({
                   time: Date.parse(point.observedAt),
                   value: point.cpuMillicores,
@@ -333,7 +301,7 @@ function ContainerMetricsHistory({
                 unit="m"
               />
               <ContainerMetricHistoryChart
-                config={MEMORY_CONFIG}
+                config={metricConfig("var(--chart-2)", t("resources.detail.metricsMemory"))}
                 data={container.points.map((point) => ({
                   time: Date.parse(point.observedAt),
                   value: point.memoryMebibytes,

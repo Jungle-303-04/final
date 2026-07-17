@@ -25,4 +25,5 @@ export const helmEn = {
   "helm.upgrade.diff.target": "Target: {target} {version} · chart {chartVersion}",
   "helm.upgrade.diff.values": "Values: {count}",
   "helm.upgrade.selectValue": "Select a value",
+  "helm.releaseList.noMatches": "No releases match this filter.",
 } satisfies Record<HelmMessageKey, string>;

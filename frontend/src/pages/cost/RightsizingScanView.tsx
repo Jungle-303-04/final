@@ -601,7 +601,10 @@ function RightsizingResultRow({
             <p className="mt-1 text-xs text-muted-foreground">{t("rightsizing.scan.noImpact")}</p>
           ) : (
             <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-              CPU {signed(row.impact.cpuMillicoresChange, formatNumber)} mCPU · Memory {signed(row.impact.memoryBytesChange, formatNumber)} bytes
+              {t("rightsizing.scan.impactValues", {
+                cpu: signed(row.impact.cpuMillicoresChange, formatNumber),
+                memory: signed(row.impact.memoryBytesChange, formatNumber),
+              })}
             </p>
           )}
         </TableCell>

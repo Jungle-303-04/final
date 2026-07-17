@@ -22,4 +22,5 @@ export type HelmMessageKey =
   | "helm.upgrade.diff.release"
   | "helm.upgrade.diff.target"
   | "helm.upgrade.diff.values"
-  | "helm.upgrade.selectValue";
+  | "helm.upgrade.selectValue"
+  | "helm.releaseList.noMatches";

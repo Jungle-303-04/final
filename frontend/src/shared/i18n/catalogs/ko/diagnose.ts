@@ -1,0 +1,27 @@
+import type { DiagnoseMessageKey } from "../../keys/diagnose";
+
+export const diagnoseKo = {
+  "diagnose.history.title": "최근 조사",
+  "diagnose.history.description": "완료된 결과와 진행 중인 조사를 다시 열 수 있습니다.",
+  "diagnose.history.clear": "완료 이력 지우기",
+  "diagnose.history.loading": "조사 이력을 불러오는 중…",
+  "diagnose.history.empty": "리소스 상세 화면에서 AI 조사를 시작할 수 있습니다.",
+  "diagnose.run.back": "최근 조사로 돌아가기",
+  "diagnose.run.loading": "조사 불러오는 중",
+  "diagnose.run.connecting": "조사 이벤트를 연결하는 중…",
+  "diagnose.run.stop": "조사 중단",
+  "diagnose.followUp.label": "후속 질문",
+  "diagnose.followUp.placeholder": "근거를 바탕으로 후속 질문하기",
+  "diagnose.followUp.send": "후속 질문 보내기",
+  "diagnose.failure": "조사 데이터를 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.",
+  "diagnose.event.phase": "단계가 변경되었습니다.",
+  "diagnose.event.turn": "조사를 시작했습니다.",
+  "diagnose.event.step": "조사 단계를 실행했습니다.",
+  "diagnose.event.thinking": "근거를 분석하고 있습니다.",
+  "diagnose.event.verdict": "조사 결과를 생성했습니다.",
+  "diagnose.event.commandProposal": "조치 제안이 생성되었습니다.",
+  "diagnose.event.commandReceipt": "조치 요청이 접수되었습니다.",
+  "diagnose.event.operation": "조치 상태가 변경되었습니다.",
+  "diagnose.event.error": "조사가 실패했습니다.",
+  "diagnose.event.closed": "조사가 종료되었습니다.",
+} satisfies Record<DiagnoseMessageKey, string>;

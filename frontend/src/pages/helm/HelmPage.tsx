@@ -46,6 +46,7 @@ import {
 import { RefreshAction } from "../../motion/RefreshAction";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { useI18n } from "../../shared/i18n";
 import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -970,11 +971,12 @@ function helmFailureDetail(code: HelmFailureCode | string): string {
 }
 
 function EmptyReleaseList({ query }: { query: string }) {
+  const { t } = useI18n();
   return (
     <div className="grid min-h-48 place-items-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
       <div className="grid justify-items-center gap-2">
         <PackageSearch aria-hidden="true" className="size-7" />
-        <span>{query.trim() ? "No releases match this filter." : HELM_COPY.noReleases}</span>
+        <span>{query.trim() ? t("helm.releaseList.noMatches") : HELM_COPY.noReleases}</span>
       </div>
     </div>
   );

@@ -960,4 +960,7 @@ export const resourcesEn = {
   "resources.detail.provider.volumeMode": "Volume mode",
   "resources.detail.provider.volumeName": "Volume name",
   "resources.detail.provider.zone": "Zone",
+  "resources.graph.view.label": "Server placement view",
+  "resources.serviceAccess.response.truncated": "truncated",
+  "resources.serviceAccess.response.emptyBody": "(empty body)",
 } satisfies Record<ResourcesMessageKey, string>;

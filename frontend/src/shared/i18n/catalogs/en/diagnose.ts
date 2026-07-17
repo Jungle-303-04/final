@@ -1,0 +1,27 @@
+import type { DiagnoseMessageKey } from "../../keys/diagnose";
+
+export const diagnoseEn = {
+  "diagnose.history.title": "Recent investigations",
+  "diagnose.history.description": "Resume running investigations or review durable results.",
+  "diagnose.history.clear": "Clear finished history",
+  "diagnose.history.loading": "Loading investigations…",
+  "diagnose.history.empty": "Start an AI investigation from a resource detail view.",
+  "diagnose.run.back": "Back to investigations",
+  "diagnose.run.loading": "Loading investigation",
+  "diagnose.run.connecting": "Connecting to investigation…",
+  "diagnose.run.stop": "Stop investigation",
+  "diagnose.followUp.label": "Follow-up question",
+  "diagnose.followUp.placeholder": "Ask a follow-up from the evidence",
+  "diagnose.followUp.send": "Send follow-up",
+  "diagnose.failure": "Investigation data could not be loaded. Check the connection and retry.",
+  "diagnose.event.phase": "Phase changed.",
+  "diagnose.event.turn": "Investigation started.",
+  "diagnose.event.step": "Investigation step ran.",
+  "diagnose.event.thinking": "Analyzing evidence.",
+  "diagnose.event.verdict": "Investigation result generated.",
+  "diagnose.event.commandProposal": "An action proposal was generated.",
+  "diagnose.event.commandReceipt": "The action request was accepted.",
+  "diagnose.event.operation": "Operation status changed.",
+  "diagnose.event.error": "Investigation failed.",
+  "diagnose.event.closed": "Investigation closed.",
+} satisfies Record<DiagnoseMessageKey, string>;

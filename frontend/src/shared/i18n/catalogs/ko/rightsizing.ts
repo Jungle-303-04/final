@@ -55,6 +55,7 @@ export const rightsizingKo = {
   "rightsizing.scan.cpu": "CPU 요청량",
   "rightsizing.scan.memory": "메모리 요청량",
   "rightsizing.scan.impact": "서버 영향",
+  "rightsizing.scan.impactValues": "CPU {cpu} mCPU · 메모리 {memory} bytes",
   "rightsizing.scan.open": "워크로드 열기",
   "rightsizing.scan.showMore": "{count}개 더 보기",
   "rightsizing.scan.replicas": "레플리카 {count}개",

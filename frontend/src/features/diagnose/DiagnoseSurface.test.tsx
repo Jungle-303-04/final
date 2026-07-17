@@ -12,7 +12,7 @@ describe("DiagnoseSurface", () => {
   it("renders durable history and opens the selected investigation", async () => {
     const onActiveRunChange = vi.fn();
     render(
-      <I18nProvider>
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
         <DiagnoseSurface
           activeRunId={null}
           onActiveRunChange={onActiveRunChange}
@@ -25,11 +25,12 @@ describe("DiagnoseSurface", () => {
       name: /Deployment\/checkout/u,
     }));
     expect(onActiveRunChange).toHaveBeenCalledWith("run-1");
+    expect(screen.getByText("Recent investigations")).not.toBeNull();
   });
 
   it("replays verdict evidence and keeps follow-up disabled until completion", async () => {
     render(
-      <I18nProvider>
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
         <DiagnoseSurface
           activeRunId="run-1"
           onActiveRunChange={vi.fn()}
@@ -48,6 +49,23 @@ describe("DiagnoseSurface", () => {
       (screen.getByRole("textbox", { name: /후속 질문|Follow-up/u }) as HTMLTextAreaElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it("renders investigation controls in Korean", async () => {
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <DiagnoseSurface
+          activeRunId="run-1"
+          onActiveRunChange={vi.fn()}
+          port={port()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole("button", { name: "최근 조사로 돌아가기" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "새로 고침" })).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "후속 질문" })).not.toBeNull();
+    expect(await screen.findByText("근거")).not.toBeNull();
   });
 });
 

@@ -16,6 +16,7 @@ import type { TrafficMessageKey } from "./keys/traffic";
 import type { CompareMessageKey } from "./keys/compare";
 import type { HelmMessageKey } from "./keys/helm";
 import type { WorkloadDetailMessageKey } from "./keys/workloadDetail";
+import type { DiagnoseMessageKey } from "./keys/diagnose";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -398,6 +399,7 @@ export type MessageKey =
   | CompareMessageKey
   | HelmMessageKey
   | WorkloadDetailMessageKey
+  | DiagnoseMessageKey
   | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;

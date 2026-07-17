@@ -53,6 +53,7 @@ export type RightsizingMessageKey =
   | "rightsizing.scan.cpu"
   | "rightsizing.scan.memory"
   | "rightsizing.scan.impact"
+  | "rightsizing.scan.impactValues"
   | "rightsizing.scan.open"
   | "rightsizing.scan.showMore"
   | "rightsizing.scan.replicas"

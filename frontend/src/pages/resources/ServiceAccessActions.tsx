@@ -306,10 +306,10 @@ function ServiceRequestSession({
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="outline">{result.status} {result.statusText}</Badge>
             <span>{result.durationMs} ms</span>
-            <span>{result.bodyBytes} B{result.truncated ? " · truncated" : ""}</span>
+            <span>{result.bodyBytes} B{result.truncated ? ` · ${t("resources.serviceAccess.response.truncated")}` : ""}</span>
           </div>
           <pre className="max-h-64 overflow-auto whitespace-pre rounded-lg bg-muted p-3 text-xs">
-            {result.body.slice(0, SERVICE_BODY_PREVIEW_CHARACTERS) || "(empty body)"}
+            {result.body.slice(0, SERVICE_BODY_PREVIEW_CHARACTERS) || t("resources.serviceAccess.response.emptyBody")}
           </pre>
         </section>
       ) : null}

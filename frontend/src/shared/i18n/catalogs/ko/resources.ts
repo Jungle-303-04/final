@@ -960,4 +960,7 @@ export const resourcesKo = {
   "resources.detail.provider.volumeMode": "볼륨 모드",
   "resources.detail.provider.volumeName": "볼륨 이름",
   "resources.detail.provider.zone": "영역",
+  "resources.graph.view.label": "서버 배치 보기 방식",
+  "resources.serviceAccess.response.truncated": "일부만 표시",
+  "resources.serviceAccess.response.emptyBody": "(빈 본문)",
 } satisfies Record<ResourcesMessageKey, string>;
