@@ -134,6 +134,27 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
     assert descriptor.seed_marker() == restored.seed_marker()
 
 
+def test_runtime_owner_override_is_revalidated_and_bound_to_seed_marker() -> None:
+    descriptor = load_descriptor(DEFAULT_DESCRIPTOR)
+    owner_user_id = "user-8c543a9f-bc2f-594e-928b-55f2246f43fe"
+
+    overridden = load_descriptor(DEFAULT_DESCRIPTOR, owner_user_id=owner_user_id)
+    restored = DemoWorkspaceDescriptor.model_validate_json(overridden.model_dump_json())
+    db = FakeDemoDatabase()
+
+    asyncio.run(seed_demo_workspace(db, overridden, events=FakeEvents()))
+
+    assert overridden.workspace.workspace_id == descriptor.workspace.workspace_id
+    assert overridden.workspace.owner_user_id == owner_user_id
+    assert overridden.digest() != descriptor.digest()
+    assert overridden.seed_marker() == restored.seed_marker()
+    assert db.registration_writes[0]["user_id"] == owner_user_id
+    assert db.registration_writes[0]["settings"][DEMO_SEED_MARKER_KEY] == overridden.seed_marker()
+
+    with pytest.raises(ValidationError, match="owner_user_id"):
+        load_descriptor(DEFAULT_DESCRIPTOR, owner_user_id=" invalid owner ")
+
+
 def test_descriptor_rejects_default_workspace_and_incomplete_inventory(tmp_path: Path) -> None:
     raw = json.loads(DEFAULT_DESCRIPTOR.read_text(encoding="utf-8"))
     raw["workspace"]["workspace_id"] = "default"

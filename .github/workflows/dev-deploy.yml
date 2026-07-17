@@ -413,6 +413,7 @@ jobs:
           PY
           )"
           [[ "${admin_id}" =~ ^user-[0-9a-f-]{36}$ ]]
+          echo "DEV_ADMIN_USER_ID=${admin_id}" >>"${GITHUB_ENV}"
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             patch configmap management-runtime-config --type merge \
             --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\",\"CONTROL_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"POD_EXEC_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"TARGET_DEFAULT_CONTROL_NAMESPACES\":\"sandbox,color-turf\"}}"
@@ -447,6 +448,49 @@ jobs:
               >/dev/null
           fi
           unset admin_id cursor_encoded cursor_value llm_provider_encoded llm_model_encoded llm_key_encoded llm_patch
+
+      - name: Seed dedicated dev demo workspace
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          [[ "${DEPLOY_IMAGE}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]]
+          [[ "${DEV_ADMIN_USER_ID}" =~ ^user-[0-9a-f-]{36}$ ]]
+          cleanup_demo_seed() {
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              delete job management-demo-workspace-seed \
+              --ignore-not-found --wait=true >/dev/null 2>&1 || true
+            rm -f -- \
+              "${RUNNER_TEMP}/demo-workspace-seed-image.yaml" \
+              "${RUNNER_TEMP}/demo-workspace-seed-job.yaml"
+          }
+          trap cleanup_demo_seed EXIT
+          cleanup_demo_seed
+          kubectl set image \
+            --filename deploy/management/demo-workspace-seed-job.yaml \
+            seed="${DEPLOY_IMAGE}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/demo-workspace-seed-image.yaml"
+          kubectl set env \
+            --filename "${RUNNER_TEMP}/demo-workspace-seed-image.yaml" \
+            DEMO_WORKSPACE_OWNER_USER_ID="${DEV_ADMIN_USER_ID}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/demo-workspace-seed-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --filename "${RUNNER_TEMP}/demo-workspace-seed-job.yaml"
+          if ! kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            wait --for=condition=complete \
+            job/management-demo-workspace-seed --timeout=330s; then
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs job/management-demo-workspace-seed --all-containers --tail=500 || true
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              describe job management-demo-workspace-seed || true
+            exit 1
+          fi
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            logs job/management-demo-workspace-seed --all-containers --tail=500
 
       - name: Pin target agent image in runtime config
         if: env.DEPLOYMENT_SCOPE == 'FULL'

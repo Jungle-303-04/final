@@ -19,14 +19,35 @@ database schema and never initialize or migrate it.
 export DATABASE_URL='postgresql://...'
 export OPSIA_DEMO_WORKSPACE_MUTATIONS='demo-workspace-v1'
 
-python src/controller/demo_workspace.py seed
-python src/controller/demo_workspace.py reset
+PYTHONPATH=src python -m controller.demo_workspace seed
+PYTHONPATH=src python -m controller.demo_workspace reset
 ```
 
 Seeding the same descriptor digest again is a no-op. A changed descriptor produces a new
 inventory cut. Reset locks the registered cluster and requires its persisted descriptor marker
 to match before deleting the dedicated workspace and its workspace-scoped projections. The user
 identity is intentionally retained because it may be shared with another workspace.
+
+An owner can be supplied at execution time without editing the versioned fixture. The value is
+revalidated as part of the effective descriptor and therefore changes both its digest and seed
+marker. A manual reset of that seed must use the same override so the persisted marker still
+matches.
+
+```bash
+PYTHONPATH=src python -m controller.demo_workspace seed --owner-user-id 'user-<uuid>'
+PYTHONPATH=src python -m controller.demo_workspace reset --owner-user-id 'user-<uuid>'
+```
+
+The FULL dev deployment seeds real database-backed demo data after the versioned migration and
+fixed administrator bootstrap. The workflow derives the owner UUID from the existing
+`PROJECT_SLUG` and normalized `AUTH_EMAIL`, validates it, and renders it into the standalone
+`deploy/management/demo-workspace-seed-job.yaml`. That Job is deliberately excluded from the
+management kustomization so an ordinary workload apply cannot run a mutation. It uses the exact
+`OPSIA_DEMO_WORKSPACE_MUTATIONS=demo-workspace-v1` opt-in and the runtime database secret, runs the
+new immutable service digest without a service-account token or root privileges, and has bounded
+deadline, resources, retries, and post-run cleanup. A failure emits bounded Job logs and a
+description before failing the deployment. Deployment automation only invokes `seed`; it never
+invokes `reset`.
 
 For a trusted-proxy development console, point the authenticated session at the descriptor's
 identity rather than teaching the frontend about demo IDs:

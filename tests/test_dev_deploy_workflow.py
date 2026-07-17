@@ -151,6 +151,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Synchronize fixed dev runtime identity"
     )
     assert names.index("Synchronize fixed dev runtime identity") < names.index(
+        "Seed dedicated dev demo workspace"
+    )
+    assert names.index("Seed dedicated dev demo workspace") < names.index(
         "Pin target agent image in runtime config"
     )
     assert names.index("Pin target agent image in runtime config") < names.index(
@@ -219,6 +222,73 @@ def test_target_policy_upgrade_job_has_bounded_non_privileged_database_authority
         "name": "management-runtime-config",
         "key": "TARGET_AGENT_IMAGE",
     }
+
+
+def test_demo_workspace_seed_job_is_explicit_bounded_and_non_privileged() -> None:
+    manifest = yaml.safe_load(
+        (ROOT / "deploy/management/demo-workspace-seed-job.yaml").read_text(encoding="utf-8")
+    )
+    pod_spec = manifest["spec"]["template"]["spec"]
+    container = pod_spec["containers"][0]
+    env = {item["name"]: item for item in container["env"]}
+    kustomization = (ROOT / "deploy/management/kustomization.yaml").read_text(encoding="utf-8")
+
+    assert manifest["kind"] == "Job"
+    assert manifest["metadata"]["name"] == "management-demo-workspace-seed"
+    assert manifest["spec"]["backoffLimit"] == 0
+    assert manifest["spec"]["activeDeadlineSeconds"] == 300
+    assert manifest["spec"]["ttlSecondsAfterFinished"] == 3600
+    assert pod_spec["automountServiceAccountToken"] is False
+    assert pod_spec["restartPolicy"] == "Never"
+    assert pod_spec["terminationGracePeriodSeconds"] == 10
+    assert pod_spec["securityContext"]["runAsNonRoot"] is True
+    assert pod_spec["securityContext"]["runAsUser"] == 10001
+    assert container["command"] == ["python", "-m", "controller.demo_workspace"]
+    assert container["args"] == [
+        "seed",
+        "--owner-user-id",
+        "$(DEMO_WORKSPACE_OWNER_USER_ID)",
+    ]
+    assert "reset" not in container["args"]
+    assert "@sha256:" in container["image"]
+    assert env["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
+        "name": "management-runtime-secret",
+        "key": "COMMAND_NOTIFY_DATABASE_URL",
+    }
+    assert env["OPSIA_DEMO_WORKSPACE_MUTATIONS"]["value"] == "demo-workspace-v1"
+    assert env["DEMO_WORKSPACE_OWNER_USER_ID"]["value"] == ""
+    assert container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
+    assert container["resources"] == {
+        "requests": {"cpu": "50m", "memory": "128Mi"},
+        "limits": {"cpu": "1", "memory": "512Mi"},
+    }
+    assert "demo-workspace-seed-job.yaml" not in kustomization
+
+
+def test_full_deploy_renders_seed_owner_from_fixed_admin_and_cleans_up() -> None:
+    steps = steps_by_name()
+    identity = steps["Synchronize fixed dev runtime identity"]["run"]
+    seed = steps["Seed dedicated dev demo workspace"]
+    source = seed["run"]
+
+    assert seed["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert seed["env"]["DEPLOY_IMAGE"] == "${{ steps.image.outputs.image }}"
+    assert 'project_slug = os.environ["PROJECT_SLUG"].strip()' in identity
+    assert 'identifier = os.environ["AUTH_EMAIL"].strip().lower()' in identity
+    assert 'echo "DEV_ADMIN_USER_ID=${admin_id}" >>"${GITHUB_ENV}"' in identity
+    assert "deploy/management/demo-workspace-seed-job.yaml" in source
+    assert 'seed="${DEPLOY_IMAGE}"' in source
+    assert 'DEMO_WORKSPACE_OWNER_USER_ID="${DEV_ADMIN_USER_ID}"' in source
+    assert "delete job management-demo-workspace-seed" in source
+    assert "trap cleanup_demo_seed EXIT" in source
+    assert "wait --for=condition=complete" in source
+    assert "logs job/management-demo-workspace-seed" in source
+    assert "describe job management-demo-workspace-seed" in source
+    assert "controller.demo_workspace reset" not in WORKFLOW_PATH.read_text(encoding="utf-8")
 
 
 def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording() -> None:
@@ -385,6 +455,7 @@ def test_full_deploy_keeps_migration_rollout_and_smoke() -> None:
         "Run fail-closed database migration",
         "Bootstrap fixed dev administrator",
         "Synchronize fixed dev runtime identity",
+        "Seed dedicated dev demo workspace",
         "Pin target agent image in runtime config",
         "Roll out immutable service digest",
         "Run post-deploy smoke",

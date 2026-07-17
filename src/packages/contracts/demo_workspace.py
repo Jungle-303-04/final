@@ -18,7 +18,11 @@ DEMO_SEED_MARKER_KEY = "opsia_demo_seed"
 
 class DemoWorkspaceIdentity(StrictModel):
     workspace_id: str = Field(min_length=1, max_length=120)
-    owner_user_id: str = Field(min_length=1, max_length=253)
+    owner_user_id: str = Field(
+        min_length=1,
+        max_length=253,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@+-]*$",
+    )
 
 
 class DemoClusterDescriptor(StrictModel):
@@ -68,6 +72,13 @@ class DemoWorkspaceDescriptor(StrictModel):
             sort_keys=True,
         )
         return hashlib.sha256(canonical.encode()).hexdigest()
+
+    def with_owner_user_id(self, owner_user_id: str) -> DemoWorkspaceDescriptor:
+        """Return a fully revalidated descriptor whose digest binds the runtime owner."""
+
+        payload = self.model_dump(mode="python")
+        payload["workspace"]["owner_user_id"] = owner_user_id
+        return type(self).model_validate(payload)
 
     def seed_marker(self) -> dict[str, str | int]:
         return {

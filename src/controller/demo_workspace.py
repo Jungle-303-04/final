@@ -39,9 +39,16 @@ class OutboxRequiredPublisher:
         raise RuntimeError("demo inventory events require the database outbox")
 
 
-def load_descriptor(path: Path) -> DemoWorkspaceDescriptor:
+def load_descriptor(
+    path: Path,
+    *,
+    owner_user_id: str | None = None,
+) -> DemoWorkspaceDescriptor:
     with path.open(encoding="utf-8") as handle:
-        return DemoWorkspaceDescriptor.model_validate(json.load(handle))
+        descriptor = DemoWorkspaceDescriptor.model_validate(json.load(handle))
+    if owner_user_id is None:
+        return descriptor
+    return descriptor.with_owner_user_id(owner_user_id)
 
 
 def _persisted_registration_marker(registration: object) -> object:
@@ -189,12 +196,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_DESCRIPTOR,
         help="versioned demo workspace descriptor",
     )
+    parser.add_argument(
+        "--owner-user-id",
+        help="validated runtime owner included in the effective descriptor digest",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
-    descriptor = load_descriptor(args.descriptor)
+    descriptor = load_descriptor(args.descriptor, owner_user_id=args.owner_user_id)
     require_demo_workspace_mutation_opt_in()
     db = Database()
     try:
