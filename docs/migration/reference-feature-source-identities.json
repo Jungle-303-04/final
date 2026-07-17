@@ -3,6 +3,77 @@
   "sourceRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
   "identities": [
     {
+      "sourceKey": "upstream-ui:app-shell:omnibar-and-command:single-authority:v1",
+      "legacyContractId": "reference.feature.016",
+      "evidence": [
+        {
+          "path": "web/src/App.tsx",
+          "sha256": "12aa5fa90416fa418ceb419e0a8e4acade25252375e4940cf84def36c9134bd2",
+          "symbol": "AppInner"
+        },
+        {
+          "path": "web/src/components/ui/Omnibar.tsx",
+          "sha256": "1742c949ef97b68b83786d13c5db4c60249fd61901f1145f57ea41d2bab6aa6f",
+          "symbol": "Omnibar"
+        },
+        {
+          "path": "web/src/components/ui/CommandPalette.tsx",
+          "sha256": "b00cf4f9a153e1c46da3658b06fa8c669ca8dafabc17b50720a54758c92e2a93",
+          "symbol": "CommandPalette"
+        }
+      ],
+      "interaction": "One shell-owned omnibar and command surface searches server-authorized resource identities, applies cluster and namespace scope, and navigates the canonical route catalog through the existing product filter and keyboard authorities."
+    },
+    {
+      "sourceKey": "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1",
+      "legacyContractId": "reference.feature.017",
+      "evidence": [
+        {
+          "path": "web/src/App.tsx",
+          "sha256": "12aa5fa90416fa418ceb419e0a8e4acade25252375e4940cf84def36c9134bd2",
+          "symbol": "AppInner"
+        },
+        {
+          "path": "web/src/components/ui/ShortcutHelpOverlay.tsx",
+          "sha256": "df9668bf8e175067bdaaab0494b59ba7cfce6d4705081d97c53b323b0cd1faf9",
+          "symbol": "ShortcutHelpOverlay"
+        },
+        {
+          "path": "web/src/components/ui/DiagnosticsOverlay.tsx",
+          "sha256": "d2efd00efe9124c2a96488602a8b8060fab190f645b461f4739f696593863aff",
+          "symbol": "DiagnosticsOverlay"
+        }
+      ],
+      "interaction": "The shell reuses one theme authority, authenticated diagnostics contract, active shortcut registry, capability-gated desktop terminal, and Base UI modal boundary with focus containment, Escape close, and opener focus restoration; source repository promotion remains excluded by the product policy."
+    },
+    {
+      "sourceKey": "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1",
+      "legacyContractId": "reference.feature.019",
+      "evidence": [
+        {
+          "path": "packages/k8s-ui/src/components/dock/BottomDock.tsx",
+          "sha256": "3e88b4fa48ab9acd0b1142e3241073d9a78e179f4ce14c81692aa26cb4adf4bc",
+          "symbol": "BottomDock"
+        },
+        {
+          "path": "web/src/components/dock/BottomDock.tsx",
+          "sha256": "8ac4c666f170c13f70a99a63ce26aa26b202a426d2e13737654e951ac95a3b29",
+          "symbol": "BottomDock"
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "fetchSessionCounts"
+        },
+        {
+          "path": "internal/server/server.go",
+          "sha256": "e5df3ea4ea2a5a7e0c8f3e4c63527be12890b84595c909b0631bdd96fb2c4129",
+          "symbol": "handleGetSessions"
+        }
+      ],
+      "interaction": "The product preserves its bounded log and operation dock, existing Agent-backed exec lifecycle, and native local-terminal and port-forward owners; one browser registry projects live counts before a cluster-scope change because those sessions are distributed rather than owned by a single Python process."
+    },
+    {
       "sourceKey": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
       "legacyContractId": "reference.feature.089",
       "evidence": [

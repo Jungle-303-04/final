@@ -31,12 +31,12 @@ describe("ShellSessionsProvider", () => {
     );
 
     await waitFor(() => expect(port.list).toHaveBeenCalledTimes(1));
-    expect(await screen.findByTestId("cluster-a-session-counts")).toHaveTextContent(
+    expect((await screen.findByTestId("cluster-a-session-counts")).textContent).toBe(
       JSON.stringify({
-        execSessions: 1,
+        execSessions: 2,
         localTerminals: 1,
         portForwards: 1,
-        total: 3,
+        total: 4,
       }),
     );
   });
@@ -44,22 +44,29 @@ describe("ShellSessionsProvider", () => {
 
 function SessionProbe() {
   const sessions = useShellSessions();
+  const register = sessions.register;
   useEffect(() => {
-    const closeExec = sessions.register({
+    const closeExec = register({
       clusterId: "cluster-a",
       id: "exec-1",
       kind: "exec",
     });
-    const closeLocal = sessions.register({
+    const closeParallelExec = register({
+      clusterId: "cluster-a",
+      id: "exec-1",
+      kind: "exec",
+    });
+    const closeLocal = register({
       clusterId: null,
       id: "local-1",
       kind: "local-terminal",
     });
     return () => {
       closeExec();
+      closeParallelExec();
       closeLocal();
     };
-  }, [sessions.register]);
+  }, [register]);
   return (
     <output data-testid="cluster-a-session-counts">
       {JSON.stringify(sessions.countsForCluster("cluster-a"))}

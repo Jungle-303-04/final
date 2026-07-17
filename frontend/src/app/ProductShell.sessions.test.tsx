@@ -64,7 +64,7 @@ describe("ProductShell session-aware cluster switching", () => {
       name: "활성 세션을 확인하세요",
     })).toBeNull());
     expect(screen.getByRole("button", {
-      name: "클러스터 필터 cluster-1 제거",
+      name: /클러스터 필터 cluster-1.*제거/u,
     })).toBeTruthy();
 
     await user.click(screen.getByRole("textbox", {
@@ -74,7 +74,7 @@ describe("ProductShell session-aware cluster switching", () => {
     await user.click(await screen.findByRole("button", { name: "클러스터 전환" }));
 
     expect(await screen.findByRole("button", {
-      name: "클러스터 필터 cluster-2 제거",
+      name: /클러스터 필터 cluster-2.*제거/u,
     })).toBeTruthy();
   });
 });

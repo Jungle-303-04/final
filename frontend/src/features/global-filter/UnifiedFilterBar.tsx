@@ -47,6 +47,16 @@ import {
   removeChip,
   selectedChips,
 } from "./globalFilterSelection";
+import { useOptionalShellSessions, type ShellSessionCounts } from "../shell-sessions/ShellSessionsProvider";
+import { Button } from "../../shared/ui/primitives/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../shared/ui/primitives/dialog";
 
 type SearchPhase = "idle" | "loading" | "ready" | "failed";
 type SuggestionType = GlobalFilterSuggestion["type"];
@@ -89,6 +99,7 @@ export const UnifiedFilterBar = forwardRef<
 >(function UnifiedFilterBar({ port }, ref) {
   const filter = useUnifiedFilter();
   const clusterScope = useClusterScope();
+  const shellSessions = useOptionalShellSessions();
   const navigate = useNavigate();
   const { formatNumber, t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -96,6 +107,10 @@ export const UnifiedFilterBar = forwardRef<
   const [phase, setPhase] = useState<SearchPhase>("idle");
   const [suggestions, setSuggestions] = useState<readonly GlobalFilterSuggestion[]>([]);
   const [groupFilter, setGroupFilter] = useState<"cluster" | "namespace" | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<{
+    counts: ShellSessionCounts;
+    suggestion: GlobalFilterSuggestion;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const shortcutFocusRef = useRef(false);
   const selection = useMemo(() => ({
@@ -154,7 +169,7 @@ export const UnifiedFilterBar = forwardRef<
     };
   });
 
-  const selectSuggestion = (suggestion: GlobalFilterSuggestion) => {
+  const applySuggestion = (suggestion: GlobalFilterSuggestion) => {
     if (suggestion.type === "resource") {
       const detail = {
         ...filter.detail,
@@ -191,6 +206,24 @@ export const UnifiedFilterBar = forwardRef<
     }
     filter.updateFilters((current) => addSuggestion(current, suggestion), "chip-add");
     setQuery("");
+  };
+
+  const selectSuggestion = (suggestion: GlobalFilterSuggestion) => {
+    const nextClusterId = suggestion.type === "cluster"
+      ? suggestion.id
+      : suggestion.type === "resource" ? suggestion.clusterId : null;
+    const currentClusterId = filter.state.common.clusters.length === 1
+      ? filter.state.common.clusters[0] ?? null
+      : null;
+    if (shellSessions !== null && nextClusterId !== null && nextClusterId !== currentClusterId) {
+      const counts = shellSessions.countsForCluster(currentClusterId);
+      if (counts.total > 0) {
+        setOpen(false);
+        setPendingSelection({ counts, suggestion });
+        return;
+      }
+    }
+    applySuggestion(suggestion);
   };
 
   const changeSearch = (next: { text: string; pills: SearchModifier[] }) => {
@@ -245,7 +278,8 @@ export const UnifiedFilterBar = forwardRef<
   useImperativeHandle(ref, () => ({ focus, openGroup }), [focus, openGroup]);
 
   return (
-    <div
+    <>
+      <div
       className="min-w-0 flex-1 sm:max-w-xl"
       data-slot="unified-filter-bar"
       onKeyDownCapture={(event) => {
@@ -378,9 +412,63 @@ export const UnifiedFilterBar = forwardRef<
           </Command>
         </PopoverContent>
       </Popover>
-    </div>
+      </div>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingSelection(null);
+        }}
+        open={pendingSelection !== null}
+      >
+        <DialogContent closeLabel={t("shell.sessions.cancel")}>
+          <DialogHeader>
+            <DialogTitle>{t("shell.sessions.confirmTitle")}</DialogTitle>
+            <DialogDescription>{t("shell.sessions.confirmDescription")}</DialogDescription>
+          </DialogHeader>
+          {pendingSelection ? (
+            <dl className="grid grid-cols-3 gap-2 text-center text-sm">
+              <SessionCount
+                label={t("shell.sessions.portForwards", { count: pendingSelection.counts.portForwards })}
+                value={pendingSelection.counts.portForwards}
+              />
+              <SessionCount
+                label={t("shell.sessions.exec", { count: pendingSelection.counts.execSessions })}
+                value={pendingSelection.counts.execSessions}
+              />
+              <SessionCount
+                label={t("shell.sessions.localTerminals", { count: pendingSelection.counts.localTerminals })}
+                value={pendingSelection.counts.localTerminals}
+              />
+            </dl>
+          ) : null}
+          <DialogFooter>
+            <Button onClick={() => setPendingSelection(null)} type="button" variant="outline">
+              {t("shell.sessions.cancel")}
+            </Button>
+            <Button
+              onClick={() => {
+                const next = pendingSelection?.suggestion;
+                setPendingSelection(null);
+                if (next) applySuggestion(next);
+              }}
+              type="button"
+            >
+              {t("shell.sessions.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 });
+
+function SessionCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 rounded-lg border bg-muted/40 p-2">
+      <dt className="truncate text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 font-semibold tabular-nums">{value}</dd>
+    </div>
+  );
+}
 
 function pillIdentity(pill: Pick<SearchModifier, "key" | "value">): string {
   return `${pill.key}:${pill.value}`;

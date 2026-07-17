@@ -459,57 +459,90 @@
     },
     {
       "contractId": "reference.feature.016",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:omnibar-and-command:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.016"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-016",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIdentitySearchResponse",
+      "frontendContract": "frontend/src/features/global-filter/globalFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#search_resource_identities",
+          "consumer": "frontend/src/features/global-filter/createGlobalFilterAdapter.ts#createGlobalFilterAdapter",
+          "reason": "The authenticated search contract returns authorized resource identities and counted facets from persisted outbound-Agent observations; it never performs a direct target lookup.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/app/ProductCommandPalette.tsx#ProductCommandPalette",
+          "reason": "The existing filter and descriptor-backed command palette are the single search, scope, resource-kind, and route authorities without duplicating paths or labels.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.017",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1",
       "legacyContractIds": [
         "reference.feature.017"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-017",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/runtimeStatusContract.ts",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_runtime_diagnostics.py",
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.test.tsx",
+        "frontend/src/desktop/DesktopLocalTerminalEntry.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "frontend/src/features/runtime-status/createRuntimeStatusAdapter.ts#createRuntimeStatusAdapter",
+          "reason": "Diagnostics consume authenticated server and stored Agent observations; theme, help, and native terminal capability remain their existing browser or desktop authorities.",
+          "test": "tests/test_runtime_diagnostics.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductShell.tsx#ProductShellFrame",
+          "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts",
+          "reason": "Theme, shortcut help, diagnostics, update notice, and capability-gated terminal reuse shared controllers. Source repository promotion is intentionally excluded by the product policy and its dedicated not-applicable rows.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalEntry.tsx#DesktopLocalTerminalEntry",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#capabilities",
+          "test": "frontend/src/desktop/DesktopLocalTerminalEntry.test.tsx"
+        },
         "realtime": "not_required"
       }
     },
@@ -554,56 +587,89 @@
     },
     {
       "contractId": "reference.feature.019",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1",
       "legacyContractIds": [
         "reference.feature.019"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-019",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.OperationEvent",
+      "frontendContract": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_realtime_gateway.py",
+        "frontend/src/app/ProductShell.dock.test.tsx",
+        "frontend/src/features/shell-sessions/ShellSessionsProvider.test.tsx",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+        "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/terminal_sessions.py#TerminalSessionBroker",
+          "consumer": "src/services/target/cluster-agent/terminal_exec.py#PodExecController",
+          "reason": "Exec and log streams retain their authenticated bounded Agent path. The browser session registry composes lifetimes without adding another Python transport or direct cluster connection.",
+          "test": "tests/test_realtime_gateway.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/BottomDock.tsx#BottomDock",
+          "consumer": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#ShellSessionsProvider",
+          "reason": "The existing resizable, collapsible, reconnectable bounded dock remains the log and operation surface while existing exec, local-terminal, and port-forward owners register their live session lifetime in one shared shell contract.",
+          "test": "frontend/src/app/ProductShell.dock.test.tsx"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx#DesktopLocalTerminalSurface",
+          "consumer": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#register",
+          "test": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
+        },
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.020",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1",
       "legacyContractIds": [
         "reference.feature.020"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-020",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.InventoryResourceDetailResponse",
+      "frontendContract": "frontend/src/shared/ui/primitives/dialog.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+        "frontend/src/pages/resources/resourcesUrlState.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
+          "consumer": "frontend/src/features/resources/createResourcesAdapter.ts#createResourcesAdapter",
+          "reason": "Resource and operation overlays consume their existing authenticated contracts; modal focus and URL ownership do not require a duplicate overlay endpoint.",
+          "test": "tests/test_inventory_domain.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/shared/ui/primitives/dialog.tsx#DialogContent",
+          "consumer": "frontend/src/app/ProductShell.tsx#ProductShellFrame",
+          "reason": "Base UI provides one modal focus boundary, Escape dismissal, inert background, and opener focus restoration; resource details retain canonical URL deep links and full/peek history.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3665,11 +3731,11 @@
     },
     {
       "contractId": "reference.feature.100",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1",
       "legacyContractIds": [
         "reference.feature.100"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-100",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3678,18 +3744,37 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.OperationEvent",
+      "frontendContract": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_realtime_gateway.py",
+        "frontend/src/features/shell-sessions/ShellSessionsProvider.test.tsx",
+        "frontend/src/app/ProductShell.sessions.test.tsx",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx",
+        "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#ShellSessionsProvider",
+          "reason": "Unlike the upstream single-process server, product sessions are distributed across the authenticated realtime Agent broker, browser owners, and a native local PTY. A Python aggregate would be stale and incomplete, so the owning clients compose the exact active snapshot without a duplicate endpoint.",
+          "test": "frontend/src/features/shell-sessions/ShellSessionsProvider.test.tsx"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#countsForCluster",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "reason": "Cluster-scope changes read live port-forward, exec, and local-terminal lifetimes, then require one focus-trapped confirmation while preserving each session's original cluster authority.",
+          "test": "frontend/src/app/ProductShell.sessions.test.tsx"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx#DesktopLocalTerminalSurface",
+          "consumer": "frontend/src/features/shell-sessions/ShellSessionsProvider.tsx#register",
+          "test": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
+        },
         "realtime": "not_required"
       }
     },

@@ -215,6 +215,39 @@ test("implemented feature는 source identity 없이는 생성될 수 없다", ()
   assert.ok(errors.some((error) => error.includes("implemented source identity is required")));
 });
 
+test("전역 셸 016·017·019·020·100은 공용 UI와 분산 세션 권위로 닫힌다", async () => {
+  const [aliases, identities, portMap, featureLedger] = await Promise.all([
+    readJson("docs/migration/reference-feature-source-aliases.json"),
+    readJson("docs/migration/reference-feature-source-identities.json"),
+    readJson("docs/migration/reference-feature-port-map.json"),
+    readJson("docs/migration/reference-feature-ledger.json"),
+  ]);
+  const expected = new Map([
+    ["reference.feature.016", "upstream-ui:app-shell:omnibar-and-command:single-authority:v1"],
+    ["reference.feature.017", "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1"],
+    ["reference.feature.019", "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1"],
+    ["reference.feature.020", "upstream-ui:app-shell:utilities-and-overlays:focus-authority:v1"],
+    ["reference.feature.100", "upstream-ui:app-shell:sessions:dock-and-switch-guard:v1"],
+  ]);
+  const identityKeys = new Set(identities.identities.map((identity) => identity.sourceKey));
+  const features = new Map(featureLedger.features.map((feature) => [feature.contractId, feature]));
+  for (const [contractId, sourceKey] of expected) {
+    assert.equal(aliases.aliases[contractId], sourceKey);
+    assert.equal(features.get(contractId)?.sourceKey, sourceKey);
+    assert.equal(features.get(contractId)?.deliveryStatus, "implemented");
+    assert.equal(portMap.features[contractId]?.deliveryStatus, "implemented");
+    assert.ok(identityKeys.has(sourceKey));
+  }
+  assert.equal(
+    portMap.features["reference.feature.100"].coverage.backend.state,
+    "not_required",
+  );
+  assert.match(
+    portMap.features["reference.feature.100"].coverage.backend.reason,
+    /distributed/u,
+  );
+});
+
 test("리소스 유지보수 174~176은 frozen snapshot exact identity를 사용한다", async () => {
   const [aliases, classifications, identities, sourceLedger, featureLedger] =
     await Promise.all([

@@ -28,6 +28,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../shared/ui/primitives/sheet";
+import { useOptionalShellSessions } from "../features/shell-sessions/ShellSessionsProvider";
 
 type TerminalPhase = "connecting" | "connected" | "ended" | "failed";
 type TerminalFailure =
@@ -114,6 +115,8 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState<TerminalPhase>("connecting");
   const [shell, setShell] = useState<string | null>(null);
   const [failure, setFailure] = useState<TerminalFailure | null>(null);
+  const shellSessions = useOptionalShellSessions();
+  const registerShellSession = shellSessions?.register;
 
   useLayoutEffect(() => {
     const container = host.current;
@@ -121,6 +124,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
 
     let disposed = false;
     let sessionId: string | null = null;
+    let unregisterShellSession: (() => void) | null = null;
     const pendingEvents: DesktopLocalTerminalEvent[] = [];
     let outputBuffer: LocalTerminalOutputBuffer | null = null;
     let outputFrame: number | null = null;
@@ -148,6 +152,8 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
     const invalidateSession = (): string | null => {
       const currentSessionId = sessionId;
       sessionId = null;
+      unregisterShellSession?.();
+      unregisterShellSession = null;
       return currentSessionId;
     };
     const fail = (nextFailure: TerminalFailure, shouldCloseNativeSession = false) => {
@@ -286,6 +292,11 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
           return;
         }
         sessionId = started.sessionId;
+        unregisterShellSession = registerShellSession?.({
+          clusterId: null,
+          id: started.sessionId,
+          kind: "local-terminal",
+        }) ?? null;
         outputBuffer = new LocalTerminalOutputBuffer(
           started.outputWindowBytes,
           started.outputFrameBytes,
@@ -325,7 +336,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       const activeSessionId = invalidateSession();
       if (activeSessionId) void desktopBridge.closeLocalTerminal(activeSessionId).catch(() => undefined);
     };
-  }, [generation, onClose, reducedMotion, t]);
+  }, [generation, onClose, reducedMotion, registerShellSession, t]);
 
   const isFailed = phase === "failed";
   const failureMessage = failure ? terminalFailureMessage(failure, t) : null;
