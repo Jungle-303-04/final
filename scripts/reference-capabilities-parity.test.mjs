@@ -31,6 +31,7 @@ const SOURCE_EVIDENCE = [
 ];
 
 const AUTHORITY_TESTS = [
+  "scripts/reference-capabilities-parity.test.mjs",
   "tests/test_helm_release_router.py",
   "tests/test_kubernetes_api_discovery_contract.py",
   "tests/test_log_stream.py",

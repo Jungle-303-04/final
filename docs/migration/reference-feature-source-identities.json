@@ -20,6 +20,33 @@
       "interaction": "The authenticated diagnostics surface refreshes bounded runtime, timeline, resource projection, and provider collection health without exposing tenant state through the public readiness probe."
     },
     {
+      "sourceKey": "upstream-ui:capabilities:rbac:resource-authority:v1",
+      "legacyContractId": "reference.feature.096",
+      "evidence": [
+        {
+          "path": "internal/k8s/capabilities.go",
+          "sha256": "58fc4ee7d6c8be58ed5baf4ebd88e36c71e68572abb83591392a1623cad7d425",
+          "symbol": "CheckCapabilities"
+        },
+        {
+          "path": "internal/server/server.go",
+          "sha256": "e5df3ea4ea2a5a7e0c8f3e4c63527be12890b84595c909b0631bdd96fb2c4129",
+          "symbol": "handleCapabilities"
+        },
+        {
+          "path": "packages/k8s-ui/src/types/core.ts",
+          "sha256": "b53c9adbfec3c03a8999a2757cc036b76f0932228e1bd33e0fa99a876fe216d1",
+          "symbol": "Capabilities"
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f",
+          "symbol": "useCapabilities"
+        }
+      ],
+      "interaction": "The browser resolves exact resource, namespace, and operation authority from product RBAC plus the connected outbound Agent capability before exposing resource actions, logs, service access, port forwarding, Helm operations, or observed resource kinds."
+    },
+    {
       "sourceKey": "upstream-ui:nodes:drain:confirm-and-progress:v1",
       "legacyContractId": "reference.feature.174",
       "evidence": [

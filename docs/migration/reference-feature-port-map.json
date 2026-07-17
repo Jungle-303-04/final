@@ -643,6 +643,44 @@
         }
       }
     },
+    "reference.feature.096": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceCapabilitiesResponse",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-capabilities-parity.test.mjs",
+        "tests/test_helm_release_router.py",
+        "tests/test_kubernetes_api_discovery_contract.py",
+        "tests/test_log_stream.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_service_access_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/api/api-resource-discovery.test.ts",
+        "frontend/src/api/log-stream.test.ts",
+        "frontend/src/api/resource-capabilities.test.ts",
+        "frontend/src/api/service-access.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_resource_capabilities",
+          "consumer": "src/domains/inventory/capabilities.py#resource_capabilities_response",
+          "reason": "One exact-resource response composes workspace and cluster RBAC, immutable inventory identity, namespace safety, observed resource state, and connected outbound Agent capability. Logs, service access and port-forward, Helm operations, and readable API kinds reuse their typed authorities rather than a second namespace-wide boolean endpoint or direct target access.",
+          "test": "tests/test_resource_capabilities_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/api/resource-capabilities.ts#getResourceCapabilities",
+          "reason": "The browser renders only server-owned descriptors for the exact resource and delegates logs, service access, port-forward, Helm, and dynamic kind visibility to their shared typed ports without a hardcoded capability matrix.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        }
+      }
+    },
     "reference.feature.097": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
