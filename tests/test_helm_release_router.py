@@ -15,6 +15,7 @@ from domains.helm.release_router import (
     create_helm_release_rollback,
     create_helm_release_uninstall,
     create_helm_release_upgrade,
+    create_helm_values_preview,
     list_helm_install_targets,
 )
 from domains.helm.repository import HelmOwnedResourceObservationBatch
@@ -27,11 +28,15 @@ from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HELM_RELEASE_OPERATION_ACTION,
     HELM_RELEASE_OPERATION_CAPABILITY,
+    HELM_VALUES_PREVIEW_ACTION,
+    HELM_VALUES_PREVIEW_CAPABILITY,
+    HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER,
     HelmArtifactReadRequest,
     HelmReleaseInstallRequest,
     HelmReleaseRollbackRequest,
     HelmReleaseUninstallRequest,
     HelmReleaseUpgradeRequest,
+    HelmReleaseValuesPreviewRequest,
 )
 from packages.contracts.helm.sources import (
     HelmChartSource,
@@ -284,6 +289,7 @@ class HelmUpgradeDb(HelmReleaseDb):
                     Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
                     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
                     HELM_RELEASE_OPERATION_CAPABILITY,
+                    HELM_VALUES_PREVIEW_CAPABILITY,
                 ],
             }
         ]
@@ -695,6 +701,127 @@ def test_release_upgrade_reuses_the_real_catalog_agent_command_and_audit_receipt
     }
     assert command.diff.basis["expected_revision"] == 3
     assert command.diff.basis["catalog_item_id"] == "catalog-redis"
+
+
+def test_release_values_preview_queues_one_revision_bound_read_only_agent_command(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_accept(_events, command, *, actor, max_active_per_action=None):
+        captured["command"] = command
+        assert actor.user_id == "user-a"
+        assert max_active_per_action == HELM_VALUES_PREVIEW_MAX_ACTIVE_PER_CLUSTER
+        return SimpleNamespace(
+            event=SimpleNamespace(event_id="evt-preview-1", correlation_id="corr-preview-1")
+        ), None
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        fake_accept,
+    )
+
+    receipt = asyncio.run(
+        create_helm_values_preview(
+            namespace="sandbox",
+            release_name="storefront",
+            payload=HelmReleaseValuesPreviewRequest(
+                cluster_id="cluster-a",
+                expected_revision=3,
+                catalog_item_id="catalog-redis",
+                catalog_version="1.0.0",
+                values={"master.persistence.storageClass": "gp3"},
+            ),
+            current=SimpleNamespace(
+                user_id="user-a",
+                workspace_id="workspace-a",
+                roles=("user",),
+            ),
+            db=HelmUpgradeDb(),
+            events=SimpleNamespace(),
+            operation_events=SimpleNamespace(),
+            provider=HelmUpgradeProvider(),
+        )
+    )
+
+    assert receipt.event_id == receipt.audit_event_id == "evt-preview-1"
+    command = captured["command"]
+    assert command.action == HELM_VALUES_PREVIEW_ACTION
+    assert command.namespace == "sandbox"
+    assert command.direct_execution is False
+    assert command.direct_execution_confirmed is False
+    assert command.payload == {
+        "namespace": "sandbox",
+        "release_name": "storefront",
+        "catalog_item_id": "catalog-redis",
+        "catalog_version": "1.0.0",
+        "values": {"master.persistence.storageClass": "gp3"},
+        "guard": {
+            "expected_revision": 3,
+            "storage": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Secret",
+                "namespace": "sandbox",
+                "name": "sh.helm.release.v1.storefront.v3",
+                "uid": "uid-storefront-v3",
+            },
+            "storage_resource_version": "1042",
+            "chart_name": "redis",
+            "chart_version": "22.0.0",
+        },
+    }
+    assert command.diff.basis == {
+        "expected_revision": 3,
+        "catalog_item_id": "catalog-redis",
+        "catalog_version": "1.0.0",
+        "chart_version": "23.1.1",
+    }
+
+
+def test_release_values_preview_requires_the_agent_preview_capability(monkeypatch) -> None:
+    class MissingPreviewCapabilityDb(HelmUpgradeDb):
+        def list_cluster_agent_statuses(self, workspace_id: str, cluster_id: str):
+            rows = super().list_cluster_agent_statuses(workspace_id, cluster_id)
+            rows[0]["capabilities"] = [
+                capability
+                for capability in rows[0]["capabilities"]
+                if capability != HELM_VALUES_PREVIEW_CAPABILITY
+            ]
+            return rows
+
+    async def unexpected_accept(*_args, **_kwargs):
+        raise AssertionError("preview must not queue without the exact Agent capability")
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        unexpected_accept,
+    )
+    with pytest.raises(HTTPException) as captured:
+        asyncio.run(
+            create_helm_values_preview(
+                namespace="sandbox",
+                release_name="storefront",
+                payload=HelmReleaseValuesPreviewRequest(
+                    cluster_id="cluster-a",
+                    expected_revision=3,
+                    catalog_item_id="catalog-redis",
+                    catalog_version="1.0.0",
+                    values={"master.persistence.storageClass": "gp3"},
+                ),
+                current=SimpleNamespace(
+                    user_id="user-a",
+                    workspace_id="workspace-a",
+                    roles=("user",),
+                ),
+                db=MissingPreviewCapabilityDb(),
+                events=SimpleNamespace(),
+                operation_events=SimpleNamespace(),
+                provider=HelmUpgradeProvider(),
+            )
+        )
+
+    assert captured.value.status_code == 409
 
 
 def test_release_values_apply_is_the_reviewed_upgrade_contract() -> None:
