@@ -824,6 +824,37 @@ def test_release_values_preview_requires_the_agent_preview_capability(monkeypatc
     assert captured.value.status_code == 409
 
 
+def test_missing_preview_capability_does_not_hide_existing_release_commands() -> None:
+    class MissingPreviewCapabilityDb(HelmUpgradeDb):
+        def list_cluster_agent_statuses(self, workspace_id: str, cluster_id: str):
+            rows = super().list_cluster_agent_statuses(workspace_id, cluster_id)
+            rows[0]["capabilities"] = [
+                capability
+                for capability in rows[0]["capabilities"]
+                if capability != HELM_VALUES_PREVIEW_CAPABILITY
+            ]
+            return rows
+
+    module = importlib.import_module("domains.helm.release_router")
+    app = FastAPI()
+    app.include_router(module.router)
+    app.dependency_overrides[require_session] = lambda: SimpleNamespace(
+        user_id="user-a",
+        workspace_id="workspace-a",
+        roles=("user",),
+    )
+    app.dependency_overrides[get_db] = MissingPreviewCapabilityDb
+
+    response = TestClient(app).get("/helm/releases/sandbox/storefront?cluster_id=cluster-a")
+
+    assert response.status_code == 200
+    assert response.json()["detail"]["commands"]["actions"] == [
+        "upgrade",
+        "rollback",
+        "uninstall",
+    ]
+
+
 def test_release_values_apply_is_the_reviewed_upgrade_contract() -> None:
     module = importlib.import_module("domains.helm.release_router")
     app = FastAPI()
