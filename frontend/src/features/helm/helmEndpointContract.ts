@@ -155,7 +155,7 @@ export interface HelmChartSourceEndpoint {
   name: string;
   reference: string;
   status: "active" | "disabled";
-  actions: Array<"delete">;
+  actions: Array<"refresh" | "delete">;
   credentials_configured: boolean;
   observed_at: string | null;
 }
@@ -309,4 +309,14 @@ export interface HelmEndpointDependencies {
     input: HelmChartSourceDeleteEndpointInput,
     signal?: AbortSignal,
   ): Promise<HelmConfigMutationEndpointReceipt>;
+  refreshHelmRepository(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    source_id: string;
+    chart_count: number;
+    observed_at: string;
+    event_id: string;
+    correlation_id: string;
+  }>;
 }

@@ -412,6 +412,7 @@ function upgradeReadEndpoints() {
   return {
     startHelmReleaseRollback: vi.fn().mockResolvedValue(receipt()),
     startHelmReleaseUninstall: vi.fn().mockResolvedValue(receipt()),
+    refreshHelmRepository: vi.fn(),
     getHelmReleaseUpgradeInfo: vi.fn().mockResolvedValue(info),
     listHelmReleaseVersions: vi.fn().mockResolvedValue({
       availability: "available" as const,

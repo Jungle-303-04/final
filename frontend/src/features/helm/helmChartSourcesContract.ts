@@ -2,7 +2,7 @@ import type { ConfigMutationReceipt } from "../../shared/parity/referenceParity"
 
 export type HelmChartSourceProvider = "repository" | "oci";
 export type HelmChartSourceStatus = "active" | "disabled";
-export type HelmChartSourceAction = "delete";
+export type HelmChartSourceAction = "refresh" | "delete";
 
 export interface HelmChartSource {
   id: string;
@@ -46,3 +46,11 @@ export interface HelmChartSourceDeleteRequest {
 }
 
 export type HelmChartSourceDeleteReceipt = ConfigMutationReceipt;
+
+export interface HelmRepositoryRefreshReceipt {
+  sourceId: string;
+  chartCount: number;
+  observedAt: string;
+  eventId: string;
+  correlationId: string;
+}

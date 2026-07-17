@@ -558,6 +558,7 @@ function helmPort(): HelmPort & {
   upgradeRelease: ReturnType<typeof vi.fn>;
   rollbackRelease: ReturnType<typeof vi.fn>;
   uninstallRelease: ReturnType<typeof vi.fn>;
+  refreshChartSource: ReturnType<typeof vi.fn>;
   listChartSources: ReturnType<typeof vi.fn>;
   registerChartSource: ReturnType<typeof vi.fn>;
   deleteChartSource: ReturnType<typeof vi.fn>;
@@ -630,6 +631,13 @@ function helmPort(): HelmPort & {
       correlationId: "corr-helm-uninstall-1",
       commandId: "cmd-helm-uninstall-1",
       status: "queued",
+    }),
+    refreshChartSource: vi.fn().mockResolvedValue({
+      sourceId: "source-repository",
+      chartCount: 1,
+      observedAt: "2026-07-17T08:00:00Z",
+      eventId: "event-refresh-source",
+      correlationId: "correlation-refresh-source",
     }),
     deleteChartSource: vi.fn().mockResolvedValue({
       accepted: true,

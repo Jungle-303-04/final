@@ -109,9 +109,27 @@ function ChartSourceTable({
   port: HelmPort;
 }) {
   const [selected, setSelected] = useState<HelmChartSource | null>(null);
-  const hasActions = items.some((source) => source.actions.includes("delete"));
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshFailure, setRefreshFailure] = useState(false);
+  const hasActions = items.some((source) => source.actions.length > 0);
+  const refresh = async (source: HelmChartSource) => {
+    if (refreshingId !== null) return;
+    setRefreshingId(source.id);
+    setRefreshFailure(false);
+    try {
+      await port.refreshChartSource(source.name);
+      onDeleted();
+    } catch {
+      setRefreshFailure(true);
+    } finally {
+      setRefreshingId(null);
+    }
+  };
   return (
     <>
+      {refreshFailure ? (
+        <Alert variant="destructive"><AlertDescription>{HELM_COPY.chartSourceRefreshFailed}</AlertDescription></Alert>
+      ) : null}
       <Table scrollAreaLabel={HELM_COPY.chartSources}>
         <TableHeader>
           <TableRow>
@@ -135,6 +153,18 @@ function ChartSourceTable({
               <TableCell className="text-muted-foreground">{formatObservedAt(source.observedAt)}</TableCell>
               {hasActions ? (
                 <TableCell>
+                  {source.actions.includes("refresh") ? (
+                    <Button
+                      aria-label={HELM_COPY.chartSourceRefreshButton(source.name)}
+                      disabled={refreshingId !== null}
+                      onClick={() => void refresh(source)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <RefreshCw aria-hidden="true" className={refreshingId === source.id ? "animate-spin motion-reduce:animate-none" : undefined} />
+                    </Button>
+                  ) : null}
                   {source.actions.includes("delete") ? (
                     <Button
                       aria-label={HELM_COPY.chartSourceDeleteButton(source.name)}

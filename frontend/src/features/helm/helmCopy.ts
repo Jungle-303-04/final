@@ -26,6 +26,8 @@ export const HELM_COPY = {
   chartSourcesRegisterForbidden: "You are not authorized to register chart sources in this workspace.",
   chartSourcesRegisterConflict: "This chart source is already registered.",
   chartSourceActions: "Actions",
+  chartSourceRefreshButton: (name: string) => `Refresh ${name} chart source`,
+  chartSourceRefreshFailed: "The repository index could not be refreshed.",
   chartSourceDelete: "Delete chart source",
   chartSourceDeleteButton: (name: string) => `Delete ${name} chart source`,
   chartSourceDeleteDescription: "This removes the workspace source and its stored credential. This action cannot be undone.",

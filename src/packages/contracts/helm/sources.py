@@ -14,7 +14,7 @@ HELM_CHART_PROVIDER_MAX_CHARTS = 50_000
 
 HelmChartSourceProvider = Literal["repository", "oci"]
 HelmChartSourceStatus = Literal["active", "disabled"]
-HelmChartSourceAction = Literal["delete"]
+HelmChartSourceAction = Literal["refresh", "delete"]
 HelmChartVersionAvailability = Literal["available", "partial", "unavailable"]
 
 

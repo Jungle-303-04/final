@@ -138,9 +138,11 @@ export {
 } from "./helm-releases-schemas";
 export {
   HELM_CHART_SOURCES_PATH,
+  HELM_REPOSITORY_UPDATE_PATH,
   deleteHelmChartSource,
   listHelmChartSources,
   registerHelmChartSource,
+  refreshHelmRepository,
   type HelmChartSourceCredentialRequest,
   type HelmChartSourceDeleteRequest,
   type HelmChartSourceListQuery,
@@ -150,8 +152,10 @@ export {
 export {
   helmChartSourcePageSchema,
   helmChartSourceSchema,
+  helmRepositoryRefreshSchema,
   type HelmChartSourceEndpoint,
   type HelmChartSourcePageEndpoint,
+  type HelmRepositoryRefreshEndpoint,
 } from "./helm-chart-sources-schemas";
 export {
   getTrafficOverview,

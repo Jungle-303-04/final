@@ -5,6 +5,7 @@ import type {
   HelmChartSourceListRequest,
   HelmChartSourcePage,
   HelmChartSourceRegisterRequest,
+  HelmRepositoryRefreshReceipt,
 } from "./helmChartSourcesContract";
 
 export type {
@@ -18,6 +19,7 @@ export type {
   HelmChartSourceProvider,
   HelmChartSourceRegisterRequest,
   HelmChartSourceStatus,
+  HelmRepositoryRefreshReceipt,
 } from "./helmChartSourcesContract";
 
 export type HelmAvailability = "available" | "partial" | "unavailable";
@@ -406,4 +408,8 @@ export interface HelmPort {
     request: HelmChartSourceDeleteRequest,
     signal?: AbortSignal,
   ): Promise<HelmChartSourceDeleteReceipt>;
+  refreshChartSource(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<HelmRepositoryRefreshReceipt>;
 }

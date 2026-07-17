@@ -138,7 +138,7 @@ def test_source_list_materializes_per_source_workspace_rbac_before_pagination() 
     assert db.source_ids == {"source-a"}
     assert db.permissions == ["catalog.read", "config.update"]
     assert response.json()["items"][0]["reference"] == "https://charts.example.com/stable"
-    assert response.json()["items"][0]["actions"] == ["delete"]
+    assert response.json()["items"][0]["actions"] == ["refresh", "delete"]
     assert "credential_ref" not in response.text
 
 

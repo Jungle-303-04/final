@@ -294,7 +294,11 @@ async def list_helm_chart_sources(
             "items": tuple(
                 source.model_copy(
                     update={
-                        "actions": ("delete",)
+                        "actions": (
+                            ("refresh", "delete")
+                            if source.provider == "repository"
+                            else ("delete",)
+                        )
                         if delete_ids is None or source.source_id in delete_ids
                         else ()
                     }
