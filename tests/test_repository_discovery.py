@@ -474,8 +474,157 @@ metadata:
     assert [(item.kind, item.name) for item in response.resources] == [
         ("Deployment", "rendered-api")
     ]
-    assert client.content_paths == ["k8s/deployment.yaml", "k8s/kustomization.yaml"]
+    assert client.content_paths == ["k8s/kustomization.yaml", "k8s/deployment.yaml"]
     assert len(commands) == 1
+
+
+def test_kustomize_validation_resolves_parent_base_with_bounded_dependency_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GITOPS_KUBECTL_BIN", raising=False)
+    contents = {
+        "manifests/base/kustomization.yaml": b"resources:\n- deployment.yaml\n",
+        "manifests/base/deployment.yaml": b"""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: base-api
+""",
+        "manifests/overlays/dev/kustomization.yaml": b"""
+resources:
+  - ../../base
+patches:
+  - path: deployment-patch.yaml
+""",
+        "manifests/overlays/dev/deployment-patch.yaml": b"""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: base-api
+""",
+        "unrelated/secret.yaml": b"kind: Secret\nmetadata:\n  name: unrelated\n",
+    }
+    client = StubGitHubClient(
+        contents=contents,
+        tree_items=[{"type": "blob", "path": path} for path in contents],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        source_dir = Path(command[2])
+        repository_root = source_dir.parents[2]
+        assert command[:2] == ["kubectl", "kustomize"]
+        assert (source_dir / "kustomization.yaml").is_file()
+        assert (source_dir / "deployment-patch.yaml").is_file()
+        assert (repository_root / "manifests/base/kustomization.yaml").is_file()
+        assert (repository_root / "manifests/base/deployment.yaml").is_file()
+        assert not (repository_root / "unrelated/secret.yaml").exists()
+        return subprocess.CompletedProcess(
+            list(command),
+            0,
+            stdout="""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-base-api
+""",
+            stderr="",
+        )
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client, render_executor=executor).validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="manifests/overlays/dev",
+                source_type="kustomize",
+            )
+        )
+    )
+
+    assert response.valid is True
+    assert [(item.kind, item.name) for item in response.resources] == [
+        ("Deployment", "dev-base-api")
+    ]
+    assert set(client.content_paths) == {
+        "manifests/base/deployment.yaml",
+        "manifests/base/kustomization.yaml",
+        "manifests/overlays/dev/deployment-patch.yaml",
+        "manifests/overlays/dev/kustomization.yaml",
+    }
+    assert any("parent or sibling references" in warning for warning in response.warnings)
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected_error"),
+    [
+        ("https://github.com/example/remote//base?ref=main", "remote reference"),
+        ("github.com/example/remote/base", "remote reference"),
+        ("../../../../outside.yaml", "escapes repository"),
+    ],
+)
+def test_kustomize_validation_rejects_remote_and_repository_escape_references(
+    reference: str,
+    expected_error: str,
+) -> None:
+    path = "manifests/overlays/dev/kustomization.yaml"
+    client = StubGitHubClient(
+        contents={path: f"resources:\n  - {reference}\n".encode()},
+        tree_items=[{"type": "blob", "path": path}],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("renderer must not execute unsafe Kustomize references")
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client, render_executor=executor).validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="manifests/overlays/dev",
+                source_type="kustomize",
+            )
+        )
+    )
+
+    assert response.valid is False
+    assert response.status == "invalid"
+    assert expected_error in response.errors[0]
+    assert client.content_paths == [path]
+
+
+def test_kustomize_dependency_export_enforces_total_byte_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(repository_discovery, "MAX_RENDER_SOURCE_BYTES", 20)
+    path = "k8s/kustomization.yaml"
+    client = StubGitHubClient(
+        contents={path: b"resources:\n  - deployment.yaml\n"},
+        tree_items=[{"type": "blob", "path": path}],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("renderer must not execute when byte limit is exceeded")
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client, render_executor=executor).validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="k8s",
+                source_type="kustomize",
+            )
+        )
+    )
+
+    assert response.valid is False
+    assert "byte limit" in response.errors[0]
+    assert client.content_paths == [path]
 
 
 def test_helm_validation_templates_chart_with_sandbox_namespace(
@@ -618,6 +767,35 @@ def test_missing_renderer_executable_returns_invalid() -> None:
     assert response.status == "invalid"
     assert response.validation_mode == "kustomize-render"
     assert "executable not found" in response.errors[0]
+
+
+def test_kustomize_renderer_timeout_returns_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS", "0.25")
+    client = StubGitHubClient(
+        contents={"k8s/kustomization.yaml": b"resources: []\n"},
+        tree_items=[{"type": "blob", "path": "k8s/kustomization.yaml"}],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(list(command), timeout_seconds)
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client, render_executor=executor).validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="k8s",
+                source_type="kustomize",
+            )
+        )
+    )
+
+    assert response.valid is False
+    assert response.status == "invalid"
+    assert response.validation_mode == "kustomize-render"
+    assert "timed out after 0.25s" in response.errors[0]
 
 
 def test_render_validation_stops_before_content_when_file_limit_exceeded(

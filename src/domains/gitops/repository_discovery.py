@@ -6,6 +6,7 @@ import asyncio
 import base64
 import binascii
 import json
+import posixpath
 import re
 import subprocess
 from collections.abc import Mapping, Sequence
@@ -47,6 +48,7 @@ REPO_REF_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 GIT_SSH_PATTERN = re.compile(r"^git@[^:]+:(?P<repo>[^/]+/[^/]+?)(?:\.git)?$")
 GITHUB_HOST = "github.com"
 KUSTOMIZATION_FILES = {"kustomization.yaml", "kustomization.yml", "Kustomization"}
+KUSTOMIZATION_FILE_ORDER = ("kustomization.yaml", "kustomization.yml", "Kustomization")
 HELM_CHART_FILE = "Chart.yaml"
 MANIFEST_EXTENSIONS = {".yaml", ".yml", ".json"}
 MAX_BRANCHES = 100
@@ -440,6 +442,19 @@ async def export_render_source(
 ) -> tuple[Path, list[str]]:
     source_dir = render_source_directory(manifest_path, source_type)
     tree, warnings = await client.tree(repo_ref, branch)
+    if source_type == "kustomize":
+        source_contents, dependency_warnings = await collect_kustomize_source_contents(
+            client,
+            repo_ref,
+            branch,
+            source_dir,
+            tree,
+        )
+        warnings.extend(dependency_warnings)
+        for path, content in sorted(source_contents.items()):
+            write_render_source_file(checkout_root, path, content)
+        return checkout_root if source_dir == "." else checkout_root / source_dir, warnings
+
     source_paths = sorted(
         {
             path
@@ -476,6 +491,284 @@ async def export_render_source(
         write_render_source_file(checkout_root, path, content)
 
     return checkout_root if source_dir == "." else checkout_root / source_dir, warnings
+
+
+async def collect_kustomize_source_contents(
+    client: GitHubClient,
+    repo_ref: str,
+    branch: str,
+    source_dir: str,
+    tree: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, bytes], list[str]]:
+    blob_paths = {
+        path
+        for item in tree
+        if str(item.get("type") or "") == "blob"
+        for path in [normalize_tree_path(str(item.get("path") or ""))]
+        if path
+    }
+    selected_source_paths = {
+        path for path in blob_paths if path_is_under_directory(path, source_dir)
+    }
+    if len(selected_source_paths) > MAX_RENDER_SOURCE_FILES:
+        raise ManifestRenderValidationError(
+            "kustomize render source exceeds file limit "
+            f"({len(selected_source_paths)} > {MAX_RENDER_SOURCE_FILES})"
+        )
+    directory_paths = repository_directories(blob_paths)
+    source_contents: dict[str, bytes] = {}
+    total_bytes = 0
+
+    async def fetch(path: str) -> bytes:
+        nonlocal total_bytes
+        cached = source_contents.get(path)
+        if cached is not None:
+            return cached
+        if path not in blob_paths:
+            raise ManifestRenderValidationError(
+                f"Kustomize local reference does not exist in repository: {path}"
+            )
+        if len(source_contents) >= MAX_RENDER_SOURCE_FILES:
+            raise ManifestRenderValidationError(
+                "kustomize render source exceeds file limit "
+                f"({len(source_contents) + 1} > {MAX_RENDER_SOURCE_FILES})"
+            )
+        try:
+            content = await client.content(repo_ref, branch, path)
+        except RepositoryDiscoveryError as exc:
+            raise ManifestRenderValidationError(
+                f"render source content fetch failed for {path}: {exc.detail}"
+            ) from exc
+        total_bytes += len(content)
+        if total_bytes > MAX_RENDER_SOURCE_BYTES:
+            raise ManifestRenderValidationError(
+                "kustomize render source exceeds byte limit "
+                f"({total_bytes} > {MAX_RENDER_SOURCE_BYTES})"
+            )
+        source_contents[path] = content
+        return content
+
+    pending_directories = [source_dir]
+    visited_directories: set[str] = set()
+    used_external_local_reference = False
+    while pending_directories:
+        directory = pending_directories.pop()
+        if directory in visited_directories:
+            continue
+        visited_directories.add(directory)
+        kustomization_path = find_kustomization_path(directory, blob_paths)
+        content = await fetch(kustomization_path)
+        document = parse_kustomization_document(content, kustomization_path)
+        for field, raw_reference, may_be_directory in kustomize_local_references(document):
+            reference = normalize_kustomize_local_reference(
+                raw_reference,
+                field=field,
+                current_directory=directory,
+            )
+            if reference != directory and not path_is_under_directory(reference, source_dir):
+                used_external_local_reference = True
+            if may_be_directory and reference in directory_paths:
+                pending_directories.append(reference)
+                continue
+            await fetch(reference)
+
+    warnings = []
+    if used_external_local_reference:
+        warnings.append(
+            "Kustomize parent or sibling references were resolved within the bounded repository tree"
+        )
+    return source_contents, warnings
+
+
+def repository_directories(blob_paths: set[str]) -> set[str]:
+    directories = {"."}
+    for path in blob_paths:
+        parent = parent_path(path)
+        while parent != ".":
+            directories.add(parent)
+            parent = parent_path(parent)
+    return directories
+
+
+def find_kustomization_path(directory: str, blob_paths: set[str]) -> str:
+    candidates = [
+        name if directory == "." else f"{directory}/{name}"
+        for name in KUSTOMIZATION_FILE_ORDER
+        if (name if directory == "." else f"{directory}/{name}") in blob_paths
+    ]
+    if not candidates:
+        raise ManifestRenderValidationError(
+            f"Kustomize source is missing kustomization.yaml under {directory}"
+        )
+    if len(candidates) > 1:
+        raise ManifestRenderValidationError(
+            f"Kustomize source has multiple kustomization files under {directory}"
+        )
+    return candidates[0]
+
+
+def parse_kustomization_document(content: bytes, path: str) -> Mapping[str, Any]:
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ManifestRenderValidationError(f"Kustomize source is not valid utf-8: {path}") from exc
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise ManifestRenderValidationError(
+            f"Kustomize source parse failed for {path}: {exc}"
+        ) from exc
+    if not isinstance(document, Mapping):
+        raise ManifestRenderValidationError(f"Kustomize source must be an object: {path}")
+    return document
+
+
+def kustomize_local_references(document: Mapping[str, Any]) -> list[tuple[str, str, bool]]:
+    references: list[tuple[str, str, bool]] = []
+    for field in ("resources", "bases", "components"):
+        references.extend(
+            (field, value, True) for value in string_sequence(document.get(field), field)
+        )
+    for field in ("crds", "configurations", "generators", "transformers"):
+        references.extend(
+            (field, value, False) for value in string_sequence(document.get(field), field)
+        )
+    references.extend(kustomize_patch_references(document))
+    references.extend(kustomize_generator_references(document))
+
+    openapi = document.get("openapi")
+    if isinstance(openapi, Mapping) and isinstance(openapi.get("path"), str):
+        references.append(("openapi.path", str(openapi["path"]), False))
+
+    helm_globals = document.get("helmGlobals")
+    if isinstance(helm_globals, Mapping) and isinstance(helm_globals.get("chartHome"), str):
+        references.append(("helmGlobals.chartHome", str(helm_globals["chartHome"]), True))
+    for chart in mapping_sequence(document.get("helmCharts"), "helmCharts"):
+        repository = chart.get("repo")
+        if isinstance(repository, str) and repository.strip():
+            raise ManifestRenderValidationError(
+                "Kustomize remote reference is not allowed: helmCharts.repo"
+            )
+        values_file = chart.get("valuesFile")
+        if isinstance(values_file, str) and values_file.strip():
+            references.append(("helmCharts.valuesFile", values_file, False))
+        references.extend(
+            ("helmCharts.additionalValuesFiles", value, False)
+            for value in string_sequence(
+                chart.get("additionalValuesFiles"),
+                "helmCharts.additionalValuesFiles",
+            )
+        )
+    return references
+
+
+def kustomize_patch_references(document: Mapping[str, Any]) -> list[tuple[str, str, bool]]:
+    references: list[tuple[str, str, bool]] = []
+    for patch in sequence_value(document.get("patches"), "patches"):
+        if isinstance(patch, Mapping) and isinstance(patch.get("path"), str):
+            references.append(("patches.path", str(patch["path"]), False))
+    for patch in sequence_value(document.get("patchesJson6902"), "patchesJson6902"):
+        if isinstance(patch, Mapping) and isinstance(patch.get("path"), str):
+            references.append(("patchesJson6902.path", str(patch["path"]), False))
+    for patch in string_sequence(document.get("patchesStrategicMerge"), "patchesStrategicMerge"):
+        if "\n" not in patch:
+            references.append(("patchesStrategicMerge", patch, False))
+    return references
+
+
+def kustomize_generator_references(
+    document: Mapping[str, Any],
+) -> list[tuple[str, str, bool]]:
+    references: list[tuple[str, str, bool]] = []
+    for generator_field in ("configMapGenerator", "secretGenerator"):
+        for generator in mapping_sequence(document.get(generator_field), generator_field):
+            for file_field in ("files", "envs"):
+                references.extend(
+                    (f"{generator_field}.{file_field}", generator_file_path(value), False)
+                    for value in string_sequence(
+                        generator.get(file_field), f"{generator_field}.{file_field}"
+                    )
+                )
+            env_file = generator.get("env")
+            if isinstance(env_file, str) and env_file.strip():
+                references.append((f"{generator_field}.env", env_file, False))
+    return references
+
+
+def generator_file_path(reference: str) -> str:
+    if "=" not in reference:
+        return reference
+    _, path = reference.split("=", 1)
+    return path
+
+
+def sequence_value(value: Any, field: str) -> Sequence[Any]:
+    if value is None:
+        return ()
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ManifestRenderValidationError(f"Kustomize {field} must be a list")
+    return value
+
+
+def string_sequence(value: Any, field: str) -> list[str]:
+    values = sequence_value(value, field)
+    if any(not isinstance(item, str) or not item.strip() for item in values):
+        raise ManifestRenderValidationError(f"Kustomize {field} entries must be paths")
+    return [str(item) for item in values]
+
+
+def mapping_sequence(value: Any, field: str) -> list[Mapping[str, Any]]:
+    values = sequence_value(value, field)
+    if any(not isinstance(item, Mapping) for item in values):
+        raise ManifestRenderValidationError(f"Kustomize {field} entries must be objects")
+    return [item for item in values if isinstance(item, Mapping)]
+
+
+def normalize_kustomize_local_reference(
+    raw_reference: str,
+    *,
+    field: str,
+    current_directory: str,
+) -> str:
+    reference = raw_reference.strip()
+    if is_remote_kustomize_reference(reference):
+        raise ManifestRenderValidationError(
+            f"Kustomize remote reference is not allowed in {field}: {reference}"
+        )
+    if not reference or "\\" in reference or reference.startswith("/"):
+        raise ManifestRenderValidationError(
+            f"Kustomize local reference is invalid in {field}: {reference or '<empty>'}"
+        )
+    base = "" if current_directory == "." else current_directory
+    normalized = posixpath.normpath(posixpath.join(base, reference))
+    if normalized in {"", ".", ".."} or normalized.startswith("../"):
+        raise ManifestRenderValidationError(
+            f"Kustomize local reference escapes repository in {field}: {reference}"
+        )
+    safe = normalize_tree_path(normalized)
+    if not safe:
+        raise ManifestRenderValidationError(
+            f"Kustomize local reference is invalid in {field}: {reference}"
+        )
+    return safe
+
+
+def is_remote_kustomize_reference(reference: str) -> bool:
+    lowered = reference.casefold()
+    return bool(
+        re.match(r"^[a-z][a-z0-9+.-]*:", lowered)
+        or lowered.startswith(("git@", "//"))
+        or lowered.startswith(
+            (
+                "github.com/",
+                "gitlab.com/",
+                "bitbucket.org/",
+                "dev.azure.com/",
+            )
+        )
+        or ".git//" in lowered
+        or "?ref=" in lowered
+    )
 
 
 async def render_source(
