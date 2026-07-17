@@ -112,10 +112,12 @@ The same persisted snapshot supplies these read paths:
 | Cost | Two Node rows plus one current synthetic namespace allocation window. The overview exposes 840,000 micro-USD/hour and 90,000 micro-USD/hour of storage evidence. |
 | Traffic | Two synthetic Caretta-shaped flow observations, including one cross-namespace and one external destination, read through the bounded Agent evidence repository. |
 
+Issues and RCA receive one descriptor-owned synthetic `payments-api` incident through the
+canonical RCA timeline writer. The record carries `analysis_mode=none` and synthetic evidence
+references, so it does not claim an Agent observation or AI diagnosis.
+
 The descriptor intentionally does not fabricate evidence that belongs to another read model:
 
-- Issues remains empty because that surface reads incident/RCA projections, and an inventory
-  snapshot or Warning Event is not itself an incident.
 - Applications lists the five descriptor-owned Application and DeploymentBinding rows and shows
   their successful repository-render validation deliveries. Apply, live diff, rollout health, and
   workload runtime membership stay unavailable: the successful WorkflowRun is explicitly
@@ -134,9 +136,6 @@ The descriptor intentionally does not fabricate evidence that belongs to another
   flows but no live Agent status proves that Caretta is the selected collector. An outbound Agent
   `traffic_sources.active_source` observation is required before the product can claim fully
   available Traffic.
-- RCA/Issues remains unavailable because a Warning Event and synthetic metric windows do not prove
-  an incident or diagnosis. Those screens require their canonical incident/RCA write contracts.
-
 Those unavailable states are part of the fixture's evidence boundary. Extending them requires a
 separate descriptor-owned slice through their canonical write contracts; they must not be
 inferred from labels or inserted as frontend samples.
