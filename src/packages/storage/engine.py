@@ -229,6 +229,26 @@ OPERATIONAL_INDEXES = (
         "where correlation_id is not null"
     ),
 )
+INVENTORY_FILTER_COMPAT_COLUMNS = {
+    "change_ledger_epoch": (
+        "alter table inventory_filter_revisions "
+        "add column if not exists change_ledger_epoch text"
+    ),
+}
+INVENTORY_CHANGE_TIMELINE_COMPAT_INDEXES = (
+    (
+        "create index if not exists ix_timeline_events_inventory_changes "
+        "on timeline_events (workspace_id, cluster_id, occurred_at, event_id) "
+        "where source = 'inventory' and activity = 'change' "
+        "and event_type in ('add', 'update', 'delete')"
+    ),
+    (
+        "create index if not exists ix_inventory_filter_revisions_change_coverage "
+        "on inventory_filter_revisions "
+        "(workspace_id, cluster_id, change_ledger_epoch, resources_complete, "
+        "observed_at, revision_id)"
+    ),
+)
 REPO_CHANGE_COMPAT_COLUMNS = {
     "workspace_id": "alter table repo_changes add column if not exists workspace_id text",
     "repository_id": "alter table repo_changes add column if not exists repository_id text",
@@ -728,6 +748,13 @@ class DatabaseConnection:
             self._add_missing_columns(conn, table_name, columns)
         conn.execute(text(CLUSTER_AGENT_TOKEN_HASH_INDEX))
         for statement in OPERATIONAL_INDEXES:
+            conn.execute(text(statement))
+        self._add_missing_columns(
+            conn,
+            "inventory_filter_revisions",
+            INVENTORY_FILTER_COMPAT_COLUMNS,
+        )
+        for statement in INVENTORY_CHANGE_TIMELINE_COMPAT_INDEXES:
             conn.execute(text(statement))
 
         for table_name in WORKSPACE_BACKFILL_COLUMNS:
