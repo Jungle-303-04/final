@@ -42,6 +42,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
         Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
         Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        Command.GITOPS_RESOURCE_CONTROL_ACTION,
         HELM_RELEASE_ARTIFACT_READ_ACTION,
     }
     cronjob_actions = {
@@ -60,6 +61,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
         Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
         Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        Command.GITOPS_RESOURCE_CONTROL_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
@@ -110,6 +112,11 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         assert rollback is not None
         assert rollback.supports_cancel is True
         assert rollback.required_agent_capability == Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY
+    gitops = command_action_spec(Command.GITOPS_RESOURCE_CONTROL_ACTION)
+    assert gitops is not None
+    assert gitops.allowed_namespaces == ()
+    assert gitops.enforce_control_namespace is False
+    assert gitops.required_agent_capability == Command.GITOPS_RESOURCE_CONTROL_CAPABILITY
 
 
 def test_spec_lookup_and_namespace_policy() -> None:
