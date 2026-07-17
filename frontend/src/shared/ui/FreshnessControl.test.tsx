@@ -103,7 +103,8 @@ describe("FreshnessControl", () => {
       </TooltipProvider>,
     );
 
-    expect(await screen.findByText("새로 고쳤습니다.")).toBeTruthy();
+    const succeeded = await screen.findByText("새로 고쳤습니다.");
+    expect(succeeded.className).toContain("sr-only");
   });
 
   it("requires both a resolving request and newer freshness evidence when both are available", async () => {

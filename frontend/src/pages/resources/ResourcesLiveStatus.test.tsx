@@ -41,6 +41,43 @@ describe("ResourcesLiveStatus", () => {
 
     expect(screen.getByText(label)).toBeTruthy();
   });
+
+  it("keeps one stable row and reserves optional live evidence slots", () => {
+    const view = renderStatus({
+      status: "connecting",
+      actualIntervalSeconds: null,
+      degradedReason: null,
+      source: null,
+      updatedAt: 0,
+    });
+    const root = view.container.querySelector('[data-slot="resources-live-status"]');
+    const degraded = view.container.querySelector('[data-slot="resources-live-degraded"]');
+    const updated = view.container.querySelector('[data-slot="resources-live-updated"]');
+
+    expect(root?.className).toContain("grid");
+    expect(root?.className).not.toContain("flex-wrap");
+    expect(degraded).toBeTruthy();
+    expect(updated).toBeTruthy();
+
+    view.rerender(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourcesLiveStatus
+          state={{
+            status: "connected",
+            actualIntervalSeconds: 1.2,
+            degradedReason: "metrics_partial",
+            source: "mixed",
+            updatedAt: Date.now(),
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    expect(view.container.querySelector('[data-slot="resources-live-degraded"]'))
+      .toBe(degraded);
+    expect(view.container.querySelector('[data-slot="resources-live-updated"]'))
+      .toBe(updated);
+  });
 });
 
 function renderStatus(state: PhysicalTopologyLiveState) {
