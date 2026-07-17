@@ -365,6 +365,9 @@ def test_deploy_has_no_preservation_cutover_or_partial_capture_escape_hatches() 
     assert "verify_first_deploy_backup.py" not in source
     assert "--allow-missing-live" not in source
     assert source.count("--managed-repository") == 2
+    service_capture = steps_by_name()["Capture current service digest rollback plan"]["run"]
+    assert "kubectl kustomize deploy/management" in service_capture
+    assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in service_capture
     assert "kubectl apply --filename deploy/management" not in source
     assert "alembic stamp" not in source
     assert "alembic downgrade" not in source

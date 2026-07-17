@@ -678,6 +678,61 @@ def test_event_consumer_pending_metric_reads_latest_samples() -> None:
     assert "event_consumer_metrics.pending_events" in sql
 
 
+def test_event_consumer_lag_snapshot_is_bounded_and_prioritizes_backlog() -> None:
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "consumer": "critical-worker",
+                    "subject": "critical.subject",
+                    "stream": "SERVICE_EVENTS",
+                    "pending_events": 9,
+                    "ack_pending_events": 2,
+                    "redelivered_events": 1,
+                    "total_count": 82,
+                }
+            ]
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    samples, total = repository.event_consumer_lag_snapshot(limit=50)
+
+    assert total == 82
+    assert samples == [
+        EventConsumerMetrics(
+            stream="SERVICE_EVENTS",
+            subject="critical.subject",
+            durable="critical-worker",
+            pending=9,
+            ack_pending=2,
+            redelivered=1,
+        )
+    ]
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "count(*) OVER ()" in sql
+    assert "event_consumer_metrics.pending_events DESC" in sql
+    assert "event_consumer_metrics.ack_pending_events DESC" in sql
+    assert "event_consumer_metrics.redelivered_events DESC" in sql
+    assert "LIMIT" in sql
+    assert 50 in compiled.params.values()
+
+
 def test_record_llm_invocation_metric_inserts_latency_cost_sample() -> None:
     recorded: list[Any] = []
 

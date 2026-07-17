@@ -575,6 +575,37 @@ def test_capture_selects_every_live_container_by_exact_repository() -> None:
     ) == (("api-gateway", "api-gateway"), ("audit-worker", "audit-worker"))
 
 
+def test_manifest_targets_include_live_legacy_repository_for_safe_rollout(tmp_path: Path) -> None:
+    manifest = deployment_manifest(tmp_path)
+    legacy_digest = "registry.example/legacy/service@sha256:" + "d" * 64
+    live = json.loads(exact_live_document(api_image=legacy_digest))
+    expected = capture_image_digests.expected_deployment_containers(
+        manifest,
+        managed_repository="service",
+    )
+    plan = capture_image_digests.build_plan(
+        expected=expected,
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+
+    assert [target.resource for target in plan.targets] == [
+        "deployment/api-gateway",
+        "deployment/audit-worker",
+    ]
+    assert plan.targets[0].image == legacy_digest
+    assert (
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image="service@sha256:" + "c" * 64,
+            live_document=live,
+            require_exact_digest=False,
+        )
+        == 2
+    )
+
+
 def test_rollout_repository_verification_fails_closed_on_stale_or_extra_target(
     tmp_path: Path,
 ) -> None:

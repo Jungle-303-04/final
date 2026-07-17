@@ -21,6 +21,7 @@ from domains.diagnostics.version_check import (
 from domains.identity.dependencies import require_session
 from packages.contracts.bootstrap import (
     AGENT_DIAGNOSTICS_LIMIT,
+    CONSUMER_LAG_LIMIT,
     AgentCollectionDiagnostics,
     AgentDiagnosticsItem,
     VersionCheckResponse,
@@ -184,6 +185,43 @@ def test_runtime_diagnostics_is_session_scoped_batched_and_bounded() -> None:
     ) in db.calls
     assert len([call for call in db.calls if call[0] == "latest_cluster_agent_statuses"]) == 1
     assert len([call for call in db.calls if call[0] == "latest_inventory_snapshots"]) == 1
+
+
+def test_runtime_diagnostics_prioritizes_nonzero_lag_before_bounded_idle_consumers() -> None:
+    class HighLagRuntimeDiagnosticsDb(RuntimeDiagnosticsDb):
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            idle = {
+                (f"idle-consumer-{index:03d}", f"idle.subject.{index:03d}"): 0
+                for index in range(CONSUMER_LAG_LIMIT + 2)
+            }
+            return {
+                **idle,
+                ("zz-critical-consumer", "critical.subject"): 9,
+            }
+
+        def event_consumer_ack_pending_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {("zz-critical-consumer", "critical.subject"): 2}
+
+        def event_consumer_redelivered_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {("zz-critical-consumer", "critical.subject"): 1}
+
+    response = _client(HighLagRuntimeDiagnosticsDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    event_pipeline = response.json()["event_pipeline"]
+    assert event_pipeline["reason_codes"] == ["consumer_lag_limit_reached"]
+    assert len(event_pipeline["consumer_lag"]) == CONSUMER_LAG_LIMIT
+    assert event_pipeline["consumer_lag"][0] == {
+        "consumer": "zz-critical-consumer",
+        "subject": "critical.subject",
+        "pending": 9,
+        "ack_pending": 2,
+        "redelivered": 1,
+    }
 
 
 def test_runtime_diagnostics_preserves_partial_results_without_leaking_exception_text() -> None:
