@@ -14,6 +14,7 @@ from domains.ai.context_facade import (
     answer_from_context,
     get_ai_resource,
     get_context_chat_llm,
+    get_context_mcp_engine,
     list_ai_resources,
     suggestions_for_context,
 )
@@ -122,6 +123,7 @@ async def chat_with_context(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     llm: Any | None = Depends(get_context_chat_llm),
+    mcp_engine: Any | None = Depends(get_context_mcp_engine),
 ) -> AiChatResponse:
     """Return only current, authorized inventory facts with explicit evidence links."""
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
@@ -132,6 +134,7 @@ async def chat_with_context(
         context=payload.context,
         message=payload.message,
         llm=llm,
+        mcp_engine=mcp_engine,
     )
 
 

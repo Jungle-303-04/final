@@ -8,9 +8,11 @@ import httpx
 import pytest
 
 from packages.ai.tools import ToolContext
+from packages.ai.tools import ToolRegistry as AiToolRegistry
 from services.mcp.internal_control.ai_runtime import (
     AiRuntimeMcpExecutor,
     ai_tool_registry_from_mcp,
+    ai_tool_registry_with_mcp,
     anthropic_tools,
     format_runtime_tools,
     gemini_function_declarations,
@@ -42,6 +44,17 @@ class _ScriptedLlm:
 
 async def _read_handler(_client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
     return {"tool": "read_cluster", "arguments": arguments}
+
+
+async def _base_ai_handler(context: ToolContext) -> dict[str, Any]:
+    return {"workspace_id": context.workspace_id}
+
+
+async def _base_read_cluster_handler(
+    _context: ToolContext,
+    cluster_id: str,
+) -> dict[str, Any]:
+    return {"cluster_id": cluster_id, "source": "base"}
 
 
 async def _write_handler(_client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -517,6 +530,65 @@ def test_mcp_tools_can_be_registered_for_internal_conversation_engine() -> None:
         }
         with pytest.raises(ValueError, match="unknown ai tool: write_cluster"):
             ai_registry.spec("write_cluster")
+
+    asyncio.run(run())
+
+
+def test_mcp_tools_can_be_merged_with_existing_internal_ai_tools() -> None:
+    async def run() -> None:
+        base_registry = AiToolRegistry()
+        base_registry.tool(
+            name="base_status",
+            description="Read the existing internal AI context.",
+        )(_base_ai_handler)
+
+        merged = ai_tool_registry_with_mcp(
+            base_registry,
+            _client(),
+            registry=_sample_registry(),
+        )
+
+        assert merged.tool_names() == ("base_status", "read_cluster")
+        assert await merged.execute("base_status", _tool_context(), {}) == {
+            "workspace_id": "workspace-1"
+        }
+        assert await merged.execute(
+            "read_cluster",
+            _tool_context(),
+            {"cluster_id": "cluster-1"},
+        ) == {
+            "tool": "read_cluster",
+            "ok": True,
+            "result": {
+                "tool": "read_cluster",
+                "arguments": {"cluster_id": "cluster-1"},
+            },
+        }
+
+    asyncio.run(run())
+
+
+def test_mcp_registry_merge_keeps_existing_internal_tool_on_name_overlap() -> None:
+    async def run() -> None:
+        base_registry = AiToolRegistry()
+        base_registry.tool(
+            name="read_cluster",
+            description="Existing internal cluster reader.",
+            parameters={"cluster_id": {"type": "string", "required": True}},
+        )(_base_read_cluster_handler)
+
+        merged = ai_tool_registry_with_mcp(
+            base_registry,
+            _client(),
+            registry=_sample_registry(),
+        )
+
+        assert merged.tool_names() == ("read_cluster",)
+        assert await merged.execute(
+            "read_cluster",
+            _tool_context(),
+            {"cluster_id": "cluster-1"},
+        ) == {"cluster_id": "cluster-1", "source": "base"}
 
     asyncio.run(run())
 

@@ -155,6 +155,20 @@ class McpSettings:
 
 
 def load_settings() -> McpSettings:
+    return load_settings_with_auth(
+        bearer_token=env(OPSIA_MCP_BEARER_TOKEN_ENV, ""),
+        cookie_header=env(OPSIA_MCP_COOKIE_ENV, ""),
+        session_cookie=env(OPSIA_MCP_SESSION_COOKIE_ENV, ""),
+    )
+
+
+def load_settings_with_auth(
+    *,
+    bearer_token: str = "",
+    cookie_header: str = "",
+    session_cookie: str = "",
+    writes_enabled: bool | None = None,
+) -> McpSettings:
     timeout = _float_env(OPSIA_MCP_TIMEOUT_SECONDS_ENV, DEFAULT_TIMEOUT_SECONDS)
     max_response_bytes = _int_env(
         OPSIA_MCP_MAX_RESPONSE_BYTES_ENV,
@@ -162,16 +176,24 @@ def load_settings() -> McpSettings:
     )
     return McpSettings(
         api_base_url=_first_env(OPSIA_MCP_API_BASE_URL_ENV, MANAGEMENT_BASE_URL_ENV),
-        bearer_token=env(OPSIA_MCP_BEARER_TOKEN_ENV, ""),
-        cookie_header=env(OPSIA_MCP_COOKIE_ENV, ""),
-        session_cookie=env(OPSIA_MCP_SESSION_COOKIE_ENV, ""),
+        bearer_token=bearer_token,
+        cookie_header=cookie_header,
+        session_cookie=session_cookie,
         session_cookie_name=env(OPSIA_MCP_SESSION_COOKIE_NAME_ENV, Auth.SESSION_COOKIE_NAME),
         trusted_proxy_secret=env(OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV, ""),
-        writes_enabled=_bool_env(OPSIA_MCP_ENABLE_WRITES_ENV, False),
+        writes_enabled=(
+            _bool_env(OPSIA_MCP_ENABLE_WRITES_ENV, False)
+            if writes_enabled is None
+            else bool(writes_enabled)
+        ),
         allow_insecure_http=_bool_env(OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV, False),
         timeout_seconds=timeout,
         max_response_bytes=max_response_bytes,
     ).validate()
+
+
+def configured_session_cookie_name() -> str:
+    return env(OPSIA_MCP_SESSION_COOKIE_NAME_ENV, Auth.SESSION_COOKIE_NAME).strip()
 
 
 def _first_env(*names: str) -> str:

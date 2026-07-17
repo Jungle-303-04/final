@@ -14,6 +14,8 @@ from services.mcp.internal_control.api_client import ManagementApiClient, Manage
 from services.mcp.internal_control.config import (
     OPSIA_MCP_ENABLE_WRITES_ENV,
     McpConfigurationError,
+    load_settings,
+    load_settings_with_auth,
 )
 from services.mcp.internal_control.tools import (
     ToolInputError,
@@ -215,22 +217,80 @@ def ai_tool_registry_from_mcp(
     return ai_registry
 
 
+def ai_tool_registry_with_mcp(
+    base_registry: AiToolRegistry,
+    client: ManagementApiClient,
+    *,
+    registry: McpToolRegistry | None = None,
+    include_write_tools: bool = False,
+) -> AiToolRegistry:
+    """Copy an existing internal AI registry and append MCP runtime tools."""
+    ai_registry = _copy_ai_tool_registry(base_registry)
+    selected_registry = registry or default_tool_registry()
+    mcp_registry = ai_tool_registry_from_mcp(
+        selected_registry,
+        client,
+        include_write_tools=include_write_tools,
+    )
+    for spec in mcp_registry.tools():
+        if ai_registry.get(spec.name) is not None:
+            continue
+        ai_registry.tool(
+            name=spec.name,
+            description=spec.description,
+            parameters=deepcopy(spec.parameters),
+            locales=spec.locales,
+        )(spec.handler)
+    return ai_registry
+
+
 def mcp_conversation_engine(
     llm: LlmClient,
     client: ManagementApiClient,
     *,
     registry: McpToolRegistry | None = None,
+    base_registry: AiToolRegistry | None = None,
     include_write_tools: bool = False,
     max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
 ) -> ConversationEngine:
     """Create a ConversationEngine that can auto-run MCP tools from model tool calls."""
     selected_registry = registry or default_tool_registry()
-    ai_registry = ai_tool_registry_from_mcp(
-        selected_registry,
-        client,
-        include_write_tools=include_write_tools,
+    ai_registry = (
+        ai_tool_registry_from_mcp(
+            selected_registry,
+            client,
+            include_write_tools=include_write_tools,
+        )
+        if base_registry is None
+        else ai_tool_registry_with_mcp(
+            base_registry,
+            client,
+            registry=selected_registry,
+            include_write_tools=include_write_tools,
+        )
     )
     return ConversationEngine(llm, ai_registry, max_tool_calls=max_tool_calls)
+
+
+def management_client_from_env() -> ManagementApiClient:
+    return ManagementApiClient(load_settings())
+
+
+def management_client_from_auth(
+    *,
+    bearer_token: str = "",
+    cookie_header: str = "",
+    session_cookie: str = "",
+    writes_enabled: bool | None = None,
+) -> ManagementApiClient:
+    return ManagementApiClient(
+        load_settings_with_auth(
+            bearer_token=bearer_token,
+            cookie_header=cookie_header,
+            session_cookie=session_cookie,
+            writes_enabled=writes_enabled,
+        )
+    )
 
 
 def format_runtime_tools(
@@ -317,6 +377,18 @@ def _ai_tool_handler(
         return await executor.call(tool_name, arguments)
 
     return call_mcp_tool
+
+
+def _copy_ai_tool_registry(base_registry: AiToolRegistry) -> AiToolRegistry:
+    ai_registry = AiToolRegistry()
+    for spec in base_registry.tools():
+        ai_registry.tool(
+            name=spec.name,
+            description=spec.description,
+            parameters=deepcopy(spec.parameters),
+            locales=spec.locales,
+        )(spec.handler)
+    return ai_registry
 
 
 def _ai_tool_parameters(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -410,9 +482,12 @@ __all__ = [
     "AiRuntimeTool",
     "AiRuntimeToolFormat",
     "ai_tool_registry_from_mcp",
+    "ai_tool_registry_with_mcp",
     "anthropic_tools",
     "format_runtime_tools",
     "gemini_function_declarations",
+    "management_client_from_auth",
+    "management_client_from_env",
     "mcp_conversation_engine",
     "openai_tools",
     "tools_from_mcp_registry",

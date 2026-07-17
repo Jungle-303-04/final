@@ -22,14 +22,27 @@ from packages.ai.engine import ConversationEngine
 from packages.ai.llm import build_llm_client, describe_llm_client
 from packages.ai.metrics import metered_llm_client
 from packages.ai.tools import ToolContext, ai
+from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import AiConversationStore
 from packages.runtime.app import App, EventContext
+from services.mcp.internal_control.ai_runtime import (
+    ai_tool_registry_with_mcp,
+    management_client_from_env,
+)
+from services.mcp.internal_control.api_client import ManagementApiClient
+from services.mcp.internal_control.config import McpConfigurationError
+from services.mcp.internal_control.tools import default_tool_registry
 
 app = App("ai-chat-worker")
 llm_client = build_llm_client()
 load_domain_tools()  # domains/*/tools.py 자동 발견 — @ai.tool 등록 유발
 engine = ConversationEngine(llm_client, ai)
+mcp_registry = default_tool_registry()
+AI_CHAT_WORKER_ENABLE_MCP_ENV = "OPSIA_AI_CHAT_WORKER_ENABLE_MCP"
+TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+_MCP_CLIENT_UNSET = object()
+_mcp_client: ManagementApiClient | None | object = _MCP_CLIENT_UNSET
 
 # 런타임 핸들러 타임아웃(30초)보다 짧게 — 실패 기록/이벤트가 항상 실행될 예산 확보.
 AGENT_DEADLINE_SECONDS = 20
@@ -79,6 +92,15 @@ def request_resource_context(evt: AiMessageReceivedBody) -> dict[str, str]:
 def engine_for_request(evt: AiMessageReceivedBody, ctx: EventContext[AiConversationStore]):
     if not isinstance(engine, ConversationEngine):
         return engine
+    registry = engine.registry
+    mcp_client = _mcp_client_from_env()
+    if mcp_client is not None:
+        registry = ai_tool_registry_with_mcp(
+            registry,
+            mcp_client,
+            registry=mcp_registry,
+            include_write_tools=False,
+        )
     return ConversationEngine(
         metered_llm_client(
             engine.llm,
@@ -88,9 +110,26 @@ def engine_for_request(evt: AiMessageReceivedBody, ctx: EventContext[AiConversat
             correlation_id=ctx.correlation_id,
             causation_id=ctx.causation_id,
         ),
-        engine.registry,
+        registry,
         max_tool_calls=engine.max_tool_calls,
     )
+
+
+def _mcp_client_from_env() -> ManagementApiClient | None:
+    global _mcp_client
+    if _mcp_client is _MCP_CLIENT_UNSET:
+        if not _worker_mcp_enabled():
+            _mcp_client = None
+        else:
+            try:
+                _mcp_client = management_client_from_env()
+            except McpConfigurationError:
+                _mcp_client = None
+    return _mcp_client if isinstance(_mcp_client, ManagementApiClient) else None
+
+
+def _worker_mcp_enabled() -> bool:
+    return env(AI_CHAT_WORKER_ENABLE_MCP_ENV, "").strip().casefold() in TRUE_ENV_VALUES
 
 
 @app.on(AiMessageReceivedBody)
