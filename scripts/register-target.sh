@@ -12,7 +12,6 @@ TARGET_NAME="${TARGET_NAME:-${TARGET_CLUSTER_ID}}"
 TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-sandbox}"
 WORKSPACE_ID="${WORKSPACE_ID:-default}"
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"
-PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://prometheus.target.svc:9090}"
 LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 IMAGE_NAME="${IMAGE_NAME:-}"
@@ -113,7 +112,6 @@ registration_body="$(
   TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT}" \
   WORKSPACE_ID="${WORKSPACE_ID}" \
   MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
-  PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL}" \
   LOKI_BASE_URL="${LOKI_BASE_URL}" \
   EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
   IMAGE_NAME="${IMAGE_NAME}" \
@@ -139,7 +137,6 @@ body = {
     "environment": os.environ["TARGET_ENVIRONMENT"],
     "workspace_id": os.environ["WORKSPACE_ID"],
     "management_base_url": os.environ["MANAGEMENT_BASE_URL"],
-    "prometheus_base_url": os.environ["PROMETHEUS_BASE_URL"],
     "loki_base_url": os.environ["LOKI_BASE_URL"],
     "evidence_interval_seconds": int(os.environ["EVIDENCE_INTERVAL_SECONDS"]),
     "image": os.environ["IMAGE_NAME"],
