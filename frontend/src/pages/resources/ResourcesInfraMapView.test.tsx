@@ -38,11 +38,12 @@ describe("ResourcesInfraMapView", () => {
     });
 
     expect(screen.getByText(
-      "Summarizes each node as a server card, highlighting key Pods, Pod distribution, and node capacity at a glance.",
+      "Summarizes nodes as server cards so key Pods, Pod distribution, and node capacity can be compared at a glance.",
     )).toBeTruthy();
     expect(legend.getAttribute("data-slot")).toBe("infra-map-legend");
     expect(legend.textContent).toContain("Healthy");
-    expect(legend.textContent).toContain("CPU request usage");
+    expect(legend.textContent).toContain("Pod CPU request usage");
+    expect(legend.textContent).toContain("Node CPU capacity gauge");
     expect(legend.textContent).toContain("Abnormal state");
     expect(legend.textContent).toContain("Unknown");
 

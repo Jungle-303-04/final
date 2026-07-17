@@ -1,5 +1,6 @@
 export const INFRA_MAP_TOPOLOGY_ZOOM = {
   animationMs: 160,
+  defaultPercent: 100,
   max: 1.6,
   min: 0.05,
   percentScale: 100,
@@ -9,11 +10,17 @@ export const INFRA_MAP_TOPOLOGY_ZOOM = {
 export type TopologyZoomDirection = -1 | 1;
 
 export function topologyZoomPercent(zoom: number): number {
+  if (!Number.isFinite(zoom) || zoom <= 0) {
+    return INFRA_MAP_TOPOLOGY_ZOOM.defaultPercent;
+  }
   return Math.round(zoom * INFRA_MAP_TOPOLOGY_ZOOM.percentScale);
 }
 
 export function topologyZoomLevelFromPercent(percent: number): number {
-  return percent / INFRA_MAP_TOPOLOGY_ZOOM.percentScale;
+  const safePercent = Number.isFinite(percent)
+    ? percent
+    : INFRA_MAP_TOPOLOGY_ZOOM.defaultPercent;
+  return clampTopologyZoomPercent(safePercent) / INFRA_MAP_TOPOLOGY_ZOOM.percentScale;
 }
 
 export function nextTopologyZoomPercent(

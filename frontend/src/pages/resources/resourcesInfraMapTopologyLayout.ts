@@ -9,9 +9,9 @@ export interface TopologySize {
 }
 
 export const INFRA_MAP_TOPOLOGY_NODE_SIZE = {
-  cluster: { height: 64, width: 64 },
+  cluster: { height: 72, width: 72 },
   pod: { height: 32, width: 32 },
-  server: { height: 56, width: 56 },
+  server: { height: 64, width: 64 },
 } as const satisfies Record<string, TopologySize>;
 
 export const INFRA_MAP_TOPOLOGY_POD_SIZE = {

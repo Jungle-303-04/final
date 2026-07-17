@@ -13,12 +13,13 @@ import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import type { InfraMapPod } from "./resourcesInfraMapModel";
 import { infraMapPodMetricRatio } from "./resourcesInfraMapPodOrdering";
 import {
+  INFRA_MAP_TOPOLOGY_POD_HEALTH_STROKE_CLASS,
+  infraMapPodToneState,
+  infraMapTopologyPodFillClass,
+} from "./resourcesInfraMapPodVisual";
+import {
   podAbnormalBadge,
   podAbnormalBadgeTone,
-  podHealthTone,
-  podResourcePressureTone,
-  type PodHealthTone,
-  type PodResourcePressureTone,
 } from "./podVisualState";
 
 export function TopologyPodHex({
@@ -39,8 +40,7 @@ export function TopologyPodHex({
   const { formatNumber, t } = useI18n();
   const tooltipId = useId();
   const ratio = infraMapPodMetricRatio(pod, metricMode);
-  const pressureTone = podResourcePressureTone(ratio);
-  const healthTone = podHealthTone(pod);
+  const { healthTone, pressureTone } = infraMapPodToneState(pod, metricMode);
   const badge = podAbnormalBadge(pod);
   const usageText = ratio === null
     ? null
@@ -66,8 +66,8 @@ export function TopologyPodHex({
         aria-hidden="true"
         className={cn(
           "size-8",
-          topologyPodFillClass(pressureTone, healthTone),
-          TOPOLOGY_POD_HEALTH_STROKE_CLASS[healthTone],
+          infraMapTopologyPodFillClass(pressureTone, healthTone),
+          INFRA_MAP_TOPOLOGY_POD_HEALTH_STROKE_CLASS[healthTone],
         )}
         style={topologyPodHexStyle(size)}
       />
@@ -121,33 +121,4 @@ function topologyPodHexStyle(size: number | undefined): CSSProperties | undefine
     height: size,
     width: size,
   };
-}
-
-const TOPOLOGY_POD_FILL_CLASS: Record<PodResourcePressureTone, string> = {
-  danger: "fill-orange-500/35 text-orange-500",
-  healthy: "fill-emerald-500/25 text-emerald-500",
-  unknown: "fill-muted/35 text-muted-foreground [stroke-dasharray:3_2]",
-  warning: "fill-status-warning/30 text-status-warning",
-};
-
-const TOPOLOGY_POD_UNKNOWN_FILL_CLASS: Record<PodHealthTone, string> = {
-  critical: "fill-destructive/12 text-destructive [stroke-dasharray:3_2]",
-  healthy: "fill-emerald-500/10 text-emerald-500 [stroke-dasharray:3_2]",
-  unknown: TOPOLOGY_POD_FILL_CLASS.unknown,
-  warning: "fill-status-warning/12 text-status-warning [stroke-dasharray:3_2]",
-};
-
-const TOPOLOGY_POD_HEALTH_STROKE_CLASS: Record<PodHealthTone, string> = {
-  critical: "stroke-destructive stroke-2",
-  healthy: "stroke-emerald-600/85 dark:stroke-emerald-400/85",
-  unknown: "stroke-muted-foreground/80",
-  warning: "stroke-status-warning",
-};
-
-function topologyPodFillClass(
-  pressureTone: PodResourcePressureTone,
-  healthTone: PodHealthTone,
-): string {
-  if (pressureTone !== "unknown") return TOPOLOGY_POD_FILL_CLASS[pressureTone];
-  return TOPOLOGY_POD_UNKNOWN_FILL_CLASS[healthTone];
 }

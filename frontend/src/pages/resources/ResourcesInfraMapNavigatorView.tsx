@@ -7,10 +7,21 @@ import {
 } from "react";
 
 import { useI18n } from "../../shared/i18n";
+import {
+  InfraMapHoverCard,
+  InfraMapTooltipHeader,
+  InfraMapTooltipRow,
+  infraMapHoverFrameFromEvent,
+  shouldReuseInfraMapHoverFrame,
+  type InfraMapHoverFrame,
+} from "./InfraMapHoverCard";
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
-import { ratioSplitText } from "./ResourcesInfraMapMetrics";
 import { PodEvidenceTooltipPanel } from "./PodEvidenceTooltipContent";
 import type { InfraMapModel, InfraMapPod } from "./resourcesInfraMapModel";
+import {
+  infraMapNodePodRatio,
+  infraMapNodeSummaryText,
+} from "./resourcesInfraMapNodeSummary";
 import {
   buildInfraMapNavigatorModel,
   infraMapNavigatorPodVisual,
@@ -18,65 +29,35 @@ import {
   type InfraMapNavigatorNode,
   type InfraMapNavigatorPod,
 } from "./resourcesInfraMapNavigatorModel";
+import {
+  buildNavigatorHexLayout,
+  NAVIGATOR_CANVAS_WIDTH,
+  NAVIGATOR_HEX_START_X,
+  NAVIGATOR_NODE_RAIL_PADDING,
+  NAVIGATOR_NODE_RAIL_WIDTH,
+  NAVIGATOR_NODE_RAIL_X,
+  NAVIGATOR_PADDING,
+  NAVIGATOR_RACK_FIELD_PADDING,
+  NAVIGATOR_RACK_GUIDE_COLUMN_WIDTH,
+  navigatorHexagonPoints,
+  type NavigatorHexLayoutCluster,
+  type NavigatorHexLayoutNode,
+  type NavigatorHexLayoutPod,
+} from "./resourcesInfraMapNavigatorLayout";
+import type { PodHealthTone } from "./podVisualState";
 
-const NAVIGATOR_CANVAS_WIDTH = 980;
-const NAVIGATOR_CLUSTER_HEADER_HEIGHT = 42;
-const NAVIGATOR_CLUSTER_GAP = 28;
-const NAVIGATOR_NODE_ROW_MIN_HEIGHT = 126;
-const NAVIGATOR_NODE_ROW_GAP = 18;
-const NAVIGATOR_PADDING = 28;
-const NAVIGATOR_NODE_RAIL_X = 42;
-const NAVIGATOR_NODE_RAIL_WIDTH = 44;
-const NAVIGATOR_NODE_RAIL_PADDING = 12;
-const NAVIGATOR_HEX_START_X = 134;
-const NAVIGATOR_HEX_TOP_PADDING = 30;
-const NAVIGATOR_HEX_COLUMN_STEP = 26;
-const NAVIGATOR_HEX_ROW_STEP = 23;
-const NAVIGATOR_HEX_ROW_OFFSET = NAVIGATOR_HEX_COLUMN_STEP / 2;
-const NAVIGATOR_HEX_RADIUS_SCALE = 1.55;
-const NAVIGATOR_HEX_RADIUS_MIN = 8;
-const NAVIGATOR_HEX_RADIUS_MAX = 15;
-const NAVIGATOR_HOVER_CARD_WIDTH = 288;
-const NAVIGATOR_HOVER_EDGE_PADDING = 8;
-const NAVIGATOR_HOVER_GAP = 14;
+const NAVIGATOR_NODE_SUMMARY_START_Y = 74;
+const NAVIGATOR_NODE_SUMMARY_X_OFFSET = 22;
+const NAVIGATOR_NODE_SUMMARY_BOTTOM_PADDING = 10;
+const NAVIGATOR_NODE_SUMMARY_MIN_HEIGHT = 44;
+const NAVIGATOR_PERCENT_SCALE = 100;
 
 type NavigatorHoverSubject =
   | { cluster: InfraMapNavigatorCluster; kind: "cluster" }
   | { kind: "node"; node: InfraMapNavigatorNode }
   | { kind: "pod"; pod: InfraMapNavigatorPod };
 
-type HoveredNavigatorSubject = NavigatorHoverSubject & {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-};
-
-interface NavigatorHexLayoutPod {
-  center: { x: number; y: number };
-  pod: InfraMapNavigatorPod;
-  radius: number;
-}
-
-interface NavigatorHexLayoutNode {
-  hexes: NavigatorHexLayoutPod[];
-  node: InfraMapNavigatorNode;
-  rowHeight: number;
-  y: number;
-}
-
-interface NavigatorHexLayoutCluster {
-  cluster: InfraMapNavigatorCluster;
-  headerY: number;
-  nodes: NavigatorHexLayoutNode[];
-  y: number;
-}
-
-interface NavigatorHexLayout {
-  clusters: NavigatorHexLayoutCluster[];
-  height: number;
-  width: number;
-}
+type HoveredNavigatorSubject = NavigatorHoverSubject & InfraMapHoverFrame;
 
 export function ResourcesInfraMapNavigatorView({
   metricMode,
@@ -95,7 +76,7 @@ export function ResourcesInfraMapNavigatorView({
     () => buildInfraMapNavigatorModel(model, metricMode),
     [model, metricMode],
   );
-  const layout = useMemo(() => navigatorHexLayout(navigator), [navigator]);
+  const layout = useMemo(() => buildNavigatorHexLayout(navigator), [navigator]);
   const nodeCount = navigator.clusters.reduce(
     (total, cluster) => total + cluster.nodes.length,
     0,
@@ -104,13 +85,21 @@ export function ResourcesInfraMapNavigatorView({
     event: ReactMouseEvent<SVGGElement>,
     subject: NavigatorHoverSubject,
   ) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    setHoveredSubject({
+    const nextHover = {
       ...subject,
-      height: rect?.height ?? 0,
-      width: rect?.width ?? 0,
-      x: rect ? event.clientX - rect.left : event.clientX,
-      y: rect ? event.clientY - rect.top : event.clientY,
+      ...infraMapHoverFrameFromEvent(event, containerRef.current),
+    };
+    setHoveredSubject((current) => {
+      if (
+        shouldReuseInfraMapHoverFrame({
+          current,
+          next: nextHover,
+          sameSubject: sameNavigatorSubject(current, nextHover),
+        })
+      ) {
+        return current;
+      }
+      return nextHover;
     });
   };
 
@@ -279,23 +268,51 @@ function NavigatorNodeRow({
   const railHeight = Math.max(0, node.rowHeight - NAVIGATOR_NODE_RAIL_PADDING * 2);
   const railY = node.y + NAVIGATOR_NODE_RAIL_PADDING;
   const nodeColor = healthColor(node.node.node.health);
+  const laneX = NAVIGATOR_NODE_RAIL_X + NAVIGATOR_NODE_RAIL_WIDTH + 18;
+  const laneY = node.y + NAVIGATOR_NODE_RAIL_PADDING;
+  const laneWidth = NAVIGATOR_CANVAS_WIDTH - laneX - NAVIGATOR_PADDING;
+  const laneHeight = railHeight;
+  const summaryY = railY + NAVIGATOR_NODE_SUMMARY_START_Y;
+  const summaryHeight = Math.max(
+    NAVIGATOR_NODE_SUMMARY_MIN_HEIGHT,
+    railY + railHeight - summaryY - NAVIGATOR_NODE_SUMMARY_BOTTOM_PADDING,
+  );
   return (
     <g data-node-id={node.node.node.id} data-slot="infra-map-navigator-node">
       <rect
-        className="fill-muted/20"
+        className="fill-background/45 stroke-border"
         height={node.rowHeight}
-        rx="12"
+        rx="14"
+        strokeWidth="1"
         width={NAVIGATOR_CANVAS_WIDTH - NAVIGATOR_PADDING * 2}
         x={NAVIGATOR_PADDING}
         y={node.y}
       />
+      <rect
+        className="fill-muted/10 stroke-border"
+        height={laneHeight}
+        opacity="0.9"
+        rx="10"
+        strokeDasharray="4 5"
+        strokeWidth="1"
+        width={laneWidth}
+        x={laneX}
+        y={laneY}
+      />
+      <NavigatorRackGuideLines
+        height={laneHeight}
+        width={laneWidth}
+        x={laneX}
+        y={laneY}
+      />
       <line
-        className="stroke-border"
-        opacity="0.72"
-        x1={NAVIGATOR_HEX_START_X - 24}
-        x2={NAVIGATOR_CANVAS_WIDTH - NAVIGATOR_PADDING}
-        y1={node.y}
-        y2={node.y}
+        className="stroke-muted-foreground"
+        opacity="0.24"
+        strokeLinecap="round"
+        x1={NAVIGATOR_NODE_RAIL_X + NAVIGATOR_NODE_RAIL_WIDTH}
+        x2={laneX}
+        y1={railY + railHeight / 2}
+        y2={railY + railHeight / 2}
       />
       <g
         className="cursor-help outline-none"
@@ -306,31 +323,81 @@ function NavigatorNodeRow({
       >
         <title>{nodeTitle(node.node, formatNumber, t)}</title>
         <rect
-          fill={nodeColor}
-          fillOpacity="0.28"
+          className="fill-background"
           height={railHeight}
-          rx="5"
+          rx="10"
           stroke={nodeColor}
-          strokeWidth="1.4"
+          strokeOpacity="0.68"
+          strokeWidth="1.3"
           width={NAVIGATOR_NODE_RAIL_WIDTH}
           x={NAVIGATOR_NODE_RAIL_X}
           y={railY}
         />
-        <text
-          className="pointer-events-none fill-foreground text-[11px] font-medium"
-          textAnchor="middle"
-          transform={`translate(${NAVIGATOR_NODE_RAIL_X + NAVIGATOR_NODE_RAIL_WIDTH / 2} ${railY + railHeight / 2}) rotate(-90)`}
+        <rect
+          fill={nodeColor}
+          height={railHeight - 18}
+          opacity="0.86"
+          rx="3"
+          width="5"
+          x={NAVIGATOR_NODE_RAIL_X + 10}
+          y={railY + 9}
+        />
+        <g
+          className="stroke-muted-foreground"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.5"
+          transform={`translate(${NAVIGATOR_NODE_RAIL_X + 25} ${railY + 16})`}
         >
-          {node.node.node.name}
-        </text>
+          <rect height="8" rx="2" width="18" x="0" y="0" />
+          <rect height="8" rx="2" width="18" x="0" y="13" />
+          <path d="M4 4h.01M4 17h.01" />
+        </g>
+        <foreignObject
+          height="56"
+          width={NAVIGATOR_NODE_RAIL_WIDTH - 54}
+          x={NAVIGATOR_NODE_RAIL_X + 52}
+          y={railY + 9}
+        >
+          <div
+            className="grid min-w-0 gap-0.5 text-left leading-tight"
+          >
+            <p className="truncate text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              {t("resources.infraMap.nodeKind")}
+            </p>
+            <p className="truncate text-xs font-semibold text-foreground">
+              {node.node.node.name}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              {node.node.node.ready === null
+                ? t("common.state.unknown")
+                : node.node.node.ready
+                ? t("resources.infraMap.nodeReady")
+                : t("resources.infraMap.nodeNotReady")}
+            </p>
+          </div>
+        </foreignObject>
+        <foreignObject
+          height={summaryHeight}
+          width={NAVIGATOR_NODE_RAIL_WIDTH - NAVIGATOR_NODE_SUMMARY_X_OFFSET * 2}
+          x={NAVIGATOR_NODE_RAIL_X + NAVIGATOR_NODE_SUMMARY_X_OFFSET}
+          y={summaryY}
+        >
+          <NavigatorNodeSummary
+            formatNumber={formatNumber}
+            node={node.node.node}
+            t={t}
+          />
+        </foreignObject>
       </g>
       <text
         className="fill-muted-foreground text-[10px] tabular-nums"
         textAnchor="end"
         x={NAVIGATOR_CANVAS_WIDTH - NAVIGATOR_PADDING - 4}
-        y={node.y + 18}
+        y={laneY + 15}
       >
-        {formatNumber(node.node.pods.length)}
+        {t("resources.infraMap.metric.pods")} {formatNumber(node.node.pods.length)}
       </text>
       {node.hexes.map((hex) => (
         <NavigatorPodHex
@@ -345,6 +412,112 @@ function NavigatorNodeRow({
         />
       ))}
     </g>
+  );
+}
+
+function NavigatorRackGuideLines({
+  height,
+  width,
+  x,
+  y,
+}: {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}) {
+  const guideCount = Math.max(1, Math.floor(width / NAVIGATOR_RACK_GUIDE_COLUMN_WIDTH));
+  return (
+    <g aria-hidden="true" className="stroke-muted-foreground" opacity="0.11">
+      {Array.from({ length: guideCount }, (_, index) => {
+        const guideX =
+          x +
+          NAVIGATOR_RACK_FIELD_PADDING +
+          ((width - NAVIGATOR_RACK_FIELD_PADDING * 2) * (index + 1)) /
+            (guideCount + 1);
+        return (
+          <line
+            key={guideX}
+            strokeDasharray="2 8"
+            strokeLinecap="round"
+            x1={guideX}
+            x2={guideX}
+            y1={y + 12}
+            y2={y + height - 12}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+function NavigatorNodeSummary({
+  formatNumber,
+  node,
+  t,
+}: {
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"];
+  node: InfraMapNavigatorNode["node"];
+  t: ReturnType<typeof useI18n>["t"];
+}) {
+  const summary = infraMapNodeSummaryText(node, { formatNumber, t });
+  return (
+    <div
+      className="grid h-full min-w-0 content-center gap-1 overflow-hidden"
+      data-slot="infra-map-navigator-node-summary"
+    >
+      <NavigatorNodeSummaryMetric
+        label={t("resources.infraMap.metric.cpu")}
+        ratio={node.cpuRatio}
+        valueText={summary.cpu}
+      />
+      <NavigatorNodeSummaryMetric
+        label={t("resources.infraMap.metric.memory")}
+        ratio={node.memoryRatio}
+        valueText={summary.memory}
+      />
+      <NavigatorNodeSummaryMetric
+        label={t("resources.infraMap.metric.pods")}
+        ratio={infraMapNodePodRatio(node)}
+        valueText={summary.pods}
+      />
+    </div>
+  );
+}
+
+function NavigatorNodeSummaryMetric({
+  label,
+  ratio,
+  valueText,
+}: {
+  label: string;
+  ratio: number | null;
+  valueText: string;
+}) {
+  const fillPercent = ratio === null
+    ? null
+    : clampNavigatorPercent(ratio * NAVIGATOR_PERCENT_SCALE);
+  return (
+    <div className="grid min-w-0 grid-cols-[2.45rem_minmax(0,1fr)_3.3rem] items-center gap-1.5 text-[8px] leading-none">
+      <span className="truncate text-muted-foreground">{label}</span>
+      <span
+        aria-label={`${label} ${valueText}`}
+        className="h-1.5 overflow-hidden rounded-full bg-muted/50"
+        role="img"
+      >
+        {fillPercent === null ? (
+          <span className="block h-full rounded-full border border-dashed border-muted-foreground/45" />
+        ) : (
+          <span
+            className="block h-full rounded-full bg-primary/80"
+            style={{ width: `${fillPercent}%` }}
+          />
+        )}
+      </span>
+      <span className="truncate text-right tabular-nums text-muted-foreground" title={valueText}>
+        {valueText}
+      </span>
+    </div>
   );
 }
 
@@ -386,7 +559,7 @@ function NavigatorPodHex({
       <polygon
         fill={visual.fill}
         fillOpacity={hex.pod.pressureTone === "unknown" ? 0.18 : 0.48}
-        points={hexagonPoints(hex.center, hex.radius)}
+        points={navigatorHexagonPoints(hex.center, hex.radius)}
         stroke={visual.stroke}
         strokeDasharray={visual.strokeDasharray}
         strokeLinejoin="round"
@@ -411,35 +584,10 @@ function NavigatorHoverCard({
 }: {
   hover: HoveredNavigatorSubject;
 }) {
-  const cardWidth = Math.min(
-    NAVIGATOR_HOVER_CARD_WIDTH,
-    Math.max(0, hover.width - NAVIGATOR_HOVER_EDGE_PADDING * 2),
-  );
-  const maxLeft = Math.max(
-    NAVIGATOR_HOVER_EDGE_PADDING,
-    hover.width - cardWidth - NAVIGATOR_HOVER_EDGE_PADDING,
-  );
-  const left = Math.min(
-    Math.max(NAVIGATOR_HOVER_EDGE_PADDING, hover.x + NAVIGATOR_HOVER_GAP),
-    maxLeft,
-  );
-  const placeAbove = hover.height > 0 && hover.y > hover.height / 2;
-  const verticalOffset = placeAbove
-    ? Math.max(NAVIGATOR_HOVER_EDGE_PADDING, hover.height - hover.y + NAVIGATOR_HOVER_GAP)
-    : Math.max(NAVIGATOR_HOVER_EDGE_PADDING, hover.y + NAVIGATOR_HOVER_GAP);
-
   return (
-    <div
-      className="pointer-events-none absolute z-50 w-72 max-w-[calc(100%-1rem)] overflow-hidden rounded-md bg-foreground text-background shadow-lg"
-      data-slot="infra-map-navigator-hover-card"
-      role="tooltip"
-      style={{
-        bottom: placeAbove ? verticalOffset : undefined,
-        left,
-        maxHeight: "calc(100% - 1rem)",
-        top: placeAbove ? undefined : verticalOffset,
-        width: cardWidth || undefined,
-      }}
+    <InfraMapHoverCard
+      dataSlot="infra-map-navigator-hover-card"
+      frame={hover}
     >
       {hover.kind === "cluster" ? (
         <NavigatorClusterHoverContent cluster={hover.cluster} />
@@ -448,7 +596,7 @@ function NavigatorHoverCard({
       ) : (
         <NavigatorPodHoverContent pod={hover.pod} />
       )}
-    </div>
+    </InfraMapHoverCard>
   );
 }
 
@@ -460,21 +608,21 @@ function NavigatorClusterHoverContent({
   const { formatNumber, t } = useI18n();
   return (
     <>
-      <NavigatorTooltipHeader
+      <InfraMapTooltipHeader
         eyebrow={t("resources.infraMap.topology.cluster")}
         title={cluster.cluster.name}
       />
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-3 py-2.5 text-[0.6875rem]">
-        <NavigatorTooltipRow
+        <InfraMapTooltipRow
           label={t("resources.infraMap.nodeKind")}
           value={formatNumber(cluster.cluster.nodeCount)}
         />
-        <NavigatorTooltipRow
+        <InfraMapTooltipRow
           label={t("resources.infraMap.metric.pods")}
           value={formatNumber(cluster.cluster.podCount)}
         />
-        <NavigatorTooltipRow label={t("status.tone.warning")} value={formatNumber(cluster.cluster.warningCount)} />
-        <NavigatorTooltipRow label={t("clusterScope.stage.error")} value={formatNumber(cluster.cluster.criticalCount)} />
+        <InfraMapTooltipRow label={t("status.tone.warning")} value={formatNumber(cluster.cluster.warningCount)} />
+        <InfraMapTooltipRow label={t("clusterScope.stage.error")} value={formatNumber(cluster.cluster.criticalCount)} />
       </dl>
     </>
   );
@@ -486,20 +634,15 @@ function NavigatorNodeHoverContent({
   node: InfraMapNavigatorNode;
 }) {
   const { formatNumber, t } = useI18n();
-  const cpuText = node.node.cpuRatio === null
-    ? t("common.value.unavailable")
-    : ratioSplitText(node.node.cpuRatio, formatNumber);
-  const memoryText = node.node.memoryRatio === null
-    ? t("common.value.unavailable")
-    : ratioSplitText(node.node.memoryRatio, formatNumber);
+  const summary = infraMapNodeSummaryText(node.node, { formatNumber, t });
   return (
     <>
-      <NavigatorTooltipHeader
+      <InfraMapTooltipHeader
         eyebrow={t("resources.infraMap.nodeKind")}
         title={node.node.name}
       />
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-3 py-2.5 text-[0.6875rem]">
-        <NavigatorTooltipRow
+        <InfraMapTooltipRow
           label={t("resources.table.status")}
           value={node.node.ready === null
             ? t("common.state.unknown")
@@ -507,12 +650,9 @@ function NavigatorNodeHoverContent({
             ? t("resources.infraMap.nodeReady")
             : t("resources.infraMap.nodeNotReady")}
         />
-        <NavigatorTooltipRow
-          label={t("resources.infraMap.metric.pods")}
-          value={formatNumber(node.node.assignedPodCount)}
-        />
-        <NavigatorTooltipRow label={t("resources.infraMap.metric.cpu")} value={cpuText} />
-        <NavigatorTooltipRow label={t("resources.infraMap.metric.memory")} value={memoryText} />
+        <InfraMapTooltipRow label={t("resources.infraMap.metric.pods")} value={summary.pods} />
+        <InfraMapTooltipRow label={t("resources.infraMap.metric.cpu")} value={summary.cpu} />
+        <InfraMapTooltipRow label={t("resources.infraMap.metric.memory")} value={summary.memory} />
       </dl>
     </>
   );
@@ -544,38 +684,6 @@ function NavigatorPodHoverContent({
   );
 }
 
-function NavigatorTooltipHeader({
-  eyebrow,
-  title,
-}: {
-  eyebrow: string;
-  title: string;
-}) {
-  return (
-    <div className="border-b border-background/15 px-3 py-2.5">
-      <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-background/65">
-        {eyebrow}
-      </p>
-      <p className="mt-0.5 break-all text-xs font-semibold leading-snug">{title}</p>
-    </div>
-  );
-}
-
-function NavigatorTooltipRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <>
-      <dt className="text-background/65">{label}</dt>
-      <dd className="min-w-0 text-right font-medium tabular-nums">{value}</dd>
-    </>
-  );
-}
-
 function NavigatorGuideRow({
   label,
   value,
@@ -591,78 +699,18 @@ function NavigatorGuideRow({
   );
 }
 
-function navigatorHexLayout(navigator: ReturnType<typeof buildInfraMapNavigatorModel>): NavigatorHexLayout {
-  const maxColumns = navigatorHexColumnCount();
-  let cursorY = NAVIGATOR_PADDING;
-  const clusters = navigator.clusters.map((cluster) => {
-    const clusterY = cursorY;
-    const headerY = cursorY + 14;
-    cursorY += NAVIGATOR_CLUSTER_HEADER_HEIGHT;
-    const nodes = cluster.nodes.map((node) => {
-      const rows = Math.max(1, Math.ceil(node.pods.length / maxColumns));
-      const rowHeight = Math.max(
-        NAVIGATOR_NODE_ROW_MIN_HEIGHT,
-        NAVIGATOR_HEX_TOP_PADDING * 2 + rows * NAVIGATOR_HEX_ROW_STEP,
-      );
-      const rowY = cursorY;
-      cursorY += rowHeight + NAVIGATOR_NODE_ROW_GAP;
-      return {
-        hexes: node.pods.map((pod, podIndex) => {
-          const row = Math.floor(podIndex / maxColumns);
-          const column = podIndex % maxColumns;
-          return {
-            center: {
-              x: NAVIGATOR_HEX_START_X +
-                column * NAVIGATOR_HEX_COLUMN_STEP +
-                (row % 2 === 1 ? NAVIGATOR_HEX_ROW_OFFSET : 0),
-              y: rowY + NAVIGATOR_HEX_TOP_PADDING + row * NAVIGATOR_HEX_ROW_STEP,
-            },
-            pod,
-            radius: navigatorHexRadius(pod),
-          };
-        }),
-        node,
-        rowHeight,
-        y: rowY,
-      } satisfies NavigatorHexLayoutNode;
-    });
-    cursorY += NAVIGATOR_CLUSTER_GAP;
-    return {
-      cluster,
-      headerY,
-      nodes,
-      y: clusterY,
-    } satisfies NavigatorHexLayoutCluster;
-  });
-  return {
-    clusters,
-    height: Math.max(420, cursorY + NAVIGATOR_PADDING),
-    width: NAVIGATOR_CANVAS_WIDTH,
-  };
-}
-
-function navigatorHexColumnCount(): number {
-  return Math.max(
-    1,
-    Math.floor(
-      (NAVIGATOR_CANVAS_WIDTH - NAVIGATOR_HEX_START_X - NAVIGATOR_PADDING) /
-        NAVIGATOR_HEX_COLUMN_STEP,
-    ),
-  );
-}
-
-function navigatorHexRadius(pod: InfraMapNavigatorPod): number {
-  return Math.max(
-    NAVIGATOR_HEX_RADIUS_MIN,
-    Math.min(NAVIGATOR_HEX_RADIUS_MAX, pod.radius * NAVIGATOR_HEX_RADIUS_SCALE),
-  );
-}
-
-function hexagonPoints(center: { x: number; y: number }, radius: number): string {
-  return Array.from({ length: 6 }, (_, index) => {
-    const angle = -Math.PI / 2 + index * (Math.PI / 3);
-    return `${center.x + Math.cos(angle) * radius},${center.y + Math.sin(angle) * radius}`;
-  }).join(" ");
+function sameNavigatorSubject(
+  current: HoveredNavigatorSubject | null,
+  next: HoveredNavigatorSubject,
+): boolean {
+  if (current === null || current.kind !== next.kind) return false;
+  if (next.kind === "cluster") {
+    return current.kind === "cluster" && current.cluster.cluster.id === next.cluster.cluster.id;
+  }
+  if (next.kind === "node") {
+    return current.kind === "node" && current.node.node.id === next.node.node.id;
+  }
+  return current.kind === "pod" && current.pod.pod.id === next.pod.pod.id;
 }
 
 function handlePodKeyDown(event: KeyboardEvent<SVGGElement>, callback: () => void) {
@@ -671,16 +719,27 @@ function handlePodKeyDown(event: KeyboardEvent<SVGGElement>, callback: () => voi
   callback();
 }
 
+function clampNavigatorPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(NAVIGATOR_PERCENT_SCALE, value));
+}
+
 function healthColor(tone: string): string {
-  const color: Record<string, string> = {
+  const normalized = normalizeNodeHealthTone(tone);
+  const color: Record<PodHealthTone, string> = {
     critical: "var(--destructive)",
-    danger: "var(--color-orange-500)",
     healthy: "var(--color-emerald-500)",
-    stale: "var(--muted-foreground)",
     unknown: "var(--muted-foreground)",
     warning: "var(--status-warning)",
   };
-  return color[tone] ?? color.unknown;
+  return color[normalized];
+}
+
+function normalizeNodeHealthTone(tone: string): PodHealthTone {
+  if (tone === "critical" || tone === "healthy" || tone === "warning") {
+    return tone;
+  }
+  return "unknown";
 }
 
 function clusterTitle(
@@ -700,9 +759,12 @@ function nodeTitle(
   formatNumber: ReturnType<typeof useI18n>["formatNumber"],
   t: ReturnType<typeof useI18n>["t"],
 ): string {
+  const summary = infraMapNodeSummaryText(node.node, { formatNumber, t });
   return [
     `${t("resources.infraMap.nodeKind")}: ${node.node.name}`,
-    `${t("resources.infraMap.metric.pods")}: ${formatNumber(node.node.assignedPodCount)}`,
+    `${t("resources.infraMap.metric.pods")}: ${summary.pods}`,
+    `${t("resources.infraMap.metric.cpu")}: ${summary.cpu}`,
+    `${t("resources.infraMap.metric.memory")}: ${summary.memory}`,
     node.node.ready === null
       ? t("common.state.unknown")
       : node.node.ready

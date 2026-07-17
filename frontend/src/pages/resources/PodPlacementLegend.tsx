@@ -1,13 +1,11 @@
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
-
-type PodPlacementLegendVariant =
-  | "infra-card"
-  | "infra-navigator"
-  | "infra-topology"
-  | "infra-traffic"
-  | "physical";
+import {
+  podPlacementLegendItems,
+  type LegendMarkKind,
+  type PodPlacementLegendVariant,
+} from "./podPlacementLegendModel";
 
 export function PodPlacementLegend({
   ariaLabel,
@@ -23,7 +21,7 @@ export function PodPlacementLegend({
   variant?: PodPlacementLegendVariant;
 }) {
   const { t } = useI18n();
-  const items = legendItems(variant, metricMode);
+  const items = podPlacementLegendItems(variant, metricMode);
   return (
     <aside
       aria-label={ariaLabel ?? t("resources.graph.physical.legend")}
@@ -41,101 +39,6 @@ export function PodPlacementLegend({
       ))}
     </aside>
   );
-}
-
-type LegendMarkKind =
-  | "abnormal-card"
-  | "dashed-card"
-  | "dashed-line"
-  | "healthy-dot"
-  | "healthy-card"
-  | "node-bar"
-  | "pod-dot"
-  | "pod-hex"
-  | "pod-hex-size"
-  | "pod-size"
-  | "pressure-dot"
-  | "pressure-card"
-  | "solid-line"
-  | "traffic-flow"
-  | "traffic-node";
-
-interface LegendItem {
-  labelKey:
-    | "resources.graph.physical.legend.abnormal"
-    | "resources.graph.physical.legend.healthy"
-    | "resources.graph.physical.legend.pressure"
-    | "resources.graph.physical.legend.unknown"
-    | "resources.infraMap.legend.card.unknown"
-    | "resources.infraMap.legend.card.usage.cpu"
-    | "resources.infraMap.legend.card.usage.memory"
-    | "resources.infraMap.legend.status.critical"
-    | "resources.infraMap.legend.status.healthy"
-    | "resources.infraMap.legend.status.pressure"
-    | "resources.infraMap.legend.navigator.edge"
-    | "resources.infraMap.legend.navigator.node"
-    | "resources.infraMap.legend.navigator.podSize"
-    | "resources.infraMap.legend.navigator.podTone.cpu"
-    | "resources.infraMap.legend.navigator.podTone.memory"
-    | "resources.infraMap.legend.topology.edge"
-    | "resources.infraMap.legend.topology.metricUnknown"
-    | "resources.infraMap.legend.traffic.flow"
-    | "resources.infraMap.legend.traffic.node"
-    | "resources.infraMap.legend.traffic.unavailable";
-  mark: LegendMarkKind;
-}
-
-function legendItems(
-  variant: PodPlacementLegendVariant,
-  metricMode: InfraMapMetricMode,
-): LegendItem[] {
-  if (variant === "infra-topology") {
-    return [
-      { labelKey: "resources.infraMap.legend.topology.edge", mark: "solid-line" },
-      { labelKey: "resources.infraMap.legend.topology.metricUnknown", mark: "dashed-line" },
-      { labelKey: "resources.infraMap.legend.status.healthy", mark: "healthy-dot" },
-      { labelKey: "resources.infraMap.legend.status.pressure", mark: "pressure-dot" },
-      { labelKey: "resources.infraMap.legend.status.critical", mark: "abnormal-card" },
-    ];
-  }
-  if (variant === "infra-navigator") {
-    return [
-      { labelKey: "resources.infraMap.legend.navigator.node", mark: "node-bar" },
-      {
-        labelKey: metricMode === "cpu"
-          ? "resources.infraMap.legend.navigator.podTone.cpu"
-          : "resources.infraMap.legend.navigator.podTone.memory",
-        mark: "pod-hex",
-      },
-      { labelKey: "resources.infraMap.legend.navigator.podSize", mark: "pod-hex-size" },
-    ];
-  }
-  if (variant === "infra-traffic") {
-    return [
-      { labelKey: "resources.infraMap.legend.traffic.flow", mark: "traffic-flow" },
-      { labelKey: "resources.infraMap.legend.traffic.node", mark: "traffic-node" },
-      { labelKey: "resources.infraMap.legend.traffic.unavailable", mark: "dashed-line" },
-    ];
-  }
-  if (variant === "infra-card") {
-    return [
-      { labelKey: "resources.infraMap.legend.status.healthy", mark: "healthy-card" },
-      {
-        labelKey: metricMode === "cpu"
-          ? "resources.infraMap.legend.card.usage.cpu"
-          : "resources.infraMap.legend.card.usage.memory",
-        mark: "pressure-card",
-      },
-      { labelKey: "resources.infraMap.legend.status.critical", mark: "abnormal-card" },
-      { labelKey: "resources.infraMap.legend.card.unknown", mark: "dashed-card" },
-    ];
-  }
-  return [
-    { labelKey: "resources.graph.physical.legend.healthy", mark: "healthy-card" },
-    { labelKey: "resources.graph.physical.legend.pressure", mark: "pressure-card" },
-    { labelKey: "resources.graph.physical.legend.abnormal", mark: "abnormal-card" },
-    { labelKey: "resources.graph.physical.legend.unknown", mark: "dashed-card" },
-  ];
 }
 
 function LegendMark({ kind }: { kind: LegendMarkKind }) {
@@ -181,10 +84,6 @@ function LegendMark({ kind }: { kind: LegendMarkKind }) {
         >
           <span className="size-1.5 rounded-full bg-sky-500" />
         </span>
-      );
-    case "pod-dot":
-      return (
-        <span aria-hidden="true" className="size-3.5 rounded-full border border-emerald-500/70 bg-emerald-500/60" />
       );
     case "healthy-dot":
       return (
@@ -232,13 +131,6 @@ function LegendMark({ kind }: { kind: LegendMarkKind }) {
           </svg>
         </span>
       );
-    case "pod-size":
-      return (
-        <span aria-hidden="true" className="flex h-3.5 w-7 items-center gap-1">
-          <span className="size-2 rounded-full border border-emerald-500/70 bg-emerald-500/50" />
-          <span className="size-3.5 rounded-full border border-orange-500/70 bg-orange-500/35" />
-        </span>
-      );
     case "abnormal-card":
       return (
         <span
@@ -261,6 +153,14 @@ function LegendMark({ kind }: { kind: LegendMarkKind }) {
           aria-hidden="true"
           className="size-3.5 rounded border border-orange-500/70 bg-[color-mix(in_oklch,var(--status-warning)_32%,var(--card))]"
         />
+      );
+    case "capacity-gauge":
+      return (
+        <svg aria-hidden="true" className="h-4 w-5" viewBox="0 0 20 16">
+          <path d="M3 12 A7 7 0 0 1 17 12 L13.8 12 A3.8 3.8 0 0 0 6.2 12 Z" fill="var(--color-emerald-500)" opacity="0.75" />
+          <path d="M10 12 L15 6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+          <circle cx="10" cy="12" fill="currentColor" r="1.4" />
+        </svg>
       );
     case "healthy-card":
     default:

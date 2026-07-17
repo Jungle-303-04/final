@@ -121,10 +121,7 @@ describe("ResourcesInfraMapTopologyFlow", () => {
 
     const serverNode = graph.nodes.find((node) => node.id === "node:node-a");
     expect(serverNode).toBeDefined();
-    const serverCenter = {
-      x: (serverNode?.position.x ?? 0) + 28,
-      y: (serverNode?.position.y ?? 0) + 28,
-    };
+    const serverCenter = nodeCenter(serverNode!);
     const podCenters = graph.nodes
       .filter((node) => node.type === "infra-map-pod")
       .map((node) => {

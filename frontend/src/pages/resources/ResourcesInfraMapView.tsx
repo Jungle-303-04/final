@@ -418,7 +418,7 @@ function infraMapNodeGridLayout(nodeCount: number): {
     className: [
       "mt-4 grid w-full justify-center gap-3",
       "grid-cols-[repeat(auto-fit,minmax(17rem,18rem))]",
-      "items-start",
+      "items-stretch",
     ].join(" "),
     name: nodeCount <= 1 ? "single" : "grid",
   };

@@ -15,6 +15,7 @@ export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
   viewportRef,
 }: {
   fitViewOptions?: {
+    duration?: number;
     maxZoom?: number;
     minZoom?: number;
     padding?: number;

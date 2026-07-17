@@ -6,6 +6,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../shared/ui/primitives/tooltip";
+import {
+  InfraMapTooltipHeader,
+  InfraMapTooltipRow,
+} from "./InfraMapHoverCard";
 import type { InfraMapTopologyCluster } from "./resourcesInfraMapTopologyModel";
 
 export function TopologyClusterOverview({
@@ -38,35 +42,35 @@ export function TopologyClusterOverview({
                   aria-label={t("resources.infraMap.topology.cluster.aria", {
                     name: cluster.name,
                   })}
-                  className="relative grid size-16 place-items-center rounded-full border border-primary/25 bg-primary/8 text-primary outline-none transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                  className="relative grid size-[4.5rem] place-items-center rounded-full border border-blue-400/45 bg-blue-500/10 text-blue-500 outline-none shadow-sm shadow-blue-500/10 transition-[border-color,background-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-blue-400/70 hover:bg-blue-500/15 hover:shadow-blue-500/20 focus-visible:ring-2 focus-visible:ring-ring/60 dark:border-blue-300/35 dark:bg-blue-400/15 dark:text-blue-300 dark:shadow-blue-900/20 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                   onClick={() => onSelect(cluster.id)}
                   title={clusterTooltip(cluster, { formatNumber, t })}
                   type="button"
                 />
               )}
             >
-              <ShipWheel aria-hidden="true" className="size-8" />
+              <ShipWheel aria-hidden="true" className="size-10" />
               <TopologyHealthDot tone={cluster.health} />
             </TooltipTrigger>
             <TooltipContent className="w-64 max-w-[calc(100vw-1rem)] p-0" side="top">
-              <TopologyTooltipHeader
+              <InfraMapTooltipHeader
                 eyebrow={t("resources.infraMap.topology.cluster")}
                 title={cluster.name}
               />
               <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-3 py-2.5 text-[0.6875rem]">
-                <TopologyTooltipRow
+                <InfraMapTooltipRow
                   label={t("resources.infraMap.nodeKind")}
                   value={formatNumber(cluster.nodeCount)}
                 />
-                <TopologyTooltipRow
+                <InfraMapTooltipRow
                   label={t("resources.infraMap.metric.pods")}
                   value={formatNumber(cluster.podCount)}
                 />
-                <TopologyTooltipRow
+                <InfraMapTooltipRow
                   label={t("status.tone.warning")}
                   value={formatNumber(cluster.warningCount)}
                 />
-                <TopologyTooltipRow
+                <InfraMapTooltipRow
                   label={t("status.tone.critical")}
                   value={formatNumber(cluster.criticalCount)}
                 />
@@ -108,36 +112,4 @@ function TopologyHealthDot({ tone }: { tone: string }) {
     warning: "bg-status-warning",
   }[tone] ?? "bg-muted-foreground";
   return <span aria-hidden="true" className={`absolute right-2 top-2 size-2.5 shrink-0 rounded-full ${className}`} />;
-}
-
-function TopologyTooltipHeader({
-  eyebrow,
-  title,
-}: {
-  eyebrow: string;
-  title: string;
-}) {
-  return (
-    <div className="border-b border-background/15 px-3 py-2.5">
-      <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-background/65">
-        {eyebrow}
-      </p>
-      <p className="mt-0.5 break-all text-xs font-semibold leading-snug">{title}</p>
-    </div>
-  );
-}
-
-function TopologyTooltipRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <>
-      <dt className="text-background/65">{label}</dt>
-      <dd className="min-w-0 text-right font-medium tabular-nums">{value}</dd>
-    </>
-  );
 }

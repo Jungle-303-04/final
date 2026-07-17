@@ -12,6 +12,12 @@ describe("resources infra map topology zoom", () => {
     expect(topologyZoomPercent(1)).toBe(100);
   });
 
+  it("falls back to the default zoom percentage for invalid zoom levels", () => {
+    expect(topologyZoomPercent(Number.NaN)).toBe(100);
+    expect(topologyZoomPercent(0)).toBe(100);
+    expect(topologyZoomPercent(-1)).toBe(100);
+  });
+
   it("moves by stable ten percent steps from arbitrary zoom levels", () => {
     expect(nextTopologyZoomPercent(0.51, 1)).toBe(60);
     expect(nextTopologyZoomPercent(0.51, -1)).toBe(50);
@@ -24,5 +30,9 @@ describe("resources infra map topology zoom", () => {
 
   it("converts percentage values back to React Flow zoom levels", () => {
     expect(topologyZoomLevelFromPercent(60)).toBe(0.6);
+  });
+
+  it("falls back to the default zoom level for invalid percentages", () => {
+    expect(topologyZoomLevelFromPercent(Number.NaN)).toBe(1);
   });
 });

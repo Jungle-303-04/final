@@ -8,6 +8,11 @@ import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import type { InfraMapPod } from "./resourcesInfraMapModel";
 import { infraMapPodMetricRatio } from "./resourcesInfraMapPodOrdering";
 import {
+  infraMapPodRequestRange,
+  infraMapPodSizeFromRequest,
+  type InfraMapPodRequestRange,
+} from "./resourcesInfraMapPodSizing";
+import {
   INFRA_MAP_TOPOLOGY_HONEYCOMB_LAYOUT,
   INFRA_MAP_TOPOLOGY_NODE_SIZE,
   INFRA_MAP_TOPOLOGY_POD_SIZE,
@@ -115,7 +120,10 @@ export function buildInfraTopologyFlowGraph(
       targetAngle: nodeAngle + Math.PI,
     }));
 
-    const requestRange = podMetricRequestRange(node.groups, metricMode);
+    const requestRange = infraMapPodRequestRange(
+      node.groups.flatMap((group) => group.pods),
+      metricMode,
+    );
     node.groups.forEach((group, groupIndex) => {
       const groupPlacement = nodePlan.groupPlacements[groupIndex] ?? {
         angle: nodeAngle,
@@ -300,49 +308,12 @@ export function topologyNodeSize(node: InfraTopologyNode): TopologySize {
   return { height: node.data.size, width: node.data.size };
 }
 
-interface MetricRequestRange {
-  max: number;
-  min: number;
-}
-
-function podMetricRequestRange(
-  groups: readonly InfraMapTopologyPodGroup[],
-  metricMode: InfraMapMetricMode,
-): MetricRequestRange | null {
-  const requests = groups
-    .flatMap((group) => group.pods.map((pod) => podMetricRequest(pod, metricMode)))
-    .filter(isPositiveMetric);
-  if (requests.length === 0) return null;
-  return {
-    max: Math.max(...requests),
-    min: Math.min(...requests),
-  };
-}
-
 function topologyPodVisualSize(
   pod: InfraMapPod,
   metricMode: InfraMapMetricMode,
-  requestRange: MetricRequestRange | null,
+  requestRange: InfraMapPodRequestRange | null,
 ): number {
-  const request = podMetricRequest(pod, metricMode);
-  if (!requestRange || !isPositiveMetric(request) || requestRange.max <= requestRange.min) {
-    return INFRA_MAP_TOPOLOGY_POD_SIZE.base;
-  }
-  const normalized = Math.sqrt((request - requestRange.min) / (requestRange.max - requestRange.min));
-  const size = INFRA_MAP_TOPOLOGY_POD_SIZE.min +
-    normalized * (INFRA_MAP_TOPOLOGY_POD_SIZE.max - INFRA_MAP_TOPOLOGY_POD_SIZE.min);
-  return Math.round(size);
-}
-
-function podMetricRequest(
-  pod: InfraMapPod,
-  metricMode: InfraMapMetricMode,
-): number | null {
-  return metricMode === "cpu" ? pod.cpu.request : pod.memory.request;
-}
-
-function isPositiveMetric(value: number | null): value is number {
-  return value !== null && Number.isFinite(value) && value > 0;
+  return infraMapPodSizeFromRequest(pod, metricMode, requestRange, INFRA_MAP_TOPOLOGY_POD_SIZE);
 }
 
 export function topologyNodeCenter(node: InfraTopologyNode): TopologyPoint {

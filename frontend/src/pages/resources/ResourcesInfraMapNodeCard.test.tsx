@@ -62,7 +62,7 @@ describe("InfraMapNodeCard", () => {
 
     expect(screen.queryByText("hidden-three")).toBeNull();
     expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod']")).toHaveLength(4);
-    expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod-cube']")).toHaveLength(6);
+    expect(rendered.container.querySelector("[data-slot='infra-map-pod-distribution']")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
 
@@ -99,7 +99,7 @@ describe("InfraMapNodeCard", () => {
     expect(onShowMorePods).toHaveBeenCalledWith(node);
   });
 
-  it("summarizes Pod distribution after the visible two-row limit", () => {
+  it("shows a visual node capacity overview above representative Pods", () => {
     const pods = Array.from({ length: 31 }, (_, index) =>
       podFixture({
         id: `pod:visible-${index}`,
@@ -124,12 +124,65 @@ describe("InfraMapNodeCard", () => {
       </I18nProvider>,
     );
 
-    expect(rendered.container.querySelectorAll("[data-slot='infra-map-pod-cube']")).toHaveLength(26);
-    expect(screen.getByText("+5")).toBeTruthy();
+    expect(rendered.container.querySelector("[data-slot='infra-map-node-capacity-overview']")).toBeTruthy();
+    expect(rendered.container.querySelector("[data-slot='infra-map-node-capacity-gauge']")).toBeTruthy();
+    expect(rendered.container.querySelector("[data-slot='infra-map-pod-distribution']")).toBeNull();
+    expect(screen.queryByText("+5")).toBeNull();
     expect(screen.getByRole("button", { name: "View details" })).toBeTruthy();
   });
 
-  it("keeps the distribution overflow count separate from the detail button label", () => {
+  it("keeps node capacity overview sections present across node cards", () => {
+    const densePods = Array.from({ length: 31 }, (_, index) =>
+      podFixture({
+        id: `pod:dense-${index}`,
+        name: `dense-${index}`,
+      }));
+    const sparsePods = Array.from({ length: 6 }, (_, index) =>
+      podFixture({
+        id: `pod:sparse-${index}`,
+        name: `sparse-${index}`,
+      }));
+    const rendered = render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <TooltipProvider delay={0}>
+          <div>
+            <InfraMapNodeCard
+              metricMode="cpu"
+              node={nodeFixture({
+                assignedPodCount: densePods.length,
+                hiddenPods: densePods.slice(4),
+                visiblePods: densePods.slice(0, 4),
+              })}
+              onOpenPod={vi.fn()}
+              onShowMorePods={vi.fn()}
+              selectionActive={false}
+            />
+            <InfraMapNodeCard
+              metricMode="cpu"
+              node={nodeFixture({
+                assignedPodCount: sparsePods.length,
+                hiddenPods: sparsePods.slice(4),
+                id: "node:sparse",
+                name: "sparse-node",
+                visiblePods: sparsePods.slice(0, 4),
+              })}
+              onOpenPod={vi.fn()}
+              onShowMorePods={vi.fn()}
+              selectionActive={false}
+            />
+          </div>
+        </TooltipProvider>
+      </I18nProvider>,
+    );
+
+    const overviews = rendered.container.querySelectorAll<HTMLElement>(
+      "[data-slot='infra-map-node-capacity-overview']",
+    );
+
+    expect(overviews).toHaveLength(2);
+  });
+
+  it("keeps the detail button independent from removed distribution overflow counts", () => {
     const pods = Array.from({ length: 12 }, (_, index) =>
       podFixture({
         id: `pod:observed-${index}`,
@@ -154,7 +207,8 @@ describe("InfraMapNodeCard", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByText("+22")).toBeTruthy();
+    expect(screen.queryByText("+22")).toBeNull();
+    expect(document.querySelector("[data-slot='infra-map-pod-distribution']")).toBeNull();
     expect(screen.getByRole("button", { name: "View details" })).toBeTruthy();
   });
 
@@ -210,21 +264,6 @@ describe("InfraMapNodeCard", () => {
     expect(cpuPods[2]?.dataset.metricAvailable).toBe("false");
     expect(cpuPods[2]?.dataset.healthTone).toBe("healthy");
     expect(cpuPods[2]?.className).toContain("emerald");
-
-    const cpuCubes = rendered.container.querySelectorAll<HTMLElement>(
-      "[data-slot='infra-map-pod-cube']",
-    );
-    expect(cpuCubes[0]?.getAttribute("aria-label")).toContain("hot-worker");
-    expect(cpuCubes[0]?.dataset.metricAvailable).toBe("true");
-    expect(cpuCubes[0]?.style.getPropertyValue("--infra-map-pod-cube-color")).toContain("orange");
-    expect(cpuCubes[1]?.getAttribute("aria-label")).toContain("stable-api");
-    expect(cpuCubes[1]?.dataset.metricAvailable).toBe("true");
-    expect(cpuCubes[1]?.style.getPropertyValue("--infra-map-pod-cube-color")).toContain("emerald");
-    expect(cpuCubes[2]?.getAttribute("aria-label")).toContain("unknown-worker");
-    expect(cpuCubes[2]?.dataset.metricAvailable).toBe("false");
-    expect(cpuCubes[2]?.style.getPropertyValue("--infra-map-pod-cube-color")).toBe("");
-    expect(cpuCubes[2]?.dataset.healthTone).toBe("healthy");
-    expect(cpuCubes[2]?.className).toContain("emerald");
 
     rendered.rerender(
       <I18nProvider navigatorLanguage="en-US" storage={null}>

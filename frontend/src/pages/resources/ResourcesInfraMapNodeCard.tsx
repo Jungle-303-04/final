@@ -1,4 +1,4 @@
-import { AlertTriangle, Box, Server } from "lucide-react";
+import { AlertTriangle, Server } from "lucide-react";
 import { useId, type CSSProperties } from "react";
 
 import { useI18n } from "../../shared/i18n";
@@ -7,18 +7,17 @@ import {
   Tooltip,
   TooltipTrigger,
 } from "../../shared/ui/primitives/tooltip";
-import { PodEvidenceTooltipContent } from "./PodEvidenceTooltipContent";
 import {
-  CountMetric,
-  type InfraMapMetricMode,
-  RatioMetric,
-} from "./ResourcesInfraMapMetrics";
+  PodEvidenceTooltipContent,
+  type PodEvidenceTooltipValue,
+} from "./PodEvidenceTooltipContent";
+import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import {
-  INFRA_MAP_DISTRIBUTION_PODS_PER_NODE,
   INFRA_MAP_REPRESENTATIVE_PODS_PER_NODE,
   type InfraMapNode,
   type InfraMapPod,
 } from "./resourcesInfraMapModel";
+import { InfraMapNodeCapacityOverview } from "./ResourcesInfraMapNodeCapacityOverview";
 import {
   orderInfraMapPodsForMetric,
 } from "./resourcesInfraMapPodOrdering";
@@ -26,15 +25,16 @@ import {
   PERCENT_SCALE,
   podAbnormalBadge,
   podAbnormalBadgeTone,
-  podHealthTone,
-  podResourcePressureTone,
   podUsageColorFromRatio,
   type PodAbnormalBadge,
-  type PodHealthTone,
-  type PodResourcePressureTone,
 } from "./podVisualState";
+import {
+  INFRA_MAP_POD_HEALTH_BORDER_CLASS,
+  infraMapHealthDotClass,
+  infraMapPodSlotShellClass,
+  infraMapPodToneState,
+} from "./resourcesInfraMapPodVisual";
 
-const POD_DISTRIBUTION_VISIBLE_LIMIT = INFRA_MAP_DISTRIBUTION_PODS_PER_NODE;
 const POD_NAME_VISIBLE_PREFIX_PARTS = 2;
 
 export function InfraMapNodeCard({
@@ -53,7 +53,7 @@ export function InfraMapNodeCard({
   const { t } = useI18n();
   return (
     <section
-      className="grid min-h-96 min-w-0 grid-rows-[auto_auto_auto] overflow-hidden rounded-lg border bg-linear-to-b from-muted/35 via-background/90 to-muted/25 shadow-sm"
+      className="grid h-full min-h-96 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-linear-to-b from-muted/35 via-background/90 to-muted/25 shadow-sm"
       data-metric={metricMode}
       data-slot="infra-map-node"
     >
@@ -79,29 +79,13 @@ export function InfraMapNodeCard({
         <HealthDot tone={node.health} />
       </div>
 
-      <div className="p-3">
+      <div className="min-h-0 p-3">
         <InfraMapPodArea
           metricMode={metricMode}
           node={node}
           onOpenPod={onOpenPod}
           onShowMorePods={onShowMorePods}
           selectionActive={selectionActive}
-        />
-      </div>
-
-      <div className="grid gap-1.5 border-t bg-muted/15 px-3 py-2">
-        <RatioMetric
-          label={t("resources.infraMap.metric.cpu")}
-          ratio={node.cpuRatio}
-        />
-        <RatioMetric
-          label={t("resources.infraMap.metric.memory")}
-          ratio={node.memoryRatio}
-        />
-        <CountMetric
-          label={t("resources.infraMap.metric.pods")}
-          total={node.podCapacity}
-          value={node.assignedPodCount}
         />
       </div>
     </section>
@@ -125,22 +109,20 @@ function InfraMapPodArea({
   const knownPods = [...node.visiblePods, ...node.hiddenPods];
   const orderedPods = orderInfraMapPodsForMetric(knownPods, metricMode);
   const representativePods = orderedPods.slice(0, INFRA_MAP_REPRESENTATIVE_PODS_PER_NODE);
-  if (orderedPods.length === 0) {
-    return (
-      <div className="grid h-full min-h-24 place-items-center rounded-md border border-dashed bg-muted/10 px-3 text-center text-xs text-muted-foreground">
-        {selectionActive
-          ? t("resources.infraMap.noSelectedPods")
-          : t("resources.infraMap.noPods")}
-      </div>
-    );
-  }
   return (
-    <div className="grid min-h-48 gap-2 rounded-md border border-dashed bg-muted/10 p-2 shadow-inner">
+    <div className="grid h-full min-h-64 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2 rounded-md border border-dashed bg-muted/10 p-2 shadow-inner">
+      <InfraMapNodeCapacityOverview metricMode={metricMode} node={node} />
       <div className="flex items-center justify-between gap-2 px-0.5 pb-1 text-[0.625rem] font-medium text-muted-foreground">
         <span>{t("resources.infraMap.representativePods")}</span>
         <span>{t("resources.infraMap.podDistributionCount", { count: formatNumber(node.assignedPodCount) })}</span>
       </div>
-      <div className="grid gap-2">
+      {orderedPods.length === 0 ? (
+        <div className="grid min-h-24 place-items-center rounded-md border border-dashed bg-background/40 px-3 text-center text-xs text-muted-foreground">
+          {selectionActive
+            ? t("resources.infraMap.noSelectedPods")
+            : t("resources.infraMap.noPods")}
+        </div>
+      ) : (
         <div
           className="grid grid-cols-1 content-start gap-1.5 sm:grid-cols-2"
           data-slot="infra-map-representative-pods"
@@ -154,13 +136,7 @@ function InfraMapPodArea({
             />
           ))}
         </div>
-        <InfraMapPodDistribution
-          metricMode={metricMode}
-          node={node}
-          onOpenPod={onOpenPod}
-          pods={orderedPods}
-        />
-      </div>
+      )}
       <button
         className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/80 px-2 text-[0.6875rem] font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => onShowMorePods(node)}
@@ -169,141 +145,6 @@ function InfraMapPodArea({
         {t("resources.infraMap.viewPodDetails")}
       </button>
     </div>
-  );
-}
-
-function InfraMapPodDistribution({
-  metricMode,
-  node,
-  onOpenPod,
-  pods,
-}: {
-  metricMode: InfraMapMetricMode;
-  node: InfraMapNode;
-  onOpenPod: (pod: InfraMapPod) => void;
-  pods: readonly InfraMapPod[];
-}) {
-  const { formatNumber, t } = useI18n();
-  const unobservedPodCount = Math.max(0, node.hiddenPodCount - node.hiddenPods.length);
-  const visiblePods = pods.slice(0, POD_DISTRIBUTION_VISIBLE_LIMIT);
-  const remainingPodCount = infraMapDistributionOverflowPodCount({
-    observedPodCount: pods.length,
-    unobservedPodCount,
-  });
-  return (
-    <div
-      aria-label={t("resources.infraMap.podDistribution")}
-      className="grid gap-1 rounded-sm border bg-background/45 px-2 py-1.5"
-      data-slot="infra-map-pod-distribution"
-    >
-      <div className="flex min-w-0 items-center gap-2 text-[0.625rem] text-muted-foreground">
-        <span>{t("resources.infraMap.podDistribution")}</span>
-      </div>
-      <div className="flex min-w-0 flex-wrap content-start gap-1.5">
-        {visiblePods.map((pod) => (
-          <InfraMapPodCube
-            key={pod.id}
-            metricMode={metricMode}
-            onOpenPod={onOpenPod}
-            pod={pod}
-          />
-        ))}
-        {remainingPodCount > 0 ? (
-          <span
-            className="inline-flex h-4 min-w-5 items-center justify-center rounded-sm border border-dashed bg-background px-1 text-[0.5625rem] font-medium text-muted-foreground"
-            title={t("resources.infraMap.podDistributionMore", { count: formatNumber(remainingPodCount) })}
-          >
-            +{formatNumber(remainingPodCount)}
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function infraMapDistributionOverflowPodCount({
-  observedPodCount,
-  unobservedPodCount,
-}: {
-  observedPodCount: number;
-  unobservedPodCount: number;
-}): number {
-  return Math.max(0, observedPodCount - POD_DISTRIBUTION_VISIBLE_LIMIT) +
-    unobservedPodCount;
-}
-
-function InfraMapPodCube({
-  metricMode,
-  onOpenPod,
-  pod,
-}: {
-  metricMode: InfraMapMetricMode;
-  onOpenPod: (pod: InfraMapPod) => void;
-  pod: InfraMapPod;
-}) {
-  const { formatNumber, t } = useI18n();
-  const tooltipId = useId();
-  const selectedMetric = podMetricForMode(pod, metricMode, { formatNumber, t });
-  const pressureTone = podResourcePressureTone(selectedMetric.ratio);
-  const healthVisualTone = podHealthTone(pod);
-  const cubeStyle = selectedMetric.ratio === null
-    ? undefined
-    : ({
-      "--infra-map-pod-cube-color": podUsageColorFromRatio(selectedMetric.ratio),
-    } as CSSProperties);
-  const iconStyle = cubeStyle === undefined
-    ? undefined
-    : ({
-      color: "var(--infra-map-pod-cube-color)",
-    } as CSSProperties);
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={(
-          <button
-            aria-describedby={tooltipId}
-            aria-label={`${pod.name} ${pod.phase} ${selectedMetric.label} ${selectedMetric.displayText}`}
-            className={cn(
-              "inline-grid size-4 shrink-0 place-items-center rounded-sm border outline-none transition-[background-color,border-color,box-shadow,transform]",
-              "hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              podCubeShellClass(pressureTone, healthVisualTone),
-              POD_CUBE_HEALTH_BORDER_CLASS[healthVisualTone],
-              pod.selected && "ring-1 ring-primary/50",
-            )}
-            data-health-tone={healthVisualTone}
-            data-metric={metricMode}
-            data-metric-available={selectedMetric.ratio === null ? "false" : "true"}
-            data-slot="infra-map-pod-cube"
-            data-usage-tone={pressureTone}
-            onClick={() => onOpenPod(pod)}
-            style={cubeStyle}
-            type="button"
-          />
-        )}
-      >
-        <Box
-          aria-hidden="true"
-          className="size-3 transition-colors"
-          style={iconStyle}
-        />
-      </TooltipTrigger>
-      <PodEvidenceTooltipContent
-        id={tooltipId}
-        pod={{
-          cpuMillicores: pod.cpu.value,
-          cpuRequestMillicores: pod.cpu.request,
-          memoryMebibytes: pod.memory.value,
-          memoryRequestMebibytes: pod.memory.request,
-          name: pod.name,
-          namespace: pod.namespace,
-          phase: pod.phase,
-          restartCount: pod.restartCount,
-          usagePercent: pod.usagePercent,
-        }}
-        slot="infra-map-pod-tooltip"
-        usageText={selectedMetric.ratio === null ? null : selectedMetric.displayText}
-      />
-    </Tooltip>
   );
 }
 
@@ -318,16 +159,14 @@ function InfraMapPodSlot({
 }) {
   const { formatNumber, t } = useI18n();
   const tooltipId = useId();
-  const selectedMetric = podMetricForMode(pod, metricMode, { formatNumber, t });
-  const fillPercent = selectedMetric.ratio === null
+  const podView = useInfraMapPodView(pod, metricMode, { formatNumber, t });
+  const fillPercent = podView.selectedMetric.ratio === null
     ? null
-    : clampPercent(selectedMetric.ratio * PERCENT_SCALE);
-  const pressureTone = podResourcePressureTone(selectedMetric.ratio);
-  const healthVisualTone = podHealthTone(pod);
+    : clampPercent(podView.selectedMetric.ratio * PERCENT_SCALE);
   const abnormalBadge = podAbnormalBadge(pod);
   const style = {
     "--infra-map-pod-fill-width": fillPercent === null ? "0%" : `${fillPercent}%`,
-    "--infra-map-pod-usage-color": podUsageColorFromRatio(selectedMetric.ratio),
+    "--infra-map-pod-usage-color": podUsageColorFromRatio(podView.selectedMetric.ratio),
   } as CSSProperties;
   return (
     <Tooltip>
@@ -335,20 +174,20 @@ function InfraMapPodSlot({
         render={(
           <button
             aria-describedby={tooltipId}
-            aria-label={`${pod.name} ${pod.phase} ${selectedMetric.label} ${selectedMetric.displayText}`}
+            aria-label={podView.ariaLabel}
             className={cn(
               "relative flex h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-sm border px-2 text-left shadow-xs outline-none transition-[background-color,border-color,box-shadow,transform]",
               "hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              podSlotShellClass(pressureTone, healthVisualTone),
-              POD_HEALTH_BORDER_CLASS[healthVisualTone],
+              infraMapPodSlotShellClass(podView.pressureTone, podView.healthTone),
+              INFRA_MAP_POD_HEALTH_BORDER_CLASS[podView.healthTone],
               pod.selected && "ring-2 ring-primary/45",
             )}
-            data-health-tone={healthVisualTone}
+            data-health-tone={podView.healthTone}
             data-metric={metricMode}
             data-metric-available={fillPercent === null ? "false" : "true"}
             data-selected={pod.selected || undefined}
             data-slot="infra-map-pod"
-            data-usage-tone={pressureTone}
+            data-usage-tone={podView.pressureTone}
             onClick={() => onOpenPod(pod)}
             style={style}
             type="button"
@@ -369,7 +208,7 @@ function InfraMapPodSlot({
             data-slot="infra-map-pod-risk-bar"
           />
         )}
-        <HealthDot tone={healthVisualTone} />
+        <HealthDot tone={podView.healthTone} />
         <div className="relative z-10 min-w-0 flex-1" title={pod.name}>
           <h4 className="truncate text-[0.6875rem] font-semibold leading-none">
             {shortPodName(pod.name)}
@@ -377,100 +216,24 @@ function InfraMapPodSlot({
         </div>
         <span
           className="relative z-10 hidden shrink-0 text-[0.625rem] tabular-nums text-muted-foreground sm:inline"
-          title={`${selectedMetric.label} ${selectedMetric.displayText}`}
+          title={`${podView.selectedMetric.label} ${podView.selectedMetric.displayText}`}
         >
-          {selectedMetric.displayText}
+          {podView.selectedMetric.displayText}
         </span>
         <PodStatusBadge badge={abnormalBadge} />
       </TooltipTrigger>
       <PodEvidenceTooltipContent
         id={tooltipId}
-        pod={{
-          cpuMillicores: pod.cpu.value,
-          cpuRequestMillicores: pod.cpu.request,
-          memoryMebibytes: pod.memory.value,
-          memoryRequestMebibytes: pod.memory.request,
-          name: pod.name,
-          namespace: pod.namespace,
-          phase: pod.phase,
-          restartCount: pod.restartCount,
-          usagePercent: pod.usagePercent,
-        }}
+        pod={podView.tooltipPod}
         slot="infra-map-pod-tooltip"
-        usageText={selectedMetric.ratio === null ? null : selectedMetric.displayText}
+        usageText={podView.usageText}
       />
     </Tooltip>
   );
 }
 
-const POD_PRESSURE_CLASS: Record<PodResourcePressureTone, string> = {
-  danger: "border-border bg-orange-500/10 text-foreground",
-  healthy: "border-border bg-emerald-500/5 text-foreground",
-  unknown: "border-dashed border-border bg-background/80 text-muted-foreground",
-  warning: "border-border bg-status-warning/10 text-foreground",
-};
-
-const POD_HEALTH_BORDER_CLASS: Record<PodHealthTone, string> = {
-  critical: "border-destructive/70 ring-1 ring-destructive/25",
-  healthy: "border-border",
-  unknown: "border-border",
-  warning: "border-border",
-};
-
-const POD_CUBE_PRESSURE_CLASS: Record<PodResourcePressureTone, string> = {
-  danger: "border-border bg-orange-500/15 text-foreground",
-  healthy: "border-border bg-emerald-500/12 text-foreground",
-  unknown: "border-dashed border-border bg-background text-muted-foreground",
-  warning: "border-border bg-status-warning/15 text-foreground",
-};
-
-const POD_CUBE_HEALTH_BORDER_CLASS: Record<PodHealthTone, string> = {
-  critical: "border-destructive/75 ring-1 ring-destructive/30",
-  healthy: "border-border",
-  unknown: "border-border",
-  warning: "border-border",
-};
-
-const POD_UNKNOWN_HEALTH_SLOT_CLASS: Record<PodHealthTone, string> = {
-  critical: "border-dashed border-destructive/65 bg-destructive/5 text-foreground",
-  healthy: "border-dashed border-emerald-500/50 bg-emerald-500/5 text-foreground",
-  unknown: POD_PRESSURE_CLASS.unknown,
-  warning: "border-dashed border-status-warning/60 bg-status-warning/5 text-foreground",
-};
-
-const POD_UNKNOWN_HEALTH_CUBE_CLASS: Record<PodHealthTone, string> = {
-  critical: "border-dashed border-destructive/70 bg-destructive/10 text-destructive",
-  healthy: "border-dashed border-emerald-500/60 bg-emerald-500/10 text-emerald-500",
-  unknown: POD_CUBE_PRESSURE_CLASS.unknown,
-  warning: "border-dashed border-status-warning/70 bg-status-warning/10 text-status-warning",
-};
-
-function podSlotShellClass(
-  pressureTone: PodResourcePressureTone,
-  healthTone: PodHealthTone,
-): string {
-  if (pressureTone !== "unknown") return POD_PRESSURE_CLASS[pressureTone];
-  return POD_UNKNOWN_HEALTH_SLOT_CLASS[healthTone];
-}
-
-function podCubeShellClass(
-  pressureTone: PodResourcePressureTone,
-  healthTone: PodHealthTone,
-): string {
-  if (pressureTone !== "unknown") return POD_CUBE_PRESSURE_CLASS[pressureTone];
-  return POD_UNKNOWN_HEALTH_CUBE_CLASS[healthTone];
-}
-
 function HealthDot({ tone }: { tone: string }) {
-  const className = {
-    critical: "bg-destructive",
-    danger: "bg-orange-500",
-    healthy: "bg-emerald-500",
-    stale: "bg-muted-foreground",
-    unknown: "bg-muted-foreground",
-    warning: "bg-status-warning",
-  }[tone] ?? "bg-muted-foreground";
-  return <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${className}`} />;
+  return <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${infraMapHealthDotClass(tone)}`} />;
 }
 
 function PodStatusBadge({ badge }: { badge: PodAbnormalBadge }) {
@@ -488,6 +251,40 @@ function PodStatusBadge({ badge }: { badge: PodAbnormalBadge }) {
       <AlertTriangle aria-hidden="true" className="size-2.5" />
     </span>
   );
+}
+
+function useInfraMapPodView(
+  pod: InfraMapPod,
+  metricMode: InfraMapMetricMode,
+  helpers: Pick<ReturnType<typeof useI18n>, "formatNumber" | "t">,
+): {
+  ariaLabel: string;
+  healthTone: ReturnType<typeof infraMapPodToneState>["healthTone"];
+  pressureTone: ReturnType<typeof infraMapPodToneState>["pressureTone"];
+  selectedMetric: ReturnType<typeof podMetricForMode>;
+  tooltipPod: PodEvidenceTooltipValue;
+  usageText: string | null;
+} {
+  const selectedMetric = podMetricForMode(pod, metricMode, helpers);
+  const { healthTone, pressureTone } = infraMapPodToneState(pod, metricMode);
+  return {
+    ariaLabel: `${pod.name} ${pod.phase} ${selectedMetric.label} ${selectedMetric.displayText}`,
+    healthTone,
+    pressureTone,
+    selectedMetric,
+    tooltipPod: {
+      cpuMillicores: pod.cpu.value,
+      cpuRequestMillicores: pod.cpu.request,
+      memoryMebibytes: pod.memory.value,
+      memoryRequestMebibytes: pod.memory.request,
+      name: pod.name,
+      namespace: pod.namespace,
+      phase: pod.phase,
+      restartCount: pod.restartCount,
+      usagePercent: pod.usagePercent,
+    },
+    usageText: selectedMetric.ratio === null ? null : selectedMetric.displayText,
+  };
 }
 
 function nodeStatusText(

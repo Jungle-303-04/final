@@ -164,6 +164,8 @@ export type ResourcesMessageKey =
   | "resources.infraMap.viewer.traffic"
   | "resources.infraMap.viewerTabs.aria"
   | "resources.infraMap.navigator.aria"
+  | "resources.infraMap.legend.card.nodeCapacity.cpu"
+  | "resources.infraMap.legend.card.nodeCapacity.memory"
   | "resources.infraMap.legend.card.unknown"
   | "resources.infraMap.legend.card.usage.cpu"
   | "resources.infraMap.legend.card.usage.memory"
