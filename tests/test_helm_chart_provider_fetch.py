@@ -206,6 +206,50 @@ def test_oci_tag_fetch_uses_registry_api_and_returns_one_source_only(
     assert "must-not-leak" not in str(result.model_dump(mode="json"))
 
 
+def test_oci_tag_fetch_rejects_invalid_numeric_prerelease_and_sorts_semver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def validate(_url: str, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("domains.helm.source_provider.validate_outbound_url", validate)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "tags": [
+                    "1.0.0-rc.2",
+                    "1.0.0-01",
+                    "1.0.0",
+                    "1.0.0-rc.1",
+                    "1.0.0-rc.10",
+                ]
+            },
+        )
+
+    provider = HelmChartVersionProvider(
+        transport=httpx.MockTransport(handler),
+        resolver=_public_resolver,
+    )
+    result = asyncio.run(
+        provider.fetch_versions(
+            _source(
+                provider="oci",
+                reference="oci://registry.example.com/platform/charts",
+            ),
+            "storefront",
+        )
+    )
+
+    assert [item.version for item in result.versions] == [
+        "1.0.0",
+        "1.0.0-rc.10",
+        "1.0.0-rc.2",
+        "1.0.0-rc.1",
+    ]
+
+
 def test_oci_basic_credential_follows_only_validated_bearer_challenge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
