@@ -59,11 +59,17 @@ from packages.contracts.helm import (
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
     HELM_UPGRADE_BATCH_MAX_RELEASES,
     HelmArtifactCommandPayload,
     HelmArtifactReadRequest,
     HelmFeatureAvailability,
     HelmReleaseCommands,
+    HelmReleaseGuard,
+    HelmReleaseOperationCommandPayload,
+    HelmReleaseRollbackRequest,
+    HelmReleaseUninstallRequest,
     HelmReleaseUpgradeBatch,
     HelmReleaseUpgradeInfo,
     HelmReleaseUpgradeRequest,
@@ -93,6 +99,8 @@ UPGRADE_PERMISSION_UNAVAILABLE = "helm_upgrade_permission_denied"
 UPGRADE_AGENT_UNAVAILABLE = "helm_upgrade_agent_unavailable"
 UPGRADE_REVISION_UNAVAILABLE = "helm_release_revision_unavailable"
 UPGRADE_TARGETS_UNAVAILABLE = "helm_upgrade_targets_unavailable"
+OPERATION_AGENT_UNAVAILABLE_DETAIL = "Helm release operation runner is unavailable"
+OPERATION_STALE_REVISION_DETAIL = "Helm release revision changed; refresh before operating"
 MAX_SCOPE_VALUES = 200
 
 
@@ -471,6 +479,210 @@ async def create_helm_release_upgrade(
 
 
 @router.post(
+    gateway_routes.HELM_RELEASE_UPGRADE_STREAM_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+    include_in_schema=False,
+)
+async def create_helm_release_upgrade_stream(
+    namespace: str,
+    release_name: str,
+    payload: HelmReleaseUpgradeRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> CommandReceipt:
+    """Compatibility endpoint backed by the shared resumable operation stream."""
+
+    return await create_helm_release_upgrade(
+        namespace,
+        release_name,
+        payload,
+        current,
+        db,
+        events,
+        operation_events,
+        provider,
+    )
+
+
+@router.post(
+    gateway_routes.HELM_RELEASE_ROLLBACK_STREAM_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def create_helm_release_rollback(
+    namespace: str,
+    release_name: str,
+    payload: HelmReleaseRollbackRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await _create_helm_release_operation(
+        operation="rollback",
+        namespace=namespace,
+        release_name=release_name,
+        cluster_id=payload.cluster_id,
+        expected_revision=payload.expected_revision,
+        rollback_revision=payload.revision,
+        reason=payload.reason,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.delete(
+    gateway_routes.HELM_RELEASE_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def create_helm_release_uninstall(
+    namespace: str,
+    release_name: str,
+    payload: HelmReleaseUninstallRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await _create_helm_release_operation(
+        operation="uninstall",
+        namespace=namespace,
+        release_name=release_name,
+        cluster_id=payload.cluster_id,
+        expected_revision=payload.expected_revision,
+        rollback_revision=None,
+        reason=payload.reason,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+async def _create_helm_release_operation(
+    *,
+    operation: str,
+    namespace: str,
+    release_name: str,
+    cluster_id: str,
+    expected_revision: int,
+    rollback_revision: int | None,
+    reason: str | None,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    selected_namespace = _single_scope_value(namespace)
+    selected_release = _single_scope_value(release_name)
+    selected_cluster = _single_scope_value(cluster_id)
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        selected_cluster,
+        Permission.DEPLOY_RUN.value,
+    )
+    if selected_namespace != Sandbox.NAMESPACE or not control_namespace_allowed(selected_namespace):
+        raise HTTPException(status_code=409, detail=UPGRADE_NAMESPACE_UNAVAILABLE)
+    if not await asyncio.to_thread(
+        _agent_supports_release_operation,
+        db,
+        workspace_id,
+        selected_cluster,
+    ):
+        raise HTTPException(status_code=409, detail=OPERATION_AGENT_UNAVAILABLE_DETAIL)
+    detail = await get_helm_release(
+        selected_namespace,
+        selected_release,
+        selected_cluster,
+        current,
+        db,
+    )
+    release = detail.detail.release
+    if (
+        release.revision != expected_revision
+        or release.storage_resource_version is None
+        or release.chart is None
+        or release.chart_version is None
+    ):
+        raise HTTPException(status_code=409, detail=OPERATION_STALE_REVISION_DETAIL)
+    command_payload = HelmReleaseOperationCommandPayload(
+        operation=operation,
+        namespace=selected_namespace,
+        release_name=selected_release,
+        guard=HelmReleaseGuard(
+            expected_revision=expected_revision,
+            storage=release.storage,
+            storage_resource_version=release.storage_resource_version,
+            chart_name=release.chart,
+            chart_version=release.chart_version,
+        ),
+        rollback_revision=rollback_revision,
+    )
+    command = CommandRequestedBody(
+        cluster_id=selected_cluster,
+        action=HELM_RELEASE_OPERATION_ACTION,
+        namespace=selected_namespace,
+        reason=reason or f"{operation} Helm release {selected_release}",
+        diff=Diff(
+            workspace_id=workspace_id,
+            cluster_id=selected_cluster,
+            resource=f"helm-release/{selected_namespace}/{selected_release}",
+            namespace=selected_namespace,
+            desired_image=(
+                f"helm-revision:{rollback_revision}"
+                if rollback_revision is not None
+                else "uninstalled"
+            ),
+            actual_image=f"helm-revision:{expected_revision}",
+            risk=RiskLevel.SANDBOX_ONLY,
+            status=operation,
+            basis={
+                "expected_revision": expected_revision,
+                "rollback_revision": rollback_revision,
+                "storage_uid": release.storage.uid,
+                "storage_resource_version": release.storage_resource_version,
+            },
+        ),
+        command_id=new_command_id(),
+        payload=command_payload.model_dump(mode="json"),
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=str(getattr(current, "user_id", "")),
+        direct_execution=True,
+        direct_execution_confirmed=True,
+    )
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
+        command,
+        actor=Actor(
+            str(getattr(current, "user_id", "")),
+            tuple(getattr(current, "roles", ()) or ()),
+        ),
+    )
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events,
+        receipt_event,
+        workspace_id=workspace_id,
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
+
+
+@router.post(
     gateway_routes.HELM_RELEASE_ARTIFACT_PATH,
     response_model=CommandReceipt,
     response_model_exclude_none=True,
@@ -766,4 +978,21 @@ def _agent_supports_artifact_reads(
         and str(item.get("status") or "").casefold() == "connected"
         and HELM_RELEASE_ARTIFACT_READ_CAPABILITY in tuple(item.get("capabilities") or ())
         for item in statuses
+    )
+
+
+def _agent_supports_release_operation(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> bool:
+    reader = getattr(db, "list_cluster_agent_statuses", None)
+    if not callable(reader):
+        return False
+    required = {"command_receiver", HELM_RELEASE_OPERATION_CAPABILITY}
+    return any(
+        isinstance(item, Mapping)
+        and cluster_connection_status(item) == AGENT_STATUS_ONLINE
+        and required.issubset(set(item.get("capabilities") or ()))
+        for item in reader(workspace_id, cluster_id)
     )

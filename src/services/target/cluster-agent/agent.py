@@ -31,7 +31,9 @@ from commands import (
 from commands.helm import (
     run_catalog_helm_install,
     run_helm_artifact_query,
+    run_helm_release_operation,
     validate_catalog_helm_upgrade_secret,
+    validate_helm_release_operation_secret,
 )
 from commands.service_access import (
     ServiceAccessExecutionError,
@@ -175,7 +177,9 @@ from packages.contracts.gateway.requests import (
 from packages.contracts.gitops import supported_kubernetes_resource
 from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_OPERATION_ACTION,
     HelmArtifactCommandPayload,
+    HelmReleaseOperationCommandPayload,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
@@ -1291,6 +1295,7 @@ class TargetClusterAgent:
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             Command.CATALOG_HELM_INSTALL_ACTION,
+            HELM_RELEASE_OPERATION_ACTION,
             AgentConfig.ROLLOUT_RESTART_ACTION,
             KUBERNETES_CONFIGMAP_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_PATCH_ACTION,
@@ -1529,6 +1534,52 @@ class TargetClusterAgent:
                 **fields,
             )
         return ctx.ok("catalog Helm install completed", applied=True, **fields)
+
+    @command.handler(
+        HELM_RELEASE_OPERATION_ACTION,
+        payload_model=HelmReleaseOperationCommandPayload,
+    )
+    async def helm_release_operation_command(
+        self,
+        ctx: CommandContext[HelmReleaseOperationCommandPayload],
+    ) -> JsonObject:
+        try:
+            live_storage = await ctx.kubernetes.get_namespaced_resource(
+                api_group="core",
+                version="v1",
+                namespace=ctx.payload.namespace,
+                resource="secrets",
+                name=ctx.payload.guard.storage.name,
+            )
+            validate_helm_release_operation_secret(live_storage, ctx.payload)
+        except ValueError:
+            return ctx.fail(
+                "Helm release operation rejected stale release evidence",
+                error_code="helm_release_guard_stale",
+                retryable=False,
+            )
+        except Exception:
+            return ctx.fail(
+                "Helm release operation could not verify release evidence",
+                error_code="helm_release_guard_unavailable",
+                retryable=False,
+            )
+        result = await asyncio.to_thread(run_helm_release_operation, ctx.payload)
+        fields = {
+            "operation": ctx.payload.operation,
+            "release_name": ctx.payload.release_name,
+            "expected_revision": ctx.payload.guard.expected_revision,
+            "rollback_revision": ctx.payload.rollback_revision,
+            "returncode": result.returncode,
+        }
+        if not result.succeeded:
+            return ctx.fail(
+                f"Helm release operation failed: {result.error_code}",
+                error_code=result.error_code,
+                retryable=False,
+                **fields,
+            )
+        return ctx.ok("Helm release operation completed", applied=True, **fields)
 
     @command.k8s(
         KUBERNETES_DEPLOYMENT_PATCH_ACTION,

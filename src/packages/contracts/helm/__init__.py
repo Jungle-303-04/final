@@ -20,6 +20,8 @@ from packages.contracts.helm.operations import (
     HELM_RELEASE_OPERATION_CAPABILITY,
     HelmReleaseGuard,
     HelmReleaseOperationCommandPayload,
+    HelmReleaseRollbackRequest,
+    HelmReleaseUninstallRequest,
 )
 from packages.contracts.helm.releases import (
     HELM_UPGRADE_BATCH_MAX_RELEASES,
@@ -97,6 +99,8 @@ __all__ = [
     "HELM_RELEASE_OPERATION_CAPABILITY",
     "HelmReleaseGuard",
     "HelmReleaseOperationCommandPayload",
+    "HelmReleaseRollbackRequest",
+    "HelmReleaseUninstallRequest",
     "HelmReleaseVersionList",
     "HelmResourceFieldChange",
     "HelmResourceHealthAvailability",

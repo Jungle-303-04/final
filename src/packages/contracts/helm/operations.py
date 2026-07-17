@@ -57,3 +57,24 @@ class HelmReleaseOperationCommandPayload(StrictModel):
         elif self.rollback_revision is not None:
             raise ValueError("rollback revision is only valid for rollback")
         return self
+
+
+class HelmReleaseRollbackRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=253)
+    expected_revision: int = Field(ge=2)
+    revision: int = Field(ge=1)
+    confirmation: Literal[True]
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def revision_is_older(self) -> HelmReleaseRollbackRequest:
+        if self.revision >= self.expected_revision:
+            raise ValueError("rollback revision must be older than the observed revision")
+        return self
+
+
+class HelmReleaseUninstallRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=253)
+    expected_revision: int = Field(ge=1)
+    confirmation: Literal[True]
+    reason: str | None = Field(default=None, max_length=500)

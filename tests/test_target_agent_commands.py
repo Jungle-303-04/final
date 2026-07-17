@@ -1105,6 +1105,73 @@ def test_catalog_helm_install_command_preserves_runner_failure(monkeypatch) -> N
     assert "orders" not in result["stderr"]
 
 
+def test_helm_release_rollback_revalidates_storage_before_runner(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+
+    class LiveReleaseKubernetesClient(StubKubernetesClient):
+        async def get_namespaced_resource(self, **_kwargs: object) -> dict[str, object]:
+            return {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "namespace": "sandbox",
+                    "name": "sh.helm.release.v1.storefront.v3",
+                    "uid": "storage-uid-v3",
+                    "resourceVersion": "1042",
+                    "labels": {"owner": "helm", "name": "storefront", "version": "3"},
+                },
+            }
+
+    agent.kubernetes = LiveReleaseKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_helm_release_operation",
+        lambda payload: (
+            calls.append(payload) or SimpleNamespace(succeeded=True, error_code="", returncode=0)
+        ),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.HELM_RELEASE_OPERATION_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "operation": "rollback",
+                    "namespace": "sandbox",
+                    "release_name": "storefront",
+                    "rollback_revision": 2,
+                    "guard": {
+                        "expected_revision": 3,
+                        "storage": {
+                            "api_group": "",
+                            "version": "v1",
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "sh.helm.release.v1.storefront.v3",
+                            "uid": "storage-uid-v3",
+                        },
+                        "storage_resource_version": "1042",
+                        "chart_name": "redis",
+                        "chart_version": "22.0.0",
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["operation"] == "rollback"
+    assert result["rollback_revision"] == 2
+    assert len(calls) == 1
+
+
 def test_management_agent_blocks_catalog_runner_before_subprocess(monkeypatch) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

@@ -9,6 +9,8 @@ from packages.config.constants import Command, Sandbox
 from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HELM_RELEASE_OPERATION_ACTION,
+    HELM_RELEASE_OPERATION_CAPABILITY,
 )
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
@@ -57,6 +59,18 @@ class ApplyManifestCommand:
 )
 class CatalogHelmUpgradeCommand:
     """Digest-pinned catalog execution reused for an observed release upgrade."""
+
+
+@command.action(
+    HELM_RELEASE_OPERATION_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=HELM_RELEASE_OPERATION_CAPABILITY,
+)
+class HelmReleaseOperationCommand:
+    """Revision-bound Helm rollback or uninstall command."""
 
 
 @command.action(
