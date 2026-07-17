@@ -142,6 +142,8 @@ class ClusterRegistration(Base):
     environment: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
     agent_token_hash: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    agent_envelope_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_envelope_private_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     settings: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()

@@ -38,7 +38,11 @@ def yaml_string(value: str) -> str:
     return json.dumps(value)
 
 
-def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) -> str:
+def target_install_manifest(
+    payload: TargetRegisterRequest,
+    agent_token: str,
+    agent_envelope_private_key: str = "",
+) -> str:
     namespace = agent_namespace(payload)
     role = payload.cluster_role
     return "\n---\n".join(
@@ -50,7 +54,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             service_account_manifest(namespace),
             target_rbac_manifest(payload),
             runtime_config_manifest(payload),
-            runtime_secret_manifest(agent_token, namespace),
+            runtime_secret_manifest(agent_token, namespace, agent_envelope_private_key),
             sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
             cluster_agent_manifest(payload),
         ]
@@ -641,7 +645,16 @@ data:
 """
 
 
-def runtime_secret_manifest(agent_token: str, namespace: str) -> str:
+def runtime_secret_manifest(
+    agent_token: str,
+    namespace: str,
+    agent_envelope_private_key: str = "",
+) -> str:
+    envelope_key_line = (
+        f"\n  AGENT_ENVELOPE_PRIVATE_KEY: {yaml_string(agent_envelope_private_key)}"
+        if agent_envelope_private_key
+        else ""
+    )
     return f"""
 apiVersion: v1
 kind: Secret
@@ -650,7 +663,7 @@ metadata:
   namespace: {namespace}
 type: Opaque
 stringData:
-  AGENT_TOKEN: {yaml_string(agent_token)}
+  AGENT_TOKEN: {yaml_string(agent_token)}{envelope_key_line}
 """
 
 

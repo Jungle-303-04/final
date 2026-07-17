@@ -19,7 +19,11 @@ from packages.contracts.gateway.requests import (
     EvidenceRuntimePolicy,
 )
 from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
-from packages.security.credentials import seal_agent_payload
+from packages.security.credentials import (
+    agent_envelope_context,
+    generate_agent_envelope_keypair,
+    seal_agent_payload,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -237,9 +241,21 @@ def test_management_client_polls_evidence_job() -> None:
     }
 
 
-def test_management_client_fetches_revision_bound_prometheus_configuration() -> None:
+def test_management_client_fetches_revision_bound_prometheus_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     agent_module = load_agent_module()
     requests: list[httpx.Request] = []
+    public_key, private_key = generate_agent_envelope_keypair()
+    monkeypatch.setenv("WORKSPACE_ID", "workspace-1")
+    monkeypatch.setenv("AGENT_ENVELOPE_PRIVATE_KEY", private_key)
+    context = agent_envelope_context(
+        "workspace-1",
+        "cluster-1",
+        "revision-1",
+        "operation-1",
+        "https://prometheus.test",
+    )
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
@@ -252,8 +268,8 @@ def test_management_client_fetches_revision_bound_prometheus_configuration() -> 
                 "address": "https://prometheus.test",
                 "sealed_headers": seal_agent_payload(
                     {"headers": {"Authorization": "Bearer secret"}},
-                    "agent-test-token",
-                    "revision-1",
+                    public_key,
+                    context,
                 ),
             },
             request=request,

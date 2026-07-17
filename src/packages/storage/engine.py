@@ -180,6 +180,14 @@ WORKSPACE_COMPAT_COLUMNS = {
         "agent_token_hash": (
             "alter table cluster_registrations add column if not exists agent_token_hash text"
         ),
+        "agent_envelope_public_key": (
+            "alter table cluster_registrations add column if not exists "
+            "agent_envelope_public_key text"
+        ),
+        "agent_envelope_private_key_encrypted": (
+            "alter table cluster_registrations add column if not exists "
+            "agent_envelope_private_key_encrypted text"
+        ),
     },
 }
 WORKSPACE_BACKFILL_COLUMNS = (

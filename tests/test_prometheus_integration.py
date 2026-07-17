@@ -15,7 +15,14 @@ from domains.integrations.prometheus import router
 from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
 from packages.contracts.parity import OperationEvent
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
-from packages.security.credentials import decrypt_credential, open_agent_payload
+from packages.security.credentials import (
+    CredentialEncryptionError,
+    agent_envelope_context,
+    decrypt_credential,
+    generate_agent_envelope_keypair,
+    open_agent_payload,
+    seal_agent_payload,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +41,9 @@ class SessionAuth:
 
 class IntegrationDb:
     def __init__(self) -> None:
+        self.agent_envelope_public_key, self.agent_envelope_private_key = (
+            generate_agent_envelope_keypair()
+        )
         self.credential: dict[str, Any] | None = None
         self.policy: dict[str, Any] | None = None
         self.metadata_updates: list[dict[str, Any]] = []
@@ -50,7 +60,11 @@ class IntegrationDb:
 
     def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, Any]:
         assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
-        return {"workspace_id": workspace_id, "cluster_id": cluster_id}
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "agent_envelope_public_key": self.agent_envelope_public_key,
+        }
 
     def lock_cluster_policy_for_update(
         self,
@@ -255,6 +269,42 @@ def test_prometheus_integration_request_normalizes_and_bounds_sensitive_headers(
         )
 
 
+def test_agent_envelope_is_bound_to_recipient_and_complete_operation_context() -> None:
+    public_key, private_key = generate_agent_envelope_keypair()
+    _other_public_key, other_private_key = generate_agent_envelope_keypair()
+    context = agent_envelope_context(
+        "workspace-a",
+        "cluster-a",
+        "revision-a",
+        "operation-a",
+        "https://prometheus.example.test",
+    )
+    sealed = seal_agent_payload(
+        {"headers": {"Authorization": "Bearer secret-value"}},
+        public_key,
+        context,
+    )
+
+    assert "secret-value" not in sealed
+    assert open_agent_payload(sealed, private_key, context)["headers"] == {
+        "Authorization": "Bearer secret-value"
+    }
+    with pytest.raises(CredentialEncryptionError):
+        open_agent_payload(sealed, other_private_key, context)
+    with pytest.raises(CredentialEncryptionError):
+        open_agent_payload(
+            sealed,
+            private_key,
+            agent_envelope_context(
+                "workspace-a",
+                "cluster-a",
+                "revision-a",
+                "operation-b",
+                "https://prometheus.example.test",
+            ),
+        )
+
+
 def test_update_encrypts_headers_advances_policy_and_returns_durable_receipt() -> None:
     db = IntegrationDb()
     events = IntegrationEvents()
@@ -416,12 +466,47 @@ def test_browser_status_redacts_values_and_agent_fetch_is_revision_bound() -> No
     assert agent.status_code == 200
     assert "headers" not in agent.json()
     assert "secret-value" not in agent.text
+    context = agent_envelope_context(
+        "workspace-a",
+        "cluster-a",
+        created["revision"],
+        created["operation_id"],
+        "https://prometheus.example.test",
+    )
     assert open_agent_payload(
         agent.json()["sealed_headers"],
-        "agent-test-token",
-        created["revision"],
+        db.agent_envelope_private_key,
+        context,
     )["headers"] == {"Authorization": "Bearer secret-value"}
+    with pytest.raises(CredentialEncryptionError):
+        open_agent_payload(agent.json()["sealed_headers"], "agent-test-token", context)
     assert agent.json()["operation_id"] == created["operation_id"]
+
+
+def test_agent_fetch_fails_closed_when_registration_has_no_pinned_envelope_key() -> None:
+    db = IntegrationDb()
+    db.agent_envelope_public_key = ""
+    events = IntegrationEvents()
+    operations = IntegrationOperations()
+    client = _client(db, events, operations)
+    created = client.put(
+        "/integrations/prometheus",
+        json={
+            "cluster_id": "cluster-a",
+            "prometheus_url": "https://prometheus.example.test",
+            "headers": {"Authorization": "Bearer secret-value"},
+        },
+    ).json()
+
+    response = client.get(
+        "/agent/integrations/prometheus",
+        params={"revision": created["revision"]},
+        headers={"x-agent-token": "agent-test-token"},
+    )
+
+    assert response.status_code == 409
+    assert "sealed_headers" not in response.text
+    assert "secret-value" not in response.text
 
 
 def test_agent_probe_status_is_exactly_bound_and_closes_operation_stream() -> None:

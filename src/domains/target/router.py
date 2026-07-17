@@ -124,6 +124,13 @@ from packages.runtime.dependencies import (
     get_events,
     get_timeline_fanout,
 )
+from packages.security.credentials import (
+    CredentialEncryptionError,
+    agent_envelope_public_key,
+    decrypt_credential,
+    encrypt_credential,
+    generate_agent_envelope_keypair,
+)
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
 
@@ -186,6 +193,7 @@ DETECTED_CLUSTER_PROVIDERS = frozenset({"eks", "gke", "aks"})
 AGENT_ERROR_STATUSES = frozenset({"error", "failed"})
 TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
 MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
+AGENT_BOOTSTRAP_HTTPS_REQUIRED = "remote agent bootstrap requires an HTTPS management URL"
 EXTERNAL_ACCESS_REQUIRED = "external access URL is required to enroll another cluster"
 TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS"
 TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
@@ -420,8 +428,20 @@ def reject_test_target(payload: TargetRegisterRequest) -> None:
 
 
 def require_management_base_url(payload: TargetRegisterRequest) -> None:
-    if not normalized_management_base_url(payload.management_base_url):
+    normalized = normalized_management_base_url(payload.management_base_url)
+    if not normalized:
         raise HTTPException(status_code=422, detail=MANAGEMENT_BASE_URL_NOT_CONFIGURED)
+
+
+def require_secure_agent_bootstrap(payload: TargetRegisterRequest) -> None:
+    normalized = normalized_management_base_url(payload.management_base_url)
+    parsed = urlsplit(normalized)
+    hostname = (parsed.hostname or "").casefold()
+    local_development_host = hostname in {"localhost", "127.0.0.1", "::1"} or hostname.endswith(
+        ".local"
+    )
+    if parsed.scheme != "https" and not local_development_host:
+        raise HTTPException(status_code=422, detail=AGENT_BOOTSTRAP_HTTPS_REQUIRED)
 
 
 def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
@@ -1072,6 +1092,7 @@ async def register_target(
         and access.reachability == "self_only"
     ):
         raise HTTPException(status_code=422, detail=EXTERNAL_ACCESS_REQUIRED)
+    require_secure_agent_bootstrap(scoped_payload)
     require_target_registration_preflight(scoped_payload, workspace_id, db)
     validate_target_install_providers(scoped_payload)
     validate_target_bootstrap_config(scoped_payload)
@@ -1081,7 +1102,13 @@ async def register_target(
     # 클러스터별 agent 토큰 생성 — 원문은 이 클러스터 secret 에만 주입, 해시만 레지스트리에 저장.
     # 전역 AGENT_TOKEN 신뢰를 제거(토큰 1개로 전 워크스페이스 접근하던 구멍 차단). 재등록 시 회전.
     agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
-    manifest = target_install_manifest(scoped_payload, agent_token)
+    agent_envelope_public_key, agent_envelope_private_key = generate_agent_envelope_keypair()
+    encrypted_agent_envelope_private_key = encrypt_credential(agent_envelope_private_key)
+    manifest = target_install_manifest(
+        scoped_payload,
+        agent_token,
+        agent_envelope_private_key,
+    )
     apply_output = (
         apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
         if scoped_payload.apply
@@ -1106,6 +1133,8 @@ async def register_target(
                 "environment": scoped_payload.environment,
                 "status": ClusterRegistrationStatus.PENDING_INSTALL.value,
                 "agent_token_hash": hash_agent_token(agent_token),
+                "agent_envelope_public_key": agent_envelope_public_key,
+                "agent_envelope_private_key_encrypted": (encrypted_agent_envelope_private_key),
                 "settings": registration_settings,
             }
         )
@@ -1229,7 +1258,10 @@ async def reissue_cluster_connect_command(
     payload = normalize_target_provider_defaults(
         target_register_payload_from_settings(registration.get("settings") or {})
     )
+    require_secure_agent_bootstrap(payload)
     agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
+    agent_envelope_public_key, agent_envelope_private_key = generate_agent_envelope_keypair()
+    encrypted_agent_envelope_private_key = encrypt_credential(agent_envelope_private_key)
     timeout_seconds = target_registration_connect_timeout_seconds()
     expires_at = connect_expires_at_from(datetime.now(UTC), timeout_seconds)
     settings = payload.model_dump(exclude={"apply", "kube_context"})
@@ -1245,6 +1277,8 @@ async def reissue_cluster_connect_command(
             workspace_id,
             cluster_id,
             agent_token_hash=hash_agent_token(agent_token),
+            agent_envelope_public_key=agent_envelope_public_key,
+            agent_envelope_private_key_encrypted=encrypted_agent_envelope_private_key,
             settings=settings,
         )
         if not rotated:
@@ -1279,8 +1313,18 @@ async def install_manifest_by_token(
     registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
     if registration is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    try:
+        agent_envelope_private_key = decrypt_credential(
+            str(registration.get("agent_envelope_private_key_encrypted") or "")
+        )
+        if agent_envelope_public_key(agent_envelope_private_key) != str(
+            registration.get("agent_envelope_public_key") or ""
+        ):
+            raise CredentialEncryptionError("agent envelope keypair does not match")
+    except CredentialEncryptionError as exc:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found") from exc
     payload = target_register_payload_from_settings(registration.get("settings") or {})
-    manifest = target_install_manifest(payload, agent_token)
+    manifest = target_install_manifest(payload, agent_token, agent_envelope_private_key)
     return PlainTextResponse(
         manifest,
         media_type="text/yaml",

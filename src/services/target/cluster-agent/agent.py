@@ -209,7 +209,11 @@ from packages.contracts.target import (
     TARGET_RBAC_VERSION_ANNOTATION,
 )
 from packages.contracts.traffic.control import TrafficSourceAgentCommandPayload
-from packages.security.credentials import CredentialEncryptionError, open_agent_payload
+from packages.security.credentials import (
+    CredentialEncryptionError,
+    agent_envelope_context,
+    open_agent_payload,
+)
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -320,6 +324,7 @@ class AgentConfig:
     EVIDENCE_INTERVAL_ENV = "EVIDENCE_INTERVAL_SECONDS"
     AGENT_TOKEN_ENV = "AGENT_TOKEN"
     AGENT_TOKEN_HEADER = "x-agent-token"
+    AGENT_ENVELOPE_PRIVATE_KEY_ENV = agent_config.AGENT_ENVELOPE_PRIVATE_KEY_ENV
     # 타이밍 튜닝값은 config 모듈이 단일 원천(env 오버라이드 가능) — 중복 리터럴 금지
     HTTP_TIMEOUT_SECONDS = agent_config.HTTP_TIMEOUT_SECONDS
     COMMAND_POLL_TIMEOUT_SECONDS = agent_config.COMMAND_POLL_TIMEOUT_SECONDS
@@ -368,6 +373,11 @@ class HttpManagementPlaneClient:
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=timeout_seconds)
         self.headers = {AgentConfig.AGENT_TOKEN_HEADER: env(AgentConfig.AGENT_TOKEN_ENV, "")}
+        self.workspace_id = env(AgentConfig.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
+        self.agent_envelope_private_key = env(
+            AgentConfig.AGENT_ENVELOPE_PRIVATE_KEY_ENV,
+            "",
+        )
 
     async def __aenter__(self) -> HttpManagementPlaneClient:
         return self
@@ -595,9 +605,19 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
         envelope = AgentPrometheusIntegrationEnvelope.model_validate(response.json())
-        token = self.headers.get(AgentConfig.AGENT_TOKEN_HEADER, "")
         try:
-            secret = open_agent_payload(envelope.sealed_headers, token, revision)
+            context = agent_envelope_context(
+                self.workspace_id,
+                envelope.cluster_id,
+                envelope.revision,
+                envelope.operation_id,
+                envelope.address,
+            )
+            secret = open_agent_payload(
+                envelope.sealed_headers,
+                self.agent_envelope_private_key,
+                context,
+            )
         except CredentialEncryptionError as exc:
             raise RuntimeError("prometheus integration envelope is invalid") from exc
         headers = secret.get("headers")

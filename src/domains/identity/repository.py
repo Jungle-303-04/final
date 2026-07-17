@@ -232,6 +232,8 @@ class IdentityAccessRepository(DatabaseConnection):
         cluster_id: str,
         *,
         agent_token_hash: str,
+        agent_envelope_public_key: str,
+        agent_envelope_private_key_encrypted: str,
         settings: JsonObject,
     ) -> bool:
         """만료/대기 등록의 설치 자격증명을 원자적으로 회전한다."""
@@ -251,6 +253,8 @@ class IdentityAccessRepository(DatabaseConnection):
             .values(
                 status=ClusterRegistrationStatus.PENDING_INSTALL.value,
                 agent_token_hash=agent_token_hash,
+                agent_envelope_public_key=agent_envelope_public_key,
+                agent_envelope_private_key_encrypted=agent_envelope_private_key_encrypted,
                 settings=settings,
                 updated_at=func.now(),
             )
@@ -268,6 +272,8 @@ class IdentityAccessRepository(DatabaseConnection):
             .values(
                 status=ClusterRegistrationStatus.DISCONNECTED.value,
                 agent_token_hash=None,
+                agent_envelope_public_key=None,
+                agent_envelope_private_key_encrypted=None,
                 updated_at=func.now(),
             )
             .returning(table.c.cluster_id)
@@ -1458,6 +1464,10 @@ class IdentityAccessRepository(DatabaseConnection):
             environment=str(payload.get("environment") or "default"),
             status=str(payload.get("status") or ClusterRegistrationStatus.REGISTERED.value),
             agent_token_hash=payload.get("agent_token_hash"),
+            agent_envelope_public_key=payload.get("agent_envelope_public_key"),
+            agent_envelope_private_key_encrypted=payload.get(
+                "agent_envelope_private_key_encrypted"
+            ),
             settings=payload.get("settings") or {},
         )
         return insert.on_conflict_do_update(
@@ -1467,6 +1477,10 @@ class IdentityAccessRepository(DatabaseConnection):
                 "environment": insert.excluded.environment,
                 "status": str(payload.get("status") or ClusterRegistrationStatus.REGISTERED.value),
                 "agent_token_hash": insert.excluded.agent_token_hash,
+                "agent_envelope_public_key": insert.excluded.agent_envelope_public_key,
+                "agent_envelope_private_key_encrypted": (
+                    insert.excluded.agent_envelope_private_key_encrypted
+                ),
                 "settings": insert.excluded.settings,
                 "updated_at": func.now(),
             },

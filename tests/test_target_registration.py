@@ -20,6 +20,7 @@ from domains.identity.dependencies import (
     require_admin_session,
 )
 from domains.target.router import (
+    AGENT_BOOTSTRAP_HTTPS_REQUIRED,
     EXTERNAL_ACCESS_REQUIRED,
     KUBE_CONTEXT_NOT_ALLOWED,
     MANAGEMENT_BASE_URL_NOT_CONFIGURED,
@@ -67,6 +68,16 @@ from packages.contracts.target import (
     TARGET_RBAC_MANIFEST_VERSION,
     TARGET_RBAC_VERSION_ANNOTATION,
 )
+from packages.security.credentials import (
+    agent_envelope_public_key,
+    encrypt_credential,
+    generate_agent_envelope_keypair,
+)
+
+
+@pytest.fixture(autouse=True)
+def _credential_encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "target-registration-test-key")
 
 
 class StubDb:
@@ -975,6 +986,18 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     match = re.search(r'AGENT_TOKEN: "([^"]+)"', response.install_manifest)
     assert match is not None
     assert db.registered[0]["agent_token_hash"] == hash_agent_token(match.group(1))
+    private_key_match = re.search(
+        r'AGENT_ENVELOPE_PRIVATE_KEY: "([^"]+)"',
+        response.install_manifest,
+    )
+    assert private_key_match is not None
+    assert db.registered[0]["agent_envelope_public_key"] == agent_envelope_public_key(
+        private_key_match.group(1)
+    )
+    assert db.registered[0]["agent_envelope_private_key_encrypted"]
+    assert private_key_match.group(1) not in str(
+        db.registered[0]["agent_envelope_private_key_encrypted"]
+    )
     assert "agent_token" not in db.registered[0]
     assert db.policy is not None
     assert db.policy["cluster_id"] == "target-cluster-01"
@@ -1467,6 +1490,8 @@ def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_regi
             cluster_id: str,
             *,
             agent_token_hash: str,
+            agent_envelope_public_key: str,
+            agent_envelope_private_key_encrypted: str,
             settings: dict[str, object],
         ) -> bool:
             self.rotated.append(
@@ -1474,6 +1499,8 @@ def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_regi
                     "workspace_id": workspace_id,
                     "cluster_id": cluster_id,
                     "agent_token_hash": agent_token_hash,
+                    "agent_envelope_public_key": agent_envelope_public_key,
+                    "agent_envelope_private_key_encrypted": (agent_envelope_private_key_encrypted),
                     "settings": settings,
                 }
             )
@@ -1497,6 +1524,8 @@ def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_regi
     assert response.expires_at
     assert len(db.rotated) == 1
     assert db.rotated[0]["agent_token_hash"]
+    assert db.rotated[0]["agent_envelope_public_key"]
+    assert db.rotated[0]["agent_envelope_private_key_encrypted"]
     assert "connect_expires_at" in db.rotated[0]["settings"]
 
 
@@ -2427,6 +2456,8 @@ class StubInstallLinkDb:
     def __init__(self, token: str, settings: dict[str, object]) -> None:
         self.token_hash = hash_agent_token(token)
         self.settings = settings
+        self.public_key, self.private_key = generate_agent_envelope_keypair()
+        self.encrypted_private_key = encrypt_credential(self.private_key)
 
     def authenticate_cluster_agent(self, token_hash: str) -> dict[str, object] | None:
         if token_hash != self.token_hash:
@@ -2439,6 +2470,8 @@ class StubInstallLinkDb:
         return {
             "workspace_id": workspace_id,
             "cluster_id": cluster_id,
+            "agent_envelope_public_key": self.public_key,
+            "agent_envelope_private_key_encrypted": self.encrypted_private_key,
             "settings": self.settings,
         }
 
@@ -2454,8 +2487,9 @@ def test_install_manifest_by_token_serves_same_manifest_as_registration() -> Non
     assert response.headers.get("cache-control") == "no-store"
     body = response.body.decode()
     assert 'AGENT_TOKEN: "install-token-1"' in body
+    assert f'AGENT_ENVELOPE_PRIVATE_KEY: "{db.private_key}"' in body
     assert "name: cluster-agent" in body
-    assert body == target_install_manifest(target_request(), token)
+    assert body == target_install_manifest(target_request(), token, db.private_key)
 
 
 def test_install_manifest_by_token_rejects_unknown_token() -> None:
@@ -2468,6 +2502,41 @@ def test_install_manifest_by_token_rejects_unknown_token() -> None:
         assert exc.status_code == 404
     else:
         raise AssertionError("expected HTTPException")
+
+
+def test_install_manifest_by_token_rejects_mismatched_pinned_envelope_key() -> None:
+    token = "install-token-1"
+    db = StubInstallLinkDb(
+        token,
+        target_request().model_dump(exclude={"apply", "kube_context"}),
+    )
+    db.public_key, _private_key = generate_agent_envelope_keypair()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(install_manifest_by_token(token, db=db))
+
+    assert exc.value.status_code == 404
+
+
+def test_remote_agent_bootstrap_requires_https(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
+    request = target_request().model_copy(
+        update={"management_base_url": "http://opsia.example.test/api"}
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                request,
+                current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+                db=StubDb(),
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == AGENT_BOOTSTRAP_HTTPS_REQUIRED
 
 
 def test_target_registration_returns_one_line_install_command() -> None:

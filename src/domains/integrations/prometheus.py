@@ -7,10 +7,9 @@ import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from domains.identity.dependencies import (
-    AGENT_TOKEN_HEADER,
     ClusterAgentIdentity,
     require_cluster_access,
     require_cluster_agent,
@@ -35,6 +34,7 @@ from packages.contracts.parity import CommandReceipt, OperationEvent
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.security.credentials import (
     CredentialEncryptionError,
+    agent_envelope_context,
     decrypt_credential,
     encrypt_credential,
     seal_agent_payload,
@@ -357,7 +357,6 @@ async def update_prometheus_integration(
     response_model=AgentPrometheusIntegrationEnvelope,
 )
 async def agent_prometheus_integration(
-    request: Request,
     revision: str = Query(min_length=1, max_length=120),
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
@@ -377,15 +376,31 @@ async def agent_prometheus_integration(
         isinstance(key, str) and isinstance(value, str) for key, value in headers.items()
     ):
         raise HTTPException(status_code=409, detail=PROMETHEUS_CREDENTIAL_UNAVAILABLE)
-    token = request.headers.get(AGENT_TOKEN_HEADER, "")
+    registration = db.get_cluster_registration(identity.workspace_id, identity.cluster_id)
+    public_key = (
+        str(registration.get("agent_envelope_public_key") or "")
+        if isinstance(registration, dict)
+        else ""
+    )
+    operation_id = str(metadata.get("operation_id") or "")
     try:
-        sealed_headers = seal_agent_payload({"headers": dict(headers)}, token, revision)
+        context = agent_envelope_context(
+            identity.workspace_id,
+            identity.cluster_id,
+            revision,
+            operation_id,
+            str(metadata.get("address") or ""),
+        )
+        sealed_headers = seal_agent_payload({"headers": dict(headers)}, public_key, context)
     except CredentialEncryptionError as exc:
-        raise HTTPException(status_code=401, detail="invalid agent token") from exc
+        raise HTTPException(
+            status_code=409,
+            detail="agent envelope identity is unavailable; reconnect the cluster",
+        ) from exc
     return AgentPrometheusIntegrationEnvelope(
         cluster_id=identity.cluster_id,
         revision=revision,
-        operation_id=str(metadata.get("operation_id") or ""),
+        operation_id=operation_id,
         address=str(metadata.get("address") or ""),
         sealed_headers=sealed_headers,
     )
