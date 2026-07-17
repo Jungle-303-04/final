@@ -9034,14 +9034,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/source_router.py#update_helm_repository",
           "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.refresh_repository",
-          "reason": "The exact authorized repository cache is invalidated, its bounded index is fetched again with the stored credential, and one durable CONFIG_UPDATE audit event records the observation.",
+          "reason": "The exact authorized repository cache is invalidated, refetched, and recorded with a durable CONFIG_UPDATE audit event.",
           "test": "tests/test_helm_chart_source_router.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmChartSourcesPanel.tsx#ChartSourceTable",
           "consumer": "frontend/src/features/helm/createHelmChartSourcesPort.ts#createHelmChartSourcesPort",
-          "reason": "Refresh appears only on the server-advertised repository action and refetches the source page after the audited observation succeeds.",
+          "reason": "Refresh appears only on the server-advertised repository action and refetches the page after success.",
           "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
@@ -9292,14 +9292,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/source_router.py#search_artifacthub_charts",
           "consumer": "src/domains/helm/artifacthub_provider.py#ArtifactHubProvider.search",
-          "reason": "The fixed ArtifactHub host is queried through bounded DNS-pinned no-redirect transport and only typed chart and trust metadata cross the server boundary.",
+          "reason": "Fixed-host bounded transport projects only typed chart and trust metadata.",
           "test": "tests/test_helm_artifacthub.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmArtifactHubPanel.tsx#HelmArtifactHubPanel",
           "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
-          "reason": "The browser submits bounded search inputs, renders typed trust badges, and never treats discovery results as executable recipes.",
+          "reason": "Bounded search renders typed trust badges without promoting discovery to execution.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -9344,14 +9344,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/source_router.py#get_artifacthub_chart_version",
           "consumer": "src/domains/helm/artifacthub_provider.py#ArtifactHubProvider.chart",
-          "reason": "Latest and exact-version detail use escaped identities and bounded README and version projections; no external identity is promoted into an executable recipe.",
+          "reason": "Latest and exact-version details are escaped and bounded without creating an executable mapping.",
           "test": "tests/test_helm_artifacthub.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmArtifactHubPanel.tsx#HelmArtifactHubPanel",
           "consumer": "frontend/src/api/helm-artifacthub.ts#getArtifactHubChart",
-          "reason": "Exact chart details and versions are rendered as read-only discovery evidence and expose no ArtifactHub install action.",
+          "reason": "Exact read-only discovery details expose no external install action.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -9400,14 +9400,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/release_router.py#create_helm_release_install_stream",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The digest-pinned server recipe is accepted through the common staged CommandReceipt, preserves the catalog idempotency identity, and publishes the first durable OperationEvent before Agent execution.",
+          "reason": "The digest-pinned server recipe now returns the common staged CommandReceipt, preserves catalog idempotency, and emits the first durable OperationEvent before Agent execution.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmReleaseInstallDialog.tsx#HelmReleaseInstallDialog",
           "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "reason": "The wizard consumes only server-owned recipe targets and namespace policy, validates declared values, creates a unique idempotency key, and hands the command ID to the shared operation dock.",
+          "reason": "The wizard consumes server-owned targets and hands the accepted command to the shared operation dock.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -9515,14 +9515,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/release_router.py#create_helm_release_rollback",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_release_operation",
-          "reason": "Server and Agent both revalidate the exact UID, resourceVersion, chart and observed revision before a bounded Helm rollback command runs.",
+          "reason": "Server and Agent double-revalidate exact release CAS evidence before bounded rollback.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmReleaseOperationDialogs.tsx#HelmReleaseOperationDialogs",
           "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
-          "reason": "Rollback is capability-gated, selects only an older observed history revision, confirms the diff, and starts the shared operation stream from the audited receipt.",
+          "reason": "Only older observed revisions can be confirmed and sent to the shared operation dock.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -9530,7 +9530,7 @@
           "state": "implemented",
           "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
           "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
-          "reason": "Acceptance stages the first durable OperationEvent and the shared resumable command stream carries rollback progress and terminal state.",
+          "reason": "The audited receipt starts the shared resumable rollback operation stream.",
           "test": "tests/test_operation_event_hub.py"
         }
       }
@@ -9573,24 +9573,18 @@
           "state": "implemented",
           "destination": "src/domains/helm/release_router.py#create_helm_values_preview",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_values_preview",
-          "reason": "A revision-bound digest-pinned candidate is rendered by the target Agent, compared with the current manifest, redacted, bounded, and returned through a typed terminal operation result.",
+          "reason": "The target Agent renders a digest-pinned revision-bound candidate and returns only a bounded redacted resource diff.",
           "test": "tests/test_helm_values_preview.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
           "consumer": "frontend/src/features/helm/createHelmAdapter.ts#toHelmValuesPreviewOperationResult",
-          "reason": "The values editor queues an optional preview, validates the strict redacted result, reuses the common resource diff view, and invalidates stale results when target inputs change without blocking the existing upgrade flow.",
+          "reason": "The values editor strictly validates and renders the shared redacted resource diff while preserving the existing upgrade flow when preview is unavailable.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
-        "realtime": {
-          "state": "implemented",
-          "destination": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
-          "consumer": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
-          "reason": "The audited preview receipt reuses the durable resumable OperationEvent stream; no Helm-specific polling or duplicate SSE connection is introduced.",
-          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
-        }
+        "realtime": "not_required"
       }
     },
     {
@@ -9629,14 +9623,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/release_router.py#apply_helm_release_values",
           "consumer": "src/domains/helm/release_router.py#create_helm_release_upgrade",
-          "reason": "Values apply reuses the reviewed digest-pinned, revision-bound upgrade transaction, server validation, Agent CAS, audited receipt, and OperationEvent handoff.",
+          "reason": "Values apply reuses the reviewed revision-bound upgrade, Agent CAS, audit, and stream.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
           "consumer": "frontend/src/api/helm-releases.ts#applyHelmReleaseValues",
-          "reason": "The shared typed values editor validates server-declared fields and uses the same one-time target and diff confirmation as the canonical upgrade flow.",
+          "reason": "One shared typed values editor validates declared inputs and confirms the exact target diff.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -9680,14 +9674,14 @@
           "state": "implemented",
           "destination": "src/domains/helm/release_router.py#create_helm_release_uninstall",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_release_operation",
-          "reason": "Uninstall is double-revalidated against exact observed release identity and capability, then runs with bounded timeout and returns the common audited receipt.",
+          "reason": "Exact release CAS evidence is double-revalidated before bounded uninstall.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmReleaseOperationDialogs.tsx#HelmReleaseOperationDialogs",
           "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
-          "reason": "The destructive action appears only in the server CapabilitySet and requires exact-target confirmation before the receipt is handed to the shared operation dock.",
+          "reason": "The destructive action is capability-gated and exact-target confirmed before dispatch.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,

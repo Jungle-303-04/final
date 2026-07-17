@@ -7599,26 +7599,30 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.sources.HelmRepositoryRefreshAccepted",
+      "frontendContract": "frontend/src/features/helm/helmChartSourcesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
-        "frontend/src/pages/helm/HelmPage.test.tsx"
+        "tests/test_helm_chart_source_router.py",
+        "tests/test_helm_chart_provider_fetch.py",
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/router.py",
-          "reason": "Curated server recipes have no browser-mutable repository cache or refresh operation.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#update_helm_repository",
+          "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.refresh_repository",
+          "reason": "The exact authorized repository cache is invalidated, refetched, and recorded with a durable CONFIG_UPDATE audit event.",
+          "test": "tests/test_helm_chart_source_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "No repository update control is exposed without an owner-authorized provider.",
-          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartSourcesPanel.tsx#ChartSourceTable",
+          "consumer": "frontend/src/features/helm/createHelmChartSourcesPort.ts#createHelmChartSourcesPort",
+          "reason": "Refresh appears only on the server-advertised repository action and refetches the page after success.",
+          "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -7814,25 +7818,28 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacthub.ArtifactHubSearchPage",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_artifacthub.py",
+        "frontend/src/api/helm-artifacthub.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/router.py",
-          "reason": "No external catalog provider, pagination contract, trust metadata, timeout, or cache policy exists.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#search_artifacthub_charts",
+          "consumer": "src/domains/helm/artifacthub_provider.py#ArtifactHubProvider.search",
+          "reason": "Fixed-host bounded transport projects only typed chart and trust metadata.",
+          "test": "tests/test_helm_artifacthub.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "External search results are not hardcoded into the browser.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmArtifactHubPanel.tsx#HelmArtifactHubPanel",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "Bounded search renders typed trust badges without promoting discovery to execution.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -7855,25 +7862,28 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacthub.ArtifactHubChartDetail",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_artifacthub.py",
+        "frontend/src/api/helm-artifacthub.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/router.py",
-          "reason": "The product has no external chart detail provider or verified mapping from external identity to an executable server recipe.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#get_artifacthub_chart_version",
+          "consumer": "src/domains/helm/artifacthub_provider.py#ArtifactHubProvider.chart",
+          "reason": "Latest and exact-version details are escaped and bounded without creating an executable mapping.",
+          "test": "tests/test_helm_artifacthub.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The curated catalog detail cannot be relabeled as arbitrary external chart detail.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmArtifactHubPanel.tsx#HelmArtifactHubPanel",
+          "consumer": "frontend/src/api/helm-artifacthub.ts#getArtifactHubChart",
+          "reason": "Exact read-only discovery details expose no external install action.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -7895,8 +7905,8 @@
       "streaming": true,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
       "desktopContract": null,
       "verification": [
@@ -7904,22 +7914,25 @@
         "tests/test_catalog_agent_runner.py",
         "tests/test_target_agent_commands.py",
         "tests/test_operation_event_hub.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/api/helm-releases.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx",
         "frontend/src/api/operation-events.test.ts"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/catalog/router.py#install_catalog_item",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_install_stream",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The idempotent Agent executor is complete for digest-pinned server recipes in the sandbox namespace, not arbitrary chart, repository, namespace, or credential input.",
-          "test": "tests/test_catalog_agent_runner.py"
+          "reason": "The digest-pinned server recipe now returns the common staged CommandReceipt, preserves catalog idempotency, and emits the first durable OperationEvent before Agent execution.",
+          "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseInstallDialog.tsx#HelmReleaseInstallDialog",
           "consumer": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "reason": "The durable operation reader exists, but no Helm wizard accepts the bounded catalog install receipt.",
-          "test": "frontend/src/api/operation-events.test.ts"
+          "reason": "The wizard consumes server-owned targets and hands the accepted command to the shared operation dock.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
         "realtime": {
@@ -7996,9 +8009,9 @@
       "streaming": true,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
-      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.operations.HelmReleaseRollbackRequest",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
@@ -8007,23 +8020,25 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The catalog installer has no observed-release identity, target revision payload, rollback capability, or Agent handler.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_rollback",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_release_operation",
+          "reason": "Server and Agent double-revalidate exact release CAS evidence before bounded rollback.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "No rollback control is rendered without an authorized action descriptor and receipt.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseOperationDialogs.tsx#HelmReleaseOperationDialogs",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "Only older observed revisions can be confirmed and sent to the shared operation dock.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
         "realtime": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "reason": "The shared stream is ready, but no rollback command can issue the first durable event.",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
+          "reason": "The audited receipt starts the shared resumable rollback operation stream.",
           "test": "tests/test_operation_event_hub.py"
         }
       }
@@ -8043,25 +8058,29 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.previews.HelmValuesPreviewResult",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_catalog_domain.py",
+        "tests/test_helm_values_preview.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/catalog/install.py#validate_catalog_values",
-          "reason": "Catalog values schema validation exists, but no provider renders a revision-bound preview artifact or redacted manifest diff.",
-          "test": "tests/test_catalog_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_values_preview",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_values_preview",
+          "reason": "The target Agent renders a digest-pinned revision-bound candidate and returns only a bounded redacted resource diff.",
+          "test": "tests/test_helm_values_preview.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The browser has no typed preview response to confirm.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#toHelmValuesPreviewOperationResult",
+          "reason": "The values editor strictly validates and renders the shared redacted resource diff while preserving the existing upgrade flow when preview is unavailable.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -8083,9 +8102,9 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
-      "frontendContract": "frontend/src/pages/helm",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
@@ -8093,15 +8112,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "reason": "Applying release values is an upgrade and requires the missing provider validation, executor, audit receipt, and operation stream handoff.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#apply_helm_release_values",
+          "consumer": "src/domains/helm/release_router.py#create_helm_release_upgrade",
+          "reason": "Values apply reuses the reviewed revision-bound upgrade, Agent CAS, audit, and stream.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "No values editor or Apply action is exposed against the read-only release projection.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "consumer": "frontend/src/api/helm-releases.ts#applyHelmReleaseValues",
+          "reason": "One shared typed values editor validates declared inputs and confirms the exact target diff.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
@@ -8123,9 +8144,9 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
-      "frontendContract": "frontend/src/features/operations/operationEventsContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.operations.HelmReleaseUninstallRequest",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
@@ -8134,16 +8155,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The Agent has no uninstall action, observed-release ownership proof, capability, or command payload.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_uninstall",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_release_operation",
+          "reason": "Exact release CAS evidence is double-revalidated before bounded uninstall.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The release detail never exposes a destructive action without an exact server capability and one-time confirmation.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseOperationDialogs.tsx#HelmReleaseOperationDialogs",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "The destructive action is capability-gated and exact-target confirmed before dispatch.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "desktop": null,
