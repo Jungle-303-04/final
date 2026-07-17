@@ -47,6 +47,23 @@ def install_payload(**updates: object) -> CatalogHelmInstallPayload:
     return CatalogHelmInstallPayload.model_validate(fields)
 
 
+def upgrade_guard(*, chart_name: str = "redis", chart_version: str = "22.0.0") -> dict[str, object]:
+    return {
+        "expected_revision": 3,
+        "storage": {
+            "api_group": "",
+            "version": "v1",
+            "kind": "Secret",
+            "namespace": "sandbox",
+            "name": "sh.helm.release.v1.storefront.v3",
+            "uid": "storage-uid-3",
+        },
+        "storage_resource_version": "1042",
+        "chart_name": chart_name,
+        "chart_version": chart_version,
+    }
+
+
 def test_helm_runner_uses_explicit_args_private_values_file_and_sanitized_env(
     monkeypatch,
 ) -> None:
@@ -143,6 +160,63 @@ def test_redis_runner_enforces_immutable_standalone_recipe() -> None:
         },
         "master": {"persistence": {"size": "1Gi", "storageClass": "gp2"}},
     }
+
+
+def test_helm_upgrade_guard_rejects_a_tampered_recipe_before_any_subprocess() -> None:
+    module = load_runner_module()
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="{}", stderr="")
+
+    result = module.run_catalog_helm_install(
+        install_payload(
+            release_name="storefront",
+            application_name="storefront",
+            upgrade_guard=upgrade_guard(),
+        ),
+        helm_binary="/usr/local/bin/helm",
+        run=fake_run,
+    )
+
+    assert result.succeeded is False
+    assert result.error_code == "catalog_install_validation_error"
+    assert calls == []
+
+
+def test_helm_upgrade_guard_checks_live_status_immediately_before_upgrade() -> None:
+    module = load_runner_module()
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args[1] == "status":
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=(
+                    '{"name":"storefront","namespace":"sandbox","version":3,'
+                    '"chart":{"metadata":{"name":"redis","version":"22.0.0"}}}'
+                ),
+                stderr="",
+            )
+        return subprocess.CompletedProcess(args, 0, stdout="upgraded", stderr="")
+
+    result = module.run_catalog_helm_install(
+        install_payload(
+            catalog_item_id="catalog-redis",
+            application_name="storefront",
+            release_name="storefront",
+            values={"master.persistence.storageClass": "gp3"},
+            upgrade_guard=upgrade_guard(),
+        ),
+        helm_binary="/usr/local/bin/helm",
+        run=fake_run,
+    )
+
+    assert result.succeeded is True
+    assert [args[1] for args in calls] == ["status", "upgrade"]
 
 
 def test_helm_runner_reports_timeout_without_subprocess_output() -> None:

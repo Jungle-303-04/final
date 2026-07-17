@@ -938,6 +938,57 @@ def test_target_agent_advertises_catalog_helm_runner_capability() -> None:
     module = load_agent_module()
 
     assert "catalog_helm_install" in module.AgentConfig.AGENT_CAPABILITIES
+    assert "catalog_helm_upgrade_cas.v1" in module.AgentConfig.AGENT_CAPABILITIES
+
+
+def test_catalog_helm_upgrade_rejects_stale_secret_before_runner(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_catalog_helm_install",
+        lambda payload: calls.append(payload),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-redis",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "storefront",
+                    "release_name": "storefront",
+                    "values": {"master.persistence.storageClass": "gp3"},
+                    "upgrade_guard": {
+                        "expected_revision": 3,
+                        "storage": {
+                            "api_group": "",
+                            "version": "v1",
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "sh.helm.release.v1.storefront.v3",
+                            "uid": "storage-uid-3",
+                        },
+                        "storage_resource_version": "1042",
+                        "chart_name": "redis",
+                        "chart_version": "22.0.0",
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "helm_release_guard_stale"
+    assert calls == []
 
 
 def test_catalog_helm_install_command_preserves_runner_failure(monkeypatch) -> None:
