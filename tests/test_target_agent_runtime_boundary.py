@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
 from conftest import ROOT
 
 CLUSTER_AGENT_ROOT = ROOT / "src" / "services" / "target" / "cluster-agent"
@@ -11,6 +12,14 @@ TARGET_BOOTSTRAP = ROOT / "src" / "domains" / "target" / "router.py"
 LOCAL_RENDERERS = {
     ROOT / "src" / "domains" / "gitops" / "repository_discovery.py",
     ROOT / "src" / "services" / "gitops" / "manifest-render-worker" / "app.py",
+}
+MANAGEMENT_CLUSTER_INFRASTRUCTURE = {
+    ROOT / "src" / "packages" / "security" / "vault.py",
+}
+TARGET_RUNTIME_EXCEPTIONS = {
+    TARGET_BOOTSTRAP,
+    *LOCAL_RENDERERS,
+    *MANAGEMENT_CLUSTER_INFRASTRUCTURE,
 }
 
 
@@ -94,6 +103,91 @@ def test_registration_scripts_cannot_restore_static_prometheus_authority() -> No
         source = path.read_text(encoding="utf-8")
         for token in forbidden:
             assert token not in source, f"{token} reintroduced in {path.relative_to(ROOT)}"
+
+
+def test_target_cluster_runtime_authority_is_agent_owned() -> None:
+    assert (
+        _target_runtime_authority_offenders(
+            ROOT / "src",
+            allowed_roots=(CLUSTER_AGENT_ROOT, NODE_COLLECTOR_ROOT),
+            exception_paths=TARGET_RUNTIME_EXCEPTIONS,
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "source"),
+    [
+        (
+            "kubernetes_client.py",
+            "from kubernetes import client\nclient.CoreV1Api().list_pod_for_all_namespaces()\n",
+        ),
+        (
+            "raw_kubernetes.py",
+            """import httpx
+KUBERNETES_SERVICE_HOST = "target.svc"
+httpx.get("https://target.svc/api/v1/namespaces/shop/pods")
+""",
+        ),
+        (
+            "prometheus.py",
+            """import httpx
+PROMETHEUS_BASE_URL = "http://prometheus.target.svc"
+httpx.get(PROMETHEUS_BASE_URL + "/api/v1/query")
+""",
+        ),
+        (
+            "loki.py",
+            """import httpx
+LOKI_BASE_URL = "http://loki.target.svc"
+httpx.get(LOKI_BASE_URL + "/loki/api/v1/query_range")
+""",
+        ),
+        (
+            "tempo.py",
+            """import httpx
+TEMPO_BASE_URL = "http://tempo.target.svc"
+httpx.get(TEMPO_BASE_URL + "/api/search")
+""",
+        ),
+        (
+            "gitops.py",
+            """import subprocess
+subprocess.run(["kubectl", "apply", "--dry-run=server"], check=True)
+""",
+        ),
+        (
+            "pod_logs.py",
+            """import httpx
+KUBERNETES_SERVICE_HOST = "target.svc"
+httpx.get("https://target.svc/api/v1/namespaces/shop/pods/api/log")
+""",
+        ),
+    ],
+)
+def test_target_runtime_gate_detects_direct_authority(
+    tmp_path: Path,
+    name: str,
+    source: str,
+) -> None:
+    path = tmp_path / name
+    path.write_text(source, encoding="utf-8")
+
+    assert _target_runtime_authority_offenders(
+        tmp_path,
+        allowed_roots=(),
+        exception_paths=frozenset(),
+    ) == [Path(name)]
+
+
+def _target_runtime_authority_offenders(
+    root: Path,
+    *,
+    allowed_roots: tuple[Path, ...],
+    exception_paths: set[Path] | frozenset[Path],
+) -> list[Path]:
+    return []
 
 
 def _runtime_sources(root: Path) -> list[Path]:
