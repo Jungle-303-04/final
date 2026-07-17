@@ -9,6 +9,7 @@ import {
   HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_ROLLBACK_STREAM_PATH,
   HELM_RELEASE_VALUES_PATH,
+  HELM_RELEASE_VALUES_PREVIEW_PATH,
   HELM_INSTALL_TARGETS_PATH,
   HELM_RELEASE_INSTALL_STREAM_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,
@@ -20,6 +21,7 @@ import {
   listHelmInstallTargets,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
+  startHelmReleaseValuesPreview,
   startHelmReleaseRollback,
   startHelmReleaseUninstall,
   startHelmReleaseInstall,
@@ -265,6 +267,34 @@ describe("Helm release API", () => {
     expect(HELM_RELEASE_VALUES_PATH).toBe("/api/helm/releases/{namespace}/{release_name}/values");
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/helm/releases/sandbox/redis/values");
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PUT");
+  });
+
+  it("queues a non-mutating candidate values preview without browser-supplied chart fields", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(receipt()));
+
+    await startHelmReleaseValuesPreview({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "redis",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.size": "16Gi" },
+    });
+
+    expect(HELM_RELEASE_VALUES_PREVIEW_PATH).toBe(
+      "/api/helm/releases/{namespace}/{release_name}/values/preview",
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/helm/releases/sandbox/redis/values/preview",
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      cluster_id: "cluster-a",
+      expected_revision: 3,
+      catalog_item_id: "catalog-redis",
+      catalog_version: "1.0.0",
+      values: { "master.persistence.size": "16Gi" },
+    });
   });
 
   it("reads server-resolved upgrade info, versions, and bounded batch decoration", async () => {
