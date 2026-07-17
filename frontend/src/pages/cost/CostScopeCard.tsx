@@ -56,7 +56,10 @@ function humanAvailabilityReasons(
     if (reason === "authorization_scope_empty") messages.add(t("cost.scope.reason.authorization"));
     else if (reason.startsWith("inventory_snapshot_unavailable:")) messages.add(t("cost.scope.reason.unavailable"));
     else if (reason.startsWith("inventory_snapshot_incomplete:") || reason === "agent_snapshot_truncated") messages.add(t("cost.scope.reason.partial"));
-    else if (reason !== "cost_observation_not_integrated") messages.add(t("cost.scope.reason.generic"));
+    else if (
+      reason !== "cost_observation_not_integrated"
+      && reason !== "cost_observation_unavailable"
+    ) messages.add(t("cost.scope.reason.generic"));
   }
   return [...messages];
 }

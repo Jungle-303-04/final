@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -40,6 +41,11 @@ CURSOR_UNAVAILABLE_DETAIL = "Cost node cursor is unavailable"
 MAX_CURSOR_LENGTH = 8192
 MAX_NODE_PAGE_LIMIT = 200
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
+COST_RANGE_WINDOWS = {
+    "6h": timedelta(hours=6),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+}
 
 
 @dataclass(frozen=True)
@@ -78,10 +84,18 @@ async def get_cost_overview(
     }
     _require_requested_clusters(requested_scope_clusters, allowed_clusters)
     selected_clusters = tuple(sorted(requested_scope_clusters or allowed_clusters))
-    contexts = await asyncio.to_thread(
-        db.filter_snapshot_contexts,
-        workspace_id,
-        selected_clusters,
+    contexts, evidence_windows = await asyncio.gather(
+        asyncio.to_thread(
+            db.filter_snapshot_contexts,
+            workspace_id,
+            selected_clusters,
+        ),
+        asyncio.to_thread(
+            db.list_cost_evidence_windows,
+            workspace_id,
+            selected_clusters,
+            since=datetime.now(tz=UTC) - COST_RANGE_WINDOWS[time_range],
+        ),
     )
     return cost_overview(
         workspace_id=workspace_id,
@@ -89,6 +103,7 @@ async def get_cost_overview(
         selected_cluster_ids=selected_clusters,
         namespace_refs=requested_namespaces,
         time_range=time_range,
+        evidence_windows=evidence_windows,
     )
 
 

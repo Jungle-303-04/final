@@ -1,22 +1,55 @@
-"""Truthful Cost projection backed by authorized inventory scope only."""
+"""Cost projections from bounded observations persisted by outbound agents."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from domains.inventory_filter.snapshot_scope import project_snapshot_scope
 from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.cost.observations import (
+    COST_NAMESPACE_HOURLY_METRIC,
+    COST_NAMESPACE_STORAGE_METRIC,
+    MAX_COST_TREND_POINTS,
+    MAX_COST_TREND_SERIES,
+    MAX_SAFE_JSON_INTEGER,
     CostObservationStatus,
     CostObservationSummary,
+    CostObservedObservationStatus,
+    CostObservedObservationSummary,
+    CostObservedTrend,
     CostOverviewResponse,
     CostScopeCoverage,
     CostTimeRange,
+    CostTrendPoint,
+    CostTrendSeries,
     CostUnavailableTrend,
 )
 
-COST_OBSERVATION_UNAVAILABLE = "cost_observation_not_integrated"
+COST_OBSERVATION_UNAVAILABLE = "cost_observation_unavailable"
+COST_OBSERVATION_PARTIAL = "cost_observation_partial"
+COST_STORAGE_OBSERVATION_PARTIAL = "cost_storage_observation_partial"
+COST_SCOPE_PARTIAL = "cost_scope_partial"
+COST_TREND_HISTORY_INSUFFICIENT = "cost_trend_history_insufficient"
+COST_TREND_SERIES_TRUNCATED = "cost_trend_series_truncated"
+COST_CURRENCY = "USD"
+COST_ALLOCATION_WINDOW = "1h"
+MONTHLY_PROJECTION_HOURS = 730
+MICROS_PER_UNIT = Decimal("1000000")
+
+
+@dataclass(frozen=True)
+class _CostWindow:
+    cluster_id: str
+    timestamp: int
+    observed_at: str
+    rates: Mapping[str, int]
+    storage_rates: Mapping[str, int] | None
+    invalid: bool
 
 
 def cost_overview(
@@ -26,15 +59,90 @@ def cost_overview(
     selected_cluster_ids: Iterable[str],
     namespace_refs: Iterable[tuple[str, str]] = (),
     time_range: CostTimeRange = "24h",
+    evidence_windows: Sequence[Mapping[str, Any]] = (),
 ) -> CostOverviewResponse:
-    """Expose scope/freshness without turning missing billing data into money."""
+    """Project truthful money only from authorized, persisted agent evidence."""
 
+    selected = tuple(sorted(set(selected_cluster_ids)))
+    namespaces = tuple(sorted(set(namespace_refs)))
     coverage = cost_scope_coverage(
         workspace_id=workspace_id,
         contexts=contexts,
-        selected_cluster_ids=selected_cluster_ids,
-        namespace_refs=namespace_refs,
+        selected_cluster_ids=selected,
+        namespace_refs=namespaces,
     )
+    windows = tuple(
+        window
+        for row in evidence_windows
+        if (window := _cost_window(row, selected, namespaces)) is not None
+    )
+    latest = _latest_windows(windows)
+    if not latest:
+        return _unavailable_overview(coverage=coverage, time_range=time_range)
+
+    missing_clusters = set(selected) - set(latest)
+    invalid = any(window.invalid for window in latest.values())
+    storage_partial = any(window.storage_rates is None for window in latest.values())
+    reasons = _unique_reasons(
+        (COST_OBSERVATION_PARTIAL,) if missing_clusters or invalid else (),
+        (COST_STORAGE_OBSERVATION_PARTIAL,) if storage_partial else (),
+        (COST_SCOPE_PARTIAL,) if coverage.availability != "available" else (),
+    )
+    availability = "partial" if reasons else "available"
+    hourly_cost = _safe_total(_window_total(window) for window in latest.values())
+    if hourly_cost is None:
+        return _unavailable_overview(coverage=coverage, time_range=time_range)
+    storage_cost = (
+        None
+        if storage_partial
+        else _safe_total(
+            sum(window.storage_rates.values())
+            for window in latest.values()
+            if window.storage_rates is not None
+        )
+    )
+    monthly_projection = _safe_multiply(hourly_cost, MONTHLY_PROJECTION_HOURS)
+    if monthly_projection is None:
+        return _unavailable_overview(coverage=coverage, time_range=time_range)
+
+    observed_at = max(window.observed_at for window in latest.values())
+    trend = _cost_trend(
+        windows=windows,
+        time_range=time_range,
+        partial_reasons=reasons,
+        cluster_count=len(selected),
+    )
+    return CostOverviewResponse(
+        scope_coverage=coverage,
+        observation=CostObservedObservationStatus(
+            availability=availability,
+            observed_at=observed_at,
+            currency=COST_CURRENCY,
+            data_window=COST_ALLOCATION_WINDOW,
+            reason_codes=reasons,
+        ),
+        summary=CostObservedObservationSummary(
+            availability=availability,
+            hourly_cost=hourly_cost,
+            monthly_projection=monthly_projection,
+            storage_cost=storage_cost,
+            idle_cost=None,
+            efficiency=None,
+            savings_recommendations=None,
+            reason_codes=reasons,
+        ),
+        trend=trend,
+        refresh_after_seconds=integral_refresh_after_seconds("cost_summary"),
+        trend_refresh_after_seconds=integral_refresh_after_seconds("cost_trend"),
+        nodes_refresh_after_seconds=integral_refresh_after_seconds("cost_nodes"),
+    )
+
+
+def _unavailable_overview(
+    *,
+    coverage: CostScopeCoverage,
+    time_range: CostTimeRange,
+) -> CostOverviewResponse:
     reasons = (COST_OBSERVATION_UNAVAILABLE,)
     return CostOverviewResponse(
         scope_coverage=coverage,
@@ -45,6 +153,240 @@ def cost_overview(
         trend_refresh_after_seconds=integral_refresh_after_seconds("cost_trend"),
         nodes_refresh_after_seconds=integral_refresh_after_seconds("cost_nodes"),
     )
+
+
+def _cost_window(
+    row: Mapping[str, Any],
+    selected_cluster_ids: tuple[str, ...],
+    namespace_refs: tuple[tuple[str, str], ...],
+) -> _CostWindow | None:
+    cluster_id = row.get("cluster_id")
+    payload = row.get("payload")
+    if not isinstance(cluster_id, str) or cluster_id not in selected_cluster_ids:
+        return None
+    if not isinstance(payload, Mapping) or payload.get("cluster_id") not in (None, cluster_id):
+        return None
+    timestamp = _timestamp(row.get("updated_at"))
+    if timestamp is None:
+        return None
+    results = _metric_results(payload)
+    if results is None:
+        return None
+    allowed_namespaces = {
+        namespace
+        for namespace_cluster, namespace in namespace_refs
+        if namespace_cluster == cluster_id
+    }
+    scoped = bool(namespace_refs)
+    rates, rates_invalid = _namespace_rates(
+        results.get(COST_NAMESPACE_HOURLY_METRIC),
+        allowed_namespaces=allowed_namespaces,
+        scoped=scoped,
+    )
+    if rates is None or not rates:
+        return None
+    storage, storage_invalid = _namespace_rates(
+        results.get(COST_NAMESPACE_STORAGE_METRIC),
+        allowed_namespaces=allowed_namespaces,
+        scoped=scoped,
+    )
+    return _CostWindow(
+        cluster_id=cluster_id,
+        timestamp=timestamp,
+        observed_at=datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z"),
+        rates=rates,
+        storage_rates=storage,
+        invalid=rates_invalid or storage_invalid,
+    )
+
+
+def _metric_results(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return None
+    results = metrics.get("results")
+    return results if isinstance(results, Mapping) else None
+
+
+def _namespace_rates(
+    result: Any,
+    *,
+    allowed_namespaces: set[str],
+    scoped: bool,
+) -> tuple[dict[str, int] | None, bool]:
+    if not isinstance(result, Mapping):
+        return None, False
+    samples = result.get("samples")
+    if not isinstance(samples, list):
+        return None, True
+    rates: dict[str, int] = defaultdict(int)
+    invalid = False
+    for sample in samples:
+        if not isinstance(sample, Mapping):
+            invalid = True
+            continue
+        metric = sample.get("metric")
+        namespace = (
+            metric.get("namespace") or metric.get("exported_namespace")
+            if isinstance(metric, Mapping)
+            else None
+        )
+        if not isinstance(namespace, str) or not namespace:
+            invalid = True
+            continue
+        if scoped and namespace not in allowed_namespaces:
+            continue
+        micros = _to_micros(sample.get("value"))
+        if micros is None or rates[namespace] > MAX_SAFE_JSON_INTEGER - micros:
+            invalid = True
+            continue
+        rates[namespace] += micros
+    return dict(rates), invalid
+
+
+def _to_micros(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+        return None
+    try:
+        decimal = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    if not decimal.is_finite() or decimal < 0:
+        return None
+    micros = int((decimal * MICROS_PER_UNIT).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return micros if micros <= MAX_SAFE_JSON_INTEGER else None
+
+
+def _timestamp(value: Any) -> int | None:
+    parsed: datetime | None = None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    timestamp = int(parsed.timestamp())
+    return timestamp if timestamp >= 0 else None
+
+
+def _latest_windows(windows: Sequence[_CostWindow]) -> dict[str, _CostWindow]:
+    latest: dict[str, _CostWindow] = {}
+    for window in windows:
+        current = latest.get(window.cluster_id)
+        if current is None or window.timestamp >= current.timestamp:
+            latest[window.cluster_id] = window
+    return latest
+
+
+def _window_total(window: _CostWindow) -> int:
+    return sum(window.rates.values()) + (
+        sum(window.storage_rates.values()) if window.storage_rates is not None else 0
+    )
+
+
+def _safe_total(values: Iterable[int]) -> int | None:
+    total = 0
+    for value in values:
+        if value < 0 or total > MAX_SAFE_JSON_INTEGER - value:
+            return None
+        total += value
+    return total
+
+
+def _safe_multiply(value: int, multiplier: int) -> int | None:
+    if value < 0 or multiplier < 0 or value > MAX_SAFE_JSON_INTEGER // multiplier:
+        return None
+    return value * multiplier
+
+
+def _cost_trend(
+    *,
+    windows: Sequence[_CostWindow],
+    time_range: CostTimeRange,
+    partial_reasons: tuple[str, ...],
+    cluster_count: int,
+) -> CostObservedTrend | CostUnavailableTrend:
+    points_by_key: dict[str, dict[int, int]] = defaultdict(dict)
+    labels: dict[str, str] = {}
+    for window in windows:
+        namespace_rates = dict(window.rates)
+        if window.storage_rates is not None:
+            for namespace, storage_rate in window.storage_rates.items():
+                namespace_rates[namespace] = namespace_rates.get(namespace, 0) + storage_rate
+        for namespace, rate in namespace_rates.items():
+            if rate > MAX_SAFE_JSON_INTEGER:
+                continue
+            key = f"{window.cluster_id}/{namespace}"
+            labels[key] = namespace if cluster_count == 1 else f"{window.cluster_id} · {namespace}"
+            points_by_key[key][window.timestamp] = rate
+
+    eligible = {
+        key: tuple(sorted(points.items()))[-MAX_COST_TREND_POINTS:]
+        for key, points in points_by_key.items()
+        if len(points) >= 2
+    }
+    if not eligible:
+        return CostUnavailableTrend(
+            range=time_range,
+            reason_codes=(COST_TREND_HISTORY_INSUFFICIENT,),
+        )
+
+    ranked = sorted(
+        eligible,
+        key=lambda key: (-eligible[key][-1][1], key),
+    )
+    truncated = len(ranked) > MAX_COST_TREND_SERIES
+    direct_limit = MAX_COST_TREND_SERIES - 1 if truncated else MAX_COST_TREND_SERIES
+    direct_keys = ranked[:direct_limit]
+    series = [_trend_series(key, labels[key], eligible[key]) for key in direct_keys]
+    if truncated:
+        other_points: dict[int, int] = defaultdict(int)
+        for key in ranked[direct_limit:]:
+            for timestamp, rate in eligible[key]:
+                if other_points[timestamp] <= MAX_SAFE_JSON_INTEGER - rate:
+                    other_points[timestamp] += rate
+        if len(other_points) >= 2:
+            series.append(
+                _trend_series(
+                    "other",
+                    "Other",
+                    tuple(sorted(other_points.items()))[-MAX_COST_TREND_POINTS:],
+                )
+            )
+    reasons = _unique_reasons(
+        partial_reasons,
+        (COST_TREND_SERIES_TRUNCATED,) if truncated else (),
+    )
+    return CostObservedTrend(
+        availability="partial" if reasons else "available",
+        range=time_range,
+        currency=COST_CURRENCY,
+        series=tuple(series),
+        reason_codes=reasons,
+    )
+
+
+def _trend_series(
+    key: str,
+    label: str,
+    points: Sequence[tuple[int, int]],
+) -> CostTrendSeries:
+    return CostTrendSeries(
+        key=key,
+        label=label,
+        points=tuple(
+            CostTrendPoint(timestamp=timestamp, rate_micros=rate) for timestamp, rate in points
+        ),
+    )
+
+
+def _unique_reasons(*groups: Iterable[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(reason for group in groups for reason in group if reason))
 
 
 def cost_scope_coverage(

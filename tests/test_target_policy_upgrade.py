@@ -14,6 +14,10 @@ from domains.target.policy_upgrade import (
     TargetPolicyUpgradeService,
     build_target_upgrade_plan,
 )
+from packages.contracts.cost.observations import (
+    COST_NAMESPACE_HOURLY_METRIC,
+    COST_NAMESPACE_STORAGE_METRIC,
+)
 from packages.contracts.gateway.requests import AgentPolicy
 from packages.contracts.target import (
     NODE_COLLECTOR_IMAGE_KEY,
@@ -170,6 +174,13 @@ def test_upgrade_plan_rebases_only_named_defaults_and_preserves_custom_configura
         "custom_option": {"keep": True},
     }
     assert {str(item["name"]) for item in default_kubernetes_queries}.issubset(query_by_name)
+    metrics_query_names = {
+        str(item["name"]) for item in plan.policy.evidence.providers["metrics"].queries
+    }
+    assert {
+        COST_NAMESPACE_HOURLY_METRIC,
+        COST_NAMESPACE_STORAGE_METRIC,
+    }.issubset(metrics_query_names)
     assert plan.policy.evidence.providers["customer-provider"].model_dump() == (
         _policy().evidence.providers["customer-provider"].model_dump()
     )

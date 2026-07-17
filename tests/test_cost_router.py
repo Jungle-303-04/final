@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from datetime import datetime
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -15,6 +16,7 @@ from packages.runtime.dependencies import get_db
 class CostDb:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.cost_evidence_windows: list[dict[str, object]] = []
 
     def accessible_resource_ids(
         self,
@@ -49,6 +51,27 @@ class CostDb:
             }
             for cluster_id in cluster_ids
         }
+
+    def list_cost_evidence_windows(
+        self,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+        *,
+        since: datetime,
+        limit_per_cluster: int = 480,
+    ) -> list[dict[str, object]]:
+        self.calls.append(
+            (
+                "cost-evidence",
+                {
+                    "workspace_id": workspace_id,
+                    "cluster_ids": cluster_ids,
+                    "since": since,
+                    "limit_per_cluster": limit_per_cluster,
+                },
+            )
+        )
+        return self.cost_evidence_windows
 
     def filter_snapshot_context(
         self,
@@ -184,7 +207,7 @@ def test_cost_overview_is_scope_and_permission_bound_without_fabricating_money()
         "observed_at": None,
         "currency": None,
         "data_window": None,
-        "reason_codes": ["cost_observation_not_integrated"],
+        "reason_codes": ["cost_observation_unavailable"],
     }
     assert body["summary"] == {
         "availability": "unavailable",
@@ -194,18 +217,82 @@ def test_cost_overview_is_scope_and_permission_bound_without_fabricating_money()
         "idle_cost": None,
         "efficiency": None,
         "savings_recommendations": None,
-        "reason_codes": ["cost_observation_not_integrated"],
+        "reason_codes": ["cost_observation_unavailable"],
     }
     assert body["trend"] == {
         "availability": "unavailable",
         "range": "24h",
         "currency": None,
         "series": [],
-        "reason_codes": ["cost_observation_not_integrated"],
+        "reason_codes": ["cost_observation_unavailable"],
     }
     assert body["refresh_after_seconds"] == 60
     assert body["trend_refresh_after_seconds"] == 120
     assert body["nodes_refresh_after_seconds"] == 120
+
+
+def test_cost_overview_projects_agent_evidence_with_one_bounded_batch_read() -> None:
+    client = _client()
+    db = client.app.state.cost_test_db
+    db.cost_evidence_windows = [
+        _cost_window("2026-07-17T08:00:00Z", hourly=1.25, storage=0.25),
+        _cost_window("2026-07-17T09:00:00Z", hourly=1.5, storage=0.5),
+    ]
+
+    response = client.get("/cost/overview?clusters=cluster-a&namespaces=cluster-a%2Fshop")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["observation"] == {
+        "availability": "available",
+        "observed_at": "2026-07-17T09:00:00Z",
+        "currency": "USD",
+        "data_window": "1h",
+        "reason_codes": [],
+    }
+    assert body["summary"] == {
+        "availability": "available",
+        "hourly_cost": 2_000_000,
+        "monthly_projection": 1_460_000_000,
+        "storage_cost": 500_000,
+        "idle_cost": None,
+        "efficiency": None,
+        "savings_recommendations": None,
+        "reason_codes": [],
+    }
+    assert body["trend"]["series"] == [
+        {
+            "key": "cluster-a/shop",
+            "label": "shop",
+            "points": [
+                {"timestamp": 1_784_275_200, "rate_micros": 1_500_000},
+                {"timestamp": 1_784_278_800, "rate_micros": 2_000_000},
+            ],
+        }
+    ]
+    calls = [kwargs for name, kwargs in db.calls if name == "cost-evidence"]
+    assert len(calls) == 1
+    assert calls[0]["cluster_ids"] == ("cluster-a",)
+
+
+def _cost_window(observed_at: str, *, hourly: float, storage: float) -> dict[str, object]:
+    return {
+        "cluster_id": "cluster-a",
+        "updated_at": observed_at,
+        "payload": {
+            "cluster_id": "cluster-a",
+            "metrics": {
+                "results": {
+                    "opencost_namespace_hourly_rate": {
+                        "samples": [{"metric": {"namespace": "shop"}, "value": hourly}],
+                    },
+                    "opencost_namespace_storage_rate": {
+                        "samples": [{"metric": {"namespace": "shop"}, "value": storage}],
+                    },
+                },
+            },
+        },
+    }
 
 
 def test_cost_overview_hides_unauthorized_scope_and_rejects_invalid_cluster_syntax() -> None:

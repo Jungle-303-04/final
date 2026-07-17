@@ -113,21 +113,36 @@ function toOverview(value: Awaited<ReturnType<CostEndpointDependencies["getCostO
       observedAt: value.scope_coverage.observed_at,
       reasonCodes: value.scope_coverage.reason_codes,
     },
-    observation: {
+    observation: value.observation.availability === "unavailable" ? {
+      availability: "unavailable",
+      observedAt: null,
+      currency: null,
+      dataWindow: null,
+      reasonCodes: value.observation.reason_codes,
+    } : {
       availability: value.observation.availability,
       observedAt: value.observation.observed_at,
       currency: value.observation.currency,
       dataWindow: value.observation.data_window,
       reasonCodes: value.observation.reason_codes,
     },
-    summary: {
+    summary: value.summary.availability === "unavailable" ? {
+      availability: "unavailable",
+      hourlyCost: null,
+      monthlyProjection: null,
+      storageCost: null,
+      idleCost: null,
+      efficiency: null,
+      savingsRecommendations: null,
+      reasonCodes: value.summary.reason_codes,
+    } : {
       availability: value.summary.availability,
       hourlyCost: value.summary.hourly_cost,
       monthlyProjection: value.summary.monthly_projection,
       storageCost: value.summary.storage_cost,
       idleCost: value.summary.idle_cost,
       efficiency: value.summary.efficiency,
-      savingsRecommendations: value.summary.savings_recommendations,
+      savingsRecommendations: null,
       reasonCodes: value.summary.reason_codes,
     },
     trend: value.trend.availability === "unavailable" ? {

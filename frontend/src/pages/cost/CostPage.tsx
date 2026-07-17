@@ -15,7 +15,7 @@ import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filter
 import type { RightsizingPort } from "../../features/rightsizing/rightsizingContract";
 import type { RightsizingClusterScope } from "../../features/rightsizing/useRightsizingScans";
 import { RefreshAction } from "../../motion/RefreshAction";
-import { useI18n } from "../../shared/i18n";
+import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
@@ -201,12 +201,12 @@ function CostContent({
         <div aria-labelledby="cost-tab-overview" className="grid min-w-0 gap-4" id="cost-panel-overview" role="tabpanel">
           <ObservationNotice overview={overview} />
           <section className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={t("cost.summary.title")}>
-            <SummaryCard label={t("cost.summary.hourly")} value={overview.summary.hourlyCost} />
-            <SummaryCard label={t("cost.summary.monthly")} value={overview.summary.monthlyProjection} />
-            <SummaryCard label={t("cost.summary.storage")} value={overview.summary.storageCost} />
-            <SummaryCard label={t("cost.summary.idle")} value={overview.summary.idleCost} />
-            <SummaryCard label={t("cost.summary.efficiency")} value={overview.summary.efficiency} />
-            <SummaryCard label={t("cost.summary.savings")} value={overview.summary.savingsRecommendations} />
+            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.hourly")} value={overview.summary.hourlyCost} />
+            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.monthly")} value={overview.summary.monthlyProjection} />
+            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.storage")} value={overview.summary.storageCost} />
+            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.idle")} value={overview.summary.idleCost} />
+            <SummaryCard currency={null} kind="percent" label={t("cost.summary.efficiency")} value={overview.summary.efficiency} />
+            <SummaryCard currency={null} label={t("cost.summary.savings")} value={overview.summary.savingsRecommendations} />
           </section>
           <CostScopeCard overview={overview} />
         </div>
@@ -222,21 +222,51 @@ function ObservationNotice({ overview }: { overview: CostOverview }) {
       <Activity aria-hidden="true" />
       <AlertTitle>{t("cost.status.title")}</AlertTitle>
       <AlertDescription>
-        <p>{t("cost.status.unavailable")}</p>
+        <p>{observationStatusCopy(overview, t)}</p>
         <AvailabilityReasons reasons={overview.observation.reasonCodes} />
       </AlertDescription>
     </Alert>
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: null }) {
-  const { t } = useI18n();
+function SummaryCard({
+  currency,
+  kind = "currency",
+  label,
+  value,
+}: {
+  currency: string | null;
+  kind?: "currency" | "percent";
+  label: string;
+  value: number | null;
+}) {
+  const { formatNumber, t } = useI18n();
+  const rendered = value === null
+    ? t("cost.value.notObserved")
+    : kind === "percent"
+      ? `${formatNumber(value / 100, { maximumFractionDigits: 2 })}%`
+      : currency === null
+        ? t("cost.value.notObserved")
+        : formatNumber(value / 1_000_000, {
+          currency,
+          maximumFractionDigits: value >= 1_000_000 ? 2 : 4,
+          style: "currency",
+        });
   return (
     <Card size="sm">
       <CardHeader><CardTitle>{label}</CardTitle></CardHeader>
-      <CardContent><p className="text-lg font-semibold">{value ?? t("cost.value.notObserved")}</p></CardContent>
+      <CardContent><p className="break-words text-lg font-semibold tabular-nums">{rendered}</p></CardContent>
     </Card>
   );
+}
+
+function observationStatusCopy(
+  overview: CostOverview,
+  t: TranslationFunction,
+): string {
+  if (overview.observation.availability === "available") return t("cost.status.available");
+  if (overview.observation.availability === "partial") return t("cost.status.partial");
+  return t("cost.status.unavailable");
 }
 
 function CostFailureScreen({ failure, onRefresh }: { failure: CostPortFailure; onRefresh: () => void }) {

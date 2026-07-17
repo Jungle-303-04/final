@@ -69,6 +69,41 @@ describe("Cost overview API", () => {
     await expect(getCostOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
 
+  it("accepts observed allocation summaries and rejects partial values without reasons", async () => {
+    const fixture = overview();
+    const observed = {
+      ...fixture,
+      observation: {
+        availability: "available",
+        observed_at: "2026-07-17T09:00:00Z",
+        currency: "USD",
+        data_window: "1h",
+        reason_codes: [],
+      },
+      summary: {
+        availability: "available",
+        hourly_cost: 2_000_000,
+        monthly_projection: 1_460_000_000,
+        storage_cost: 500_000,
+        idle_cost: null,
+        efficiency: null,
+        savings_recommendations: null,
+        reason_codes: [],
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(observed));
+    await expect(getCostOverview()).resolves.toMatchObject({
+      observation: { availability: "available", currency: "USD" },
+      summary: { availability: "available", hourly_cost: 2_000_000 },
+    });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      ...observed,
+      observation: { ...observed.observation, availability: "partial" },
+    }));
+    await expect(getCostOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
   it("fails closed if unavailable cost has a numeric amount, currency, or recommendation", async () => {
     const fixture = overview();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
@@ -103,7 +138,7 @@ function overview() {
       observed_at: null,
       currency: null,
       data_window: null,
-      reason_codes: ["cost_observation_not_integrated"],
+      reason_codes: ["cost_observation_unavailable"],
     },
     summary: {
       availability: "unavailable",
@@ -113,14 +148,14 @@ function overview() {
       idle_cost: null,
       efficiency: null,
       savings_recommendations: null,
-      reason_codes: ["cost_observation_not_integrated"],
+      reason_codes: ["cost_observation_unavailable"],
     },
     trend: {
       availability: "unavailable",
       range: "7d",
       currency: null,
       series: [],
-      reason_codes: ["cost_observation_not_integrated"],
+      reason_codes: ["cost_observation_unavailable"],
     },
     refresh_after_seconds: 60,
     trend_refresh_after_seconds: 120,

@@ -61,6 +61,12 @@ export interface CostOverviewEndpoint {
     currency: null;
     data_window: null;
     reason_codes: string[];
+  } | {
+    availability: "available" | "partial";
+    observed_at: string;
+    currency: string;
+    data_window: string;
+    reason_codes: string[];
   };
   summary: {
     availability: "unavailable";
@@ -69,6 +75,15 @@ export interface CostOverviewEndpoint {
     storage_cost: null;
     idle_cost: null;
     efficiency: null;
+    savings_recommendations: null;
+    reason_codes: string[];
+  } | {
+    availability: "available" | "partial";
+    hourly_cost: number;
+    monthly_projection: number;
+    storage_cost: number | null;
+    idle_cost: number | null;
+    efficiency: number | null;
     savings_recommendations: null;
     reason_codes: string[];
   };

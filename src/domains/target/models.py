@@ -26,6 +26,12 @@ class EvidenceWindow(Base):
             "correlation_id",
             "cluster_id",
         ),
+        Index(
+            "ix_evidence_windows_workspace_cluster_updated",
+            "workspace_id",
+            "cluster_id",
+            "updated_at",
+        ),
     )
 
     evidence_key: Mapped[str] = mapped_column(Text, primary_key=True)

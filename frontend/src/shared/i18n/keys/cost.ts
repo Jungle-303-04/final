@@ -7,6 +7,8 @@ export type CostMessageKey =
   | "cost.refresh.cancelled"
   | "cost.refresh.failed"
   | "cost.status.title"
+  | "cost.status.available"
+  | "cost.status.partial"
   | "cost.status.unavailable"
   | "cost.scope.title"
   | "cost.scope.unavailable"

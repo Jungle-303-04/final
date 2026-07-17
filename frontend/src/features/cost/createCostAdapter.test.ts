@@ -24,6 +24,39 @@ describe("createCostAdapter", () => {
     expect(overview.scopeCoverage.scopes[0]).toMatchObject({ clusterId: "cluster-a", freshness: "live" });
   });
 
+  it("maps observed summary micro-units without client-side recomputation", async () => {
+    const fixture = {
+      ...endpoint(),
+      observation: {
+        availability: "available" as const,
+        observed_at: "2026-07-17T09:00:00Z",
+        currency: "USD",
+        data_window: "1h",
+        reason_codes: [],
+      },
+      summary: {
+        availability: "available" as const,
+        hourly_cost: 2_000_000,
+        monthly_projection: 1_460_000_000,
+        storage_cost: 500_000,
+        idle_cost: null,
+        efficiency: null,
+        savings_recommendations: null,
+        reason_codes: [],
+      },
+    };
+    const port = createCostAdapter({
+      getCostOverview: vi.fn().mockResolvedValue(fixture),
+      getCostNodes: vi.fn().mockResolvedValue(nodeEndpoint()),
+    }, refreshPolicies());
+
+    await expect(port.getOverview({ clusterIds: ["cluster-a"], namespaces: [], timeRange: "24h" }))
+      .resolves.toMatchObject({
+        observation: { availability: "available", currency: "USD", dataWindow: "1h" },
+        summary: { availability: "available", hourlyCost: 2_000_000, storageCost: 500_000 },
+      });
+  });
+
   it("loads every Cost channel from the injected server policy registry", async () => {
     const policies = refreshPolicies();
     const port = createCostAdapter(
@@ -123,14 +156,14 @@ function endpoint() {
       idle_cost: null,
       efficiency: null,
       savings_recommendations: null,
-      reason_codes: ["cost_observation_not_integrated"],
+      reason_codes: ["cost_observation_unavailable"],
     },
     trend: {
       availability: "unavailable" as const,
       range: "24h" as const,
       currency: null,
       series: [],
-      reason_codes: ["cost_observation_not_integrated"],
+      reason_codes: ["cost_observation_unavailable"],
     },
     refresh_after_seconds: 60,
     trend_refresh_after_seconds: 120,
@@ -144,7 +177,7 @@ function unavailable() {
     observed_at: null,
     currency: null,
     data_window: null,
-    reason_codes: ["cost_observation_not_integrated"],
+    reason_codes: ["cost_observation_unavailable"],
   };
 }
 

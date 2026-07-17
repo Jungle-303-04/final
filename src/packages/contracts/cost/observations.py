@@ -18,6 +18,9 @@ CostAvailability = Literal["available", "partial", "unavailable"]
 CostTimeRange = Literal["6h", "24h", "7d"]
 CostWorkloadKind = Literal["Deployment", "StatefulSet", "DaemonSet"]
 
+COST_NAMESPACE_HOURLY_METRIC = "opencost_namespace_hourly_rate"
+COST_NAMESPACE_STORAGE_METRIC = "opencost_namespace_storage_rate"
+
 MAX_COST_TREND_SERIES = 8
 MAX_COST_TREND_POINTS = 480
 MAX_SAFE_JSON_INTEGER = 9_007_199_254_740_991
@@ -45,6 +48,20 @@ class CostObservationStatus(StrictModel):
     reason_codes: tuple[str, ...] = Field(min_length=1)
 
 
+class CostObservedObservationStatus(StrictModel):
+    availability: Literal["available", "partial"]
+    observed_at: str = Field(min_length=1)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    data_window: str = Field(min_length=1, max_length=32)
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def partial_observation_has_a_reason(self) -> CostObservedObservationStatus:
+        if self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial cost observation requires a reason")
+        return self
+
+
 class CostObservationSummary(StrictModel):
     availability: Literal["unavailable"] = "unavailable"
     hourly_cost: None = None
@@ -54,6 +71,25 @@ class CostObservationSummary(StrictModel):
     efficiency: None = None
     savings_recommendations: None = None
     reason_codes: tuple[str, ...] = Field(min_length=1)
+
+
+class CostObservedObservationSummary(StrictModel):
+    """Observed currency values use integer micro-units; efficiency uses basis points."""
+
+    availability: Literal["available", "partial"]
+    hourly_cost: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    monthly_projection: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    storage_cost: int | None = Field(default=None, ge=0, le=MAX_SAFE_JSON_INTEGER)
+    idle_cost: int | None = Field(default=None, ge=0, le=MAX_SAFE_JSON_INTEGER)
+    efficiency: int | None = Field(default=None, ge=0, le=10_000)
+    savings_recommendations: None = None
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def partial_summary_has_a_reason(self) -> CostObservedObservationSummary:
+        if self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial cost summary requires a reason")
+        return self
 
 
 class CostTrendPoint(StrictModel):
@@ -169,8 +205,8 @@ CostWorkloadAllocation = CostObservedWorkloadAllocation | CostUnavailableWorkloa
 
 class CostOverviewResponse(StrictModel):
     scope_coverage: CostScopeCoverage
-    observation: CostObservationStatus
-    summary: CostObservationSummary
+    observation: CostObservedObservationStatus | CostObservationStatus
+    summary: CostObservedObservationSummary | CostObservationSummary
     trend: CostObservedTrend | CostUnavailableTrend
     refresh_after_seconds: int = Field(ge=1, le=3600)
     trend_refresh_after_seconds: int = Field(ge=1, le=3600)

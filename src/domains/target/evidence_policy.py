@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from packages.config.constants import Target
 from packages.config.security import RCA_TEST_TARGET_ENVIRONMENTS
+from packages.contracts.cost.observations import (
+    COST_NAMESPACE_HOURLY_METRIC,
+    COST_NAMESPACE_STORAGE_METRIC,
+)
 from packages.contracts.evidence_policy import (
     EvidencePolicyQuery,
     EvidenceProfile,
@@ -33,6 +37,21 @@ STANDARD_EVIDENCE_PROFILE: EvidenceProfile = "standard"
 DEMO_EVIDENCE_PROFILE: EvidenceProfile = "demo"
 MANAGEMENT_EVIDENCE_PROFILE: EvidenceProfile = "management"
 EVIDENCE_PROVIDER_KEYS = ("kubernetes", "metrics", "logs", "traces", "metadata")
+
+COST_NAMESPACE_HOURLY_QUERY = """sum by (namespace) (
+  label_replace(avg_over_time(container_cpu_allocation{namespace!=""}[1h]), "namespace", "$1", "exported_namespace", "(.+)")
+  * on(node) group_left() max by (node) (node_cpu_hourly_cost)
+) + sum by (namespace) (
+  label_replace(avg_over_time(container_memory_allocation_bytes{namespace!=""}[1h]), "namespace", "$1", "exported_namespace", "(.+)")
+  / 1073741824 * on(node) group_left() max by (node) (node_ram_hourly_cost)
+)"""
+COST_NAMESPACE_STORAGE_QUERY = """sum by (namespace) (
+  max by (persistentvolume) (pv_hourly_cost)
+  * on(persistentvolume) group_left(namespace)
+  max by (persistentvolume, namespace) (
+    label_replace(kube_persistentvolume_claim_ref, "namespace", "$1", "claim_namespace", "(.+)")
+  )
+)"""
 
 
 def _provenance(
@@ -197,6 +216,11 @@ def evidence_provider_queries(
         return queries
 
     if provider_key == "metrics":
+        cost_provenance = _provenance(
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+            query_scope="cluster",
+        )
         queries = [
             _namespace_query(
                 source="prometheus",
@@ -217,6 +241,22 @@ def evidence_provider_queries(
                 matcher='namespace="target"',
                 cluster_id=cluster_id,
                 evidence_profile=evidence_profile,
+            ),
+            _query(
+                source="prometheus",
+                name=COST_NAMESPACE_HOURLY_METRIC,
+                description="Namespace CPU and memory allocation hourly rate from OpenCost metrics.",
+                query=COST_NAMESPACE_HOURLY_QUERY,
+                provenance=cost_provenance,
+                collection_scope="cluster_cost_observation",
+            ),
+            _query(
+                source="prometheus",
+                name=COST_NAMESPACE_STORAGE_METRIC,
+                description="Namespace persistent-volume hourly rate from OpenCost metrics.",
+                query=COST_NAMESPACE_STORAGE_QUERY,
+                provenance=cost_provenance,
+                collection_scope="cluster_cost_observation",
             ),
         ]
         if evidence_profile == DEMO_EVIDENCE_PROFILE:

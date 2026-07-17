@@ -26,6 +26,16 @@ export interface CostUnavailableObservation {
   reasonCodes: readonly string[];
 }
 
+export interface CostObservedObservation {
+  availability: "available" | "partial";
+  observedAt: string;
+  currency: string;
+  dataWindow: string;
+  reasonCodes: readonly string[];
+}
+
+export type CostObservation = CostObservedObservation | CostUnavailableObservation;
+
 export interface CostUnavailableSummary {
   availability: "unavailable";
   hourlyCost: null;
@@ -36,6 +46,19 @@ export interface CostUnavailableSummary {
   savingsRecommendations: null;
   reasonCodes: readonly string[];
 }
+
+export interface CostObservedSummary {
+  availability: "available" | "partial";
+  hourlyCost: number;
+  monthlyProjection: number;
+  storageCost: number | null;
+  idleCost: number | null;
+  efficiency: number | null;
+  savingsRecommendations: null;
+  reasonCodes: readonly string[];
+}
+
+export type CostSummary = CostObservedSummary | CostUnavailableSummary;
 
 export interface CostTrendPoint {
   timestamp: number;
@@ -99,8 +122,8 @@ export type CostWorkloadAllocation =
 
 export interface CostOverview {
   scopeCoverage: CostScopeCoverage;
-  observation: CostUnavailableObservation;
-  summary: CostUnavailableSummary;
+  observation: CostObservation;
+  summary: CostSummary;
   trend: CostTrend;
 }
 

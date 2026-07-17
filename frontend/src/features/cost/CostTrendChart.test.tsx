@@ -37,7 +37,7 @@ describe("CostTrendChart", () => {
       availability: "unavailable",
       timeRange: "24h",
       currency: null,
-      reasonCodes: ["cost_observation_not_integrated"],
+      reasonCodes: ["cost_observation_unavailable"],
       series: [],
     }, onChange);
 

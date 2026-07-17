@@ -28,9 +28,9 @@ describe("CostPage", () => {
     renderCostPage(port);
 
     expect(await screen.findByRole("heading", { name: "Cost" })).toBeTruthy();
-    expect(screen.getByText("Cost observation is not integrated for this authorized scope.")).toBeTruthy();
+    expect(screen.getByText("No cost allocation observation is available for this authorized scope.")).toBeTruthy();
     expect(screen.getAllByText("Not observed").length).toBeGreaterThan(0);
-    expect(screen.queryByText("cost_observation_not_integrated")).toBeNull();
+    expect(screen.queryByText("cost_observation_unavailable")).toBeNull();
     expect(screen.queryByText("inventory_snapshot_unavailable:cluster-a")).toBeNull();
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.queryByText("USD")).toBeNull();
@@ -48,6 +48,49 @@ describe("CostPage", () => {
       namespaces: [],
       limit: 50,
     }, expect.any(AbortSignal)));
+  });
+
+  it("renders observed agent allocation in currency micro-units", async () => {
+    const port = costPort();
+    port.getOverview.mockResolvedValue({
+      scopeCoverage: {
+        availability: "available",
+        scopes: [{ workspaceId: "workspace-a", clusterId: "cluster-a", namespaces: [], freshness: "live" }],
+        observedAt: "2026-07-17T09:00:00Z",
+        reasonCodes: [],
+      },
+      observation: {
+        availability: "available",
+        observedAt: "2026-07-17T09:00:00Z",
+        currency: "USD",
+        dataWindow: "1h",
+        reasonCodes: [],
+      },
+      summary: {
+        availability: "available",
+        hourlyCost: 2_000_000,
+        monthlyProjection: 1_460_000_000,
+        storageCost: 500_000,
+        idleCost: null,
+        efficiency: null,
+        savingsRecommendations: null,
+        reasonCodes: [],
+      },
+      trend: {
+        availability: "unavailable",
+        timeRange: "24h",
+        currency: null,
+        series: [],
+        reasonCodes: ["cost_trend_history_insufficient"],
+      },
+    });
+
+    renderCostPage(port);
+
+    expect(await screen.findByText("Cost allocation is observed through the connected cluster agent.")).toBeTruthy();
+    expect(screen.getByText("$2.00")).toBeTruthy();
+    expect(screen.getByText("$1,460.00")).toBeTruthy();
+    expect(screen.getByText("$0.50")).toBeTruthy();
   });
 
   it("renders a forbidden response without querying a replacement scope", async () => {
@@ -113,7 +156,7 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
         observedAt: "2026-07-16T09:00:00Z",
         reasonCodes: [],
       },
-      observation: { availability: "unavailable", observedAt: null, currency: null, dataWindow: null, reasonCodes: ["cost_observation_not_integrated"] },
+      observation: { availability: "unavailable", observedAt: null, currency: null, dataWindow: null, reasonCodes: ["cost_observation_unavailable"] },
       summary: {
         availability: "unavailable",
         hourlyCost: null,
@@ -122,14 +165,14 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
         idleCost: null,
         efficiency: null,
         savingsRecommendations: null,
-        reasonCodes: ["cost_observation_not_integrated"],
+        reasonCodes: ["cost_observation_unavailable"],
       },
       trend: {
         availability: "unavailable" as const,
         timeRange: "24h" as const,
         currency: null,
         series: [] as const,
-        reasonCodes: ["cost_observation_not_integrated"],
+        reasonCodes: ["cost_observation_unavailable"],
       },
     })),
     getNodes: vi.fn().mockImplementation(() => error ? Promise.reject(error) : Promise.resolve({

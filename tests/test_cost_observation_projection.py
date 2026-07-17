@@ -39,7 +39,7 @@ def test_cost_projection_exposes_scope_but_never_invents_currency_or_amounts() -
         "observed_at": None,
         "currency": None,
         "data_window": None,
-        "reason_codes": ("cost_observation_not_integrated",),
+        "reason_codes": ("cost_observation_unavailable",),
     }
     assert body.summary.hourly_cost is None
     assert body.summary.monthly_projection is None
@@ -49,7 +49,7 @@ def test_cost_projection_exposes_scope_but_never_invents_currency_or_amounts() -
         "range": "24h",
         "currency": None,
         "series": (),
-        "reason_codes": ("cost_observation_not_integrated",),
+        "reason_codes": ("cost_observation_unavailable",),
     }
     assert body.refresh_after_seconds == 60
     assert body.trend_refresh_after_seconds == 120
@@ -74,6 +74,61 @@ def test_cost_projection_preserves_the_requested_bounded_trend_range() -> None:
 
     assert body.trend.range == "7d"
     assert body.trend.series == ()
+
+
+def test_cost_projection_uses_agent_windows_without_cross_cluster_collisions() -> None:
+    body = cost_overview(
+        workspace_id="workspace-a",
+        selected_cluster_ids=("cluster-a", "cluster-b"),
+        contexts={
+            cluster_id: {
+                "snapshot_revision": 8,
+                "observed_at": "2026-07-17T09:00:00Z",
+                "resources_complete": True,
+                "labels_complete": True,
+                "partial_reason_codes": [],
+            }
+            for cluster_id in ("cluster-a", "cluster-b")
+        },
+        evidence_windows=(
+            _window("cluster-a", "2026-07-17T08:00:00Z", 1.0),
+            _window("cluster-b", "2026-07-17T08:00:00Z", 2.0),
+            _window("cluster-a", "2026-07-17T09:00:00Z", 1.5),
+            _window("cluster-b", "2026-07-17T09:00:00Z", 2.5),
+        ),
+    )
+
+    assert body.observation.availability == "available"
+    assert body.summary.hourly_cost == 4_000_000
+    assert body.summary.monthly_projection == 2_920_000_000
+    assert body.summary.storage_cost == 0
+    assert body.trend.availability == "available"
+    assert [series.key for series in body.trend.series] == [
+        "cluster-b/shop",
+        "cluster-a/shop",
+    ]
+    assert [series.label for series in body.trend.series] == [
+        "cluster-b · shop",
+        "cluster-a · shop",
+    ]
+
+
+def _window(cluster_id: str, observed_at: str, hourly: float) -> dict[str, object]:
+    return {
+        "cluster_id": cluster_id,
+        "updated_at": observed_at,
+        "payload": {
+            "cluster_id": cluster_id,
+            "metrics": {
+                "results": {
+                    "opencost_namespace_hourly_rate": {
+                        "samples": [{"metric": {"namespace": "shop"}, "value": hourly}],
+                    },
+                    "opencost_namespace_storage_rate": {"samples": []},
+                },
+            },
+        },
+    }
 
 
 def test_cost_projection_keeps_partial_and_disconnected_scope_evidence() -> None:

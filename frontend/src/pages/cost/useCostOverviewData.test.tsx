@@ -129,7 +129,7 @@ function overview() {
       observedAt: null,
       currency: null,
       dataWindow: null,
-      reasonCodes: ["cost_observation_not_integrated"],
+      reasonCodes: ["cost_observation_unavailable"],
     },
     summary: {
       availability: "unavailable" as const,
@@ -139,14 +139,14 @@ function overview() {
       idleCost: null,
       efficiency: null,
       savingsRecommendations: null,
-      reasonCodes: ["cost_observation_not_integrated"],
+      reasonCodes: ["cost_observation_unavailable"],
     },
     trend: {
       availability: "unavailable" as const,
       timeRange: "24h" as const,
       currency: null,
       series: [] as const,
-      reasonCodes: ["cost_observation_not_integrated"],
+      reasonCodes: ["cost_observation_unavailable"],
     },
   };
 }

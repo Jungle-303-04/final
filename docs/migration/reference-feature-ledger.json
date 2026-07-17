@@ -10648,24 +10648,31 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.cost.observations",
       "frontendContract": "frontend/src/pages/cost",
       "desktopContract": "desktop",
       "verification": [
         "tests/test_cost_router.py",
+        "tests/test_cost_repository.py",
+        "tests/test_target_evidence_policy.py",
+        "tests/test_target_policy_upgrade.py",
         "frontend/src/pages/cost/CostPage.test.tsx",
         "frontend/src/api/cost-overview.test.ts"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/cost/router.py#get_cost_overview",
-          "test": "tests/test_cost_router.py"
+          "consumer": "src/domains/cost/repository.py#CostObservationRepository.list_cost_evidence_windows",
+          "reason": "The server compiles fixed OpenCost allocation queries into the outbound cluster-agent evidence policy, persists results in evidence windows, and reads one workspace/cluster/time/rank-bounded batch to project integer micro-unit summary values without a direct Prometheus connection.",
+          "test": "tests/test_cost_router.py#test_cost_overview_projects_agent_evidence_with_one_bounded_batch_read"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/cost/CostPage.tsx",
+          "state": "implemented",
+          "destination": "frontend/src/pages/cost/CostPage.tsx#CostObservedContent",
+          "consumer": "frontend/src/features/cost/createCostAdapter.ts#createCostAdapter",
+          "reason": "The Cost route validates observed/partial/unavailable unions, preserves server-computed micro-units, formats the observed currency, and keeps missing values distinct from observed zero.",
           "test": "frontend/src/pages/cost/CostPage.test.tsx"
         },
         "desktop": null,
@@ -10748,23 +10755,24 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.cost.observations",
       "frontendContract": "frontend/src/features/cost/costContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_cost_router.py",
+        "tests/test_cost_repository.py",
         "tests/test_cost_observation_projection.py",
         "frontend/src/api/cost-overview.test.ts",
         "frontend/src/features/cost/CostTrendChart.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/cost/router.py#get_cost_overview",
-          "consumer": "src/packages/contracts/cost/observations.py#CostObservedTrend",
-          "reason": "Bounded trend ranges and transport limits are implemented, but the provider observation repository is not connected.",
-          "test": "tests/test_cost_router.py#test_cost_overview_validates_and_forwards_the_trend_range"
+          "consumer": "src/domains/cost/observation_projection.py#_cost_trend",
+          "reason": "The trend derives from historical outbound-agent evidence windows rather than a browser or server range query, isolates cluster/namespace identities, retains at most eight series and 480 ordered points, and reports insufficient or truncated evidence explicitly.",
+          "test": "tests/test_cost_observation_projection.py#test_cost_projection_uses_agent_windows_without_cross_cluster_collisions"
         },
         "frontend": {
           "state": "implemented",

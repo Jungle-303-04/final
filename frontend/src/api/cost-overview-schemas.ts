@@ -3,6 +3,7 @@ import { z } from "zod";
 const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
 const freshnessSchema = z.enum(["live", "stale", "partial", "disconnected"]);
 const reasonCodesSchema = z.array(z.string().min(1)).min(1);
+const optionalReasonCodesSchema = z.array(z.string().min(1));
 const costTimeRangeSchema = z.enum(["6h", "24h", "7d"]);
 const maxSafeIntegerSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
@@ -65,7 +66,7 @@ export const costScopeCoverageSchema = z.strictObject({
   }
 });
 
-export const costObservationStatusSchema = z.strictObject({
+export const costUnavailableObservationStatusSchema = z.strictObject({
   availability: z.literal("unavailable"),
   observed_at: z.null(),
   currency: z.null(),
@@ -73,7 +74,24 @@ export const costObservationStatusSchema = z.strictObject({
   reason_codes: reasonCodesSchema,
 });
 
-export const costObservationSummarySchema = z.strictObject({
+export const costObservedObservationStatusSchema = z.strictObject({
+  availability: z.enum(["available", "partial"]),
+  observed_at: z.string().min(1),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  data_window: z.string().min(1).max(32),
+  reason_codes: optionalReasonCodesSchema,
+}).superRefine((value, context) => {
+  if (value.availability === "partial" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial cost observation requires reasons" });
+  }
+});
+
+export const costObservationStatusSchema = z.union([
+  costObservedObservationStatusSchema,
+  costUnavailableObservationStatusSchema,
+]);
+
+export const costUnavailableObservationSummarySchema = z.strictObject({
   availability: z.literal("unavailable"),
   hourly_cost: z.null(),
   monthly_projection: z.null(),
@@ -83,6 +101,26 @@ export const costObservationSummarySchema = z.strictObject({
   savings_recommendations: z.null(),
   reason_codes: reasonCodesSchema,
 });
+
+export const costObservedObservationSummarySchema = z.strictObject({
+  availability: z.enum(["available", "partial"]),
+  hourly_cost: maxSafeIntegerSchema,
+  monthly_projection: maxSafeIntegerSchema,
+  storage_cost: maxSafeIntegerSchema.nullable(),
+  idle_cost: maxSafeIntegerSchema.nullable(),
+  efficiency: z.number().int().min(0).max(10_000).nullable(),
+  savings_recommendations: z.null(),
+  reason_codes: optionalReasonCodesSchema,
+}).superRefine((value, context) => {
+  if (value.availability === "partial" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial cost summary requires reasons" });
+  }
+});
+
+export const costObservationSummarySchema = z.union([
+  costObservedObservationSummarySchema,
+  costUnavailableObservationSummarySchema,
+]);
 
 export const costOverviewSchema = z.strictObject({
   scope_coverage: costScopeCoverageSchema,
