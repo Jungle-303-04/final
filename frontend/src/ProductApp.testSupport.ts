@@ -96,6 +96,13 @@ export function homeApiResponse(path: string): Response {
       cluster_id: "cluster-1",
       latest_snapshot: { collected_at: "2026-07-12T10:00:00Z" },
       counts: [{ resource_type: "pod", health: "healthy", count: 1 }],
+      counts_evidence: {
+        completeness: "observed",
+        observed_at: "2026-07-12T10:00:00Z",
+        namespace_scope: [],
+        reason_codes: [],
+        forbidden: [],
+      },
     },
     "/api/clusters/cluster-1/api-resources": {
       cluster_id: "cluster-1",
