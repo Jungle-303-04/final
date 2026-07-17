@@ -1,9 +1,8 @@
 import { ExternalLink, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
-import { serializeProductFilterUrl } from "../filters/filterUrl";
-import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
+import { parseProductFilterUrl, serializeProductFilterUrl } from "../filters/filterUrl";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import { Surface } from "../../shared/ui/Surface";
@@ -29,7 +28,7 @@ export function RcaContextPanel({
   subject: RcaContextSubject;
 }) {
   const { t } = useI18n();
-  const filter = useUnifiedFilter();
+  const { search } = useLocation();
   const subjectKey = rcaSubjectKey(subject);
   const [frame, setFrame] = useState<RcaContextFrame>({ key: subjectKey, phase: "loading" });
 
@@ -51,11 +50,12 @@ export function RcaContextPanel({
   }, [port, subject, subjectKey]);
 
   const issuesHref = useMemo(() => {
+    const filterState = parseProductFilterUrl(search).state;
     const namespaces = subject.scope.namespaces ?? [];
     return `/issues${serializeProductFilterUrl({
-      ...filter.state,
+      ...filterState,
       common: {
-        ...filter.state.common,
+        ...filterState.common,
         clusters: [subject.scope.clusterId],
         namespaces: namespaces.map((namespace) => ({
           clusterId: subject.scope.clusterId,
@@ -63,7 +63,7 @@ export function RcaContextPanel({
         })),
       },
     })}`;
-  }, [filter.state, subject.scope.clusterId, subject.scope.namespaces]);
+  }, [search, subject.scope.clusterId, subject.scope.namespaces]);
 
   const currentFrame: RcaContextFrame = frame.key === subjectKey
     ? frame

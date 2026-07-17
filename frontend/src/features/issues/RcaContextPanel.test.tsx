@@ -81,16 +81,40 @@ describe("RcaContextPanel", () => {
     expect(await screen.findByText("이 정확한 범위의 연관 이슈 수집 범위가 불완전합니다.")).toBeTruthy();
     expect(screen.queryByText("연결된 원인과 영향")).toBeNull();
   });
+
+  it("builds the exact scoped issue link without requiring a global filter provider", async () => {
+    renderPanel({
+      state: "available",
+      scope,
+      coverageAvailability: "available",
+      reasonCodes: [],
+      record: {
+        issue: issue(),
+        report: null,
+        rootCause: "memory limit exceeded",
+        impact: "checkout requests failed",
+        evidence: ["container terminated"],
+        missingEvidence: [],
+      },
+    }, "en-US", false);
+
+    const href = (await screen.findByRole("link", { name: "Open related issue" })).getAttribute("href") ?? "";
+    expect(href).toContain("clusters=cluster-a");
+    expect(href).toContain("namespaces=cluster-a%2Fshop");
+  });
 });
 
-function renderPanel(result: RcaContextResult, navigatorLanguage = "en-US") {
+function renderPanel(
+  result: RcaContextResult,
+  navigatorLanguage = "en-US",
+  withFilterProvider = true,
+) {
   const port: RcaContextPort = { load: async () => result };
+  const panel = <RcaContextPanel port={port} subject={subject} />;
   return render(
     <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
       <MemoryRouter initialEntries={["/gitops/resource?clusters=cluster-other"]}>
-        <UnifiedFilterProvider>
-          <RcaContextPanel port={port} subject={subject} />
-        </UnifiedFilterProvider>
+        {withFilterProvider ? <UnifiedFilterProvider>{panel}</UnifiedFilterProvider> : panel}
       </MemoryRouter>
     </I18nProvider>,
   );
