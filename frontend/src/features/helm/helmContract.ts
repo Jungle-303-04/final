@@ -65,7 +65,7 @@ export interface HelmUpgradeTarget {
 
 export interface HelmReleaseCommands {
   availability: "available";
-  actions: readonly ["upgrade"];
+  actions: readonly ["upgrade", "rollback", "uninstall"];
   confirmationRequired: true;
   realtime: true;
   upgradeTargets: readonly HelmUpgradeTarget[];
@@ -328,6 +328,19 @@ export interface HelmReleaseUpgradeRequest extends HelmReleaseDetailRequest {
   reason?: string;
 }
 
+export interface HelmReleaseRollbackRequest extends HelmReleaseDetailRequest {
+  expectedRevision: number;
+  revision: number;
+  confirmation: true;
+  reason?: string;
+}
+
+export interface HelmReleaseUninstallRequest extends HelmReleaseDetailRequest {
+  expectedRevision: number;
+  confirmation: true;
+  reason?: string;
+}
+
 export type HelmFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -371,6 +384,14 @@ export interface HelmPort {
   ): Promise<HelmArtifactReceipt>;
   upgradeRelease(
     request: HelmReleaseUpgradeRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeReceipt>;
+  rollbackRelease(
+    request: HelmReleaseRollbackRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeReceipt>;
+  uninstallRelease(
+    request: HelmReleaseUninstallRequest,
     signal?: AbortSignal,
   ): Promise<HelmReleaseUpgradeReceipt>;
   listChartSources(

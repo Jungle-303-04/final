@@ -85,6 +85,24 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         return toArtifactReceipt(receipt);
       });
     },
+    async rollbackRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseRollback(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm rollback audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async uninstallRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseUninstall(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm uninstall audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
   };
 }
 
@@ -367,7 +385,9 @@ function toCommands(
 function toArtifactReceipt(
   value:
     | Awaited<ReturnType<HelmEndpointDependencies["startHelmArtifactRead"]>>
-    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUpgrade"]>>,
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUpgrade"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseRollback"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUninstall"]>>,
 ): HelmArtifactReceipt {
   return {
     accepted: value.accepted,

@@ -29,7 +29,7 @@ export interface HelmEndpointUpgradeInput {
 
 export interface HelmEndpointReleaseCommands {
   availability: "available";
-  actions: ["upgrade"];
+  actions: ["upgrade", "rollback", "uninstall"];
   confirmation_required: true;
   realtime: true;
   upgrade_targets: Array<{
@@ -247,6 +247,43 @@ export interface HelmEndpointDependencies {
       catalogItemId: string;
       catalogVersion: string;
       values: Readonly<Record<string, unknown>>;
+      confirmation: true;
+      reason?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{
+    accepted: true;
+    event_id: string;
+    audit_event_id: string;
+    correlation_id: string;
+    command_id: string;
+    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+  }>;
+  startHelmReleaseRollback(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      expectedRevision: number;
+      revision: number;
+      confirmation: true;
+      reason?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{
+    accepted: true;
+    event_id: string;
+    audit_event_id: string;
+    correlation_id: string;
+    command_id: string;
+    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+  }>;
+  startHelmReleaseUninstall(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      expectedRevision: number;
       confirmation: true;
       reason?: string;
     },

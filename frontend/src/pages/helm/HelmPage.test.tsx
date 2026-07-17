@@ -197,11 +197,12 @@ describe("HelmPage", () => {
     operationState.value = store;
     renderRoute("/helm/detail/cluster-a/sandbox/storefront", port);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Upgrade" }));
-    expect(screen.getByRole("dialog", { name: "Confirm Helm upgrade" })).toBeTruthy();
-    expect(screen.getByText(/cluster-a · sandbox · storefront · revision 3/)).toBeTruthy();
+    const upgradeButton = await screen.findByRole("button", { name: "Upgrade" });
     expect(screen.getByRole("button", { name: "Rollback" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Uninstall" })).toBeTruthy();
+    fireEvent.click(upgradeButton);
+    expect(screen.getByRole("dialog", { name: "Confirm Helm upgrade" })).toBeTruthy();
+    expect(screen.getByText(/cluster-a · sandbox · storefront · revision 3/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("master.persistence.storageClass"), {
       target: { value: "gp3" },

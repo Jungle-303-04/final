@@ -955,6 +955,7 @@ def _agent_supports_release_upgrade(
         "command_receiver",
         Command.CATALOG_HELM_INSTALL_CAPABILITY,
         Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
+        HELM_RELEASE_OPERATION_CAPABILITY,
     }
     return any(
         isinstance(item, Mapping)

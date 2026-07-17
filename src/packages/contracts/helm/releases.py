@@ -101,15 +101,19 @@ class HelmUpgradeTarget(StrictModel):
 
 class HelmReleaseCommands(StrictModel):
     availability: Literal["available"] = "available"
-    actions: tuple[Literal["upgrade"], ...] = ("upgrade",)
+    actions: tuple[Literal["upgrade", "rollback", "uninstall"], ...] = (
+        "upgrade",
+        "rollback",
+        "uninstall",
+    )
     confirmation_required: Literal[True] = True
     realtime: Literal[True] = True
     upgrade_targets: tuple[HelmUpgradeTarget, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def executable_actions_are_exact(self) -> HelmReleaseCommands:
-        if self.actions != ("upgrade",):
-            raise ValueError("Helm release commands must expose only upgrade")
+        if self.actions != ("upgrade", "rollback", "uninstall"):
+            raise ValueError("Helm release commands must expose the reviewed action set")
         identities = tuple((item.item_id, item.version) for item in self.upgrade_targets)
         if len(set(identities)) != len(identities):
             raise ValueError("Helm upgrade targets must be unique")

@@ -58,6 +58,7 @@ import {
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
 import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
 import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
+import { HelmReleaseOperationDialogs } from "./HelmReleaseOperationDialogs";
 import {
   useHelmReleaseDetail,
   useHelmReleaseList,
@@ -394,12 +395,19 @@ function HelmDetailBoundary({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {detail.commands.availability === "available" ? (
-            <HelmReleaseUpgradeDialog
-              availableVersions={detail.availableVersions}
-              detail={detail}
-              onAccepted={onMutationAccepted}
-              port={port}
-            />
+            <>
+              <HelmReleaseUpgradeDialog
+                availableVersions={detail.availableVersions}
+                detail={detail}
+                onAccepted={onMutationAccepted}
+                port={port}
+              />
+              <HelmReleaseOperationDialogs
+                detail={detail}
+                onAccepted={onMutationAccepted}
+                port={port}
+              />
+            </>
           ) : null}
           <HelmRefreshAction
             hasFailed={frame.refreshFailure !== null}

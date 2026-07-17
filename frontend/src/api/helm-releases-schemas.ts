@@ -49,7 +49,7 @@ export const helmUpgradeInputSchema = z.strictObject({
 
 export const helmReleaseCommandsSchema = z.strictObject({
   availability: z.literal("available"),
-  actions: z.tuple([z.literal("upgrade")]),
+  actions: z.tuple([z.literal("upgrade"), z.literal("rollback"), z.literal("uninstall")]),
   confirmation_required: z.literal(true),
   realtime: z.literal(true),
   upgrade_targets: z.array(z.strictObject({
