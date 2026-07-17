@@ -213,15 +213,48 @@ def test_runtime_diagnostics_prioritizes_nonzero_lag_before_bounded_idle_consume
 
     assert response.status_code == 200
     event_pipeline = response.json()["event_pipeline"]
-    assert event_pipeline["reason_codes"] == ["consumer_lag_limit_reached"]
+    assert event_pipeline["availability"] == "available"
+    assert event_pipeline["reason_codes"] == []
+    assert event_pipeline["open_dead_letters"] == 3
+    assert event_pipeline["outbox_pending"] == 4
+    assert event_pipeline["consumer_lag"] == [
+        {
+            "consumer": "zz-critical-consumer",
+            "subject": "critical.subject",
+            "pending": 9,
+            "ack_pending": 2,
+            "redelivered": 1,
+        }
+    ]
+
+
+def test_runtime_diagnostics_marks_only_an_actual_lag_sample_as_truncated() -> None:
+    class ActualLagRuntimeDiagnosticsDb(RuntimeDiagnosticsDb):
+        def event_consumer_pending_by_consumer_subject(self) -> dict[tuple[str, str], int]:
+            return {
+                (f"consumer-{index:03d}", f"subject.{index:03d}"): index + 1
+                for index in range(CONSUMER_LAG_LIMIT + 2)
+            }
+
+        def event_consumer_ack_pending_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {}
+
+        def event_consumer_redelivered_by_consumer_subject(
+            self,
+        ) -> dict[tuple[str, str], int]:
+            return {}
+
+    response = _client(ActualLagRuntimeDiagnosticsDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    event_pipeline = response.json()["event_pipeline"]
+    assert event_pipeline["availability"] == "partial"
+    assert event_pipeline["reason_codes"] == ["consumer_lag_sample_truncated"]
     assert len(event_pipeline["consumer_lag"]) == CONSUMER_LAG_LIMIT
-    assert event_pipeline["consumer_lag"][0] == {
-        "consumer": "zz-critical-consumer",
-        "subject": "critical.subject",
-        "pending": 9,
-        "ack_pending": 2,
-        "redelivered": 1,
-    }
+    assert event_pipeline["consumer_lag"][0]["pending"] == CONSUMER_LAG_LIMIT + 2
+    assert event_pipeline["consumer_lag"][-1]["pending"] == 3
 
 
 def test_runtime_diagnostics_preserves_partial_results_without_leaking_exception_text() -> None:

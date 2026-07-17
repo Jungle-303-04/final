@@ -32,7 +32,10 @@ from domains.gitops.repository import (
 from domains.rca.repository import RcaRepository
 from domains.target.repository import TargetAgentRepository, agent_status_retention_seconds
 from packages.ai.metrics import LlmInvocationMetric
-from packages.contracts.event_bus.interfaces import EventConsumerMetrics
+from packages.contracts.event_bus.interfaces import (
+    EventConsumerLagSnapshot,
+    EventConsumerMetrics,
+)
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
@@ -694,9 +697,14 @@ def test_event_consumer_lag_snapshot_is_bounded_and_prioritizes_backlog() -> Non
                     "pending_events": 9,
                     "ack_pending_events": 2,
                     "redelivered_events": 1,
-                    "total_count": 82,
                 }
             ]
+
+        def one(self) -> dict[str, object]:
+            return {
+                "metric_count": 82,
+                "lagging_count": 1,
+            }
 
     class StubConnection:
         def execute(self, statement: Any) -> StubResult:
@@ -710,27 +718,85 @@ def test_event_consumer_lag_snapshot_is_bounded_and_prioritizes_backlog() -> Non
     repository = object.__new__(EventRepository)
     repository.connection = stub_connection  # type: ignore[method-assign]
 
-    samples, total = repository.event_consumer_lag_snapshot(limit=50)
+    snapshot = repository.event_consumer_lag_snapshot(limit=50)
 
-    assert total == 82
-    assert samples == [
+    assert snapshot == EventConsumerLagSnapshot(
+        samples=(
+            EventConsumerMetrics(
+                stream="SERVICE_EVENTS",
+                subject="critical.subject",
+                durable="critical-worker",
+                pending=9,
+                ack_pending=2,
+                redelivered=1,
+            ),
+        ),
+        metric_count=82,
+        lagging_count=1,
+    )
+    count_sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+    sample_statement = recorded[1].compile(dialect=postgresql.dialect())
+    sample_sql = str(sample_statement)
+    assert "count(*)" in count_sql
+    assert "FILTER (WHERE" in count_sql
+    assert "event_consumer_metrics.pending_events >" in count_sql
+    assert "event_consumer_metrics.pending_events >" in sample_sql
+    assert "event_consumer_metrics.pending_events DESC" in sample_sql
+    assert "event_consumer_metrics.ack_pending_events DESC" in sample_sql
+    assert "event_consumer_metrics.redelivered_events DESC" in sample_sql
+    assert "LIMIT" in sample_sql
+    assert 50 in sample_statement.params.values()
+
+
+def test_record_event_consumer_metrics_batch_uses_one_bulk_upsert() -> None:
+    recorded: list[Any] = []
+
+    class StubConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def stub_connection():
+        yield StubConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+    samples = [
         EventConsumerMetrics(
             stream="SERVICE_EVENTS",
-            subject="critical.subject",
-            durable="critical-worker",
-            pending=9,
-            ack_pending=2,
-            redelivered=1,
+            subject=f"subject.{index}",
+            durable=f"worker-{index}",
+            pending=index,
+            ack_pending=1,
+            redelivered=0,
         )
+        for index in range(3)
     ]
+
+    repository.record_event_consumer_metrics_batch(samples)
+
+    assert len(recorded) == 1
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
-    assert "count(*) OVER ()" in sql
-    assert "event_consumer_metrics.pending_events DESC" in sql
-    assert "event_consumer_metrics.ack_pending_events DESC" in sql
-    assert "event_consumer_metrics.redelivered_events DESC" in sql
-    assert "LIMIT" in sql
-    assert 50 in compiled.params.values()
+    assert "INSERT INTO event_consumer_metrics" in sql
+    assert "ON CONFLICT (consumer, subject) DO UPDATE" in sql
+    assert {value for key, value in compiled.params.items() if key.startswith("consumer_m")} == {
+        "worker-0",
+        "worker-1",
+        "worker-2",
+    }
+
+
+def test_record_event_consumer_metrics_batch_skips_an_empty_batch() -> None:
+    @contextmanager
+    def fail_if_connected():
+        raise AssertionError("empty batch must not open a transaction")
+        yield
+
+    repository = object.__new__(EventRepository)
+    repository.connection = fail_if_connected  # type: ignore[method-assign]
+
+    repository.record_event_consumer_metrics_batch([])
 
 
 def test_record_llm_invocation_metric_inserts_latency_cost_sample() -> None:
