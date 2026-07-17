@@ -2299,6 +2299,23 @@ async def command_heartbeat(
         getattr(correlation_id, "operation_event", None),
         workspace_id=identity.workspace_id,
     )
+    if payload.progress is not None:
+        progress_event = await db.append_command_operation_event(
+            identity.workspace_id,
+            command_id,
+            "progress",
+            {
+                "cluster_id": identity.cluster_id,
+                "correlation_id": correlation,
+                "status": CommandStatus.RUNNING,
+                "progress": payload.progress.model_dump(),
+            },
+        )
+        await announce_staged_operation_event(
+            operation_events,
+            progress_event,
+            workspace_id=identity.workspace_id,
+        )
     return CommandHeartbeatResponse(
         accepted=True,
         correlation_id=correlation,

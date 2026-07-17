@@ -90,6 +90,7 @@ from packages.contracts.gateway.requests import (
     SchedulingPolicy,
     TargetPreflightRequest,
     TargetRegisterRequest,
+    normalize_control_namespaces,
 )
 from packages.contracts.gateway.responses import (
     BootstrapStep,
@@ -114,7 +115,7 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     Permission,
 )
-from packages.contracts.target import TARGET_RBAC_MANIFEST_VERSION
+from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_RBAC_MANIFEST_VERSION
 from packages.events.envelope import event
 from packages.runtime.dependencies import (
     get_dashboard_ready_fanout,
@@ -325,12 +326,12 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
     if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE and not payload.control_namespaces.strip():
         default_control_namespaces = env(TARGET_DEFAULT_CONTROL_NAMESPACES_ENV, "").strip()
         if default_control_namespaces:
-            updates["control_namespaces"] = default_control_namespaces
+            updates["control_namespaces"] = normalize_control_namespaces(default_control_namespaces)
 
     if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE:
         updates["install_node_collector"] = False
         updates["install_sample_workload"] = False
-        updates["control_namespaces"] = ""
+        updates["control_namespaces"] = payload.control_namespaces or SANDBOX_NAMESPACE
         for telemetry_field in (
             "prometheus_base_url",
             "loki_base_url",

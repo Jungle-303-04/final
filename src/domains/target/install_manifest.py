@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
 from packages.config.environments import normalize_environment
 from packages.config.realtime import derive_realtime_gateway_url
@@ -66,10 +68,8 @@ def target_rbac_manifest(payload: TargetRegisterRequest) -> str:
         for block in (
             cluster_read_rbac_manifest(namespace),
             gitops_control_rbac_manifest(namespace),
-            node_control_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            resource_debug_rbac_manifest(payload, namespace)
-            if role != MANAGEMENT_CLUSTER_ROLE
-            else "",
+            node_control_rbac_manifest(namespace),
+            resource_debug_rbac_manifest(payload, namespace),
             cronjob_control_rbac_manifest(payload, namespace)
             if role != MANAGEMENT_CLUSTER_ROLE
             else "",
@@ -339,87 +339,113 @@ def resource_debug_rbac_manifest(
 ) -> str:
     """Debug mutations are isolated to configured control namespaces."""
 
-    control_namespaces = tuple(
-        dict.fromkeys(
-            item.strip()
-            for item in (payload.control_namespaces.strip() or SANDBOX_NAMESPACE).split(",")
-            if item.strip()
+    documents: list[dict[str, object]] = []
+    for control_namespace in configured_control_namespaces(payload):
+        documents.extend(
+            [
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "Role",
+                    "metadata": {
+                        "name": "cluster-agent-resource-debug",
+                        "namespace": control_namespace,
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["pods"],
+                            "verbs": ["get", "create", "delete"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["pods/ephemeralcontainers"],
+                            "verbs": ["get", "patch"],
+                        },
+                    ],
+                },
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "RoleBinding",
+                    "metadata": {
+                        "name": "cluster-agent-resource-debug",
+                        "namespace": control_namespace,
+                    },
+                    "roleRef": {
+                        "apiGroup": "rbac.authorization.k8s.io",
+                        "kind": "Role",
+                        "name": "cluster-agent-resource-debug",
+                    },
+                    "subjects": [
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "cluster-agent",
+                            "namespace": agent_namespace,
+                        }
+                    ],
+                },
+            ]
         )
-    )
-    return "\n---\n".join(
-        f"""
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: cluster-agent-resource-debug
-  namespace: {control_namespace}
-rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "create", "delete"]
-  - apiGroups: [""]
-    resources: ["pods/ephemeralcontainers"]
-    verbs: ["get", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: cluster-agent-resource-debug
-  namespace: {control_namespace}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: cluster-agent-resource-debug
-subjects:
-  - kind: ServiceAccount
-    name: cluster-agent
-    namespace: {agent_namespace}
-""".strip()
-        for control_namespace in control_namespaces
-    )
+    return render_yaml_documents(documents)
+
+
+def configured_control_namespaces(payload: TargetRegisterRequest) -> tuple[str, ...]:
+    return tuple((payload.control_namespaces.strip() or SANDBOX_NAMESPACE).split(","))
 
 
 def cronjob_control_rbac_manifest(payload: TargetRegisterRequest, agent_namespace: str) -> str:
     """Project CronJob writes only into the configured control namespaces."""
 
-    control_namespaces = tuple(
-        dict.fromkeys(
-            item.strip()
-            for item in (payload.control_namespaces.strip() or SANDBOX_NAMESPACE).split(",")
-            if item.strip()
+    documents: list[dict[str, object]] = []
+    for control_namespace in configured_control_namespaces(payload):
+        documents.extend(
+            [
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "Role",
+                    "metadata": {
+                        "name": "cluster-agent-cronjob-control",
+                        "namespace": control_namespace,
+                    },
+                    "rules": [
+                        {
+                            "apiGroups": ["batch"],
+                            "resources": ["jobs"],
+                            "verbs": ["create"],
+                        },
+                        {
+                            "apiGroups": ["batch"],
+                            "resources": ["cronjobs"],
+                            "verbs": ["patch"],
+                        },
+                    ],
+                },
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "RoleBinding",
+                    "metadata": {
+                        "name": "cluster-agent-cronjob-control",
+                        "namespace": control_namespace,
+                    },
+                    "roleRef": {
+                        "apiGroup": "rbac.authorization.k8s.io",
+                        "kind": "Role",
+                        "name": "cluster-agent-cronjob-control",
+                    },
+                    "subjects": [
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "cluster-agent",
+                            "namespace": agent_namespace,
+                        }
+                    ],
+                },
+            ]
         )
-    )
-    return "\n---\n".join(
-        f"""
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: cluster-agent-cronjob-control
-  namespace: {control_namespace}
-rules:
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["create"]
-  - apiGroups: ["batch"]
-    resources: ["cronjobs"]
-    verbs: ["patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: cluster-agent-cronjob-control
-  namespace: {control_namespace}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: cluster-agent-cronjob-control
-subjects:
-  - kind: ServiceAccount
-    name: cluster-agent
-    namespace: {agent_namespace}
-""".strip()
-        for control_namespace in control_namespaces
-    )
+    return render_yaml_documents(documents)
+
+
+def render_yaml_documents(documents: list[dict[str, object]]) -> str:
+    return yaml.safe_dump_all(documents, sort_keys=False).strip()
 
 
 def target_write_rbac_manifest(namespace: str) -> str:
@@ -555,12 +581,17 @@ def control_namespaces_line(payload: TargetRegisterRequest) -> str:
     value = payload.control_namespaces.strip()
     if not value:
         return ""
-    return f"\n  CONTROL_ALLOWED_NAMESPACES: {yaml_string(value)}"
+    return render_config_map_entry("CONTROL_ALLOWED_NAMESPACES", value)
 
 
 def pod_exec_namespaces_line(payload: TargetRegisterRequest) -> str:
     value = payload.control_namespaces.strip() or SANDBOX_NAMESPACE
-    return f"\n  POD_EXEC_ALLOWED_NAMESPACES: {yaml_string(value)}"
+    return render_config_map_entry("POD_EXEC_ALLOWED_NAMESPACES", value)
+
+
+def render_config_map_entry(name: str, value: str) -> str:
+    rendered = yaml.safe_dump({name: value}, sort_keys=False).rstrip()
+    return "\n" + "\n".join(f"  {line}" for line in rendered.splitlines())
 
 
 def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
@@ -599,7 +630,7 @@ data:
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}{pod_exec_namespaces_line(payload)}
-  NODE_CONTROL_ENABLED: {yaml_string(str(payload.cluster_role != MANAGEMENT_CLUSTER_ROLE).lower())}
+  NODE_CONTROL_ENABLED: {yaml_string("true")}
   {TARGET_AGENT_IMAGE_KEY}: {yaml_string(payload.image)}
   {NODE_COLLECTOR_IMAGE_KEY}: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(namespace)}

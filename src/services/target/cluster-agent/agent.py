@@ -423,6 +423,7 @@ class HttpManagementPlaneClient:
         agent_id: str,
         attempt_id: str | None = None,
         observed_cancel_generation: int | None = None,
+        progress: JsonObject | None = None,
     ) -> JsonObject:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_heartbeat_path(command_id)}",
@@ -437,6 +438,7 @@ class HttpManagementPlaneClient:
                     if observed_cancel_generation is not None
                     else {}
                 ),
+                **({"progress": progress} if progress is not None else {}),
             },
             headers=self.headers,
         )
@@ -1109,7 +1111,23 @@ class TargetClusterAgent:
             # The server never kills a local process.  Handlers may observe this
             # event at safe checkpoints; already-running side effects finish and
             # report their actual result so completion/cancel races are honest.
-            return await self.execute_command(command, cancel_requested=cancel_requested)
+            async def report_progress(progress: JsonObject) -> None:
+                await client.heartbeat_command(
+                    command_id,
+                    self.cluster_id,
+                    workspace_id,
+                    lease_id,
+                    self.agent_id,
+                    attempt_id,
+                    None,
+                    progress,
+                )
+
+            return await self.execute_command(
+                command,
+                cancel_requested=cancel_requested,
+                operation_progress_reporter=report_progress,
+            )
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):
@@ -1200,6 +1218,7 @@ class TargetClusterAgent:
         command: CommandRecord,
         *,
         cancel_requested: asyncio.Event | None = None,
+        operation_progress_reporter: object = None,
     ) -> JsonObject:
         if cancel_requested is not None and cancel_requested.is_set():
             return {
@@ -1272,6 +1291,7 @@ class TargetClusterAgent:
                     ),
                     Gateway.DIRECT_EXECUTION: direct_execution,
                     "cooperative_cancel_requested": cancel_requested,
+                    "operation_progress_reporter": operation_progress_reporter,
                 },
             )
         except Exception as exc:
@@ -2011,29 +2031,18 @@ class TargetClusterAgent:
         )
         results: list[JsonObject] = []
         try:
-            await asyncio.wait_for(
-                self.evict_node_pods(ctx, eligible, cancel_requested, results),
+            cancelled_during_eviction = await asyncio.wait_for(
+                self.evict_node_pods_until_cancel(ctx, eligible, cancel_requested, results),
                 timeout=ctx.payload.timeout_seconds,
             )
         except TimeoutError:
-            completed = {
-                (item.get("namespace"), item.get("name"), item.get("uid")) for item in results
-            }
-            results.extend(
-                {
-                    **self.pod_operation_identity(pod),
-                    "status": "failed",
-                    "error": "TimeoutError",
-                }
-                for pod in eligible
-                if (
-                    self.pod_operation_identity(pod).get("namespace"),
-                    self.pod_operation_identity(pod).get("name"),
-                    self.pod_operation_identity(pod).get("uid"),
-                )
-                not in completed
+            self.mark_pending_node_drain_results(
+                eligible,
+                results,
+                status="failed",
+                error="TimeoutError",
             )
-            results.sort(key=lambda item: (str(item.get("namespace")), str(item.get("name"))))
+            await self.report_node_drain_progress(ctx, results, total=len(eligible))
             evicted = sum(item.get("status") == "evicted" for item in results)
             failed = sum(item.get("status") == "failed" for item in results)
             return ctx.fail(
@@ -2045,14 +2054,14 @@ class TargetClusterAgent:
                 partial_failure=True,
                 resources=[*skipped, *results],
             )
+        await self.report_node_drain_progress(ctx, results, total=len(eligible))
         evicted = sum(item.get("status") == "evicted" for item in results)
         failed = sum(item.get("status") == "failed" for item in results)
-        cancelled = any(item.get("status") == "cancelled" for item in results)
         resources = [*skipped, *results]
-        if cancelled:
+        if cancelled_during_eviction:
             return {
                 **self.resource_maintenance_cancelled(
-                    "node drain cancelled at an eviction boundary",
+                    "node drain cancelled during eviction",
                     applied=True,
                 ),
                 Gateway.RESOURCES: resources,
@@ -2061,6 +2070,16 @@ class TargetClusterAgent:
                 "skipped": len(skipped),
                 "partial_failure": True,
             }
+        if failed:
+            return ctx.fail(
+                "kubernetes node drain completed with failed evictions",
+                applied=True,
+                resources=resources,
+                evicted=evicted,
+                failed=failed,
+                skipped=len(skipped),
+                partial_failure=True,
+            )
         return ctx.ok(
             "kubernetes node drain completed",
             applied=True,
@@ -2070,6 +2089,48 @@ class TargetClusterAgent:
             skipped=len(skipped),
             partial_failure=failed > 0,
         )
+
+    async def evict_node_pods_until_cancel(
+        self,
+        ctx: CommandContext[KubernetesNodeDrainPayload],
+        pods: list[JsonObject],
+        cancel_requested: object,
+        results: list[JsonObject],
+    ) -> bool:
+        eviction_task = asyncio.create_task(
+            self.evict_node_pods(ctx, pods, cancel_requested, results)
+        )
+        cancel_task: asyncio.Task[bool] | None = None
+        try:
+            if not isinstance(cancel_requested, asyncio.Event):
+                await eviction_task
+                return False
+            cancel_task = asyncio.create_task(cancel_requested.wait())
+            done, _pending = await asyncio.wait(
+                {eviction_task, cancel_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if eviction_task in done:
+                await eviction_task
+                return False
+            eviction_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await eviction_task
+            self.mark_pending_node_drain_results(
+                pods,
+                results,
+                status="cancelled",
+            )
+            return True
+        finally:
+            if not eviction_task.done():
+                eviction_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await eviction_task
+            if cancel_task is not None and not cancel_task.done():
+                cancel_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await cancel_task
 
     async def evict_node_pods(
         self,
@@ -2115,6 +2176,64 @@ class TargetClusterAgent:
 
         await asyncio.gather(*(evict(pod) for pod in pods))
         results.sort(key=lambda item: (str(item.get("namespace")), str(item.get("name"))))
+
+    def mark_pending_node_drain_results(
+        self,
+        pods: list[JsonObject],
+        results: list[JsonObject],
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        completed = {(item.get("namespace"), item.get("name"), item.get("uid")) for item in results}
+        for pod in pods:
+            identity = self.pod_operation_identity(pod)
+            key = (identity.get("namespace"), identity.get("name"), identity.get("uid"))
+            if key in completed:
+                continue
+            result = {**identity, "status": status}
+            if error is not None:
+                result["error"] = error
+            results.append(result)
+        results.sort(key=lambda item: (str(item.get("namespace")), str(item.get("name"))))
+
+    async def report_node_drain_progress(
+        self,
+        ctx: CommandContext[KubernetesNodeDrainPayload],
+        results: list[JsonObject],
+        *,
+        total: int,
+    ) -> None:
+        reporter = ctx.metadata.get("operation_progress_reporter")
+        if not callable(reporter):
+            return
+        for batch_index, offset in enumerate(range(0, len(results), 64), start=1):
+            resources = [
+                {
+                    "namespace": str(item["namespace"]),
+                    "name": str(item["name"]),
+                    "uid": str(item["uid"]),
+                    "resource_version": str(item["resource_version"]),
+                    "status": str(item["status"]),
+                    "error_code": (str(item["error"]) if item.get("error") is not None else None),
+                }
+                for item in results[offset : offset + 64]
+            ]
+            progress: JsonObject = {
+                "progress_id": f"node-drain-batch-{batch_index}",
+                "phase": "node_drain_evictions",
+                "completed": min(offset + len(resources), total),
+                "total": total,
+                "resources": resources,
+            }
+            for attempt in range(3):
+                try:
+                    await reporter(progress)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0)
 
     @command.k8s(
         Command.KUBERNETES_POD_DEBUG_ACTION,
