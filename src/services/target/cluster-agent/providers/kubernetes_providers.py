@@ -1182,6 +1182,9 @@ def role_access_summary(item: JsonObject, kind: str) -> JsonObject:
 
 def binding_access_summary(item: JsonObject, kind: str) -> JsonObject:
     meta = metadata(item)
+    binding_namespace = (
+        "" if kind == "ClusterRoleBinding" else _required_text(meta.get("namespace"))
+    )
     role_ref = item.get("roleRef")
     if not isinstance(role_ref, dict):
         raise ValueError("binding roleRef is invalid")
@@ -1190,14 +1193,18 @@ def binding_access_summary(item: JsonObject, kind: str) -> JsonObject:
         raise ValueError("binding role kind is invalid")
     return {
         "kind": kind,
-        "namespace": "" if kind == "ClusterRoleBinding" else _required_text(meta.get("namespace")),
+        "namespace": binding_namespace,
         "name": _required_text(meta.get("name")),
         "roleRef": {
             "kind": role_kind,
             "name": _required_text(role_ref.get("name")),
         },
         "subjects": [
-            subject_summary(subject) for subject in _nullable_dict_list(item.get("subjects"))
+            subject_summary(
+                subject,
+                default_service_account_namespace=binding_namespace or None,
+            )
+            for subject in _nullable_dict_list(item.get("subjects"))
         ],
     }
 
@@ -1212,11 +1219,20 @@ def policy_rule_summary(value: JsonObject) -> JsonObject:
     }
 
 
-def subject_summary(value: JsonObject) -> JsonObject:
+def subject_summary(
+    value: JsonObject,
+    *,
+    default_service_account_namespace: str | None = None,
+) -> JsonObject:
     kind = _required_text(value.get("kind"))
     if kind not in {"ServiceAccount", "User", "Group"}:
         raise ValueError("binding subject kind is invalid")
-    namespace = _required_text(value.get("namespace")) if kind == "ServiceAccount" else ""
+    namespace = ""
+    if kind == "ServiceAccount":
+        raw_namespace = (
+            value["namespace"] if "namespace" in value else default_service_account_namespace
+        )
+        namespace = _required_text(raw_namespace)
     return {
         "kind": kind,
         "namespace": namespace,
