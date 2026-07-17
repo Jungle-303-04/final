@@ -1,21 +1,12 @@
 import { apiRequest } from "./client";
+import type { TrafficOverviewQuery } from "../features/traffic/trafficEndpointContract";
 import { canonicalFacetSelections } from "./resource-filter-query";
 import { trafficOverviewSchema, type TrafficOverviewEndpoint } from "./traffic-overview-schemas";
 import { withQuery } from "./url";
 
 export const TRAFFIC_FLOWS_PATH = "/api/traffic/flows" as const;
 
-export interface TrafficOverviewQuery {
-  clusterIds?: readonly string[];
-  namespaces?: readonly string[];
-  since?: "1m" | "5m" | "15m" | "1h";
-  protocols?: readonly ("tcp" | "udp" | "http" | "grpc" | "dns" | "unknown")[];
-  verdicts?: readonly ("forwarded" | "dropped" | "error" | "unknown")[];
-  sort?: "connections" | "last_seen" | "source" | "destination";
-  order?: "asc" | "desc";
-  cursor?: string;
-  limit?: number;
-}
+export type { TrafficOverviewQuery } from "../features/traffic/trafficEndpointContract";
 
 export function getTrafficOverview(
   query: TrafficOverviewQuery = {},

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { ResourceFileResultEndpoint } from "../features/resource-files/resourceFilesEndpointContract";
+
 const entrySchema = z.strictObject({
   name: z.string().min(1),
   path: z.string().startsWith("/"),
@@ -47,10 +49,10 @@ const readSchema = z.strictObject({
   filename: z.string().min(1),
 });
 
-export const resourceFileResultSchema = z.discriminatedUnion("operation", [
+export const resourceFileResultSchema: z.ZodType<ResourceFileResultEndpoint> = z.discriminatedUnion("operation", [
   metadataSchema,
   directorySchema,
   readSchema,
 ]);
 
-export type ResourceFileResultEndpoint = z.infer<typeof resourceFileResultSchema>;
+export type { ResourceFileResultEndpoint } from "../features/resource-files/resourceFilesEndpointContract";

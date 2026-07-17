@@ -1,5 +1,3 @@
-import { resourceFileResultSchema } from "../../api/resource-files-schemas";
-import type { ResourceFileResultEndpoint } from "../../api/resource-files-schemas";
 import type {
   ResourceFileCommandInput,
   ResourceFileDirectoryResult,
@@ -11,6 +9,7 @@ import type {
 } from "./resourceFilesContract";
 import type {
   ResourceFileCommandEndpointInput,
+  ResourceFileResultEndpoint,
   ResourceFilesEndpointDependencies,
 } from "./resourceFilesEndpointContract";
 
@@ -28,7 +27,7 @@ export function createResourceFilesAdapter(
     for await (const event of endpoints.subscribeCommandOperationEvents(receipt.command_id, { signal })) {
       if (event.kind === "completed") {
         const result = asRecord(asRecord(event.payload).result).resource_file;
-        return mapResult(resourceFileResultSchema.parse(result));
+        return mapResult(endpoints.parseResourceFileResult(result));
       }
       if (event.kind === "failed" || event.kind === "cancelled") {
         throw new Error(operationFailureMessage(event.payload, event.kind));

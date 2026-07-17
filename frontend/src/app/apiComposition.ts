@@ -33,7 +33,9 @@ import {
   openScheduledWorkloadRunLogStream,
   openWorkloadLogStream,
   postAiChat,
+  parseResourceFileResult,
   promoteAlertEvent,
+  startResourceFileCommand,
   subscribeCommandOperationEvents,
   stopDiagnoseRun,
   subscribeDiagnoseEvents,
@@ -54,6 +56,7 @@ import { createWorkloadDetailAdapter } from "../features/workload-detail/createW
 import { createCompareAdapter } from "../features/compare/createCompareAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
+import { createResourceFilesAdapter } from "../features/resource-files/createResourceFilesAdapter";
 import { createShellStateAdapter } from "../features/shell-state/createShellStateAdapter";
 import { createSettingsAdapter } from "../features/settings/createSettingsAdapter";
 import { createRuntimeStatusAdapter } from "../features/runtime-status/createRuntimeStatusAdapter";
@@ -84,6 +87,11 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
   const operationStatusStore = createOperationStatusStore(
     createOperationEventsAdapter({ subscribeCommandOperationEvents }),
   );
+  const resourceFilesPort = createResourceFilesAdapter({
+    parseResourceFileResult,
+    startResourceFileCommand,
+    subscribeCommandOperationEvents,
+  });
   const registry = createPortRegistry({ homePort, operationStatusStore });
   const globalFilterPort = createGlobalFilterAdapter({
     listGlobalFilterFacets,
@@ -162,6 +170,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           refreshPolicies,
           timelinePort,
           portForwardSessions,
+          resourceFilesPort,
         ),
       })),
     },

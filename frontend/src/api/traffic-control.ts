@@ -1,4 +1,8 @@
 import { apiRequest } from "./client";
+import type {
+  TrafficSourceCommandPayload,
+  TrafficSourcesQuery,
+} from "../features/traffic/trafficEndpointContract";
 import {
   trafficCommandReceiptSchema,
   trafficSourcesSchema,
@@ -12,22 +16,10 @@ export const TRAFFIC_SOURCES_PATH = "/api/traffic/sources" as const;
 export const TRAFFIC_SOURCE_PATH = "/api/traffic/source" as const;
 export const TRAFFIC_CONNECT_PATH = "/api/traffic/connect" as const;
 
-export interface TrafficSourcesQuery {
-  clusterIds?: readonly string[];
-}
-
-export interface TrafficSourceCommandPayload {
-  scope: {
-    workspace_id: string;
-    cluster_id: string;
-    namespaces: readonly string[];
-    freshness: "live" | "stale" | "partial" | "disconnected";
-  };
-  source_key: string;
-  capability_revision: string;
-  confirmation: true;
-  reason: string;
-}
+export type {
+  TrafficSourceCommandPayload,
+  TrafficSourcesQuery,
+} from "../features/traffic/trafficEndpointContract";
 
 export function getTrafficSources(
   query: TrafficSourcesQuery = {},

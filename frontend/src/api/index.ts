@@ -493,6 +493,7 @@ export {
   subscribeCommandOperationEvents,
 } from "./operation-events";
 export {
+  parseResourceFileResult,
   RESOURCE_FILE_COMMANDS_PATH,
   startResourceFileCommand,
 } from "./resource-files";

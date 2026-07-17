@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { TrafficOverviewEndpoint } from "../features/traffic/trafficEndpointContract";
+
 const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
 const observedAvailabilitySchema = z.enum(["available", "partial"]);
 const freshnessSchema = z.enum(["live", "stale", "partial", "disconnected"]);
@@ -143,7 +145,7 @@ export const trafficRelationshipsSchema = z.union([
   trafficUnavailableRelationshipsSchema,
 ]);
 
-export const trafficOverviewSchema = z.strictObject({
+export const trafficOverviewSchema: z.ZodType<TrafficOverviewEndpoint> = z.strictObject({
   scope_coverage: trafficScopeCoverageSchema,
   observation: trafficObservationStatusSchema,
   summary: trafficObservationSummarySchema,
@@ -151,7 +153,7 @@ export const trafficOverviewSchema = z.strictObject({
   refresh_after_seconds: z.number().int().min(1).max(3_600),
 });
 
-export type TrafficOverviewEndpoint = z.infer<typeof trafficOverviewSchema>;
+export type { TrafficOverviewEndpoint } from "../features/traffic/trafficEndpointContract";
 
 function partialRequiresReason(
   value: { availability: "available" | "partial"; reason_codes: string[] },

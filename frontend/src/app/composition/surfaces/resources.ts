@@ -25,9 +25,7 @@ import {
   previewResourceManifestEdit,
   resolveServiceAccess,
   runScopedMetricQuery,
-  startResourceFileCommand,
   startServiceRequest,
-  subscribeCommandOperationEvents,
 } from "../../../api";
 import type { HomePort } from "../../../features/home/homeContract";
 import { createPodTerminalAdapter } from "../../../features/pod-terminal/createPodTerminalAdapter";
@@ -46,8 +44,8 @@ import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserR
 import type { ResourcesRefreshPolicyKey } from "../../../features/resources/resourceMetricsHistoryContract";
 import type { TimelinePort } from "../../../features/timeline/timelineContract";
 import type { PortForwardSessionPort } from "../../../features/service-access/portForwardSessionContract";
+import type { ResourceFilesPort } from "../../../features/resource-files/resourceFilesContract";
 import { createChecksProductPort } from "./checks";
-import { createResourceFilesAdapter } from "../../../features/resource-files/createResourceFilesAdapter";
 
 export function loadResourcesSurface(
   homePort: HomePort,
@@ -56,6 +54,7 @@ export function loadResourcesSurface(
   >,
   timelinePort: TimelinePort,
   portForwardSessions: PortForwardSessionPort,
+  resourceFilesPort: ResourceFilesPort,
 ): ComponentType {
   const topologyPorts = createTopologyPorts();
   return createResourcesSurface(
@@ -109,9 +108,6 @@ export function loadResourcesSurface(
       },
     }),
     portForwardSessions,
-    createResourceFilesAdapter({
-      startResourceFileCommand,
-      subscribeCommandOperationEvents,
-    }),
+    resourceFilesPort,
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createResourceFilesAdapter } from "./createResourceFilesAdapter";
 import type { ResourceFileCommandInput } from "./resourceFilesContract";
+import type { ResourceFileResultEndpoint } from "./resourceFilesEndpointContract";
 
 const INPUT: ResourceFileCommandInput = {
   capabilityId: "pod.filesystem",
@@ -72,6 +73,7 @@ describe("resource files adapter", () => {
       };
     });
     const port = createResourceFilesAdapter({
+      parseResourceFileResult,
       startResourceFileCommand,
       subscribeCommandOperationEvents,
     });
@@ -97,6 +99,7 @@ describe("resource files adapter", () => {
 
   it("reads sequential chunks with browser backpressure and verifies the digest", async () => {
     const port = createResourceFilesAdapter({
+      parseResourceFileResult,
       startResourceFileCommand: vi.fn()
         .mockResolvedValueOnce(receipt("command-1"))
         .mockResolvedValueOnce(receipt("command-2")),
@@ -119,6 +122,10 @@ describe("resource files adapter", () => {
     expect(await blob.text()).toBe("hello world");
   });
 });
+
+function parseResourceFileResult(value: unknown): ResourceFileResultEndpoint {
+  return value as ResourceFileResultEndpoint;
+}
 
 function receipt(commandId: string) {
   return {

@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import type {
+  TrafficCommandReceiptEndpoint,
+  TrafficSourcesEndpoint,
+} from "../features/traffic/trafficEndpointContract";
+
 import { commandAcceptedSchema } from "./commands-schemas";
 import { trafficClusterScopeSchema, trafficScopeCoverageSchema } from "./traffic-overview-schemas";
 
@@ -40,14 +45,16 @@ const trafficClusterSourceCatalogSchema = z.strictObject({
   reason_codes: z.array(z.string().min(1)),
 });
 
-export const trafficSourcesSchema = z.strictObject({
+export const trafficSourcesSchema: z.ZodType<TrafficSourcesEndpoint> = z.strictObject({
   availability: z.enum(["available", "partial", "unavailable"]),
   coverage: trafficScopeCoverageSchema,
   clusters: z.array(trafficClusterSourceCatalogSchema),
   reason_codes: z.array(z.string().min(1)),
 });
 
-export const trafficCommandReceiptSchema = commandAcceptedSchema;
+export const trafficCommandReceiptSchema: z.ZodType<TrafficCommandReceiptEndpoint> = commandAcceptedSchema;
 
-export type TrafficSourcesEndpoint = z.infer<typeof trafficSourcesSchema>;
-export type TrafficCommandReceiptEndpoint = z.infer<typeof trafficCommandReceiptSchema>;
+export type {
+  TrafficCommandReceiptEndpoint,
+  TrafficSourcesEndpoint,
+} from "../features/traffic/trafficEndpointContract";
