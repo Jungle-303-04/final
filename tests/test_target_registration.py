@@ -1946,6 +1946,37 @@ def test_cluster_summary_registered_provider_overrides_detected_provider() -> No
     assert summary.connection_stage == "ready"
 
 
+def test_cluster_summary_reads_detected_provider_from_persisted_snapshot_envelope() -> None:
+    now = datetime.now(UTC)
+    summary = cluster_summary(
+        {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "prod",
+            "environment": "production",
+            "status": "registered",
+            "settings": {"cloud_provider": "auto"},
+            "updated_at": (now - timedelta(minutes=5)).isoformat(),
+        },
+        {
+            "agent_id": "agent-1",
+            "status": "connected",
+            "last_seen_at": now.isoformat(),
+        },
+        latest_snapshot={
+            "agent_id": "agent-1",
+            "summary": {
+                "summary": {"detected_provider": "eks"},
+                "health": {},
+                "usage": {},
+            },
+            "created_at": (now - timedelta(minutes=1)).isoformat(),
+        },
+    )
+
+    assert summary.provider == "eks"
+
+
 def test_cluster_summary_generic_registration_falls_back_to_onprem() -> None:
     summary = cluster_summary(
         {

@@ -28,6 +28,7 @@ from domains.identity.dependencies import (
 )
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
+from domains.inventory.snapshot_evidence import snapshot_source_summary
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
 from domains.target.connectivity import (
@@ -840,8 +841,8 @@ def resolved_cluster_provider(
     if selected in CONCRETE_CLUSTER_PROVIDERS:
         return selected
 
-    snapshot_summary = (latest_snapshot or {}).get("summary") or {}
-    detected = str(snapshot_summary.get("detected_provider") or "").strip().lower()
+    source_summary = snapshot_source_summary(latest_snapshot) or {}
+    detected = str(source_summary.get("detected_provider") or "").strip().lower()
     if detected in DETECTED_CLUSTER_PROVIDERS:
         return detected
     provider_config = settings.get("provider_config") or {}

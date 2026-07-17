@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from domains.inventory.snapshot_evidence import snapshot_source_summary
 from domains.log_stream.service import WORKLOAD_KIND_NAMES
 from domains.target.connectivity import (
     AGENT_STATUS_NEVER_CONNECTED,
@@ -91,7 +92,7 @@ def workload_detail_projection(
     if not latest_snapshot_id or not observation_snapshot_id:
         raise WorkloadDetailUnavailable("inventory snapshot identity is unavailable")
 
-    source_summary = nested_mapping(latest_snapshot.get("summary"), "summary")
+    source_summary = snapshot_source_summary(latest_snapshot) or {}
     source_truncated = nested_mapping(source_summary, "collection_limits").get("truncated") is True
     source_complete = source_summary.get("resources_complete") is True and not source_truncated
     coverage_reasons: list[str] = []

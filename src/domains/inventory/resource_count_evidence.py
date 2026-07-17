@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import ValidationError
 
+from domains.inventory.snapshot_evidence import snapshot_source_summary
 from domains.resource_access.projection import (
     ResourceAccessUnavailable,
     agent_execution_access_projection,
@@ -28,7 +29,7 @@ def project_inventory_resource_counts_evidence(
     *,
     namespace_scope: tuple[str, ...],
 ) -> InventoryResourceCountsEvidence:
-    source = _source_summary(snapshot)
+    source = snapshot_source_summary(snapshot)
     if source is None:
         return InventoryResourceCountsEvidence(
             completeness="unavailable",
@@ -68,12 +69,6 @@ def project_inventory_resource_counts_evidence(
         reason_codes=tuple(sorted(reasons)),
         forbidden=tuple(forbidden[key] for key in sorted(forbidden, key=_restriction_sort_key)),
     )
-
-
-def _source_summary(snapshot: Mapping[str, object] | None) -> Mapping[str, object] | None:
-    envelope = snapshot.get("summary") if isinstance(snapshot, Mapping) else None
-    source = envelope.get("summary") if isinstance(envelope, Mapping) else None
-    return source if isinstance(source, Mapping) else None
 
 
 def _discovery(
