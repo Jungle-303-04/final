@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from domains.helm.release_router import (
     create_helm_artifact_read,
+    create_helm_release_install_stream,
     create_helm_release_rollback,
     create_helm_release_uninstall,
     create_helm_release_upgrade,
@@ -27,6 +28,7 @@ from packages.contracts.helm import (
     HELM_RELEASE_OPERATION_ACTION,
     HELM_RELEASE_OPERATION_CAPABILITY,
     HelmArtifactReadRequest,
+    HelmReleaseInstallRequest,
     HelmReleaseRollbackRequest,
     HelmReleaseUninstallRequest,
     HelmReleaseUpgradeRequest,
@@ -722,6 +724,66 @@ def test_install_stream_exposes_only_server_recipe_targets_and_the_accepted_cont
     app.include_router(module.router)
     operation = app.openapi()["paths"]["/helm/releases/install-stream"]["post"]
     assert "202" in operation["responses"]
+
+
+def test_install_stream_returns_the_common_audit_receipt_for_one_idempotent_command(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_accept(_events, command, *, actor, max_active_per_action=None):
+        captured["command"] = command
+        assert actor.user_id == "user-a"
+        assert max_active_per_action is None
+        return SimpleNamespace(
+            event=SimpleNamespace(event_id="evt-install-1", correlation_id="corr-install-1")
+        ), None
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        fake_accept,
+    )
+    receipt = asyncio.run(
+        create_helm_release_install_stream(
+            payload=HelmReleaseInstallRequest(
+                cluster_id="cluster-a",
+                namespace="sandbox",
+                application_name="redis",
+                release_name="redis",
+                catalog_item_id="catalog-redis",
+                catalog_version="1.0.0",
+                values={"master.persistence.storageClass": "gp3"},
+                confirmation=True,
+            ),
+            idempotency_key="helm-install-request-1",
+            current=SimpleNamespace(
+                user_id="user-a",
+                workspace_id="workspace-a",
+                roles=("user",),
+            ),
+            db=HelmUpgradeDb(),
+            events=SimpleNamespace(),
+            operation_events=SimpleNamespace(),
+        )
+    )
+
+    assert receipt.event_id == receipt.audit_event_id == "evt-install-1"
+    command = captured["command"]
+    assert command.command_id == "cmd-catalog-5557d3fb80d210f0548b82fd"
+    assert command.action == Command.CATALOG_HELM_INSTALL_ACTION
+    assert command.namespace == "sandbox"
+    assert command.direct_execution is True
+    assert command.direct_execution_confirmed is True
+    assert command.diff.basis["request_fingerprint"]
+    assert command.payload == {
+        "catalog_item_id": "catalog-redis",
+        "catalog_version": "1.0.0",
+        "namespace": "sandbox",
+        "application_name": "redis",
+        "release_name": "redis",
+        "values": {"master.persistence.storageClass": "gp3"},
+        "upgrade_guard": None,
+    }
 
 
 def test_release_rollback_reuses_common_receipt_and_revision_bound_agent_command(
