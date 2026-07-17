@@ -50,6 +50,40 @@ MAX_TIMELINE_EVENTS = 10_000
 TIMELINE_APPEND_CHUNK = 1_000
 
 
+def _timeline_diagnostics_statement(workspace_id: str) -> Any:
+    """Build one cursor lookup and two single-row time-bound probes."""
+    cursor = TimelineLedgerCursor.__table__
+    ledger = TimelineLedgerEvent.__table__
+    anchor = select(literal(1).label("present")).subquery("diagnostics_anchor")
+    oldest_occurred_at = (
+        select(ledger.c.occurred_at)
+        .where(ledger.c.workspace_id == workspace_id)
+        .order_by(ledger.c.occurred_at, ledger.c.sequence)
+        .limit(1)
+        .scalar_subquery()
+    )
+    newest_occurred_at = (
+        select(ledger.c.occurred_at)
+        .where(ledger.c.workspace_id == workspace_id)
+        .order_by(ledger.c.occurred_at.desc(), ledger.c.sequence.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    high_water_sequence = func.coalesce(cursor.c.last_sequence, 0)
+    return select(
+        high_water_sequence.label("event_count"),
+        oldest_occurred_at.label("oldest_occurred_at"),
+        newest_occurred_at.label("newest_occurred_at"),
+        high_water_sequence.label("high_water_sequence"),
+        func.coalesce(cursor.c.retained_from_sequence, 1).label("retained_from_sequence"),
+    ).select_from(
+        anchor.outerjoin(
+            cursor,
+            cursor.c.workspace_id == workspace_id,
+        )
+    )
+
+
 class TimelinePinRevisionConflict(ValueError):
     """The browser attempted a pin mutation from an obsolete pin-set revision."""
 
@@ -615,26 +649,15 @@ class TimelineLedgerRepository(DatabaseConnection):
             )
 
     def timeline_diagnostics(self, workspace_id: str) -> dict[str, Any]:
-        """Return one workspace-scoped aggregate without loading replay payloads."""
-        cursor = TimelineLedgerCursor.__table__
-        ledger = TimelineLedgerEvent.__table__
-        last_sequence = (
-            select(cursor.c.last_sequence)
-            .where(cursor.c.workspace_id == workspace_id)
-            .scalar_subquery()
-        )
-        retained_from_sequence = (
-            select(cursor.c.retained_from_sequence)
-            .where(cursor.c.workspace_id == workspace_id)
-            .scalar_subquery()
-        )
-        statement = select(
-            func.count(ledger.c.sequence).label("event_count"),
-            func.min(ledger.c.occurred_at).label("oldest_occurred_at"),
-            func.max(ledger.c.occurred_at).label("newest_occurred_at"),
-            func.coalesce(last_sequence, 0).label("high_water_sequence"),
-            func.coalesce(retained_from_sequence, 1).label("retained_from_sequence"),
-        ).where(ledger.c.workspace_id == workspace_id)
+        """Return exact append-only diagnostics with three bounded index probes.
+
+        ``last_sequence`` is also the exact row count: the ledger allocates one
+        contiguous sequence for every inserted row, never updates/deletes source
+        facts, and advances the cursor in the same transaction as the insert.
+        Reading that authority avoids aggregating every historical event.  The
+        two time bounds stop at one row through the diagnostics index.
+        """
+        statement = _timeline_diagnostics_statement(workspace_id)
         with self.connection() as conn:
             row = conn.execute(statement).mappings().one()
         return {

@@ -42,7 +42,7 @@ async def collect_runtime_diagnostics(
     event_pipeline, timeline, agent_collection = await asyncio.gather(
         asyncio.to_thread(_collect_event_pipeline, db),
         asyncio.to_thread(_collect_timeline, db, str(current.workspace_id)),
-        asyncio.to_thread(_collect_agents, db, current),
+        _collect_agents(db, current),
     )
     reason_codes = sorted(
         {
@@ -175,37 +175,35 @@ def _collect_timeline(db: Any, workspace_id: str) -> TimelineDiagnostics:
         )
 
 
-def _collect_agents(db: Any, current: Any) -> AgentCollectionDiagnostics:
+async def _collect_agents(db: Any, current: Any) -> AgentCollectionDiagnostics:
     try:
         workspace_id = str(current.workspace_id)
-        allowed_ids = resolve_allowed_cluster_ids(
+        selected, truncated = await asyncio.to_thread(
+            _select_agent_registrations,
             db,
             current,
             workspace_id,
-            Permission.CLUSTER_READ.value,
         )
-        registrations = db.list_cluster_registrations(
-            workspace_id,
-            cluster_ids=allowed_ids,
-            limit=AGENT_DIAGNOSTICS_LIMIT + 1,
-        )
-        ordered = sorted(
-            (item for item in registrations if isinstance(item, Mapping)),
-            key=lambda item: str(item.get("cluster_id") or ""),
-        )
-        truncated = len(ordered) > AGENT_DIAGNOSTICS_LIMIT
-        selected = ordered[:AGENT_DIAGNOSTICS_LIMIT]
         selected_ids = {
             str(item.get("cluster_id") or "").strip()
             for item in selected
             if str(item.get("cluster_id") or "").strip()
         }
-        statuses = (
-            db.latest_cluster_agent_statuses(workspace_id, selected_ids) if selected_ids else {}
-        )
-        snapshots = (
-            db.latest_inventory_snapshots(workspace_id, selected_ids) if selected_ids else {}
-        )
+        if selected_ids:
+            statuses, snapshots = await asyncio.gather(
+                asyncio.to_thread(
+                    db.latest_cluster_agent_statuses,
+                    workspace_id,
+                    selected_ids,
+                ),
+                asyncio.to_thread(
+                    db.latest_inventory_snapshots,
+                    workspace_id,
+                    selected_ids,
+                ),
+            )
+        else:
+            statuses, snapshots = {}, {}
         items: list[AgentDiagnosticsItem] = []
         reason_codes: list[str] = []
         if truncated:
@@ -229,6 +227,30 @@ def _collect_agents(db: Any, current: Any) -> AgentCollectionDiagnostics:
             availability="unavailable",
             reason_codes=["agent_collection_unavailable"],
         )
+
+
+def _select_agent_registrations(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+) -> tuple[list[Mapping[str, Any]], bool]:
+    """Authorize first, then materialize one bounded registration page."""
+    allowed_ids = resolve_allowed_cluster_ids(
+        db,
+        current,
+        workspace_id,
+        Permission.CLUSTER_READ.value,
+    )
+    registrations = db.list_cluster_registrations(
+        workspace_id,
+        cluster_ids=allowed_ids,
+        limit=AGENT_DIAGNOSTICS_LIMIT + 1,
+    )
+    ordered = sorted(
+        (item for item in registrations if isinstance(item, Mapping)),
+        key=lambda item: str(item.get("cluster_id") or ""),
+    )
+    return ordered[:AGENT_DIAGNOSTICS_LIMIT], len(ordered) > AGENT_DIAGNOSTICS_LIMIT
 
 
 def _agent_item(

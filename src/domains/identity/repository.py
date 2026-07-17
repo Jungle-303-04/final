@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from typing import Any
 
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import and_, case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.identity.models import (
@@ -45,6 +45,73 @@ from packages.contracts.identity import (
 )
 from packages.storage.engine import DatabaseConnection, iso_or_none
 from packages.storage.retry import sync_retry_db_conflict
+
+
+def _accessible_resource_ids_statement(
+    user_id: str,
+    workspace_id: str,
+    resource_type: str,
+    permission: str,
+) -> Any:
+    """Resolve resource grants and scoped-policy fallback in one statement.
+
+    A scoped role policy replaces the global role policy when any scoped row
+    exists, including an all-disabled policy.  Keeping that decision correlated
+    to the member role preserves the existing fail-closed override semantics
+    without one existence query plus one permission query per distinct role.
+    """
+    assignment = ResourceAssignment.__table__
+    group_member = GroupMember.__table__
+    member_role = MemberResourceRole.__table__
+    active_policy = RolePermission.__table__.alias("active_role_policy")
+    scoped_policy = RolePermission.__table__.alias("scoped_role_policy")
+    scoped_rows_exist = (
+        select(scoped_policy.c.id)
+        .where(
+            scoped_policy.c.organization_id == workspace_id,
+            scoped_policy.c.resource_type == resource_type,
+            scoped_policy.c.role == member_role.c.role,
+        )
+        .limit(1)
+        .exists()
+    )
+    policy_scope = case(
+        (scoped_rows_exist, workspace_id),
+        else_=GLOBAL_ROLE_POLICY_ORGANIZATION_ID,
+    )
+    return (
+        select(assignment.c.resource_id)
+        .select_from(
+            assignment.join(
+                group_member,
+                (group_member.c.group_id == assignment.c.group_id)
+                & (group_member.c.user_id == user_id)
+                & (group_member.c.status == AccessStatus.ACTIVE.value),
+            )
+            .join(
+                member_role,
+                (member_role.c.resource_assignment_id == assignment.c.resource_assignment_id)
+                & (member_role.c.user_id == user_id)
+                & (member_role.c.status == AccessStatus.ACTIVE.value),
+            )
+            .join(
+                active_policy,
+                and_(
+                    active_policy.c.organization_id == policy_scope,
+                    active_policy.c.resource_type == resource_type,
+                    active_policy.c.role == member_role.c.role,
+                    active_policy.c.permission == permission,
+                    active_policy.c.status == AccessStatus.ACTIVE.value,
+                ),
+            )
+        )
+        .where(
+            assignment.c.organization_id == workspace_id,
+            assignment.c.resource_type == resource_type,
+            assignment.c.status == AccessStatus.ACTIVE.value,
+        )
+        .distinct()
+    )
 
 
 class IdentityAccessRepository(DatabaseConnection):
@@ -922,49 +989,15 @@ class IdentityAccessRepository(DatabaseConnection):
             if self.is_service_admin(user_id):
                 return None
             permission = Permission(action).value
-            assignment = ResourceAssignment.__table__
-            group_member = GroupMember.__table__
-            member_role = MemberResourceRole.__table__
-            statement = (
-                select(
-                    assignment.c.resource_id,
-                    member_role.c.role,
-                )
-                .select_from(
-                    assignment.join(
-                        group_member,
-                        (group_member.c.group_id == assignment.c.group_id)
-                        & (group_member.c.user_id == user_id)
-                        & (group_member.c.status == AccessStatus.ACTIVE.value),
-                    ).join(
-                        member_role,
-                        (
-                            member_role.c.resource_assignment_id
-                            == assignment.c.resource_assignment_id
-                        )
-                        & (member_role.c.user_id == user_id)
-                        & (member_role.c.status == AccessStatus.ACTIVE.value),
-                    )
-                )
-                .where(
-                    assignment.c.organization_id == workspace_id,
-                    assignment.c.resource_type == resource_type,
-                    assignment.c.status == AccessStatus.ACTIVE.value,
-                )
+            statement = _accessible_resource_ids_statement(
+                user_id,
+                workspace_id,
+                resource_type,
+                permission,
             )
             with self.connection() as conn:
                 candidates = list(conn.execute(statement).mappings())
-            role_permissions = {
-                str(role): self.role_has_permission(
-                    resource_type, str(role), permission, workspace_id
-                )
-                for role in {row["role"] for row in candidates}
-            }
-            return {
-                str(row["resource_id"])
-                for row in candidates
-                if role_permissions.get(str(row["role"]), False)
-            }
+            return {str(row["resource_id"]) for row in candidates}
 
         return sync_retry_db_conflict(lookup)
 

@@ -165,16 +165,16 @@ def test_service_admin_can_access_every_resource_action() -> None:
     )
 
 
-def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> None:
+def test_accessible_resource_ids_resolves_scoped_role_policy_without_role_n_plus_one() -> None:
+    statements: list[Any] = []
+
     class StubResult:
         def mappings(self) -> list[dict[str, str]]:
-            return [
-                {"resource_id": "cluster-1", "role": ResourceRole.OBSERVER.value},
-                {"resource_id": "cluster-2", "role": ResourceRole.RELEASE_OPERATOR.value},
-            ]
+            return [{"resource_id": "cluster-2"}]
 
     class StubConnection:
-        def execute(self, _statement: Any) -> StubResult:
+        def execute(self, statement: Any) -> StubResult:
+            statements.append(statement)
             return StubResult()
 
     @contextmanager
@@ -184,18 +184,6 @@ def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> Non
     repository = object.__new__(WorkspaceAccessRepository)
     repository.is_service_admin = lambda _user_id: False  # type: ignore[method-assign]
     repository.connection = stub_connection  # type: ignore[method-assign]
-    calls: list[tuple[str, str, str, str]] = []
-
-    def role_has_permission(
-        resource_type: str,
-        role: str,
-        permission: str,
-        organization_id: str | None = None,
-    ) -> bool:
-        calls.append((resource_type, role, permission, str(organization_id)))
-        return role == ResourceRole.RELEASE_OPERATOR.value
-
-    repository.role_has_permission = role_has_permission  # type: ignore[method-assign]
 
     assert repository.accessible_resource_ids(
         "user-1",
@@ -203,20 +191,17 @@ def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> Non
         AccessResourceType.CLUSTER.value,
         Permission.DEPLOY_RUN.value,
     ) == {"cluster-2"}
-    assert set(calls) == {
-        (
-            AccessResourceType.CLUSTER.value,
-            ResourceRole.OBSERVER.value,
-            Permission.DEPLOY_RUN.value,
-            "org-a",
-        ),
-        (
-            AccessResourceType.CLUSTER.value,
-            ResourceRole.RELEASE_OPERATOR.value,
-            Permission.DEPLOY_RUN.value,
-            "org-a",
-        ),
-    }
+    assert len(statements) == 1
+    compiled = statements[0].compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True},
+    )
+    sql = " ".join(str(compiled).casefold().split())
+    assert "join role_permissions as active_role_policy" in sql
+    assert "exists (select scoped_role_policy.id" in sql
+    assert "scoped_role_policy.organization_id = 'org-a'" in sql
+    assert "then 'org-a' else '__global__'" in sql
+    assert "active_role_policy.permission = 'deploy.run'" in sql
 
 
 def test_list_access_grants_requires_organization_id_without_global_default() -> None:

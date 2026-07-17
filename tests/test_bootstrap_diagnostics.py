@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -189,6 +190,34 @@ def test_runtime_diagnostics_is_session_scoped_batched_and_bounded() -> None:
     ) in db.calls
     assert len([call for call in db.calls if call[0] == "latest_cluster_agent_statuses"]) == 1
     assert len([call for call in db.calls if call[0] == "latest_inventory_snapshots"]) == 1
+
+
+def test_runtime_diagnostics_reads_independent_agent_observations_concurrently() -> None:
+    class ConcurrentAgentDb(RuntimeDiagnosticsDb):
+        def __init__(self) -> None:
+            super().__init__()
+            self.observation_barrier = threading.Barrier(2)
+
+        def latest_cluster_agent_statuses(
+            self,
+            workspace_id: str,
+            cluster_ids: set[str],
+        ) -> dict[str, dict[str, object]]:
+            self.observation_barrier.wait(timeout=1)
+            return super().latest_cluster_agent_statuses(workspace_id, cluster_ids)
+
+        def latest_inventory_snapshots(
+            self,
+            workspace_id: str,
+            cluster_ids: set[str],
+        ) -> dict[str, dict[str, object]]:
+            self.observation_barrier.wait(timeout=1)
+            return super().latest_inventory_snapshots(workspace_id, cluster_ids)
+
+    response = _client(ConcurrentAgentDb()).get("/diagnostics")
+
+    assert response.status_code == 200
+    assert response.json()["agent_collection"]["availability"] == "available"
 
 
 def test_runtime_diagnostics_prioritizes_nonzero_lag_before_bounded_idle_consumers() -> None:

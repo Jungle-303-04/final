@@ -16,7 +16,7 @@ from domains.target.models import EvidenceWindow
 from packages.contracts.cost.observations import COST_EVIDENCE_METRICS
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "20260718_0100"
+HEAD_REVISION = "20260718_0200"
 REVISION = "20260718_0010"
 DOWN_REVISION = "20260717_2000"
 INDEX_NAME = "ix_evidence_windows_cost_workspace_cluster_updated"

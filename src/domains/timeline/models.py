@@ -43,6 +43,12 @@ class TimelineLedgerEvent(Base):
         UniqueConstraint("workspace_id", "source_key", name="uq_timeline_events_source_key"),
         Index("ix_timeline_events_replay", "workspace_id", "sequence"),
         Index(
+            "ix_timeline_events_diagnostics",
+            "workspace_id",
+            "occurred_at",
+            "sequence",
+        ),
+        Index(
             "ix_timeline_events_scope_time",
             "workspace_id",
             "cluster_id",
