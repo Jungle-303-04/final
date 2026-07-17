@@ -126,35 +126,40 @@ def verify_repository_rollout(
         for target in rollout_targets(plan)
     }
     live_images = live_deployment_images(live_document)
-    if not require_exact_digest:
-        missing = sorted(expected - set(live_images))
-        unexpected_repository_targets = sorted(
-            identity
-            for identity, observed_image in live_images.items()
-            if image_repository(observed_image) == repository and identity not in expected
-        )
-        if missing or unexpected_repository_targets:
-            raise RuntimeError(
-                "repository target set changed: "
-                f"missing={missing!r} extra={unexpected_repository_targets!r}"
-            )
-        return len(expected)
-    observed_images = {
-        identity: observed_image
+    protected = {
+        (target.resource.removeprefix("deployment/"), target.container): target.image
+        for target in plan.protected_targets
+    }
+    if any(
+        image_repository(protected_image) != repository for protected_image in protected.values()
+    ):
+        raise ValueError("protected target repository must match rollout repository")
+    missing = sorted(expected - set(live_images))
+    protected_changes = sorted(
+        identity
+        for identity, protected_image in protected.items()
+        if live_images.get(identity) != protected_image
+    )
+    unexpected_repository_targets = sorted(
+        identity
         for identity, observed_image in live_images.items()
         if image_repository(observed_image) == repository
-    }
-    observed = set(observed_images)
-    if observed != expected:
-        missing = sorted(expected - observed)
-        extra = sorted(observed - expected)
-        raise RuntimeError(f"repository target set changed: missing={missing!r} extra={extra!r}")
-    mismatches = sorted(
-        identity for identity, observed_image in observed_images.items() if observed_image != image
+        and identity not in expected
+        and identity not in protected
     )
+    if missing or unexpected_repository_targets:
+        raise RuntimeError(
+            "repository target set changed: "
+            f"missing={missing!r} extra={unexpected_repository_targets!r}"
+        )
+    if protected_changes:
+        raise RuntimeError(f"protected repository target changed: {protected_changes!r}")
+    if not require_exact_digest:
+        return len(expected)
+    mismatches = sorted(identity for identity in expected if live_images[identity] != image)
     if mismatches:
         raise RuntimeError(f"repository digest mismatch: {mismatches!r}")
-    return len(observed)
+    return len(expected)
 
 
 def verify_pre_rollout_state(plan: RollbackPlan, *, image: str, live_document: Any) -> int:
@@ -184,10 +189,23 @@ def verify_pre_rollout_state(plan: RollbackPlan, *, image: str, live_document: A
         (target.resource.removeprefix("deployment/"), target.container)
         for target in rollout_targets(plan)
     }
+    protected = {
+        (target.resource.removeprefix("deployment/"), target.container): target.image
+        for target in plan.protected_targets
+    }
+    protected_changes = sorted(
+        identity
+        for identity, protected_image in protected.items()
+        if live_images.get(identity) != protected_image
+    )
+    if protected_changes:
+        raise RuntimeError(f"protected repository target changed: {protected_changes!r}")
     unexpected_repository_targets = sorted(
         identity
         for identity, observed_image in live_images.items()
-        if image_repository(observed_image) == repository and identity not in expected
+        if image_repository(observed_image) == repository
+        and identity not in expected
+        and identity not in protected
     )
     if unexpected_repository_targets:
         raise RuntimeError(

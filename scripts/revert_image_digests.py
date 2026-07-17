@@ -36,10 +36,20 @@ class BootstrapTarget:
 
 
 @dataclass(frozen=True)
+class ProtectedTarget:
+    namespace: str
+    resource: str
+    container: str
+    image: str
+    state: str
+
+
+@dataclass(frozen=True)
 class RollbackPlan:
     previous_release_sha: str
     targets: tuple[RollbackTarget, ...]
     bootstrap_targets: tuple[BootstrapTarget, ...] = ()
+    protected_targets: tuple[ProtectedTarget, ...] = ()
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -100,6 +110,33 @@ def parse_bootstrap_target(value: Any, index: int) -> BootstrapTarget:
     return target
 
 
+def parse_protected_target(value: Any, index: int) -> ProtectedTarget:
+    mapping = require_mapping(value, f"protected_targets[{index}]")
+    expected = {"namespace", "resource", "container", "image", "state"}
+    if set(mapping) != expected:
+        raise ValueError(f"protected_targets[{index}] must contain exactly {sorted(expected)}")
+    target = ProtectedTarget(
+        namespace=require_text(mapping, "namespace"),
+        resource=require_text(mapping, "resource"),
+        container=require_text(mapping, "container"),
+        image=require_text(mapping, "image"),
+        state=require_text(mapping, "state"),
+    )
+    if not KUBERNETES_NAME.fullmatch(target.namespace):
+        raise ValueError(f"protected_targets[{index}].namespace is not a Kubernetes name")
+    if not DEPLOYMENT_RESOURCE.fullmatch(target.resource):
+        raise ValueError(f"protected_targets[{index}].resource must be deployment/<name>")
+    if not KUBERNETES_NAME.fullmatch(target.container):
+        raise ValueError(f"protected_targets[{index}].container is not a Kubernetes name")
+    if not IMAGE_DIGEST.fullmatch(target.image):
+        raise ValueError(f"protected_targets[{index}].image must use an immutable sha256 digest")
+    if target.state != "outside_manifest_scope_before_rollout":
+        raise ValueError(
+            f"protected_targets[{index}].state must be outside_manifest_scope_before_rollout"
+        )
+    return target
+
+
 def load_plan(path: Path) -> RollbackPlan:
     document = require_mapping(json.loads(path.read_text(encoding="utf-8")), "plan")
     version = document.get("version")
@@ -112,8 +149,16 @@ def load_plan(path: Path) -> RollbackPlan:
             "targets",
             "bootstrap_targets",
         }
+    elif version == 3:
+        expected_fields = {
+            "version",
+            "previous_release_sha",
+            "targets",
+            "bootstrap_targets",
+            "protected_targets",
+        }
     else:
-        raise ValueError("plan version must be 1 or 2")
+        raise ValueError("plan version must be 1, 2, or 3")
     if set(document) != expected_fields:
         raise ValueError(f"plan must contain exactly {sorted(expected_fields)}")
 
@@ -131,11 +176,17 @@ def load_plan(path: Path) -> RollbackPlan:
     bootstrap_targets = tuple(
         parse_bootstrap_target(value, index) for index, value in enumerate(raw_bootstrap_targets)
     )
-    if not targets and not bootstrap_targets:
+    raw_protected_targets = document.get("protected_targets", [])
+    if not isinstance(raw_protected_targets, list):
+        raise ValueError("protected_targets must be a list")
+    protected_targets = tuple(
+        parse_protected_target(value, index) for index, value in enumerate(raw_protected_targets)
+    )
+    if not targets and not bootstrap_targets and not protected_targets:
         raise ValueError("plan must contain at least one target")
     identities = [
         (target.namespace, target.resource, target.container)
-        for target in (*targets, *bootstrap_targets)
+        for target in (*targets, *bootstrap_targets, *protected_targets)
     ]
     if len(identities) != len(set(identities)):
         raise ValueError("plan must not contain duplicate deployment containers")
@@ -143,6 +194,7 @@ def load_plan(path: Path) -> RollbackPlan:
         previous_release_sha=previous_release_sha,
         targets=targets,
         bootstrap_targets=bootstrap_targets,
+        protected_targets=protected_targets,
     )
 
 
@@ -305,19 +357,20 @@ def live_deployment_images(*, context: str, namespace: str) -> dict[tuple[str, s
 
 
 def verify_exact_live_digests(plan: RollbackPlan, *, context: str) -> int:
+    expected = (*plan.targets, *plan.protected_targets)
     observed_by_namespace = {
         namespace: live_deployment_images(context=context, namespace=namespace)
-        for namespace in dict.fromkeys(target.namespace for target in plan.targets)
+        for namespace in dict.fromkeys(target.namespace for target in expected)
     }
     mismatches = sorted(
         (target.namespace, target.resource, target.container)
-        for target in plan.targets
+        for target in expected
         if observed_by_namespace[target.namespace].get((target.resource, target.container))
         != target.image
     )
     if mismatches:
         raise RuntimeError(f"rollback digest mismatch: {mismatches!r}")
-    return len(plan.targets)
+    return len(expected)
 
 
 def verify_bootstrap_targets_absent(plan: RollbackPlan, *, context: str) -> int:

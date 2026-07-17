@@ -576,6 +576,43 @@ def test_capture_accepts_only_explicit_same_repository_tag_attestation(tmp_path:
         )
 
 
+def test_capture_protects_same_repository_target_outside_manifest_scope(
+    tmp_path: Path,
+) -> None:
+    expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
+    live = live_deployments()
+    items = live["items"]
+    assert isinstance(items, list)
+    items.append(
+        {
+            "metadata": {"name": "cluster-agent"},
+            "spec": {
+                "template": {"spec": {"containers": [{"name": "cluster-agent", "image": DIGEST}]}}
+            },
+        }
+    )
+
+    plan = capture_image_digests.build_plan(
+        expected=expected,
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+        managed_repository="registry.example/opsia/service",
+    )
+
+    assert [
+        (target.resource, target.container, target.image, target.state)
+        for target in plan.protected_targets
+    ] == [
+        (
+            "deployment/cluster-agent",
+            "cluster-agent",
+            DIGEST,
+            "outside_manifest_scope_before_rollout",
+        )
+    ]
+
+
 def test_capture_rejects_duplicate_or_mutable_live_image_attestations() -> None:
     mapping = f"registry.example/opsia/service:release={DIGEST}"
 
@@ -749,6 +786,69 @@ def test_rollout_repository_verification_fails_closed_on_stale_or_extra_target(
             plan,
             image=next_digest,
             live_document=only_target,
+            require_exact_digest=True,
+        )
+
+
+def test_rollout_keeps_captured_outside_manifest_target_digest_unchanged(
+    tmp_path: Path,
+) -> None:
+    plan = capture_image_digests.build_plan(
+        expected=(("api-gateway", "api-gateway"),),
+        live_document={
+            "items": [
+                live_deployments()["items"][0],
+                {
+                    "metadata": {"name": "cluster-agent"},
+                    "spec": {
+                        "template": {
+                            "spec": {"containers": [{"name": "cluster-agent", "image": DIGEST}]}
+                        }
+                    },
+                },
+            ]
+        },
+        namespace="management",
+        previous_release_sha=SHA,
+        managed_repository="registry.example/opsia/service",
+    )
+    next_digest = "registry.example/opsia/service@sha256:" + "c" * 64
+    live = {
+        "items": [
+            {
+                "metadata": {"name": "api-gateway"},
+                "spec": {
+                    "template": {
+                        "spec": {"containers": [{"name": "api-gateway", "image": next_digest}]}
+                    }
+                },
+            },
+            {
+                "metadata": {"name": "cluster-agent"},
+                "spec": {
+                    "template": {
+                        "spec": {"containers": [{"name": "cluster-agent", "image": DIGEST}]}
+                    }
+                },
+            },
+        ]
+    }
+
+    assert (
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image=next_digest,
+            live_document=live,
+            require_exact_digest=True,
+        )
+        == 1
+    )
+    live["items"][1]["spec"]["template"]["spec"]["containers"][0]["image"] = next_digest
+    with pytest.raises(RuntimeError, match="protected repository target changed"):
+        rollout_image_digest.verify_repository_rollout(
+            plan,
+            image=next_digest,
+            live_document=live,
             require_exact_digest=True,
         )
 
