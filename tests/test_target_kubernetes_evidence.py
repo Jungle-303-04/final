@@ -115,6 +115,106 @@ def test_resource_access_normalizes_null_rbac_collections_as_empty_lists(
 
 
 @pytest.mark.parametrize(
+    ("subject", "expected_namespace"),
+    [
+        ({"kind": "ServiceAccount", "name": "reader"}, "shop"),
+        (
+            {"kind": "ServiceAccount", "namespace": "shared", "name": "reader"},
+            "shared",
+        ),
+    ],
+)
+def test_role_binding_defaults_only_missing_service_account_namespace(
+    subject: dict[str, object],
+    expected_namespace: str,
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            role_bindings=[
+                {
+                    "metadata": {"name": "reader", "namespace": "shop"},
+                    "roleRef": {"kind": "Role", "name": "reader"},
+                    "subjects": [subject],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "exact"
+    assert normalized["role_bindings"][0]["subjects"][0]["namespace"] == expected_namespace
+
+
+def test_cluster_role_binding_rejects_missing_service_account_namespace() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            cluster_role_bindings=[
+                {
+                    "metadata": {"name": "reader"},
+                    "roleRef": {"kind": "ClusterRole", "name": "reader"},
+                    "subjects": [{"kind": "ServiceAccount", "name": "reader"}],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "unavailable"
+    assert normalized["reason_codes"] == ["invalid_access_observation"]
+
+
+def test_role_binding_keeps_user_and_group_subjects_cluster_scoped() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            role_bindings=[
+                {
+                    "metadata": {"name": "reader", "namespace": "shop"},
+                    "roleRef": {"kind": "Role", "name": "reader"},
+                    "subjects": [
+                        {"kind": "User", "namespace": "ignored", "name": "alice"},
+                        {"kind": "Group", "namespace": "ignored", "name": "operators"},
+                    ],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "exact"
+    assert [subject["namespace"] for subject in normalized["role_bindings"][0]["subjects"]] == [
+        "",
+        "",
+    ]
+
+
+@pytest.mark.parametrize("namespace", [None, "", 7])
+def test_role_binding_rejects_invalid_binding_namespace(namespace: object) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            role_bindings=[
+                {
+                    "metadata": {"name": "reader", "namespace": namespace},
+                    "roleRef": {"kind": "Role", "name": "reader"},
+                    "subjects": [{"kind": "ServiceAccount", "name": "reader"}],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "unavailable"
+    assert normalized["reason_codes"] == ["invalid_access_observation"]
+
+
+@pytest.mark.parametrize(
     ("collection", "resource"),
     [
         (
