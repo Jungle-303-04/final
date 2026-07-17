@@ -60,3 +60,12 @@ def test_application_pending_promotion_rejects_non_boolean_value() -> None:
         assert "pending promotion" in str(exc)
     else:
         raise AssertionError("invalid pending promotion must fail closed")
+
+
+def test_application_surface_axes_reject_control_characters() -> None:
+    try:
+        _filters(environments="prod\nsecret")
+    except ValueError as exc:
+        assert "unsafe control characters" in str(exc)
+    else:
+        raise AssertionError("unsafe application filter value must fail closed")

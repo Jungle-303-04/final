@@ -239,3 +239,13 @@ def test_metric_history_rejects_duplicate_and_future_snapshot_before_history_que
     )
     assert future.status_code == 422
     assert [kind for kind, _call in future_db.calls] == ["snapshot"]
+
+
+def test_metric_history_rejects_unsafe_ids_before_history_query() -> None:
+    db = ResourceMetricHistoryDb()
+    response = _client(db).get(
+        "/metrics/history", params={"ids": "pod-a\npod-b", "clusters": "cluster-a"}
+    )
+
+    assert response.status_code == 422
+    assert db.calls == []

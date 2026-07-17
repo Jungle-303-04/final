@@ -27,6 +27,8 @@ from domains.issue_filter.query import (
     selected_facet_values,
 )
 from packages.config.settings import env
+from packages.contracts.gateway import limits as gateway_limits
+from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     FilterResultCounts,
@@ -40,9 +42,10 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_PAGE_LIMIT = 50
-MAX_PAGE_LIMIT = 200
-MAX_CURSOR_LENGTH = 8192
+DEFAULT_PAGE_LIMIT = gateway_limits.FILTER_FACET_DEFAULT_LIMIT
+MAX_PAGE_LIMIT = gateway_limits.FILTER_FACET_MAX_LIMIT
+MAX_CURSOR_LENGTH = gateway_limits.FILTER_CURSOR_MAX_LENGTH
+MAX_FILTER_SEARCH_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "issue filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "issue filter scope not found"
@@ -72,10 +75,13 @@ async def list_filtered_issues(
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
-    issues_severity: str | None = Query(default=None, alias="issues.severity"),
-    issues_status: str | None = Query(default=None, alias="issues.status"),
-    issues_environment: str | None = Query(default=None, alias="issues.environment"),
-    issues_q: str | None = Query(default=None, alias="issues.q"),
+    issues_severity: str | None = Query(default=None, alias=gateway_params.ISSUES_SEVERITY_QUERY),
+    issues_status: str | None = Query(default=None, alias=gateway_params.ISSUES_STATUS_QUERY),
+    issues_environment: str | None = Query(
+        default=None,
+        alias=gateway_params.ISSUES_ENVIRONMENT_QUERY,
+    ),
+    issues_q: str | None = Query(default=None, alias=gateway_params.ISSUES_SEARCH_QUERY),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
@@ -136,11 +142,14 @@ async def list_issue_filter_facets(
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
-    issues_severity: str | None = Query(default=None, alias="issues.severity"),
-    issues_status: str | None = Query(default=None, alias="issues.status"),
-    issues_environment: str | None = Query(default=None, alias="issues.environment"),
-    issues_q: str | None = Query(default=None, alias="issues.q"),
-    facet_q: str | None = Query(default=None, max_length=200),
+    issues_severity: str | None = Query(default=None, alias=gateway_params.ISSUES_SEVERITY_QUERY),
+    issues_status: str | None = Query(default=None, alias=gateway_params.ISSUES_STATUS_QUERY),
+    issues_environment: str | None = Query(
+        default=None,
+        alias=gateway_params.ISSUES_ENVIRONMENT_QUERY,
+    ),
+    issues_q: str | None = Query(default=None, alias=gateway_params.ISSUES_SEARCH_QUERY),
+    facet_q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
@@ -217,11 +226,14 @@ async def list_issue_label_facets(
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
-    issues_severity: str | None = Query(default=None, alias="issues.severity"),
-    issues_status: str | None = Query(default=None, alias="issues.status"),
-    issues_environment: str | None = Query(default=None, alias="issues.environment"),
-    issues_q: str | None = Query(default=None, alias="issues.q"),
-    facet_q: str | None = Query(default=None, max_length=200),
+    issues_severity: str | None = Query(default=None, alias=gateway_params.ISSUES_SEVERITY_QUERY),
+    issues_status: str | None = Query(default=None, alias=gateway_params.ISSUES_STATUS_QUERY),
+    issues_environment: str | None = Query(
+        default=None,
+        alias=gateway_params.ISSUES_ENVIRONMENT_QUERY,
+    ),
+    issues_q: str | None = Query(default=None, alias=gateway_params.ISSUES_SEARCH_QUERY),
+    facet_q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),

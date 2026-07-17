@@ -29,6 +29,7 @@ from domains.inventory_filter.query import (
     parse_resource_filters,
 )
 from packages.config.settings import env
+from packages.contracts.gateway import facets as gateway_facets
 from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes as gateway_routes
@@ -47,21 +48,24 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
-DEFAULT_PAGE_LIMIT = 50
-MAX_PAGE_LIMIT = 200
-MAX_CURSOR_LENGTH = 8192
+DEFAULT_PAGE_LIMIT = gateway_limits.FILTER_FACET_DEFAULT_LIMIT
+MAX_PAGE_LIMIT = gateway_limits.FILTER_FACET_MAX_LIMIT
+DEFAULT_GLOBAL_FACET_LIMIT = gateway_limits.GLOBAL_FILTER_FACET_DEFAULT_LIMIT
+MAX_GLOBAL_FACET_LIMIT = gateway_limits.GLOBAL_FILTER_FACET_MAX_LIMIT
+MAX_CURSOR_LENGTH = gateway_limits.FILTER_CURSOR_MAX_LENGTH
+MAX_FILTER_SEARCH_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
 DEFAULT_GRAPH_NODE_LIMIT = gateway_limits.RESOURCE_GRAPH_DEFAULT_NODE_LIMIT
 MAX_GRAPH_NODE_LIMIT = gateway_limits.RESOURCE_GRAPH_MAX_NODE_LIMIT
 DEFAULT_GRAPH_EDGE_LIMIT = gateway_limits.RESOURCE_GRAPH_DEFAULT_EDGE_LIMIT
 MAX_GRAPH_EDGE_LIMIT = gateway_limits.RESOURCE_GRAPH_MAX_EDGE_LIMIT
-MAX_METRIC_HISTORY_IDS = 100
-MAX_METRIC_HISTORY_QUERY_LENGTH = 8192
-METRIC_HISTORY_RANGE_SECONDS = {
-    "15m": 15 * 60,
-    "1h": 60 * 60,
-    "6h": 6 * 60 * 60,
-    "24h": 24 * 60 * 60,
-}
+MAX_METRIC_HISTORY_IDS = gateway_limits.RESOURCE_METRIC_HISTORY_MAX_IDS
+MAX_METRIC_HISTORY_ID_LENGTH = gateway_limits.RESOURCE_METRIC_HISTORY_ID_MAX_LENGTH
+MAX_METRIC_HISTORY_QUERY_LENGTH = gateway_limits.RESOURCE_METRIC_HISTORY_IDS_MAX_QUERY_LENGTH
+DEFAULT_METRIC_HISTORY_LIMIT = gateway_limits.RESOURCE_METRIC_HISTORY_DEFAULT_LIMIT
+MAX_METRIC_HISTORY_LIMIT = gateway_limits.RESOURCE_METRIC_HISTORY_MAX_LIMIT
+DEFAULT_METRIC_HISTORY_RANGE = gateway_limits.RESOURCE_METRIC_HISTORY_DEFAULT_RANGE
+METRIC_HISTORY_RANGE_SECONDS = gateway_limits.RESOURCE_METRIC_HISTORY_RANGE_SECONDS
+METRIC_HISTORY_RANGES = gateway_limits.RESOURCE_METRIC_HISTORY_RANGES
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "resource filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "resource filter scope not found"
@@ -69,7 +73,7 @@ CURSOR_UNAVAILABLE_DETAIL = "resource filter cursor is unavailable"
 TOPOLOGY_REFRESH_AFTER_SECONDS = 5
 TOPOLOGY_PROJECTION_UNAVAILABLE = "topology_projection_unavailable"
 
-FacetAxis = Literal["clusters", "namespaces", "applications"]
+FacetAxis = Literal[*gateway_facets.RESOURCE_FILTER_FACET_AXES]
 
 router = APIRouter()
 
@@ -97,7 +101,7 @@ class PageState:
     response_model=GlobalFilterFacetsResponse,
 )
 async def list_global_filter_facets(
-    q: str | None = Query(default=None, max_length=200),
+    q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
@@ -107,7 +111,7 @@ async def list_global_filter_facets(
     ),
     resource_types: str | None = Query(default=None, include_in_schema=False),
     labels: str | None = Query(default=None),
-    limit: int = Query(default=8, ge=1, le=20),
+    limit: int = Query(default=DEFAULT_GLOBAL_FACET_LIMIT, ge=1, le=MAX_GLOBAL_FACET_LIMIT),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> GlobalFilterFacetsResponse:
@@ -618,8 +622,11 @@ async def get_resource_metrics_history(
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
     snapshot_revision: int | None = Query(default=None, ge=1),
-    time_range: Literal["15m", "1h", "6h", "24h"] = Query(default="1h", alias="range"),
-    limit: int = Query(default=60, ge=1, le=288),
+    time_range: Literal[*METRIC_HISTORY_RANGES] = Query(
+        default=DEFAULT_METRIC_HISTORY_RANGE,
+        alias=gateway_params.RESOURCE_METRIC_HISTORY_RANGE_QUERY,
+    ),
+    limit: int = Query(default=DEFAULT_METRIC_HISTORY_LIMIT, ge=1, le=MAX_METRIC_HISTORY_LIMIT),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ResourceMetricsHistoryResponse:
@@ -732,7 +739,7 @@ async def list_resource_label_facets(
         alias=gateway_params.RESOURCE_INCLUDE_DELETED_QUERY,
     ),
     include_deleted: bool | None = Query(default=None, include_in_schema=False),
-    facet_q: str | None = Query(default=None, max_length=200),
+    facet_q: str | None = Query(default=None, max_length=MAX_FILTER_SEARCH_LENGTH),
     cursor: str | None = Query(default=None, min_length=1, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     current: Any = Depends(require_session),
@@ -1105,7 +1112,10 @@ def _parse_metric_history_ids(value: str) -> tuple[str, ...]:
     ids = tuple(item.strip() for item in raw)
     if (
         not ids
-        or any(not item or len(item) > 512 for item in ids)
+        or any(
+            not item or len(item) > MAX_METRIC_HISTORY_ID_LENGTH or _has_control_character(item)
+            for item in ids
+        )
         or len(ids) > MAX_METRIC_HISTORY_IDS
         or len(set(ids)) != len(ids)
     ):
@@ -1161,6 +1171,10 @@ def _coalesce_bool(canonical: bool | None, compatibility: bool | None) -> bool:
         raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
     value = canonical if canonical is not None else compatibility
     return bool(value)
+
+
+def _has_control_character(value: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
 def _require_requested_scope(

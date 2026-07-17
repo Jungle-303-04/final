@@ -45,3 +45,12 @@ def test_gitops_fingerprint_and_facet_removal_cover_surface_axes() -> None:
     assert without_approval.approvals == ()
     assert without_approval.environments == baseline.environments
     assert selected_facet_values(baseline, "change_type") == ("config", "image")
+
+
+def test_gitops_surface_axes_reject_control_characters() -> None:
+    try:
+        _filters(approvals="pending\nsecret")
+    except ValueError as exc:
+        assert "unsafe control characters" in str(exc)
+    else:
+        raise AssertionError("unsafe GitOps filter value must fail closed")

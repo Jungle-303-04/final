@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
+from collections.abc import Set as AbstractSet
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
 from packages.contracts.gateway import evidence as gateway_evidence
+from packages.contracts.gateway import facets as gateway_facets
 from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import params as gateway_params
 from packages.contracts.gateway import routes
@@ -29,6 +31,22 @@ DEFAULT_EVENT_LIMIT = gateway_limits.INVENTORY_EVENT_DEFAULT_LIMIT
 MAX_EVENT_LIMIT = gateway_limits.INVENTORY_EVENT_MAX_LIMIT
 DEFAULT_CLUSTER_USAGE_LIMIT = gateway_limits.CLUSTER_USAGE_DEFAULT_LIMIT
 MAX_CLUSTER_USAGE_LIMIT = gateway_limits.CLUSTER_USAGE_MAX_LIMIT
+DEFAULT_FILTER_FACET_LIMIT = gateway_limits.FILTER_FACET_DEFAULT_LIMIT
+MAX_FILTER_FACET_LIMIT = gateway_limits.FILTER_FACET_MAX_LIMIT
+DEFAULT_GLOBAL_FILTER_FACET_LIMIT = gateway_limits.GLOBAL_FILTER_FACET_DEFAULT_LIMIT
+MAX_GLOBAL_FILTER_FACET_LIMIT = gateway_limits.GLOBAL_FILTER_FACET_MAX_LIMIT
+MAX_FILTER_CURSOR_LENGTH = gateway_limits.FILTER_CURSOR_MAX_LENGTH
+MAX_FILTER_SEARCH_LENGTH = gateway_limits.FILTER_SEARCH_MAX_LENGTH
+MAX_FILTER_VALUE_LIST_LENGTH = gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH
+DEFAULT_RESOURCE_METRIC_HISTORY_LIMIT = gateway_limits.RESOURCE_METRIC_HISTORY_DEFAULT_LIMIT
+MAX_RESOURCE_METRIC_HISTORY_LIMIT = gateway_limits.RESOURCE_METRIC_HISTORY_MAX_LIMIT
+MAX_RESOURCE_METRIC_HISTORY_IDS = gateway_limits.RESOURCE_METRIC_HISTORY_MAX_IDS
+MAX_RESOURCE_METRIC_HISTORY_ID_LENGTH = gateway_limits.RESOURCE_METRIC_HISTORY_ID_MAX_LENGTH
+MAX_RESOURCE_METRIC_HISTORY_IDS_QUERY_LENGTH = (
+    gateway_limits.RESOURCE_METRIC_HISTORY_IDS_MAX_QUERY_LENGTH
+)
+DEFAULT_RESOURCE_METRIC_HISTORY_RANGE = gateway_limits.RESOURCE_METRIC_HISTORY_DEFAULT_RANGE
+RESOURCE_METRIC_HISTORY_RANGES = gateway_limits.RESOURCE_METRIC_HISTORY_RANGES
 DEFAULT_RECENT_INCIDENT_LIMIT = gateway_limits.RCA_QUERY_DEFAULT_LIMIT
 MAX_QUERY_LIMIT = gateway_limits.RCA_QUERY_MAX_LIMIT
 DEFAULT_APPLICATION_LIMIT = gateway_limits.APPLICATION_LIST_DEFAULT_LIMIT
@@ -292,7 +310,9 @@ def default_tool_registry() -> ToolRegistry:
                             "Optional resource type filter, for example pod, workload, service, node, namespace, or event.",
                             max_length=80,
                         ),
-                        "namespace": _string("Optional Kubernetes namespace filter.", max_length=253),
+                        "namespace": _string(
+                            "Optional Kubernetes namespace filter.", max_length=253
+                        ),
                         "include_deleted": {
                             "type": "boolean",
                             "description": "Include deleted inventory rows when the API has retained them.",
@@ -310,6 +330,184 @@ def default_tool_registry() -> ToolRegistry:
                 handler=list_resources,
             ),
             McpTool(
+                name="list_global_filter_facets",
+                title="List Global Filter Facets",
+                description=(
+                    "List workspace-wide authorized filter suggestions from the existing "
+                    "global facets API so AI can choose real visible scopes only."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "query": _string("Optional facet search query.", max_length=200),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "resource_types": _string(
+                            "Optional comma-separated resource type filter.",
+                            max_length=2048,
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "limit": _integer(
+                            "Maximum number of values per facet to return.",
+                            minimum=1,
+                            maximum=MAX_GLOBAL_FILTER_FACET_LIMIT,
+                            default=DEFAULT_GLOBAL_FILTER_FACET_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_global_filter_facets,
+            ),
+            McpTool(
+                name="list_resource_filter_facets",
+                title="List Resource Filter Facets",
+                description=(
+                    "List authorized resource filter values for one facet axis through "
+                    "the existing resources facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "axis": _enum_string(
+                            "Facet axis to list.",
+                            gateway_facets.RESOURCE_FILTER_FACET_AXES,
+                        ),
+                        "selected": _string(
+                            "Optional comma-separated selected values for the same axis.",
+                            max_length=2048,
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of facet values to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    },
+                    required=["axis"],
+                ),
+                handler=list_resource_filter_facets,
+            ),
+            McpTool(
+                name="list_resource_label_facets",
+                title="List Resource Label Facets",
+                description=(
+                    "List authorized resource label selectors through the existing "
+                    "resource label-facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "resource_types": _string(
+                            "Optional comma-separated resource type filter.",
+                            max_length=2048,
+                        ),
+                        "health": _string(
+                            "Optional comma-separated health filter.", max_length=2048
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "query": _string("Optional resource search query.", max_length=200),
+                        "include_deleted": _optional_boolean(
+                            "Include deleted resources when retained by the Gateway."
+                        ),
+                        "facet_query": _string(
+                            "Optional label facet search query.", max_length=200
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of label facets to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_resource_label_facets,
+            ),
+            McpTool(
+                name="get_resource_metrics_history",
+                title="Get Resource Metrics History",
+                description=(
+                    "Fetch persisted metric history for existing resource ids through "
+                    "the resources metrics-history API. MCP does not query metrics "
+                    "storage or clusters directly."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "resource_ids": _string_array(
+                            "Existing inventory resource ids returned by Gateway APIs.",
+                            max_items=MAX_RESOURCE_METRIC_HISTORY_IDS,
+                            max_length=MAX_RESOURCE_METRIC_HISTORY_ID_LENGTH,
+                        ),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "resource_types": _string(
+                            "Optional comma-separated resource type filter.",
+                            max_length=2048,
+                        ),
+                        "health": _string(
+                            "Optional comma-separated health filter.", max_length=2048
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "query": _string("Optional resource search query.", max_length=200),
+                        "include_deleted": _optional_boolean(
+                            "Include deleted resources when retained by the Gateway."
+                        ),
+                        "snapshot_revision": _optional_integer(
+                            "Optional existing inventory snapshot revision to pin.",
+                            minimum=1,
+                        ),
+                        "time_range": _enum_string(
+                            "Metric history window.",
+                            RESOURCE_METRIC_HISTORY_RANGES,
+                            default=DEFAULT_RESOURCE_METRIC_HISTORY_RANGE,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of samples per series to return.",
+                            minimum=1,
+                            maximum=MAX_RESOURCE_METRIC_HISTORY_LIMIT,
+                            default=DEFAULT_RESOURCE_METRIC_HISTORY_LIMIT,
+                        ),
+                    },
+                    required=["resource_ids"],
+                ),
+                handler=get_resource_metrics_history,
+            ),
+            McpTool(
                 name="get_resource_detail",
                 title="Get Resource Detail",
                 description=(
@@ -319,8 +517,12 @@ def default_tool_registry() -> ToolRegistry:
                 input_schema=_schema(
                     properties={
                         "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
-                        "resource_type": _string("Resource type returned by list_resources.", max_length=80),
-                        "kind": _string("Kubernetes kind, for example Pod or Deployment.", max_length=120),
+                        "resource_type": _string(
+                            "Resource type returned by list_resources.", max_length=80
+                        ),
+                        "kind": _string(
+                            "Kubernetes kind, for example Pod or Deployment.", max_length=120
+                        ),
                         "name": _string("Kubernetes resource name.", max_length=253),
                         "namespace": _string("Namespace for namespaced resources.", max_length=253),
                         "related_limit": _integer(
@@ -349,7 +551,9 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "correlation_id": _string("Optional incident correlation id.", max_length=255),
+                        "correlation_id": _string(
+                            "Optional incident correlation id.", max_length=255
+                        ),
                         "since": _string("Optional ISO-8601 lower bound.", max_length=80),
                         "until": _string("Optional ISO-8601 upper bound.", max_length=80),
                         "limit": _integer(
@@ -412,6 +616,102 @@ def default_tool_registry() -> ToolRegistry:
                 handler=list_rca_issues,
             ),
             McpTool(
+                name="list_issue_filter_facets",
+                title="List Issue Filter Facets",
+                description=(
+                    "List authorized issue filter values for one facet axis through "
+                    "the existing issue facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "axis": _enum_string(
+                            "Issue facet axis to list.",
+                            gateway_facets.ISSUE_FILTER_FACET_AXES,
+                        ),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "severity": _string("Optional issue severity filter.", max_length=120),
+                        "status": _string("Optional issue status filter.", max_length=120),
+                        "environment": _string(
+                            "Optional issue environment filter.", max_length=120
+                        ),
+                        "query": _string("Optional issue search query.", max_length=200),
+                        "facet_query": _string(
+                            "Optional issue facet search query.", max_length=200
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of facet values to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    },
+                    required=["axis"],
+                ),
+                handler=list_issue_filter_facets,
+            ),
+            McpTool(
+                name="list_issue_label_facets",
+                title="List Issue Label Facets",
+                description=(
+                    "List authorized issue label selectors through the existing issue "
+                    "label-facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "severity": _string("Optional issue severity filter.", max_length=120),
+                        "status": _string("Optional issue status filter.", max_length=120),
+                        "environment": _string(
+                            "Optional issue environment filter.", max_length=120
+                        ),
+                        "query": _string("Optional issue search query.", max_length=200),
+                        "facet_query": _string(
+                            "Optional issue label facet search query.",
+                            max_length=200,
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of label facets to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_issue_label_facets,
+            ),
+            McpTool(
                 name="get_rca_incident",
                 title="Get RCA Incident",
                 description=(
@@ -441,7 +741,9 @@ def default_tool_registry() -> ToolRegistry:
                         "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
                         "kind": _string("Existing Kubernetes resource kind.", max_length=253),
                         "name": _string("Existing Kubernetes resource name.", max_length=253),
-                        "namespace": _string("Optional namespace for namespaced resources.", max_length=253),
+                        "namespace": _string(
+                            "Optional namespace for namespaced resources.", max_length=253
+                        ),
                         "limit": _integer(
                             "Maximum number of resource issues to return.",
                             minimum=1,
@@ -609,11 +911,21 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "clusters": _string("Optional comma-separated cluster filter.", max_length=2048),
-                        "namespaces": _string("Optional comma-separated namespace filter.", max_length=2048),
-                        "applications": _string("Optional comma-separated application filter.", max_length=2048),
-                        "labels": _string("Optional comma-separated label filter.", max_length=2048),
-                        "environment": _string("Optional application environment filter.", max_length=120),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.", max_length=2048
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "environment": _string(
+                            "Optional application environment filter.", max_length=120
+                        ),
                         "status": _string("Optional application status filter.", max_length=120),
                         "pending_promotion": _string(
                             "Optional pending promotion filter accepted by the Gateway.",
@@ -631,17 +943,121 @@ def default_tool_registry() -> ToolRegistry:
                 handler=list_applications,
             ),
             McpTool(
+                name="list_application_filter_facets",
+                title="List Application Filter Facets",
+                description=(
+                    "List authorized application filter values for one facet axis through "
+                    "the existing application facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "axis": _enum_string(
+                            "Application facet axis to list.",
+                            gateway_facets.APPLICATION_FILTER_FACET_AXES,
+                        ),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "environment": _string(
+                            "Optional application environment filter.", max_length=120
+                        ),
+                        "status": _string("Optional application status filter.", max_length=120),
+                        "pending_promotion": _string(
+                            "Optional pending promotion filter accepted by the Gateway.",
+                            max_length=120,
+                        ),
+                        "query": _string("Optional application search query.", max_length=200),
+                        "facet_query": _string(
+                            "Optional application facet search query.",
+                            max_length=200,
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of facet values to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    },
+                    required=["axis"],
+                ),
+                handler=list_application_filter_facets,
+            ),
+            McpTool(
+                name="list_application_label_facets",
+                title="List Application Label Facets",
+                description=(
+                    "List authorized application label selectors through the existing "
+                    "application label-facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "environment": _string(
+                            "Optional application environment filter.", max_length=120
+                        ),
+                        "status": _string("Optional application status filter.", max_length=120),
+                        "pending_promotion": _string(
+                            "Optional pending promotion filter accepted by the Gateway.",
+                            max_length=120,
+                        ),
+                        "query": _string("Optional application search query.", max_length=200),
+                        "facet_query": _string(
+                            "Optional application label facet search query.",
+                            max_length=200,
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of label facets to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_application_label_facets,
+            ),
+            McpTool(
                 name="get_application_detail",
                 title="Get Application Detail",
                 description=(
-                    "Fetch one application detail projection through the existing "
-                    "applications API."
+                    "Fetch one application detail projection through the existing applications API."
                 ),
                 input_schema=_schema(
                     properties={
                         "application_id": _string("Existing application id.", max_length=200),
                         "instance": _string("Optional application instance id.", max_length=200),
-                        "workload": _string("Optional workload key within the application.", max_length=128),
+                        "workload": _string(
+                            "Optional workload key within the application.", max_length=128
+                        ),
                     },
                     required=["application_id"],
                 ),
@@ -695,7 +1111,9 @@ def default_tool_registry() -> ToolRegistry:
                 input_schema=_schema(
                     properties={
                         "correlation_id": _string("Existing correlation id.", max_length=2048),
-                        "cursor": _string("Optional cursor returned by the audit API.", max_length=2048),
+                        "cursor": _string(
+                            "Optional cursor returned by the audit API.", max_length=2048
+                        ),
                         "limit": _integer(
                             "Maximum number of audit items to return.",
                             minimum=1,
@@ -720,9 +1138,13 @@ def default_tool_registry() -> ToolRegistry:
                             "Optional application id for application workflow runs.",
                             max_length=200,
                         ),
-                        "plan_id": _string("Optional release plan id for release runs.", max_length=160),
+                        "plan_id": _string(
+                            "Optional release plan id for release runs.", max_length=160
+                        ),
                         "status": _string("Optional release run status filter.", max_length=80),
-                        "attention_only": _boolean("Only release runs needing attention.", default=False),
+                        "attention_only": _boolean(
+                            "Only release runs needing attention.", default=False
+                        ),
                         "active_only": _boolean("Only active release runs.", default=False),
                         "limit": _integer(
                             "Maximum number of runs to return.",
@@ -743,7 +1165,9 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "run_id": _string("Existing release run id or workflow_run_id.", max_length=200),
+                        "run_id": _string(
+                            "Existing release run id or workflow_run_id.", max_length=200
+                        ),
                         "application_id": _string(
                             "Optional application id when run_id is an application workflow_run_id.",
                             max_length=200,
@@ -862,6 +1286,58 @@ def default_tool_registry() -> ToolRegistry:
                 handler=list_pending_approvals,
             ),
             McpTool(
+                name="list_gitops_filter_facets",
+                title="List GitOps Filter Facets",
+                description=(
+                    "List authorized GitOps change filter values for one facet axis "
+                    "through the existing GitOps facet API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "axis": _enum_string(
+                            "GitOps facet axis to list.",
+                            gateway_facets.GITOPS_FILTER_FACET_AXES,
+                        ),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
+                        "applications": _string(
+                            "Optional comma-separated application filter.",
+                            max_length=2048,
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
+                        "environment": _string(
+                            "Optional GitOps environment filter.", max_length=120
+                        ),
+                        "approval": _string("Optional GitOps approval filter.", max_length=120),
+                        "change_type": _string(
+                            "Optional GitOps change type filter.", max_length=120
+                        ),
+                        "query": _string("Optional GitOps search query.", max_length=200),
+                        "facet_query": _string(
+                            "Optional GitOps facet search query.", max_length=200
+                        ),
+                        "cursor": _string(
+                            "Optional cursor returned by the API.",
+                            max_length=MAX_FILTER_CURSOR_LENGTH,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of facet values to return.",
+                            minimum=1,
+                            maximum=MAX_FILTER_FACET_LIMIT,
+                            default=DEFAULT_FILTER_FACET_LIMIT,
+                        ),
+                    },
+                    required=["axis"],
+                ),
+                handler=list_gitops_filter_facets,
+            ),
+            McpTool(
                 name="get_resource_capabilities",
                 title="Get Resource Capabilities",
                 description=(
@@ -885,8 +1361,12 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 input_schema=_schema(
                     properties={
-                        "clusters": _string("Optional comma-separated cluster filter.", max_length=2048),
-                        "namespaces": _string("Optional comma-separated namespace filter.", max_length=2048),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
                         "applications": _string(
                             "Optional comma-separated application filter.",
                             max_length=2048,
@@ -895,8 +1375,12 @@ def default_tool_registry() -> ToolRegistry:
                             "Optional comma-separated resource type filter.",
                             max_length=2048,
                         ),
-                        "health": _string("Optional comma-separated health filter.", max_length=2048),
-                        "labels": _string("Optional comma-separated label filter.", max_length=2048),
+                        "health": _string(
+                            "Optional comma-separated health filter.", max_length=2048
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
                         "query": _string("Optional resource graph search query.", max_length=200),
                         "include_deleted": _optional_boolean(
                             "Include deleted resources when retained by the Gateway."
@@ -923,8 +1407,7 @@ def default_tool_registry() -> ToolRegistry:
                 name="list_recent_changes",
                 title="List Recent Changes",
                 description=(
-                    "List an authorized bounded change timeline through the existing "
-                    "changes API."
+                    "List an authorized bounded change timeline through the existing changes API."
                 ),
                 input_schema=_schema(
                     properties={
@@ -943,8 +1426,12 @@ def default_tool_registry() -> ToolRegistry:
                             minimum=MIN_CHANGE_BUCKET_MS,
                             maximum=MAX_CHANGE_BUCKET_MS,
                         ),
-                        "clusters": _string("Optional comma-separated cluster filter.", max_length=2048),
-                        "namespaces": _string("Optional comma-separated namespace filter.", max_length=2048),
+                        "clusters": _string(
+                            "Optional comma-separated cluster filter.", max_length=2048
+                        ),
+                        "namespaces": _string(
+                            "Optional comma-separated namespace filter.", max_length=2048
+                        ),
                         "applications": _string(
                             "Optional comma-separated application filter.",
                             max_length=2048,
@@ -953,8 +1440,12 @@ def default_tool_registry() -> ToolRegistry:
                             "Optional comma-separated resource type filter.",
                             max_length=2048,
                         ),
-                        "health": _string("Optional comma-separated health filter.", max_length=2048),
-                        "labels": _string("Optional comma-separated label filter.", max_length=2048),
+                        "health": _string(
+                            "Optional comma-separated health filter.", max_length=2048
+                        ),
+                        "labels": _string(
+                            "Optional comma-separated label filter.", max_length=2048
+                        ),
                         "query": _string("Optional resource search query.", max_length=200),
                     },
                     required=["from_ms", "to_ms", "bucket_ms"],
@@ -1485,7 +1976,9 @@ async def get_cluster_usage(
 
 
 async def list_resources(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
-    _reject_unknown(arguments, {"cluster_id", "resource_type", "namespace", "include_deleted", "limit"})
+    _reject_unknown(
+        arguments, {"cluster_id", "resource_type", "namespace", "include_deleted", "limit"}
+    )
     cluster_id = _required_str(arguments, "cluster_id", max_length=512)
     path = _format_path(routes.CLUSTER_INVENTORY_RESOURCES_PATH, cluster_id=cluster_id)
     data = await client.get_json(
@@ -1504,6 +1997,140 @@ async def list_resources(client: ManagementApiClient, arguments: dict[str, Any])
         },
     )
     return _read_result("list_resources", path, data)
+
+
+async def list_global_filter_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {"query", "clusters", "namespaces", "applications", "resource_types", "labels", "limit"},
+    )
+    data = await client.get_json(
+        routes.FILTER_FACETS_PATH,
+        {
+            gateway_params.GLOBAL_FILTER_SEARCH_QUERY: _optional_str(
+                arguments,
+                "query",
+                max_length=MAX_FILTER_SEARCH_LENGTH,
+            ),
+            gateway_params.CLUSTERS_QUERY: _optional_str(
+                arguments,
+                "clusters",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+            gateway_params.NAMESPACES_QUERY: _optional_str(
+                arguments,
+                "namespaces",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+            gateway_params.APPLICATIONS_QUERY: _optional_str(
+                arguments,
+                "applications",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+            gateway_params.RESOURCE_TYPES_QUERY: _optional_str(
+                arguments,
+                "resource_types",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+            gateway_params.LABELS_QUERY: _optional_str(
+                arguments,
+                "labels",
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+            ),
+            gateway_params.LIMIT_QUERY: _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_GLOBAL_FILTER_FACET_LIMIT,
+                1,
+                MAX_GLOBAL_FILTER_FACET_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_global_filter_facets", routes.FILTER_FACETS_PATH, data)
+
+
+async def list_resource_filter_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"axis", "selected", "cursor", "limit"})
+    data = await client.get_json(
+        routes.RESOURCES_FILTER_FACETS_PATH,
+        {
+            gateway_params.FACET_AXIS_QUERY: _required_enum(
+                arguments,
+                "axis",
+                gateway_facets.RESOURCE_FILTER_FACET_AXES,
+            ),
+            gateway_params.FACET_SELECTED_QUERY: _optional_str(
+                arguments,
+                "selected",
+                max_length=2048,
+            ),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result("list_resource_filter_facets", routes.RESOURCES_FILTER_FACETS_PATH, data)
+
+
+async def list_resource_label_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _RESOURCE_LABEL_FACET_ARGUMENTS)
+    data = await client.get_json(
+        routes.RESOURCE_LABEL_FACETS_PATH,
+        {
+            **_resource_filter_params(arguments, include_deleted=True),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result("list_resource_label_facets", routes.RESOURCE_LABEL_FACETS_PATH, data)
+
+
+async def get_resource_metrics_history(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _RESOURCE_METRIC_HISTORY_ARGUMENTS)
+    ids_query = ",".join(
+        _required_string_list(
+            arguments,
+            "resource_ids",
+            max_items=MAX_RESOURCE_METRIC_HISTORY_IDS,
+            item_max_length=MAX_RESOURCE_METRIC_HISTORY_ID_LENGTH,
+            forbidden_characters=",",
+        )
+    )
+    if len(ids_query) > MAX_RESOURCE_METRIC_HISTORY_IDS_QUERY_LENGTH:
+        raise ToolInputError(
+            f"resource_ids must encode to at most {MAX_RESOURCE_METRIC_HISTORY_IDS_QUERY_LENGTH} characters"
+        )
+    data = await client.get_json(
+        routes.RESOURCE_METRICS_HISTORY_PATH,
+        {
+            gateway_params.RESOURCE_METRIC_HISTORY_IDS_QUERY: ids_query,
+            **_resource_filter_params(arguments, include_deleted=True),
+            gateway_params.SNAPSHOT_REVISION_QUERY: _optional_bounded_int(
+                arguments,
+                "snapshot_revision",
+                1,
+            ),
+            gateway_params.RESOURCE_METRIC_HISTORY_RANGE_QUERY: _optional_enum(
+                arguments,
+                "time_range",
+                RESOURCE_METRIC_HISTORY_RANGES,
+                default=DEFAULT_RESOURCE_METRIC_HISTORY_RANGE,
+            ),
+            gateway_params.LIMIT_QUERY: _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_RESOURCE_METRIC_HISTORY_LIMIT,
+                1,
+                MAX_RESOURCE_METRIC_HISTORY_LIMIT,
+            ),
+        },
+    )
+    return _read_result("get_resource_metrics_history", routes.RESOURCE_METRICS_HISTORY_PATH, data)
 
 
 async def get_resource_detail(
@@ -1559,7 +2186,9 @@ async def list_recent_incidents(
             "correlation_id": _optional_str(arguments, "correlation_id", max_length=255),
             "since": _optional_str(arguments, "since", max_length=80),
             "until": _optional_str(arguments, "until", max_length=80),
-            "limit": _bounded_int(arguments, "limit", DEFAULT_RECENT_INCIDENT_LIMIT, 1, MAX_QUERY_LIMIT),
+            "limit": _bounded_int(
+                arguments, "limit", DEFAULT_RECENT_INCIDENT_LIMIT, 1, MAX_QUERY_LIMIT
+            ),
             "offset": _bounded_int(arguments, "offset", 0, 0, MAX_LEGACY_OFFSET),
             "cursor": _optional_str(arguments, "cursor", max_length=2048),
         },
@@ -1586,9 +2215,7 @@ async def list_dead_letters(
     return _read_result("list_dead_letters", routes.DEAD_LETTERS_PATH, data)
 
 
-async def list_rca_issues(
-    client: ManagementApiClient, arguments: dict[str, Any]
-) -> dict[str, Any]:
+async def list_rca_issues(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
     _reject_unknown(arguments, {"cluster_id", "limit"})
     data = await client.get_json(
         routes.DASHBOARD_RCA_ISSUES_PATH,
@@ -1604,6 +2231,39 @@ async def list_rca_issues(
         },
     )
     return _read_result("list_rca_issues", routes.DASHBOARD_RCA_ISSUES_PATH, data)
+
+
+async def list_issue_filter_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _ISSUE_FILTER_FACET_ARGUMENTS)
+    data = await client.get_json(
+        routes.ISSUES_FILTER_FACETS_PATH,
+        {
+            gateway_params.FACET_AXIS_QUERY: _required_enum(
+                arguments,
+                "axis",
+                gateway_facets.ISSUE_FILTER_FACET_AXES,
+            ),
+            **_issue_filter_params(arguments),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result("list_issue_filter_facets", routes.ISSUES_FILTER_FACETS_PATH, data)
+
+
+async def list_issue_label_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _ISSUE_LABEL_FACET_ARGUMENTS)
+    data = await client.get_json(
+        routes.ISSUES_LABEL_FACETS_PATH,
+        {
+            **_issue_filter_params(arguments),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result("list_issue_label_facets", routes.ISSUES_LABEL_FACETS_PATH, data)
 
 
 async def get_rca_incident(
@@ -1649,7 +2309,9 @@ async def list_evidence_windows(
     data = await client.get_json(
         routes.EVIDENCE_WINDOWS_PATH,
         {
-            "limit": _bounded_int(arguments, "limit", DEFAULT_RECENT_INCIDENT_LIMIT, 1, MAX_QUERY_LIMIT),
+            "limit": _bounded_int(
+                arguments, "limit", DEFAULT_RECENT_INCIDENT_LIMIT, 1, MAX_QUERY_LIMIT
+            ),
             "offset": _bounded_int(arguments, "offset", 0, 0, MAX_LEGACY_OFFSET),
         },
     )
@@ -1695,9 +2357,7 @@ async def list_alert_rules(
     return _read_result("list_alert_rules", routes.ALERT_RULES_PATH, data)
 
 
-async def get_alert_rule(
-    client: ManagementApiClient, arguments: dict[str, Any]
-) -> dict[str, Any]:
+async def get_alert_rule(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
     _reject_unknown(arguments, {"rule_id"})
     rule_id = _required_str(arguments, "rule_id", max_length=120)
     return await _read_list_item(
@@ -1803,10 +2463,18 @@ async def list_applications(
     data = await client.get_json(
         routes.APPLICATIONS_PATH,
         {
-            "clusters": _optional_str(arguments, "clusters", max_length=2048),
-            "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
-            "applications": _optional_str(arguments, "applications", max_length=2048),
-            "labels": _optional_str(arguments, "labels", max_length=2048),
+            "clusters": _optional_str(
+                arguments, "clusters", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "namespaces": _optional_str(
+                arguments, "namespaces", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "applications": _optional_str(
+                arguments, "applications", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "labels": _optional_str(
+                arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
             gateway_params.APPLICATIONS_ENVIRONMENT_QUERY: _optional_str(
                 arguments,
                 "environment",
@@ -1825,7 +2493,7 @@ async def list_applications(
             gateway_params.APPLICATIONS_SEARCH_QUERY: _optional_str(
                 arguments,
                 "query",
-                max_length=200,
+                max_length=MAX_FILTER_SEARCH_LENGTH,
             ),
             "limit": _bounded_int(
                 arguments,
@@ -1837,6 +2505,47 @@ async def list_applications(
         },
     )
     return _read_result("list_applications", routes.APPLICATIONS_PATH, data)
+
+
+async def list_application_filter_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _APPLICATION_FILTER_FACET_ARGUMENTS)
+    data = await client.get_json(
+        routes.APPLICATION_FILTER_FACETS_PATH,
+        {
+            gateway_params.FACET_AXIS_QUERY: _required_enum(
+                arguments,
+                "axis",
+                gateway_facets.APPLICATION_FILTER_FACET_AXES,
+            ),
+            **_application_filter_params(arguments),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result(
+        "list_application_filter_facets",
+        routes.APPLICATION_FILTER_FACETS_PATH,
+        data,
+    )
+
+
+async def list_application_label_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _APPLICATION_LABEL_FACET_ARGUMENTS)
+    data = await client.get_json(
+        routes.APPLICATION_LABEL_FACETS_PATH,
+        {
+            **_application_filter_params(arguments),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result(
+        "list_application_label_facets",
+        routes.APPLICATION_LABEL_FACETS_PATH,
+        data,
+    )
 
 
 async def get_application_detail(
@@ -2116,6 +2825,25 @@ async def list_pending_approvals(
     )
 
 
+async def list_gitops_filter_facets(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, _GITOPS_FILTER_FACET_ARGUMENTS)
+    data = await client.get_json(
+        routes.GITOPS_FILTER_FACETS_PATH,
+        {
+            gateway_params.FACET_AXIS_QUERY: _required_enum(
+                arguments,
+                "axis",
+                gateway_facets.GITOPS_FILTER_FACET_AXES,
+            ),
+            **_gitops_filter_params(arguments),
+            **_facet_page_params(arguments),
+        },
+    )
+    return _read_result("list_gitops_filter_facets", routes.GITOPS_FILTER_FACETS_PATH, data)
+
+
 async def get_resource_capabilities(
     client: ManagementApiClient, arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -2151,24 +2879,32 @@ async def get_resource_graph(
     data = await client.get_json(
         routes.RESOURCES_GRAPH_PATH,
         {
-            "clusters": _optional_str(arguments, "clusters", max_length=2048),
-            "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
-            "applications": _optional_str(arguments, "applications", max_length=2048),
+            "clusters": _optional_str(
+                arguments, "clusters", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "namespaces": _optional_str(
+                arguments, "namespaces", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "applications": _optional_str(
+                arguments, "applications", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
             gateway_params.RESOURCE_TYPES_QUERY: _optional_str(
                 arguments,
                 "resource_types",
-                max_length=2048,
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
             ),
             gateway_params.RESOURCE_HEALTH_QUERY: _optional_str(
                 arguments,
                 "health",
-                max_length=2048,
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
             ),
-            "labels": _optional_str(arguments, "labels", max_length=2048),
+            "labels": _optional_str(
+                arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
             gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
                 arguments,
                 "query",
-                max_length=200,
+                max_length=MAX_FILTER_SEARCH_LENGTH,
             ),
             gateway_params.RESOURCE_INCLUDE_DELETED_QUERY: _optional_bool_or_none(
                 arguments,
@@ -2239,24 +2975,32 @@ async def list_recent_changes(
             gateway_params.TIME_RANGE_FROM_QUERY: from_ms,
             gateway_params.TIME_RANGE_TO_QUERY: to_ms,
             gateway_params.CHANGE_BUCKET_QUERY: bucket_ms,
-            "clusters": _optional_str(arguments, "clusters", max_length=2048),
-            "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
-            "applications": _optional_str(arguments, "applications", max_length=2048),
+            "clusters": _optional_str(
+                arguments, "clusters", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "namespaces": _optional_str(
+                arguments, "namespaces", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
+            "applications": _optional_str(
+                arguments, "applications", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
             gateway_params.RESOURCE_TYPES_QUERY: _optional_str(
                 arguments,
                 "resource_types",
-                max_length=2048,
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
             ),
             gateway_params.RESOURCE_HEALTH_QUERY: _optional_str(
                 arguments,
                 "health",
-                max_length=2048,
+                max_length=MAX_FILTER_VALUE_LIST_LENGTH,
             ),
-            "labels": _optional_str(arguments, "labels", max_length=2048),
+            "labels": _optional_str(
+                arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+            ),
             gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
                 arguments,
                 "query",
-                max_length=200,
+                max_length=MAX_FILTER_SEARCH_LENGTH,
             ),
         },
     )
@@ -2438,9 +3182,7 @@ async def approve_or_reject_workflow(
     decision = _required_str(arguments, "decision", max_length=20)
     if decision not in {"grant", "reject"}:
         raise ToolInputError("decision must be grant or reject")
-    template = (
-        routes.APPROVAL_GRANT_PATH if decision == "grant" else routes.APPROVAL_REJECT_PATH
-    )
+    template = routes.APPROVAL_GRANT_PATH if decision == "grant" else routes.APPROVAL_REJECT_PATH
     api_path = _format_path(template, approval_id=approval_id)
     payload: dict[str, Any] = {}
     reason = _optional_str(arguments, "reason", max_length=500)
@@ -2576,9 +3318,7 @@ async def _command_control_request(
     )
 
 
-async def ack_alert_event(
-    client: ManagementApiClient, arguments: dict[str, Any]
-) -> dict[str, Any]:
+async def ack_alert_event(client: ManagementApiClient, arguments: dict[str, Any]) -> dict[str, Any]:
     _reject_unknown(arguments, {"event_id", "dry_run", "approval_confirmed"})
     event_id = _required_str(arguments, "event_id", max_length=120)
     path = _format_path(routes.ALERT_EVENT_ACK_PATH, event_id=event_id)
@@ -2729,6 +3469,263 @@ async def start_release_run(
             "permissions, and production approval-evidence checks still apply."
         ),
     )
+
+
+_RESOURCE_FILTER_ARGUMENTS = frozenset(
+    {
+        "clusters",
+        "namespaces",
+        "applications",
+        "resource_types",
+        "health",
+        "labels",
+        "query",
+        "include_deleted",
+    }
+)
+_FACET_PAGE_ARGUMENTS = frozenset({"facet_query", "cursor", "limit"})
+_RESOURCE_LABEL_FACET_ARGUMENTS = _RESOURCE_FILTER_ARGUMENTS | _FACET_PAGE_ARGUMENTS
+_RESOURCE_METRIC_HISTORY_ARGUMENTS = _RESOURCE_FILTER_ARGUMENTS | frozenset(
+    {"resource_ids", "snapshot_revision", "time_range", "limit"}
+)
+_APPLICATION_FILTER_ARGUMENTS = frozenset(
+    {
+        "clusters",
+        "namespaces",
+        "applications",
+        "labels",
+        "environment",
+        "status",
+        "pending_promotion",
+        "query",
+    }
+)
+_APPLICATION_FILTER_FACET_ARGUMENTS = (
+    _APPLICATION_FILTER_ARGUMENTS | _FACET_PAGE_ARGUMENTS | frozenset({"axis"})
+)
+_APPLICATION_LABEL_FACET_ARGUMENTS = _APPLICATION_FILTER_ARGUMENTS | _FACET_PAGE_ARGUMENTS
+_GITOPS_FILTER_ARGUMENTS = frozenset(
+    {
+        "clusters",
+        "namespaces",
+        "applications",
+        "labels",
+        "environment",
+        "approval",
+        "change_type",
+        "query",
+    }
+)
+_GITOPS_FILTER_FACET_ARGUMENTS = (
+    _GITOPS_FILTER_ARGUMENTS | _FACET_PAGE_ARGUMENTS | frozenset({"axis"})
+)
+_ISSUE_FILTER_ARGUMENTS = frozenset(
+    {
+        "clusters",
+        "namespaces",
+        "applications",
+        "labels",
+        "severity",
+        "status",
+        "environment",
+        "query",
+    }
+)
+_ISSUE_FILTER_FACET_ARGUMENTS = (
+    _ISSUE_FILTER_ARGUMENTS | _FACET_PAGE_ARGUMENTS | frozenset({"axis"})
+)
+_ISSUE_LABEL_FACET_ARGUMENTS = _ISSUE_FILTER_ARGUMENTS | _FACET_PAGE_ARGUMENTS
+
+
+def _resource_filter_params(
+    arguments: dict[str, Any],
+    *,
+    include_deleted: bool,
+) -> dict[str, Any]:
+    params = {
+        gateway_params.CLUSTERS_QUERY: _optional_str(
+            arguments,
+            "clusters",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.NAMESPACES_QUERY: _optional_str(
+            arguments,
+            "namespaces",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.APPLICATIONS_QUERY: _optional_str(
+            arguments,
+            "applications",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.RESOURCE_TYPES_QUERY: _optional_str(
+            arguments,
+            "resource_types",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.RESOURCE_HEALTH_QUERY: _optional_str(
+            arguments,
+            "health",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.LABELS_QUERY: _optional_str(
+            arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.RESOURCE_SEARCH_QUERY: _optional_str(
+            arguments,
+            "query",
+            max_length=MAX_FILTER_SEARCH_LENGTH,
+        ),
+    }
+    if include_deleted:
+        params[gateway_params.RESOURCE_INCLUDE_DELETED_QUERY] = _optional_bool_or_none(
+            arguments,
+            "include_deleted",
+        )
+    return params
+
+
+def _application_filter_params(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {
+        gateway_params.CLUSTERS_QUERY: _optional_str(
+            arguments, "clusters", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.NAMESPACES_QUERY: _optional_str(
+            arguments,
+            "namespaces",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.APPLICATIONS_QUERY: _optional_str(
+            arguments,
+            "applications",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.LABELS_QUERY: _optional_str(
+            arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.APPLICATIONS_ENVIRONMENT_QUERY: _optional_str(
+            arguments,
+            "environment",
+            max_length=120,
+        ),
+        gateway_params.APPLICATIONS_STATUS_QUERY: _optional_str(
+            arguments,
+            "status",
+            max_length=120,
+        ),
+        gateway_params.APPLICATIONS_PENDING_PROMOTION_QUERY: _optional_str(
+            arguments,
+            "pending_promotion",
+            max_length=120,
+        ),
+        gateway_params.APPLICATIONS_SEARCH_QUERY: _optional_str(
+            arguments,
+            "query",
+            max_length=MAX_FILTER_SEARCH_LENGTH,
+        ),
+    }
+
+
+def _gitops_filter_params(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {
+        gateway_params.CLUSTERS_QUERY: _optional_str(
+            arguments, "clusters", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.NAMESPACES_QUERY: _optional_str(
+            arguments,
+            "namespaces",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.APPLICATIONS_QUERY: _optional_str(
+            arguments,
+            "applications",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.LABELS_QUERY: _optional_str(
+            arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.GITOPS_ENVIRONMENT_QUERY: _optional_str(
+            arguments,
+            "environment",
+            max_length=120,
+        ),
+        gateway_params.GITOPS_APPROVAL_QUERY: _optional_str(
+            arguments,
+            "approval",
+            max_length=120,
+        ),
+        gateway_params.GITOPS_CHANGE_TYPE_QUERY: _optional_str(
+            arguments,
+            "change_type",
+            max_length=120,
+        ),
+        gateway_params.GITOPS_SEARCH_QUERY: _optional_str(
+            arguments,
+            "query",
+            max_length=MAX_FILTER_SEARCH_LENGTH,
+        ),
+    }
+
+
+def _issue_filter_params(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {
+        gateway_params.CLUSTERS_QUERY: _optional_str(
+            arguments, "clusters", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.NAMESPACES_QUERY: _optional_str(
+            arguments,
+            "namespaces",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.APPLICATIONS_QUERY: _optional_str(
+            arguments,
+            "applications",
+            max_length=MAX_FILTER_VALUE_LIST_LENGTH,
+        ),
+        gateway_params.LABELS_QUERY: _optional_str(
+            arguments, "labels", max_length=MAX_FILTER_VALUE_LIST_LENGTH
+        ),
+        gateway_params.ISSUES_SEVERITY_QUERY: _optional_str(
+            arguments,
+            "severity",
+            max_length=120,
+        ),
+        gateway_params.ISSUES_STATUS_QUERY: _optional_str(
+            arguments,
+            "status",
+            max_length=120,
+        ),
+        gateway_params.ISSUES_ENVIRONMENT_QUERY: _optional_str(
+            arguments,
+            "environment",
+            max_length=120,
+        ),
+        gateway_params.ISSUES_SEARCH_QUERY: _optional_str(
+            arguments, "query", max_length=MAX_FILTER_SEARCH_LENGTH
+        ),
+    }
+
+
+def _facet_page_params(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {
+        gateway_params.FACET_SEARCH_QUERY: _optional_str(
+            arguments,
+            "facet_query",
+            max_length=MAX_FILTER_SEARCH_LENGTH,
+        ),
+        gateway_params.CURSOR_QUERY: _optional_str(
+            arguments,
+            "cursor",
+            max_length=MAX_FILTER_CURSOR_LENGTH,
+        ),
+        gateway_params.LIMIT_QUERY: _bounded_int(
+            arguments,
+            "limit",
+            DEFAULT_FILTER_FACET_LIMIT,
+            1,
+            MAX_FILTER_FACET_LIMIT,
+        ),
+    }
 
 
 def _read_result(tool_name: str, api_path: str, data: Any) -> dict[str, Any]:
@@ -2893,12 +3890,11 @@ def _redact_read_response_value(value: Any) -> Any:
         for key, item in value.items():
             key_text = str(key)
             normalized_key = _normalized_proposal_identifier(key_text)
-            if _is_sensitive_read_key(normalized_key) or (
-                secret_context and normalized_key in SECRET_READ_DATA_KEYS
-            ) or (
-                alert_channel_context and normalized_key in ALERT_CHANNEL_REDACTED_KEYS
-            ) or (
-                has_sensitive_marker and _is_sensitive_marker_value_key(key_text)
+            if (
+                _is_sensitive_read_key(normalized_key)
+                or (secret_context and normalized_key in SECRET_READ_DATA_KEYS)
+                or (alert_channel_context and normalized_key in ALERT_CHANNEL_REDACTED_KEYS)
+                or (has_sensitive_marker and _is_sensitive_marker_value_key(key_text))
             ):
                 redacted[key_text] = REDACTED_VALUE
             else:
@@ -3074,8 +4070,7 @@ def _is_sensitive_marker_value_key(key: str) -> bool:
 def _contains_sensitive_proposal_part(value: str) -> bool:
     compact = value.replace("_", "")
     return any(
-        part in value or part.replace("_", "") in compact
-        for part in SENSITIVE_PROPOSAL_KEY_PARTS
+        part in value or part.replace("_", "") in compact for part in SENSITIVE_PROPOSAL_KEY_PARTS
     )
 
 
@@ -3159,7 +4154,38 @@ def _optional_integer(
     return _integer(description, minimum=minimum, maximum=maximum)
 
 
-def _reject_unknown(arguments: dict[str, Any], allowed: set[str]) -> None:
+def _enum_string(
+    description: str,
+    values: tuple[str, ...],
+    *,
+    default: str | None = None,
+) -> dict[str, Any]:
+    schema: dict[str, Any] = {
+        "type": "string",
+        "description": description,
+        "enum": list(values),
+    }
+    if default is not None:
+        schema["default"] = default
+    return schema
+
+
+def _string_array(
+    description: str,
+    *,
+    max_items: int,
+    max_length: int,
+) -> dict[str, Any]:
+    return {
+        "type": "array",
+        "description": description,
+        "minItems": 1,
+        "maxItems": max_items,
+        "items": _string("Existing value from the Opsia API.", max_length=max_length),
+    }
+
+
+def _reject_unknown(arguments: dict[str, Any], allowed: AbstractSet[str]) -> None:
     unknown = sorted(set(arguments) - allowed)
     if unknown:
         raise ToolInputError(f"unknown arguments: {', '.join(unknown)}")
@@ -3172,11 +4198,73 @@ def _required_str(arguments: dict[str, Any], name: str, *, max_length: int) -> s
     return value
 
 
+def _required_enum(arguments: dict[str, Any], name: str, values: tuple[str, ...]) -> str:
+    value = _required_str(arguments, name, max_length=_max_enum_length(values))
+    if value not in values:
+        raise ToolInputError(f"{name} must be one of: {', '.join(values)}")
+    return value
+
+
+def _optional_enum(
+    arguments: dict[str, Any],
+    name: str,
+    values: tuple[str, ...],
+    *,
+    default: str,
+) -> str:
+    value = _optional_str(arguments, name, max_length=_max_enum_length(values))
+    if value is None:
+        return default
+    if value not in values:
+        raise ToolInputError(f"{name} must be one of: {', '.join(values)}")
+    return value
+
+
+def _max_enum_length(values: tuple[str, ...]) -> int:
+    if not values:
+        raise ToolInputError("enum values must not be empty")
+    return max(len(value) for value in values)
+
+
 def _required_object(arguments: dict[str, Any], name: str) -> dict[str, Any]:
     value = arguments.get(name)
     if not isinstance(value, dict):
         raise ToolInputError(f"{name} must be an object")
     return _validate_json_payload(value, name)
+
+
+def _required_string_list(
+    arguments: dict[str, Any],
+    name: str,
+    *,
+    max_items: int,
+    item_max_length: int,
+    forbidden_characters: str = "",
+) -> tuple[str, ...]:
+    value = arguments.get(name)
+    if not isinstance(value, list):
+        raise ToolInputError(f"{name} must be an array")
+    if not value or len(value) > max_items:
+        raise ToolInputError(f"{name} must contain between 1 and {max_items} values")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ToolInputError(f"{name} values must be strings")
+        text = item.strip()
+        if not text:
+            raise ToolInputError(f"{name} values must not be empty")
+        if _has_control_character(text):
+            raise ToolInputError(f"{name} values contain unsafe control characters")
+        if len(text) > item_max_length:
+            raise ToolInputError(f"{name} values must be at most {item_max_length} characters")
+        if any(character in text for character in forbidden_characters):
+            raise ToolInputError(f"{name} values contain unsupported separator characters")
+        if text in seen:
+            raise ToolInputError(f"{name} values must be unique")
+        normalized.append(text)
+        seen.add(text)
+    return tuple(normalized)
 
 
 def _optional_str(arguments: dict[str, Any], name: str, *, max_length: int) -> str | None:
