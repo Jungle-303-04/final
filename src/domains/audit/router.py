@@ -178,6 +178,7 @@ _AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSub
                 EventSubject.NAMESPACE_SCOPE_UPDATED,
                 EventSubject.UI_PREFERENCES_UPDATED,
                 EventSubject.HELM_CHART_SOURCE_DELETED,
+                EventSubject.HELM_CHART_SOURCE_REFRESHED,
             }
         ),
     ),
