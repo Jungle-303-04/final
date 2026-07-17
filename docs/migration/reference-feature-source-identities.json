@@ -87,6 +87,82 @@
         }
       ],
       "interaction": "The Node terminal creates one owned privileged debug Pod for the exact Node, opens the terminal only from the returned session identity, and cleans up only that Node debug lifecycle."
+    },
+    {
+      "sourceKey": "upstream-ui:traffic:source-discovery:wizard-catalog:v1",
+      "legacyContractIds": [
+        "reference.feature.178"
+      ],
+      "interaction": "agent-observed source detection drives the scoped setup wizard without a browser-owned source list",
+      "evidence": [
+        {
+          "path": "internal/server/traffic_handlers.go",
+          "sha256": "cc3f047c9d6b871f537056bcbc0513ba601b2806f7f23314afb2964095e290fa",
+          "symbol": "handleGetTrafficSources"
+        },
+        {
+          "path": "web/src/components/traffic/TrafficWizard.tsx",
+          "sha256": "f7f28a623fe52959417a001782a84d7744217928e6428b30d85012c1c78d60e1",
+          "symbol": "TrafficWizard"
+        }
+      ]
+    },
+    {
+      "sourceKey": "upstream-ui:traffic:source-selection:flow-invalidation:v1",
+      "legacyContractIds": [
+        "reference.feature.179"
+      ],
+      "interaction": "an exact detected source selection invalidates prior flow projections before the next observation",
+      "evidence": [
+        {
+          "path": "internal/server/traffic_handlers.go",
+          "sha256": "cc3f047c9d6b871f537056bcbc0513ba601b2806f7f23314afb2964095e290fa",
+          "symbol": "handleSetTrafficSource"
+        },
+        {
+          "path": "web/src/components/traffic/TrafficView.tsx",
+          "sha256": "e5f05df0ecf3719c724d839a5974cadecad469256c4cd83b94ec15aed9484d24",
+          "symbol": "useSetTrafficSource"
+        }
+      ]
+    },
+    {
+      "sourceKey": "upstream-ui:traffic:source-connect:durable-progress:v1",
+      "legacyContractIds": [
+        "reference.feature.180"
+      ],
+      "interaction": "the selected observed source connects through an explicit operation lifecycle and reports progress",
+      "evidence": [
+        {
+          "path": "internal/server/traffic_handlers.go",
+          "sha256": "cc3f047c9d6b871f537056bcbc0513ba601b2806f7f23314afb2964095e290fa",
+          "symbol": "handleTrafficConnect"
+        },
+        {
+          "path": "web/src/components/traffic/TrafficView.tsx",
+          "sha256": "e5f05df0ecf3719c724d839a5974cadecad469256c4cd83b94ec15aed9484d24",
+          "symbol": "useTrafficConnect"
+        }
+      ]
+    },
+    {
+      "sourceKey": "upstream-ui:traffic:network-policy:exact-flow-verdict:v1",
+      "legacyContractIds": [
+        "reference.feature.182"
+      ],
+      "interaction": "flow detail resolves exact pod identities and evaluates selecting Kubernetes ingress or egress policies",
+      "evidence": [
+        {
+          "path": "internal/server/network_policy.go",
+          "sha256": "8e1ae3fbcae2e8c30b6739e2baaaffeb64f1c24ef26037c6f1dc2125e03ef524",
+          "symbol": "handleEvaluateNetworkPolicies"
+        },
+        {
+          "path": "web/src/components/traffic/TrafficFlowList.tsx",
+          "sha256": "e71c660eed644a019c26e0a02626458a264fe4f5f397f74333efa66915b916f9",
+          "symbol": "PolicyCorrelation"
+        }
+      ]
     }
   ]
 }
