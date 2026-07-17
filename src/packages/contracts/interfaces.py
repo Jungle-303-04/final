@@ -186,6 +186,14 @@ class ManagementPlaneClient(Protocol):
         self, cluster_id: str, agent_id: str, capabilities: list[str]
     ) -> None: ...
 
+    async def report_agent_status(
+        self,
+        cluster_id: str,
+        agent_id: str,
+        capabilities: list[str],
+        details: JsonObject,
+    ) -> None: ...
+
     async def poll_command(
         self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None: ...

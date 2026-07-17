@@ -161,14 +161,20 @@ function trafficPort(): TrafficPort & {
       }],
       reasonCodes: [],
     }),
-    selectSource: vi.fn(),
+    selectSource: vi.fn().mockResolvedValue(commandReceipt()),
     connectSource: vi.fn().mockResolvedValue({
-      accepted: true,
-      commandId: "cmd-traffic-1",
-      eventId: "evt-traffic-1",
-      auditEventId: "evt-traffic-1",
-      correlationId: "corr-traffic-1",
-      status: "queued",
+      ...commandReceipt(),
     }),
+  };
+}
+
+function commandReceipt() {
+  return {
+    accepted: true as const,
+    commandId: "cmd-traffic-1",
+    eventId: "evt-traffic-1",
+    auditEventId: "evt-traffic-1",
+    correlationId: "corr-traffic-1",
+    status: "queued" as const,
   };
 }

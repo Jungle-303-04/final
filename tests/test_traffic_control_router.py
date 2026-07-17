@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -10,7 +11,7 @@ from domains.identity.dependencies import require_session
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 
-OBSERVED_AT = "2026-07-17T01:00:00+00:00"
+OBSERVED_AT = datetime.now(UTC).isoformat()
 
 
 class TrafficControlDb:
@@ -37,6 +38,26 @@ class TrafficControlDb:
         ):
             return {"cluster-a"}
         return set()
+
+    def can_access(
+        self,
+        _user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+        permission: str,
+    ) -> bool:
+        return (
+            self.allowed
+            and workspace_id == "workspace-a"
+            and resource_type == "cluster"
+            and resource_id == "cluster-a"
+            and permission
+            in {
+                Permission.INVENTORY_READ.value,
+                Permission.DEPLOY_RUN.value,
+            }
+        )
 
     def filter_snapshot_contexts(
         self,

@@ -195,6 +195,22 @@ export {
   type TrafficOverviewEndpoint,
 } from "./traffic-overview-schemas";
 export {
+  connectTrafficSource,
+  getTrafficSources,
+  setTrafficSource,
+  TRAFFIC_CONNECT_PATH,
+  TRAFFIC_SOURCE_PATH,
+  TRAFFIC_SOURCES_PATH,
+  type TrafficSourceCommandPayload,
+  type TrafficSourcesQuery,
+} from "./traffic-control";
+export {
+  trafficCommandReceiptSchema,
+  trafficSourcesSchema,
+  type TrafficCommandReceiptEndpoint,
+  type TrafficSourcesEndpoint,
+} from "./traffic-control-schemas";
+export {
   getCostOverview,
   COST_OVERVIEW_PATH,
   type CostOverviewQuery,

@@ -79,6 +79,7 @@ from queries import (
 from span import configure_tracing
 from telemetry_registry import telemetry
 from terminal_exec import PodExecController
+from traffic_sources import TrafficSourceDetector
 
 import config as agent_config
 from config import (
@@ -199,6 +200,7 @@ from packages.contracts.target import (
     TARGET_RBAC_MANIFEST_VERSION,
     TARGET_RBAC_VERSION_ANNOTATION,
 )
+from packages.contracts.traffic.control import TrafficSourceAgentCommandPayload
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -316,6 +318,9 @@ class AgentConfig:
     COMMAND_EXECUTION_DELAY_SECONDS = agent_config.COMMAND_EXECUTION_DELAY_SECONDS
     REGISTER_RETRY_DELAY_SECONDS = agent_config.REGISTER_RETRY_DELAY_SECONDS
     COMMAND_RETRY_DELAY_SECONDS = agent_config.COMMAND_RETRY_DELAY_SECONDS
+    TRAFFIC_SOURCE_OBSERVATION_INTERVAL_SECONDS = (
+        agent_config.TRAFFIC_SOURCE_OBSERVATION_INTERVAL_SECONDS
+    )
 
     HOSTNAME_ENV = "HOSTNAME"
     DEFAULT_AGENT_ID = "target-agent"
@@ -371,6 +376,25 @@ class HttpManagementPlaneClient:
                 Gateway.CLUSTER_ID: cluster_id,
                 Gateway.AGENT_ID: agent_id,
                 Gateway.CAPABILITIES: capabilities,
+            },
+            headers=self.headers,
+        )
+        response.raise_for_status()
+
+    async def report_agent_status(
+        self,
+        cluster_id: str,
+        agent_id: str,
+        capabilities: list[str],
+        details: JsonObject,
+    ) -> None:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.AGENT_CONNECT_PATH}",
+            json={
+                Gateway.CLUSTER_ID: cluster_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.CAPABILITIES: capabilities,
+                "details": details,
             },
             headers=self.headers,
         )
@@ -678,6 +702,7 @@ class TargetClusterAgent:
             ),
         )
         self.kubernetes = KubernetesApiClient()
+        self.traffic_source_detector = TrafficSourceDetector(self.kubernetes)
         self.command_registry = AgentCommandRegistry.from_instance(
             self,
             cluster_id=self.cluster_id,
@@ -837,8 +862,37 @@ class TargetClusterAgent:
             self.reconciler.run(client),
             self.poll_commands(client),
             self.flush_command_results_forever(client),
+            self.report_traffic_sources_forever(client),
             self.live_summary.run(),
         )
+
+    async def report_traffic_sources_forever(self, client: ManagementPlaneClient) -> None:
+        reporter = getattr(client, "report_agent_status", None)
+        if not callable(reporter):
+            return
+        while True:
+            try:
+                observation = await self.traffic_source_detector.observe(
+                    active_source=self.control_store.load_runtime_setting("traffic.active_source")
+                )
+                await reporter(
+                    self.cluster_id,
+                    self.agent_id,
+                    self.advertised_capabilities(),
+                    {"traffic_sources": observation},
+                )
+            except Exception as exc:
+                LOGGER.warning(
+                    "traffic_source_observation_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
+            await asyncio.sleep(AgentConfig.TRAFFIC_SOURCE_OBSERVATION_INTERVAL_SECONDS)
 
     async def cleanup_expired_rca_test_fixtures_forever(self) -> None:
         if not rca_test_runs_enabled():
@@ -936,6 +990,8 @@ class TargetClusterAgent:
             capabilities.remove(Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY)
             capabilities.remove(Command.GITOPS_RESOURCE_CONTROL_CAPABILITY)
             capabilities.remove(Command.KUBERNETES_DEBUG_CAPABILITY)
+            capabilities.remove(Command.TRAFFIC_SOURCE_SELECT_CAPABILITY)
+            capabilities.remove(Command.TRAFFIC_SOURCE_CONNECT_CAPABILITY)
         if direct_commands_enabled and getattr(self, "node_control_enabled", False):
             capabilities.append(Command.KUBERNETES_NODE_CONTROL_CAPABILITY)
         return capabilities
@@ -1454,6 +1510,112 @@ class TargetClusterAgent:
             query=definition.__dict__,
             result=result,
         )
+
+    @command.handler(
+        Command.TRAFFIC_SOURCE_SELECT_ACTION,
+        payload_model=TrafficSourceAgentCommandPayload,
+    )
+    async def select_traffic_source_command(
+        self,
+        ctx: CommandContext[TrafficSourceAgentCommandPayload],
+    ) -> JsonObject:
+        cancelled = self.traffic_source_cancelled_result(ctx)
+        if cancelled is not None:
+            return cancelled
+        observation = await self.traffic_source_detector.observe(
+            active_source=self.control_store.load_runtime_setting("traffic.active_source")
+        )
+        source = self.observed_traffic_source(observation, ctx.payload.source_key)
+        if source is None or source.get("status") != "available":
+            return ctx.fail(
+                "traffic source is no longer available",
+                retryable=False,
+                source_key=ctx.payload.source_key,
+            )
+        cancelled = self.traffic_source_cancelled_result(ctx)
+        if cancelled is not None:
+            return cancelled
+        self.control_store.save_runtime_setting(
+            "traffic.active_source",
+            ctx.payload.source_key,
+        )
+        return ctx.ok(
+            "traffic source selected",
+            applied=True,
+            source_key=ctx.payload.source_key,
+            invalidated=list(ctx.payload.cache_invalidations),
+        )
+
+    @command.handler(
+        Command.TRAFFIC_SOURCE_CONNECT_ACTION,
+        payload_model=TrafficSourceAgentCommandPayload,
+    )
+    async def connect_traffic_source_command(
+        self,
+        ctx: CommandContext[TrafficSourceAgentCommandPayload],
+    ) -> JsonObject:
+        cancelled = self.traffic_source_cancelled_result(ctx)
+        if cancelled is not None:
+            return cancelled
+        active_source = self.control_store.load_runtime_setting("traffic.active_source")
+        if active_source != ctx.payload.source_key:
+            return ctx.fail(
+                "traffic source selection changed before connect",
+                retryable=False,
+                source_key=ctx.payload.source_key,
+            )
+        observation = await self.traffic_source_detector.observe(active_source=active_source)
+        source = self.observed_traffic_source(observation, ctx.payload.source_key)
+        if source is None or source.get("status") != "available":
+            return ctx.fail(
+                "traffic source endpoint is unavailable",
+                retryable=True,
+                source_key=ctx.payload.source_key,
+            )
+        cancelled = self.traffic_source_cancelled_result(ctx)
+        if cancelled is not None:
+            return cancelled
+        return ctx.ok(
+            "traffic source connected",
+            source_key=ctx.payload.source_key,
+            connection={"state": "connected", "observed_at": observation["observed_at"]},
+            invalidated=list(ctx.payload.cache_invalidations),
+        )
+
+    @staticmethod
+    def observed_traffic_source(
+        observation: JsonObject,
+        source_key: str,
+    ) -> JsonObject | None:
+        sources = observation.get("sources")
+        if not isinstance(sources, list):
+            return None
+        return next(
+            (
+                source
+                for source in sources
+                if isinstance(source, dict) and source.get("key") == source_key
+            ),
+            None,
+        )
+
+    def traffic_source_cancelled_result(
+        self,
+        ctx: CommandContext[TrafficSourceAgentCommandPayload],
+    ) -> JsonObject | None:
+        cancel_requested = ctx.metadata.get("cooperative_cancel_requested")
+        if not isinstance(cancel_requested, asyncio.Event) or not cancel_requested.is_set():
+            return None
+        return {
+            Gateway.STATUS: CommandStatus.CANCELLED,
+            Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.APPLIED: False,
+            Gateway.MESSAGE: "traffic source command cancelled at a safe observation boundary",
+            Gateway.RETRYABLE: False,
+            Gateway.RESOURCES: [],
+            Gateway.STDOUT: "",
+            Gateway.STDERR: "",
+        }
 
     @command.handler(
         HELM_RELEASE_ARTIFACT_READ_ACTION,

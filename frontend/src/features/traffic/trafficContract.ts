@@ -1,3 +1,5 @@
+import type { CommandReceipt } from "../../shared/parity/referenceParity";
+
 export type TrafficAvailability = "available" | "partial" | "unavailable";
 export type TrafficFreshness = "live" | "stale" | "partial" | "disconnected";
 
@@ -47,6 +49,59 @@ export interface TrafficOverviewRequest {
   namespaces: readonly string[];
 }
 
+export interface TrafficSourceActionDescriptor {
+  id: string;
+  kind: "select" | "connect";
+  label: string;
+  enabled: boolean;
+  confirmationRequired: boolean;
+  reasonCode: string | null;
+}
+
+export interface TrafficSourceDescriptor {
+  key: string;
+  label: string;
+  status: "available" | "not_detected" | "error";
+  version: string | null;
+  native: boolean;
+  message: string;
+  actions: readonly TrafficSourceActionDescriptor[];
+}
+
+export interface TrafficDetectedCluster {
+  platform: string;
+  cni: string;
+  dataplaneV2: boolean;
+  kubernetesVersion: string | null;
+}
+
+export interface TrafficClusterSourceCatalog {
+  scope: TrafficClusterScope;
+  freshness: TrafficFreshness;
+  observedAt: string | null;
+  activeSource: string | null;
+  capabilityRevision: string;
+  cluster: TrafficDetectedCluster | null;
+  sources: readonly TrafficSourceDescriptor[];
+  reasonCodes: readonly string[];
+}
+
+export interface TrafficSources {
+  availability: TrafficAvailability;
+  coverage: TrafficScopeCoverage;
+  clusters: readonly TrafficClusterSourceCatalog[];
+  reasonCodes: readonly string[];
+}
+
+export interface TrafficSourceCommandInput {
+  scope: TrafficClusterScope;
+  sourceKey: string;
+  capabilityRevision: string;
+  confirmation: true;
+  idempotencyKey: string;
+  reason: string;
+}
+
 export type TrafficFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -71,4 +126,10 @@ export class TrafficPortFailure extends Error {
 
 export interface TrafficPort {
   getOverview(request: TrafficOverviewRequest, signal?: AbortSignal): Promise<TrafficOverview>;
+  getSources(
+    request: Pick<TrafficOverviewRequest, "clusterIds">,
+    signal?: AbortSignal,
+  ): Promise<TrafficSources>;
+  selectSource(input: TrafficSourceCommandInput, signal?: AbortSignal): Promise<CommandReceipt>;
+  connectSource(input: TrafficSourceCommandInput, signal?: AbortSignal): Promise<CommandReceipt>;
 }

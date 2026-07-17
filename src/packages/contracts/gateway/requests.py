@@ -232,6 +232,7 @@ class AgentConnectRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     agent_id: str
     capabilities: list[str] = Field(default_factory=list)
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentEvidenceRequest(StrictModel):

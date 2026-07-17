@@ -328,6 +328,30 @@ class ServiceHttpRequestCommand:
 
 
 @command.action(
+    Command.TRAFFIC_SOURCE_SELECT_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.TRAFFIC_SOURCE_SELECT_CAPABILITY,
+)
+class TrafficSourceSelectCommand:
+    """Persist one server-authorized source from the latest target observation."""
+
+
+@command.action(
+    Command.TRAFFIC_SOURCE_CONNECT_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.TRAFFIC_SOURCE_CONNECT_CAPABILITY,
+)
+class TrafficSourceConnectCommand:
+    """Verify the selected source's currently observed in-cluster endpoint."""
+
+
+@command.action(
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     requires_approval=False,
     supports_cancel=True,

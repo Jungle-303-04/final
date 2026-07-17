@@ -275,10 +275,11 @@ class TargetAgentRepository(DatabaseConnection):
         )
         update_values: dict[str, Any] = {
             "status": status,
-            "details": details or {},
             "last_seen_at": func.now(),
             "updated_at": func.now(),
         }
+        if details:
+            update_values["details"] = table.c.details.op("||")(cast(details, JSONB))
         if normalized_capabilities is not None:
             update_values["capabilities"] = normalized_capabilities
         statement = (

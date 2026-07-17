@@ -583,7 +583,7 @@ class ApiGateway:
                     cluster_id=identity.cluster_id,
                     agent_id=payload.agent_id,
                     capabilities=payload.capabilities,
-                    details={},
+                    details=payload.details,
                 )
                 status_updater = getattr(self.db, "update_cluster_registration_status", None)
                 if callable(status_updater):

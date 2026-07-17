@@ -8287,11 +8287,11 @@
     {
       "id": "reference-feature-178",
       "contractId": "reference.feature.178",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:source-discovery:wizard-catalog:v1",
       "legacyContractIds": [
         "reference.feature.178"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.7 Live Traffic",
       "line": 491,
       "cells": [
@@ -8307,25 +8307,29 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.TrafficSourcesResponse",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
+        "tests/test_traffic_control_router.py",
+        "tests/test_target_agent_traffic_sources.py",
+        "frontend/src/features/traffic/createTrafficAdapter.test.ts",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "Authorized scope coverage exists, but no agent-reported source detection catalog or freshness timestamp is persisted.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#get_traffic_sources",
+          "consumer": "src/domains/traffic/source_projection.py#traffic_sources_response",
+          "reason": "The target agent detects source workloads through the live Kubernetes API, persists observations in agent status details, and the authorized projection exposes freshness, partial coverage, and no-data reasons without fabricated samples.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "The page truthfully reports collector absence and has no source wizard contract.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficSourcesSection",
+          "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "reason": "The page renders agent-observed source catalogs, freshness, partial state, and source actions exclusively from strict server descriptors.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,
@@ -8335,11 +8339,11 @@
     {
       "id": "reference-feature-179",
       "contractId": "reference.feature.179",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:source-selection:flow-invalidation:v1",
       "legacyContractIds": [
         "reference.feature.179"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.7 Live Traffic",
       "line": 492,
       "cells": [
@@ -8355,25 +8359,29 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.TrafficSourceCommandRequest",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
+        "tests/test_traffic_control_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/traffic/createTrafficAdapter.test.ts",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "No workspace-cluster scoped source selection, agent capability validation, audit receipt, or cache invalidation contract exists.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#set_traffic_source",
+          "consumer": "src/services/target/cluster-agent/agent.py#select_traffic_source_command",
+          "reason": "Workspace and cluster RBAC, observed capability revision, confirmation, idempotent durable command receipt, audit staging, and canonical traffic cache invalidations gate source selection before the agent persists it.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "No server-authorized traffic source selector is rendered.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficSourceActionDialog",
+          "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "reason": "Only enabled server descriptors can open the one-confirmation reason dialog; accepted work is handed to the shared operation status store.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,
@@ -8383,11 +8391,11 @@
     {
       "id": "reference-feature-180",
       "contractId": "reference.feature.180",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:source-connect:durable-progress:v1",
       "legacyContractIds": [
         "reference.feature.180"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.7 Live Traffic",
       "line": 493,
       "cells": [
@@ -8403,25 +8411,30 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.TrafficSourceCommandRequest",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
+        "tests/test_traffic_control_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_operation_stream.py",
+        "frontend/src/features/operations/OperationStatusP1.test.tsx",
         "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "No target-agent traffic collector connection command or durable connection state projection exists.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#connect_traffic_source",
+          "consumer": "src/services/target/cluster-agent/agent.py#connect_traffic_source_command",
+          "reason": "Connection uses the same RBAC and capability revision gate, durable CommandReceipt and OperationEvent outbox, cooperative cancellation checkpoints, persisted active source, idempotent replay, and shared resumable command SSE.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "No connect command receipt, progress stream, or reconnect feedback is available.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficSourcesSection",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#OperationStatusStore",
+          "reason": "The server-provided connect action returns a receipt to the shared 60fps-safe external store, which resumes SSE by sequence and surfaces reconnect, cancel, completion, and failure without a traffic-specific scheduler.",
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         },
         "desktop": null,
@@ -8482,11 +8495,11 @@
     {
       "id": "reference-feature-182",
       "contractId": "reference.feature.182",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:network-policy:exact-flow-verdict:v1",
       "legacyContractIds": [
         "reference.feature.182"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.7 Live Traffic",
       "line": 495,
       "cells": [
@@ -8502,26 +8515,26 @@
       "streaming": false,
       "area": "traffic-analysis",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.traffic.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.traffic.control.NetworkPolicyEvaluationResponse",
       "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_traffic_router.py",
-        "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        "tests/test_traffic_control_router.py"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/traffic/router.py",
-          "reason": "No exact Pod or label identity NetworkPolicy evaluator is exposed from the Python traffic boundary.",
-          "test": "tests/test_traffic_router.py"
+          "state": "implemented",
+          "destination": "src/domains/traffic/router.py#evaluate_network_policies",
+          "consumer": "src/domains/traffic/network_policy.py#evaluate_network_policy",
+          "reason": "The evaluator rejects stale Pod UIDs, uses exact Pod and namespace labels, implements Kubernetes selector, peer, port, named-port, IPBlock, direction, and union-of-allow semantics, and bounds each inventory policy cut with explicit partial coverage.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
-          "reason": "Flow details cannot request a policy verdict until collector-backed endpoints and an evaluator contract exist.",
-          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+          "state": "not_required",
+          "destination": "src/packages/contracts/traffic/control.py#NetworkPolicyEvaluationResponse",
+          "reason": "This row owns exact evaluator semantics; the browser flow-detail consumer remains governed by the separate collector-backed traffic-flow row and must not fabricate a flow target before that evidence exists.",
+          "test": "tests/test_traffic_control_router.py"
         },
         "desktop": null,
         "realtime": "not_required"
