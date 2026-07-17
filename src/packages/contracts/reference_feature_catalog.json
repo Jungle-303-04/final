@@ -3303,11 +3303,11 @@
     },
     {
       "contractId": "reference.feature.093",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
       "legacyContractIds": [
         "reference.feature.093"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-093",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3316,28 +3316,41 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/cluster-connection.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#get_cluster_connection_status",
+          "consumer": "src/domains/target/connectivity.py#cluster_connection_status",
+          "reason": "The normalized response exposes the authenticated outbound agent state, selected cluster identity, observation time, stage, and bounded failure detail without a direct target connection.",
+          "test": "tests/test_target_registration.py#test_cluster_connection_status_route_returns_agent_details"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider",
+          "consumer": "frontend/src/api/cluster-connection.ts#getClusterConnectionStatus",
+          "reason": "One scope authority preserves the last safe matching response and discards completions from obsolete cluster selections.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.094",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
       "legacyContractIds": [
         "reference.feature.094"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-094",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -3346,17 +3359,29 @@
       "streaming": false,
       "area": "bootstrap-shell-desktop",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/pages/clusters/ClustersPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "src/domains/target/router.py#get_cluster_connection_status",
+          "reason": "The installed cluster agent owns outbound reconnect. A browser-triggered target connection mutation would violate the agent-only boundary, so retry refreshes the authoritative observation instead.",
+          "test": "tests/test_target_registration.py#test_cluster_connection_status_route_returns_agent_details"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/clusters/ClustersPage.tsx#ClustersPage",
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider",
+          "reason": "The retry control starts one deduplicated status refresh for the current authority and never opens a direct Kubernetes or Prometheus connection.",
+          "test": "frontend/src/pages/clusters/ClustersPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

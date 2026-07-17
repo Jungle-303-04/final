@@ -13128,7 +13128,9 @@
           "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
           "legacyContractIds": [
             "reference.feature.064",
-            "reference.feature.065"
+            "reference.feature.065",
+            "reference.feature.093",
+            "reference.feature.094"
           ],
           "symbol": "ConnectionProvider status, reconnect, and cache refresh",
           "interaction": "the authenticated shell observes selected-cluster connection stage and freshness, preserves the last safe projection during a transient refresh, and exposes one bounded refresh action without letting browser state switch kubeconfig or impersonate an agent reconnect",
