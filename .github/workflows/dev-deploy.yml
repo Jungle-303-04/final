@@ -450,6 +450,7 @@ jobs:
           unset admin_id cursor_encoded cursor_value llm_provider_encoded llm_model_encoded llm_key_encoded llm_patch
 
       - name: Seed dedicated dev demo workspace
+        id: demo_seed
         if: env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
         env:
@@ -489,8 +490,20 @@ jobs:
               describe job management-demo-workspace-seed || true
             exit 1
           fi
-          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            logs job/management-demo-workspace-seed --all-containers --tail=500
+          seed_json="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            logs job/management-demo-workspace-seed --all-containers --tail=500)"
+          printf '%s\n' "${seed_json}"
+          demo_workspace_id="$(jq -er '
+            if type == "object"
+              and (.workspace_id | type == "string")
+              and (.workspace_id | length > 0)
+            then .workspace_id
+            else error("seed workspace_id contract is invalid")
+            end
+          ' <<<"${seed_json}")"
+          [[ "${demo_workspace_id}" =~ ^[A-Za-z0-9._-]+$ ]]
+          printf 'workspace_id=%s\n' "${demo_workspace_id}" >>"${GITHUB_OUTPUT}"
+          unset seed_json demo_workspace_id
 
       - name: Pin target agent image in runtime config
         if: env.DEPLOYMENT_SCOPE == 'FULL'
@@ -584,6 +597,8 @@ jobs:
         id: browser_smoke
         env:
           AUTH_COOKIE_JAR: ${{ runner.temp }}/browser-auth-cookie.jar
+          DEMO_WORKSPACE_ID: ${{ steps.demo_seed.outputs.workspace_id }}
+          REQUIRE_DEMO_WORKSPACE_SMOKE: ${{ env.DEPLOYMENT_SCOPE == 'FULL' && '1' || '0' }}
           ROUTE_SMOKE_BASE_URL: http://127.0.0.1:18080
         shell: bash
         run: |

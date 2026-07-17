@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ROUTE_CRITICAL_API_CONTRACTS,
+  classifyRouteApiRequest,
   createRouteNetworkObserver,
   createRouteSmokeDiagnostics,
   formatRouteSmokeFailureDiagnostics,
@@ -14,8 +16,41 @@ import {
   normalizeSurfaceText,
   orderRoutesForTraversal,
   parseNetscapeSessionCookie,
+  verifyWorkspaceRoundTrip,
   withRouteSmokeDiagnostics,
 } from "./post-deploy-route-smoke.mjs";
+
+function createNetworkHarness(startedAt = 1_000) {
+  let now = startedAt;
+  const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+  const listeners = new Map();
+  const page = {
+    off(event, listener) {
+      listeners.get(event)?.delete(listener);
+    },
+    on(event, listener) {
+      const eventListeners = listeners.get(event) ?? new Set();
+      eventListeners.add(listener);
+      listeners.set(event, eventListeners);
+    },
+    async waitForTimeout(durationMs) {
+      now += durationMs;
+    },
+  };
+  return {
+    advance(durationMs) {
+      now += durationMs;
+    },
+    emit(event, value) {
+      listeners.get(event)?.forEach((listener) => listener(value));
+    },
+    now: () => now,
+    page,
+    restore() {
+      dateNow.mockRestore();
+    },
+  };
+}
 
 describe("post-deploy route smoke helpers", () => {
   it("orders the currently rendered route last so every DOM route receives a transition", () => {
@@ -28,6 +63,27 @@ describe("post-deploy route smoke helpers", () => {
     expect(
       orderRoutesForTraversal(routes, "/beta").map(({ pathname }) => pathname),
     ).toEqual(["/alpha", "/gamma", "/beta"]);
+  });
+
+  it("keeps one critical API contract entry for every released navigation route", () => {
+    expect(Object.keys(ROUTE_CRITICAL_API_CONTRACTS)).toEqual([
+      "/home",
+      "/resources",
+      "/issues",
+      "/applications",
+      "/timeline",
+      "/traffic",
+      "/helm",
+      "/gitops",
+      "/checks",
+      "/cost",
+      "/clusters",
+      "/alerts",
+      "/settings",
+    ]);
+    expect(Object.values(ROUTE_CRITICAL_API_CONTRACTS).every(
+      (contracts) => contracts.length > 0,
+    )).toBe(true);
   });
 
   it("preserves DOM order when the current URL is not a released navigation route", () => {
@@ -136,6 +192,34 @@ describe("post-deploy route smoke helpers", () => {
     )).toBe(false);
   });
 
+  it("classifies route-owned APIs separately from common background traffic", () => {
+    expect(classifyRouteApiRequest(
+      "/timeline",
+      "https://example.test/api/timeline/snapshots?cluster=one",
+      "https://example.test",
+    )).toBe("critical");
+    expect(classifyRouteApiRequest(
+      "/cost",
+      "https://example.test/api/cost/nodes?cluster=one",
+      "https://example.test",
+    )).toBe("critical");
+    expect(classifyRouteApiRequest(
+      "/timeline",
+      "https://example.test/api/alert-events?limit=200",
+      "https://example.test",
+    )).toBe("background-common");
+    expect(classifyRouteApiRequest(
+      "/alerts",
+      "https://example.test/api/alert-events?limit=200",
+      "https://example.test",
+    )).toBe("background-common");
+    expect(classifyRouteApiRequest(
+      "/cost",
+      "https://agent.example.test/api/cost/nodes",
+      "https://example.test",
+    )).toBe("ignored");
+  });
+
   it("requires both API completion and a bounded quiet window", () => {
     const observation = {
       lastActivityAt: 1_000,
@@ -180,23 +264,34 @@ describe("post-deploy route smoke helpers", () => {
     const observer = createRouteNetworkObserver(page, "https://example.test");
 
     try {
-      const phase = observer.beginPhase();
+      const phase = observer.beginPhase("/checks");
       now += 25;
       emit("request", request);
       now += 125;
       emit("response", { request: () => request, status: () => 200 });
 
       await expect(observer.waitForSettled(phase, 300)).rejects.toThrow(
-        "route API requests did not settle",
+        "route critical API requests did not settle",
       );
-      expect(observer.summarize(phase, now - phase.startedAt).apiRequestCount).toBe(0);
+      expect(observer.summarize(
+        phase,
+        now - phase.startedAt,
+      ).criticalApiRequestCount).toBe(0);
 
       emit("requestfinished", request);
       await observer.waitForSettled(phase, 1_000);
       expect(observer.summarize(phase, now - phase.startedAt)).toEqual({
-        apiRequestCount: 1,
+        backgroundApiRequestCount: 0,
+        backgroundInFlightRequestCount: 0,
+        criticalApiRequestCount: 1,
         durationMs: 950,
-        slowApi: [{ durationMs: 425, path: "/api/checks", status: 200 }],
+        slowBackgroundApi: [],
+        slowCriticalApi: [{
+          durationMs: 425,
+          in_flight: false,
+          path: "/api/checks",
+          status: 200,
+        }],
       });
 
       observer.dispose();
@@ -204,6 +299,173 @@ describe("post-deploy route smoke helpers", () => {
     } finally {
       dateNow.mockRestore();
     }
+  });
+
+  it.each([
+    ["/timeline", "/api/timeline/snapshots"],
+    ["/cost", "/api/cost/nodes"],
+  ])("keeps delayed %s route data in the requestfinished gate", async (route, apiPath) => {
+    const harness = createNetworkHarness();
+    const request = { url: () => `https://example.test${apiPath}` };
+    const observer = createRouteNetworkObserver(harness.page, "https://example.test");
+
+    try {
+      const phase = observer.beginPhase(route);
+      harness.advance(25);
+      harness.emit("request", request);
+      harness.advance(25);
+      harness.emit("response", { request: () => request, status: () => 200 });
+
+      await expect(observer.waitForSettled(phase, 400)).rejects.toThrow(
+        "route critical API requests did not settle",
+      );
+      harness.emit("requestfinished", request);
+      await observer.waitForSettled(phase, 1_000);
+
+      expect(observer.summarize(
+        phase,
+        harness.now() - phase.startedAt,
+      )).toMatchObject({
+        backgroundApiRequestCount: 0,
+        backgroundInFlightRequestCount: 0,
+        criticalApiRequestCount: 1,
+        slowBackgroundApi: [],
+        slowCriticalApi: [{ path: apiPath, status: 200 }],
+      });
+    } finally {
+      observer.dispose();
+      harness.restore();
+    }
+  });
+
+  it("measures a delayed global alert poll without blocking route readiness", async () => {
+    const harness = createNetworkHarness();
+    const request = {
+      url: () => "https://example.test/api/alert-events?limit=200",
+    };
+    const observer = createRouteNetworkObserver(harness.page, "https://example.test");
+
+    try {
+      const phase = observer.beginPhase("/timeline");
+      harness.advance(25);
+      harness.emit("request", request);
+      harness.advance(25);
+      harness.emit("response", { request: () => request, status: () => 200 });
+
+      await observer.waitForSettled(phase, 600);
+      expect(observer.summarize(
+        phase,
+        harness.now() - phase.startedAt,
+      )).toMatchObject({
+        backgroundApiRequestCount: 1,
+        backgroundInFlightRequestCount: 1,
+        criticalApiRequestCount: 0,
+        slowBackgroundApi: [{
+          in_flight: true,
+          path: "/api/alert-events",
+          status: 200,
+        }],
+      });
+
+      harness.emit("requestfinished", request);
+      expect(observer.summarize(
+        phase,
+        harness.now() - phase.startedAt,
+      )).toMatchObject({
+        backgroundApiRequestCount: 1,
+        backgroundInFlightRequestCount: 0,
+        criticalApiRequestCount: 0,
+        slowBackgroundApi: [{
+          in_flight: false,
+          path: "/api/alert-events",
+          status: 200,
+        }],
+        slowCriticalApi: [],
+      });
+    } finally {
+      observer.dispose();
+      harness.restore();
+    }
+  });
+
+  it("switches to the seeded workspace and restores the original session and surface", async () => {
+    const calls = [];
+    const result = await verifyWorkspaceRoundTrip({
+      demoWorkspaceId: "workspace-demo",
+      async loadCatalog() {
+        calls.push("catalog");
+        return {
+          current_workspace_id: "workspace-original",
+          items: [
+            { workspace_id: "workspace-original" },
+            { workspace_id: "workspace-demo" },
+          ],
+        };
+      },
+      async loadSession() {
+        const workspaceId = calls.includes("restore-surface")
+          ? "unexpected"
+          : calls.includes("switch:workspace-original")
+            ? "workspace-original"
+            : "workspace-demo";
+        calls.push(`session:${workspaceId}`);
+        return { workspace_id: workspaceId };
+      },
+      async switchWorkspace(workspaceId) {
+        calls.push(`switch:${workspaceId}`);
+        return { workspace_id: workspaceId };
+      },
+      async verifyDemoSurface(workspaceId) {
+        calls.push(`demo-surface:${workspaceId}`);
+      },
+      async verifyRestoredSurface(workspaceId) {
+        calls.push(`restore-surface:${workspaceId}`);
+        return { pathname: "/home" };
+      },
+    });
+
+    expect(calls).toEqual([
+      "catalog",
+      "switch:workspace-demo",
+      "session:workspace-demo",
+      "demo-surface:workspace-demo",
+      "switch:workspace-original",
+      "session:workspace-original",
+      "restore-surface:workspace-original",
+    ]);
+    expect(result).toEqual({
+      originalWorkspaceId: "workspace-original",
+      restoredSurface: { pathname: "/home" },
+    });
+  });
+
+  it("restores the original workspace in finally when demo surface verification fails", async () => {
+    const switched = [];
+    let sessionWorkspaceId = "workspace-original";
+
+    await expect(verifyWorkspaceRoundTrip({
+      demoWorkspaceId: "workspace-demo",
+      loadCatalog: async () => ({
+        current_workspace_id: "workspace-original",
+        items: [
+          { workspace_id: "workspace-original" },
+          { workspace_id: "workspace-demo" },
+        ],
+      }),
+      loadSession: async () => ({ workspace_id: sessionWorkspaceId }),
+      async switchWorkspace(workspaceId) {
+        switched.push(workspaceId);
+        sessionWorkspaceId = workspaceId;
+        return { workspace_id: workspaceId };
+      },
+      verifyDemoSurface: async () => {
+        throw new Error("demo surface failed");
+      },
+      verifyRestoredSurface: async () => ({ pathname: "/home" }),
+    })).rejects.toThrow("demo surface failed");
+
+    expect(switched).toEqual(["workspace-demo", "workspace-original"]);
+    expect(sessionWorkspaceId).toBe("workspace-original");
   });
 
   it("accepts one HttpOnly root handoff and leaves transport security to the public browser origin", () => {

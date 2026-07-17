@@ -283,6 +283,7 @@ def test_full_deploy_renders_seed_owner_from_fixed_admin_and_cleans_up() -> None
     source = seed["run"]
 
     assert seed["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert seed["id"] == "demo_seed"
     assert seed["env"]["DEPLOY_IMAGE"] == "${{ steps.image.outputs.image }}"
     assert 'project_slug = os.environ["PROJECT_SLUG"].strip()' in identity
     assert 'identifier = os.environ["AUTH_EMAIL"].strip().lower()' in identity
@@ -295,6 +296,10 @@ def test_full_deploy_renders_seed_owner_from_fixed_admin_and_cleans_up() -> None
     assert "wait --for=condition=complete" in source
     assert "logs job/management-demo-workspace-seed" in source
     assert "describe job management-demo-workspace-seed" in source
+    assert "seed_json=" in source
+    assert "seed workspace_id contract is invalid" in source
+    assert "${GITHUB_OUTPUT}" in source
+    assert "workspace_id=%s" in source
     assert "controller.demo_workspace reset" not in WORKFLOW_PATH.read_text(encoding="utf-8")
 
 
@@ -315,6 +320,8 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     handoff = "${{ runner.temp }}/browser-auth-cookie.jar"
     assert smoke["env"] == {
         "AUTH_COOKIE_JAR": handoff,
+        "DEMO_WORKSPACE_ID": "${{ steps.demo_seed.outputs.workspace_id }}",
+        "REQUIRE_DEMO_WORKSPACE_SMOKE": ("${{ env.DEPLOYMENT_SCOPE == 'FULL' && '1' || '0' }}"),
         "ROUTE_SMOKE_BASE_URL": "http://127.0.0.1:18080",
     }
     assert "port-forward service/console-dev 18080:80" in smoke["run"]
@@ -344,6 +351,9 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert "diagnostics.apiErrors" in script
     assert "parseNetscapeSessionCookie" in script
     assert "page.context().addCookies" in script
+    assert "verifyWorkspaceRoundTrip" in script
+    assert '"/api/auth/workspaces/switch"' in script
+    assert "DEMO_WORKSPACE_ID" in script
     assert 'input[name="email"]' not in script
     assert 'input[name="password"]' not in script
     assert names.index("Run post-deploy smoke") < names.index(

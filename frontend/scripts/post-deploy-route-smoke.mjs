@@ -13,6 +13,7 @@ const NETWORK_SAMPLE_INTERVAL_MS = 100;
 const ROUTE_STABLE_SAMPLE_COUNT = 3;
 const SLOW_API_LIMIT = 5;
 const DIAGNOSTIC_ITEM_LIMIT = 50;
+const DEMO_WORKSPACE_ROUTE = "/home";
 const SENSITIVE_ASSIGNMENT_PATTERN = /\b(authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)\s*([:=])\s*(?:Bearer\s+)?[^\s,"']+/giu;
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+\/=-]+/giu;
 const FAILURE_PRODUCT_STATES = new Set([
@@ -21,6 +22,51 @@ const FAILURE_PRODUCT_STATES = new Set([
   "not-found",
   "offline",
   "release",
+]);
+
+/**
+ * Route-owned read boundaries used by the deployment smoke. Prefix matching
+ * deliberately includes nested resource URLs while keeping shell bootstrap
+ * and global polling outside the route completion gate.
+ */
+export const ROUTE_CRITICAL_API_CONTRACTS = Object.freeze({
+  "/home": Object.freeze(["/api/clusters"]),
+  "/resources": Object.freeze([
+    "/api/resources",
+    "/api/filter-facets",
+    "/api/clusters",
+  ]),
+  "/issues": Object.freeze(["/api/dashboard/rca"]),
+  "/applications": Object.freeze(["/api/applications"]),
+  "/timeline": Object.freeze(["/api/timeline"]),
+  "/traffic": Object.freeze(["/api/traffic"]),
+  "/helm": Object.freeze(["/api/helm"]),
+  "/gitops": Object.freeze([
+    "/api/gitops",
+    "/api/release-plans",
+  ]),
+  "/checks": Object.freeze(["/api/checks"]),
+  "/cost": Object.freeze([
+    "/api/cost",
+    "/api/rightsizing",
+  ]),
+  "/clusters": Object.freeze(["/api/clusters"]),
+  "/alerts": Object.freeze([
+    "/api/alert-rules",
+    "/api/alert-channels",
+  ]),
+  "/settings": Object.freeze([
+    "/api/settings",
+    "/api/integrations",
+  ]),
+});
+
+export const COMMON_BACKGROUND_API_CONTRACTS = Object.freeze([
+  "/api/alert-events",
+  "/api/auth/session",
+  "/api/refresh-policies",
+  "/api/settings",
+  "/api/version-check",
 ]);
 
 export function normalizeSurfaceText(value) {
@@ -89,6 +135,28 @@ export function isObservedRouteApiRequest(rawUrl, baseUrl) {
   } catch {
     return false;
   }
+}
+
+export function classifyRouteApiRequest(routePathname, rawUrl, baseUrl) {
+  if (!isObservedRouteApiRequest(rawUrl, baseUrl)) return "ignored";
+  return classifyObservedApiPath(routePathname, new URL(rawUrl).pathname);
+}
+
+function classifyObservedApiPath(routePathname, apiPathname) {
+  const contracts = ROUTE_CRITICAL_API_CONTRACTS[routePathname] ?? [];
+  if (contracts.some((contract) => matchesApiContract(apiPathname, contract))) {
+    return "critical";
+  }
+  if (COMMON_BACKGROUND_API_CONTRACTS.some(
+    (contract) => matchesApiContract(apiPathname, contract),
+  )) {
+    return "background-common";
+  }
+  return "background-other";
+}
+
+function matchesApiContract(apiPathname, contract) {
+  return apiPathname === contract || apiPathname.startsWith(`${contract}/`);
 }
 
 export function isRouteNetworkSettled({
@@ -186,6 +254,11 @@ async function runWithDiagnostics(diagnostics) {
   const baseUrl = requiredEnvironment("BASE_URL");
   const email = requiredEnvironment("AUTH_EMAIL");
   const password = requiredEnvironment("AUTH_PASSWORD", { trim: false });
+  const demoWorkspaceId = optionalEnvironment("DEMO_WORKSPACE_ID");
+  const requireDemoWorkspaceSmoke = process.env.REQUIRE_DEMO_WORKSPACE_SMOKE === "1";
+  if (requireDemoWorkspaceSmoke && demoWorkspaceId === null) {
+    throw new Error("missing required environment variable: DEMO_WORKSPACE_ID");
+  }
   diagnostics.failingRoute = new URL(baseUrl).pathname;
   const browser = await chromium.launch({
     headless: true,
@@ -223,7 +296,34 @@ async function runWithDiagnostics(diagnostics) {
 
   try {
     await authenticate(page, baseUrl, email, password);
-    const initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
+    let initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
+    if (demoWorkspaceId !== null) {
+      const verifySurface = (workspaceId) => verifyWorkspaceSurface({
+        baseUrl,
+        diagnostics,
+        page,
+        routeNetwork,
+        workspaceId,
+      });
+      const workspaceResult = await verifyWorkspaceRoundTrip({
+        demoWorkspaceId,
+        loadCatalog: () => requestBrowserJson(page, baseUrl, "/api/auth/workspaces"),
+        loadSession: () => requestBrowserJson(page, baseUrl, "/api/auth/session"),
+        switchWorkspace: (workspaceId) => requestBrowserJson(
+          page,
+          baseUrl,
+          "/api/auth/workspaces/switch",
+          {
+            data: { workspace_id: workspaceId },
+            method: "POST",
+          },
+        ),
+        verifyDemoSurface: verifySurface,
+        verifyRestoredSurface: verifySurface,
+      });
+      initial = workspaceResult.restoredSurface;
+      process.stdout.write("authenticated workspace switch smoke passed\n");
+    }
     const routes = await collectReleasedRoutes(page);
     const traversal = orderRoutesForTraversal(routes, new URL(page.url()).pathname);
 
@@ -243,7 +343,7 @@ async function runWithDiagnostics(diagnostics) {
       );
 
       const spaStartedAt = Date.now();
-      const spaNetworkPhase = routeNetwork.beginPhase();
+      const spaNetworkPhase = routeNetwork.beginPhase(route.pathname);
       await Promise.all([
         page.waitForURL(
           (url) => url.pathname === route.pathname,
@@ -264,7 +364,7 @@ async function runWithDiagnostics(diagnostics) {
 
       const directUrl = new URL(observedHref, baseUrl);
       const directStartedAt = Date.now();
-      const directNetworkPhase = routeNetwork.beginPhase();
+      const directNetworkPhase = routeNetwork.beginPhase(route.pathname);
       await page.goto(directUrl.href, { waitUntil: "domcontentloaded" });
       previous = await waitForObservedRouteSurface(
         page,
@@ -301,6 +401,137 @@ async function runWithDiagnostics(diagnostics) {
   }
 }
 
+export async function verifyWorkspaceRoundTrip({
+  demoWorkspaceId,
+  loadCatalog,
+  loadSession,
+  switchWorkspace,
+  verifyDemoSurface,
+  verifyRestoredSurface,
+}) {
+  const catalog = await loadCatalog();
+  assertWorkspaceCatalog(catalog);
+  const originalWorkspaceId = catalog.current_workspace_id;
+  assert.notEqual(
+    demoWorkspaceId,
+    originalWorkspaceId,
+    "demo workspace must differ from the original authenticated workspace",
+  );
+  assert.ok(
+    catalog.items.some(({ workspace_id: workspaceId }) => workspaceId === demoWorkspaceId),
+    "demo workspace was not present in the authenticated workspace catalog",
+  );
+
+  let restoreRequired = false;
+  let restoredSurface;
+  try {
+    restoreRequired = true;
+    assertWorkspaceSession(
+      await switchWorkspace(demoWorkspaceId),
+      demoWorkspaceId,
+      "workspace switch response",
+    );
+    assertWorkspaceSession(
+      await loadSession(),
+      demoWorkspaceId,
+      "workspace switch session",
+    );
+    await verifyDemoSurface(demoWorkspaceId);
+  } finally {
+    if (restoreRequired) {
+      assertWorkspaceSession(
+        await switchWorkspace(originalWorkspaceId),
+        originalWorkspaceId,
+        "workspace restore response",
+      );
+      assertWorkspaceSession(
+        await loadSession(),
+        originalWorkspaceId,
+        "workspace restore session",
+      );
+      restoredSurface = await verifyRestoredSurface(originalWorkspaceId);
+    }
+  }
+
+  return { originalWorkspaceId, restoredSurface };
+}
+
+function assertWorkspaceCatalog(value) {
+  assert.ok(value && typeof value === "object", "workspace catalog must be an object");
+  assert.ok(
+    typeof value.current_workspace_id === "string"
+      && value.current_workspace_id.trim().length > 0,
+    "workspace catalog current_workspace_id must be a non-empty string",
+  );
+  assert.ok(Array.isArray(value.items), "workspace catalog items must be an array");
+  for (const item of value.items) {
+    assert.ok(
+      item
+        && typeof item === "object"
+        && typeof item.workspace_id === "string"
+        && item.workspace_id.trim().length > 0,
+      "workspace catalog item workspace_id must be a non-empty string",
+    );
+  }
+}
+
+function assertWorkspaceSession(value, expectedWorkspaceId, label) {
+  assert.ok(value && typeof value === "object", `${label} must be an object`);
+  assert.equal(value.workspace_id, expectedWorkspaceId, `${label} workspace mismatch`);
+}
+
+async function requestBrowserJson(page, baseUrl, pathname, options = {}) {
+  const method = options.method ?? "GET";
+  const response = await page.request.fetch(new URL(pathname, baseUrl).href, {
+    data: options.data,
+    failOnStatusCode: false,
+    headers: method === "GET"
+      ? undefined
+      : {
+          "content-type": "application/json",
+          "x-service-csrf": "same-origin",
+        },
+    method,
+  });
+  assert.ok(
+    response.ok(),
+    `${method} ${pathname} failed with status ${response.status()}`,
+  );
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(`${method} ${pathname} returned invalid JSON`);
+  }
+}
+
+async function verifyWorkspaceSurface({
+  baseUrl,
+  diagnostics,
+  page,
+  routeNetwork,
+  workspaceId,
+}) {
+  diagnostics.failingRoute = DEMO_WORKSPACE_ROUTE;
+  const networkPhase = routeNetwork.beginPhase(DEMO_WORKSPACE_ROUTE);
+  await page.goto(new URL(DEMO_WORKSPACE_ROUTE, baseUrl).href, {
+    waitUntil: "domcontentloaded",
+  });
+  const surface = await waitForObservedRouteSurface(
+    page,
+    routeNetwork,
+    networkPhase,
+    null,
+    DEMO_WORKSPACE_ROUTE,
+    AUTH_BOOTSTRAP_TIMEOUT_MS,
+  );
+  await page
+    .locator(SIDEBAR_SELECTOR)
+    .getByText(workspaceId, { exact: true })
+    .waitFor({ state: "visible", timeout: AUTH_BOOTSTRAP_TIMEOUT_MS });
+  assertDiagnostics(diagnostics);
+  return surface;
+}
+
 async function waitForObservedRouteSurface(
   page,
   routeNetwork,
@@ -318,21 +549,33 @@ export function createRouteNetworkObserver(page, baseUrl) {
   let sequence = 0;
   const pendingRequests = new Map();
   const completedRequests = [];
+  const activity = [];
+  const recordActivity = (pending) => {
+    activity.push({
+      at: Date.now(),
+      path: pending.path,
+      requestSequence: pending.requestSequence,
+      sequence,
+    });
+  };
   const onRequest = (request) => {
     if (!isObservedRouteApiRequest(request.url(), baseUrl)) return;
     sequence += 1;
-    pendingRequests.set(request, {
+    const pending = {
       path: safeUrl(request.url()),
-      sequence,
+      requestSequence: sequence,
       status: null,
       startedAt: Date.now(),
-    });
+    };
+    pendingRequests.set(request, pending);
+    recordActivity(pending);
   };
   const onResponse = (response) => {
     const pending = pendingRequests.get(response.request());
     if (pending === undefined) return;
     pending.status = response.status();
     sequence += 1;
+    recordActivity(pending);
   };
   const onRequestFinished = (request) => {
     const pending = pendingRequests.get(request);
@@ -346,10 +589,11 @@ export function createRouteNetworkObserver(page, baseUrl) {
     if (pending === undefined) return;
     pendingRequests.delete(request);
     sequence += 1;
+    recordActivity(pending);
     completedRequests.push({
       durationMs: Date.now() - pending.startedAt,
       path: pending.path,
-      requestSequence: pending.sequence,
+      requestSequence: pending.requestSequence,
       status,
     });
   };
@@ -360,9 +604,14 @@ export function createRouteNetworkObserver(page, baseUrl) {
   page.on("requestfailed", onRequestFailed);
 
   return {
-    beginPhase() {
+    beginPhase(routePathname) {
+      assert.ok(
+        Object.hasOwn(ROUTE_CRITICAL_API_CONTRACTS, routePathname),
+        `missing route critical API contract: ${routePathname}`,
+      );
       return {
         completedOffset: completedRequests.length,
+        routePathname,
         sequence,
         startedAt: Date.now(),
       };
@@ -377,30 +626,53 @@ export function createRouteNetworkObserver(page, baseUrl) {
       const requests = completedRequests
         .slice(phase.completedOffset)
         .filter((request) => request.requestSequence > phase.sequence);
+      const criticalRequests = requests.filter(
+        (request) => classifyObservedApiPath(phase.routePathname, request.path) === "critical",
+      );
+      const backgroundRequests = requests.filter(
+        (request) => classifyObservedApiPath(phase.routePathname, request.path) !== "critical",
+      );
+      const pendingBackgroundRequests = [...pendingRequests.values()]
+        .filter((request) => (
+          request.requestSequence > phase.sequence
+          && classifyObservedApiPath(phase.routePathname, request.path) !== "critical"
+        ))
+        .map((request) => ({
+          durationMs: Date.now() - request.startedAt,
+          inFlight: true,
+          path: request.path,
+          status: request.status,
+        }));
+      const measuredBackgroundRequests = [
+        ...backgroundRequests.map((request) => ({ ...request, inFlight: false })),
+        ...pendingBackgroundRequests,
+      ];
       return {
-        apiRequestCount: requests.length,
+        backgroundApiRequestCount: measuredBackgroundRequests.length,
+        backgroundInFlightRequestCount: pendingBackgroundRequests.length,
+        criticalApiRequestCount: criticalRequests.length,
         durationMs,
-        slowApi: [...requests]
-          .sort((left, right) => right.durationMs - left.durationMs)
-          .slice(0, SLOW_API_LIMIT)
-          .map(({ durationMs: apiDurationMs, path, status }) => ({
-            durationMs: apiDurationMs,
-            path,
-            status,
-          })),
+        slowBackgroundApi: slowRequestSummary(measuredBackgroundRequests),
+        slowCriticalApi: slowRequestSummary(criticalRequests),
       };
     },
     async waitForSettled(phase, timeoutMs) {
       const deadline = Date.now() + timeoutMs;
-      let lastActivityAt = phase.startedAt;
-      let observedSequence = phase.sequence;
       while (Date.now() < deadline) {
-        if (sequence !== observedSequence) {
-          observedSequence = sequence;
-          lastActivityAt = Date.now();
-        }
-        const pendingRequestCount = [...pendingRequests.values()]
-          .filter((request) => request.sequence > phase.sequence)
+        const criticalActivity = activity.filter((item) => (
+          item.requestSequence > phase.sequence
+          && classifyObservedApiPath(phase.routePathname, item.path) === "critical"
+        ));
+        const lastActivityAt = criticalActivity.reduce(
+          (latest, item) => Math.max(latest, item.at),
+          phase.startedAt,
+        );
+        const pendingCriticalRequests = [...pendingRequests.values()]
+          .filter((request) => (
+            request.requestSequence > phase.sequence
+            && classifyObservedApiPath(phase.routePathname, request.path) === "critical"
+          ));
+        const pendingRequestCount = pendingCriticalRequests
           .length;
         if (isRouteNetworkSettled({
           lastActivityAt,
@@ -411,24 +683,46 @@ export function createRouteNetworkObserver(page, baseUrl) {
         await page.waitForTimeout(NETWORK_SAMPLE_INTERVAL_MS);
       }
       throw new Error(
-        `route API requests did not settle: ${JSON.stringify({
+        `route critical API requests did not settle: ${JSON.stringify({
           pending: [...pendingRequests.values()]
-            .filter((request) => request.sequence > phase.sequence)
+            .filter((request) => (
+              request.requestSequence > phase.sequence
+              && classifyObservedApiPath(phase.routePathname, request.path) === "critical"
+            ))
             .map((request) => request.path),
+          route: phase.routePathname,
         })}`,
       );
     },
   };
 }
 
+function slowRequestSummary(requests) {
+  return [...requests]
+    .sort((left, right) => right.durationMs - left.durationMs)
+    .slice(0, SLOW_API_LIMIT)
+    .map(({ durationMs, inFlight = false, path, status }) => ({
+      durationMs,
+      in_flight: inFlight,
+      path,
+      status,
+    }));
+}
+
 function formatRouteTiming({ direct, pathname, spa, totalDurationMs }) {
   return `route smoke passed: ${pathname} (spa+direct) ${JSON.stringify({
+    direct_background_api_requests: direct.backgroundApiRequestCount,
+    direct_background_in_flight: direct.backgroundInFlightRequestCount,
+    direct_critical_api_requests: direct.criticalApiRequestCount,
     direct_ms: direct.durationMs,
-    direct_api_requests: direct.apiRequestCount,
-    direct_slow_api: direct.slowApi,
+    direct_slow_background_api: direct.slowBackgroundApi,
+    direct_slow_critical_api: direct.slowCriticalApi,
+    spa_background_api_requests: spa.backgroundApiRequestCount,
+    spa_background_in_flight: spa.backgroundInFlightRequestCount,
+    spa_critical_api_requests: spa.criticalApiRequestCount,
     spa_ms: spa.durationMs,
-    spa_api_requests: spa.apiRequestCount,
-    spa_slow_api: spa.slowApi,
+    spa_slow_background_api: spa.slowBackgroundApi,
+    spa_slow_critical_api: spa.slowCriticalApi,
     total_ms: totalDurationMs,
   })}`;
 }
@@ -613,6 +907,11 @@ function requiredEnvironment(name, { trim = true } = {}) {
     throw new Error(`missing required environment variable: ${name}`);
   }
   return value;
+}
+
+function optionalEnvironment(name) {
+  const value = process.env[name]?.trim();
+  return value ? value : null;
 }
 
 function safeUrl(rawUrl) {
