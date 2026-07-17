@@ -13,6 +13,7 @@ from domains.dashboard.ready_stream import (
     DashboardReadyFanoutClosed,
     DashboardReadySnapshot,
     InMemoryDashboardReadyFanout,
+    dashboard_ready_heartbeat_seconds,
 )
 from domains.inventory_filter.cursor import FilterCursorCodec
 from packages.contracts.freshness import HomeDashboardEventFrame
@@ -171,6 +172,17 @@ def test_dashboard_ready_wakeup_and_cursor_cannot_cross_cluster_scope() -> None:
     ):
         with pytest.raises(ValueError, match="cursor scope changed"):
             codec.decode(token, binding=unauthorized_binding)
+
+
+def test_dashboard_ready_heartbeat_uses_reference_cadence_and_stays_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DASHBOARD_READY_HEARTBEAT_SECONDS", raising=False)
+    assert dashboard_ready_heartbeat_seconds() == 30
+
+    monkeypatch.setenv("DASHBOARD_READY_HEARTBEAT_SECONDS", "61")
+    with pytest.raises(RuntimeError, match="between 1 and 60"):
+        dashboard_ready_heartbeat_seconds()
 
 
 async def _collect(stream: object) -> list[str]:
