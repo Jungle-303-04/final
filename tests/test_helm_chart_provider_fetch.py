@@ -157,6 +157,45 @@ def test_repository_index_fetch_is_semver_sorted_bounded_and_never_returns_raw(
     assert "raw-digest" not in str(body)
 
 
+def test_repository_index_is_shared_across_chart_reads_in_one_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def validate(_url: str, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("domains.helm.source_provider.validate_outbound_url", validate)
+    requests = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        return httpx.Response(
+            200,
+            text=(
+                "apiVersion: v1\nentries:\n"
+                "  storefront:\n    - version: 2.0.0\n"
+                "  checkout:\n    - version: 3.0.0\n"
+            ),
+        )
+
+    provider = HelmChartVersionProvider(
+        transport=httpx.MockTransport(handler),
+        resolver=_public_resolver,
+    )
+
+    async def fetch() -> tuple[object, object]:
+        return await asyncio.gather(
+            provider.fetch_versions(_source(), "storefront"),
+            provider.fetch_versions(_source(), "checkout"),
+        )
+
+    storefront, checkout = asyncio.run(fetch())
+
+    assert requests == 1
+    assert [item.version for item in storefront.versions] == ["2.0.0"]
+    assert [item.version for item in checkout.versions] == ["3.0.0"]
+
+
 def test_oci_tag_fetch_uses_registry_api_and_returns_one_source_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
