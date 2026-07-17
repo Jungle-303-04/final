@@ -10,7 +10,6 @@ import argparse
 import copy
 import json
 import os
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -35,14 +34,18 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
+    TARGET_AGENT_IMAGE_KEY,
     TARGET_NAMESPACE,
     TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RUNTIME_CONFIG_NAME,
+    TARGET_RUNTIME_IMAGE_ANNOTATION,
     TargetComponent,
+    require_target_image_digest,
 )
 from packages.storage.engine import unit_of_work_or_null
 
 TARGET_RBAC_ADMIN_MANIFEST_PATH = gateway_routes.TARGET_RBAC_MANIFEST_PATH
-IMMUTABLE_IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$")
 UPGRADE_PAGE_SIZE = 100
 UPGRADE_ACTOR = "target-policy-upgrade"
 
@@ -137,10 +140,7 @@ class TargetPolicyUpgradeReport:
 
 
 def require_immutable_image(image: str) -> str:
-    candidate = image.strip()
-    if not IMMUTABLE_IMAGE_PATTERN.fullmatch(candidate):
-        raise ValueError("target image must use an immutable sha256 digest")
-    return candidate
+    return require_target_image_digest(image)
 
 
 def _registration_payload(registration: JsonObject, target_image: str) -> TargetRegisterRequest:
@@ -216,10 +216,24 @@ def _deployment_resource(policy: AgentPolicy, payload: TargetRegisterRequest) ->
         if len(named) != 1:
             raise ValueError("cluster-agent desired resource container identity is ambiguous")
         named[0]["image"] = payload.image
+        template = state["spec"]["template"]
+        if not isinstance(template, dict):
+            raise ValueError("cluster-agent desired resource template must be an object")
+        metadata = template.setdefault("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ValueError("cluster-agent template metadata must be an object")
+        annotations = metadata.setdefault("annotations", {})
+        if not isinstance(annotations, dict):
+            raise ValueError("cluster-agent template annotations must be an object")
+        annotations[TARGET_RUNTIME_IMAGE_ANNOTATION] = payload.image
         resource["state"] = state
         body[section]["resources"][index] = resource
     else:
         state = yaml.safe_load(cluster_agent_manifest(payload))
+        template = state["spec"]["template"]
+        template.setdefault("metadata", {}).setdefault("annotations", {})[
+            TARGET_RUNTIME_IMAGE_ANNOTATION
+        ] = payload.image
         resource = DesiredResource(
             resource_id="target-agent-deployment",
             scope="target-agent",
@@ -230,6 +244,49 @@ def _deployment_resource(policy: AgentPolicy, payload: TargetRegisterRequest) ->
             state=state,
         )
         body["desired_state"]["resources"].append(resource.model_dump())
+    return AgentPolicy.model_validate(body)
+
+
+def _runtime_config_resource(policy: AgentPolicy, payload: TargetRegisterRequest) -> AgentPolicy:
+    """Own only the two runtime image leaves and order them before agent rollout."""
+
+    body = policy.model_dump()
+    matches: list[tuple[str, int, JsonObject]] = []
+    for section in ("bootstrap", "desired_state"):
+        for index, resource in enumerate(body[section]["resources"]):
+            if (
+                resource.get("kind") == "ConfigMap"
+                and resource.get("namespace") == TARGET_NAMESPACE
+                and resource.get("name") == TARGET_RUNTIME_CONFIG_NAME
+            ):
+                matches.append((section, index, resource))
+    if len(matches) > 1:
+        raise ValueError("target runtime config desired resource identity is ambiguous")
+
+    resource_id = "target-runtime-config-images"
+    if matches:
+        section, index, existing = matches[0]
+        resource_id = str(existing.get("resource_id") or resource_id)
+        del body[section]["resources"][index]
+    state = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": TARGET_RUNTIME_CONFIG_NAME, "namespace": TARGET_NAMESPACE},
+        "data": {
+            TARGET_AGENT_IMAGE_KEY: payload.image,
+            NODE_COLLECTOR_IMAGE_KEY: payload.image,
+        },
+    }
+    resource = DesiredResource(
+        resource_id=resource_id,
+        scope="target-agent",
+        kind="ConfigMap",
+        namespace=TARGET_NAMESPACE,
+        name=TARGET_RUNTIME_CONFIG_NAME,
+        action="apply",
+        state=state,
+    )
+    body["bootstrap"]["resources"].insert(0, resource.model_dump())
     return AgentPolicy.model_validate(body)
 
 
@@ -297,10 +354,9 @@ def build_target_upgrade_plan(
         )
 
     payload = _registration_payload(registration, image)
-    rebased = _deployment_resource(
-        _rebase_provider_queries(current, payload.evidence_interval_seconds),
-        payload,
-    )
+    rebased = _rebase_provider_queries(current, payload.evidence_interval_seconds)
+    rebased = _runtime_config_resource(rebased, payload)
+    rebased = _deployment_resource(rebased, payload)
     policy_changed = _policy_without_generation(rebased) != _policy_without_generation(current)
     settings = registration.get("settings")
     current_image = str(settings.get("image") or "") if isinstance(settings, dict) else ""

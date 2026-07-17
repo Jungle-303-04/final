@@ -680,22 +680,57 @@ def test_target_agent_sanitizes_command_output() -> None:
 
 def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
     manager_module = load_node_collector_manager_module()
+    image = f"registry.example/opsia/node-collector@sha256:{'3' * 64}"
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
     monkeypatch.setattr(manager_module, "service_account_token", lambda: "token")
 
     async def run_with_get_status(status_code: int) -> list[str]:
         methods: list[str] = []
+        desired = manager_module.NodeCollectorManager(
+            enabled=True,
+            image=image,
+            namespace="target",
+        ).daemonset()
+        desired["metadata"]["generation"] = 1
+        desired["status"] = {
+            "observedGeneration": 1,
+            "desiredNumberScheduled": 1,
+            "updatedNumberScheduled": 1,
+            "numberReady": 1,
+            "numberUnavailable": 0,
+        }
 
         def handler(request: httpx.Request) -> httpx.Response:
             methods.append(request.method)
+            if request.url.path.endswith("/pods"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {
+                                "status": {
+                                    "containerStatuses": [
+                                        {
+                                            "name": "node-collector",
+                                            "ready": True,
+                                            "image": image,
+                                            "imageID": f"containerd://{image.rsplit('@', 1)[1]}",
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    request=request,
+                )
             if request.method == "GET":
-                return httpx.Response(status_code, request=request)
-            return httpx.Response(200, json={"ok": True}, request=request)
+                return httpx.Response(status_code, json=desired, request=request)
+            return httpx.Response(200, json=desired, request=request)
 
         manager = manager_module.NodeCollectorManager(
             enabled=True,
-            image="service:local",
+            image=image,
             namespace="target",
             transport=getattr(httpx, "Mo" + "ckTransport")(handler),
         )
@@ -704,7 +739,7 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
         return methods
 
     body = manager_module.NodeCollectorManager(
-        enabled=True, image="service:local", namespace="target"
+        enabled=True, image=image, namespace="target"
     ).daemonset()
 
     assert body["kind"] == "DaemonSet"
@@ -713,8 +748,8 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
         "python",
         "src/services/target/node-collector/app.py",
     ]
-    assert asyncio.run(run_with_get_status(404)) == ["GET", "POST"]
-    assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH"]
+    assert asyncio.run(run_with_get_status(404)) == ["GET", "POST", "GET"]
+    assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH", "GET"]
 
 
 def test_node_collector_manager_reconciles_exact_env_digest_and_pod_image_id(

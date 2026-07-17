@@ -30,6 +30,12 @@ from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway.requests import AgentPolicy, DesiredResource
 from packages.contracts.interfaces import ManagementPlaneClient
+from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
+    TARGET_AGENT_IMAGE_KEY,
+    TARGET_RUNTIME_CONFIG_NAME,
+    require_target_image_digest,
+)
 
 TRACER = get_tracer("target-cluster-agent.reconciler")
 LOGGER = get_logger(__name__)
@@ -168,6 +174,7 @@ class DesiredStateReconciler:
                 results.append(result.__dict__)
                 if result.status == RECONCILE_FAILED:
                     status = RECONCILE_FAILED
+                    break
                 elif result.status == RECONCILE_APPLIED and status != RECONCILE_FAILED:
                     status = RECONCILE_APPLIED
 
@@ -238,13 +245,37 @@ class DesiredStateReconciler:
             raise PermissionError(
                 f"{self.cluster_role} agent cannot reconcile namespace {resource.namespace}"
             )
-        if resource.kind == "ConfigMap" and resource.name != "target-agent-policy":
-            raise PermissionError("target-agent configmap control is name-scoped")
+        if resource.kind == "ConfigMap":
+            if resource.name not in {"target-agent-policy", TARGET_RUNTIME_CONFIG_NAME}:
+                raise PermissionError("target-agent configmap control is name-scoped")
+            if resource.name == TARGET_RUNTIME_CONFIG_NAME:
+                self.ensure_runtime_image_patch(resource)
         if resource.scope == "target-agent" and resource.kind == "Deployment":
             if resource.name != "cluster-agent":
                 raise PermissionError("target-agent deployment control is name-scoped")
         if resource.scope == "system" and resource.kind == "Deployment":
             raise PermissionError("system deployment reconciliation is not enabled")
+
+    def ensure_runtime_image_patch(self, resource: DesiredResource) -> None:
+        expected = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": TARGET_RUNTIME_CONFIG_NAME, "namespace": "target"},
+        }
+        if any(resource.state.get(key) != value for key, value in expected.items()):
+            raise PermissionError("target runtime config patch identity is invalid")
+        if set(resource.state) != {*expected, "data"}:
+            raise PermissionError("target runtime config patch fields are not allowed")
+        data = resource.state.get("data")
+        if not isinstance(data, dict) or set(data) != {
+            TARGET_AGENT_IMAGE_KEY,
+            NODE_COLLECTOR_IMAGE_KEY,
+        }:
+            raise PermissionError("target runtime config patch is image-leaf scoped")
+        target_image = require_target_image_digest(str(data[TARGET_AGENT_IMAGE_KEY]))
+        collector_image = require_target_image_digest(str(data[NODE_COLLECTOR_IMAGE_KEY]))
+        if target_image != collector_image:
+            raise PermissionError("target runtime images must use one exact digest")
 
     def policy_resources(self, policy: AgentPolicy) -> Iterable[DesiredResource]:
         yield from policy.bootstrap.resources

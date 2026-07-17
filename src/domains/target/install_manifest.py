@@ -18,7 +18,9 @@ from packages.config.security import (
 )
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
     SANDBOX_NAMESPACE,
+    TARGET_AGENT_IMAGE_KEY,
     TARGET_NAMESPACE,
     TARGET_RBAC_MANIFEST_VERSION,
     TARGET_RBAC_VERSION_ANNOTATION,
@@ -375,7 +377,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
-    resourceNames: ["target-agent-policy"]
+    resourceNames: ["target-agent-policy", "target-runtime-config"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -543,7 +545,8 @@ data:
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}{pod_exec_namespaces_line(payload)}
   NODE_CONTROL_ENABLED: {yaml_string(str(payload.cluster_role != MANAGEMENT_CLUSTER_ROLE).lower())}
-  NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
+  {TARGET_AGENT_IMAGE_KEY}: {yaml_string(payload.image)}
+  {NODE_COLLECTOR_IMAGE_KEY}: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(namespace)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
   COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"

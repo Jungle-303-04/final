@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 
@@ -25,8 +26,21 @@ CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-fast-lane"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
 FAST_LANE_NODE_LABEL_VALUE = "fast-lane"
-TARGET_RBAC_MANIFEST_VERSION = "2026-07-17.1"
+TARGET_RBAC_MANIFEST_VERSION = "2026-07-17.2"
 TARGET_RBAC_VERSION_ANNOTATION = "opsia.dev/target-rbac-version"
+TARGET_RUNTIME_CONFIG_NAME = "target-runtime-config"
+TARGET_AGENT_IMAGE_KEY = "TARGET_AGENT_IMAGE"
+NODE_COLLECTOR_IMAGE_KEY = "NODE_COLLECTOR_IMAGE"
+TARGET_RUNTIME_IMAGE_ANNOTATION = "opsia.dev/runtime-image"
+TARGET_IMAGE_DIGEST_PATTERN = re.compile(r"^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$")
+
+
+def require_target_image_digest(image: str) -> str:
+    candidate = image.strip()
+    if not TARGET_IMAGE_DIGEST_PATTERN.fullmatch(candidate):
+        raise ValueError("target image must use an immutable sha256 digest")
+    return candidate
+
 
 # Kubernetes evidence query contract. Namespace snapshots remain the default;
 # the cluster-events scope is an explicit, separately authorized all-namespace
