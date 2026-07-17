@@ -92,10 +92,10 @@ function legendItems(
   if (variant === "infra-topology") {
     return [
       { labelKey: "resources.infraMap.legend.topology.edge", mark: "solid-line" },
+      { labelKey: "resources.infraMap.legend.topology.metricUnknown", mark: "dashed-line" },
       { labelKey: "resources.infraMap.legend.status.healthy", mark: "healthy-dot" },
       { labelKey: "resources.infraMap.legend.status.pressure", mark: "pressure-dot" },
       { labelKey: "resources.infraMap.legend.status.critical", mark: "abnormal-card" },
-      { labelKey: "resources.infraMap.legend.topology.metricUnknown", mark: "dashed-line" },
     ];
   }
   if (variant === "infra-navigator") {

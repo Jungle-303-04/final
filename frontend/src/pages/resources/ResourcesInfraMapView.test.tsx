@@ -53,6 +53,11 @@ describe("ResourcesInfraMapView", () => {
     expect(legend.textContent).toContain("Placement relationship");
     expect(legend.textContent).toContain("Resource pressure");
     expect(legend.textContent).toContain("Unknown");
+    const topologyLegendText = legend.textContent ?? "";
+    expect(topologyLegendText.indexOf("Unknown"))
+      .toBeGreaterThan(topologyLegendText.indexOf("Placement relationship"));
+    expect(topologyLegendText.indexOf("Healthy"))
+      .toBeGreaterThan(topologyLegendText.indexOf("Unknown"));
 
     fireEvent.click(screen.getByRole("button", { name: "Navigator" }));
     expect(screen.getByText(
