@@ -955,6 +955,115 @@ def test_target_agent_advertises_catalog_helm_runner_capability() -> None:
     assert "catalog_helm_upgrade_cas.v1" in module.AgentConfig.AGENT_CAPABILITIES
 
 
+def helm_values_preview_payload() -> dict[str, object]:
+    return {
+        "namespace": "sandbox",
+        "release_name": "storefront",
+        "catalog_item_id": "catalog-redis",
+        "catalog_version": "1.0.0",
+        "values": {"master.persistence.storageClass": "gp3"},
+        "guard": {
+            "expected_revision": 3,
+            "storage": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Secret",
+                "namespace": "sandbox",
+                "name": "sh.helm.release.v1.storefront.v3",
+                "uid": "storage-uid-3",
+            },
+            "storage_resource_version": "1042",
+            "chart_name": "redis",
+            "chart_version": "22.0.0",
+        },
+    }
+
+
+def test_helm_values_preview_revalidates_storage_before_real_runner(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+
+    class LiveReleaseKubernetesClient(StubKubernetesClient):
+        async def get_namespaced_resource(self, **_kwargs: object) -> dict[str, object]:
+            return {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "namespace": "sandbox",
+                    "name": "sh.helm.release.v1.storefront.v3",
+                    "uid": "storage-uid-3",
+                    "resourceVersion": "1042",
+                    "labels": {"owner": "helm", "name": "storefront", "version": "3"},
+                },
+            }
+
+    agent.kubernetes = LiveReleaseKubernetesClient()
+    calls: list[object] = []
+    preview = SimpleNamespace(model_dump=lambda **_kwargs: {"redaction_applied": True})
+    monkeypatch.setattr(
+        module,
+        "run_helm_values_preview",
+        lambda payload: (
+            calls.append(payload)
+            or SimpleNamespace(succeeded=True, preview=preview, error_code="", returncode=0)
+        ),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.HELM_VALUES_PREVIEW_ACTION,
+                "payload": helm_values_preview_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is False
+    assert result["preview"] == {"redaction_applied": True}
+    assert len(calls) == 1
+    assert calls[0].guard.storage_resource_version == "1042"
+
+
+def test_helm_values_preview_rejects_stale_storage_before_runner(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_helm_values_preview",
+        lambda payload: calls.append(payload),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.HELM_VALUES_PREVIEW_ACTION,
+                "payload": helm_values_preview_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "helm_release_guard_stale"
+    assert calls == []
+
+
+def test_target_agent_advertises_helm_values_preview_capability() -> None:
+    module = load_agent_module()
+
+    assert module.HELM_VALUES_PREVIEW_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
+
+
 def test_catalog_helm_upgrade_rejects_stale_secret_before_runner(monkeypatch) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
