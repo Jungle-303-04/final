@@ -89,6 +89,7 @@ export const applicationsKo = {
   "applications.status": "결과",
   "applications.actor": "주체",
   "applications.time": "시각",
+  "applications.gitOps": "GitOps",
   "applications.gitOpsChange": "GitOps 변경 보기",
   "applications.noDeployments": "기록된 배포 이력이 없습니다.",
   "applications.aligned": "Git과 일치합니다.",

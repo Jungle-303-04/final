@@ -87,6 +87,7 @@ export const applicationMessageKeys = {
   status: "applications.status",
   actor: "applications.actor",
   time: "applications.time",
+  gitOps: "applications.gitOps",
   gitOpsChange: "applications.gitOpsChange",
   noDeployments: "applications.noDeployments",
   aligned: "applications.aligned",

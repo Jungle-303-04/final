@@ -89,6 +89,7 @@ export const applicationsEn = {
   "applications.status": "Result",
   "applications.actor": "Actor",
   "applications.time": "Time",
+  "applications.gitOps": "GitOps",
   "applications.gitOpsChange": "View GitOps change",
   "applications.noDeployments": "No deployment history is available.",
   "applications.aligned": "Aligned with Git.",

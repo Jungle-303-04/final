@@ -37,7 +37,7 @@ export function ApplicationDeploymentsPanel({
             <TableHead>{copy.time}</TableHead><TableHead>{copy.environment}</TableHead>
             <TableHead>{copy.version}</TableHead><TableHead>{copy.gitSha}</TableHead>
             <TableHead>{copy.actor}</TableHead><TableHead>{copy.status}</TableHead>
-            <TableHead><span className="sr-only">GitOps</span></TableHead>
+            <TableHead><span className="sr-only">{copy.gitOps}</span></TableHead>
           </TableRow></TableHeader>
           <TableBody>{deployments.map((deployment) => (
             <TableRow key={deployment.id}>

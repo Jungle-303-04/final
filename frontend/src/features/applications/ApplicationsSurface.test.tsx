@@ -296,6 +296,7 @@ describe("S10 Applications surface", () => {
 
     await user.click(within(tabs).getByRole("tab", { name: "Deployments" }));
     const gitOpsLink = await screen.findByRole("link", { name: /View GitOps change/ });
+    expect(screen.getByRole("columnheader", { name: "GitOps" })).toBeTruthy();
     expect(gitOpsLink.getAttribute("href")).toBe(
       "/gitops?clusters=cluster-1&labels=team%3Dcheckout&detail=change%3Achange-42",
     );
