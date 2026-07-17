@@ -307,7 +307,11 @@ class StubClusterDb:
             "agent_id": "agent-1",
             "status": "connected",
             "capabilities": ["inventory", "commands"],
-            "details": {},
+            "details": {
+                "traffic_sources": {
+                    "cluster": {"kubernetes_version": "v1.33.1"},
+                },
+            },
             "last_seen_at": datetime.now(UTC).isoformat(),
             "created_at": datetime.now(UTC).isoformat(),
             "updated_at": datetime.now(UTC).isoformat(),
@@ -2013,6 +2017,40 @@ def test_cluster_summary_reads_detected_provider_from_persisted_snapshot_envelop
     )
 
     assert summary.provider == "eks"
+
+
+def test_cluster_summary_prefers_agent_observed_server_version_to_kubelet_versions() -> None:
+    summary = cluster_summary(
+        {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "prod",
+            "environment": "production",
+            "status": "registered",
+            "settings": {},
+        },
+        {
+            "agent_id": "agent-1",
+            "status": "connected",
+            "details": {
+                "traffic_sources": {
+                    "cluster": {"kubernetes_version": "v1.34.0"},
+                },
+            },
+        },
+        latest_snapshot={
+            "summary": {
+                "summary": {
+                    "nodes": [
+                        {"version": "v1.33.1"},
+                        {"version": "v1.33.2"},
+                    ],
+                },
+            },
+        },
+    )
+
+    assert summary.kubernetes_version == "v1.34.0"
 
 
 def test_cluster_summary_generic_registration_falls_back_to_onprem() -> None:

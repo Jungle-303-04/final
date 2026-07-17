@@ -945,7 +945,7 @@ def cluster_summary(
         else cluster["status"]
     )
     kubernetes_version, namespace_count, crd_discovery_status = cluster_observation_metadata(
-        latest_snapshot
+        latest_snapshot, latest_agent
     )
     return ClusterSummary(
         workspace_id=cluster["workspace_id"],
@@ -970,6 +970,7 @@ def cluster_summary(
 
 def cluster_observation_metadata(
     latest_snapshot: dict[str, Any] | None,
+    latest_agent: dict[str, Any] | None,
 ) -> tuple[str | None, int | None, str | None]:
     source = snapshot_source_summary(latest_snapshot)
     if source is None:
@@ -980,7 +981,17 @@ def cluster_observation_metadata(
         str(node.get("version") or "").strip() for node in node_items if isinstance(node, dict)
     }
     versions.discard("")
-    kubernetes_version = next(iter(versions)) if len(versions) == 1 else None
+    details = (latest_agent or {}).get("details")
+    traffic_sources = details.get("traffic_sources") if isinstance(details, dict) else None
+    traffic_cluster = traffic_sources.get("cluster") if isinstance(traffic_sources, dict) else None
+    observed_server_version = (
+        str(traffic_cluster.get("kubernetes_version") or "").strip()
+        if isinstance(traffic_cluster, dict)
+        else ""
+    )
+    kubernetes_version = observed_server_version or (
+        next(iter(versions)) if len(versions) == 1 else None
+    )
     namespaces = source.get("namespaces")
     namespace_count = (
         len({value for value in namespaces if isinstance(value, str) and value})
