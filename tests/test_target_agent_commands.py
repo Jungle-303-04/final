@@ -991,6 +991,64 @@ def test_catalog_helm_upgrade_rejects_stale_secret_before_runner(monkeypatch) ->
     assert calls == []
 
 
+def test_catalog_helm_upgrade_fails_closed_when_secret_read_is_unavailable(
+    monkeypatch,
+) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+
+    class UnavailableKubernetesClient(StubKubernetesClient):
+        async def get_namespaced_resource(self, **_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("credential material must not leak")
+
+    agent.kubernetes = UnavailableKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_catalog_helm_install",
+        lambda payload: calls.append(payload),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-redis",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "storefront",
+                    "release_name": "storefront",
+                    "values": {"master.persistence.storageClass": "gp3"},
+                    "upgrade_guard": {
+                        "expected_revision": 3,
+                        "storage": {
+                            "api_group": "",
+                            "version": "v1",
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "sh.helm.release.v1.storefront.v3",
+                            "uid": "storage-uid-3",
+                        },
+                        "storage_resource_version": "1042",
+                        "chart_name": "redis",
+                        "chart_version": "22.0.0",
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "helm_release_guard_unavailable"
+    assert "credential material" not in str(result)
+    assert calls == []
+
+
 def test_catalog_helm_install_command_preserves_runner_failure(monkeypatch) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
