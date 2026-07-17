@@ -1,6 +1,8 @@
 import type { IssuesMessageKey } from "../../keys/issues";
 
 export const issuesKo = {
+  "issues.page.title": "인시던트 현황",
+  "issues.page.description": "감지된 장애의 영향, 원인 분석과 복구 진행 상황을 확인합니다.",
   "issues.surface.list": "이슈",
   "issues.surface.listEmpty": "현재 감지된 인시던트가 없습니다.",
   "issues.surface.listLoading": "이슈 불러오는 중",

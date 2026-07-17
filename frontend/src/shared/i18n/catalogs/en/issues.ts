@@ -1,6 +1,8 @@
 import type { IssuesMessageKey } from "../../keys/issues";
 
 export const issuesEn = {
+  "issues.page.title": "Incident overview",
+  "issues.page.description": "Review detected impact, root-cause analysis, and recovery progress.",
   "issues.surface.list": "Incidents",
   "issues.surface.listEmpty": "No incidents are currently detected.",
   "issues.surface.listLoading": "Loading issues",

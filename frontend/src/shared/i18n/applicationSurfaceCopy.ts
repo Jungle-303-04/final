@@ -2,6 +2,7 @@ import type { SupportedLocale } from "./types";
 
 const copy = {
   ko: {
+    overviewTitle: "애플리케이션 현황",
     title: "애플리케이션",
     description: "흩어진 리소스를 앱 단위로 묶어 건강, 배포, 변경을 봅니다.",
     search: "애플리케이션 검색",
@@ -61,6 +62,7 @@ const copy = {
     manifest: "매니페스트",
   },
   en: {
+    overviewTitle: "Application overview",
     title: "Applications",
     description: "See health, deployments, and changes grouped by application.",
     search: "Search applications",

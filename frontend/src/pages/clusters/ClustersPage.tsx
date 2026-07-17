@@ -1,4 +1,4 @@
-import { CircleAlert, Plus, RefreshCw } from "lucide-react";
+import { CircleAlert, Plus, RefreshCw, Server } from "lucide-react";
 import { useState } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
@@ -15,6 +15,7 @@ import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductPageHeader } from "../../shared/ui/ProductPageHeader";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
@@ -68,13 +69,9 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
   }
   return (
     <ProductPageFrame className="gap-6">
-      <header className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] lg:items-end">
-        <div className="min-w-0">
-          <h2 className="font-display text-2xl font-normal tracking-wide">{t("clusters.title")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{t("clusters.description")}</p>
-        </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0 flex-1" />
+      <ProductPageHeader
+        actions={(
+          <>
           {canManageClusters ? (
             <Button onClick={() => setConnectOpen(true)} type="button">
               <Plus aria-hidden="true" />
@@ -91,8 +88,13 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
           >
             <RefreshCw aria-hidden="true" className={scope.collection.refreshing ? "motion-safe:animate-spin" : undefined} />
           </Button>
-        </div>
-      </header>
+          </>
+        )}
+        description={t("clusters.description")}
+        icon={Server}
+        meta={<span className="truncate font-medium text-foreground">{session?.workspaceId}</span>}
+        title={t("clusters.page.title")}
+      />
 
       {scope.collection.refreshFailure ? (
         <Alert>

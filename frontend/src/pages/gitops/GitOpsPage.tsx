@@ -6,6 +6,7 @@ import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/primitives/tabs";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductPageHeader } from "../../shared/ui/ProductPageHeader";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { SuccessCheckIcon } from "../../shared/ui/SuccessCheckIcon";
 import { ManifestWorkspace } from "./ManifestWorkspace";
@@ -15,7 +16,6 @@ import { RunWorkspace } from "./RunWorkspace";
 import { useGitOpsPageController, type WorkflowFeedback } from "./useGitOpsPageController";
 import { NativeSelect, policyLabel } from "./WorkflowFormControls";
 import { WorkflowOverview } from "./WorkflowOverview";
-import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowPlanPicker } from "./WorkflowPlanPicker";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
 
@@ -27,11 +27,10 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
 
   return (
     <ProductPageFrame className="gap-4">
-      <WorkflowInlineHeading
-        as="h1"
-        icon={<GitBranch aria-hidden="true" />}
-        title={t("workflows.title")}
-        variant="page"
+      <ProductPageHeader
+        description={t("workflows.page.description")}
+        icon={GitBranch}
+        title={t("workflows.page.title")}
       />
       <Tabs
         className="min-w-0 gap-4"

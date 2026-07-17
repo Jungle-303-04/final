@@ -1,4 +1,6 @@
 export const workflowsEn = {
+  "workflows.page.title": "GitOps change management",
+  "workflows.page.description": "Plan, review, and track controlled deployment changes from Git.",
   "workflows.title": "GitOps",
   "workflows.section.aria": "GitOps views",
   "workflows.section.changes": "Changes",

@@ -1,3 +1,4 @@
+import { Siren } from "lucide-react";
 import { useMemo } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type { ClusterScopeFailure } from "../../features/cluster-scope/clusterScopeContract";
@@ -25,6 +26,7 @@ import { useI18n } from "../../shared/i18n";
 import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductPageHeader } from "../../shared/ui/ProductPageHeader";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 
 const FAILURE_MESSAGE: Record<IssuesFailureCode, MessageKey> = {
@@ -135,6 +137,16 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
 
   return (
     <ProductPageFrame>
+      <ProductPageHeader
+        description={t("issues.page.description")}
+        icon={Siren}
+        meta={(
+          <span className="truncate font-medium text-foreground">
+            {clusterId ?? t("clusterScope.all")}
+          </span>
+        )}
+        title={t("issues.page.title")}
+      />
       <IssuesSurface
         clusterId={clusterId}
         copy={copy}

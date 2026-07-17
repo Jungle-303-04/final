@@ -1,4 +1,5 @@
 export type AlertsMessageKey =
+  | "alerts.page.title"
   | "alerts.title"
   | "alerts.description"
   | "alerts.refresh"

@@ -8,6 +8,7 @@ import type {
 } from "../../features/alerts/alertEventsContract";
 import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductPageHeader } from "../../shared/ui/ProductPageHeader";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button, buttonVariants } from "../../shared/ui/primitives/button";
@@ -37,23 +38,27 @@ export function AlertsPage({ rulesPort = EMPTY_ALERT_RULES_PORT }: { rulesPort?:
 
   return (
     <ProductPageFrame className="gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="font-display text-2xl font-normal tracking-wide">{t("alerts.title")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("alerts.description")}
-          </p>
-        </div>
-        {selectedTab === "events" ? <Button
-          aria-label={t("alerts.refresh")}
-          onClick={alerts.refresh}
-          size="icon"
-          type="button"
-          variant="outline"
-        >
-          <RefreshCw aria-hidden="true" />
-        </Button> : null}
-      </header>
+      <ProductPageHeader
+        actions={selectedTab === "events" ? (
+          <Button
+            aria-label={t("alerts.refresh")}
+            onClick={alerts.refresh}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw aria-hidden="true" />
+          </Button>
+        ) : null}
+        description={t("alerts.description")}
+        icon={BellRing}
+        meta={alerts.unreadCount > 0 ? (
+          <Badge variant="destructive">
+            {t("alerts.sidebar.unread", { count: formatNumber(alerts.unreadCount) })}
+          </Badge>
+        ) : null}
+        title={t("alerts.page.title")}
+      />
 
       <div aria-label={t("alerts.tabs.label")} className="flex items-center gap-1 border-b" role="tablist">
         <button

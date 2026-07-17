@@ -1,6 +1,7 @@
 import type { ClustersMessageKey } from "../../keys/clusters";
 
 export const clustersKo = {
+  "clusters.page.title": "클러스터 현황",
   "clusters.title": "클러스터",
   "clusters.description": "컨트롤 플레인에서 확인한 연결 서버 묶음",
   "clusters.search.aria": "표시된 클러스터 검색",

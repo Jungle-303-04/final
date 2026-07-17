@@ -1,4 +1,6 @@
 export type IssuesMessageKey =
+  | "issues.page.title"
+  | "issues.page.description"
   | "issues.surface.list"
   | "issues.surface.listEmpty"
   | "issues.surface.listLoading"

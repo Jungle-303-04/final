@@ -4,6 +4,7 @@ import {
   GitBranch,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import { presentProductSession } from "../../features/auth/sessionPresentation";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductPageHeader } from "../../shared/ui/ProductPageHeader";
 import { Badge } from "../../shared/ui/primitives/badge";
 import {
   Card,
@@ -39,12 +41,11 @@ export function SettingsPage() {
 
   return (
     <ProductPageFrame className="gap-6">
-      <header className="max-w-3xl">
-        <h2 className="font-display text-2xl font-normal tracking-wide">{t("settings.title")}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          {t("settings.description")}
-        </p>
-      </header>
+      <ProductPageHeader
+        description={t("settings.description")}
+        icon={SlidersHorizontal}
+        title={t("settings.page.title")}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SettingsCard

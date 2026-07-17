@@ -1,6 +1,7 @@
 import type { AlertsMessageKey } from "../../keys/alerts";
 
 export const alertsKo = {
+  "alerts.page.title": "알림 현황",
   "alerts.title": "알림",
   "alerts.description": "감시 조건을 넘은 리소스와 운영자가 처리한 기록을 함께 봅니다.",
   "alerts.refresh": "알림 새로고침",

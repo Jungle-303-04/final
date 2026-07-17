@@ -1,4 +1,5 @@
 export type ClustersMessageKey =
+  | "clusters.page.title"
   | "clusters.title"
   | "clusters.description"
   | "clusters.search.aria"

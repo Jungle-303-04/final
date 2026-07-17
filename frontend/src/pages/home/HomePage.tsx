@@ -1,10 +1,12 @@
-import { CircleAlert } from "lucide-react";
+import { Activity, CircleAlert } from "lucide-react";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductPageHeader } from "../../shared/ui/ProductPageHeader";
 import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
+import { Badge } from "../../shared/ui/primitives/badge";
 import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { HomeClusterGrid } from "./HomeClusterGrid";
@@ -13,6 +15,7 @@ import { HomeLiveBand } from "./HomeLiveBand";
 import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({ port }: { port: HomePort }) {
+  const { t } = useI18n();
   const state = useHomePageState(port);
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
@@ -37,15 +40,30 @@ export function HomePage({ port }: { port: HomePort }) {
 
   return (
     <ProductPageFrame>
-      <header className="flex min-w-0 justify-end">
-        <PollingFreshness
-          connectionState={homeConnectionState(state)}
-          dataUpdatedAt={state.dataUpdatedAt}
-          intervalSeconds={state.selectedNodeName ? 5 : 10}
-          isFetching={refreshing}
-          onRefresh={state.refresh}
-        />
-      </header>
+      <ProductPageHeader
+        actions={(
+          <PollingFreshness
+            connectionState={homeConnectionState(state)}
+            dataUpdatedAt={state.dataUpdatedAt}
+            intervalSeconds={state.selectedNodeName ? 5 : 10}
+            isFetching={refreshing}
+            onRefresh={state.refresh}
+          />
+        )}
+        description={t("home.page.description")}
+        icon={Activity}
+        meta={(
+          <>
+            <span className="truncate font-medium text-foreground">
+              {selectedCluster?.name ?? t("clusterScope.all")}
+            </span>
+            {selectedCluster?.environment ? (
+              <Badge variant="outline">{selectedCluster.environment}</Badge>
+            ) : null}
+          </>
+        )}
+        title={t("home.page.title")}
+      />
       {!state.selectedClusterExists ? (
         state.clusterSelection.kind === "unfiltered" ? (
           <HomeClusterGrid clusters={state.choices.data.clusters} />

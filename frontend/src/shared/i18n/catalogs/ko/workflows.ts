@@ -1,6 +1,8 @@
 import type { WorkflowsMessageKey } from "../../keys/workflows";
 
 export const workflowsKo = {
+  "workflows.page.title": "GitOps 변경 관리",
+  "workflows.page.description": "Git을 기준으로 배포 변경을 계획하고 검토하며 진행 상태를 추적합니다.",
   "workflows.title": "GitOps",
   "workflows.section.aria": "GitOps 보기",
   "workflows.section.changes": "변경",

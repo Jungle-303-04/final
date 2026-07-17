@@ -1,6 +1,7 @@
 import type { ClustersMessageKey } from "../../keys/clusters";
 
 export const clustersEn = {
+  "clusters.page.title": "Cluster overview",
   "clusters.title": "Clusters",
   "clusters.description": "Connected server groups reported by the control plane",
   "clusters.search.aria": "Search displayed clusters",

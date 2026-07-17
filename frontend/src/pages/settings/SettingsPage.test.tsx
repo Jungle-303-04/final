@@ -38,7 +38,7 @@ describe("SettingsPage", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "설정", level: 2 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "워크스페이스 설정", level: 2 })).toBeTruthy();
     expect(screen.getByText("default")).toBeTruthy();
     expect(screen.getByText("Woo Nyong")).toBeTruthy();
     expect(screen.getByText("woonyong.kr@gmail.com")).toBeTruthy();

@@ -1,6 +1,7 @@
 import type { AlertsMessageKey } from "../../keys/alerts";
 
 export const alertsEn = {
+  "alerts.page.title": "Alert overview",
   "alerts.title": "Alerts",
   "alerts.description": "Review resources that crossed a watch condition and their operator history.",
   "alerts.refresh": "Refresh alerts",
