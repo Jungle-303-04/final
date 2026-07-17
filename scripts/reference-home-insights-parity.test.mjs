@@ -27,6 +27,9 @@ const FEATURE_IDS = [
 
 const IMPLEMENTED = new Set([
   "reference.feature.038",
+  "reference.feature.039",
+  "reference.feature.040",
+  "reference.feature.041",
   "reference.feature.042",
   "reference.feature.063",
   "reference.feature.065",
@@ -43,10 +46,25 @@ const IMPLEMENTED = new Set([
   "reference.feature.123",
 ]);
 
-const PROVIDER_BLOCKED = new Set([
+const HOME_SOURCE_BANDS = new Set([
   "reference.feature.039",
   "reference.feature.040",
   "reference.feature.041",
+]);
+
+const HOME_SOURCE_EVIDENCE = new Map([
+  ["web/src/components/home/HomeView.tsx", "0d0af15cf15dea17ca0acadcf01e5a4486e512c1b832e2864b5cf188e2ba065b"],
+  ["web/src/components/home/TopologyPreview.tsx", "6f20ee354d8d9a873afcb7e2648a59cdf0b5f44130b5fa296a7e0184e3a6d786"],
+  ["web/src/components/home/ActivitySummary.tsx", "d0441196600296ef3aa56c09d5f35356322bfe78e770cf5fe88695411163b06c"],
+  ["web/src/components/home/TrafficSummary.tsx", "f6865a6c432ed9ada28b236e1c64cb9cd4e1db136987e25fa4c1fd49c7b7bb4c"],
+  ["web/src/components/home/HelmSummary.tsx", "94d4c23f7cba65d0d305979403bacb7ef9a00fc6533a427e1b1db33ff05908fb"],
+  ["web/src/components/home/CostCard.tsx", "610f331db7c1b9860ad92fadf8408b40c11e016348ed190e35e89828193bebb1"],
+  ["web/src/components/home/CertificateHealthCard.tsx", "fc8e4066154e87e3cd0b90a0cf0bdda559f0dd6a1d714ec5a130bc3cc242ddf1"],
+  ["web/src/components/home/NetworkPolicyCoverageCard.tsx", "f500058d50c4fead4ccef4656ddce627c3d3274e1d2d4be402d52d3f52f8272a"],
+  ["web/src/components/home/GitOpsControllersCard.tsx", "6fd5fe961d7ead7f35605e5310e377bb960672be549799287862349462d9e045"],
+  ["web/src/api/client.ts", "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f"],
+  ["internal/server/dashboard.go", "b3cd6345ea096685a4a8c76e50f2a50fa5888cf9081a0eeca047cbe15edb755f"],
+  ["internal/server/dashboard_gitops.go", "ae376fc4278b359105ab8002ab97ba68e055e58ffa1416d1f04d5a8d6d0b7298"],
 ]);
 
 test("Home, Issues, Applications, Topology, and Timeline rows own one source decision", async () => {
@@ -94,16 +112,33 @@ test("Home, Issues, Applications, Topology, and Timeline rows own one source dec
   }
 });
 
-test("unavailable Home providers and settings mutations remain explicit", async () => {
-  const ports = await readJson("docs/migration/reference-feature-port-map.json");
-  for (const contractId of PROVIDER_BLOCKED) {
-    const blocked = Object.values(ports.features[contractId].coverage)
-      .filter((item) => item?.state === "blocked");
-    assert.ok(blocked.length > 0, `${contractId} requires a blocked boundary`);
-    assert.ok(
-      blocked.every((item) => typeof item.reason === "string" && item.reason.length > 0),
-      `${contractId} requires an actionable blocked reason`,
-    );
+test("Home source bands own exact immutable source evidence and implemented ports", async () => {
+  const [ports, aliases, classifications, sourceLedger] = await Promise.all([
+    readJson("docs/migration/reference-feature-port-map.json"),
+    readJson("docs/migration/reference-feature-source-aliases.json"),
+    readJson("docs/migration/reference-ui-delta-classifications.json"),
+    readJson("docs/migration/reference-source-ledger.json"),
+  ]);
+  const sourceByPath = new Map(sourceLedger.files.map((file) => [file.path, file]));
+  const interactions = Object.entries(classifications.classifications)
+    .flatMap(([path, classification]) => (
+      (classification.interactions ?? []).map((interaction) => ({ interaction, path }))
+    ));
+
+  for (const contractId of HOME_SOURCE_BANDS) {
+    const port = ports.features[contractId];
+    const sourceKey = aliases.aliases[contractId];
+    const owner = interactions.find(({ interaction }) => interaction.sourceKey === sourceKey);
+
+    assert.equal(port.deliveryStatus, "implemented", contractId);
+    assert.equal(port.coverage.backend.state, "implemented", contractId);
+    assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    assert.equal(owner?.path, "web/src/components/home/HomeView.tsx", contractId);
+    assert.equal(owner?.interaction.opsiaPort.state, "in_progress", contractId);
+    assert.equal(owner?.interaction.opsiaPort.blockedReason, null, contractId);
+  }
+  for (const [path, sha256] of HOME_SOURCE_EVIDENCE) {
+    assert.equal(sourceByPath.get(path)?.sha256, sha256, path);
   }
 });
 

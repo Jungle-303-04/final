@@ -144,6 +144,73 @@ export function toHomeInsights(
 ): HomeInsights {
   const clusterId = canonicalIdentity(requestedClusterId);
   assertSameIdentity(wire.cluster_id, clusterId);
+  const topologyCoverage = toInsightCoverage(wire.topology.coverage);
+  const topologyCounts = {
+    nodeCount: nullableNonNegativeInteger(wire.topology.node_count),
+    edgeCount: nullableNonNegativeInteger(wire.topology.edge_count),
+    omittedNodeCount: nullableNonNegativeInteger(wire.topology.omitted_node_count),
+    omittedEdgeCount: nullableNonNegativeInteger(wire.topology.omitted_edge_count),
+  };
+  const topologyUnavailable = topologyCoverage.availability === "unavailable";
+  if (
+    topologyUnavailable !== Object.values(topologyCounts).every((value) => value === null) ||
+    topologyUnavailable !== (wire.topology.relation_completeness === "unavailable") ||
+    (topologyCoverage.availability === "available" &&
+      wire.topology.relation_completeness !== "exact") ||
+    (topologyCoverage.availability === "partial" &&
+      wire.topology.relation_completeness !== "partial")
+  ) {
+    invalidResponse();
+  }
+  const trafficCoverage = toInsightCoverage(wire.explore.traffic.coverage);
+  const costCoverage = toInsightCoverage(wire.explore.cost.coverage);
+  const networkPolicyCoverage = toInsightCoverage(wire.posture.network_policy.coverage);
+  const totalPolicies = nullableNonNegativeInteger(wire.posture.network_policy.total_policies);
+  const coveredWorkloads = nullableNonNegativeInteger(
+    wire.posture.network_policy.covered_workloads,
+  );
+  const totalWorkloads = nullableNonNegativeInteger(wire.posture.network_policy.total_workloads);
+  const networkUnavailable = networkPolicyCoverage.availability === "unavailable";
+  if (
+    networkUnavailable !== [totalPolicies, coveredWorkloads, totalWorkloads].every(
+      (value) => value === null,
+    ) ||
+    (coveredWorkloads !== null && totalWorkloads !== null && coveredWorkloads > totalWorkloads)
+  ) {
+    invalidResponse();
+  }
+  const gitopsCoverage = toInsightCoverage(wire.posture.gitops.coverage);
+  const controllerCount = nullableNonNegativeInteger(wire.posture.gitops.controller_count);
+  const providerCounts = positiveCountMap(wire.posture.gitops.provider_counts, 20);
+  const healthCounts = positiveCountMap(wire.posture.gitops.health_counts, 40);
+  const gitopsUnavailable = gitopsCoverage.availability === "unavailable";
+  if (
+    gitopsUnavailable !== (controllerCount === null) ||
+    (gitopsUnavailable && (Object.keys(providerCounts).length > 0 || Object.keys(healthCounts).length > 0)) ||
+    (controllerCount !== null && (
+      Object.values(providerCounts).reduce((sum, count) => sum + count, 0) > controllerCount ||
+      Object.values(healthCounts).reduce((sum, count) => sum + count, 0) > controllerCount
+    ))
+  ) {
+    invalidResponse();
+  }
+  const auditCoverage = toInsightCoverage(wire.posture.audit.coverage);
+  const totalCheckCount = nullableNonNegativeInteger(wire.posture.audit.total_check_count);
+  const totalFindingCount = nullableNonNegativeInteger(wire.posture.audit.total_finding_count);
+  const severityCounts = positiveCountMap(wire.posture.audit.severity_counts, 2);
+  if (Object.keys(severityCounts).some((severity) => !["warning", "danger"].includes(severity))) {
+    invalidResponse();
+  }
+  const auditUnavailable = auditCoverage.availability === "unavailable";
+  if (
+    auditUnavailable !== (totalCheckCount === null) ||
+    auditUnavailable !== (totalFindingCount === null) ||
+    (auditUnavailable && Object.keys(severityCounts).length > 0) ||
+    (totalFindingCount !== null &&
+      Object.values(severityCounts).reduce((sum, count) => sum + count, 0) !== totalFindingCount)
+  ) {
+    invalidResponse();
+  }
   const customCoverage = toInsightCoverage(wire.custom_resources.coverage);
   const customItems = wire.custom_resources.items.map((item) => {
     const count = nonNegativeInteger(item.count);
@@ -260,6 +327,35 @@ export function toHomeInsights(
   if (refreshAfterSeconds < 1 || refreshAfterSeconds > 3600) invalidResponse();
   return {
     clusterId,
+    topology: {
+      coverage: topologyCoverage,
+      ...topologyCounts,
+      relationCompleteness: wire.topology.relation_completeness,
+    },
+    explore: {
+      traffic: { coverage: trafficCoverage },
+      cost: { coverage: costCoverage },
+    },
+    posture: {
+      networkPolicy: {
+        coverage: networkPolicyCoverage,
+        totalPolicies,
+        coveredWorkloads,
+        totalWorkloads,
+      },
+      gitops: {
+        coverage: gitopsCoverage,
+        controllerCount,
+        providerCounts,
+        healthCounts,
+      },
+      audit: {
+        coverage: auditCoverage,
+        totalCheckCount,
+        totalFindingCount,
+        severityCounts,
+      },
+    },
     customResources: {
       coverage: customCoverage,
       items: customItems,
@@ -285,6 +381,19 @@ export function toHomeInsights(
     },
     refreshAfterSeconds,
   };
+}
+
+function positiveCountMap(
+  wire: Readonly<Record<string, number>>,
+  limit: number,
+): Record<string, number> {
+  if (Object.keys(wire).length > limit) invalidResponse();
+  return Object.fromEntries(Object.entries(wire).map(([key, count]) => {
+    const normalized = canonicalIdentity(key);
+    const normalizedCount = nonNegativeInteger(count);
+    if (normalizedCount === 0) invalidResponse();
+    return [normalized, normalizedCount];
+  }));
 }
 
 function toInsightCoverage(wire: HomeEndpointInsightCoverage) {

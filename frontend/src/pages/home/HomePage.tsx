@@ -14,6 +14,7 @@ import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeInsightsBand } from "./HomeInsightsBand";
 import { HomeLiveBand } from "./HomeLiveBand";
+import { HomeSourceBands } from "./HomeSourceBands";
 import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({ port }: { port: HomePort }) {
@@ -85,6 +86,7 @@ export function HomePage({ port }: { port: HomePort }) {
                 overview={state.overview}
               />
               <HomeInsightsBand insights={state.insights} onRefresh={state.refresh} />
+              <HomeSourceBands state={state} />
               <HomeLiveBand state={state} />
             </div>
             <HomeIssuesRail

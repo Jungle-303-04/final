@@ -1434,11 +1434,15 @@
       }
     },
     "reference.feature.039": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.HomeInsightsResponse",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_home_bands_projection.py",
+        "tests/test_fleet_router.py",
+        "frontend/src/api/cluster-summary.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
         "frontend/src/pages/home/HomePage.test.tsx",
         "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
         "frontend/src/pages/timeline/TimelineSurface.test.tsx",
@@ -1446,68 +1450,79 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
-          "reason": "Topology and Timeline have separate authorized contracts, but no bounded Home preview composition returns both summaries with one scope and completeness model.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#build_home_insights",
+          "reason": "The existing Home insights response now composes a bounded relation-graph preview from authorized persisted inventory; the recent activity preview reuses the existing bounded warning-event authority and the same outbound-Agent invalidation stream.",
+          "test": "tests/test_home_bands_projection.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/HomeLiveBand.tsx#HomeLiveBand",
-          "reason": "The current live band is an exact Node and Pod drilldown and does not render topology or recent Timeline previews.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeSourceBands.tsx#HomeSourceBands",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The live observation band renders bounded relation and Timeline evidence, preserves the active filters, and opens Resources relation view instead of reintroducing a standalone Topology route.",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         }
       }
     },
     "reference.feature.040": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.HomeExploreSummary",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_home_bands_projection.py",
+        "tests/test_fleet_router.py",
         "tests/test_traffic_router.py",
         "tests/test_helm_release_router.py",
         "tests/test_cost_router.py",
         "frontend/src/pages/home/HomePage.test.tsx",
+        "frontend/src/api/cluster-summary.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py#get_helm_releases",
-          "reason": "Traffic and Helm expose separate typed reads and Cost exposes explicit provider absence, but no Home exploration summary composes their availability without duplicate adapters.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#build_home_insights",
+          "reason": "The Home response reuses Helm inventory and the canonical Traffic and Cost projections, returning explicit provider availability without fabricating zero values or creating browser-specific provider contracts.",
+          "test": "tests/test_home_bands_projection.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
-          "reason": "No Traffic, Helm, or capability-gated Cost card is mounted; the existing regression test intentionally rejects source-only provider claims.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeSourceBands.tsx#HomeSourceBands",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The exploration band reuses the canonical Helm card and mounts Traffic or Cost only when their server-owned provider coverage is available.",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         }
       }
     },
     "reference.feature.041": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.checks.observations",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.HomePostureSummary",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_home_bands_projection.py",
+        "tests/test_fleet_router.py",
         "tests/test_checks_router.py",
         "tests/test_gitops_filter_router.py",
         "frontend/src/pages/home/HomePage.test.tsx",
+        "frontend/src/api/cluster-summary.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/checks/router.py#get_checks_overview",
-          "reason": "Audit and GitOps have partial standalone projections, but certificate expiry, NetworkPolicy coverage, and one unified Home posture response are unavailable.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#build_home_insights",
+          "reason": "The Home response reuses certificate expiry, immutable GitOps inventory, and the latest authorized outbound-Agent Checks observation. NetworkPolicy coverage stays explicitly unavailable until an exact provider reports it.",
+          "test": "tests/test_home_bands_projection.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
-          "reason": "Home has no server-evidence posture band and must not infer certificate, policy, controller, or audit health from generic inventory.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeSourceBands.tsx#HomeSourceBands",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The posture band reuses the certificate card and renders GitOps, Checks, and NetworkPolicy only from observed server evidence, hiding unavailable capabilities without inferred health.",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         }
       }

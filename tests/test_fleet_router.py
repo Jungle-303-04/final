@@ -362,7 +362,68 @@ def test_home_insights_composes_revisioned_custom_resources_and_helm_summary() -
     response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/home/insights")
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    assert body.pop("topology") == {
+        "coverage": {
+            "availability": "unavailable",
+            "observed_at": observed_at,
+            "reason_codes": ["topology_projection_unavailable"],
+        },
+        "node_count": None,
+        "edge_count": None,
+        "omitted_node_count": None,
+        "omitted_edge_count": None,
+        "relation_completeness": "unavailable",
+    }
+    assert body.pop("explore") == {
+        "traffic": {
+            "coverage": {
+                "availability": "unavailable",
+                "observed_at": None,
+                "reason_codes": ["traffic_observation_not_integrated"],
+            }
+        },
+        "cost": {
+            "coverage": {
+                "availability": "unavailable",
+                "observed_at": None,
+                "reason_codes": ["cost_observation_not_integrated"],
+            }
+        },
+    }
+    assert body.pop("posture") == {
+        "network_policy": {
+            "coverage": {
+                "availability": "unavailable",
+                "observed_at": None,
+                "reason_codes": ["network_policy_coverage_not_reported"],
+            },
+            "total_policies": None,
+            "covered_workloads": None,
+            "total_workloads": None,
+        },
+        "gitops": {
+            "coverage": {
+                "availability": "unavailable",
+                "observed_at": None,
+                "reason_codes": ["gitops_overview_repository_unavailable"],
+            },
+            "controller_count": None,
+            "provider_counts": {},
+            "health_counts": {},
+        },
+        "audit": {
+            "coverage": {
+                "availability": "unavailable",
+                "observed_at": observed_at,
+                "reason_codes": [f"checks_observation_unavailable:{CLUSTER_ID}"],
+            },
+            "total_check_count": None,
+            "total_finding_count": None,
+            "severity_counts": {},
+        },
+    }
+    assert body == {
         "cluster_id": CLUSTER_ID,
         "custom_resources": {
             "coverage": {

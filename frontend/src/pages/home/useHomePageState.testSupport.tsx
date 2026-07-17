@@ -185,6 +185,62 @@ export function nodes(clusterId: string, names: string[]): HomeNodeCollection {
 export function insights(clusterId: string): HomeInsights {
   return {
     clusterId,
+    topology: {
+      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
+      nodeCount: 0,
+      edgeCount: 0,
+      omittedNodeCount: 0,
+      omittedEdgeCount: 0,
+      relationCompleteness: "exact",
+    },
+    explore: {
+      traffic: {
+        coverage: {
+          availability: "unavailable",
+          observedAt: null,
+          reasonCodes: ["traffic_observation_not_integrated"],
+        },
+      },
+      cost: {
+        coverage: {
+          availability: "unavailable",
+          observedAt: null,
+          reasonCodes: ["cost_observation_not_integrated"],
+        },
+      },
+    },
+    posture: {
+      networkPolicy: {
+        coverage: {
+          availability: "unavailable",
+          observedAt: null,
+          reasonCodes: ["network_policy_coverage_not_reported"],
+        },
+        totalPolicies: null,
+        coveredWorkloads: null,
+        totalWorkloads: null,
+      },
+      gitops: {
+        coverage: {
+          availability: "unavailable",
+          observedAt: null,
+          reasonCodes: ["gitops_inventory_unavailable"],
+        },
+        controllerCount: null,
+        providerCounts: {},
+        healthCounts: {},
+      },
+      audit: {
+        coverage: {
+          availability: "unavailable",
+          observedAt: null,
+          reasonCodes: ["checks_observation_unavailable"],
+        },
+        totalCheckCount: null,
+        totalFindingCount: null,
+        severityCounts: {},
+      },
+    },
     customResources: {
       coverage: { availability: "available", observedAt: null, reasonCodes: [] },
       items: [],

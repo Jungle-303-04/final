@@ -149,6 +149,66 @@ describe("cluster summary API", () => {
   it("loads strict bounded Home insights for one encoded cluster", async () => {
     const payload = {
       cluster_id: "cluster/one",
+      topology: {
+        coverage: {
+          availability: "available",
+          observed_at: "2026-07-16T09:00:00Z",
+          reason_codes: [],
+        },
+        node_count: 12,
+        edge_count: 9,
+        omitted_node_count: 0,
+        omitted_edge_count: 0,
+        relation_completeness: "exact",
+      },
+      explore: {
+        traffic: {
+          coverage: {
+            availability: "unavailable",
+            observed_at: null,
+            reason_codes: ["traffic_observation_not_integrated"],
+          },
+        },
+        cost: {
+          coverage: {
+            availability: "unavailable",
+            observed_at: null,
+            reason_codes: ["cost_observation_not_integrated"],
+          },
+        },
+      },
+      posture: {
+        network_policy: {
+          coverage: {
+            availability: "unavailable",
+            observed_at: null,
+            reason_codes: ["network_policy_coverage_not_reported"],
+          },
+          total_policies: null,
+          covered_workloads: null,
+          total_workloads: null,
+        },
+        gitops: {
+          coverage: {
+            availability: "available",
+            observed_at: "2026-07-16T09:00:00Z",
+            reason_codes: [],
+          },
+          controller_count: 2,
+          provider_counts: { argo: 1, flux: 1 },
+          health_counts: { healthy: 1, degraded: 1 },
+        },
+        audit: {
+          coverage: {
+            availability: "available",
+            observed_at: "2026-07-16T09:00:00Z",
+            reason_codes: [],
+          },
+          total_check_count: 6,
+          total_finding_count: 3,
+          severity_counts: { warning: 2, danger: 1 },
+        },
+      },
       custom_resources: {
         coverage: {
           availability: "available",

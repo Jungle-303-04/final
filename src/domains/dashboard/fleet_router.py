@@ -27,6 +27,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from domains.checks.observation_projection import checks_overview
+from domains.cost.observation_projection import cost_overview
+from domains.dashboard.home_bands import (
+    compose_home_explore_summary,
+    compose_home_posture_summary,
+    compose_home_topology_preview,
+)
 from domains.dashboard.ready_stream import (
     DashboardReadyCursorBinding,
     DashboardReadyCursorCodec,
@@ -35,20 +42,31 @@ from domains.dashboard.ready_stream import (
     dashboard_ready_heartbeat_seconds,
     dashboard_ready_reconnect_after_ms,
 )
+from domains.gitops.overview_projection import project_gitops_overview
+from domains.gitops.overview_query import parse_gitops_overview_filters
 from domains.helm.release_projection import helm_release_list
-from domains.identity.dependencies import require_cluster_access, require_session
+from domains.identity.dependencies import (
+    require_cluster_access,
+    require_session,
+    resolve_allowed_application_ids,
+)
 from domains.inventory.certificate_expiry import certificate_expiry_summary
 from domains.inventory_filter.cursor import FilterCursorCodec, authorization_revision
+from domains.inventory_filter.graph import build_resource_graph
+from domains.inventory_filter.query import filter_fingerprint, parse_resource_filters
 from domains.target.router import (
     BLOCKED_TEST_CLUSTER_IDS,
     BLOCKED_TEST_CLUSTER_NAME_PARTS,
     cluster_connection_status,
 )
+from domains.traffic.observation_projection import traffic_overview
 from packages.config.certificate_expiry import certificate_expiry_warning_seconds
 from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.config.settings import env
+from packages.contracts.checks.settings import ChecksSettingsPolicy
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.freshness import HomeDashboardEventFrame
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     ClusterNodesSummaryResponse,
@@ -69,6 +87,7 @@ from packages.contracts.gateway.responses import (
     NodeSummaryItem,
     PodSummaryItem,
 )
+from packages.contracts.gitops.overview import GitOpsOverviewCoverage, GitOpsOverviewResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
 from packages.contracts.parity import ClusterScope
 from packages.runtime.dependencies import get_dashboard_ready_fanout, get_db
@@ -91,6 +110,7 @@ NODE_LIMIT = 1000
 POD_LIMIT = 1000
 HOME_CUSTOM_RESOURCE_LIMIT = 8
 HOME_CERTIFICATE_SCAN_LIMIT = 500
+HOME_GITOPS_LIMIT = 200
 NOT_FOUND_CODE = 404
 DASHBOARD_READY_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 DASHBOARD_READY_CURSOR_UNAVAILABLE = "dashboard ready cursor is unavailable"
@@ -179,7 +199,20 @@ async def cluster_home_insights(
     )
     if await asyncio.to_thread(db.get_cluster_registration, workspace_id, cluster_id) is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
-    return await asyncio.to_thread(build_home_insights, db, workspace_id, cluster_id)
+    allowed_application_ids = await asyncio.to_thread(
+        _home_allowed_application_ids,
+        db,
+        current,
+        workspace_id,
+    )
+    return await asyncio.to_thread(
+        build_home_insights,
+        db,
+        workspace_id,
+        cluster_id,
+        allowed_application_ids=allowed_application_ids,
+        user_id=str(getattr(current, "user_id", "") or "") or None,
+    )
 
 
 @router.get(gateway_routes.CLUSTER_HOME_EVENTS_PATH)
@@ -577,6 +610,9 @@ def build_home_insights(
     db: Any,
     workspace_id: str,
     cluster_id: str,
+    *,
+    allowed_application_ids: set[str] | frozenset[str] = frozenset(),
+    user_id: str | None = None,
 ) -> HomeInsightsResponse:
     contexts = db.filter_snapshot_contexts(workspace_id, (cluster_id,))
     context = contexts.get(cluster_id)
@@ -626,8 +662,46 @@ def build_home_insights(
         for release in helm_response.releases:
             if release.status:
                 status_counts[release.status] = status_counts.get(release.status, 0) + 1
+    topology = compose_home_topology_preview(
+        _home_resource_graph(
+            db,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            context=context,
+            allowed_application_ids=allowed_application_ids,
+        ),
+        observed_at=_optional_text((context or {}).get("observed_at")),
+    )
+    traffic = traffic_overview(
+        workspace_id=workspace_id,
+        contexts=contexts,
+        namespace_refs=(),
+        selected_cluster_ids=(cluster_id,),
+    )
+    cost = cost_overview(
+        workspace_id=workspace_id,
+        contexts=contexts,
+        selected_cluster_ids=(cluster_id,),
+    )
+    checks = _home_checks_overview(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        contexts=contexts,
+        user_id=user_id,
+    )
+    gitops = _home_gitops_overview(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        contexts=contexts,
+        allowed_application_ids=allowed_application_ids,
+    )
     return HomeInsightsResponse(
         cluster_id=cluster_id,
+        topology=topology,
+        explore=compose_home_explore_summary(traffic=traffic, cost=cost),
+        posture=compose_home_posture_summary(checks=checks, gitops=gitops),
         custom_resources=custom_resources,
         helm=HomeHelmSummary(
             coverage=helm_coverage,
@@ -639,6 +713,141 @@ def build_home_insights(
         certificate_expiry=certificate_expiry,
         refresh_after_seconds=integral_refresh_after_seconds("dashboard"),
     )
+
+
+def _home_resource_graph(
+    db: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    context: JsonObject | None,
+    allowed_application_ids: set[str] | frozenset[str],
+) -> JsonObject | None:
+    revision = int((context or {}).get("snapshot_revision") or 0)
+    reader = getattr(db, "list_filtered_resources", None)
+    if revision <= 0 or not callable(reader):
+        return None
+    filters = parse_resource_filters(
+        clusters=cluster_id,
+        namespaces=None,
+        applications=None,
+        resource_types=None,
+        health=None,
+        labels=None,
+        query=None,
+        include_deleted=False,
+    )
+    result = reader(
+        workspace_id=workspace_id,
+        allowed_cluster_ids={cluster_id},
+        allowed_application_ids=allowed_application_ids,
+        filters=filters,
+        snapshot_revision=revision,
+        position=None,
+        limit=gateway_limits.RESOURCE_GRAPH_DEFAULT_NODE_LIMIT,
+        graph_priority=True,
+    )
+    items = list(result.get("items") or ())
+    return build_resource_graph(
+        items,
+        snapshot_revision=revision,
+        filter_fingerprint=filter_fingerprint(filters),
+        source_complete=bool((context or {}).get("resources_complete")),
+        labels_complete=bool((context or {}).get("labels_complete")),
+        truncated=bool(result.get("has_more")),
+        node_limit=gateway_limits.RESOURCE_GRAPH_DEFAULT_NODE_LIMIT,
+        edge_limit=gateway_limits.RESOURCE_GRAPH_DEFAULT_EDGE_LIMIT,
+        omitted_node_count=max(0, int(result.get("filtered_count") or 0) - len(items)),
+        partial_reason_codes=tuple((context or {}).get("partial_reason_codes") or ()),
+    )
+
+
+def _home_checks_overview(
+    db: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    contexts: dict[str, JsonObject],
+    user_id: str | None,
+):
+    snapshot_reader = getattr(db, "latest_inventory_snapshot", None)
+    settings_reader = getattr(db, "get_checks_settings", None)
+    can_read = callable(snapshot_reader) and callable(settings_reader) and bool(user_id)
+    snapshot = snapshot_reader(workspace_id, cluster_id) if can_read else None
+    persisted_settings = (
+        settings_reader(workspace_id=workspace_id, user_id=user_id) if can_read else None
+    )
+    settings = ChecksSettingsPolicy.model_validate((persisted_settings or {}).get("policy") or {})
+    return checks_overview(
+        workspace_id=workspace_id,
+        contexts=contexts,
+        snapshots={cluster_id: snapshot} if isinstance(snapshot, dict) else {},
+        namespace_refs=(),
+        selected_cluster_ids=(cluster_id,),
+        settings=settings,
+    )
+
+
+def _home_gitops_overview(
+    db: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    contexts: dict[str, JsonObject],
+    allowed_application_ids: set[str] | frozenset[str],
+) -> GitOpsOverviewResponse:
+    reader = getattr(db, "list_gitops_overview", None)
+    if not callable(reader):
+        return GitOpsOverviewResponse(
+            workspace_id=workspace_id,
+            scopes=(ClusterScope(workspace_id=workspace_id, cluster_id=cluster_id),),
+            items=(),
+            kind_counts=(),
+            coverage=GitOpsOverviewCoverage(
+                state="unavailable",
+                registered_count=0,
+                controller_count=0,
+                returned_count=0,
+                reason_codes=("gitops_overview_repository_unavailable",),
+            ),
+        )
+    filters = parse_gitops_overview_filters(
+        clusters=cluster_id,
+        namespaces=None,
+        applications=None,
+        providers=None,
+        kinds=None,
+        labels=None,
+        query=None,
+    )
+    revision = int((contexts.get(cluster_id) or {}).get("snapshot_revision") or 0)
+    result = reader(
+        workspace_id=workspace_id,
+        allowed_cluster_ids={cluster_id},
+        allowed_application_ids=allowed_application_ids,
+        filters=filters,
+        snapshot_revision=revision,
+        limit=HOME_GITOPS_LIMIT,
+    )
+    return project_gitops_overview(
+        workspace_id=workspace_id,
+        registered_rows=result.get("registered_rows") or (),
+        inventory_rows=result.get("inventory_rows") or (),
+        snapshot_contexts=contexts,
+        has_more=bool(result.get("has_more")),
+    )
+
+
+def _home_allowed_application_ids(db: Any, current: Any, workspace_id: str) -> set[str]:
+    try:
+        return resolve_allowed_application_ids(
+            db,
+            current,
+            workspace_id,
+            Permission.APPLICATION_READ.value,
+        )
+    except (AttributeError, NotImplementedError):
+        return set()
 
 
 def _home_custom_resource_summary(

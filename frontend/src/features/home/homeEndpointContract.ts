@@ -109,6 +109,38 @@ export interface HomeEndpointInsightCoverage {
 
 export interface HomeEndpointInsights {
   cluster_id: string;
+  topology: {
+    coverage: HomeEndpointInsightCoverage;
+    node_count: number | null;
+    edge_count: number | null;
+    omitted_node_count: number | null;
+    omitted_edge_count: number | null;
+    relation_completeness: "exact" | "partial" | "unavailable";
+  };
+  explore: {
+    traffic: { coverage: HomeEndpointInsightCoverage };
+    cost: { coverage: HomeEndpointInsightCoverage };
+  };
+  posture: {
+    network_policy: {
+      coverage: HomeEndpointInsightCoverage;
+      total_policies: number | null;
+      covered_workloads: number | null;
+      total_workloads: number | null;
+    };
+    gitops: {
+      coverage: HomeEndpointInsightCoverage;
+      controller_count: number | null;
+      provider_counts: Record<string, number>;
+      health_counts: Record<string, number>;
+    };
+    audit: {
+      coverage: HomeEndpointInsightCoverage;
+      total_check_count: number | null;
+      total_finding_count: number | null;
+      severity_counts: Partial<Record<"warning" | "danger", number>>;
+    };
+  };
   custom_resources: {
     coverage: HomeEndpointInsightCoverage;
     items: Array<{

@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from domains.checks.observation_projection import checks_overview
+from domains.cost.observation_projection import cost_overview
 from domains.dashboard.home_bands import (
     compose_home_explore_summary,
     compose_home_posture_summary,
     compose_home_topology_preview,
 )
-
-from domains.checks.observation_projection import checks_overview
-from domains.cost.observation_projection import cost_overview
 from domains.gitops.overview_projection import project_gitops_overview
 from domains.traffic.observation_projection import traffic_overview
 

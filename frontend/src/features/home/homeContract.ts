@@ -237,8 +237,56 @@ export interface HomeCertificateExpirySummary {
   hasMore: boolean;
 }
 
+export interface HomeTopologyPreviewSummary {
+  coverage: HomeInsightCoverage;
+  nodeCount: number | null;
+  edgeCount: number | null;
+  omittedNodeCount: number | null;
+  omittedEdgeCount: number | null;
+  relationCompleteness: "exact" | "partial" | "unavailable";
+}
+
+export interface HomeProviderAvailabilitySummary {
+  coverage: HomeInsightCoverage;
+}
+
+export interface HomeExploreSummary {
+  traffic: HomeProviderAvailabilitySummary;
+  cost: HomeProviderAvailabilitySummary;
+}
+
+export interface HomeNetworkPolicyCoverageSummary {
+  coverage: HomeInsightCoverage;
+  totalPolicies: number | null;
+  coveredWorkloads: number | null;
+  totalWorkloads: number | null;
+}
+
+export interface HomeGitOpsControllerSummary {
+  coverage: HomeInsightCoverage;
+  controllerCount: number | null;
+  providerCounts: Readonly<Record<string, number>>;
+  healthCounts: Readonly<Record<string, number>>;
+}
+
+export interface HomeAuditFindingSummary {
+  coverage: HomeInsightCoverage;
+  totalCheckCount: number | null;
+  totalFindingCount: number | null;
+  severityCounts: Readonly<Partial<Record<"warning" | "danger", number>>>;
+}
+
+export interface HomePostureSummary {
+  networkPolicy: HomeNetworkPolicyCoverageSummary;
+  gitops: HomeGitOpsControllerSummary;
+  audit: HomeAuditFindingSummary;
+}
+
 export interface HomeInsights {
   clusterId: string;
+  topology: HomeTopologyPreviewSummary;
+  explore: HomeExploreSummary;
+  posture: HomePostureSummary;
   customResources: HomeCustomResourceSummary;
   helm: HomeHelmSummary;
   certificateExpiry: HomeCertificateExpirySummary;

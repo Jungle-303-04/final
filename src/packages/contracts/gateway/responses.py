@@ -2372,8 +2372,138 @@ class HomeCertificateExpirySummary(StrictModel):
         return self
 
 
+HomeRelationCompleteness = Literal["exact", "partial", "unavailable"]
+
+
+class HomeTopologyPreviewSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    node_count: int | None = Field(default=None, ge=0)
+    edge_count: int | None = Field(default=None, ge=0)
+    omitted_node_count: int | None = Field(default=None, ge=0)
+    omitted_edge_count: int | None = Field(default=None, ge=0)
+    relation_completeness: HomeRelationCompleteness
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        counts = (
+            self.node_count,
+            self.edge_count,
+            self.omitted_node_count,
+            self.omitted_edge_count,
+        )
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable and (
+            any(value is not None for value in counts)
+            or self.relation_completeness != "unavailable"
+        ):
+            raise ValueError("unavailable Home topology cannot expose graph counts")
+        if not unavailable and (
+            any(value is None for value in counts) or self.relation_completeness == "unavailable"
+        ):
+            raise ValueError("observed Home topology requires graph counts")
+        if self.coverage.availability == "available" and self.relation_completeness != "exact":
+            raise ValueError("available Home topology requires exact relation evidence")
+        if self.coverage.availability == "partial" and self.relation_completeness != "partial":
+            raise ValueError("partial Home topology requires partial relation evidence")
+        return self
+
+
+class HomeProviderAvailabilitySummary(StrictModel):
+    coverage: HomeInsightCoverage
+
+
+class HomeExploreSummary(StrictModel):
+    traffic: HomeProviderAvailabilitySummary
+    cost: HomeProviderAvailabilitySummary
+
+
+class HomeNetworkPolicyCoverageSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    total_policies: int | None = Field(default=None, ge=0)
+    covered_workloads: int | None = Field(default=None, ge=0)
+    total_workloads: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        counts = (self.total_policies, self.covered_workloads, self.total_workloads)
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable and any(value is not None for value in counts):
+            raise ValueError("unavailable NetworkPolicy coverage cannot expose counts")
+        if not unavailable and any(value is None for value in counts):
+            raise ValueError("observed NetworkPolicy coverage requires counts")
+        if (
+            self.covered_workloads is not None
+            and self.total_workloads is not None
+            and self.covered_workloads > self.total_workloads
+        ):
+            raise ValueError("covered workloads cannot exceed total workloads")
+        return self
+
+
+class HomeGitOpsControllerSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    controller_count: int | None = Field(default=None, ge=0)
+    provider_counts: dict[str, int] = Field(default_factory=dict, max_length=20)
+    health_counts: dict[str, int] = Field(default_factory=dict, max_length=40)
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable and (
+            self.controller_count is not None or self.provider_counts or self.health_counts
+        ):
+            raise ValueError("unavailable GitOps coverage cannot expose controller counts")
+        if not unavailable and self.controller_count is None:
+            raise ValueError("observed GitOps coverage requires a controller count")
+        for counts in (self.provider_counts, self.health_counts):
+            if any(not key.strip() or count < 1 for key, count in counts.items()):
+                raise ValueError("GitOps controller counts must be positive and named")
+            if self.controller_count is not None and sum(counts.values()) > self.controller_count:
+                raise ValueError("GitOps grouped counts cannot exceed controller count")
+        return self
+
+
+class HomeAuditFindingSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    total_check_count: int | None = Field(default=None, ge=0)
+    total_finding_count: int | None = Field(default=None, ge=0)
+    severity_counts: dict[Literal["warning", "danger"], int] = Field(
+        default_factory=dict,
+        max_length=2,
+    )
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable and (
+            self.total_check_count is not None
+            or self.total_finding_count is not None
+            or self.severity_counts
+        ):
+            raise ValueError("unavailable audit coverage cannot expose finding counts")
+        if not unavailable and (self.total_check_count is None or self.total_finding_count is None):
+            raise ValueError("observed audit coverage requires counts")
+        if any(count < 1 for count in self.severity_counts.values()):
+            raise ValueError("audit severity counts must be positive")
+        if (
+            self.total_finding_count is not None
+            and sum(self.severity_counts.values()) != self.total_finding_count
+        ):
+            raise ValueError("audit severity counts must match total findings")
+        return self
+
+
+class HomePostureSummary(StrictModel):
+    network_policy: HomeNetworkPolicyCoverageSummary
+    gitops: HomeGitOpsControllerSummary
+    audit: HomeAuditFindingSummary
+
+
 class HomeInsightsResponse(StrictModel):
     cluster_id: str = Field(min_length=1)
+    topology: HomeTopologyPreviewSummary
+    explore: HomeExploreSummary
+    posture: HomePostureSummary
     custom_resources: HomeCustomResourceSummary
     helm: HomeHelmSummary
     certificate_expiry: HomeCertificateExpirySummary

@@ -71,10 +71,8 @@ function HomeInsightsContent({
         label={t("home.section.insights")}
         onRetry={onRefresh}
       />
-      <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid min-w-0 gap-4 p-4">
         <CustomResourcesCard insights={insights.data} />
-        <HelmSummaryCard insights={insights.data} />
-        <CertificateExpiryCard insights={insights.data} />
       </div>
     </>
   );
@@ -147,7 +145,7 @@ function CustomResourcesCard({ insights }: { insights: HomeInsights }) {
   );
 }
 
-function CertificateExpiryCard({ insights }: { insights: HomeInsights }) {
+export function CertificateExpiryCard({ insights }: { insights: HomeInsights }) {
   const filter = useUnifiedFilter();
   const { formatDate, formatNumber, t } = useI18n();
   const summary = insights.certificateExpiry;
@@ -249,7 +247,7 @@ function certificateStatusVariant(
   return "secondary";
 }
 
-function HelmSummaryCard({ insights }: { insights: HomeInsights }) {
+export function HelmSummaryCard({ insights }: { insights: HomeInsights }) {
   const filter = useUnifiedFilter();
   const { formatNumber, t } = useI18n();
   const summary = insights.helm;

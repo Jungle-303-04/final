@@ -126,18 +126,22 @@ describe("HomePage", () => {
     const insights = await screen.findByRole("region", { name: "클러스터 인사이트" });
     expect(await within(insights).findByText("Application")).toBeTruthy();
     expect(within(insights).getByText("argoproj.io/v1alpha1")).toBeTruthy();
-    expect(within(insights).getByText("deployed 2")).toBeTruthy();
-    expect(within(insights).getByText("api-tls")).toBeTruthy();
-    expect(within(insights).getAllByText("만료 임박")).toHaveLength(2);
     expect(within(insights).getByRole("link", { name: "리소스 열기" }).getAttribute("href"))
       .toBe("/resources?clusters=cluster-1&applications=checkout");
-    expect(within(insights).getByRole("link", { name: "Helm 열기" }).getAttribute("href"))
+
+    const explore = screen.getByRole("region", { name: "탐색" });
+    expect(within(explore).getByText("deployed 2")).toBeTruthy();
+    expect(within(explore).getByRole("link", { name: "Helm 열기" }).getAttribute("href"))
       .toBe("/helm?clusters=cluster-1&applications=checkout");
-    expect(within(insights).getByRole("link", { name: /api-tls/u }).getAttribute("href"))
+
+    const posture = screen.getByRole("region", { name: "보안 및 운영 상태" });
+    expect(within(posture).getByText("api-tls")).toBeTruthy();
+    expect(within(posture).getAllByText("만료 임박")).toHaveLength(2);
+    expect(within(posture).getByRole("link", { name: /api-tls/u }).getAttribute("href"))
       .toBe(
         "/resources?clusters=cluster-1&applications=checkout&detail=Secret%2Fshop%2Fapi-tls",
       );
-    expect(insights.textContent).not.toContain("tls.crt");
+    expect(posture.textContent).not.toContain("tls.crt");
   });
 
   it("does not render certificate zero counts when expiry observation is unavailable", async () => {

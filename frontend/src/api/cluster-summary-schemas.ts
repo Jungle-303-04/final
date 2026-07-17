@@ -75,8 +75,52 @@ const homeInsightResourceRefSchema = z.strictObject({
   uid: z.string().min(1),
 });
 
+const homeTopologyPreviewSchema = z.strictObject({
+  coverage: homeInsightCoverageSchema,
+  node_count: z.number().int().nonnegative().nullable(),
+  edge_count: z.number().int().nonnegative().nullable(),
+  omitted_node_count: z.number().int().nonnegative().nullable(),
+  omitted_edge_count: z.number().int().nonnegative().nullable(),
+  relation_completeness: z.enum(["exact", "partial", "unavailable"]),
+});
+
+const homeProviderAvailabilitySchema = z.strictObject({
+  coverage: homeInsightCoverageSchema,
+});
+
+const homeNetworkPolicyCoverageSchema = z.strictObject({
+  coverage: homeInsightCoverageSchema,
+  total_policies: z.number().int().nonnegative().nullable(),
+  covered_workloads: z.number().int().nonnegative().nullable(),
+  total_workloads: z.number().int().nonnegative().nullable(),
+});
+
+const homeGitOpsSummarySchema = z.strictObject({
+  coverage: homeInsightCoverageSchema,
+  controller_count: z.number().int().nonnegative().nullable(),
+  provider_counts: z.record(z.string().min(1), z.number().int().positive()),
+  health_counts: z.record(z.string().min(1), z.number().int().positive()),
+});
+
+const homeAuditSummarySchema = z.strictObject({
+  coverage: homeInsightCoverageSchema,
+  total_check_count: z.number().int().nonnegative().nullable(),
+  total_finding_count: z.number().int().nonnegative().nullable(),
+  severity_counts: z.record(z.string(), z.number().int().positive()),
+});
+
 export const homeInsightsSchema = z.strictObject({
   cluster_id: z.string().min(1),
+  topology: homeTopologyPreviewSchema,
+  explore: z.strictObject({
+    traffic: homeProviderAvailabilitySchema,
+    cost: homeProviderAvailabilitySchema,
+  }),
+  posture: z.strictObject({
+    network_policy: homeNetworkPolicyCoverageSchema,
+    gitops: homeGitOpsSummarySchema,
+    audit: homeAuditSummarySchema,
+  }),
   custom_resources: z.strictObject({
     coverage: homeInsightCoverageSchema,
     items: z.array(z.strictObject({
