@@ -99,7 +99,7 @@ describe("ApplicationDetailWorkspace workload scope", () => {
     expect(within(applicationTabs).getAllByRole("tab")).toHaveLength(7);
 
     await user.click(screen.getByRole("combobox", { name: "Workload scope" }));
-    await user.click(screen.getByRole("option", { name: /Deployment\/checkout/ }));
+    await user.click(await screen.findByRole("option", { name: /Deployment\/checkout/ }));
 
     await waitFor(() => expect(screen.getByTestId("location").textContent)
       .toContain("workload=workload-a"));
