@@ -79,7 +79,8 @@ while IFS=$'\t' read -r namespace resource container; do
         '.spec.template.spec.containers[] | select(.name == $container) | .image'
   )"
   test "${current_image}" = "${EXPECTED_CONSOLE_IMAGE}"
-done < <(jq -r '.targets[] | [.namespace, .resource, .container] | @tsv' \
+done < <(jq -r \
+  '(.targets[]?, .bootstrap_targets[]?) | [.namespace, .resource, .container] | @tsv' \
   "${CONSOLE_ROLLBACK_PLAN}")
 
 echo "==> post-deploy public edge reachability (non-blocking)"

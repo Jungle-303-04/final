@@ -159,6 +159,8 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     assert names.index("Roll out immutable service digest") < names.index(
         "Roll out immutable console digest"
     )
+    service_rollout = steps_by_name()["Roll out immutable service digest"]["run"]
+    assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in service_rollout
     assert names.index("Roll out immutable console digest") < names.index(
         "Verify live auth bypass policy after rollout"
     )
