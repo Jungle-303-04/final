@@ -147,6 +147,26 @@ describe("UnifiedFilterBar", () => {
     );
   });
 
+  it("opens the exact searched resource and replaces cluster/namespace scope", async () => {
+    const user = userEvent.setup();
+    renderFilter({ search: vi.fn(async (query) =>
+      query ? searchableSuggestions : structuralSuggestions) });
+
+    await user.click(screen.getByRole("button", { name: filterPlaceholder }));
+    await user.type(screen.getByRole("textbox", { name: filterPlaceholder }), "checkout");
+    await user.click(await screen.findByText("checkout-api"));
+
+    await waitFor(() => {
+      const location = screen.getByTestId("filter-location").textContent ?? "";
+      const url = new URL(location, "https://console.example");
+      expect(url.pathname).toBe("/resources");
+      expect(url.searchParams.get("clusters")).toBe("cluster-a");
+      expect(url.searchParams.get("namespaces")).toBe("cluster-a/shop");
+      expect(url.searchParams.get("resources.types")).toBe("workload");
+      expect(url.searchParams.get("detail")).toBe("Deployment/shop/checkout-api");
+    });
+  });
+
   it("keeps chips inside one fixed search border and removes the last chip with backspace", async () => {
     const user = userEvent.setup();
     renderFilter(
@@ -239,7 +259,17 @@ describe("UnifiedFilterBar", () => {
         type: "resource",
         id: "stale",
         label: "stale-result",
-        kind: "Pod",
+        clusterId: "cluster-a",
+        resourceType: "pod",
+        resource: {
+          apiGroup: "",
+          version: "v1",
+          kind: "Pod",
+          namespace: "default",
+          name: "stale-result",
+          uid: "uid-stale",
+        },
+        matchedFields: ["name"],
         count: 1,
         count_completeness: "exact",
       },
@@ -264,6 +294,7 @@ const structuralSuggestions = [
     id: "cluster-a/shop",
     label: "shop",
     clusterId: "cluster-a",
+    resourceType: "workload",
     count: 4,
     count_completeness: "partial",
   }),
@@ -290,7 +321,17 @@ const searchableSuggestions = [
     type: "resource",
     id: "deployment:checkout",
     label: "checkout-api",
-    kind: "Deployment",
+    clusterId: "cluster-a",
+    resourceType: "workload",
+    resource: {
+      apiGroup: "apps",
+      version: "v1",
+      kind: "Deployment",
+      namespace: "shop",
+      name: "checkout-api",
+      uid: "uid-checkout",
+    },
+    matchedFields: ["name"],
     count: 1,
   }),
 ] satisfies GlobalFilterSuggestion[];

@@ -30,6 +30,7 @@ from domains.gitops.events import (
     RenderedManifest,
 )
 from packages.config.constants import RiskLevel, Sandbox
+from packages.config.environments import is_production_environment
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
@@ -262,7 +263,7 @@ def approved_snapshot_required() -> bool:
 def risk_for_diff(namespace: str, status: str, environment: str = "") -> RiskLevel:
     if namespace != Sandbox.NAMESPACE:
         return RiskLevel.NON_SANDBOX_NAMESPACE
-    if environment.strip().lower() == "production" and status != "no_change":
+    if is_production_environment(environment) and status != "no_change":
         return RiskLevel.REVIEW_REQUIRED
     if status in {"review_required", "adoption_required"}:
         return RiskLevel.REVIEW_REQUIRED

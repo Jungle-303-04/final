@@ -1,4 +1,8 @@
 import { CircleAlert, Clock3, TriangleAlert } from "lucide-react";
+import type { ReactNode } from "react";
+import { routeDefinitionForSurface } from "../../app/productRoutes";
+import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomeClusterChoice, HomeClusterOverview } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { Surface } from "../../shared/ui/Surface";
@@ -60,6 +64,7 @@ function IssueContent({
   onRefresh: () => void;
   overview: HomeResourceState<HomeClusterOverview>;
 }) {
+  const filter = useUnifiedFilter();
   const { t } = useI18n();
   if (overview.phase === "loading" || overview.phase === "idle") {
     return <HomeSectionLoading label={t("home.section.activeIssues")} />;
@@ -90,6 +95,7 @@ function IssueContent({
       </>
     );
   }
+  const issuesHref = filter.navigationHref(routeDefinitionForSurface("issues").path);
   return (
     <>
       <HomeRefreshFailure
@@ -104,7 +110,11 @@ function IssueContent({
       >
         <div className="grid gap-2 p-3 pr-4">
         {overview.data.incidents.map((incident) => (
-          <Item key={incident.id} variant="muted">
+          <NavigableIssueItem
+            href={incident.incidentId === null ? null : issuesHref}
+            key={incident.id}
+            variant="muted"
+          >
             <ItemMedia variant="icon"><CircleAlert aria-hidden="true" className="text-destructive" /></ItemMedia>
             <ItemContent>
               <ItemTitle>{incident.symptom ?? t("home.issue.analyzing")}</ItemTitle>
@@ -117,22 +127,56 @@ function IssueContent({
               </ItemDescription>
               <IssueTime value={incident.createdAt} />
             </ItemContent>
-          </Item>
+          </NavigableIssueItem>
         ))}
-        {overview.data.warnings.map((warning) => (
-          <Item key={warning.id} variant="outline">
+        {overview.data.warnings.map((warning) => {
+          const href = clusterResourceHref(overview.data.clusterId, warning);
+          return (
+          <NavigableIssueItem
+            href={href}
+            key={warning.id}
+            variant="outline"
+          >
             <ItemMedia variant="icon"><TriangleAlert aria-hidden="true" className="text-status-warning" /></ItemMedia>
             <ItemContent>
               <ItemTitle>{warning.reason ?? warning.name}</ItemTitle>
               <ItemDescription>{warning.message ?? t("home.issue.noDetail")}</ItemDescription>
               <IssueTime value={warning.lastSeenAt} />
             </ItemContent>
-          </Item>
-        ))}
+          </NavigableIssueItem>
+          );
+        })}
         </div>
       </ScrollArea>
     </>
   );
+}
+
+function NavigableIssueItem({
+  children,
+  href,
+  variant,
+}: {
+  children: ReactNode;
+  href: string | null;
+  variant: "muted" | "outline";
+}) {
+  return href === null
+    ? <Item variant={variant}>{children}</Item>
+    : <Item as="a" href={href} variant={variant}>{children}</Item>;
+}
+
+function clusterResourceHref(
+  clusterId: string,
+  warning: HomeClusterOverview["warnings"][number],
+): string | null {
+  if (warning.involvedKind === null || warning.involvedName === null) return null;
+  return alertEventResourceHref({
+    cluster: clusterId,
+    namespace: warning.namespace,
+    kind: warning.involvedKind,
+    name: warning.involvedName,
+  });
 }
 
 function IssueTime({ value }: { value: string | null }) {

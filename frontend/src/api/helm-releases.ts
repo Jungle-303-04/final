@@ -2,14 +2,33 @@ import { apiRequest, type ApiPath } from "./client";
 import {
   helmReleaseDetailSchema,
   helmReleaseListSchema,
+  helmReleaseUpgradeBatchSchema,
+  helmReleaseUpgradeInfoSchema,
+  helmReleaseVersionListSchema,
   type HelmReleaseDetailEndpoint,
   type HelmReleaseListEndpoint,
+  type HelmReleaseUpgradeBatchEndpoint,
+  type HelmReleaseUpgradeInfoEndpoint,
+  type HelmReleaseVersionListEndpoint,
 } from "./helm-releases-schemas";
+import {
+  resourceActionAcceptedSchema,
+  type ResourceActionAccepted,
+} from "./resource-capability-actions-schemas";
 import { canonicalFacetSelections } from "./resource-filter-query";
 import { encodePathSegment, withQuery } from "./url";
 
 export const HELM_RELEASES_PATH = "/api/helm/releases" as const;
 export const HELM_RELEASE_PATH = "/api/helm/releases/{namespace}/{release_name}" as const;
+export const HELM_RELEASE_ARTIFACT_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/artifacts" as const;
+export const HELM_RELEASE_UPGRADE_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/upgrade" as const;
+export const HELM_RELEASE_UPGRADE_INFO_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/upgrade-info" as const;
+export const HELM_RELEASE_VERSIONS_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/versions" as const;
+export const HELM_UPGRADE_CHECK_PATH = "/api/helm/upgrade-check" as const;
 
 export interface HelmReleaseListQuery {
   clusterIds?: readonly string[];
@@ -37,6 +56,131 @@ export function getHelmRelease(
     .replace("{namespace}", encodePathSegment(namespace))
     .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
   return apiRequest(withQuery(path, [["cluster_id", clusterId]]), helmReleaseDetailSchema, { signal });
+}
+
+export function getHelmReleaseUpgradeInfo(
+  input: { clusterId: string; namespace: string; releaseName: string },
+  signal?: AbortSignal,
+): Promise<HelmReleaseUpgradeInfoEndpoint> {
+  return apiRequest(
+    releaseReadPath(HELM_RELEASE_UPGRADE_INFO_PATH, input),
+    helmReleaseUpgradeInfoSchema,
+    { signal },
+  );
+}
+
+export function listHelmReleaseVersions(
+  input: { clusterId: string; namespace: string; releaseName: string },
+  signal?: AbortSignal,
+): Promise<HelmReleaseVersionListEndpoint> {
+  return apiRequest(
+    releaseReadPath(HELM_RELEASE_VERSIONS_PATH, input),
+    helmReleaseVersionListSchema,
+    { signal },
+  );
+}
+
+export function checkHelmReleaseUpgrades(
+  query: HelmReleaseListQuery = {},
+  signal?: AbortSignal,
+): Promise<HelmReleaseUpgradeBatchEndpoint> {
+  return apiRequest(withQuery(HELM_UPGRADE_CHECK_PATH, [
+    ["clusters", joined("clusters", query.clusterIds)],
+    ["namespaces", joined("namespaces", query.namespaces)],
+  ]), helmReleaseUpgradeBatchSchema, { signal });
+}
+
+export function startHelmArtifactRead(
+  input: {
+    clusterId: string;
+    namespace: string;
+    releaseName: string;
+    artifact:
+      | "manifest"
+      | "values"
+      | "manifest_diff"
+      | "values_diff"
+      | "notes_diff"
+      | "hooks_diff"
+      | "resources_diff";
+    revision: number;
+    comparisonRevision?: number;
+    allValues?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const clusterId = requiredIdentity(input.clusterId, "clusterId");
+  const namespace = requiredIdentity(input.namespace, "namespace");
+  const releaseName = requiredIdentity(input.releaseName, "releaseName");
+  const path = HELM_RELEASE_ARTIFACT_PATH
+    .replace("{namespace}", encodePathSegment(namespace))
+    .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: clusterId,
+      artifact: input.artifact,
+      revision: input.revision,
+      comparison_revision: input.comparisonRevision ?? null,
+      all_values: input.allValues ?? false,
+    }),
+    signal,
+  });
+}
+
+export function startHelmReleaseUpgrade(
+  input: {
+    clusterId: string;
+    namespace: string;
+    releaseName: string;
+    expectedRevision: number;
+    catalogItemId: string;
+    catalogVersion: string;
+    values: Readonly<Record<string, unknown>>;
+    confirmation: true;
+    reason?: string;
+  },
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const clusterId = requiredIdentity(input.clusterId, "clusterId");
+  const namespace = requiredIdentity(input.namespace, "namespace");
+  const releaseName = requiredIdentity(input.releaseName, "releaseName");
+  const catalogItemId = requiredIdentity(input.catalogItemId, "catalogItemId");
+  const catalogVersion = requiredIdentity(input.catalogVersion, "catalogVersion");
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    throw new RangeError("expectedRevision must be a positive integer");
+  }
+  const path = HELM_RELEASE_UPGRADE_PATH
+    .replace("{namespace}", encodePathSegment(namespace))
+    .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: clusterId,
+      expected_revision: input.expectedRevision,
+      catalog_item_id: catalogItemId,
+      catalog_version: catalogVersion,
+      values: input.values,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
+function releaseReadPath(
+  template: typeof HELM_RELEASE_UPGRADE_INFO_PATH | typeof HELM_RELEASE_VERSIONS_PATH,
+  input: { clusterId: string; namespace: string; releaseName: string },
+): ApiPath {
+  const clusterId = requiredIdentity(input.clusterId, "clusterId");
+  const namespace = requiredIdentity(input.namespace, "namespace");
+  const releaseName = requiredIdentity(input.releaseName, "releaseName");
+  const path = template
+    .replace("{namespace}", encodePathSegment(namespace))
+    .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
+  return withQuery(path, [["cluster_id", clusterId]]);
 }
 
 function joined(

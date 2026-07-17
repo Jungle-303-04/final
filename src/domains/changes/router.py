@@ -7,7 +7,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from domains.changes.repository import MAX_CHANGE_EVENTS
+from domains.changes.partitioned_evidence import (
+    ChangeEvidencePartitionLimitExceeded,
+    load_partitioned_change_evidence,
+)
+from domains.changes.repository import MAX_CHANGE_EVENTS, MAX_CHANGE_OBSERVATIONS
 from domains.changes.timeline import build_change_timeline
 from domains.identity.dependencies import require_session
 from domains.inventory_filter.query import ResourceFilters, parse_resource_filters
@@ -27,6 +31,7 @@ MAX_BUCKET_MS = gateway_limits.CHANGE_TIMELINE_MAX_BUCKET_MS
 MAX_RANGE_MS = gateway_limits.CHANGE_TIMELINE_MAX_RANGE_MS
 MAX_BUCKETS = gateway_limits.CHANGE_TIMELINE_MAX_BUCKETS
 MAX_EPOCH_MS = gateway_limits.CHANGE_TIMELINE_MAX_EPOCH_MS
+MAX_CHANGE_RESPONSE_EVENTS = 10_000
 INVALID_REQUEST_DETAIL = "change timeline request is invalid"
 RESULT_LIMIT_DETAIL = "change timeline result exceeds the bounded read limit"
 
@@ -78,20 +83,26 @@ async def list_changes(
     if not required_clusters:
         return ChangeTimelineResponse(buckets=[], events=[], gaps=[])
 
-    evidence = await asyncio.to_thread(
-        db.list_change_timeline_evidence,
-        workspace_id=authorized.workspace_id,
-        allowed_cluster_ids=required_clusters,
-        allowed_application_ids=set(authorized.application_ids),
-        allowed_incident_cluster_ids=set(authorized.incident_cluster_ids),
-        allowed_deployment_application_ids=set(authorized.deployment_application_ids),
-        filters=filters,
-        from_ms=from_ms,
-        to_ms=to_ms,
-        limit=MAX_CHANGE_EVENTS,
-    )
-    if evidence.get("event_overflow") or evidence.get("observation_overflow"):
-        raise HTTPException(status_code=422, detail=RESULT_LIMIT_DETAIL)
+    try:
+        evidence = await asyncio.to_thread(
+            load_partitioned_change_evidence,
+            db.list_change_timeline_evidence,
+            query={
+                "workspace_id": authorized.workspace_id,
+                "allowed_cluster_ids": required_clusters,
+                "allowed_application_ids": set(authorized.application_ids),
+                "allowed_incident_cluster_ids": set(authorized.incident_cluster_ids),
+                "allowed_deployment_application_ids": set(authorized.deployment_application_ids),
+                "filters": filters,
+            },
+            from_ms=from_ms,
+            to_ms=to_ms,
+            leaf_limit=MAX_CHANGE_EVENTS,
+            max_events=MAX_CHANGE_RESPONSE_EVENTS,
+            max_observations=MAX_CHANGE_OBSERVATIONS,
+        )
+    except ChangeEvidencePartitionLimitExceeded:
+        raise HTTPException(status_code=422, detail=RESULT_LIMIT_DETAIL) from None
     result = build_change_timeline(
         from_ms=from_ms,
         to_ms=to_ms,

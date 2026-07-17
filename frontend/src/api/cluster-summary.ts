@@ -2,9 +2,11 @@ import { apiRequest, type ApiPath } from "./client";
 import {
   clusterNodesSummarySchema,
   clusterSummaryDetailSchema,
+  homeInsightsSchema,
   nodePodsSummarySchema,
   type ClusterNodesSummary,
   type ClusterSummaryDetail,
+  type HomeInsightsEndpoint,
   type NodePodsSummary,
 } from "./cluster-summary-schemas";
 import { encodePathSegment } from "./url";
@@ -16,6 +18,17 @@ export function getClusterSummary(
   return apiRequest(
     `/api/clusters/${encodePathSegment(clusterId)}/summary` as ApiPath,
     clusterSummaryDetailSchema,
+    { signal },
+  );
+}
+
+export function getHomeInsights(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<HomeInsightsEndpoint> {
+  return apiRequest(
+    `/api/clusters/${encodePathSegment(clusterId)}/home/insights` as ApiPath,
+    homeInsightsSchema,
     { signal },
   );
 }

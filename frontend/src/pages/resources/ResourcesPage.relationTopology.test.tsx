@@ -260,8 +260,30 @@ function relationSnapshot(): RelationTopologySnapshot {
     graphRevision: "graph-test",
     refreshAfterSeconds: 60,
     nodes: [
-      { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
-      { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
+      {
+        id: "deployment:shop/checkout-api",
+        identity: {
+          resourceType: "workload",
+          kind: "Deployment",
+          namespace: "shop",
+          name: "checkout-api",
+        },
+        kind: "Deployment",
+        name: "checkout-api",
+        status: "Ready",
+      },
+      {
+        id: "pod:shop/checkout-api-0",
+        identity: {
+          resourceType: "pod",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-0",
+        },
+        kind: "Pod",
+        name: "checkout-api-0",
+        status: "CrashLoopBackOff",
+      },
     ],
     edges: [
       { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },

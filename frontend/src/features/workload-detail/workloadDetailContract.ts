@@ -1,3 +1,5 @@
+import type { RightsizingWorkloadEvidence } from "../rightsizing/rightsizingContract";
+
 export type WorkloadDetailAvailability = "available" | "partial" | "unavailable";
 export type WorkloadDetailFreshness = "live" | "stale" | "partial" | "disconnected";
 export type WorkloadLogStreamKind = "deployments" | "statefulsets" | "daemonsets";
@@ -86,6 +88,7 @@ export interface WorkloadDetail {
     reasonCodes: readonly string[];
   };
   logStream: WorkloadLogStreamCapability;
+  rightsizing: RightsizingWorkloadEvidence;
   capabilities: {
     revision: string;
     actions: readonly string[];

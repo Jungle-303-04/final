@@ -6,16 +6,36 @@ from collections.abc import Collection, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, false, func, literal, or_, select
+from sqlalchemy import (
+    BigInteger,
+    Select,
+    and_,
+    case,
+    cast,
+    false,
+    func,
+    literal,
+    or_,
+    select,
+    union_all,
+)
 
 from domains.dashboard.models import RcaTimeline
 from domains.gitops.models import DeploymentBinding, WorkflowRun
+from domains.inventory.change_correlation import (
+    INVENTORY_CHANGE_LEDGER_EPOCH,
+    REVISION_ID_FIELD,
+    SOURCE_SNAPSHOT_ID_FIELD,
+    VERSION_ID_FIELD,
+)
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
     InventoryResourceApplicationVersion,
+    InventoryResourceLabelVersion,
     InventoryResourceVersion,
 )
 from domains.inventory_filter.query import ResourceFilters
+from domains.timeline.models import TimelineLedgerEvent
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection
 
@@ -144,6 +164,7 @@ class ChangeTimelineRepository(DatabaseConnection):
                 _observations_statement(
                     workspace_id=workspace_id,
                     cluster_ids=clusters,
+                    filters=filters,
                     start=start,
                     end=end,
                     limit=MAX_CHANGE_OBSERVATIONS + 1,
@@ -182,28 +203,191 @@ def _inventory_events_statement(
     end: datetime,
     limit: int,
 ) -> Select[Any]:
+    if not _has_inventory_projection_filters(filters):
+        return _bounded_inventory_events_statement(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+
+    event = TimelineLedgerEvent.__table__
     version = InventoryResourceVersion.__table__
-    statement = select(
-        version.c.version_id,
-        version.c.resource_type,
-        version.c.kind,
-        version.c.name,
-        version.c.status,
-        version.c.health,
-        version.c.observed_at,
-    ).where(
-        version.c.workspace_id == workspace_id,
-        version.c.cluster_id.in_(cluster_ids),
-        version.c.observed_at >= start,
-        version.c.observed_at < end,
+    revision = InventoryFilterRevision.__table__
+    from_clause = _inventory_correlation_join(
+        event=event,
+        revision=revision,
+        version=version,
+    )
+
+    statement = (
+        select(
+            event.c.event_id,
+            event.c.title,
+            version.c.health,
+            event.c.occurred_at,
+        )
+        .select_from(from_clause)
+        .where(
+            event.c.workspace_id == workspace_id,
+            event.c.cluster_id.in_(cluster_ids),
+            event.c.source == "inventory",
+            event.c.activity == "change",
+            event.c.event_type.in_(("add", "update", "delete")),
+            event.c.occurred_at >= start,
+            event.c.occurred_at < end,
+        )
     )
     statement = _apply_inventory_filters(
         statement,
         version=version,
         filters=filters,
         allowed_application_ids=allowed_application_ids,
+        labels_complete_column=revision.c.labels_complete,
+        applications_complete_column=revision.c.application_bindings_complete,
     )
-    return statement.order_by(version.c.observed_at, version.c.version_id).limit(limit)
+    return statement.order_by(event.c.occurred_at, event.c.event_id).limit(limit)
+
+
+def _bounded_inventory_events_statement(
+    *,
+    workspace_id: str,
+    cluster_ids: set[str],
+    start: datetime,
+    end: datetime,
+    limit: int,
+) -> Select[Any]:
+    """Bound the ordered ledger candidates before exact projection lookups."""
+    event = TimelineLedgerEvent.__table__
+    per_cluster = tuple(
+        _inventory_change_candidates_for_cluster(
+            event=event,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+        for cluster_id in sorted(cluster_ids)
+    )
+    if len(per_cluster) == 1:
+        candidates = per_cluster[0].subquery("bounded_inventory_change_events")
+    else:
+        merged = union_all(*per_cluster).subquery("per_cluster_inventory_change_events")
+        candidates = (
+            select(merged)
+            .order_by(merged.c.occurred_at, merged.c.event_id)
+            .limit(limit)
+            .subquery("bounded_inventory_change_events")
+        )
+    version = InventoryResourceVersion.__table__
+    revision = InventoryFilterRevision.__table__
+    from_clause = _inventory_correlation_join(
+        event=candidates,
+        revision=revision,
+        version=version,
+    )
+    return (
+        select(
+            candidates.c.event_id,
+            candidates.c.title,
+            version.c.health,
+            candidates.c.occurred_at,
+        )
+        .select_from(from_clause)
+        .order_by(candidates.c.occurred_at, candidates.c.event_id)
+    )
+
+
+def _inventory_change_candidates_for_cluster(
+    *,
+    event: Any,
+    workspace_id: str,
+    cluster_id: str,
+    start: datetime,
+    end: datetime,
+    limit: int,
+) -> Select[Any]:
+    revision_id = _metadata_bigint(event.c.metadata, REVISION_ID_FIELD)
+    version_id = _metadata_bigint(event.c.metadata, VERSION_ID_FIELD)
+    source_snapshot_id = _metadata_text(event.c.metadata, SOURCE_SNAPSHOT_ID_FIELD)
+    return (
+        select(
+            event.c.workspace_id,
+            event.c.cluster_id,
+            event.c.event_id,
+            event.c.native_id,
+            event.c.event_type,
+            event.c.title,
+            event.c.metadata,
+            event.c.occurred_at,
+        )
+        .where(
+            event.c.workspace_id == workspace_id,
+            event.c.cluster_id == cluster_id,
+            event.c.source == "inventory",
+            event.c.activity == "change",
+            event.c.event_type.in_(("add", "update", "delete")),
+            event.c.occurred_at >= start,
+            event.c.occurred_at < end,
+            source_snapshot_id.is_not(None),
+            revision_id.is_not(None),
+            version_id.is_not(None),
+        )
+        .order_by(event.c.occurred_at, event.c.event_id)
+        .limit(limit)
+    )
+
+
+def _inventory_correlation_join(*, event: Any, revision: Any, version: Any) -> Any:
+    source_snapshot_id = _metadata_text(event.c.metadata, SOURCE_SNAPSHOT_ID_FIELD)
+    revision_id = _metadata_bigint(event.c.metadata, REVISION_ID_FIELD)
+    version_id = _metadata_bigint(event.c.metadata, VERSION_ID_FIELD)
+    return event.join(
+        revision,
+        and_(
+            revision.c.workspace_id == event.c.workspace_id,
+            revision.c.cluster_id == event.c.cluster_id,
+            revision.c.revision_id == revision_id,
+            revision.c.snapshot_id == source_snapshot_id,
+            revision.c.change_ledger_epoch == INVENTORY_CHANGE_LEDGER_EPOCH,
+            revision.c.resources_complete.is_(True),
+        ),
+    ).join(
+        version,
+        and_(
+            version.c.workspace_id == event.c.workspace_id,
+            version.c.cluster_id == event.c.cluster_id,
+            version.c.inventory_key == event.c.native_id,
+            version.c.version_id == version_id,
+            version.c.valid_from_revision <= revision.c.revision_id,
+            or_(
+                and_(
+                    event.c.event_type == "delete",
+                    version.c.valid_to_revision == revision.c.revision_id,
+                ),
+                and_(
+                    event.c.event_type != "delete",
+                    or_(
+                        version.c.valid_to_revision.is_(None),
+                        version.c.valid_to_revision > revision.c.revision_id,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def _has_inventory_projection_filters(filters: ResourceFilters) -> bool:
+    return bool(
+        filters.namespaces
+        or filters.applications
+        or filters.resource_types
+        or filters.health
+        or filters.labels
+        or filters.query
+    )
 
 
 def _incident_events_statement(
@@ -292,22 +476,30 @@ def _observations_statement(
     *,
     workspace_id: str,
     cluster_ids: set[str],
+    filters: ResourceFilters,
     start: datetime,
     end: datetime,
     limit: int,
 ) -> Select[Any]:
     revision = InventoryFilterRevision.__table__
-    return (
+    statement = (
         select(revision.c.cluster_id, revision.c.observed_at)
         .where(
             revision.c.workspace_id == workspace_id,
             revision.c.cluster_id.in_(cluster_ids),
+            revision.c.change_ledger_epoch == INVENTORY_CHANGE_LEDGER_EPOCH,
+            revision.c.resources_complete.is_(True),
             revision.c.observed_at >= start,
             revision.c.observed_at < end,
         )
         .order_by(revision.c.observed_at, revision.c.revision_id)
         .limit(limit)
     )
+    if filters.labels:
+        statement = statement.where(revision.c.labels_complete.is_(True))
+    if filters.applications:
+        statement = statement.where(revision.c.application_bindings_complete.is_(True))
+    return statement
 
 
 def _apply_inventory_filters(
@@ -316,6 +508,8 @@ def _apply_inventory_filters(
     version: Any,
     filters: ResourceFilters,
     allowed_application_ids: set[str],
+    labels_complete_column: Any | None = None,
+    applications_complete_column: Any | None = None,
 ) -> Select[Any]:
     if filters.namespaces:
         statement = statement.where(_namespace_clause(version, filters.namespaces))
@@ -324,16 +518,36 @@ def _apply_inventory_filters(
     if filters.health:
         statement = statement.where(func.lower(version.c.health).in_(filters.health))
     if filters.labels:
+        if labels_complete_column is None:
+            return statement.where(false())
+        label = InventoryResourceLabelVersion.__table__
         statement = statement.where(
-            *(version.c.labels.contains({key: value}) for key, value in filters.labels)
+            labels_complete_column.is_(True),
+            *(
+                select(literal(1))
+                .select_from(label)
+                .where(
+                    label.c.workspace_id == version.c.workspace_id,
+                    label.c.cluster_id == version.c.cluster_id,
+                    label.c.version_id == version.c.version_id,
+                    label.c.key == key,
+                    label.c.value == value,
+                )
+                .exists()
+                for key, value in filters.labels
+            ),
         )
     if filters.applications:
         requested = set(filters.applications)
         visible = requested & allowed_application_ids
         if requested - allowed_application_ids or not visible:
             return statement.where(false())
+        if applications_complete_column is None:
+            return statement.where(false())
         binding = InventoryResourceApplicationVersion.__table__
         statement = statement.where(
+            applications_complete_column.is_(True),
+            version.c.application_binding_complete.is_(True),
             select(literal(1))
             .select_from(binding)
             .where(
@@ -341,7 +555,7 @@ def _apply_inventory_filters(
                 binding.c.version_id == version.c.version_id,
                 binding.c.application_id.in_(visible),
             )
-            .exists()
+            .exists(),
         )
     if filters.query:
         statement = statement.where(
@@ -465,17 +679,12 @@ def _namespace_clause(
 
 
 def _inventory_event(row: Mapping[str, Any]) -> JsonObject:
-    status = str(row.get("status") or "unknown")
-    title = _title(
-        f"{str(row.get('kind') or row.get('resource_type') or 'Resource')} "
-        f"{str(row.get('name') or 'unknown')} observed as {status}"
-    )
     return {
-        "id": f"inventory:{row['version_id']}",
+        "id": str(row["event_id"]),
         "kind": "inventory_event",
-        "occurredMs": _epoch_ms(row["observed_at"]),
-        "title": title,
-        "severity": normalize_change_severity(row.get("health") or status),
+        "occurredMs": _epoch_ms(row["occurred_at"]),
+        "title": _title(str(row["title"])),
+        "severity": normalize_change_severity(row.get("health")),
     }
 
 
@@ -571,3 +780,19 @@ def _escape_like(value: str) -> str:
 def _title(value: str) -> str:
     normalized = " ".join(value.split())
     return normalized[:240] or "Observed change"
+
+
+def _metadata_text(metadata: Any, field: str) -> Any:
+    value = metadata[field]
+    return case(
+        (func.jsonb_typeof(value) == "string", value.astext),
+        else_=None,
+    )
+
+
+def _metadata_bigint(metadata: Any, field: str) -> Any:
+    value = metadata[field]
+    return case(
+        (func.jsonb_typeof(value) == "number", cast(value.astext, BigInteger)),
+        else_=None,
+    )

@@ -10,13 +10,21 @@ afterEach(cleanup);
 
 describe("resource topology presentation", () => {
   it.each([
-    ["Workflow", "lucide-workflow"],
-    ["WorkflowTemplate", "lucide-file-text"],
-    ["ClusterWorkflowTemplate", "lucide-file-text"],
-    ["CronWorkflow", "lucide-clock-3"],
-    ["ServiceAccount", "lucide-id-card"],
-    ["ServiceMonitor", "lucide-monitor-dot"],
-    ["SealedSecret", "lucide-lock-keyhole"],
+    ["Deployment", "lucide-rocket"],
+    ["DaemonSet", "lucide-rows-3"],
+    ["StatefulSet", "lucide-database-zap"],
+    ["ReplicaSet", "lucide-copy"],
+    ["Workflow", "lucide-activity"],
+    ["ServiceAccount", "lucide-user-cog"],
+    ["ServiceMonitor", "lucide-radio"],
+    ["SealedSecret", "lucide-key-round"],
+    ["HTTPRoute", "lucide-globe"],
+    ["Application", "lucide-git-branch"],
+    ["HelmRelease", "lucide-anchor"],
+    ["NodePool", "lucide-server"],
+    ["KubeadmControlPlane", "lucide-shield"],
+    ["VulnerabilityReport", "lucide-shield"],
+    ["SbomReport", "lucide-file-search"],
   ])("uses the shared icon registry for %s", (kind, className) => {
     const Icon = resourceKindIcon(kind);
     const { container } = render(createElement(Icon, { "aria-hidden": true }));

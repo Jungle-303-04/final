@@ -4,6 +4,7 @@ import type { ResourceMetricsHistoryBatch } from "../../features/resources/resou
 import { mergeLiveResourceMetricSeries } from "./resourceMetricLiveSeries";
 
 const BATCH: ResourceMetricsHistoryBatch = {
+  refreshPolicyKey: "metrics_kubernetes",
   completeness: "partial",
   partialReasonCodes: ["inventory_projection_partial"],
   series: [{

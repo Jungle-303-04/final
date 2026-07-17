@@ -64,6 +64,8 @@ describe("ProductShell", () => {
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
     expect(markup.match(/data-slot="unified-filter-bar"/gu)).toHaveLength(1);
+    expect(markup).toContain('id="product-main"');
+    expect(markup).toContain("flex-1 overflow-y-auto");
   });
 
   it("never names an unreleased route while an unknown URL redirects", () => {

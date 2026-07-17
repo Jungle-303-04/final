@@ -10,16 +10,19 @@ describe("Cost overview API", () => {
 
     await expect(getCostOverview({
       clusterIds: ["cluster-b", "cluster-a", "cluster-a"],
+      namespaces: ["cluster-a/shop"],
       timeRange: "7d",
     })).resolves.toMatchObject({
       observation: { currency: null, data_window: null },
       summary: { hourly_cost: null, monthly_projection: null, savings_recommendations: null },
       trend: { availability: "unavailable", range: "7d", series: [] },
       refresh_after_seconds: 60,
+      trend_refresh_after_seconds: 120,
+      nodes_refresh_after_seconds: 120,
     });
 
     expect(COST_OVERVIEW_PATH).toBe("/api/cost/overview");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b&range=7d");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b&namespaces=cluster-a%2Fshop&range=7d");
   });
 
   it("accepts bounded observed trend series and rejects oversized responses", async () => {
@@ -120,6 +123,8 @@ function overview() {
       reason_codes: ["cost_observation_not_integrated"],
     },
     refresh_after_seconds: 60,
+    trend_refresh_after_seconds: 120,
+    nodes_refresh_after_seconds: 120,
   };
 }
 

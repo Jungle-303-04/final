@@ -1,8 +1,10 @@
 import { GitBranch, LayoutGrid, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
 import { useMatch } from "react-router-dom";
+import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type { GitOpsPort, ReleasePlan } from "../../features/gitops/gitOpsContract";
 import { gitOpsApplicationDetailIdFromRoute } from "../../features/gitops/gitOpsApplicationDetailRoute";
+import { gitOpsResourceDetailLocator } from "../../features/gitops/gitOpsResourceDetailRoute";
 import { WORKFLOW_VIEWS, settingString, type WorkflowView } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -20,14 +22,31 @@ import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowPlanPicker } from "./WorkflowPlanPicker";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
 import { GitOpsApplicationDetailPage } from "./GitOpsApplicationDetailPage";
+import { GitOpsResourceDetailPage } from "./GitOpsResourceDetailPage";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 type GitOpsSection = "changes" | "sync";
 
-export function GitOpsPage({ port }: { port: GitOpsPort }) {
+export function GitOpsPage({
+  port,
+  refreshPolicies,
+}: {
+  port: GitOpsPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts">;
+}) {
   const { t } = useI18n();
+  const searchParams = useFilterSearchParams();
   const detailMatch = useMatch("/gitops/detail/*");
+  const resourceMatch = useMatch("/gitops/resource");
   const [section, setSection] = useState<GitOpsSection>("changes");
   const applicationId = gitOpsApplicationDetailIdFromRoute(detailMatch?.params["*"]);
+  const resourceLocator = resourceMatch ? gitOpsResourceDetailLocator(searchParams) : null;
+
+  if (resourceMatch) {
+    return resourceLocator
+      ? <GitOpsResourceDetailPage locator={resourceLocator} port={port} />
+      : <ProductStateScreen kind="error" issue={{ code: "invalid-response" }} placement="content" />;
+  }
 
   if (applicationId !== null) {
     return <GitOpsApplicationDetailPage applicationId={applicationId} port={port} />;
@@ -62,7 +81,7 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           {section === "changes" ? <GitOpsChangesWorkspace port={port} /> : null}
         </TabsContent>
         <TabsContent className="min-w-0" value="sync">
-          {section === "sync" ? <GitOpsSyncTableView port={port} /> : null}
+          {section === "sync" ? <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} /> : null}
         </TabsContent>
       </Tabs>
     </ProductPageFrame>

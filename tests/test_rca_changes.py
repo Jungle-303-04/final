@@ -390,6 +390,50 @@ def test_recent_query_rechecks_unique_incident_scope_and_cutoff() -> None:
     assert gateway_limits.RCA_RECENT_CHANGE_DEFAULT_LIMIT in compiled.params.values()
 
 
+def test_issue_queue_recent_changes_use_one_authorized_globally_bounded_query() -> None:
+    statements: list[Any] = []
+
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class Connection:
+        def execute(self, statement: Any) -> Result:
+            statements.append(statement)
+            return Result()
+
+    @contextmanager
+    def connection():
+        yield Connection()
+
+    repository = object.__new__(RcaChangesRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+    result = repository.list_recent_workload_changes_for_incidents(
+        "workspace-a",
+        ("incident-b", "incident-a", "incident-a"),
+        {"cluster-a", "cluster-b"},
+        limit=500,
+    )
+
+    assert result == []
+    assert len(statements) == 1
+    compiled = statements[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "issue_queue_change_scopes" in sql
+    assert "ranked_issue_queue_change_scopes" in sql
+    assert "scope_count" in sql
+    assert "audit_log" in sql
+    assert "rca_timeline.workspace_id" in sql
+    assert "rca_timeline.cluster_id IN" in sql
+    assert "workload_changes.changed_at <=" in sql
+    assert "workflow_pr_references" in sql
+    assert "ORDER BY workload_changes.changed_at DESC, workload_changes.event_id DESC" in sql
+    assert 50 in compiled.params.values()
+
+
 def test_evidence_join_query_uses_workload_and_time_without_incident_projection() -> None:
     statements: list[Any] = []
 

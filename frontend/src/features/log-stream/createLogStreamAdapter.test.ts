@@ -7,7 +7,11 @@ describe("log stream adapter", () => {
     const onEvent = vi.fn();
     const close = vi.fn();
     const openPodLogStream = vi.fn((_cluster, _namespace, _name, _container, handlers) => {
-      handlers.onEvent({ type: "connected", stream_id: "stream-1" });
+      handlers.onEvent({
+        type: "connected",
+        stream_id: "stream-1",
+        containers: ["app", "sidecar"],
+      });
       handlers.onEvent({
         type: "log",
         id: "line-1",
@@ -41,7 +45,11 @@ describe("log stream adapter", () => {
       null,
       expect.any(Object),
     );
-    expect(onEvent).toHaveBeenNthCalledWith(1, { type: "connected", streamId: "stream-1" });
+    expect(onEvent).toHaveBeenNthCalledWith(1, {
+      type: "connected",
+      streamId: "stream-1",
+      containers: ["app", "sidecar"],
+    });
     expect(onEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({
       type: "log",
       observedAt: "2026-07-14T08:00:00+00:00",

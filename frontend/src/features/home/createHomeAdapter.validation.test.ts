@@ -5,6 +5,7 @@ import {
   CLUSTER_LIST,
   CLUSTER_OVERVIEW,
   endpoints,
+  HOME_INSIGHTS,
   NODE_COLLECTION,
   POD_COLLECTION,
 } from "./createHomeAdapter.testSupport";
@@ -29,6 +30,70 @@ describe("canonical Home adapter validation", () => {
         : port.loadNodePods("cluster-1", "worker-b");
 
     await expect(request).rejects.toMatchObject({ code: "invalid-response" });
+  });
+
+  it.each([
+    [
+      "response identity",
+      { ...HOME_INSIGHTS, cluster_id: "other" },
+    ],
+    [
+      "unavailable custom resource totals",
+      {
+        ...HOME_INSIGHTS,
+        custom_resources: {
+          ...HOME_INSIGHTS.custom_resources,
+          coverage: {
+            availability: "unavailable" as const,
+            observed_at: null,
+            reason_codes: ["inventory_snapshot_unavailable:cluster-1"],
+          },
+        },
+      },
+    ],
+    [
+      "inconsistent custom resource total",
+      {
+        ...HOME_INSIGHTS,
+        custom_resources: {
+          ...HOME_INSIGHTS.custom_resources,
+          total_resources: 1,
+        },
+      },
+    ],
+    [
+      "certificate count overflow",
+      {
+        ...HOME_INSIGHTS,
+        certificate_expiry: {
+          ...HOME_INSIGHTS.certificate_expiry,
+          observed_expiry_count: 2,
+        },
+      },
+    ],
+    [
+      "non-Secret certificate target",
+      {
+        ...HOME_INSIGHTS,
+        certificate_expiry: {
+          ...HOME_INSIGHTS.certificate_expiry,
+          items: [{
+            ...HOME_INSIGHTS.certificate_expiry.items[0],
+            secret: {
+              ...HOME_INSIGHTS.certificate_expiry.items[0].secret,
+              kind: "ConfigMap",
+            },
+          }],
+        },
+      },
+    ],
+  ])("rejects Home insights with %s", async (_name, payload) => {
+    const dependencies = endpoints({
+      getHomeInsights: vi.fn().mockResolvedValue(payload),
+    });
+
+    await expect(createHomeAdapter(dependencies).loadInsights("cluster-1"))
+      .rejects.toMatchObject({ code: "invalid-response" });
   });
 
   it.each([

@@ -21,6 +21,7 @@ describe("ProductStateScreen", () => {
 
     expect(main.getAttribute("aria-busy")).toBe("true");
     expect(main.getAttribute("aria-label")).toBe("세션 확인 중");
+    expect(main.getAttribute("data-product-state")).toBe("loading");
     expect(screen.getByRole("status", { name: "세션 확인 중" })).toBeTruthy();
     expect(screen.queryByRole("heading")).toBeNull();
     expect(container.querySelector('[data-slot="product-page-frame"]')).toBeTruthy();
@@ -46,6 +47,7 @@ describe("ProductStateScreen", () => {
     const main = screen.getByRole("main");
 
     expect(main.getAttribute("aria-busy")).toBeNull();
+    expect(main.getAttribute("data-product-state")).toBe("release");
     expect(container.querySelector("[aria-live]")).toBeNull();
     expect(container.querySelector('[data-slot="badge"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "서비스 연결을 확인하고 있습니다" })).toBeTruthy();
@@ -210,6 +212,7 @@ describe("ProductStateScreen", () => {
     expect(screen.getAllByRole("main")).toHaveLength(1);
     const region = screen.getByRole("region", { name: "불러오는 중" });
     expect(region).toBeTruthy();
+    expect(region.getAttribute("data-product-state")).toBe("loading");
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
   });

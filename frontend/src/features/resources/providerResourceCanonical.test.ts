@@ -181,4 +181,299 @@ describe("resource detail canonical mapping", () => {
       activeDeadlineSeconds: 600,
     });
   });
+
+  it("maps Karpenter and KEDA observations without browser defaults or raw metadata", () => {
+    expect(toProviderResourceDetail({
+      type: "karpenter-node-claim",
+      state: "registered",
+      instance_type: "m7g.large",
+      capacity_type: "spot",
+      node_name: "ip-10-0-0-1",
+      zone: "ap-northeast-2a",
+      architecture: "arm64",
+      node_pool: "general",
+      node_class_ref: {
+        api_version: "karpenter.k8s.aws",
+        kind: "EC2NodeClass",
+        namespace: null,
+        name: "default",
+      },
+      image_id: "ami-123",
+      expire_after: "720h",
+      capacity: { cpu: "2", memory: "8Gi", pods: "29", ephemeral_storage: null },
+      requirements: [{
+        key: "kubernetes.io/arch",
+        operator: "In",
+        values: ["arm64"],
+        min_values: null,
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "karpenter-node-claim",
+      state: "registered",
+      nodeClassRef: { kind: "EC2NodeClass", name: "default" },
+      capacity: { memory: "8Gi" },
+    });
+
+    expect(toProviderResourceDetail({
+      type: "keda-scaled-object",
+      state: "active",
+      target_ref: { api_version: null, kind: "Deployment", namespace: "shop", name: "api" },
+      scaling: { minimum: 1, maximum: 20, current: null },
+      idle_replicas: null,
+      polling_interval_seconds: 15,
+      cooldown_period_seconds: 60,
+      hpa_name: "keda-hpa-api",
+      last_active_time: "2026-07-16T00:00:00Z",
+      fallback_failure_threshold: null,
+      fallback_replicas: null,
+      restore_original_replicas: false,
+      scale_up_stabilization_seconds: 30,
+      scale_down_stabilization_seconds: 300,
+      scaling_policies: [{ direction: "up", type: "Percent", value: 100, period_seconds: 15 }],
+      triggers: [{
+        type: "rabbitmq",
+        name: "orders",
+        authentication_ref: {
+          api_version: null,
+          kind: "TriggerAuthentication",
+          namespace: "shop",
+          name: "rabbitmq",
+        },
+        metadata_keys: ["queueName"],
+        redacted_metadata_count: 2,
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "keda-scaled-object",
+      state: "active",
+      scaling: { minimum: 1, maximum: 20 },
+      triggers: [{ metadataKeys: ["queueName"], redactedMetadataCount: 2 }],
+    });
+  });
+
+  it("maps bounded SBOM and vulnerability observations without reparsing raw reports", () => {
+    expect(toProviderResourceDetail({
+      type: "sbom-report",
+      container_name: "api",
+      image: "registry.example.test/platform/api:1.2.3",
+      bom_format: "CycloneDX",
+      spec_version: "1.6",
+      component_count: 2,
+      dependency_count: 1,
+      observed_component_count: 2,
+      projected_component_count: 2,
+      truncated: false,
+      scanner_name: "Trivy",
+      scanner_version: "0.64.1",
+      scanned_at: "2026-07-16T00:00:00Z",
+      components: [{
+        name: "fastapi",
+        version: "0.116.0",
+        type: "library",
+        package_url: "pkg:pypi/fastapi@0.116.0",
+        package_url_qualifiers_redacted: true,
+        license: "MIT",
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "sbom-report",
+      componentCount: 2,
+      components: [{
+        packageUrl: "pkg:pypi/fastapi@0.116.0",
+        packageUrlQualifiersRedacted: true,
+      }],
+    });
+
+    expect(toProviderResourceDetail({
+      type: "vulnerability-report",
+      container_name: "api",
+      image: "registry.example.test/platform/api:1.2.3",
+      os_family: "debian",
+      os_name: "12",
+      os_end_of_service_life: false,
+      scanner_name: "Trivy",
+      scanner_version: "0.64.1",
+      scanned_at: "2026-07-16T00:00:00Z",
+      severity: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+      observed_vulnerability_count: 1,
+      projected_vulnerability_count: 1,
+      truncated: false,
+      vulnerabilities: [{
+        vulnerability_id: "CVE-2026-0001",
+        severity: "CRITICAL",
+        score: 9.8,
+        package: "openssl",
+        installed_version: "3.0.1",
+        fixed_version: "3.0.2",
+        primary_link: "https://security.example.test/CVE-2026-0001",
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "vulnerability-report",
+      severity: { critical: 1 },
+      vulnerabilities: [{
+        vulnerabilityId: "CVE-2026-0001",
+        fixedVersion: "3.0.2",
+      }],
+    });
+  });
+
+  it("maps Prometheus rule groups and shared TCP/TLS route contracts", () => {
+    expect(toProviderResourceDetail({
+      type: "prometheus-rule",
+      group_count: 1,
+      total_rules: 2,
+      total_alerts: 1,
+      total_recordings: 1,
+      projected_rules: 1,
+      truncated: true,
+      groups: [{
+        name: "api",
+        interval: "30s",
+        rule_count: 2,
+        alert_count: 1,
+        recording_count: 1,
+        rules: [{
+          type: "alert",
+          name: "HighErrorRate",
+          expression: "rate(http_errors_total[5m]) > 0.05",
+          duration: "10m",
+          severity: "critical",
+          summary: "API error rate is high",
+          description: null,
+          labels: [{ key: "severity", value: "critical" }],
+        }],
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "prometheus-rule",
+      totalRules: 2,
+      projectedRules: 1,
+      truncated: true,
+      groups: [{ rules: [{ name: "HighErrorRate" }] }],
+    });
+
+    expect(toProviderResourceDetail({
+      type: "tls-route",
+      hostnames: ["tls.example.test"],
+      parent_refs: [],
+      rules: [{
+        matches: [],
+        backends: [{
+          reference: {
+            api_version: null,
+            kind: null,
+            namespace: "network",
+            name: "tls-api",
+          },
+          port: 9443,
+          weight: null,
+        }],
+        filters: [],
+      }],
+      parent_statuses: [],
+      conditions: [],
+    })).toMatchObject({
+      type: "tls-route",
+      hostnames: ["tls.example.test"],
+      rules: [{ backends: [{ port: 9443 }] }],
+    });
+  });
+
+  it("maps redacted storage, secret, managed-resource, and workflow projections", () => {
+    expect(toProviderResourceDetail({
+      type: "secret",
+      secret_type: "Opaque",
+      immutable: true,
+      key_names: ["password", "username"],
+      conditions: [],
+    })).toEqual({
+      type: "secret",
+      secretType: "Opaque",
+      immutable: true,
+      keyNames: ["password", "username"],
+      conditions: [],
+    });
+
+    expect(toProviderResourceDetail({
+      type: "persistent-volume-claim",
+      phase: "Bound",
+      capacity: "20Gi",
+      requested: "20Gi",
+      storage_class_name: "gp3",
+      access_modes: ["ReadWriteOnce"],
+      volume_mode: "Filesystem",
+      volume_name: "pvc-volume",
+      provisioner: "ebs.csi.aws.com",
+      selected_node: null,
+      bind_completed: true,
+      conditions: [],
+    })).toMatchObject({
+      type: "persistent-volume-claim",
+      storageClassName: "gp3",
+      bindCompleted: true,
+    });
+
+    expect(toProviderResourceDetail({
+      type: "crossplane-managed-resource",
+      api_group: "s3.aws.upbound.io",
+      kind: "Bucket",
+      external_name: "observed-bucket",
+      management_policies: ["Observe"],
+      deletion_policy: "Orphan",
+      paused: false,
+      provider_config_ref: {
+        api_version: null,
+        kind: null,
+        namespace: null,
+        name: "prod",
+      },
+      composing_resource_ref: null,
+      observed_spec_fields: ["region"],
+      observed_status_fields: ["arn"],
+      conditions: [],
+    })).toMatchObject({
+      type: "crossplane-managed-resource",
+      externalName: "observed-bucket",
+      providerConfigRef: { name: "prod" },
+    });
+
+    expect(toProviderResourceDetail({
+      type: "workflow",
+      phase: "Succeeded",
+      started_at: "2026-07-16T00:00:00Z",
+      finished_at: "2026-07-16T00:01:00Z",
+      progress: "1/1",
+      estimated_duration_seconds: 60,
+      workflow_template_ref: {
+        api_version: "argoproj.io",
+        kind: "WorkflowTemplate",
+        namespace: "shop",
+        name: "release",
+      },
+      argument_names: ["environment"],
+      resource_durations: [{ key: "cpu", value: "12" }],
+      execution_nodes: [{
+        id: "root",
+        label: "release",
+        node_type: "DAG",
+        phase: "Succeeded",
+        depth: 0,
+        started_at: "2026-07-16T00:00:00Z",
+        finished_at: "2026-07-16T00:01:00Z",
+        message: null,
+        template_ref: null,
+      }],
+      observed_node_count: 1,
+      projected_node_count: 1,
+      truncated: false,
+      problem_summaries: [],
+      conditions: [],
+    })).toMatchObject({
+      type: "workflow",
+      workflowTemplateRef: { name: "release" },
+      executionNodes: [{ id: "root", depth: 0 }],
+    });
+  });
 });

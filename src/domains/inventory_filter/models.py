@@ -21,6 +21,15 @@ class InventoryFilterRevision(Base):
             "cluster_id",
             "revision_id",
         ),
+        Index(
+            "ix_inventory_filter_revisions_change_coverage",
+            "workspace_id",
+            "cluster_id",
+            "change_ledger_epoch",
+            "resources_complete",
+            "observed_at",
+            "revision_id",
+        ),
     )
 
     revision_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -31,6 +40,7 @@ class InventoryFilterRevision(Base):
     labels_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
     resources_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
     application_bindings_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    change_ledger_epoch: Mapped[str | None] = mapped_column(Text, nullable=True)
     partial_reason_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[Any] = created_at_column()
 

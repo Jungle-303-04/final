@@ -7,6 +7,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeInsights,
   HomeNodeCollection,
   HomePodCollection,
   HomePort,
@@ -99,6 +100,7 @@ export const NODES: HomeNodeCollection = {
       id: "node:cluster-1/worker-a",
       identityStability: "ephemeral",
       name: "worker-a",
+      kubernetesVersion: "v1.30.7",
       ready: true,
       health: "healthy",
       podsRunning: 9,
@@ -112,6 +114,7 @@ export const NODES: HomeNodeCollection = {
       id: "node:cluster-1/worker-b",
       identityStability: "ephemeral",
       name: "worker-b",
+      kubernetesVersion: "v1.30.7",
       ready: false,
       health: "warning",
       podsRunning: 8,
@@ -122,6 +125,72 @@ export const NODES: HomeNodeCollection = {
       conditions: ["MemoryPressure"],
     },
   ],
+};
+
+export const INSIGHTS: HomeInsights = {
+  clusterId: "cluster-1",
+  customResources: {
+    coverage: {
+      availability: "available",
+      observedAt: "2026-07-12T10:00:00.000Z",
+      reasonCodes: [],
+    },
+    items: [{
+      apiGroup: "argoproj.io",
+      version: "v1alpha1",
+      kind: "Application",
+      count: 7,
+    }],
+    totalKinds: 1,
+    totalResources: 7,
+    hasMore: false,
+  },
+  helm: {
+    coverage: {
+      availability: "available",
+      observedAt: "2026-07-12T10:00:00.000Z",
+      reasonCodes: [],
+    },
+    releaseCount: 2,
+    statusCounts: { deployed: 2 },
+  },
+  certificateExpiry: {
+    coverage: {
+      availability: "available",
+      observedAt: "2026-07-12T10:00:00.000Z",
+      reasonCodes: [],
+    },
+    items: [{
+      secret: {
+        apiGroup: "",
+        version: "v1",
+        kind: "Secret",
+        namespace: "shop",
+        name: "api-tls",
+        uid: "secret-api-tls",
+      },
+      sourceCertificate: {
+        apiGroup: "cert-manager.io",
+        version: "v1",
+        kind: "Certificate",
+        namespace: "shop",
+        name: "api-certificate",
+        uid: "certificate-api",
+      },
+      notAfter: "2026-07-20T10:00:00.000Z",
+      status: "expiring",
+      secondsRemaining: 345_600,
+      observedAt: "2026-07-12T10:00:00.000Z",
+    }],
+    tlsSecretCount: 1,
+    observedExpiryCount: 1,
+    expiringCount: 1,
+    expiredCount: 0,
+    earliestExpiry: "2026-07-20T10:00:00.000Z",
+    warningBeforeSeconds: 2_592_000,
+    hasMore: false,
+  },
+  refreshAfterSeconds: 30,
 };
 
 export const PODS: HomePodCollection = {
@@ -171,10 +240,26 @@ export function renderHome(
 
 export function homePort(overrides: Partial<HomePort> = {}): HomePort {
   return {
+    loadDashboardRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 15,
+      refreshAfterSeconds: 30,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: true,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     listClusterChoices: vi.fn().mockResolvedValue(CLUSTERS),
     loadClusterOverview: vi.fn().mockResolvedValue(OVERVIEW),
+    loadInsights: vi.fn().mockResolvedValue(INSIGHTS),
     loadNodes: vi.fn().mockResolvedValue(NODES),
     loadNodePods: vi.fn().mockResolvedValue(PODS),
+    subscribeDashboardInvalidations: () => ({
+      async *[Symbol.asyncIterator]() {
+        yield* [];
+      },
+    }),
     ...overrides,
   };
 }

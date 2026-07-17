@@ -14,8 +14,14 @@ COMMAND_FAILED_STATUS = "failed"
 
 PayloadT = TypeVar("PayloadT")
 PayloadModel = type[BaseModel]
-KubernetesVerb = Literal["get", "patch", "apply", "delete"]
-KubernetesScope = Literal["target-agent", "system", "user-workload"]
+KubernetesVerb = Literal["get", "create", "patch", "apply", "delete"]
+KubernetesScope = Literal[
+    "target-agent",
+    "system",
+    "user-workload",
+    "cluster-workload",
+    "service-access",
+]
 
 
 class KubernetesClient(Protocol):
@@ -30,6 +36,15 @@ class KubernetesClient(Protocol):
         subresource: str | None = None,
     ) -> JsonObject: ...
 
+    async def get_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject: ...
+
     async def patch_namespaced_resource(
         self,
         *,
@@ -42,6 +57,26 @@ class KubernetesClient(Protocol):
         subresource: str | None = None,
     ) -> JsonObject: ...
 
+    async def patch_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+        body: JsonObject,
+    ) -> JsonObject: ...
+
+    async def create_namespaced_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+        body: JsonObject,
+    ) -> JsonObject: ...
+
     async def delete_namespaced_resource(
         self,
         *,
@@ -50,6 +85,8 @@ class KubernetesClient(Protocol):
         namespace: str,
         resource: str,
         name: str,
+        preconditions: JsonObject | None = None,
+        propagation_policy: str | None = None,
     ) -> JsonObject: ...
 
     async def delete_cluster_resource(
@@ -59,6 +96,8 @@ class KubernetesClient(Protocol):
         version: str,
         resource: str,
         name: str,
+        preconditions: JsonObject | None = None,
+        propagation_policy: str | None = None,
     ) -> JsonObject: ...
 
 

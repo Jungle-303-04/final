@@ -19,6 +19,7 @@ AGENT_EVIDENCE_PATH = "/agent/evidence"
 TARGETS_PATH = "/targets"
 # 원라인 인스톨러 — agent 토큰 자체가 자격증명(해시 대조)이라 세션 불필요.
 INSTALL_MANIFEST_PATH = "/install/{agent_token}"
+TARGET_RBAC_MANIFEST_PATH = "/clusters/{cluster_id}/target-rbac-manifest"
 COMMANDS_PATH = "/commands"
 COMMAND_STATUS_PATH = "/commands/{command_id}"
 COMMAND_EVENTS_PATH = "/commands/{command_id}/events"
@@ -41,6 +42,16 @@ AI_CHAT_PATH = "/ai/chat"
 AI_SUGGESTIONS_PATH = "/ai/suggestions"
 AI_RESOURCES_PATH = "/ai/resources/{kind}"
 AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
+# Durable, resource-scoped AI investigations. The browser supplies an exact
+# Kubernetes identity, while the gateway re-resolves it before creating a run.
+DIAGNOSE_CAPABILITIES_PATH = "/diagnose/capabilities"
+DIAGNOSE_CONSENTS_PATH = "/diagnose/consents"
+DIAGNOSE_RUNS_PATH = "/diagnose/runs"
+DIAGNOSE_RUN_PATH = "/diagnose/runs/{run_id}"
+DIAGNOSE_RUN_TURNS_PATH = "/diagnose/runs/{run_id}/turns"
+DIAGNOSE_RUN_STOP_PATH = "/diagnose/runs/{run_id}/stop"
+DIAGNOSE_RUN_EVENTS_PATH = "/diagnose/runs/{run_id}/events"
+DIAGNOSE_HISTORY_PATH = "/diagnose/history"
 # Browser log SSE. Multi-cluster identity is a required query parameter; these
 # path constants own only the target identity portion.
 POD_LOG_STREAM_PATH = "/pods/{namespace}/{name}/logs/stream"
@@ -48,6 +59,7 @@ WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
 # Contextual Workload Detail.  API group/version and exact cluster identity are
 # query-owned because the upstream path is intentionally cluster agnostic.
 WORKLOAD_DETAIL_PATH = "/workloads/{kind}/{namespace}/{name}"
+RIGHTSIZING_SCAN_PATH = "/rightsizing/workloads"
 # Safe contextual Compare.  Source-compatible kind/apiGroup/a/b are query
 # owned; the product adds cluster_id and an exact apiVersion when resolved.
 COMPARE_DESCRIPTORS_PATH = "/compare/descriptors"
@@ -85,10 +97,23 @@ APPLICATION_LABEL_FACETS_PATH = "/applications/label-facets"
 GITOPS_FILTER_RESULTS_PATH = "/gitops/filter-results"
 GITOPS_FILTER_FACETS_PATH = "/gitops/filter-facets"
 GITOPS_APPLICATION_DETAIL_PATH = "/gitops/applications/{application_id}"
+GITOPS_RESOURCE_TREE_PATH = "/gitops/resources/{kind}/{namespace}/{name}/tree"
+GITOPS_RESOURCE_INSIGHTS_PATH = "/gitops/resources/{kind}/{namespace}/{name}/insights"
+GITOPS_RESOURCE_ACTION_PATH = "/gitops/resources/{kind}/{namespace}/{name}/actions"
 HELM_RELEASES_PATH = "/helm/releases"
 HELM_RELEASE_PATH = "/helm/releases/{namespace}/{release_name}"
+HELM_RELEASE_ARTIFACT_PATH = "/helm/releases/{namespace}/{release_name}/artifacts"
+HELM_RELEASE_UPGRADE_PATH = "/helm/releases/{namespace}/{release_name}/upgrade"
+HELM_RELEASE_UPGRADE_INFO_PATH = "/helm/releases/{namespace}/{release_name}/upgrade-info"
+HELM_RELEASE_VERSIONS_PATH = "/helm/releases/{namespace}/{release_name}/versions"
+HELM_UPGRADE_CHECK_PATH = "/helm/upgrade-check"
+HELM_CHART_SOURCES_PATH = "/helm/chart-sources"
+HELM_CHART_SOURCE_PATH = "/helm/chart-sources/{source_id}"
+HELM_CHART_SOURCE_VERSIONS_PATH = "/helm/chart-sources/{source_id}/charts/{chart_name}/versions"
+CLUSTER_HOME_INSIGHTS_PATH = "/clusters/{cluster_id}/home/insights"
 TRAFFIC_OVERVIEW_PATH = "/traffic/overview"
 COST_OVERVIEW_PATH = "/cost/overview"
+COST_NODES_PATH = "/cost/nodes"
 CHECKS_OVERVIEW_PATH = "/checks/overview"
 CHECKS_DETAIL_PATH = "/checks/{check_id}"
 SCHEDULED_WORKLOAD_RUNS_PATH = "/workloads/scheduled/{kind}/{namespace}/{name}/runs"
@@ -103,6 +128,7 @@ REPOS_VALIDATE_PATH = "/repos/validate"
 REPOS_BRANCHES_PATH = "/repos/branches"
 REPOS_MANIFESTS_PATH = "/repos/manifests"
 DIAGNOSTICS_PATH = "/diagnostics"
+VERSION_CHECK_PATH = "/version-check"
 RELEASE_PLANS_PATH = "/release-plans"
 RELEASE_READINESS_PATH = "/release-readiness"
 RELEASE_MANIFEST_RENDER_PATH = "/release-plans/render-manifest"
@@ -151,6 +177,7 @@ CLUSTER_CONNECT_COMMAND_PATH = "/clusters/{cluster_id}/connect-command"
 FLEET_SUMMARY_PATH = "/fleet/summary"
 # 클러스터 타일 클릭 드릴다운 — 워크로드 health 그룹/경고 이벤트/열린 인시던트/usage 스냅샷.
 CLUSTER_SUMMARY_PATH = "/clusters/{cluster_id}/summary"
+CLUSTER_HOME_EVENTS_PATH = "/clusters/{cluster_id}/home/events"
 CLUSTER_CONNECTION_STATUS_PATH = "/clusters/{cluster_id}/connection-status"
 CLUSTER_CONNECTION_PATH = "/clusters/{cluster_id}/connection"
 CLUSTER_NODES_SUMMARY_PATH = "/clusters/{cluster_id}/nodes/summary"
@@ -158,6 +185,7 @@ CLUSTER_NODE_PODS_SUMMARY_PATH = "/clusters/{cluster_id}/nodes/{node_name}/pods/
 CLUSTER_INVENTORY_RESOURCES_PATH = "/clusters/{cluster_id}/inventory/resources"
 CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH = "/clusters/{cluster_id}/inventory/resource-detail"
 CLUSTER_INVENTORY_SUMMARY_PATH = "/clusters/{cluster_id}/inventory/summary"
+CLUSTER_API_RESOURCES_PATH = "/clusters/{cluster_id}/api-resources"
 CLUSTER_INVENTORY_WORKLOADS_PATH = "/clusters/{cluster_id}/inventory/workloads"
 CLUSTER_INVENTORY_SERVICES_PATH = "/clusters/{cluster_id}/inventory/services"
 CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
@@ -166,6 +194,18 @@ RESOURCES_FILTER_FACETS_PATH = "/resources/filter-facets"
 FILTERED_RESOURCES_PATH = "/resources"
 RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 FILTER_FACETS_PATH = "/filter-facets"
+RESOURCE_SEARCH_PATH = "/search"
+# Exact Kubernetes RBAC reverse projections. Cluster identity remains an explicit
+# query parameter because product sessions are workspace scoped, not kubeconfig scoped.
+RBAC_SUBJECT_NAMESPACED_PATH = "/rbac/subject/{kind}/{namespace}/{name}"
+RBAC_SUBJECT_GLOBAL_PATH = "/rbac/subject/{kind}/{name}"
+RBAC_ROLE_PATH = "/rbac/role/{kind}/{namespace}/{name}"
+RBAC_NAMESPACE_PATH = "/rbac/namespace/{namespace}"
+CLUSTER_NAMESPACE_SCOPE_PATH = "/cluster/namespace-scope"
+CLUSTER_NAMESPACE_PATH = "/cluster/namespace"
+SETTINGS_PATH = "/settings"
+SETTINGS_ACCESS_PATH = "/settings/access"
+REFRESH_POLICIES_PATH = "/refresh-policies"
 RESOURCES_GRAPH_PATH = "/resources/graph"
 TOPOLOGY_PATH = "/topology"
 # Resources time scrubber: actual observed changes plus explicit collection gaps.
@@ -181,14 +221,26 @@ TIMELINE_STREAM_PATH = "/timeline/stream"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서
 # fan-out하지 않도록 서버 batch 경계를 별도로 둔다.
 RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"
+# Typed product metric reads resolve a server-owned subject and PromQL plan,
+# then reuse the existing audited target-agent query command path.
+SCOPED_RESOURCE_METRICS_QUERY_PATH = "/metrics/query"
 # 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
 # disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
 RESOURCE_CAPABILITIES_PATH = "/capabilities"
+RESOURCE_DELETE_PATH = "/resource-deletions/{resource_id}"
+RESOURCE_DELETE_PREVIEW_PATH = "/resource-deletions/{resource_id}/cascade-preview"
+# Exact core/v1 Service capabilities and one bounded, audited in-cluster GET.
+SERVICE_ACCESS_CAPABILITIES_PATH = "/service-access/capabilities"
+SERVICE_REQUESTS_PATH = "/service-access/requests"
 # GitOps manifest editor. The selected live inventory resource is resolved to an
 # exact application/deployment binding; writes are emitted only as Safe PR events.
 RESOURCE_MANIFEST_SOURCE_PATH = "/resource-manifests/{resource_id}"
 RESOURCE_MANIFEST_PREVIEW_PATH = "/resource-manifests/{resource_id}/preview"
 RESOURCE_MANIFEST_APPROVE_PATH = "/resource-manifests/{resource_id}/approve"
+RESOURCE_MANIFEST_APPLY_PATH = "/resource-manifests/{resource_id}/apply"
+RESOURCE_MANIFEST_CREATE_CAPABILITY_PATH = "/resource-manifests/create/capability"
+RESOURCE_MANIFEST_CREATE_DRY_RUN_PATH = "/resource-manifests/create/dry-run"
+RESOURCE_MANIFEST_CREATE_PATH = "/resource-manifests/create"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"
 ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"
@@ -203,6 +255,24 @@ CLUSTER_METRIC_WIDGET_PATH = "/clusters/{cluster_id}/metric-widgets/{widget_id}"
 METRICS_VALIDATE_PATH = "/metrics/validate"
 CLUSTER_DEPLOYMENT_SCALE_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale"
+)
+CLUSTER_WORKLOAD_SCALE_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/workloads/{kind}/{workload}/scale"
+)
+CLUSTER_WORKLOAD_RESTART_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/workloads/{kind}/{workload}/restart"
+)
+RESOURCE_WORKLOAD_ROLLBACK_PATH = "/resource-rollbacks/{resource_id}"
+CLUSTER_NODE_CORDON_PATH = "/clusters/{cluster_id}/nodes/{node}/cordon"
+CLUSTER_NODE_UNCORDON_PATH = "/clusters/{cluster_id}/nodes/{node}/uncordon"
+CLUSTER_CRONJOB_TRIGGER_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/trigger"
+)
+CLUSTER_CRONJOB_SUSPEND_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/suspend"
+)
+CLUSTER_CRONJOB_RESUME_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/resume"
 )
 CLUSTER_DEPLOYMENT_RESTART_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart"

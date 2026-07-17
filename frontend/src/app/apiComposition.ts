@@ -2,39 +2,65 @@ import {
   acknowledgeAlertEvent,
   createAlertRule,
   deleteAlertRule,
+  addDiagnoseTurn,
+  clearDiagnoseHistory,
+  createDiagnoseRun,
   getAiSuggestions,
   getClusterNodesSummary,
   getClusterSummary,
+  getHomeInsights,
   getCompareCandidates,
   getCompareResourcePair,
   getWorkloadDetail,
+  getDiagnoseCapabilities,
+  grantDiagnoseConsent,
   getScheduledWorkloadRuns,
+  getSettingsAccessProfile,
+  getRuntimeDiagnostics,
+  getVersionCheck,
   getNodePodsSummary,
+  getNamespaceScope,
+  getUiPreferences,
   listAlertEvents,
   listAlertRules,
   listClusters,
   listGlobalFilterFacets,
+  searchResourceIdentities,
+  subscribeHomeDashboardEvents,
+  listDiagnoseRuns,
   openPodLogStream,
   openScheduledWorkloadRunLogStream,
   openWorkloadLogStream,
   postAiChat,
   promoteAlertEvent,
   subscribeCommandOperationEvents,
+  stopDiagnoseRun,
+  subscribeDiagnoseEvents,
   updateAlertRule,
+  updateNamespaceScope,
+  updateUiPreferences,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
 import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
 import type { AuthPort } from "../features/auth/authContract";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
+import { createDiagnoseAdapter } from "../features/diagnose/createDiagnoseAdapter";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createWorkloadDetailAdapter } from "../features/workload-detail/createWorkloadDetailAdapter";
 import { createCompareAdapter } from "../features/compare/createCompareAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
+import { createShellStateAdapter } from "../features/shell-state/createShellStateAdapter";
+import { createSettingsAdapter } from "../features/settings/createSettingsAdapter";
+import { createRuntimeStatusAdapter } from "../features/runtime-status/createRuntimeStatusAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
+import { createApiBrowserRefreshPolicyRegistry } from "./composition/browserRefreshPolicyRegistry";
+import { createApiTimelinePort } from "./composition/timelinePort";
+import { createPortForwardSessionAdapter } from "../features/service-access/createPortForwardSessionAdapter";
+import { desktopBridge } from "../desktop/desktopBridge";
 
 /**
  * The authenticated composition is intentionally small: global providers and
@@ -42,17 +68,25 @@ import { createProductComposition, type ProductComposition } from "./productComp
  * only through its registered route module.
  */
 export function createApiComposition(auth: AuthPort): ProductComposition {
+  const refreshPolicies = createApiBrowserRefreshPolicyRegistry();
+  const timelinePort = createApiTimelinePort();
+  const portForwardSessions = createPortForwardSessionAdapter(desktopBridge, refreshPolicies);
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
+    getHomeInsights,
     getNodePodsSummary,
     listClusters,
-  });
+    subscribeHomeDashboardEvents,
+  }, refreshPolicies);
   const operationStatusStore = createOperationStatusStore(
     createOperationEventsAdapter({ subscribeCommandOperationEvents }),
   );
   const registry = createPortRegistry({ homePort, operationStatusStore });
-  const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
+  const globalFilterPort = createGlobalFilterAdapter({
+    listGlobalFilterFacets,
+    searchResourceIdentities,
+  });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,
@@ -79,6 +113,27 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getWorkloadDetail,
   });
   const comparePort = createCompareAdapter({ getCompareCandidates, getCompareResourcePair });
+  const shellStatePort = createShellStateAdapter({
+    getNamespaceScope,
+    getUiPreferences,
+    updateNamespaceScope,
+    updateUiPreferences,
+  });
+  const settingsPort = createSettingsAdapter({ getSettingsAccessProfile });
+  const diagnosePort = createDiagnoseAdapter({
+    addDiagnoseTurn,
+    clearDiagnoseHistory,
+    createDiagnoseRun,
+    getDiagnoseCapabilities,
+    grantDiagnoseConsent,
+    listDiagnoseRuns,
+    stopDiagnoseRun,
+    subscribeDiagnoseEvents,
+  });
+  const runtimeStatusPort = createRuntimeStatusAdapter({
+    getRuntimeDiagnostics,
+    getVersionCheck,
+  });
 
   return createProductComposition([
     {
@@ -96,25 +151,24 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "resources",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(registry.homePort),
-      })),
-    },
-    {
-      id: "topology",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/topology")).loadTopologySurface(registry.homePort),
+        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(
+          registry.homePort,
+          refreshPolicies,
+          timelinePort,
+          portForwardSessions,
+        ),
       })),
     },
     {
       id: "issues",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(),
+        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(refreshPolicies),
       })),
     },
     {
       id: "timeline",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(),
+        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(timelinePort),
       })),
     },
     {
@@ -126,13 +180,13 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "applications",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(),
+        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(refreshPolicies),
       })),
     },
     {
       id: "gitops",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(),
+        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(refreshPolicies),
       })),
     },
     {
@@ -150,7 +204,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "cost",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/cost")).loadCostSurface(),
+        default: (await import("./composition/surfaces/cost")).loadCostSurface(refreshPolicies),
       })),
     },
     {
@@ -162,10 +216,13 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "settings",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(),
+        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(
+          settingsPort,
+          shellStatePort,
+        ),
       })),
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort);
+  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions);
 }

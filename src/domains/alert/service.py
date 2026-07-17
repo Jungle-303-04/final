@@ -171,6 +171,7 @@ def _incident_body_from_alert_event(
         namespace=event.subject.namespace,
         symptom=symptom,
         severity=event.severity,
+        category="external_alert",
         first_seen_at=event.fired_at.isoformat(),
         summary=f"알림 발생 {event.event_id}을 운영자가 인시던트로 승격했습니다.",
         workspace_id=workspace_id,

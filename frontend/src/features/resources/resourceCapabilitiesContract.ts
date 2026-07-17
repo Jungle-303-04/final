@@ -38,6 +38,30 @@ export interface ResourceCapabilities {
   capabilities: ResourceActionCapability[];
 }
 
+export interface ResourceActionExecutionContext {
+  capabilityId: ResourceActionCapabilityId;
+  idempotencyKey: string;
+  resourceId: string;
+  snapshotId: string;
+  revision: string;
+  resource: ResourceRefContract;
+  rollback?: {
+    workloadResourceVersion: string;
+    targetRevision: ResourceRefContract;
+    targetResourceVersion: string;
+    previewRevision: string;
+  };
+}
+
+export interface ResourceRefContract {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+}
+
 /**
  * Lifecycle states shared by resource-action receipts and the operation stream.
  * Keep the in-progress cancellation states explicit so consumers never coerce a
@@ -70,9 +94,66 @@ export interface ResourceActionReceipt {
 }
 
 export interface ResourceActionsPort {
+  previewDeletion(
+    capability: ResourceActionCapability,
+    signal?: AbortSignal,
+  ): Promise<ResourceDeletionPreview>;
+  previewRollback?(
+    capability: ResourceActionCapability,
+    signal?: AbortSignal,
+  ): Promise<WorkloadRollbackPreview>;
   execute(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,
+    context?: ResourceActionExecutionContext,
     signal?: AbortSignal,
   ): Promise<ResourceActionReceipt>;
+}
+
+export interface WorkloadRollbackChange {
+  path: string;
+  before: string;
+  after: string;
+}
+
+export interface WorkloadRollbackRevision {
+  revision: string;
+  resource: ResourceRefContract;
+  resourceVersion: string;
+  createdAt: string | null;
+  templateSha256: string;
+  previewRevision: string;
+  changes: WorkloadRollbackChange[];
+}
+
+export interface WorkloadRollbackPreview {
+  availability: "available" | "unavailable";
+  completeness: "exact" | "partial";
+  reason: string | null;
+  snapshotId: string;
+  current: {
+    resource: ResourceRefContract;
+    resourceVersion: string;
+    templateSha256: string;
+  };
+  revisions: WorkloadRollbackRevision[];
+  nextCursor: number | null;
+}
+
+export interface ResourceDeletionRef {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+  resourceVersion: string;
+}
+
+export interface ResourceDeletionPreview {
+  root: ResourceDeletionRef;
+  dependents: ResourceDeletionRef[];
+  revision: string;
+  truncated: false;
+  maxDependents: number;
 }

@@ -2,6 +2,15 @@ import { z } from "zod";
 
 const nullableString = z.string().nullable();
 const nullableInteger = z.number().int().safe().nullable();
+const nonnegativeSafeInteger = z.number().int().safe().nonnegative();
+const nullableExternalHttpUrl = z.string().max(2_000).url().refine((value) => {
+  const parsed = new URL(value);
+  return (
+    (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+    parsed.username === "" &&
+    parsed.password === ""
+  );
+}).nullable();
 const condition = z.strictObject({
   type: z.string().min(1),
   status: z.enum(["True", "False", "Unknown"]),
@@ -340,6 +349,21 @@ const crossplaneComposite = z.strictObject({
   conditions,
 });
 
+const crossplaneManagedResource = z.strictObject({
+  type: z.literal("crossplane-managed-resource"),
+  api_group: nullableString,
+  kind: z.string().min(1),
+  external_name: nullableString,
+  management_policies: z.array(z.string()).max(100),
+  deletion_policy: nullableString,
+  paused: z.boolean(),
+  provider_config_ref: namedReference.nullable(),
+  composing_resource_ref: namedReference.nullable(),
+  observed_spec_fields: z.array(z.string().min(1)).max(100),
+  observed_status_fields: z.array(z.string().min(1)).max(100),
+  conditions,
+});
+
 const cronWorkflow = z.strictObject({
   type: z.literal("cron-workflow"),
   schedules: z.array(z.string()).max(100),
@@ -385,6 +409,85 @@ const externalSecret = z.strictObject({
   template_engine_version: nullableString,
   template_labels: z.array(keyValue).max(100),
   template_annotations: z.array(keyValue).max(100),
+  conditions,
+});
+
+const persistentVolumeClaim = z.strictObject({
+  type: z.literal("persistent-volume-claim"),
+  phase: nullableString,
+  capacity: nullableString,
+  requested: nullableString,
+  storage_class_name: nullableString,
+  access_modes: z.array(z.string()).max(100),
+  volume_mode: nullableString,
+  volume_name: nullableString,
+  provisioner: nullableString,
+  selected_node: nullableString,
+  bind_completed: z.boolean().nullable(),
+  conditions,
+});
+
+const sealedSecret = z.strictObject({
+  type: z.literal("sealed-secret"),
+  synced: z.boolean().nullable(),
+  target_secret_name: nullableString,
+  secret_type: nullableString,
+  scope: z.enum(["strict", "namespace-wide", "cluster-wide"]),
+  observed_generation: nullableInteger,
+  encrypted_keys: z.array(z.string().min(1)).max(100),
+  template_labels: z.array(keyValue).max(100),
+  template_annotations: z.array(keyValue).max(100),
+  conditions,
+});
+
+const secret = z.strictObject({
+  type: z.literal("secret"),
+  secret_type: nullableString,
+  immutable: z.boolean().nullable(),
+  key_names: z.array(z.string().min(1)).max(100),
+  conditions,
+});
+
+const secretStore = z.strictObject({
+  type: z.literal("secret-store"),
+  cluster_scope: z.boolean(),
+  ready: z.boolean().nullable(),
+  provider_key: nullableString,
+  provider_type: nullableString,
+  provider_details: z.array(keyValue).max(100),
+  controller: nullableString,
+  max_retries: nullableInteger,
+  retry_interval: nullableString,
+  conditions,
+});
+
+const workflowExecutionNode = z.strictObject({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  node_type: z.string().min(1),
+  phase: z.string().min(1),
+  depth: z.number().int().safe().min(0).max(20),
+  started_at: nullableString,
+  finished_at: nullableString,
+  message: z.string().max(300).nullable(),
+  template_ref: namedReference.nullable(),
+});
+
+const workflow = z.strictObject({
+  type: z.literal("workflow"),
+  phase: z.string().min(1),
+  started_at: nullableString,
+  finished_at: nullableString,
+  progress: nullableString,
+  estimated_duration_seconds: nullableInteger,
+  workflow_template_ref: namedReference.nullable(),
+  argument_names: z.array(z.string().min(1)).max(100),
+  resource_durations: z.array(keyValue).max(100),
+  execution_nodes: z.array(workflowExecutionNode).max(500),
+  observed_node_count: nonnegativeSafeInteger,
+  projected_node_count: nonnegativeSafeInteger,
+  truncated: z.boolean(),
+  problem_summaries: z.array(z.string().min(1).max(300)).max(100),
   conditions,
 });
 
@@ -522,6 +625,255 @@ const job = z.strictObject({
   conditions,
 });
 
+const providerRequirement = z.strictObject({
+  key: z.string().min(1),
+  operator: nullableString,
+  values: z.array(z.string()).max(100),
+  min_values: nullableInteger,
+});
+const karpenterSelectorTerm = z.strictObject({
+  id: nullableString,
+  name: nullableString,
+  alias: nullableString,
+  owner: nullableString,
+  tags: z.array(keyValue).max(100),
+});
+const karpenterEc2NodeClass = z.strictObject({
+  type: z.literal("karpenter-ec2-node-class"),
+  ready: z.boolean().nullable(),
+  role: nullableString,
+  instance_profile: nullableString,
+  ami_family: nullableString,
+  ami_selector_terms: z.array(karpenterSelectorTerm).max(100),
+  block_devices: z.array(z.strictObject({
+    device_name: nullableString,
+    volume_type: nullableString,
+    volume_size: nullableString,
+    iops: nullableInteger,
+    throughput: nullableInteger,
+    encrypted: z.boolean().nullable(),
+    delete_on_termination: z.boolean().nullable(),
+  })).max(100),
+  subnet_selector_terms: z.array(karpenterSelectorTerm).max(100),
+  security_group_selector_terms: z.array(karpenterSelectorTerm).max(100),
+  metadata_options: z.strictObject({
+    http_tokens: nullableString,
+    http_put_response_hop_limit: nullableInteger,
+    http_endpoint: nullableString,
+  }).nullable(),
+  resolved_amis: z.array(z.strictObject({
+    id: z.string().min(1),
+    name: nullableString,
+    requirements: z.array(providerRequirement).max(100),
+  })).max(100),
+  resolved_subnets: z.array(z.strictObject({
+    id: z.string().min(1),
+    name: nullableString,
+    zone: nullableString,
+  })).max(100),
+  resolved_security_groups: z.array(z.strictObject({
+    id: z.string().min(1),
+    name: nullableString,
+    zone: nullableString,
+  })).max(100),
+  tags: z.array(keyValue).max(100),
+  conditions,
+});
+const karpenterNodeClaim = z.strictObject({
+  type: z.literal("karpenter-node-claim"),
+  state: z.enum([
+    "ready",
+    "registered",
+    "launched",
+    "initialized",
+    "not-ready",
+    "pending",
+    "unknown",
+  ]),
+  instance_type: nullableString,
+  capacity_type: nullableString,
+  node_name: nullableString,
+  zone: nullableString,
+  architecture: nullableString,
+  node_pool: nullableString,
+  node_class_ref: namedReference.nullable(),
+  image_id: nullableString,
+  expire_after: nullableString,
+  capacity: z.strictObject({
+    cpu: nullableString,
+    memory: nullableString,
+    pods: nullableString,
+    ephemeral_storage: nullableString,
+  }),
+  requirements: z.array(providerRequirement).max(100),
+  conditions,
+});
+const karpenterNodePool = z.strictObject({
+  type: z.literal("karpenter-node-pool"),
+  ready: z.boolean().nullable(),
+  node_class_ref: namedReference.nullable(),
+  limit_cpu: nullableString,
+  limit_memory: nullableString,
+  weight: nullableInteger,
+  current_cpu: nullableString,
+  current_memory: nullableString,
+  consolidation_policy: nullableString,
+  consolidate_after: nullableString,
+  expire_after: nullableString,
+  disruption_budgets: z.array(z.strictObject({
+    nodes: nullableString,
+    schedule: nullableString,
+    duration: nullableString,
+  })).max(100),
+  template_labels: z.array(keyValue).max(100),
+  template_taints: z.array(z.strictObject({
+    key: z.string().min(1),
+    value: nullableString,
+    effect: nullableString,
+  })).max(100),
+  startup_taints: z.array(z.strictObject({
+    key: z.string().min(1),
+    value: nullableString,
+    effect: nullableString,
+  })).max(100),
+  requirements: z.array(providerRequirement).max(100),
+  conditions,
+});
+const kedaTrigger = z.strictObject({
+  type: z.string().min(1),
+  name: nullableString,
+  authentication_ref: namedReference.nullable(),
+  metadata_keys: z.array(z.string()).max(100),
+  redacted_metadata_count: z.number().int().safe().nonnegative(),
+});
+const kedaScaledObject = z.strictObject({
+  type: z.literal("keda-scaled-object"),
+  state: z.enum(["paused", "fallback", "not-ready", "active", "idle", "ready", "unknown"]),
+  target_ref: namedReference.nullable(),
+  scaling,
+  idle_replicas: nullableInteger,
+  polling_interval_seconds: nullableInteger,
+  cooldown_period_seconds: nullableInteger,
+  hpa_name: nullableString,
+  last_active_time: nullableString,
+  fallback_failure_threshold: nullableInteger,
+  fallback_replicas: nullableInteger,
+  restore_original_replicas: z.boolean().nullable(),
+  scale_up_stabilization_seconds: nullableInteger,
+  scale_down_stabilization_seconds: nullableInteger,
+  scaling_policies: z.array(z.strictObject({
+    direction: z.enum(["up", "down"]),
+    type: nullableString,
+    value: nullableInteger,
+    period_seconds: nullableInteger,
+  })).max(100),
+  triggers: z.array(kedaTrigger).max(100),
+  conditions,
+});
+const kedaScaledJob = z.strictObject({
+  type: z.literal("keda-scaled-job"),
+  state: z.enum(["not-ready", "active", "idle", "ready", "unknown"]),
+  job_target_name: nullableString,
+  strategy: nullableString,
+  polling_interval_seconds: nullableInteger,
+  successful_history_limit: nullableInteger,
+  failed_history_limit: nullableInteger,
+  minimum_replicas: nullableInteger,
+  maximum_replicas: nullableInteger,
+  triggers: z.array(kedaTrigger).max(100),
+  conditions,
+});
+const sbomReport = z.strictObject({
+  type: z.literal("sbom-report"),
+  container_name: nullableString,
+  image: nullableString,
+  bom_format: nullableString,
+  spec_version: nullableString,
+  component_count: nonnegativeSafeInteger,
+  dependency_count: nonnegativeSafeInteger,
+  observed_component_count: nonnegativeSafeInteger,
+  projected_component_count: nonnegativeSafeInteger,
+  truncated: z.boolean(),
+  scanner_name: nullableString,
+  scanner_version: nullableString,
+  scanned_at: nullableString,
+  components: z.array(z.strictObject({
+    name: z.string().min(1).max(2_000),
+    version: nullableString,
+    type: nullableString,
+    package_url: nullableString,
+    package_url_qualifiers_redacted: z.boolean(),
+    license: nullableString,
+  })).max(1_000),
+  conditions,
+});
+const vulnerabilityReport = z.strictObject({
+  type: z.literal("vulnerability-report"),
+  container_name: nullableString,
+  image: nullableString,
+  os_family: nullableString,
+  os_name: nullableString,
+  os_end_of_service_life: z.boolean().nullable(),
+  scanner_name: nullableString,
+  scanner_version: nullableString,
+  scanned_at: nullableString,
+  severity: z.strictObject({
+    critical: nonnegativeSafeInteger,
+    high: nonnegativeSafeInteger,
+    medium: nonnegativeSafeInteger,
+    low: nonnegativeSafeInteger,
+    unknown: nonnegativeSafeInteger,
+  }),
+  observed_vulnerability_count: nonnegativeSafeInteger,
+  projected_vulnerability_count: nonnegativeSafeInteger,
+  truncated: z.boolean(),
+  vulnerabilities: z.array(z.strictObject({
+    vulnerability_id: z.string().min(1).max(2_000),
+    severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]),
+    score: z.number().finite().min(0).max(10).nullable(),
+    package: nullableString,
+    installed_version: nullableString,
+    fixed_version: nullableString,
+    primary_link: nullableExternalHttpUrl,
+  })).max(500),
+  conditions,
+});
+const prometheusRule = z.strictObject({
+  type: z.literal("prometheus-rule"),
+  group_count: z.number().int().safe().nonnegative(),
+  total_rules: z.number().int().safe().nonnegative(),
+  total_alerts: z.number().int().safe().nonnegative(),
+  total_recordings: z.number().int().safe().nonnegative(),
+  projected_rules: z.number().int().safe().nonnegative(),
+  truncated: z.boolean(),
+  groups: z.array(z.strictObject({
+    name: z.string().min(1),
+    interval: nullableString,
+    rule_count: z.number().int().safe().nonnegative(),
+    alert_count: z.number().int().safe().nonnegative(),
+    recording_count: z.number().int().safe().nonnegative(),
+    rules: z.array(z.strictObject({
+      type: z.enum(["alert", "recording"]),
+      name: z.string().min(1),
+      expression: z.string().max(2_000),
+      duration: nullableString,
+      severity: nullableString,
+      summary: nullableString,
+      description: nullableString,
+      labels: z.array(keyValue).max(100),
+    })).max(100),
+  })).max(50),
+  conditions,
+});
+const tcpRoute = z.strictObject({
+  type: z.literal("tcp-route"),
+  ...gatewayRouteFields,
+});
+const tlsRoute = z.strictObject({
+  type: z.literal("tls-route"),
+  ...gatewayRouteFields,
+});
+
 export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   awsMachine,
   awsManagedCluster,
@@ -541,8 +893,14 @@ export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   certificateRequest,
   clusterComplianceReport,
   crossplaneComposite,
+  crossplaneManagedResource,
   cronWorkflow,
   externalSecret,
+  persistentVolumeClaim,
+  sealedSecret,
+  secret,
+  secretStore,
+  workflow,
   gatewayClass,
   gcpMachine,
   gcpManagedControlPlane,
@@ -550,4 +908,14 @@ export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   grpcRoute,
   httpRoute,
   job,
+  karpenterEc2NodeClass,
+  karpenterNodeClaim,
+  karpenterNodePool,
+  kedaScaledObject,
+  kedaScaledJob,
+  sbomReport,
+  vulnerabilityReport,
+  prometheusRule,
+  tcpRoute,
+  tlsRoute,
 ]);

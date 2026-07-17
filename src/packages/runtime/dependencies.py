@@ -36,3 +36,9 @@ def get_timeline_fanout(request: Request) -> Any:
     Domain routers validate the protocol they require at their own boundary.
     """
     return request.app.state.timeline_fanout
+
+
+def get_dashboard_ready_fanout(request: Request) -> Any:
+    """Return the app-owned Home snapshot-completion wake-up provider."""
+
+    return request.app.state.dashboard_ready_fanout

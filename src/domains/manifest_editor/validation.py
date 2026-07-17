@@ -119,9 +119,7 @@ def validate_manifest_edit(
         desired_sha256=desired_digest,
         diff=rendered_diff if not errors else "",
         errors=tuple(dict.fromkeys(errors)),
-        warnings=(
-            "The change will be committed on a Safe PR branch; the cluster is not patched directly.",
-        ),
+        warnings=("Review the exact diff and impact before choosing Safe PR or direct apply.",),
     )
 
 

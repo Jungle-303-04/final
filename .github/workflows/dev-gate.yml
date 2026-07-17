@@ -9,16 +9,17 @@ name: Dev Gate
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: dev-gate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gate:
-    name: Full gate
+  source-proof:
+    name: Commit and deployment proof
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -52,10 +53,12 @@ jobs:
         run: scripts/commit-msg-gate.sh --range origin/dev..HEAD
 
       - name: Classify automatic deployment scope
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/dev-deploy-scope"
-          scripts/classify-deploy-scope.sh origin/dev HEAD \
+          scripts/classify-live-deploy-scope.sh HEAD \
             >"${RUNNER_TEMP}/dev-deploy-scope/scope"
 
       - name: Upload automatic deployment scope
@@ -66,14 +69,25 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  backend:
+    name: Backend and manifest gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: ".python-version"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
+          version: "0.9.17"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
@@ -81,8 +95,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Helm
         uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -95,5 +107,40 @@ jobs:
       - name: Verify commit message gate rules
         run: uv run pytest -q tests/test_commit_msg_gate.py
 
-      - name: Run canonical gate
-        run: make gate
+      - name: Run backend and manifest gate
+        run: make gate-backend
+
+  frontend:
+    name: Frontend gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run frontend gate
+        run: make gate-frontend
+
+  gate:
+    name: Full gate
+    if: ${{ always() }}
+    needs: [source-proof, backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every parallel gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.source-proof.result }}" = "success"
+          test "${{ needs.backend.result }}" = "success"
+          test "${{ needs.frontend.result }}" = "success"

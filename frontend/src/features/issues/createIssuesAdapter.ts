@@ -26,6 +26,10 @@ import {
   canonicalIssueDetailRequest,
   canonicalIssueListRequest,
 } from "./issuesValidation";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type { IssuesEndpointDependencies } from "./issuesEndpointContract";
 
@@ -33,16 +37,26 @@ const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 200;
 const MAX_SELECTION_REASON_LENGTH = 500;
 
-export function createIssuesAdapter(endpoints: IssuesEndpointDependencies): IssuesPort {
+export function createIssuesAdapter(
+  endpoints: IssuesEndpointDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"issues_audit">,
+): IssuesPort {
   const loadIssueProjection = createIssueProjectionLoader(endpoints);
   return {
-    async listIssues(clusterId, limit = 50, signal) {
+    loadIssuesAuditRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "issues_audit", signal);
+    },
+
+    async listIssues(clusterId, limit = 50, signal, filters) {
       return withCanonicalFailure(async () => {
-        const request = canonicalIssueListRequest(clusterId, limit);
+        const request = canonicalIssueListRequest(clusterId, limit, filters);
         return toIssueList(
           request,
           await loadIssueProjection({
             clusterId: request.clusterId ?? undefined,
+            namespaces: request.filters.namespaces,
+            severities: request.filters.severities,
+            categories: request.filters.categories,
             limit: request.limit,
             signal,
           }),

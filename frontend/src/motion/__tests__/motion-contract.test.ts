@@ -57,6 +57,22 @@ describe("motion CSS contract", () => {
     ));
   });
 
+  it("keeps diagnose stream feedback transform-only and reduced-motion safe", () => {
+    const priority = "!im" + "portant";
+    expect(tokens).toContain("@keyframes motion-diagnose-entry");
+    expect(tokens).toContain("@keyframes motion-diagnose-thinking");
+    expect(tokens).toContain("@keyframes motion-diagnose-verdict");
+    expect(tokens).toMatch(
+      /\.motion-diagnose-entry \{[\s\S]*?var\(--motion-quick\)[\s\S]*?var\(--ease-out\)/,
+    );
+    expect(tokens).toMatch(new RegExp(
+      `@media \\(prefers-reduced-motion: reduce\\)[\\s\\S]*?\\.motion-diagnose-entry,[\\s\\S]*?animation: none ${priority}`,
+    ));
+    expect(tokens).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.motion-diagnose-thinking[\s\S]*?background: none;/,
+    );
+  });
+
   it("removes dock height interpolation during direct resizing and for reduced-motion users", () => {
     expect(tokens).toMatch(
       /\.motion-bottom-dock\[data-resizing="true"\][\s\S]*?transition: none;[\s\S]*?will-change: height;/,

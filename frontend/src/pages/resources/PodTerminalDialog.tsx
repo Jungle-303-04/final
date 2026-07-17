@@ -23,6 +23,7 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
+import { subscribeNamespaceScopeInvalidation } from "../../features/namespace-scope/namespaceScopeInvalidation";
 
 type TerminalStatus = "idle" | "connecting" | "connected" | "ended" | "failed";
 
@@ -69,6 +70,19 @@ export function PodTerminalDialog({
   }, [container, detail, session]);
 
   useEffect(() => () => connectionRef.current?.close(), []);
+  useEffect(() => subscribeNamespaceScopeInvalidation((invalidation) => {
+    const namespace = detail.identity.namespace;
+    if (
+      invalidation.clusterId !== detail.clusterId ||
+      namespace === null ||
+      invalidation.allowedNamespaces.length === 0 ||
+      invalidation.allowedNamespaces.includes(namespace)
+    ) return;
+    connectionRef.current?.close();
+    connectionRef.current = null;
+    setStatus("ended");
+    setOpen(false);
+  }), [detail.clusterId, detail.identity.namespace]);
 
   if (!authorized || !session || containers.length === 0 || detail.identity.namespace === null) {
     return null;

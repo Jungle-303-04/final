@@ -206,6 +206,16 @@ def test_projection_allowlists_observations_and_uses_existing_sse_kind() -> None
         "reason_codes": [],
     }
     assert detail["capabilities"]["actions"] == []
+    assert detail["rightsizing"] == {
+        "availability": "unavailable",
+        "reason_codes": ["rightsizing_observation_not_integrated"],
+    }
+    assert (
+        next(feature for feature in detail["features"] if feature["name"] == "rightsizing")[
+            "availability"
+        ]
+        == "unavailable"
+    )
     assert {feature["name"] for feature in detail["features"]} >= {"yaml", "compare"}
     assert "raw" not in str(detail)
     assert "status" not in detail["observation"]

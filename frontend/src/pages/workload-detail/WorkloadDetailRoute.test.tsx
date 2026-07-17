@@ -77,12 +77,17 @@ function detail(): WorkloadDetail {
     pods: { availability: "partial", items: [], excludedCount: 0, reasonCodes: ["direct_pod_relationship_is_bounded"] },
     events: { availability: "partial", items: [], excludedCount: 0, reasonCodes: ["direct_event_relationship_is_bounded"] },
     logStream: { availability: "available", streamKind: "deployments", reasonCodes: [] },
+    rightsizing: {
+      availability: "unavailable",
+      reasonCodes: ["rightsizing_observation_not_integrated"],
+    },
     capabilities: { revision: "snapshot-a", actions: [] },
     features: [
       { name: "overview", availability: "available", reasonCodes: [] },
       { name: "pods", availability: "partial", reasonCodes: ["direct_pod_relationship_is_bounded"] },
       { name: "events", availability: "partial", reasonCodes: ["direct_event_relationship_is_bounded"] },
       { name: "logs", availability: "available", reasonCodes: [] },
+      { name: "rightsizing", availability: "unavailable", reasonCodes: ["rightsizing_observation_not_integrated"] },
     ],
   };
 }

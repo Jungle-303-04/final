@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CostPortFailure, type CostPort } from "../../features/cost/costContract";
+import type { RightsizingPort } from "../../features/rightsizing/rightsizingContract";
 import { I18nProvider } from "../../shared/i18n";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { CostPage } from "./CostPage";
@@ -34,9 +35,18 @@ describe("CostPage", () => {
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.queryByText("USD")).toBeNull();
     expect(screen.queryByText("$")).toBeNull();
+    expect(await screen.findByText("Node cost evidence")).toBeTruthy();
+    expect(screen.getByText("node-a")).toBeTruthy();
+    expect(screen.getAllByText("Not observed").length).toBeGreaterThan(0);
     await waitFor(() => expect(port.getOverview).toHaveBeenCalledWith({
       clusterIds: ["cluster-a"],
+      namespaces: [],
       timeRange: "24h",
+    }, expect.any(AbortSignal)));
+    await waitFor(() => expect(port.getNodes).toHaveBeenCalledWith({
+      clusterIds: ["cluster-a"],
+      namespaces: [],
+      limit: 50,
     }, expect.any(AbortSignal)));
   });
 
@@ -67,6 +77,7 @@ describe("CostPage", () => {
 
     await waitFor(() => expect(port.getOverview).toHaveBeenLastCalledWith({
       clusterIds: ["cluster-a"],
+      namespaces: ["cluster-a/shop"],
       timeRange: "7d",
     }, expect.any(AbortSignal)));
     expect(screen.getByTestId("location").textContent).toContain("cost.range=7d");
@@ -75,6 +86,16 @@ describe("CostPage", () => {
 
 function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType<typeof vi.fn> } {
   return {
+    loadRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 60,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     getOverview: vi.fn().mockImplementation(() => error ? Promise.reject(error) : Promise.resolve({
       scopeCoverage: {
         availability: "available",
@@ -100,7 +121,51 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
         series: [] as const,
         reasonCodes: ["cost_observation_not_integrated"],
       },
-      refreshAfterSeconds: 60,
+    })),
+    getNodes: vi.fn().mockImplementation(() => error ? Promise.reject(error) : Promise.resolve({
+      scopeCoverage: {
+        availability: "available" as const,
+        scopes: [{ workspaceId: "workspace-a", clusterId: "cluster-a", namespaces: [], freshness: "live" as const }],
+        observedAt: "2026-07-16T09:00:00Z",
+        reasonCodes: [],
+      },
+      items: [{
+        resource: { version: "v1", kind: "Node" as const, name: "node-a", uid: "uid-node-a" },
+        clusterId: "cluster-a",
+        clusterName: "prod",
+        provider: "eks",
+        providerId: "aws:///zone/i-123",
+        instanceType: "m6i.large",
+        zone: "ap-northeast-2a",
+        capacityType: "spot",
+        status: "Ready",
+        observedAt: "2026-07-16T09:00:00Z",
+        capacity: { cpuMillicores: 1900, memoryMib: 7168, pods: 58 },
+        usage: {
+          availability: "available" as const,
+          observedAt: "2026-07-16T09:00:00Z",
+          cpuMillicores: 950,
+          memoryMib: 3584,
+          cpuUtilizationPercent: 50,
+          memoryUtilizationPercent: 50,
+          reasonCodes: [],
+        },
+        pricing: {
+          availability: "unavailable" as const,
+          currency: null,
+          hourlyRateMicros: null,
+          reasonCodes: ["node_pricing_observation_not_integrated"],
+        },
+      }],
+      total: 1,
+      countCompleteness: "exact" as const,
+      hasMore: false,
+      nextCursor: null,
+      snapshotRevision: 1,
+      pricingCoverage: {
+        availability: "unavailable" as const,
+        reasonCodes: ["node_pricing_observation_not_integrated"],
+      },
     })),
   };
 }
@@ -110,12 +175,31 @@ function renderCostPage(port: CostPort, entry = "/cost") {
     <I18nProvider navigatorLanguage="en" storage={null}>
       <MemoryRouter initialEntries={[entry]}>
         <UnifiedFilterProvider>
-          <CostPage port={port} />
+          <CostPage port={port} rightsizingPort={rightsizingPort()} />
           <LocationProbe />
         </UnifiedFilterProvider>
       </MemoryRouter>
     </I18nProvider>,
   );
+}
+
+function rightsizingPort(): RightsizingPort {
+  return {
+    getScan: vi.fn().mockResolvedValue({
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: [],
+        freshness: "live",
+      },
+      namespaceScope: [],
+      result: {
+        availability: "unavailable",
+        reasonCodes: ["rightsizing_observation_not_integrated"],
+      },
+      refreshAfterSeconds: 60,
+    }),
+  };
 }
 
 function LocationProbe() {

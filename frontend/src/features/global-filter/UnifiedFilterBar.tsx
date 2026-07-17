@@ -7,7 +7,16 @@ import {
   Tags,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import {
@@ -64,14 +73,25 @@ const groupIcons = {
   resource: Boxes,
 } satisfies Record<SuggestionType, typeof Server>;
 
-export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
+export interface UnifiedFilterBarHandle {
+  focus: () => void;
+  openGroup: (type: "cluster" | "namespace") => void;
+}
+
+export const UnifiedFilterBar = forwardRef<
+  UnifiedFilterBarHandle,
+  { port: GlobalFilterPort }
+>(function UnifiedFilterBar({ port }, ref) {
   const filter = useUnifiedFilter();
+  const navigate = useNavigate();
   const { formatNumber, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [phase, setPhase] = useState<SearchPhase>("idle");
   const [suggestions, setSuggestions] = useState<readonly GlobalFilterSuggestion[]>([]);
+  const [groupFilter, setGroupFilter] = useState<"cluster" | "namespace" | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const shortcutFocusRef = useRef(false);
   const selection = useMemo(() => ({
     clusters: filter.state.common.clusters,
     namespaces: filter.state.common.namespaces.map(
@@ -108,7 +128,7 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
     };
   }, [open, port, query, selection]);
 
-  const groups = groupOrder.map((type) => ({
+  const groups = groupOrder.filter((type) => groupFilter === null || type === groupFilter).map((type) => ({
     type,
     items: suggestions.filter((item) => item.type === type),
   })).filter((group) => group.items.length > 0);
@@ -121,6 +141,40 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   }));
 
   const selectSuggestion = (suggestion: GlobalFilterSuggestion) => {
+    if (suggestion.type === "resource") {
+      const detail = {
+        ...filter.detail,
+        detail: [
+          suggestion.resource.kind,
+          suggestion.resource.namespace ?? "~",
+          suggestion.resource.name,
+        ].join("/"),
+        resource: null,
+        resourceKind: null,
+        tab: null,
+      };
+      filter.updateFilters((current) => ({
+        ...current,
+        common: {
+          ...current.common,
+          clusters: [suggestion.clusterId],
+          namespaces: suggestion.resource.namespace === null
+            ? []
+            : [{
+                clusterId: suggestion.clusterId,
+                namespace: suggestion.resource.namespace,
+              }],
+        },
+        resources: {
+          ...current.resources,
+          types: [suggestion.resourceType],
+        },
+      }), "legacy-migration");
+      navigate(filter.navigationHref("/resources", detail));
+      setOpen(false);
+      setQuery("");
+      return;
+    }
     filter.updateFilters((current) => addSuggestion(current, suggestion), "chip-add");
     setQuery("");
   };
@@ -158,6 +212,23 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
     }
     setOpen(nextOpen);
   };
+  const openGroup = useCallback((type: "cluster" | "namespace") => {
+    shortcutFocusRef.current = true;
+    setGroupFilter(type);
+    setQuery("");
+    setOpen(true);
+    queueMicrotask(() => {
+      inputRef.current?.focus();
+      shortcutFocusRef.current = false;
+    });
+  }, []);
+  const focus = useCallback(() => {
+    setGroupFilter(null);
+    setOpen(true);
+    queueMicrotask(() => inputRef.current?.focus());
+  }, []);
+
+  useImperativeHandle(ref, () => ({ focus, openGroup }), [focus, openGroup]);
 
   return (
     <div
@@ -180,12 +251,16 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
             <PopoverTrigger
               aria-label={t("shell.filter.placeholder")}
               className="grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setGroupFilter(null)}
             >
               <Search aria-hidden="true" className="size-4" />
             </PopoverTrigger>
           )}
           onChange={changeSearch}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            if (!shortcutFocusRef.current) setGroupFilter(null);
+            setOpen(true);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape") setOpen(false);
           }}
@@ -230,7 +305,9 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
                         <Icon aria-hidden="true" />
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.type === "resource" ? (
-                          <span className="text-xs text-muted-foreground">{item.kind}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {item.resource.kind}
+                          </span>
                         ) : null}
                         <span className="text-xs tabular-nums text-muted-foreground">
                           {formatCount(item, formatNumber, t)}
@@ -255,7 +332,7 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
       </Popover>
     </div>
   );
-}
+});
 
 function pillIdentity(pill: Pick<SearchModifier, "key" | "value">): string {
   return `${pill.key}:${pill.value}`;

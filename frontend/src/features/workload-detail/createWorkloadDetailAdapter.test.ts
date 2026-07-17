@@ -100,12 +100,17 @@ function fixture(): WorkloadDetailEndpoint {
       pods: { availability: "partial", items: [], excluded_count: 0, reason_codes: ["direct_pod_relationship_is_bounded"] },
       events: { availability: "partial", items: [], excluded_count: 0, reason_codes: ["direct_event_relationship_is_bounded"] },
       log_stream: { availability: "available", stream_kind: "deployments", reason_codes: [] },
+      rightsizing: {
+        availability: "unavailable",
+        reason_codes: ["rightsizing_observation_not_integrated"],
+      },
       capabilities: { scope: { workspace_id: "workspace-a", cluster_id: "cluster-a", namespaces: ["shop"], freshness: "live" }, resource, revision: "snapshot-a", actions: [] },
       features: [
         { name: "overview", availability: "available", reason_codes: [] },
         { name: "pods", availability: "partial", reason_codes: ["direct_pod_relationship_is_bounded"] },
         { name: "events", availability: "partial", reason_codes: ["direct_event_relationship_is_bounded"] },
         { name: "logs", availability: "available", reason_codes: [] },
+        { name: "rightsizing", availability: "unavailable", reason_codes: ["rightsizing_observation_not_integrated"] },
         { name: "metrics", availability: "unavailable", reason_codes: ["workload_metrics_not_integrated"] },
         { name: "topology", availability: "unavailable", reason_codes: ["workload_topology_not_integrated"] },
         { name: "timeline", availability: "unavailable", reason_codes: ["workload_timeline_not_integrated"] },

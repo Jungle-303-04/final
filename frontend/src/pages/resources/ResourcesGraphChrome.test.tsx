@@ -48,6 +48,9 @@ describe("TimelineStrip", () => {
     const frame: ChangeTimelineFrame = {
       phase: "ready",
       failure: null,
+      refreshFailure: null,
+      refreshing: false,
+      updatedAt: fromMs,
       data: {
         fromMs,
         toMs,
@@ -55,6 +58,16 @@ describe("TimelineStrip", () => {
         buckets: [{ startMs: fromMs, endMs: toMs, total: 4, warnings: 1 }],
         events: [],
         gaps: [],
+        freshnessPolicy: {
+          staleAfterSeconds: 5,
+          refreshAfterSeconds: 15,
+          keepLastSuccess: true,
+          pauseWhenHidden: true,
+          eventInvalidation: true,
+          retryAfterSeconds: null,
+          retryLimit: null,
+          postMutationRefreshAfterSeconds: null,
+        },
       },
     };
 

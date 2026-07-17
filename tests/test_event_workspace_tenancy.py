@@ -141,7 +141,9 @@ def test_outbox_stage_persists_workspace_and_audit_row_preserves_it() -> None:
     repository.stage_events(Connection(), [envelope])
 
     compiled = statements[0].compile(dialect=postgresql.dialect())
-    assert compiled.params["workspace_id"] == "workspace-a"
+    assert {value for key, value in compiled.params.items() if key.startswith("workspace_id")} == {
+        "workspace-a"
+    }
     assert audit_log_row(envelope)["workspace_id"] == "workspace-a"
 
 

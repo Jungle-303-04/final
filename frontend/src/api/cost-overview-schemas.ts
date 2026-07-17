@@ -90,6 +90,8 @@ export const costOverviewSchema = z.strictObject({
   summary: costObservationSummarySchema,
   trend: costTrendSchema,
   refresh_after_seconds: z.number().int().min(1).max(3600),
+  trend_refresh_after_seconds: z.number().int().min(1).max(3600),
+  nodes_refresh_after_seconds: z.number().int().min(1).max(3600),
 });
 
 export type CostOverviewEndpoint = z.infer<typeof costOverviewSchema>;

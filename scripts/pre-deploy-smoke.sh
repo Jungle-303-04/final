@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/env.sh"
+source "${SCRIPT_DIR}/lib/cluster-curl.sh"
 
 BASE_URL="${BASE_URL:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-}"
@@ -10,6 +11,7 @@ MGMT_NS="${MGMT_NS:-management}"
 PRE_DEPLOY_HEALTH_MAX_ATTEMPTS="${PRE_DEPLOY_HEALTH_MAX_ATTEMPTS:-7}"
 PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS="${PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS:-30}"
 SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
+CLUSTER_CURL_POD_PREFIX="deploy-smoke-pre"
 IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
 IN_CLUSTER_CONSOLE_URL="http://console-dev.${MGMT_NS}.svc.cluster.local"
 
@@ -25,21 +27,6 @@ for command in kubectl python3; do
     exit 1
   fi
 done
-
-cluster_curl() {
-  local url="$1"
-  local pod_name="deploy-smoke-pre-${GITHUB_RUN_ID:-local}-${RANDOM}"
-
-  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" run "${pod_name}" \
-    --rm -i --restart=Never \
-    --image="${SMOKE_CURL_IMAGE}" \
-    --quiet -- \
-    curl --silent --show-error \
-      --connect-timeout 5 \
-      --max-time 15 \
-      --write-out $'\n%{http_code}' \
-      "${url}"
-}
 
 index_file="$(mktemp)"
 health_file="$(mktemp)"

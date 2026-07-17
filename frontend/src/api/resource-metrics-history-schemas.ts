@@ -14,6 +14,68 @@ export const resourceMetricHistoryPointSchema = z.strictObject({
   mem_mib: nullableMetric,
 });
 
+export const resourceMetricContainerHistorySeriesSchema = z.strictObject({
+  name: z.string().trim().min(1).max(253),
+  points: z.array(resourceMetricHistoryPointSchema),
+  completeness: filterCountCompletenessSchema,
+  partial_reason_codes: z.array(z.string()),
+}).superRefine((series, context) => {
+  const observed = series.points.map((point) => point.observed_at);
+  if (new Set(observed).size !== observed.length ||
+    observed.some((value, index) => index > 0 && value <= observed[index - 1]!)) {
+    context.addIssue({
+      code: "custom",
+      message: "container metric points must be unique and ordered",
+      path: ["points"],
+    });
+  }
+  if (series.completeness === "unavailable" && series.points.length > 0) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable container history cannot contain points",
+      path: ["completeness"],
+    });
+  }
+  if (series.completeness === "exact" && (
+    series.points.length === 0 ||
+    series.partial_reason_codes.length > 0
+  )) {
+    context.addIssue({
+      code: "custom",
+      message: "exact container history must be complete",
+      path: ["completeness"],
+    });
+  }
+});
+
+export const resourceMetricCurrentObservationSchema = z.strictObject({
+  observed_at: rfc3339TimestampSchema,
+  measurement_window: z.string().trim().min(1).max(64),
+  cpu_mcores: nullableMetric,
+  mem_mib: nullableMetric,
+  containers: z.array(z.strictObject({
+    name: z.string().trim().min(1).max(253),
+    cpu_mcores: nullableMetric,
+    mem_mib: nullableMetric,
+  }).refine(
+    (container) => container.cpu_mcores !== null || container.mem_mib !== null,
+    { message: "container metric observation requires CPU or memory" },
+  )).max(64),
+  container_metrics_complete: z.boolean(),
+}).superRefine((observation, context) => {
+    if (observation.cpu_mcores === null && observation.mem_mib === null) {
+      context.addIssue({ code: "custom", message: "current metric observation requires CPU or memory" });
+    }
+    const names = observation.containers.map((container) => container.name);
+    if (new Set(names).size !== names.length ||
+      names.some((name, index) => index > 0 && name <= names[index - 1]!)) {
+      context.addIssue({ code: "custom", message: "container metrics must be unique and ordered" });
+    }
+    if (observation.container_metrics_complete && observation.containers.length === 0) {
+      context.addIssue({ code: "custom", message: "complete container metrics require a container" });
+    }
+});
+
 export const resourceMetricHistorySeriesSchema = z.strictObject({
   resource_id: z.string().min(1),
   cluster_id: z.string().min(1),
@@ -21,6 +83,10 @@ export const resourceMetricHistorySeriesSchema = z.strictObject({
   namespace: z.string().min(1).nullable(),
   name: z.string().min(1),
   points: z.array(resourceMetricHistoryPointSchema),
+  current_observation: resourceMetricCurrentObservationSchema.nullable().optional(),
+  container_series: z.array(resourceMetricContainerHistorySeriesSchema).max(64),
+  container_history_completeness: filterCountCompletenessSchema,
+  container_history_reason_codes: z.array(z.string()),
   has_sparkline_points: z.boolean(),
   completeness: filterCountCompletenessSchema,
   partial_reason_codes: z.array(z.string()),
@@ -30,6 +96,51 @@ export const resourceMetricHistorySeriesSchema = z.strictObject({
   }
   if (series.resource_type === "node" && series.namespace !== null) {
     context.addIssue({ code: "custom", message: "node metric history must be cluster scoped", path: ["namespace"] });
+  }
+  if (series.resource_type === "node" && series.current_observation &&
+    (series.current_observation.containers.length > 0 ||
+      series.current_observation.container_metrics_complete)) {
+    context.addIssue({ code: "custom", message: "node current metrics cannot expose containers", path: ["current_observation"] });
+  }
+  if (series.resource_type === "node" && (
+    series.container_series.length > 0 ||
+    series.container_history_completeness !== "unavailable" ||
+    series.container_history_reason_codes.length !== 1 ||
+    series.container_history_reason_codes[0] !== "container_metrics_not_applicable"
+  )) {
+    context.addIssue({
+      code: "custom",
+      message: "node metric history cannot expose Pod containers",
+      path: ["container_series"],
+    });
+  }
+  const containerNames = series.container_series.map((container) => container.name);
+  if (new Set(containerNames).size !== containerNames.length ||
+    containerNames.some((name, index) => index > 0 && name <= containerNames[index - 1]!)) {
+    context.addIssue({
+      code: "custom",
+      message: "container metric series must be unique and ordered",
+      path: ["container_series"],
+    });
+  }
+  if (series.container_history_completeness === "unavailable" &&
+    series.container_series.length > 0) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable container history cannot expose series",
+      path: ["container_history_completeness"],
+    });
+  }
+  if (series.container_history_completeness === "exact" && (
+    series.container_series.length === 0 ||
+    series.container_history_reason_codes.length > 0 ||
+    series.container_series.some((container) => container.completeness !== "exact")
+  )) {
+    context.addIssue({
+      code: "custom",
+      message: "exact container history requires exact series",
+      path: ["container_history_completeness"],
+    });
   }
   const observed = series.points.map((point) => point.observed_at);
   if (new Set(observed).size !== observed.length ||
@@ -53,6 +164,12 @@ export const resourceMetricHistorySeriesSchema = z.strictObject({
 });
 
 export const resourceMetricsHistorySchema = z.strictObject({
+  refresh_policy_key: z.enum([
+    "metrics_kubernetes",
+    "metrics_prometheus",
+    "metrics_pvc",
+    "metrics_rightsizing",
+  ]),
   series: z.array(resourceMetricHistorySeriesSchema),
   completeness: filterCountCompletenessSchema,
   partial_reason_codes: z.array(z.string()),

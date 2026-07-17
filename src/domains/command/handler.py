@@ -40,6 +40,7 @@ from domains.target.management_guard import (
 )
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
+from packages.config.environments import is_sandbox_environment, normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.security import env_enabled
 from packages.config.settings import env
@@ -136,11 +137,17 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     manifest_namespace = desired_manifest_namespace(command)
     if manifest_namespace is not None and manifest_namespace != command.namespace:
         return PolicyResult.reject(MANIFEST_NAMESPACE_MISMATCH_REASON)
-    result = POLICY.evaluate(ModelLookup(command))
-    if not result.allowed:
-        return result
     # 액션별 정책 메타데이터(@command.action allowed_namespaces) — 카탈로그가 기준.
     spec = command_action_spec(command.action)
+    if spec is None:
+        return PolicyResult.reject("unsupported command action")
+    result = PolicyResult.allow()
+    if spec.enforce_control_namespace:
+        result = POLICY.evaluate(ModelLookup(command))
+        if not result.allowed:
+            return result
+    elif command.action not in allowed_command_actions():
+        return PolicyResult.reject("unsupported command action")
     if spec is not None and not spec.allows_namespace(command.namespace):
         return PolicyResult.reject(ACTION_NAMESPACE_REASON)
     if (
@@ -177,12 +184,12 @@ def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
     """
     actions = _csv_values(env(AUTO_APPROVE_ACTIONS_ENV, DEFAULT_AUTO_APPROVE_ACTIONS))
     environments = {
-        item.lower()
+        normalize_environment(item)
         for item in _csv_values(
             env(AUTO_APPROVE_ENVIRONMENTS_ENV, DEFAULT_AUTO_APPROVE_ENVIRONMENTS)
         )
     }
-    return command.action in actions and command.environment.strip().lower() in environments
+    return command.action in actions and normalize_environment(command.environment) in environments
 
 
 def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
@@ -258,7 +265,7 @@ def approval_status_result(command: CommandRequestedBody, record: JsonObject) ->
 
     details = record.get("details")
     policy_route = str(details.get("policy_route", "")) if isinstance(details, dict) else ""
-    if command.environment.strip().lower() == "sandbox" and policy_route == "safe_pr":
+    if is_sandbox_environment(command.environment) and policy_route == "safe_pr":
         return PolicyResult.allow()
     return PolicyResult.reject(APPROVAL_NOT_REQUIRED_SCOPE_REASON)
 
@@ -333,6 +340,9 @@ async def evaluate_management_guard(
     command: CommandRequestedBody, db: AgentCommandStore
 ) -> PolicyResult:
     if command.direct_execution:
+        return PolicyResult.allow()
+    spec = command_action_spec(command.action)
+    if spec is not None and spec.read_only:
         return PolicyResult.allow()
     registration_getter = getattr(db, "get_cluster_registration", None)
     registration = None
@@ -430,7 +440,11 @@ def build_plan(
             channel=COMMAND_CONFIG.agent_route_channel,
             cluster_id=cluster_id,
             workspace_id=workspace_id,
-            required_capability=COMMAND_CONFIG.required_agent_capability,
+            required_capability=(
+                action_spec.required_agent_capability
+                if action_spec is not None
+                else COMMAND_CONFIG.required_agent_capability
+            ),
         ),
         workspace_id=workspace_id,
         application_id=command.application_id,

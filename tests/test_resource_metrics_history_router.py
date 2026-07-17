@@ -178,6 +178,7 @@ def test_metric_history_returns_measured_node_series() -> None:
     )
 
     assert response.status_code == 200
+    assert response.json()["refresh_policy_key"] == "metrics_kubernetes"
     assert response.json()["series"] == [
         {
             "resource_id": "node-a",
@@ -192,6 +193,10 @@ def test_metric_history_returns_measured_node_series() -> None:
                     "mem_mib": 4096.0,
                 }
             ],
+            "current_observation": None,
+            "container_series": [],
+            "container_history_completeness": "unavailable",
+            "container_history_reason_codes": ["container_metrics_not_applicable"],
             "has_sparkline_points": True,
             "completeness": "exact",
             "partial_reason_codes": [],

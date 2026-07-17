@@ -18,6 +18,7 @@ export interface ClusterConnectReceipt {
 export interface ClusterConnectionSnapshot {
   status: ClusterConnectState;
   stage: ClusterConnectStage;
+  refreshAfterSeconds: number | null;
   agentVersion: string | null;
   lastSeenAt: string | null;
 }

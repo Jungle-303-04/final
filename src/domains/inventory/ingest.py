@@ -25,6 +25,7 @@ async def ingest_inventory_snapshot(
     agent_id: str,
     payload: JsonObject,
     fanout: TimelineEventFanout | object | None = None,
+    ready_fanout: object | None = None,
     after_persist: InventorySnapshotAfterPersist | None = None,
 ) -> JsonObject:
     """Persist, ledger-append, and only then announce one inventory snapshot.
@@ -66,6 +67,13 @@ async def ingest_inventory_snapshot(
     publisher = fanout if callable(getattr(fanout, "publish_committed", None)) else None
     for append in appends:
         await fanout_committed_timeline_append(append, publisher)
+    ready_publisher = getattr(ready_fanout, "publish_committed", None)
+    if result.get("accepted") is True and callable(ready_publisher):
+        await ready_publisher(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            snapshot_id=str(result["snapshot_id"]),
+        )
     return result
 
 
@@ -76,6 +84,9 @@ def append_inventory_timeline_events(
     """Append immutable facts within the caller-owned inventory transaction."""
     if not mutation.timeline_events:
         return ()
+    append_many = getattr(db, "append_timeline_events", None)
+    if callable(append_many):
+        return tuple(append_many(mutation.timeline_events))
     append = getattr(db, "append_timeline_event", None)
     if not callable(append):
         raise RuntimeError("inventory timeline ledger append is unavailable")

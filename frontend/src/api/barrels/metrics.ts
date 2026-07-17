@@ -3,12 +3,15 @@ export {
   getCommandStatus,
   pollCommand,
   runPrometheusQuery,
+  runScopedMetricQuery,
   submitPrometheusQuery,
   MetricQueryExecutionError,
   type ClusterUsageOptions,
   type MetricCommandSummary,
   type PollCommandOptions,
   type PrometheusQueryRun,
+  type ScopedMetricObservation,
+  type ScopedMetricQueryRun,
   type SubmittedPrometheusQuery,
 } from "../metrics";
 export {
@@ -33,6 +36,9 @@ export {
   commandStatusSchema,
   prometheusQueryDefinitionSchema,
   prometheusRangeResultSchema,
+  scopedMetricCategorySchema,
+  scopedMetricQueryRequestSchema,
+  scopedMetricQueryResponseSchema,
   type AgentDebugQueryReceipt,
   type ClusterUsage,
   type ClusterUsageResponse,
@@ -43,6 +49,10 @@ export {
   type PrometheusMetricSeries,
   type PrometheusQueryDefinition,
   type PrometheusRangeResult,
+  type ScopedMetricCategory,
+  type ScopedMetricQueryRequest,
+  type ScopedMetricQueryResponse,
+  type ScopedMetricTimeRange,
 } from "../metrics-schemas";
 export {
   metricQueryPresetListSchema,

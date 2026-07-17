@@ -1,5 +1,5 @@
-import { ChevronDown, GitBranch, RefreshCw } from "lucide-react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { ChevronDown, GitBranch, RefreshCw, Search } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   GitOpsPort,
@@ -8,13 +8,25 @@ import type {
   ReleaseCluster,
   ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
+import {
+  filterGitOpsSyncTargets,
+  gitOpsSyncCategory,
+  type GitOpsSyncCategory,
+} from "../../features/gitops/gitOpsPresentation";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
+import type {
+  BrowserRefreshPolicy,
+  BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
+import { GitOpsSyncSearch } from "./GitOpsSyncSearch";
+import { GitOpsSyncTargetDetails } from "./GitOpsSyncTargetDetails";
 import {
   Table,
   TableBody,
@@ -24,7 +36,15 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 
-export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
+type GitOpsRefreshPolicyKey = "gitops_rows" | "gitops_counts";
+
+export function GitOpsSyncTableView({
+  port,
+  refreshPolicies,
+}: {
+  port: GitOpsPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<GitOpsRefreshPolicyKey>;
+}) {
   const { formatDate, t } = useI18n();
   const [request, setRequest] = useState(0);
   const [rows, setRows] = useState<GitOpsSyncTarget[]>([]);
@@ -33,24 +53,65 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
   const [loading, setLoading] = useState(true);
   const [targetPending, setTargetPending] = useState(false);
   const [error, setError] = useState(false);
+  const [query, setQuery] = useState("");
+  const [policies, setPolicies] = useState<{
+    rows: BrowserRefreshPolicy;
+    counts: BrowserRefreshPolicy;
+  } | null>(null);
+  const [successfulRead, setSuccessfulRead] = useState<{ sequence: number; empty: boolean } | null>(null);
+  const visibleRows = useMemo(() => filterGitOpsSyncTargets(rows, query), [query, rows]);
+  const requestSharedRefresh = useCallback(() => setRequest((value) => value + 1), []);
+  const rowsRefresh = useServerRefreshScheduler(requestSharedRefresh);
+  const countsRefresh = useServerRefreshScheduler(requestSharedRefresh);
   const refresh = useCallback(() => {
     setLoading(true);
     setError(false);
-    setRequest((value) => value + 1);
-  }, []);
+    rowsRefresh.backgroundFailure();
+    countsRefresh.requestRefresh();
+  }, [countsRefresh, rowsRefresh]);
 
   useEffect(() => {
     const controller = new AbortController();
+    void Promise.all([
+      refreshPolicies.getPolicy("gitops_rows", controller.signal),
+      refreshPolicies.getPolicy("gitops_counts", controller.signal),
+    ]).then(([rowsPolicy, countsPolicy]) => {
+      if (!controller.signal.aborted) setPolicies({ rows: rowsPolicy, counts: countsPolicy });
+    }).catch((reason: unknown) => {
+      if (!isAbortError(reason)) {
+        rowsRefresh.backgroundFailure();
+        countsRefresh.backgroundFailure();
+      }
+    });
+    return () => controller.abort();
+  }, [countsRefresh, refreshPolicies, rowsRefresh]);
+
+  useEffect(() => {
+    if (policies === null || successfulRead === null) return;
+    rowsRefresh.acceptSuccess(policies.rows, { coldEmpty: successfulRead.empty });
+    countsRefresh.acceptSuccess(policies.counts);
+  }, [countsRefresh, policies, rowsRefresh, successfulRead]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    rowsRefresh.backgroundFailure();
+    countsRefresh.backgroundFailure();
     void port.listSyncTargets(controller.signal).then((nextRows) => {
       setRows(nextRows);
+      setSuccessfulRead((current) => ({
+        sequence: (current?.sequence ?? 0) + 1,
+        empty: nextRows.length === 0,
+      }));
       setLoading(false);
     }).catch((reason: unknown) => {
       if (isAbortError(reason)) return;
+      rowsRefresh.backgroundFailure();
+      countsRefresh.backgroundFailure();
       setError(true);
       setLoading(false);
     });
     return () => controller.abort();
-  }, [port, request]);
+  }, [countsRefresh, port, request, rowsRefresh]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -113,6 +174,9 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
           </Button>
         </div>
       </div>
+      {rows.length > 0 ? (
+        <GitOpsSyncSearch onChange={setQuery} query={query} />
+      ) : null}
       {error ? (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
           {t("workflows.sync.stale")}
@@ -122,7 +186,7 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
         <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <h3 className="font-medium" id="gitops-sync-table-title">{t("workflows.sync.table.title")}</h3>
           <span className="text-xs tabular-nums text-muted-foreground">
-            {t("workflows.sync.table.count", { count: rows.length })}
+            {t("workflows.sync.table.count", { count: visibleRows.length })}
           </span>
         </div>
         {rows.length === 0 ? (
@@ -133,6 +197,16 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
               </span>
               <p className="font-medium">{t("workflows.sync.empty.title")}</p>
               <p className="text-sm text-muted-foreground">{t("workflows.sync.empty.description")}</p>
+            </div>
+          </div>
+        ) : visibleRows.length === 0 ? (
+          <div className="grid min-h-52 place-items-center p-8 text-center">
+            <div className="grid max-w-md justify-items-center gap-3 rounded-xl border border-dashed p-6">
+              <Search aria-hidden="true" className="size-5 text-muted-foreground" />
+              <p className="font-medium">{t("workflows.sync.search.empty")}</p>
+              <Button onClick={() => setQuery("")} type="button" variant="outline">
+                {t("workflows.sync.search.clear")}
+              </Button>
             </div>
           </div>
         ) : (
@@ -151,7 +225,7 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => {
+              {visibleRows.map((row) => {
                 const status = syncStatus(row.syncStatus, t);
                 const selected = row.id === selectedId;
                 return (
@@ -202,7 +276,7 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
                     {selected ? (
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
                         <TableCell className="p-0" colSpan={7}>
-                          <SyncTargetDetails row={row} status={status} />
+                          <GitOpsSyncTargetDetails row={row} statusLabel={status.label} />
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -217,57 +291,31 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
   );
 }
 
-function SyncTargetDetails({
-  row,
-  status,
-}: {
-  row: GitOpsSyncTarget;
-  status: ReturnType<typeof syncStatus>;
-}) {
-  const { formatDate, t } = useI18n();
-  const unavailable = t("common.value.unavailable");
-  const items = [
-    [t("workflows.sync.table.application"), row.applicationId],
-    [t("workflows.sync.table.target"), [row.clusterId, row.namespace].filter(Boolean).join(" / ") || unavailable],
-    [t("workflows.sync.table.environment"), row.environment ?? unavailable],
-    [t("workflows.sync.table.status"), status.raw ?? status.label],
-    [t("workflows.sync.table.revision"), row.revision ?? unavailable],
-    [t("workflows.sync.table.observed"), formatObserved(row.observedAt, formatDate, unavailable)],
-  ] as const;
-
-  return (
-    <dl
-      aria-label={`${row.applicationName} ${t("common.action.details")}`}
-      className="grid gap-x-6 gap-y-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-3"
-    >
-      {items.map(([label, value]) => (
-        <div className="min-w-0" key={label}>
-          <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-          <dd className="mt-1 break-all text-sm">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 function syncStatus(
   value: string | null,
   t: TranslationFunction,
 ): { label: string; tone: StatusTone; raw: string | null } {
-  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
-  if (["synced", "synchronized", "success", "succeeded"].includes(normalized)) {
-    return { label: t("workflows.sync.status.synced"), tone: "healthy", raw: value };
-  }
-  if (["out_of_sync", "outofsync", "drifted", "diverged"].includes(normalized)) {
-    return { label: t("workflows.sync.status.outOfSync"), tone: "warning", raw: value };
-  }
-  if (["pending", "running", "polling", "progressing"].includes(normalized)) {
-    return { label: t("workflows.sync.status.checking"), tone: "warning", raw: value };
-  }
-  if (["failed", "error", "degraded"].includes(normalized)) {
-    return { label: t("workflows.sync.status.failed"), tone: "critical", raw: value };
-  }
-  return { label: t("workflows.sync.status.unknown"), tone: "unknown", raw: value };
+  const category = gitOpsSyncCategory(value);
+  return {
+    label: syncCategoryLabel(category, t),
+    tone: syncCategoryTone(category),
+    raw: value,
+  };
+}
+
+function syncCategoryLabel(category: GitOpsSyncCategory, t: TranslationFunction): string {
+  if (category === "synced") return t("workflows.sync.status.synced");
+  if (category === "out-of-sync") return t("workflows.sync.status.outOfSync");
+  if (category === "checking") return t("workflows.sync.status.checking");
+  if (category === "failed") return t("workflows.sync.status.failed");
+  return t("workflows.sync.status.unknown");
+}
+
+function syncCategoryTone(category: GitOpsSyncCategory): StatusTone {
+  if (category === "synced") return "healthy";
+  if (category === "out-of-sync" || category === "checking") return "warning";
+  if (category === "failed") return "critical";
+  return "unknown";
 }
 
 function formatObserved(
@@ -277,8 +325,9 @@ function formatObserved(
 ): string {
   if (value === null) return unavailable;
   const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return unavailable;
-  return formatDate(timestamp, { dateStyle: "medium", timeStyle: "short" });
+  return Number.isNaN(timestamp)
+    ? unavailable
+    : formatDate(timestamp, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function isAbortError(error: unknown): boolean {

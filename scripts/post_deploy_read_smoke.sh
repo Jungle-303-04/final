@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/lib/auth.sh"
 API_BASE_URL="${API_BASE_URL:-}"
 AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
+AUTH_COOKIE_JAR_OUT="${AUTH_COOKIE_JAR_OUT:-}"
 COOKIE_JAR="$(mktemp)"
 CLUSTERS_RESPONSE="$(mktemp)"
 RESOURCES_RESPONSE="$(mktemp)"
@@ -19,6 +20,11 @@ for variable in \
   AUTH_PASSWORD; do
   require_env "${variable}"
 done
+
+if [ -n "${AUTH_COOKIE_JAR_OUT}" ] && [[ "${AUTH_COOKIE_JAR_OUT}" != /* ]]; then
+  echo "AUTH_COOKIE_JAR_OUT must be an absolute path" >&2
+  exit 1
+fi
 
 echo "==> post-deploy operator login"
 login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"
@@ -47,5 +53,10 @@ if not isinstance(clusters.get("clusters"), list):
 if not isinstance(resources.get("items"), list):
     raise SystemExit("resource list response is invalid")
 PY
+
+if [ -n "${AUTH_COOKIE_JAR_OUT}" ]; then
+  rm -f -- "${AUTH_COOKIE_JAR_OUT}"
+  install -m 600 -- "${COOKIE_JAR}" "${AUTH_COOKIE_JAR_OUT}"
+fi
 
 echo "post-deploy read smoke passed"

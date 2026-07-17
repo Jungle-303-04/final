@@ -86,7 +86,7 @@ def test_commit_message_gate_accepts_nominal_korean_keyword_subjects(
 
 def test_dev_gate_checks_only_the_bounded_new_commit_range() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/dev-gate.yml").read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["gate"]["steps"]
+    steps = workflow["jobs"]["source-proof"]["steps"]
     checkout = next(step for step in steps if step.get("uses") == "actions/checkout@v4")
     command = next(
         step
@@ -102,7 +102,7 @@ def test_dev_gate_checks_only_the_bounded_new_commit_range() -> None:
 
 def test_pull_request_gate_audits_head_commits_not_the_synthetic_merge_subject() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/dev-gate.yml").read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["gate"]["steps"]
+    steps = workflow["jobs"]["source-proof"]["steps"]
     prepare = next(
         step for step in steps if step.get("name") == "Prepare bounded commit message range"
     )
@@ -117,12 +117,13 @@ def test_pull_request_gate_audits_head_commits_not_the_synthetic_merge_subject()
 
 def test_dev_gate_runs_commit_message_unit_tests_before_the_full_gate() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/dev-gate.yml").read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["gate"]["steps"]
+    steps = workflow["jobs"]["backend"]["steps"]
     names = [step.get("name") for step in steps]
     unit_test_index = names.index("Verify commit message gate rules")
-    full_gate_index = names.index("Run canonical gate")
+    full_gate_index = names.index("Run backend and manifest gate")
 
     assert steps[unit_test_index]["run"] == "uv run pytest -q tests/test_commit_msg_gate.py"
+    assert steps[full_gate_index]["run"] == "make gate-backend"
     assert unit_test_index < full_gate_index
 
 

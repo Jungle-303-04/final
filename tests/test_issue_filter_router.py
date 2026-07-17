@@ -289,6 +289,7 @@ def test_issues_pass_same_axis_or_and_cross_axis_and_filters_to_repository() -> 
             "namespaces": "cluster-b/default,cluster-a/shop",
             "applications": "app-b,app-a",
             "issues.severity": "warning,critical",
+            "issues.category": "scheduling,container_restart",
             "issues.status": "resolved,open",
             "issues.environment": "staging,production",
             "issues.q": " checkout ",
@@ -307,6 +308,7 @@ def test_issues_pass_same_axis_or_and_cross_axis_and_filters_to_repository() -> 
     )
     assert filters.applications == ("app-a", "app-b")
     assert filters.severities == ("critical", "warning")
+    assert filters.categories == ("container_restart", "scheduling")
     assert filters.statuses == ("open", "resolved")
     assert filters.environments == ("production", "staging")
     assert filters.query == "checkout"

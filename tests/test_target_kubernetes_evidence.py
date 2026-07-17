@@ -10,7 +10,11 @@ import pytest
 
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.inventory_filter.physical_topology import build_physical_topology
-from packages.contracts.gateway.requests import AgentEvidenceRequest, EvidenceJobResultRequest
+from packages.contracts.gateway.requests import (
+    AgentEvidenceRequest,
+    EvidenceJobResultRequest,
+    EvidenceProviderPolicy,
+)
 from packages.kubernetes_provider import detect_kubernetes_provider
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -59,6 +63,191 @@ def load_evidence_modules():
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
                 sys.modules[name] = previous_modules[name]
+
+
+def _exact_resource_access(**overrides: object) -> dict[str, object]:
+    access: dict[str, object] = {
+        "completeness": "exact",
+        "reason_codes": [],
+        "roles": [],
+        "cluster_roles": [],
+        "role_bindings": [],
+        "cluster_role_bindings": [],
+        "service_accounts": [],
+        "pod_subjects": [],
+    }
+    access.update(overrides)
+    return access
+
+
+@pytest.mark.parametrize(
+    ("collection", "resource", "normalized_collection", "nested_collection"),
+    [
+        (
+            "roles",
+            {"metadata": {"name": "reader", "namespace": "shop"}, "rules": None},
+            "roles",
+            "rules",
+        ),
+        (
+            "role_bindings",
+            {
+                "metadata": {"name": "reader", "namespace": "shop"},
+                "roleRef": {"kind": "Role", "name": "reader"},
+                "subjects": None,
+            },
+            "role_bindings",
+            "subjects",
+        ),
+    ],
+)
+def test_resource_access_normalizes_null_rbac_collections_as_empty_lists(
+    collection: str,
+    resource: dict[str, object],
+    normalized_collection: str,
+    nested_collection: str,
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(**{collection: [resource]}),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "exact"
+    assert normalized[normalized_collection][0][nested_collection] == []
+
+
+@pytest.mark.parametrize(
+    ("subject", "expected_namespace"),
+    [
+        ({"kind": "ServiceAccount", "name": "reader"}, "shop"),
+        (
+            {"kind": "ServiceAccount", "namespace": "shared", "name": "reader"},
+            "shared",
+        ),
+    ],
+)
+def test_role_binding_defaults_only_missing_service_account_namespace(
+    subject: dict[str, object],
+    expected_namespace: str,
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            role_bindings=[
+                {
+                    "metadata": {"name": "reader", "namespace": "shop"},
+                    "roleRef": {"kind": "Role", "name": "reader"},
+                    "subjects": [subject],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "exact"
+    assert normalized["role_bindings"][0]["subjects"][0]["namespace"] == expected_namespace
+
+
+def test_cluster_role_binding_rejects_missing_service_account_namespace() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            cluster_role_bindings=[
+                {
+                    "metadata": {"name": "reader"},
+                    "roleRef": {"kind": "ClusterRole", "name": "reader"},
+                    "subjects": [{"kind": "ServiceAccount", "name": "reader"}],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "unavailable"
+    assert normalized["reason_codes"] == ["invalid_access_observation"]
+
+
+def test_role_binding_keeps_user_and_group_subjects_cluster_scoped() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            role_bindings=[
+                {
+                    "metadata": {"name": "reader", "namespace": "shop"},
+                    "roleRef": {"kind": "Role", "name": "reader"},
+                    "subjects": [
+                        {"kind": "User", "namespace": "ignored", "name": "alice"},
+                        {"kind": "Group", "namespace": "ignored", "name": "operators"},
+                    ],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "exact"
+    assert [subject["namespace"] for subject in normalized["role_bindings"][0]["subjects"]] == [
+        "",
+        "",
+    ]
+
+
+@pytest.mark.parametrize("namespace", [None, "", 7])
+def test_role_binding_rejects_invalid_binding_namespace(namespace: object) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(
+            role_bindings=[
+                {
+                    "metadata": {"name": "reader", "namespace": namespace},
+                    "roleRef": {"kind": "Role", "name": "reader"},
+                    "subjects": [{"kind": "ServiceAccount", "name": "reader"}],
+                }
+            ]
+        ),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "unavailable"
+    assert normalized["reason_codes"] == ["invalid_access_observation"]
+
+
+@pytest.mark.parametrize(
+    ("collection", "resource"),
+    [
+        (
+            "roles",
+            {"metadata": {"name": "reader", "namespace": "shop"}, "rules": {}},
+        ),
+        (
+            "role_bindings",
+            {
+                "metadata": {"name": "reader", "namespace": "shop"},
+                "roleRef": {"kind": "Role", "name": "reader"},
+                "subjects": "checkout",
+            },
+        ),
+    ],
+)
+def test_resource_access_rejects_malformed_rbac_collections(
+    collection: str,
+    resource: dict[str, object],
+) -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    normalized = kubernetes_module.normalize_resource_access(
+        _exact_resource_access(**{collection: [resource]}),
+        observed_at="2026-07-17T00:00:00Z",
+    )
+
+    assert normalized["completeness"] == "unavailable"
+    assert normalized["reason_codes"] == ["invalid_access_observation"]
 
 
 def test_endpoint_slice_summary_normalizes_null_collections() -> None:
@@ -134,6 +323,144 @@ def test_pod_requests_survive_provider_inventory_and_physical_usage_projection()
         total_count_completeness="exact",
     )
     assert topology["pods"][0]["usage_pct"] == 50.0
+
+
+def test_pod_requests_and_limits_survive_one_provider_inventory_projection() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"uid": "pod-1", "name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "app",
+                        "resources": {
+                            "requests": {"cpu": "250m", "memory": "128Mi"},
+                            "limits": {"cpu": "500m", "memory": "256Mi"},
+                        },
+                    },
+                    {
+                        "name": "sidecar",
+                        "resources": {
+                            "requests": {"cpu": "0.1", "memory": "1Gi"},
+                            "limits": {"cpu": "200m", "memory": "2Gi"},
+                        },
+                    },
+                ]
+            },
+            "status": {"phase": "Running", "containerStatuses": []},
+        }
+    )
+
+    assert summary["cpu_request_mcores"] == 350.0
+    assert summary["cpu_limit_mcores"] == 700.0
+    assert summary["mem_request_mib"] == 1152.0
+    assert summary["mem_limit_mib"] == 2304.0
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"pods": [summary]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    persisted = snapshot["resources"][0]["summary"]
+    assert persisted["cpu_limit_mcores"] == 700.0
+    assert persisted["mem_limit_mib"] == 2304.0
+
+
+def test_node_scheduled_pod_count_excludes_completed_pods() -> None:
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {
+            "pods": [
+                {"name": "running", "node_name": "worker-a", "phase": "Running"},
+                {"name": "pending", "node_name": "worker-a", "phase": "Pending"},
+                {"name": "done", "node_name": "worker-a", "phase": "Succeeded"},
+                {"name": "failed", "node_name": "worker-a", "phase": "Failed"},
+                {"name": "other", "node_name": "worker-b", "phase": "Running"},
+            ],
+            "nodes": [{"name": "worker-a", "ready": True}],
+        },
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    node = next(
+        resource for resource in snapshot["resources"] if resource["resource_type"] == "node"
+    )
+    assert node["summary"]["pod_count"] == 2
+    assert snapshot["summary"]["nodes"][0]["pod_count"] == 2
+
+
+def test_pod_summary_preserves_spec_container_ports_and_honest_completeness() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"uid": "pod-1", "name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "app",
+                        "ports": [
+                            {"containerPort": 8080, "name": "http"},
+                            {"containerPort": 5353, "name": "dns", "protocol": "UDP"},
+                        ],
+                    },
+                    {
+                        "name": "sidecar",
+                        "ports": [{"containerPort": 9090, "name": "metrics", "protocol": "TCP"}],
+                    },
+                ]
+            },
+            "status": {
+                "phase": "Running",
+                "containerStatuses": [
+                    {"name": "app", "ready": True, "restartCount": 0},
+                ],
+            },
+        }
+    )
+
+    assert summary["container_ports_complete"] is True
+    assert [(container["name"], container["ports"]) for container in summary["containers"]] == [
+        (
+            "app",
+            [
+                {"container_port": 8080, "name": "http", "protocol": "TCP"},
+                {"container_port": 5353, "name": "dns", "protocol": "UDP"},
+            ],
+        ),
+        (
+            "sidecar",
+            [{"container_port": 9090, "name": "metrics", "protocol": "TCP"}],
+        ),
+    ]
+    assert summary["containers"][0]["ready"] is True
+    assert summary["containers"][1]["ready"] is None
+
+
+def test_pod_summary_marks_malformed_port_observation_partial_without_inventing_ports() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "app",
+                        "ports": [
+                            {"containerPort": 8080, "name": "http"},
+                            {"containerPort": "not-observed", "name": "invalid"},
+                        ],
+                    }
+                ]
+            },
+            "status": {"containerStatuses": []},
+        }
+    )
+
+    assert summary["container_ports_complete"] is False
+    assert summary["containers"][0]["ports"] == [
+        {"container_port": 8080, "name": "http", "protocol": "TCP"}
+    ]
 
 
 @pytest.mark.parametrize(
@@ -407,6 +734,8 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                 "items": [
                     {
                         "metadata": {"name": "checkout-api-7f5c", "namespace": "target"},
+                        "timestamp": "2026-07-16T02:00:00Z",
+                        "window": "30s",
                         "containers": [
                             {"name": "checkout-api", "usage": {"cpu": "125m", "memory": "64Mi"}}
                         ],
@@ -415,7 +744,12 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
             },
             "/apis/metrics.k8s.io/v1beta1/nodes": {
                 "items": [
-                    {"metadata": {"name": "node-a"}, "usage": {"cpu": "390m", "memory": "1Gi"}}
+                    {
+                        "metadata": {"name": "node-a"},
+                        "timestamp": "2026-07-16T02:00:00Z",
+                        "window": "30s",
+                        "usage": {"cpu": "390m", "memory": "1Gi"},
+                    }
                 ]
             },
             "/apis/apps/v1/namespaces/target/deployments": {
@@ -440,6 +774,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
             "/apis/apps/v1/namespaces/target/statefulsets": {"items": []},
             "/apis/apps/v1/namespaces/target/daemonsets": {"items": []},
             "/apis/apps/v1/namespaces/target/replicasets": {"items": []},
+            "/apis/apps/v1/namespaces/target/controllerrevisions": {"items": []},
             "/api/v1/namespaces/target/services": {
                 "items": [
                     {
@@ -506,7 +841,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         }
     )
 
-    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 13
+    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 15
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["detected_provider"] == "eks"
@@ -533,6 +868,12 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["pods"][0]["restart_total"] == 2
     assert validated.kubernetes["pods"][0]["cpu_mcores"] == 125.0
     assert validated.kubernetes["pods"][0]["mem_mib"] == 64.0
+    assert validated.kubernetes["pods"][0]["metrics_observed_at"] == "2026-07-16T02:00:00Z"
+    assert validated.kubernetes["pods"][0]["metrics_window"] == "30s"
+    assert validated.kubernetes["pods"][0]["container_metrics"] == [
+        {"name": "checkout-api", "cpu_mcores": 125.0, "mem_mib": 64.0}
+    ]
+    assert validated.kubernetes["pods"][0]["container_metrics_complete"] is True
     assert validated.kubernetes["events"][0]["reason"] == "BackOff"
     assert validated.kubernetes["events"][0]["reason_summary"] == {
         "category": "container_restart",
@@ -552,7 +893,10 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     }
     assert "reason_summary" not in validated.kubernetes["events"][3]
     assert validated.kubernetes["nodes"][0]["ready"] is True
+    assert validated.kubernetes["nodes"][0]["provider_id"] == "aws:///ap-northeast-2a/i-123"
     assert validated.kubernetes["nodes"][0]["cpu_mcores"] == 390.0
+    assert validated.kubernetes["nodes"][0]["metrics_observed_at"] == "2026-07-16T02:00:00Z"
+    assert validated.kubernetes["nodes"][0]["metrics_window"] == "30s"
     assert validated.kubernetes["nodes"][0]["cpu_ratio"] == 0.1
     assert validated.kubernetes["nodes"][0]["mem_ratio"] == 0.125
     assert validated.kubernetes["workloads"][0]["kind"] == "Deployment"
@@ -573,8 +917,147 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         "pod_metrics": 1,
         "node_metrics": 1,
         "workloads": 1,
+        "workload_revisions": 0,
         "services": 1,
         "endpoints": 1,
+        "resourcequotas": 0,
+    }
+
+
+def test_cluster_access_snapshot_collects_one_exact_reverse_index(monkeypatch) -> None:
+    module, kubernetes_module = load_evidence_modules()
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        rows: dict[str, list[dict[str, object]]] = {
+            "/apis/rbac.authorization.k8s.io/v1/roles": [
+                {
+                    "metadata": {"name": "reader", "namespace": "shop"},
+                    "rules": [{"verbs": ["get"], "apiGroups": [""], "resources": ["pods"]}],
+                }
+            ],
+            "/api/v1/serviceaccounts": [
+                {
+                    "metadata": {"name": "checkout", "namespace": "shop"},
+                }
+            ],
+            "/api/v1/pods": [
+                {
+                    "metadata": {
+                        "uid": "pod-checkout-0",
+                        "name": "checkout-0",
+                        "namespace": "shop",
+                    },
+                    "spec": {"serviceAccountName": "checkout"},
+                }
+            ],
+        }
+        return httpx.Response(200, json={"metadata": {}, "items": rows.get(request.url.path, [])})
+
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_access_snapshot",
+                "description": "Cluster RBAC evidence.",
+                "query": "*",
+                "collection_scope": "cluster_access",
+            }
+        )
+    )
+
+    access = asyncio.run(collector.collect("kubernetes"))["kubernetes"]["resource_access"]
+
+    assert access["completeness"] == "exact"
+    assert access["roles"][0]["name"] == "reader"
+    assert access["service_accounts"] == [{"namespace": "shop", "name": "checkout"}]
+    assert access["pod_subjects"] == [
+        {
+            "uid": "pod-checkout-0",
+            "namespace": "shop",
+            "name": "checkout-0",
+            "service_account_name": "checkout",
+        }
+    ]
+
+
+def test_cluster_access_snapshot_fails_closed_when_one_collection_is_denied(monkeypatch) -> None:
+    module, kubernetes_module = load_evidence_modules()
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/rolebindings"):
+            return httpx.Response(403, json={})
+        return httpx.Response(200, json={"metadata": {}, "items": []})
+
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_access_snapshot",
+                "description": "Cluster RBAC evidence.",
+                "query": "*",
+                "collection_scope": "cluster_access",
+            }
+        )
+    )
+
+    access = asyncio.run(collector.collect("kubernetes"))["kubernetes"]["resource_access"]
+
+    assert access["completeness"] == "unavailable"
+    assert access["reason_codes"] == ["role_bindings:rbac_denied"]
+
+
+def test_resource_quota_preserves_exact_identity_and_quantities_in_inventory() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.resource_quota_summary(
+        {
+            "metadata": {
+                "uid": "quota-uid",
+                "resourceVersion": "42",
+                "name": "compute",
+                "namespace": "shop",
+            },
+            "status": {
+                "hard": {"pods": "20", "requests.cpu": "4"},
+                "used": {"pods": "7", "requests.cpu": "1250m"},
+            },
+        }
+    )
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"resourcequotas": [summary]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    resource = snapshot["resources"][0]
+
+    assert resource["resource_type"] == "resourcequota"
+    assert resource["uid"] == "quota-uid"
+    assert resource["resource_version"] == "42"
+    assert resource["summary"] == {
+        "hard": {"pods": "20", "requests.cpu": "4"},
+        "used": {"pods": "7", "requests.cpu": "1250m"},
     }
 
 
@@ -773,6 +1256,7 @@ def test_kubernetes_snapshot_provider_scopes_one_rca_test_run(monkeypatch) -> No
         "/apis/apps/v1/namespaces/sandbox/statefulsets",
         "/apis/apps/v1/namespaces/sandbox/daemonsets",
         "/apis/apps/v1/namespaces/sandbox/replicasets",
+        "/apis/apps/v1/namespaces/sandbox/controllerrevisions",
         "/apis/batch/v1/namespaces/sandbox/jobs",
         "/apis/batch/v1/namespaces/sandbox/cronjobs",
         "/api/v1/namespaces/sandbox/services",
@@ -846,14 +1330,30 @@ def test_regular_kubernetes_snapshot_excludes_rca_test_resources() -> None:
     assert [item["name"] for item in snapshot["endpoints"]] == ["normal-service-abc"]
 
 
-def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -> None:
+def test_regular_kubernetes_snapshot_separates_scaled_down_replicaset_history() -> None:
     _module, kubernetes_module = load_evidence_modules()
     provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
 
     def replicaset(name: str, desired: int, current: int) -> dict[str, object]:
         return {
-            "metadata": {"name": name, "namespace": "production"},
-            "spec": {"replicas": desired},
+            "metadata": {
+                "name": name,
+                "namespace": "production",
+                "uid": f"uid-{name}",
+                "resourceVersion": f"rv-{name}",
+                "annotations": {"deployment.kubernetes.io/revision": name.rsplit("-", 1)[-1]},
+                "ownerReferences": [
+                    {
+                        "kind": "Deployment",
+                        "name": "orders-api",
+                        "uid": "deployment-orders-api",
+                    }
+                ],
+            },
+            "spec": {
+                "replicas": desired,
+                "template": {"spec": {"containers": [{"name": "api", "image": name}]}},
+            },
             "status": {"replicas": current, "readyReplicas": current},
         }
 
@@ -883,6 +1383,11 @@ def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -
     )
 
     assert [item["name"] for item in snapshot["workloads"]] == [
+        "orders-api-current",
+        "orders-api-terminating",
+    ]
+    assert [item["name"] for item in snapshot["workload_revisions"]] == [
+        "orders-api-old",
         "orders-api-current",
         "orders-api-terminating",
     ]
@@ -1065,6 +1570,199 @@ def test_cluster_wide_event_capture_pages_all_namespaces_without_changing_scoped
         resource
         for resource in inventory_snapshot["resources"]
         if resource["resource_type"] == "event"
+    ]
+
+
+def test_cluster_api_discovery_collects_bounded_group_versions_and_crd_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requests: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        responses = {
+            "/api": {"versions": ["v1"]},
+            "/api/v1": {
+                "groupVersion": "v1",
+                "resources": [
+                    {
+                        "name": "pods",
+                        "namespaced": True,
+                        "kind": "Pod",
+                        "verbs": ["get", "list", "watch"],
+                    }
+                ],
+            },
+            "/apis": {
+                "groups": [
+                    {
+                        "name": "apps",
+                        "versions": [{"groupVersion": "apps/v1", "version": "v1"}],
+                    },
+                    {
+                        "name": "stable.example.com",
+                        "versions": [
+                            {
+                                "groupVersion": "stable.example.com/v1",
+                                "version": "v1",
+                            }
+                        ],
+                    },
+                ]
+            },
+            "/apis/apps/v1": {
+                "groupVersion": "apps/v1",
+                "resources": [
+                    {
+                        "name": "deployments",
+                        "namespaced": True,
+                        "kind": "Deployment",
+                        "verbs": ["get", "list", "patch"],
+                    }
+                ],
+            },
+            "/apis/stable.example.com/v1": {
+                "groupVersion": "stable.example.com/v1",
+                "resources": [
+                    {
+                        "name": "crontabs",
+                        "singularName": "crontab",
+                        "namespaced": True,
+                        "kind": "CronTab",
+                        "verbs": ["delete", "get", "list", "patch"],
+                    }
+                ],
+            },
+            "/apis/apiextensions.k8s.io/v1/customresourcedefinitions": {
+                "items": [
+                    {
+                        "spec": {
+                            "group": "stable.example.com",
+                            "names": {"kind": "CronTab", "plural": "crontabs"},
+                            "scope": "Namespaced",
+                            "versions": [{"name": "v1", "served": True}],
+                        }
+                    }
+                ]
+            },
+        }
+        payload = responses.get(request.url.path)
+        return httpx.Response(200, json=payload) if payload is not None else httpx.Response(404)
+
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_api_discovery",
+                "description": "Discover authorized Kubernetes API resources.",
+                "query": "*",
+                "collection_scope": "cluster_discovery",
+            }
+        )
+    )
+
+    response = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert requests == [
+        "/api",
+        "/api/v1",
+        "/apis",
+        "/apis/apps/v1",
+        "/apis/stable.example.com/v1",
+        "/apis/apiextensions.k8s.io/v1/customresourcedefinitions",
+    ]
+    discovery = response["api_resource_discovery"]
+    assert discovery["completeness"] == "exact"
+    assert discovery["reason_codes"] == []
+    assert [
+        (item["api_version"], item["name"], item["is_crd"]) for item in discovery["resources"]
+    ] == [
+        ("v1", "pods", False),
+        ("apps/v1", "deployments", False),
+        ("stable.example.com/v1", "crontabs", True),
+    ]
+    inventory_snapshot = kubernetes_evidence_to_inventory_snapshot(
+        response,
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    assert inventory_snapshot["summary"]["api_resource_discovery"] == discovery
+
+
+def test_cluster_api_discovery_preserves_partial_group_and_crd_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api":
+            return httpx.Response(200, json={"versions": ["v1"]})
+        if request.url.path == "/api/v1":
+            return httpx.Response(
+                200,
+                json={"groupVersion": "v1", "resources": []},
+            )
+        if request.url.path == "/apis":
+            return httpx.Response(
+                200,
+                json={
+                    "groups": [
+                        {
+                            "name": "metrics.k8s.io",
+                            "versions": [
+                                {
+                                    "groupVersion": "metrics.k8s.io/v1beta1",
+                                    "version": "v1beta1",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/apis/metrics.k8s.io/v1beta1":
+            return httpx.Response(503)
+        if request.url.path.endswith("/customresourcedefinitions"):
+            return httpx.Response(403)
+        return httpx.Response(404)
+
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    query = kubernetes_module.KubernetesSnapshotQuery(
+        "cluster_api_discovery",
+        "Discover authorized Kubernetes API resources.",
+        "*",
+        collection_scope="cluster_discovery",
+    )
+
+    async def collect() -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            return provider.normalize_payload(await provider.query(client, query), query)
+
+    discovery = asyncio.run(collect())["api_resource_discovery"]
+    assert discovery["completeness"] == "partial"
+    assert discovery["reason_codes"] == [
+        "crd_discovery_forbidden",
+        "group_version_failed:metrics.k8s.io/v1beta1",
     ]
 
 
@@ -1346,3 +2044,525 @@ def test_kubernetes_snapshot_provider_can_drop_single_oversized_list_item() -> N
         status="completed",
         result={"kubernetes": limited},
     )
+
+
+def test_dynamic_resource_payload_limit_revokes_exact_coverage() -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+    results = provider.empty_results()
+    results["custom_resources"] = [
+        {
+            "api_version": "example.io/v1",
+            "kind": "Example",
+            "namespace": "target",
+            "name": "oversized",
+            "uid": "example-1",
+            "resource_version": "1",
+            "raw": {"spec": {"message": "x" * 1_100_000}},
+        }
+    ]
+    results["dynamic_resource_collections"] = [
+        {
+            "query_name": "examples",
+            "completeness": "exact",
+            "reason_codes": [],
+        }
+    ]
+    results["provider_status"] = {"examples": {"status": "exact", "reason_codes": []}}
+
+    limited = provider.build_response(results)
+
+    assert limited["custom_resources"] == []
+    assert limited["dynamic_resource_collections"] == [
+        {
+            "query_name": "examples",
+            "completeness": "unavailable",
+            "reason_codes": ["payload_limit_exceeded"],
+        }
+    ]
+    assert limited["provider_status"]["examples"] == {
+        "status": "unavailable",
+        "reason_codes": ["payload_limit_exceeded"],
+    }
+
+
+def _dynamic_resource_definition(module, **overrides: object):
+    dynamic_resource: dict[str, object] = {
+        "group": "argoproj.io",
+        "version": "v1alpha1",
+        "resource": "applications",
+        "namespaces": ["argocd"],
+        "page_size": 1,
+        "max_pages": 3,
+        "max_items": 2,
+    }
+    dynamic_resource.update(overrides)
+    return module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "kubernetes",
+            "name": "discovered_application_inventory",
+            "description": "Collect one discovery-authorized custom resource.",
+            "query": "*",
+            "collection_scope": "dynamic_resource",
+            "dynamic_resource": dynamic_resource,
+        }
+    )
+
+
+def test_dynamic_resource_policy_json_is_backward_compatible() -> None:
+    legacy_query = {
+        "name": "target_namespace_snapshot",
+        "description": "Legacy namespace query.",
+        "query": "target",
+    }
+    dynamic_query = {
+        "name": "examples",
+        "description": "Structured dynamic query.",
+        "query": "*",
+        "collection_scope": "dynamic_resource",
+        "dynamic_resource": {
+            "group": "example.io",
+            "version": "v1",
+            "resource": "examples",
+            "namespaces": ["target"],
+            "page_size": 50,
+            "max_pages": 4,
+            "max_items": 150,
+        },
+    }
+
+    policy = EvidenceProviderPolicy.model_validate(
+        {"interval_seconds": 30, "queries": [legacy_query, dynamic_query]}
+    )
+
+    assert policy.model_dump()["queries"] == [legacy_query, dynamic_query]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("group", "argoproj.io/../../api"),
+        ("version", "v1alpha1?watch=true"),
+        ("resource", "applications/status"),
+        ("namespaces", ["argocd?labelSelector=all"]),
+        ("url", "/apis/argoproj.io/v1alpha1/applications?watch=true"),
+    ],
+)
+def test_dynamic_resource_query_rejects_path_and_selector_injection(
+    field: str,
+    value: object,
+) -> None:
+    module, _kubernetes_module = load_evidence_modules()
+
+    with pytest.raises(ValueError, match="dynamic Kubernetes resource"):
+        _dynamic_resource_definition(module, **{field: value}).to_provider_query()
+
+
+def test_dynamic_resource_query_uses_live_discovery_and_continue_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requests: list[tuple[str, dict[str, str]]] = []
+
+    def application(name: str, uid: str, resource_version: str) -> dict[str, object]:
+        return {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "metadata": {
+                "name": name,
+                "namespace": "argocd",
+                "uid": uid,
+                "resourceVersion": resource_version,
+                "generation": 2,
+                "labels": {"team": "platform"},
+                "managedFields": [{"manager": "ignored"}],
+            },
+            "spec": {"source": {"repoURL": "https://example.invalid/platform.git"}},
+            "status": {
+                "sync": {"status": "Synced", "revision": "main@sha1:abc"},
+                "health": {"status": "Healthy"},
+            },
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.url.path, dict(request.url.params)))
+        if request.url.path == "/apis/argoproj.io/v1alpha1":
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": "argoproj.io/v1alpha1",
+                    "resources": [
+                        {
+                            "name": "applications",
+                            "singularName": "application",
+                            "namespaced": True,
+                            "kind": "Application",
+                            "verbs": ["get", "list", "watch"],
+                        }
+                    ],
+                },
+            )
+        if request.url.path == "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications":
+            if request.url.params.get("continue") == "page-2":
+                return httpx.Response(
+                    200,
+                    json={
+                        "metadata": {"resourceVersion": "list-rv", "continue": ""},
+                        "items": [application("checkout", "app-2", "22")],
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {"resourceVersion": "list-rv", "continue": "page-2"},
+                    "items": [application("storefront", "app-1", "21")],
+                },
+            )
+        return httpx.Response(404)
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+    inventory = kubernetes_evidence_to_inventory_snapshot(
+        kubernetes,
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    assert requests == [
+        ("/apis/argoproj.io/v1alpha1", {}),
+        (
+            "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications",
+            {"limit": "1"},
+        ),
+        (
+            "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications",
+            {"limit": "1", "continue": "page-2"},
+        ),
+    ]
+    assert kubernetes["dynamic_resource_collections"] == [
+        {
+            "query_name": "discovered_application_inventory",
+            "group": "argoproj.io",
+            "version": "v1alpha1",
+            "resource": "applications",
+            "kind": "Application",
+            "namespaced": True,
+            "namespaces": ["argocd"],
+            "completeness": "exact",
+            "reason_codes": [],
+            "page_count": 2,
+            "observed_count": 2,
+            "returned_count": 2,
+        }
+    ]
+    assert [row["name"] for row in kubernetes["custom_resources"]] == [
+        "storefront",
+        "checkout",
+    ]
+    assert [row["resource_type"] for row in inventory["resources"]] == [
+        "custom_resource",
+        "custom_resource",
+    ]
+    storefront = inventory["resources"][0]
+    assert storefront["api_version"] == "argoproj.io/v1alpha1"
+    assert storefront["kind"] == "Application"
+    assert storefront["uid"] == "app-1"
+    assert storefront["resource_version"] == "21"
+    assert storefront["raw"] == {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "name": "storefront",
+            "namespace": "argocd",
+            "uid": "app-1",
+            "resourceVersion": "21",
+            "generation": 2,
+            "labels": {"team": "platform"},
+        },
+        "spec": {"source": {"repoURL": "https://example.invalid/platform.git"}},
+        "status": {
+            "sync": {"status": "Synced", "revision": "main@sha1:abc"},
+            "health": {"status": "Healthy"},
+        },
+    }
+
+
+def test_dynamic_resource_query_fails_closed_on_rbac_denial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/apis/argoproj.io/v1alpha1":
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": "argoproj.io/v1alpha1",
+                    "resources": [
+                        {
+                            "name": "applications",
+                            "namespaced": True,
+                            "kind": "Application",
+                            "verbs": ["list"],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(403)
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert kubernetes["custom_resources"] == []
+    assert kubernetes["dynamic_resource_collections"][0]["completeness"] == "unavailable"
+    assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == ["rbac_denied"]
+
+
+def test_dynamic_resource_query_reports_page_limit_without_claiming_exact_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/apis/argoproj.io/v1alpha1":
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": "argoproj.io/v1alpha1",
+                    "resources": [
+                        {
+                            "name": "applications",
+                            "namespaced": True,
+                            "kind": "Application",
+                            "verbs": ["list"],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "metadata": {"continue": "still-more"},
+                "items": [
+                    {
+                        "apiVersion": "argoproj.io/v1alpha1",
+                        "kind": "Application",
+                        "metadata": {
+                            "name": "storefront",
+                            "namespace": "argocd",
+                            "uid": "app-1",
+                            "resourceVersion": "21",
+                        },
+                        "spec": {},
+                        "status": {},
+                    }
+                ],
+            },
+        )
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module, max_pages=1))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert kubernetes["dynamic_resource_collections"][0]["completeness"] == "partial"
+    assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == ["page_limit_exceeded"]
+    assert [row["name"] for row in kubernetes["custom_resources"]] == ["storefront"]
+
+
+def test_dynamic_resource_query_rejects_namespace_scope_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        return httpx.Response(
+            200,
+            json={
+                "groupVersion": "argoproj.io/v1alpha1",
+                "resources": [
+                    {
+                        "name": "applications",
+                        "namespaced": False,
+                        "kind": "Application",
+                        "verbs": ["list"],
+                    }
+                ],
+            },
+        )
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(_dynamic_resource_definition(module))
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert requested == ["/apis/argoproj.io/v1alpha1"]
+    assert kubernetes["custom_resources"] == []
+    assert kubernetes["dynamic_resource_collections"][0]["reason_codes"] == [
+        "namespace_scope_mismatch"
+    ]
+
+
+@pytest.mark.parametrize(
+    (
+        "group",
+        "version",
+        "resource",
+        "namespaces",
+        "kind",
+        "discovery_path",
+        "list_path",
+        "observed_namespace",
+    ),
+    [
+        (
+            "",
+            "v1",
+            "configmaps",
+            ["target"],
+            "ConfigMap",
+            "/api/v1",
+            "/api/v1/namespaces/target/configmaps",
+            "target",
+        ),
+        (
+            "storage.k8s.io",
+            "v1",
+            "storageclasses",
+            [],
+            "StorageClass",
+            "/apis/storage.k8s.io/v1",
+            "/apis/storage.k8s.io/v1/storageclasses",
+            None,
+        ),
+    ],
+)
+def test_dynamic_resource_query_distinguishes_core_and_cluster_scopes(
+    monkeypatch: pytest.MonkeyPatch,
+    group: str,
+    version: str,
+    resource: str,
+    namespaces: list[str],
+    kind: str,
+    discovery_path: str,
+    list_path: str,
+    observed_namespace: str | None,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        if request.url.path == discovery_path:
+            return httpx.Response(
+                200,
+                json={
+                    "groupVersion": f"{group}/{version}" if group else version,
+                    "resources": [
+                        {
+                            "name": resource,
+                            "namespaced": bool(namespaces),
+                            "kind": kind,
+                            "verbs": ["list"],
+                        }
+                    ],
+                },
+            )
+        item_metadata: dict[str, object] = {
+            "name": "sample",
+            "uid": "sample-1",
+            "resourceVersion": "4",
+        }
+        if observed_namespace is not None:
+            item_metadata["namespace"] = observed_namespace
+        return httpx.Response(
+            200,
+            json={
+                "metadata": {},
+                "items": [
+                    {
+                        "apiVersion": f"{group}/{version}" if group else version,
+                        "kind": kind,
+                        "metadata": item_metadata,
+                        "spec": {},
+                        "status": {},
+                    }
+                ],
+            },
+        )
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        _dynamic_resource_definition(
+            module,
+            group=group,
+            version=version,
+            resource=resource,
+            namespaces=namespaces,
+        )
+    )
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert requested == [discovery_path, list_path]
+    assert kubernetes["dynamic_resource_collections"][0]["completeness"] == "exact"
+    assert kubernetes["custom_resources"][0]["api_version"] == (
+        f"{group}/{version}" if group else version
+    )
+    assert kubernetes["custom_resources"][0]["namespace"] == observed_namespace

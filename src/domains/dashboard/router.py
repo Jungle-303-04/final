@@ -14,8 +14,11 @@ from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
     require_cluster_access,
     require_session,
+    resolve_allowed_cluster_ids,
 )
 from domains.inventory_filter.snapshot_scope import project_snapshot_scope
+from domains.issue_filter.query import IssueFilters, parse_issue_filters
+from domains.rca_changes.router import recent_change_item
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import limits as gateway_limits
@@ -37,7 +40,10 @@ from packages.contracts.gateway.responses import (
     MetricWidgetResponse,
     RcaIncidentResponse,
     RcaIssueItem,
+    RcaIssueLegacyListResponse,
     RcaIssueListResponse,
+    RcaIssueQueueItem,
+    RcaIssueQueueRecentChange,
     RcaTimelineItem,
     RcaTimelineResponse,
     ResourceIssueItem,
@@ -283,24 +289,81 @@ async def rca_timeline(
 
 @router.get(
     gateway_routes.DASHBOARD_RCA_ISSUES_PATH,
-    response_model=RcaIssueListResponse,
+    response_model=RcaIssueLegacyListResponse | RcaIssueListResponse,
 )
 async def rca_issues(
     cluster_id: str | None = None,
+    namespaces: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    contract_version: str = Query(default="1", pattern="^[12]$"),
     limit: int = Query(default=DEFAULT_TIMELINE_LIMIT, ge=1, le=MAX_TIMELINE_LIMIT),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> RcaIssueListResponse:
+) -> RcaIssueLegacyListResponse | RcaIssueListResponse:
     """Additive Issues queue contract; preserves the legacy timeline response shape."""
     workspace_id = _workspace_id(current)
     allowed_cluster_ids = await _allowed_cluster_ids(db, current, workspace_id, cluster_id)
-    rows = await asyncio.to_thread(
-        db.list_rca_issues,
-        workspace_id,
-        allowed_cluster_ids,
-        limit,
+    if contract_version == "1":
+        rows = await asyncio.to_thread(
+            db.list_rca_issues,
+            workspace_id,
+            allowed_cluster_ids,
+            limit,
+        )
+        return RcaIssueLegacyListResponse(items=[issue_item(row) for row in rows])
+
+    filters = _issue_queue_filters(
+        cluster_id=cluster_id,
+        namespaces=namespaces,
+        severity=severity,
+        category=category,
     )
-    return RcaIssueListResponse(items=[issue_item(row) for row in rows])
+    concrete_cluster_ids = await _concrete_issue_clusters(
+        db,
+        current,
+        workspace_id,
+        cluster_id=cluster_id,
+        allowed_cluster_ids=allowed_cluster_ids,
+    )
+    requested_cluster_ids = {value for value, _namespace in filters.namespaces}
+    if not requested_cluster_ids.issubset(concrete_cluster_ids):
+        raise HTTPException(status_code=403, detail=RESOURCE_ACCESS_DENIED_MESSAGE)
+    result = await asyncio.to_thread(
+        db.list_rca_issue_queue,
+        workspace_id,
+        concrete_cluster_ids,
+        namespaces=filters.namespaces,
+        severities=filters.severities,
+        categories=filters.categories,
+        limit=limit,
+        permission_scope_limited=cluster_id is None and allowed_cluster_ids is not None,
+    )
+    items = [queue_issue_item(row) for row in result.get("items") or []]
+    incident_ids = tuple(sorted({item.incident_id for item in items if item.incident_id}))
+    recent_rows = await asyncio.to_thread(
+        db.list_recent_workload_changes_for_incidents,
+        workspace_id,
+        incident_ids,
+        concrete_cluster_ids,
+        limit=10,
+    )
+    recent_changes = [
+        RcaIssueQueueRecentChange(
+            incident_id=str(row["incident_id"]),
+            **recent_change_item(row).model_dump(),
+        )
+        for row in recent_rows
+    ]
+    return RcaIssueListResponse(
+        items=items,
+        total=len(items),
+        total_matched=int(result.get("total_matched") or 0),
+        count_completeness="exact",
+        recent_changes=recent_changes,
+        visibility=result["visibility"],
+        facets=result["facets"],
+    )
 
 
 @router.get(
@@ -408,6 +471,53 @@ async def _allowed_cluster_ids(
     )
 
 
+def _issue_queue_filters(
+    *,
+    cluster_id: str | None,
+    namespaces: str | None,
+    severity: str | None,
+    category: str | None,
+) -> IssueFilters:
+    try:
+        filters = parse_issue_filters(
+            clusters=cluster_id,
+            namespaces=namespaces,
+            applications=None,
+            severities=severity,
+            statuses=None,
+            environments=None,
+            labels=None,
+            query=None,
+            categories=category,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="issue queue filters are invalid") from exc
+    if not set(filters.severities).issubset({"critical", "warning"}):
+        raise HTTPException(status_code=422, detail="issue queue filters are invalid")
+    return filters
+
+
+async def _concrete_issue_clusters(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    *,
+    cluster_id: str | None,
+    allowed_cluster_ids: set[str] | None,
+) -> set[str]:
+    if cluster_id is not None:
+        return {cluster_id}
+    if allowed_cluster_ids is not None:
+        return set(allowed_cluster_ids)
+    return await asyncio.to_thread(
+        resolve_allowed_cluster_ids,
+        db,
+        current,
+        workspace_id,
+        Permission.RCA_READ.value,
+    )
+
+
 def timeline_item(row: JsonObject) -> RcaTimelineItem:
     data = {key: row.get(key) for key in TIMELINE_ITEM_FIELDS}
     data["supporting_evidence"] = row.get("supporting_evidence") or []
@@ -420,6 +530,13 @@ def issue_item(row: JsonObject) -> RcaIssueItem:
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaIssueItem(**data)
+
+
+def queue_issue_item(row: JsonObject) -> RcaIssueQueueItem:
+    data = {key: row.get(key) for key in RcaIssueQueueItem.model_fields}
+    data["supporting_evidence"] = row.get("supporting_evidence") or []
+    data["missing_evidence"] = row.get("missing_evidence") or []
+    return RcaIssueQueueItem(**data)
 
 
 def resource_issue_item(row: JsonObject) -> ResourceIssueItem:

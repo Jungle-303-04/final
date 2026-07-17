@@ -52,6 +52,8 @@ def test_cost_projection_exposes_scope_but_never_invents_currency_or_amounts() -
         "reason_codes": ("cost_observation_not_integrated",),
     }
     assert body.refresh_after_seconds == 60
+    assert body.trend_refresh_after_seconds == 120
+    assert body.nodes_refresh_after_seconds == 120
 
 
 def test_cost_projection_preserves_the_requested_bounded_trend_range() -> None:

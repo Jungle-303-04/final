@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomePortFailure } from "../../features/home/homeContract";
-import { homePort, renderHome } from "./HomePage.testSupport";
+import { homePort, INSIGHTS, renderHome } from "./HomePage.testSupport";
 
 afterEach(cleanup);
 
@@ -49,6 +49,20 @@ describe("HomePage", () => {
     expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
       .toBeTruthy();
     expect(await screen.findByText("42.5%", {}, { timeout: 5_000 })).toBeTruthy();
+    const health = screen.getByRole("region", { name: "클러스터 상태" });
+    expect(within(health).getByText("Kubernetes v1.30.7")).toBeTruthy();
+    expect(within(health).getByRole("link", { name: /Pod/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=pod");
+    expect(within(health).getByRole("link", { name: /Node/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=node");
+    expect(within(health).getByRole("link", { name: /최근 재시작/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=pod");
+    expect(within(health).getByRole("link", { name: /활성 인시던트/u }).getAttribute("href"))
+      .toBe("/issues?clusters=cluster-1");
+    expect(within(health).getByRole("link", { name: /워크로드/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=workload");
+    expect(within(health).getByRole("link", { name: /^표시 경고/u }).getAttribute("href"))
+      .toBe("/timeline?clusters=cluster-1");
     expect(screen.queryByText("Fleet Home")).toBeNull();
     expect(screen.queryByText("CLUSTER HEALTH")).toBeNull();
     expect(screen.queryByText("ATTENTION")).toBeNull();
@@ -67,6 +81,65 @@ describe("HomePage", () => {
     expect(port.loadNodes).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
   }, 15_000);
 
+  it("does not advertise source-only cost or MCP capabilities without a product contract", async () => {
+    renderHome(homePort());
+
+    expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
+      .toBeTruthy();
+    expect(screen.queryByText("Cost Insights")).toBeNull();
+    expect(screen.queryByText("OpenCost")).toBeNull();
+    expect(screen.queryByText("MCP Server")).toBeNull();
+    expect(screen.queryByText("Connect your AI tool")).toBeNull();
+  }, 15_000);
+
+  it("renders revisioned custom resource and Helm summaries with scoped navigation", async () => {
+    renderHome(homePort(), ["/?clusters=cluster-1&applications=checkout"]);
+
+    const insights = await screen.findByRole("region", { name: "클러스터 인사이트" });
+    expect(await within(insights).findByText("Application")).toBeTruthy();
+    expect(within(insights).getByText("argoproj.io/v1alpha1")).toBeTruthy();
+    expect(within(insights).getByText("deployed 2")).toBeTruthy();
+    expect(within(insights).getByText("api-tls")).toBeTruthy();
+    expect(within(insights).getAllByText("만료 임박")).toHaveLength(2);
+    expect(within(insights).getByRole("link", { name: "리소스 열기" }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&applications=checkout");
+    expect(within(insights).getByRole("link", { name: "Helm 열기" }).getAttribute("href"))
+      .toBe("/helm?clusters=cluster-1&applications=checkout");
+    expect(within(insights).getByRole("link", { name: /api-tls/u }).getAttribute("href"))
+      .toBe(
+        "/resources?clusters=cluster-1&applications=checkout&detail=Secret%2Fshop%2Fapi-tls",
+      );
+    expect(insights.textContent).not.toContain("tls.crt");
+  });
+
+  it("does not render certificate zero counts when expiry observation is unavailable", async () => {
+    renderHome(homePort({
+      loadInsights: vi.fn().mockResolvedValue({
+        ...INSIGHTS,
+        certificateExpiry: {
+          coverage: {
+            availability: "unavailable",
+            observedAt: null,
+            reasonCodes: ["tls_secret_observation_unavailable"],
+          },
+          items: [],
+          tlsSecretCount: null,
+          observedExpiryCount: null,
+          expiringCount: null,
+          expiredCount: null,
+          earliestExpiry: null,
+          warningBeforeSeconds: 2_592_000,
+          hasMore: false,
+        },
+      }),
+    }));
+
+    const title = await screen.findByText("인증서 만료");
+    const card = title.closest("[data-slot='card']");
+    expect(card?.textContent).toContain("표시할 수 없습니다");
+    expect(card?.textContent).not.toMatch(/TLS Secret\s*0/u);
+  });
+
   it("keeps an internal Node hostname on one identifiable label while preserving its full identity", async () => {
     const port = homePort({
       loadNodes: vi.fn().mockResolvedValue({
@@ -76,6 +149,7 @@ describe("HomePage", () => {
           id: "node:cluster-1/ip-192-168-51-161.ap-northeast-2.compute.internal",
           identityStability: "ephemeral",
           name: "ip-192-168-51-161.ap-northeast-2.compute.internal",
+          kubernetesVersion: "v1.30.7",
           ready: true,
           health: "healthy",
           podsRunning: 18,
@@ -158,7 +232,8 @@ describe("HomePage", () => {
     expect(screen.getAllByRole("alert").some((alert) => (
       alert.textContent?.includes("일부 정보를 불러오지 못했습니다")
     ))).toBe(true);
-    expect(screen.queryByText("0", { selector: "strong" })).toBeNull();
+    const clusterStatus = screen.getByRole("region", { name: "클러스터 상태" });
+    expect(within(clusterStatus).queryByText("0", { selector: "strong" })).toBeNull();
   });
 
   it("reconciles a feature 401 through the single session authority", async () => {

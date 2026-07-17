@@ -38,6 +38,7 @@ export function resourcesActionsPort(
     commandId: "command-1",
   };
   return {
+    previewDeletion: vi.fn(),
     execute: vi.fn().mockResolvedValue(receipt),
     ...overrides,
   };

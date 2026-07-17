@@ -618,7 +618,7 @@ RCA를 새 top-level menu로 만들지 않는다. P1에서 확인한 정보 구�
 |---|---|---|---|
 | Home Active Issues row/detail | 사용자가 cluster 문제를 처음 발견하는 지점 | cluster, namespace, resource, issue evidence | 위치만 예약 |
 | Issues resource row 확장 또는 detail | issue→원인→근거→복구의 주 서사 | issue ID, correlation ID, resource ref | 위치만 예약 |
-| Resource drawer의 issue/audit 다음 section | 단일 resource 진단 context가 완성됨 | resource UID/ref, events, metrics, relations | 위치만 예약 |
+| Resource drawer의 issue/audit 다음 section | 단일 resource 진단 context가 완성됨 | resource UID/ref, events, metrics, relations | `POST /diagnose/runs`, `GET /diagnose/runs`, `SSE /diagnose/runs/{run_id}/stream`; exact identity와 durable replay |
 | Workload detail의 Events/Metrics 인접 tab | workload 단위 RCA evidence와 같은 scope | workload ref, pod members, time range | 위치만 예약 |
 | GitOps detail Resources/Activity | drift·operation failure의 원인과 recovery가 자연스럽게 연결 | app ref, revision, changes, history | 위치만 예약 |
 | Timeline event/resource change detail | 시간 순 인과와 correlation을 보여 주는 지점 | event ID, occurredAt, resource ref | 위치만 예약 |

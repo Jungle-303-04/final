@@ -28,6 +28,11 @@ describe("AI conversation response schemas", () => {
         role: "assistant",
         tool_metadata: { call_id: "tool-1", result: { ok: true } },
       }],
+      limit: 100,
+      has_more: false,
+      next_cursor: null,
+      messages_completeness: "complete",
+      partial_reason_codes: [],
     };
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
 
@@ -48,8 +53,30 @@ describe("AI conversation response schemas", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       conversation: { conversation_id: "aic-123" },
       messages: [],
+      limit: 100,
+      has_more: false,
+      next_cursor: null,
+      messages_completeness: "complete",
+      partial_reason_codes: [],
       processing: true,
     }));
+    await expect(getAiConversation("aic-123")).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects inconsistent bounded-history pagination state", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      conversation: { conversation_id: "aic-123" },
+      messages: [],
+      limit: 100,
+      has_more: true,
+      next_cursor: null,
+      messages_completeness: "complete",
+      partial_reason_codes: [],
+    }));
+
     await expect(getAiConversation("aic-123")).rejects.toMatchObject({
       kind: "invalid-payload",
       status: 200,

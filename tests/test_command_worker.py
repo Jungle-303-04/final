@@ -37,6 +37,10 @@ from packages.config.constants import Command, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import ApprovalStatus
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_ACTION,
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+)
 
 _DEFAULT_APPROVAL = object()
 
@@ -400,6 +404,74 @@ def test_build_plan_preserves_typed_agent_payload() -> None:
 
     assert plan.payload == payload
     assert plan.to_body()["payload"] == payload
+
+
+def test_read_only_service_plan_routes_only_to_the_service_request_agent_capability() -> None:
+    request = command_request(
+        SERVICE_HTTP_REQUEST_ACTION,
+        namespace="shop",
+        approval_ref=None,
+        policy_decision_ref=None,
+        approval_decided_by=None,
+        approval_expires_at=None,
+        payload={
+            "resource": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Service",
+                "namespace": "shop",
+                "name": "checkout-api",
+                "uid": "uid-service-1",
+            },
+            "port": 80,
+            "scheme": "http",
+            "path": "/ready",
+        },
+    )
+
+    plan = build_plan(request, "corr-service-1")
+
+    assert plan.routing_constraint.required_capability == SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
+    assert plan.retry_policy.max_attempts == 1
+
+
+def test_read_only_service_command_is_not_rejected_as_a_management_write() -> None:
+    store = ManagementClusterStore(approval=None)
+    request = command_request(
+        SERVICE_HTTP_REQUEST_ACTION,
+        namespace="shop",
+        approval_ref=None,
+        policy_decision_ref=None,
+        approval_decided_by=None,
+        approval_expires_at=None,
+        payload={
+            "resource": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Service",
+                "namespace": "shop",
+                "name": "checkout-api",
+                "uid": "uid-service-1",
+            },
+            "port": 80,
+            "scheme": "http",
+            "path": "/ready",
+        },
+    )
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                request,
+                SimpleNamespace(correlation_id="corr-service-management", db=store),
+            )
+        )
+    )
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
 
 
 def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:

@@ -36,7 +36,12 @@ describe("IssuesPage recovery approval", () => {
       { name: "Elevated response latency" },
       { timeout: 5_000 },
     )).toBeTruthy();
-    expect(port.listIssues).toHaveBeenCalledWith(null, 50, expect.any(AbortSignal));
+    expect(port.listIssues).toHaveBeenCalledWith(
+      null,
+      50,
+      expect.any(AbortSignal),
+      { namespaces: [], severities: [], categories: [] },
+    );
   });
 
   it("submits a selected recovery candidate from the product page", async () => {

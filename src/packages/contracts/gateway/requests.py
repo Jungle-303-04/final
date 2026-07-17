@@ -19,6 +19,8 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.kubernetes_discovery import MAX_KUBERNETES_API_VERSION_LENGTH
+from packages.contracts.parity import ResourceRef
 from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
 
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -128,6 +130,85 @@ class ResourceManifestApproveRequest(ResourceManifestPreviewRequest):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ResourceManifestDirectApplyRequest(ResourceManifestPreviewRequest):
+    expected_desired_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    confirmation: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceDeleteRequest(StrictModel):
+    """One exact, preview-pinned destructive resource command."""
+
+    preview_revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    confirmation: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+    idempotency_key: str = Field(
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$",
+    )
+
+
+class WorkloadRollbackRequest(StrictModel):
+    """One preview-pinned rollback against exact workload and revision identities."""
+
+    resource_id: str = Field(min_length=1, max_length=255)
+    snapshot_id: str = Field(min_length=1, max_length=255)
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    workload: ResourceRef
+    workload_resource_version: str = Field(min_length=1, max_length=253)
+    target_revision: ResourceRef
+    target_resource_version: str = Field(min_length=1, max_length=253)
+    preview_revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    confirmation: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_revision_pair(self) -> WorkloadRollbackRequest:
+        workload_kind = self.workload.kind.casefold()
+        expected_revision_kind = {
+            "deployment": "replicaset",
+            "statefulset": "controllerrevision",
+            "daemonset": "controllerrevision",
+        }.get(workload_kind)
+        if (
+            self.workload.api_group != "apps"
+            or self.workload.version != "v1"
+            or self.workload.namespace is None
+            or expected_revision_kind is None
+            or self.target_revision.api_group != "apps"
+            or self.target_revision.version != "v1"
+            or self.target_revision.kind.casefold() != expected_revision_kind
+            or self.target_revision.namespace != self.workload.namespace
+        ):
+            raise ValueError("workload rollback requires an exact apps/v1 revision pair")
+        return self
+
+
+class ResourceManifestCreateDryRunRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=200)
+    namespace: str = Field(min_length=1, max_length=253)
+    snapshot_id: str = Field(min_length=1, max_length=200)
+    edited_yaml: str = Field(min_length=1, max_length=MAX_RESOURCE_MANIFEST_BYTES)
+    force: bool = False
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceManifestCreateRequest(ResourceManifestCreateDryRunRequest):
+    desired_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    dry_run_command_id: str = Field(min_length=8, max_length=200)
+    confirmation: Literal[True]
+    force_confirmation: bool = False
+
+    @model_validator(mode="after")
+    def validate_force_confirmation(self) -> ResourceManifestCreateRequest:
+        if self.force and not self.force_confirmation:
+            raise ValueError("force create requires explicit risk confirmation")
+        if not self.force and self.force_confirmation:
+            raise ValueError("force confirmation is valid only when force is enabled")
+        return self
+
+
 class AgentConnectRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     agent_id: str
@@ -193,7 +274,7 @@ class RcaTestRunCreateRequest(StrictModel):
 
 class InventoryResource(StrictModel):
     resource_type: str = Field(min_length=1, max_length=80)
-    api_version: str = Field(default="", max_length=120)
+    api_version: str = Field(default="", max_length=MAX_KUBERNETES_API_VERSION_LENGTH)
     kind: str = Field(default="", max_length=120)
     namespace: str | None = Field(default=None, max_length=253)
     name: str = Field(min_length=1, max_length=253)
@@ -328,6 +409,35 @@ class DeploymentRestartRequest(StrictModel):
     confirmation: Literal[True] | None = None
     direct_execution: bool = False
     direct_execution_confirmed: bool = False
+
+
+class ConfirmedResourceActionRequest(StrictModel):
+    """One server-discovered resource action acknowledged by the operator."""
+
+    reason: str | None = Field(default=None, max_length=500)
+    confirmation: Literal[True] | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
+
+
+class CronJobControlRequest(ConfirmedResourceActionRequest):
+    """One capability-bound CronJob mutation against an exact observed UID."""
+
+    resource_id: str = Field(min_length=1, max_length=255)
+    snapshot_id: str = Field(min_length=1, max_length=255)
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resource: ResourceRef
+
+    @model_validator(mode="after")
+    def validate_cronjob_resource(self) -> CronJobControlRequest:
+        if (
+            self.resource.api_group != "batch"
+            or self.resource.version != "v1"
+            or self.resource.kind.casefold() != "cronjob"
+            or self.resource.namespace is None
+        ):
+            raise ValueError("CronJob control requires an exact batch/v1 ResourceRef")
+        return self
 
 
 class AgentDebugQueryRequest(StrictModel):

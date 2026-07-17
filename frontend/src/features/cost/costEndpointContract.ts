@@ -74,11 +74,72 @@ export interface CostOverviewEndpoint {
   };
   trend: CostEndpointTrend;
   refresh_after_seconds: number;
+  trend_refresh_after_seconds: number;
+  nodes_refresh_after_seconds: number;
+}
+
+export interface CostNodePageEndpoint {
+  scope_coverage: CostOverviewEndpoint["scope_coverage"];
+  items: Array<{
+    resource: {
+      api_group: string;
+      version: string;
+      kind: "Node";
+      namespace: null;
+      name: string;
+      uid: string;
+    };
+    cluster_id: string;
+    cluster_name: string;
+    provider: string;
+    provider_id: string | null;
+    instance_type: string | null;
+    zone: string | null;
+    capacity_type: string | null;
+    status: string;
+    observed_at: string;
+    capacity: { cpu_mcores: number | null; memory_mib: number | null; pods: number | null };
+    usage: {
+      availability: "available" | "partial" | "unavailable";
+      observed_at: string | null;
+      cpu_mcores: number | null;
+      memory_mib: number | null;
+      cpu_utilization_percent: number | null;
+      memory_utilization_percent: number | null;
+      reason_codes: string[];
+    };
+    pricing: {
+      availability: "unavailable";
+      currency: null;
+      hourly_rate_micros: null;
+      reason_codes: string[];
+    };
+  }>;
+  total: number;
+  count_completeness: "exact" | "partial" | "unavailable";
+  has_more: boolean;
+  next_cursor: string | null;
+  snapshot_revision: number;
+  pricing_coverage: { availability: "unavailable"; reason_codes: string[] };
+  refresh_after_seconds: number;
 }
 
 export interface CostEndpointDependencies {
   getCostOverview(
-    query?: { clusterIds?: readonly string[]; timeRange?: CostEndpointTimeRange },
+    query?: {
+      clusterIds?: readonly string[];
+      namespaces?: readonly string[];
+      timeRange?: CostEndpointTimeRange;
+    },
     signal?: AbortSignal,
   ): Promise<CostOverviewEndpoint>;
+  getCostNodes(
+    query?: {
+      clusterIds?: readonly string[];
+      namespaces?: readonly string[];
+      cursor?: string;
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<CostNodePageEndpoint>;
 }

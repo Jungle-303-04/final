@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import Integer, and_, cast, delete, func, select, update
+from sqlalchemy import BigInteger, Integer, and_, cast, delete, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application
@@ -47,6 +47,7 @@ from packages.storage.engine import DatabaseConnection
 TimelineReplayStatus = Literal["available", "resync_required"]
 TimelineResyncReason = Literal["retention_boundary"]
 MAX_TIMELINE_EVENTS = 10_000
+TIMELINE_APPEND_CHUNK = 1_000
 
 
 class TimelinePinRevisionConflict(ValueError):
@@ -351,62 +352,96 @@ class TimelineLedgerRepository(DatabaseConnection):
         return TimelinePinMutation(action=action, pin_set=pin_set)
 
     def append_timeline_event(self, event: TimelineEvent) -> TimelineLedgerAppend:
-        """Append once by immutable ``source_key`` under a workspace cursor row lock."""
+        """Append one event through the same atomic bulk allocation path."""
+        return self.append_timeline_events((event,))[0]
+
+    def append_timeline_events(
+        self, events: Iterable[TimelineEvent]
+    ) -> tuple[TimelineLedgerAppend, ...]:
+        """Allocate one contiguous sequence range and bulk-insert source-unique facts."""
+        batch = tuple(events)
+        if not batch:
+            return ()
+        workspace_ids = {event.scope.workspace_id for event in batch}
+        if len(workspace_ids) != 1:
+            raise ValueError("timeline bulk append requires one workspace")
+
         cursor = TimelineLedgerCursor.__table__
         ledger = TimelineLedgerEvent.__table__
-        workspace_id = event.scope.workspace_id
+        workspace_id = next(iter(workspace_ids))
+        source_keys = tuple(dict.fromkeys(event.source_key for event in batch))
+        first_events = {event.source_key: event for event in reversed(batch)}
         with self.connection() as conn:
             conn.execute(
                 pg_insert(cursor)
                 .values(workspace_id=workspace_id, last_sequence=0, retained_from_sequence=1)
                 .on_conflict_do_nothing(index_elements=[cursor.c.workspace_id])
             )
-            cursor_row = (
-                conn.execute(
-                    select(cursor.c.last_sequence, cursor.c.retained_from_sequence)
-                    .where(cursor.c.workspace_id == workspace_id)
-                    .with_for_update()
-                )
-                .mappings()
-                .one()
-            )
-            existing = (
-                conn.execute(
+            conn.execute(
+                select(cursor.c.last_sequence, cursor.c.retained_from_sequence)
+                .where(cursor.c.workspace_id == workspace_id)
+                .with_for_update()
+            ).mappings().one()
+            existing_rows = {
+                str(row["source_key"]): dict(row)
+                for row in conn.execute(
                     select(ledger).where(
                         ledger.c.workspace_id == workspace_id,
-                        ledger.c.source_key == event.source_key,
+                        ledger.c.source_key.in_(source_keys),
                     )
                 )
                 .mappings()
-                .one_or_none()
-            )
-            if existing is not None:
-                return TimelineLedgerAppend(
-                    event=_event_from_row(existing),
-                    sequence=int(existing["sequence"]),
-                    inserted=False,
+                .all()
+            }
+            new_events = [
+                first_events[source_key]
+                for source_key in source_keys
+                if source_key not in existing_rows
+            ]
+            inserted_rows: dict[str, dict[str, Any]] = {}
+            if new_events:
+                high_water = int(
+                    conn.execute(
+                        update(cursor)
+                        .where(cursor.c.workspace_id == workspace_id)
+                        .values(last_sequence=cursor.c.last_sequence + len(new_events))
+                        .returning(cursor.c.last_sequence)
+                    ).scalar_one()
                 )
+                first_sequence = high_water - len(new_events) + 1
+                values = [
+                    _event_values(event, sequence=first_sequence + index)
+                    for index, event in enumerate(new_events)
+                ]
+                for start in range(0, len(values), TIMELINE_APPEND_CHUNK):
+                    rows = (
+                        conn.execute(
+                            pg_insert(ledger)
+                            .values(values[start : start + TIMELINE_APPEND_CHUNK])
+                            .returning(*ledger.c)
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    inserted_rows.update((str(row["source_key"]), dict(row)) for row in rows)
 
-            sequence = conn.execute(
-                update(cursor)
-                .where(cursor.c.workspace_id == workspace_id)
-                .values(last_sequence=int(cursor_row["last_sequence"]) + 1)
-                .returning(cursor.c.last_sequence)
-            ).scalar_one()
-            row = (
-                conn.execute(
-                    pg_insert(ledger)
-                    .values(**_event_values(event, sequence=int(sequence)))
-                    .returning(*ledger.c)
-                )
-                .mappings()
-                .one()
+        rows_by_key = {**existing_rows, **inserted_rows}
+        reported_insertions: set[str] = set()
+        appends: list[TimelineLedgerAppend] = []
+        for event in batch:
+            row = rows_by_key[event.source_key]
+            inserted = (
+                event.source_key in inserted_rows and event.source_key not in reported_insertions
             )
-        return TimelineLedgerAppend(
-            event=_event_from_row(row),
-            sequence=int(row["sequence"]),
-            inserted=True,
-        )
+            reported_insertions.add(event.source_key)
+            appends.append(
+                TimelineLedgerAppend(
+                    event=_event_from_row(row),
+                    sequence=int(row["sequence"]),
+                    inserted=inserted,
+                )
+            )
+        return tuple(appends)
 
     def snapshot_timeline_events(
         self,
@@ -578,6 +613,37 @@ class TimelineLedgerRepository(DatabaseConnection):
                     )
                 ).scalar_one()
             )
+
+    def timeline_diagnostics(self, workspace_id: str) -> dict[str, Any]:
+        """Return one workspace-scoped aggregate without loading replay payloads."""
+        cursor = TimelineLedgerCursor.__table__
+        ledger = TimelineLedgerEvent.__table__
+        last_sequence = (
+            select(cursor.c.last_sequence)
+            .where(cursor.c.workspace_id == workspace_id)
+            .scalar_subquery()
+        )
+        retained_from_sequence = (
+            select(cursor.c.retained_from_sequence)
+            .where(cursor.c.workspace_id == workspace_id)
+            .scalar_subquery()
+        )
+        statement = select(
+            func.count(ledger.c.sequence).label("event_count"),
+            func.min(ledger.c.occurred_at).label("oldest_occurred_at"),
+            func.max(ledger.c.occurred_at).label("newest_occurred_at"),
+            func.coalesce(last_sequence, 0).label("high_water_sequence"),
+            func.coalesce(retained_from_sequence, 1).label("retained_from_sequence"),
+        ).where(ledger.c.workspace_id == workspace_id)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return {
+            "event_count": int(row["event_count"] or 0),
+            "oldest_occurred_at": row["oldest_occurred_at"],
+            "newest_occurred_at": row["newest_occurred_at"],
+            "high_water_sequence": int(row["high_water_sequence"] or 0),
+            "retained_from_sequence": int(row["retained_from_sequence"] or 1),
+        }
 
     def _cursor_state(self, workspace_id: str) -> tuple[int, int]:
         cursor = TimelineLedgerCursor.__table__
@@ -837,7 +903,10 @@ def _timeline_overview_bucket_index(
     predicate: TimelineEvidencePredicate,
     bucket_width_ms: int,
 ) -> Any:
-    from_ms = predicate.replay_identity.window.from_ms
+    from_ms = literal(
+        predicate.replay_identity.window.from_ms,
+        type_=BigInteger(),
+    )
     elapsed_ms = func.extract("epoch", ledger.c.occurred_at) * 1_000 - from_ms
     return cast(func.floor(elapsed_ms / bucket_width_ms), Integer)
 

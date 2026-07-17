@@ -817,17 +817,18 @@ async def list_applications(
         limit=limit,
     )
     by_id = {str(item.get("application_id") or ""): item for item in raw_applications}
+    states = await to_thread_db_retry(
+        db.get_application_catalog_states,
+        workspace_id=workspace_id,
+        application_ids=filtered_ids,
+        allowed_cluster_ids=allowed_cluster_ids,
+    )
     cards = []
     for application_id in filtered_ids:
         application = by_id.get(application_id)
         if application is None:
             continue
-        state = await _product_state(
-            db,
-            workspace_id=workspace_id,
-            application=application,
-            allowed_cluster_ids=allowed_cluster_ids,
-        )
+        state = states.get(application_id, {})
         cards.append(application_card(application, **state))
     cards.sort(key=_application_problem_sort)
     return ApplicationProductListResponse(applications=cards)

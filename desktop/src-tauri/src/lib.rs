@@ -1,11 +1,13 @@
 mod bridge;
 mod local_terminal;
 mod menu;
+mod port_forward;
 
 use tauri::{webview::NewWindowResponse, App, Manager, Url, WebviewWindowBuilder};
 
 pub use bridge::{desktop_capabilities, desktop_system_theme, format_window_title, SafeFileRegistry};
 pub use local_terminal::LocalTerminalRegistry;
+pub use port_forward::PortForwardSessionRegistry;
 
 use bridge::{
     desktop_open_external_url, desktop_open_saved_file, desktop_reveal_saved_file,
@@ -15,6 +17,8 @@ use local_terminal::{
     desktop_local_terminal_ack_output, desktop_local_terminal_close, desktop_local_terminal_input,
     desktop_local_terminal_resize, desktop_local_terminal_start,
 };
+use port_forward::{desktop_port_forward_sessions, desktop_port_forward_stop};
+use port_forward::{desktop_port_forward_recreate, desktop_port_forward_start};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,6 +29,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())
         .manage(SafeFileRegistry::default())
         .manage(LocalTerminalRegistry::default())
+        .manage(PortForwardSessionRegistry::default())
         .setup(|app| {
             install_main_webview(app)?;
             menu::install_native_menu(app)?;
@@ -43,12 +48,27 @@ pub fn run() {
             desktop_local_terminal_resize,
             desktop_local_terminal_close,
             desktop_local_terminal_ack_output,
+            desktop_port_forward_start,
+            desktop_port_forward_sessions,
+            desktop_port_forward_stop,
+            desktop_port_forward_recreate,
         ])
         .build(tauri::generate_context!())
         .expect("Opsia desktop shell failed to build");
     app.run(|app_handle, event| {
+        if let tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Destroyed,
+            ..
+        } = &event
+        {
+            app_handle
+                .state::<PortForwardSessionRegistry>()
+                .close_owner(label);
+        }
         if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
             app_handle.state::<LocalTerminalRegistry>().close_all();
+            app_handle.state::<PortForwardSessionRegistry>().close_all();
         }
     });
 }

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from math import isfinite
 from typing import Any, Literal, Protocol
+from urllib.parse import urlsplit
 
 from packages.contracts.inventory_provider import (
     AwsAddon,
@@ -31,6 +33,7 @@ from packages.contracts.inventory_provider import (
     ComplianceControlDetail,
     CronWorkflowProviderDetail,
     CrossplaneCompositeProviderDetail,
+    CrossplaneManagedResourceProviderDetail,
     ExternalSecretMappingDetail,
     ExternalSecretProviderDetail,
     ExternalSecretSourceDetail,
@@ -48,15 +51,46 @@ from packages.contracts.inventory_provider import (
     GrpcRouteProviderDetail,
     HttpRouteProviderDetail,
     JobProviderDetail,
+    KarpenterBlockDeviceDetail,
+    KarpenterCapacityDetail,
+    KarpenterDisruptionBudgetDetail,
+    KarpenterEc2NodeClassProviderDetail,
+    KarpenterMetadataOptionsDetail,
+    KarpenterNodeClaimProviderDetail,
+    KarpenterNodePoolProviderDetail,
+    KarpenterResolvedAmiDetail,
+    KarpenterResolvedNetworkDetail,
+    KarpenterSelectorTermDetail,
+    KedaScaledJobProviderDetail,
+    KedaScaledObjectProviderDetail,
+    KedaScalingPolicyDetail,
+    KedaTriggerDetail,
+    PersistentVolumeClaimProviderDetail,
+    PrometheusRuleEntryDetail,
+    PrometheusRuleGroupDetail,
+    PrometheusRuleProviderDetail,
     ProviderAddress,
     ProviderCondition,
     ProviderKeyValue,
     ProviderNamedReference,
     ProviderReference,
     ProviderReplicas,
+    ProviderRequirementDetail,
     ProviderScaling,
     ProviderTaint,
     ResourceProviderDetail,
+    SbomComponentDetail,
+    SbomReportProviderDetail,
+    SealedSecretProviderDetail,
+    SecretProviderDetail,
+    SecretStoreProviderDetail,
+    SecuritySeveritySummaryDetail,
+    TcpRouteProviderDetail,
+    TlsRouteProviderDetail,
+    VulnerabilityFindingDetail,
+    VulnerabilityReportProviderDetail,
+    WorkflowExecutionNodeDetail,
+    WorkflowProviderDetail,
 )
 
 INFRASTRUCTURE_GROUP = "infrastructure.cluster.x-k8s.io"
@@ -66,12 +100,23 @@ CERT_MANAGER_GROUP = "cert-manager.io"
 COMPLIANCE_GROUP = "aquasecurity.github.io"
 ARGO_GROUP = "argoproj.io"
 EXTERNAL_SECRETS_GROUP = "external-secrets.io"
+SEALED_SECRETS_GROUP = "sealedsecrets.bitnami.com"
 GATEWAY_GROUP = "gateway.networking.k8s.io"
 BATCH_GROUP = "batch"
+KARPENTER_GROUP = "karpenter.sh"
+KARPENTER_AWS_GROUP = "karpenter.k8s.aws"
+KEDA_GROUP = "keda.sh"
+PROMETHEUS_GROUP = "monitoring.coreos.com"
 MAX_COLLECTION_ITEMS = 100
 MAX_TEXT_LENGTH = 2_000
 MAX_ROUTE_RULES = 50
 MAX_ROUTE_ITEMS = 50
+MAX_PROMETHEUS_GROUPS = 50
+MAX_PROMETHEUS_RULES = 500
+MAX_SBOM_COMPONENTS = 1_000
+MAX_VULNERABILITIES = 500
+MAX_WORKFLOW_NODES = 500
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
 COMPLIANCE_SEVERITY_ORDER = {
     "CRITICAL": 0,
     "HIGH": 1,
@@ -91,6 +136,20 @@ SENSITIVE_ROUTE_VALUE_NAMES = frozenset(
         "token",
         "x-api-key",
     }
+)
+SENSITIVE_DYNAMIC_KEY_PARTS = (
+    "api-key",
+    "apikey",
+    "auth",
+    "certificate",
+    "connection",
+    "credential",
+    "key",
+    "password",
+    "private",
+    "sas",
+    "secret",
+    "token",
 )
 
 
@@ -624,6 +683,46 @@ def _crossplane_composite(
     )
 
 
+def _crossplane_managed_resource(
+    resource: Mapping[str, Any], raw: Mapping[str, Any]
+) -> CrossplaneManagedResourceProviderDetail | None:
+    spec = _mapping_at(raw, "spec")
+    crossplane = _mapping(spec.get("crossplane"))
+    provider_config = _mapping(spec.get("providerConfigRef")) or _mapping(
+        crossplane.get("providerConfigRef")
+    )
+    for_provider = _mapping(spec.get("forProvider"))
+    if not provider_config or not for_provider:
+        return None
+    status_at_provider = _mapping_at(raw, "status", "atProvider")
+    composing_ref = next(
+        (
+            _named_reference_with_namespace(item, _text_at(raw, "metadata", "namespace"))
+            for item in _mapping_items(_value_at(raw, "metadata", "ownerReferences"))
+            if _text(item.get("apiVersion")) is not None
+            and (
+                _text(item.get("kind")) == "CompositeResourceDefinition"
+                or _text(item.get("controller")) == "true"
+                or item.get("controller") is True
+            )
+        ),
+        None,
+    )
+    return CrossplaneManagedResourceProviderDetail(
+        api_group=_api_group(resource.get("api_version")) or None,
+        kind=_text(resource.get("kind")) or "ManagedResource",
+        external_name=_text_at(raw, "metadata", "annotations", "crossplane.io/external-name"),
+        management_policies=_text_items(spec.get("managementPolicies")),
+        deletion_policy=_text(spec.get("deletionPolicy")),
+        paused=_text_at(raw, "metadata", "annotations", "crossplane.io/paused") == "true",
+        provider_config_ref=_named_reference(provider_config),
+        composing_resource_ref=composing_ref,
+        observed_spec_fields=sorted(for_provider)[:MAX_COLLECTION_ITEMS],
+        observed_status_fields=sorted(status_at_provider)[:MAX_COLLECTION_ITEMS],
+        conditions=_conditions(raw),
+    )
+
+
 def _cron_workflow(raw: Mapping[str, Any]) -> CronWorkflowProviderDetail:
     schedules = _text_items_at(raw, "spec", "schedules")
     if not schedules and (schedule := _text_at(raw, "spec", "schedule")) is not None:
@@ -711,6 +810,269 @@ def _external_secret_source(item: Mapping[str, Any]) -> ExternalSecretSourceDeta
             detail=_joined_text(source_ref.get("kind"), source_ref.get("name")),
         )
     return ExternalSecretSourceDetail(type="unknown")
+
+
+def _persistent_volume_claim(raw: Mapping[str, Any]) -> PersistentVolumeClaimProviderDetail:
+    annotations = _mapping_at(raw, "metadata", "annotations")
+    return PersistentVolumeClaimProviderDetail(
+        phase=_text_at(raw, "status", "phase"),
+        capacity=_scalar_text_at(raw, "status", "capacity", "storage"),
+        requested=_scalar_text_at(raw, "spec", "resources", "requests", "storage"),
+        storage_class_name=_text_at(raw, "spec", "storageClassName"),
+        access_modes=_text_items_at(raw, "spec", "accessModes"),
+        volume_mode=_text_at(raw, "spec", "volumeMode"),
+        volume_name=_text_at(raw, "spec", "volumeName"),
+        provisioner=_text(annotations.get("volume.kubernetes.io/storage-provisioner")),
+        selected_node=_text(annotations.get("volume.kubernetes.io/selected-node")),
+        bind_completed=_bool_text(annotations.get("pv.kubernetes.io/bind-completed")),
+        conditions=_conditions(raw),
+    )
+
+
+def _sealed_secret(raw: Mapping[str, Any]) -> SealedSecretProviderDetail:
+    annotations = _mapping_at(raw, "metadata", "annotations")
+    template = _mapping_at(raw, "spec", "template")
+    template_metadata = _mapping(template.get("metadata"))
+    return SealedSecretProviderDetail(
+        synced=_condition_truth(raw, "Synced"),
+        target_secret_name=_text_at(template_metadata, "name") or _text_at(raw, "metadata", "name"),
+        secret_type=_text(template.get("type")),
+        scope=(
+            "cluster-wide"
+            if annotations.get("sealedsecrets.bitnami.com/cluster-wide") == "true"
+            else "namespace-wide"
+            if annotations.get("sealedsecrets.bitnami.com/namespace-wide") == "true"
+            else "strict"
+        ),
+        observed_generation=_int_at(raw, "status", "observedGeneration"),
+        encrypted_keys=sorted(_mapping_at(raw, "spec", "encryptedData"))[:MAX_COLLECTION_ITEMS],
+        template_labels=_safe_key_values(_mapping(template_metadata.get("labels"))),
+        template_annotations=_safe_key_values(_mapping(template_metadata.get("annotations"))),
+        conditions=_conditions(raw),
+    )
+
+
+def _secret(raw: Mapping[str, Any]) -> SecretProviderDetail:
+    return SecretProviderDetail(
+        secret_type=_text_at(raw, "type"),
+        immutable=_bool_at(raw, "immutable"),
+        key_names=sorted(_mapping_at(raw, "data"))[:MAX_COLLECTION_ITEMS],
+        conditions=[],
+    )
+
+
+SECRET_STORE_PROVIDER_LABELS = {
+    "aws": "AWS Secrets Manager",
+    "azurekv": "Azure Key Vault",
+    "gcpsm": "GCP Secret Manager",
+    "vault": "HashiCorp Vault",
+    "kubernetes": "Kubernetes",
+    "oracle": "Oracle Vault",
+    "ibm": "IBM Secrets Manager",
+    "doppler": "Doppler",
+    "onepassword": "1Password",
+    "akeyless": "Akeyless",
+}
+
+
+def _secret_store(raw: Mapping[str, Any]) -> SecretStoreProviderDetail:
+    provider = _mapping_at(raw, "spec", "provider")
+    provider_key = next(
+        (key for key in SECRET_STORE_PROVIDER_LABELS if _mapping(provider.get(key))),
+        next(iter(sorted(provider)), None),
+    )
+    details = (
+        _secret_store_provider_details(provider_key, _mapping(provider.get(provider_key)))
+        if provider_key is not None
+        else []
+    )
+    return SecretStoreProviderDetail(
+        cluster_scope=_text_at(raw, "kind") == "ClusterSecretStore",
+        ready=_condition_truth(raw, "Ready"),
+        provider_key=provider_key,
+        provider_type=SECRET_STORE_PROVIDER_LABELS.get(provider_key, provider_key)
+        if provider_key is not None
+        else None,
+        provider_details=details,
+        controller=_text_at(raw, "spec", "controller"),
+        max_retries=_int_at(raw, "spec", "retrySettings", "maxRetries"),
+        retry_interval=_text_at(raw, "spec", "retrySettings", "retryInterval"),
+        conditions=_conditions(raw),
+    )
+
+
+def _cluster_secret_store(raw: Mapping[str, Any]) -> SecretStoreProviderDetail:
+    return _secret_store(raw).model_copy(update={"cluster_scope": True})
+
+
+def _secret_store_provider_details(
+    provider_key: str, provider: Mapping[str, Any]
+) -> list[ProviderKeyValue]:
+    paths: dict[str, tuple[tuple[str, ...], ...]] = {
+        "aws": (
+            ("region",),
+            ("service",),
+            ("auth", "jwt", "serviceAccountRef", "name"),
+        ),
+        "azurekv": (("vaultUrl",), ("tenantId",), ("authType",), ("environmentType",)),
+        "gcpsm": (("projectID",), ("location",)),
+        "vault": (("server",), ("path",), ("version",), ("namespace",)),
+        "kubernetes": (("server", "url"), ("remoteNamespace",)),
+        "oracle": (("vault",), ("region",)),
+        "ibm": (("serviceUrl",),),
+        "doppler": (("project",), ("config",)),
+        "onepassword": (("connectHost",),),
+        "akeyless": (("akeylessGWApiURL",),),
+    }
+    result: list[ProviderKeyValue] = []
+    for path in paths.get(provider_key, ()):
+        value = _text_at(provider, *path)
+        if value is not None:
+            result.append(ProviderKeyValue(key=".".join(path), value=value))
+    return result[:MAX_COLLECTION_ITEMS]
+
+
+def _workflow(raw: Mapping[str, Any]) -> WorkflowProviderDetail:
+    raw_nodes = _mapping_at(raw, "status", "nodes")
+    projected_nodes = _workflow_execution_nodes(raw_nodes)
+    phase = _text_at(raw, "status", "phase") or "Unknown"
+    problem_summaries = _workflow_problem_summaries(phase, raw, projected_nodes)
+    template_ref = _mapping_at(raw, "spec", "workflowTemplateRef")
+    return WorkflowProviderDetail(
+        phase=phase,
+        started_at=_text_at(raw, "status", "startedAt"),
+        finished_at=_text_at(raw, "status", "finishedAt"),
+        progress=_text_at(raw, "status", "progress"),
+        estimated_duration_seconds=_int_at(raw, "status", "estimatedDuration"),
+        workflow_template_ref=_workflow_template_reference(
+            template_ref,
+            _text_at(raw, "metadata", "namespace"),
+        ),
+        argument_names=[
+            name
+            for item in _mapping_items_at(raw, "spec", "arguments", "parameters")
+            if (name := _text(item.get("name"))) is not None
+        ],
+        resource_durations=[
+            ProviderKeyValue(key=key, value=value)
+            for key, raw_value in sorted(_mapping_at(raw, "status", "resourcesDuration").items())[
+                :MAX_COLLECTION_ITEMS
+            ]
+            if (value := _scalar_text(raw_value)) is not None
+        ],
+        execution_nodes=projected_nodes,
+        observed_node_count=len(raw_nodes),
+        projected_node_count=len(projected_nodes),
+        truncated=len(raw_nodes) > len(projected_nodes),
+        problem_summaries=problem_summaries,
+        conditions=_conditions(raw),
+    )
+
+
+def _workflow_execution_nodes(
+    raw_nodes: Mapping[str, Any],
+) -> list[WorkflowExecutionNodeDetail]:
+    nodes = {
+        node_id: _mapping(raw_node)
+        for node_id, raw_node in sorted(raw_nodes.items())[:MAX_WORKFLOW_NODES]
+        if _text(node_id) is not None and isinstance(raw_node, Mapping)
+    }
+    children: dict[str, list[str]] = {}
+    parents: dict[str, list[str]] = {node_id: [] for node_id in nodes}
+    for node_id, node in nodes.items():
+        related = [
+            child
+            for child in [
+                *_text_items(node.get("children")),
+                *_text_items(node.get("outboundNodes")),
+            ]
+            if child in nodes
+        ]
+        children[node_id] = list(dict.fromkeys(related))
+        for child in children[node_id]:
+            parents[child].append(node_id)
+    depths: dict[str, int] = {}
+    ordered_ids: list[str] = []
+
+    def visit(node_id: str, depth: int, path: frozenset[str]) -> None:
+        if node_id in path:
+            return
+        bounded_depth = min(depth, 20)
+        previous = depths.get(node_id)
+        if previous is not None and previous <= bounded_depth:
+            return
+        if previous is None:
+            ordered_ids.append(node_id)
+        depths[node_id] = bounded_depth
+        for child in children[node_id]:
+            visit(child, bounded_depth + 1, path | {node_id})
+
+    for node_id in nodes:
+        if not parents[node_id]:
+            visit(node_id, 0, frozenset())
+    for node_id in nodes:
+        if node_id not in depths:
+            visit(node_id, 0, frozenset())
+
+    def project(node_id: str) -> WorkflowExecutionNodeDetail:
+        node = nodes[node_id]
+        return WorkflowExecutionNodeDetail(
+            id=node_id,
+            label=_text(node.get("displayName")) or _text(node.get("name")) or node_id,
+            node_type=_text(node.get("type")) or "Unknown",
+            phase=_text(node.get("phase"))
+            or ("Skipped" if _text(node.get("type")) == "Skipped" else "Pending"),
+            depth=depths.get(node_id, 0),
+            started_at=_text(node.get("startedAt")),
+            finished_at=_text(node.get("finishedAt")),
+            message=_bounded_text(node.get("message"), 300),
+            template_ref=_workflow_template_reference(
+                _mapping(node.get("templateRef")),
+                None,
+            ),
+        )
+
+    return [project(node_id) for node_id in ordered_ids]
+
+
+def _workflow_template_reference(
+    value: Mapping[str, Any], namespace: str | None
+) -> ProviderNamedReference | None:
+    name = _text(value.get("name")) or _text(value.get("template"))
+    if name is None:
+        return None
+    cluster_scope = _bool(value.get("clusterScope")) is True
+    return ProviderNamedReference(
+        api_version=ARGO_GROUP,
+        kind="ClusterWorkflowTemplate" if cluster_scope else "WorkflowTemplate",
+        namespace=None if cluster_scope else namespace,
+        name=name,
+    )
+
+
+def _workflow_problem_summaries(
+    phase: str,
+    raw: Mapping[str, Any],
+    nodes: list[WorkflowExecutionNodeDetail],
+) -> list[str]:
+    if phase not in {"Failed", "Error"}:
+        return []
+    result: list[str] = []
+    top_level = _bounded_text(
+        _text_at(raw, "status", "message")
+        or ("Workflow failed" if phase == "Failed" else "Workflow error"),
+        300,
+    )
+    if top_level is not None:
+        result.append(top_level)
+    for node in nodes:
+        if node.phase not in {"Failed", "Error"}:
+            continue
+        summary = f"{node.label}: {node.message}" if node.message else f"{node.label} failed"
+        bounded = _bounded_text(summary, 300)
+        if bounded is not None and bounded not in result:
+            result.append(bounded)
+    return result[:MAX_COLLECTION_ITEMS]
 
 
 def _gateway_class(raw: Mapping[str, Any]) -> GatewayClassProviderDetail:
@@ -1042,6 +1404,683 @@ def _job(raw: Mapping[str, Any]) -> JobProviderDetail:
     )
 
 
+def _karpenter_ec2_node_class(
+    raw: Mapping[str, Any],
+) -> KarpenterEc2NodeClassProviderDetail:
+    metadata_options = _mapping_at(raw, "spec", "metadataOptions")
+    return KarpenterEc2NodeClassProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        role=_text_at(raw, "spec", "role"),
+        instance_profile=_text_at(raw, "status", "instanceProfile"),
+        ami_family=_text_at(raw, "spec", "amiFamily"),
+        ami_selector_terms=_karpenter_selector_terms(raw, "spec", "amiSelectorTerms"),
+        block_devices=[
+            KarpenterBlockDeviceDetail(
+                device_name=_text(item.get("deviceName")),
+                volume_type=_text_at(item, "ebs", "volumeType"),
+                volume_size=_scalar_text_at(item, "ebs", "volumeSize"),
+                iops=_int_at(item, "ebs", "iops"),
+                throughput=_int_at(item, "ebs", "throughput"),
+                encrypted=_bool_at(item, "ebs", "encrypted"),
+                delete_on_termination=_bool_at(item, "ebs", "deleteOnTermination"),
+            )
+            for item in _mapping_items_at(raw, "spec", "blockDeviceMappings")
+        ],
+        subnet_selector_terms=_karpenter_selector_terms(raw, "spec", "subnetSelectorTerms"),
+        security_group_selector_terms=_karpenter_selector_terms(
+            raw, "spec", "securityGroupSelectorTerms"
+        ),
+        metadata_options=(
+            KarpenterMetadataOptionsDetail(
+                http_tokens=_text(metadata_options.get("httpTokens")),
+                http_put_response_hop_limit=_int(metadata_options.get("httpPutResponseHopLimit")),
+                http_endpoint=_text(metadata_options.get("httpEndpoint")),
+            )
+            if metadata_options
+            else None
+        ),
+        resolved_amis=[
+            KarpenterResolvedAmiDetail(
+                id=ami_id,
+                name=_text(item.get("name")),
+                requirements=_provider_requirements(item.get("requirements")),
+            )
+            for item in _mapping_items_at(raw, "status", "amis")
+            if (ami_id := _text(item.get("id"))) is not None
+        ],
+        resolved_subnets=_karpenter_resolved_networks(raw, "status", "subnets"),
+        resolved_security_groups=_karpenter_resolved_networks(raw, "status", "securityGroups"),
+        tags=_safe_key_values_at(raw, "spec", "tags"),
+        conditions=_conditions(raw),
+    )
+
+
+def _karpenter_node_claim(raw: Mapping[str, Any]) -> KarpenterNodeClaimProviderDetail:
+    conditions = _conditions(raw)
+    ready = _condition_by_type(conditions, "Ready")
+    launched = _condition_by_type(conditions, "Launched")
+    registered = _condition_by_type(conditions, "Registered")
+    initialized = _condition_by_type(conditions, "Initialized")
+    state: Literal[
+        "ready",
+        "registered",
+        "launched",
+        "initialized",
+        "not-ready",
+        "pending",
+        "unknown",
+    ] = (
+        "ready"
+        if ready is not None and ready.status == "True"
+        else "registered"
+        if launched is not None
+        and launched.status == "True"
+        and registered is not None
+        and registered.status == "True"
+        else "launched"
+        if launched is not None and launched.status == "True"
+        else "initialized"
+        if initialized is not None and initialized.status == "True"
+        else "not-ready"
+        if ready is not None and ready.status == "False"
+        else "unknown"
+        if ready is not None and ready.status == "Unknown"
+        else "pending"
+    )
+    requirements = _provider_requirements(_value_at(raw, "spec", "requirements"))
+    instance_type = (
+        _text_at(raw, "status", "instanceType")
+        or _text_at(raw, "metadata", "labels", "node.kubernetes.io/instance-type")
+        or _requirement_first_value(requirements, "node.kubernetes.io/instance-type")
+    )
+    return KarpenterNodeClaimProviderDetail(
+        state=state,
+        instance_type=instance_type,
+        capacity_type=_text_at(raw, "metadata", "labels", "karpenter.sh/capacity-type"),
+        node_name=_text_at(raw, "status", "nodeName"),
+        zone=_text_at(raw, "metadata", "labels", "topology.kubernetes.io/zone"),
+        architecture=_text_at(raw, "metadata", "labels", "kubernetes.io/arch"),
+        node_pool=_text_at(raw, "metadata", "labels", "karpenter.sh/nodepool"),
+        node_class_ref=_named_reference_at(raw, "spec", "nodeClassRef"),
+        image_id=_text_at(raw, "status", "imageID"),
+        expire_after=_text_at(raw, "spec", "expireAfter"),
+        capacity=KarpenterCapacityDetail(
+            cpu=_scalar_text_at(raw, "status", "capacity", "cpu"),
+            memory=_scalar_text_at(raw, "status", "capacity", "memory"),
+            pods=_scalar_text_at(raw, "status", "capacity", "pods"),
+            ephemeral_storage=_scalar_text_at(raw, "status", "capacity", "ephemeral-storage"),
+        ),
+        requirements=requirements,
+        conditions=conditions,
+    )
+
+
+def _karpenter_node_pool(raw: Mapping[str, Any]) -> KarpenterNodePoolProviderDetail:
+    expire_after = _text_at(raw, "spec", "disruption", "expireAfter") or _text_at(
+        raw, "spec", "template", "spec", "expireAfter"
+    )
+    return KarpenterNodePoolProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        node_class_ref=_named_reference_at(raw, "spec", "template", "spec", "nodeClassRef"),
+        limit_cpu=_scalar_text_at(raw, "spec", "limits", "cpu"),
+        limit_memory=_scalar_text_at(raw, "spec", "limits", "memory"),
+        weight=_int_at(raw, "spec", "weight"),
+        current_cpu=_scalar_text_at(raw, "status", "resources", "cpu"),
+        current_memory=_scalar_text_at(raw, "status", "resources", "memory"),
+        consolidation_policy=_text_at(raw, "spec", "disruption", "consolidationPolicy"),
+        consolidate_after=_text_at(raw, "spec", "disruption", "consolidateAfter"),
+        expire_after=expire_after,
+        disruption_budgets=[
+            KarpenterDisruptionBudgetDetail(
+                nodes=_scalar_text(item.get("nodes")),
+                schedule=_text(item.get("schedule")),
+                duration=_text(item.get("duration")),
+            )
+            for item in _mapping_items_at(raw, "spec", "disruption", "budgets")
+        ],
+        template_labels=_safe_key_values_at(raw, "spec", "template", "metadata", "labels"),
+        template_taints=_provider_taints_at(raw, "spec", "template", "spec", "taints"),
+        startup_taints=_provider_taints_at(raw, "spec", "template", "spec", "startupTaints"),
+        requirements=_provider_requirements(
+            _value_at(raw, "spec", "template", "spec", "requirements")
+        ),
+        conditions=_conditions(raw),
+    )
+
+
+def _keda_scaled_object(raw: Mapping[str, Any]) -> KedaScaledObjectProviderDetail:
+    conditions = _conditions(raw)
+    annotations = _mapping_at(raw, "metadata", "annotations")
+    paused = (
+        _text(annotations.get("autoscaling.keda.sh/paused")) == "true"
+        or "autoscaling.keda.sh/paused-replicas" in annotations
+        or _condition_truth_from(conditions, "Paused") is True
+    )
+    fallback = _condition_truth_from(conditions, "Fallback")
+    ready = _condition_truth_from(conditions, "Ready")
+    active = _condition_truth_from(conditions, "Active")
+    state: Literal["paused", "fallback", "not-ready", "active", "idle", "ready", "unknown"] = (
+        "paused"
+        if paused
+        else "fallback"
+        if fallback is True
+        else "not-ready"
+        if ready is False
+        else "active"
+        if active is True
+        else "idle"
+        if active is False
+        else "ready"
+        if ready is True
+        else "unknown"
+    )
+    namespace = _text_at(raw, "metadata", "namespace")
+    scale_up = _mapping_at(
+        raw,
+        "spec",
+        "advanced",
+        "horizontalPodAutoscalerConfig",
+        "behavior",
+        "scaleUp",
+    )
+    scale_down = _mapping_at(
+        raw,
+        "spec",
+        "advanced",
+        "horizontalPodAutoscalerConfig",
+        "behavior",
+        "scaleDown",
+    )
+    return KedaScaledObjectProviderDetail(
+        state=state,
+        target_ref=_named_reference_with_namespace(
+            _mapping_at(raw, "spec", "scaleTargetRef"), namespace
+        ),
+        scaling=ProviderScaling(
+            minimum=_int_at(raw, "spec", "minReplicaCount"),
+            maximum=_int_at(raw, "spec", "maxReplicaCount"),
+            current=None,
+        ),
+        idle_replicas=_int_at(raw, "spec", "idleReplicaCount"),
+        polling_interval_seconds=_int_at(raw, "spec", "pollingInterval"),
+        cooldown_period_seconds=_int_at(raw, "spec", "cooldownPeriod"),
+        hpa_name=_text_at(raw, "status", "hpaName"),
+        last_active_time=_text_at(raw, "status", "lastActiveTime"),
+        fallback_failure_threshold=_int_at(raw, "spec", "fallback", "failureThreshold"),
+        fallback_replicas=_int_at(raw, "spec", "fallback", "replicas"),
+        restore_original_replicas=_bool_at(
+            raw, "spec", "advanced", "restoreToOriginalReplicaCount"
+        ),
+        scale_up_stabilization_seconds=_int(scale_up.get("stabilizationWindowSeconds")),
+        scale_down_stabilization_seconds=_int(scale_down.get("stabilizationWindowSeconds")),
+        scaling_policies=[
+            *_keda_scaling_policies(scale_up, "up"),
+            *_keda_scaling_policies(scale_down, "down"),
+        ],
+        triggers=_keda_triggers(raw, namespace),
+        conditions=conditions,
+    )
+
+
+def _keda_scaled_job(raw: Mapping[str, Any]) -> KedaScaledJobProviderDetail:
+    conditions = _conditions(raw)
+    ready = _condition_truth_from(conditions, "Ready")
+    active = _condition_truth_from(conditions, "Active")
+    state: Literal["not-ready", "active", "idle", "ready", "unknown"] = (
+        "not-ready"
+        if ready is False
+        else "active"
+        if active is True
+        else "idle"
+        if active is False
+        else "ready"
+        if ready is True
+        else "unknown"
+    )
+    return KedaScaledJobProviderDetail(
+        state=state,
+        job_target_name=_text_at(raw, "spec", "jobTargetRef", "name"),
+        strategy=_text_at(raw, "spec", "scalingStrategy", "strategy"),
+        polling_interval_seconds=_int_at(raw, "spec", "pollingInterval"),
+        successful_history_limit=_int_at(raw, "spec", "successfulJobsHistoryLimit"),
+        failed_history_limit=_int_at(raw, "spec", "failedJobsHistoryLimit"),
+        minimum_replicas=_int_at(raw, "spec", "minReplicaCount"),
+        maximum_replicas=_int_at(raw, "spec", "maxReplicaCount"),
+        triggers=_keda_triggers(raw, _text_at(raw, "metadata", "namespace")),
+        conditions=conditions,
+    )
+
+
+def _sbom_report(raw: Mapping[str, Any]) -> SbomReportProviderDetail:
+    raw_components = _value_at(raw, "report", "components", "components")
+    observed_components = raw_components if isinstance(raw_components, list) else []
+    components: list[SbomComponentDetail] = []
+    for item in _bounded_mapping_items(raw_components, MAX_SBOM_COMPONENTS):
+        name = _text(item.get("name"))
+        if name is None:
+            continue
+        package_url, qualifiers_redacted = _safe_package_url(item.get("purl"))
+        components.append(
+            SbomComponentDetail(
+                name=name,
+                version=_text(item.get("version")),
+                type=_text(item.get("type")),
+                package_url=package_url,
+                package_url_qualifiers_redacted=qualifiers_redacted,
+                license=_sbom_license(item),
+            )
+        )
+    observed_count = len(observed_components)
+    return SbomReportProviderDetail(
+        container_name=_text_at(raw, "metadata", "labels", "trivy-operator.container.name"),
+        image=_trivy_image(raw),
+        bom_format=_text_at(raw, "report", "components", "bomFormat"),
+        spec_version=_text_at(raw, "report", "components", "specVersion"),
+        component_count=_first_present_int(
+            _nonnegative_safe_int_at(raw, "report", "summary", "componentsCount"),
+            observed_count,
+        )
+        or 0,
+        dependency_count=_nonnegative_safe_int_at(raw, "report", "summary", "dependenciesCount")
+        or 0,
+        observed_component_count=observed_count,
+        projected_component_count=len(components),
+        truncated=len(components) < observed_count,
+        scanner_name=_text_at(raw, "report", "scanner", "name"),
+        scanner_version=_text_at(raw, "report", "scanner", "version"),
+        scanned_at=_text_at(raw, "report", "updateTimestamp"),
+        components=components,
+        conditions=_conditions(raw),
+    )
+
+
+def _vulnerability_report(raw: Mapping[str, Any]) -> VulnerabilityReportProviderDetail:
+    raw_vulnerabilities = _value_at(raw, "report", "vulnerabilities")
+    observed_vulnerabilities = raw_vulnerabilities if isinstance(raw_vulnerabilities, list) else []
+    calculated_counts = {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "MEDIUM": 0,
+        "LOW": 0,
+        "UNKNOWN": 0,
+    }
+    for item in observed_vulnerabilities:
+        if isinstance(item, Mapping):
+            calculated_counts[_vulnerability_severity(item.get("severity"))] += 1
+
+    vulnerabilities: list[VulnerabilityFindingDetail] = []
+    for item in _bounded_mapping_items(raw_vulnerabilities, MAX_VULNERABILITIES):
+        vulnerability_id = _text(item.get("vulnerabilityID"))
+        if vulnerability_id is None:
+            continue
+        vulnerabilities.append(
+            VulnerabilityFindingDetail(
+                vulnerability_id=vulnerability_id,
+                severity=_vulnerability_severity(item.get("severity")),
+                score=_bounded_score(item.get("score")),
+                package=_text(item.get("resource")),
+                installed_version=_text(item.get("installedVersion")),
+                fixed_version=_text(item.get("fixedVersion")),
+                primary_link=_safe_external_http_url(item.get("primaryLink")),
+            )
+        )
+
+    observed_count = len(observed_vulnerabilities)
+    os_detail = _mapping_at(raw, "report", "os")
+    return VulnerabilityReportProviderDetail(
+        container_name=_text_at(raw, "metadata", "labels", "trivy-operator.container.name"),
+        image=_trivy_image(raw),
+        os_family=_text(os_detail.get("family")),
+        os_name=_text(os_detail.get("name")),
+        os_end_of_service_life=_bool(os_detail.get("eosl")),
+        scanner_name=_text_at(raw, "report", "scanner", "name"),
+        scanner_version=_text_at(raw, "report", "scanner", "version"),
+        scanned_at=_text_at(raw, "report", "updateTimestamp"),
+        severity=SecuritySeveritySummaryDetail(
+            critical=_reported_or_calculated_count(
+                raw, "criticalCount", calculated_counts["CRITICAL"]
+            ),
+            high=_reported_or_calculated_count(raw, "highCount", calculated_counts["HIGH"]),
+            medium=_reported_or_calculated_count(raw, "mediumCount", calculated_counts["MEDIUM"]),
+            low=_reported_or_calculated_count(raw, "lowCount", calculated_counts["LOW"]),
+            unknown=_reported_or_calculated_count(
+                raw, "unknownCount", calculated_counts["UNKNOWN"]
+            ),
+        ),
+        observed_vulnerability_count=observed_count,
+        projected_vulnerability_count=len(vulnerabilities),
+        truncated=len(vulnerabilities) < observed_count,
+        vulnerabilities=vulnerabilities,
+        conditions=_conditions(raw),
+    )
+
+
+def _prometheus_rule(raw: Mapping[str, Any]) -> PrometheusRuleProviderDetail:
+    raw_groups = _value_at(raw, "spec", "groups")
+    observed_groups = raw_groups if isinstance(raw_groups, list) else []
+    total_rules = 0
+    total_alerts = 0
+    total_recordings = 0
+    for raw_group in observed_groups:
+        if not isinstance(raw_group, Mapping):
+            continue
+        raw_rules = raw_group.get("rules")
+        if not isinstance(raw_rules, list):
+            continue
+        total_rules += len(raw_rules)
+        for raw_rule in raw_rules:
+            if not isinstance(raw_rule, Mapping):
+                continue
+            if _text(raw_rule.get("alert")) is not None:
+                total_alerts += 1
+            elif _text(raw_rule.get("record")) is not None:
+                total_recordings += 1
+    groups: list[PrometheusRuleGroupDetail] = []
+    remaining = MAX_PROMETHEUS_RULES
+    for group in _mapping_items_at(raw, "spec", "groups")[:MAX_PROMETHEUS_GROUPS]:
+        group_name = _text(group.get("name"))
+        if group_name is None or remaining <= 0:
+            continue
+        raw_group_rules = group.get("rules")
+        observed_group_rules = raw_group_rules if isinstance(raw_group_rules, list) else []
+        rules: list[PrometheusRuleEntryDetail] = []
+        for item in _mapping_items(group.get("rules"))[:remaining]:
+            alert = _text(item.get("alert"))
+            recording = _text(item.get("record"))
+            name = alert or recording
+            expression = _scalar_text(item.get("expr"))
+            if name is None or expression is None:
+                continue
+            labels = _safe_key_values(_mapping(item.get("labels")))
+            if alert is not None:
+                rules.append(
+                    PrometheusRuleEntryDetail(
+                        type="alert",
+                        name=name,
+                        expression=expression,
+                        duration=_text(item.get("for")),
+                        severity=_text_at(item, "labels", "severity"),
+                        summary=_text_at(item, "annotations", "summary"),
+                        description=_text_at(item, "annotations", "description"),
+                        labels=labels,
+                    )
+                )
+            else:
+                rules.append(
+                    PrometheusRuleEntryDetail(
+                        type="recording",
+                        name=name,
+                        expression=expression,
+                        labels=labels,
+                    )
+                )
+        remaining -= len(rules)
+        groups.append(
+            PrometheusRuleGroupDetail(
+                name=group_name,
+                interval=_text(group.get("interval")),
+                rule_count=len(observed_group_rules),
+                alert_count=sum(
+                    isinstance(item, Mapping) and _text(item.get("alert")) is not None
+                    for item in observed_group_rules
+                ),
+                recording_count=sum(
+                    isinstance(item, Mapping) and _text(item.get("record")) is not None
+                    for item in observed_group_rules
+                ),
+                rules=rules,
+            )
+        )
+    projected_rules = sum(len(group.rules) for group in groups)
+    return PrometheusRuleProviderDetail(
+        group_count=len(observed_groups),
+        total_rules=total_rules,
+        total_alerts=total_alerts,
+        total_recordings=total_recordings,
+        projected_rules=projected_rules,
+        truncated=len(groups) < len(observed_groups) or projected_rules < total_rules,
+        groups=groups,
+        conditions=_conditions(raw),
+    )
+
+
+def _simple_route(
+    raw: Mapping[str, Any], *, tls: bool
+) -> TcpRouteProviderDetail | TlsRouteProviderDetail:
+    parent_statuses = _gateway_route_parent_statuses(raw)
+    detail_type = TlsRouteProviderDetail if tls else TcpRouteProviderDetail
+    return detail_type(
+        hostnames=_text_items_at(raw, "spec", "hostnames") if tls else [],
+        parent_refs=_gateway_route_parent_refs(raw),
+        rules=_gateway_simple_route_rules(raw),
+        parent_statuses=parent_statuses,
+        conditions=parent_statuses[0].conditions if parent_statuses else [],
+    )
+
+
+def _tcp_route(raw: Mapping[str, Any]) -> TcpRouteProviderDetail:
+    return _simple_route(raw, tls=False)
+
+
+def _tls_route(raw: Mapping[str, Any]) -> TlsRouteProviderDetail:
+    return _simple_route(raw, tls=True)
+
+
+def _gateway_simple_route_rules(raw: Mapping[str, Any]) -> list[GatewayRouteRuleDetail]:
+    namespace = _text_at(raw, "metadata", "namespace")
+    return [
+        GatewayRouteRuleDetail(
+            backends=[
+                backend
+                for item in _mapping_items(rule.get("backendRefs"))[:MAX_ROUTE_ITEMS]
+                if (
+                    backend := _gateway_route_backend(
+                        item,
+                        default_namespace=namespace,
+                    )
+                )
+                is not None
+            ]
+        )
+        for rule in _mapping_items_at(raw, "spec", "rules")[:MAX_ROUTE_RULES]
+    ]
+
+
+def _karpenter_selector_terms(
+    raw: Mapping[str, Any], *path: str
+) -> list[KarpenterSelectorTermDetail]:
+    return [
+        KarpenterSelectorTermDetail(
+            id=_text(item.get("id")),
+            name=_text(item.get("name")),
+            alias=_text(item.get("alias")),
+            owner=_text(item.get("owner")),
+            tags=_safe_key_values(_mapping(item.get("tags"))),
+        )
+        for item in _mapping_items_at(raw, *path)
+    ]
+
+
+def _karpenter_resolved_networks(
+    raw: Mapping[str, Any], *path: str
+) -> list[KarpenterResolvedNetworkDetail]:
+    return [
+        KarpenterResolvedNetworkDetail(
+            id=resource_id,
+            name=_text(item.get("name")),
+            zone=_text(item.get("zone")),
+        )
+        for item in _mapping_items_at(raw, *path)
+        if (resource_id := _text(item.get("id"))) is not None
+    ]
+
+
+def _provider_requirements(value: object) -> list[ProviderRequirementDetail]:
+    return [
+        ProviderRequirementDetail(
+            key=key,
+            operator=_text(item.get("operator")),
+            values=_text_items(item.get("values")),
+            min_values=_int(item.get("minValues")),
+        )
+        for item in _mapping_items(value)
+        if (key := _text(item.get("key"))) is not None
+    ]
+
+
+def _requirement_first_value(requirements: list[ProviderRequirementDetail], key: str) -> str | None:
+    requirement = next((item for item in requirements if item.key == key), None)
+    return requirement.values[0] if requirement is not None and requirement.values else None
+
+
+def _provider_taints_at(raw: Mapping[str, Any], *path: str) -> list[ProviderTaint]:
+    return [
+        ProviderTaint(
+            key=key,
+            value=_text(item.get("value")),
+            effect=_text(item.get("effect")),
+        )
+        for item in _mapping_items_at(raw, *path)
+        if (key := _text(item.get("key"))) is not None
+    ]
+
+
+def _keda_triggers(raw: Mapping[str, Any], namespace: str | None) -> list[KedaTriggerDetail]:
+    result: list[KedaTriggerDetail] = []
+    for item in _mapping_items_at(raw, "spec", "triggers"):
+        trigger_type = _text(item.get("type"))
+        if trigger_type is None:
+            continue
+        metadata = _mapping(item.get("metadata"))
+        safe_keys = [
+            key
+            for raw_key in sorted(metadata)
+            if (key := _text(raw_key)) is not None and not _sensitive_dynamic_key(key)
+        ][:MAX_COLLECTION_ITEMS]
+        result.append(
+            KedaTriggerDetail(
+                type=trigger_type,
+                name=_text(item.get("name")),
+                authentication_ref=_named_reference_with_namespace(
+                    _mapping(item.get("authenticationRef")), namespace
+                ),
+                metadata_keys=safe_keys,
+                redacted_metadata_count=len(metadata),
+            )
+        )
+    return result
+
+
+def _keda_scaling_policies(
+    behavior: Mapping[str, Any], direction: Literal["up", "down"]
+) -> list[KedaScalingPolicyDetail]:
+    return [
+        KedaScalingPolicyDetail(
+            direction=direction,
+            type=_text(item.get("type")),
+            value=_int(item.get("value")),
+            period_seconds=_int(item.get("periodSeconds")),
+        )
+        for item in _mapping_items(behavior.get("policies"))
+    ]
+
+
+def _sbom_license(component: Mapping[str, Any]) -> str | None:
+    licenses = _bounded_mapping_items(component.get("licenses"), 1)
+    if not licenses:
+        return None
+    license_detail = _mapping(licenses[0].get("license"))
+    return _text(license_detail.get("id")) or _text(license_detail.get("name"))
+
+
+def _safe_package_url(value: object) -> tuple[str | None, bool]:
+    package_url = _text(value)
+    if package_url is None or not package_url.lower().startswith("pkg:"):
+        return None, False
+    if any(character.isspace() for character in package_url):
+        return None, False
+    qualifier_index = package_url.find("?")
+    fragment_index = package_url.find("#")
+    cut_indexes = [index for index in (qualifier_index, fragment_index) if index >= 0]
+    if not cut_indexes:
+        return package_url, False
+    return package_url[: min(cut_indexes)], qualifier_index >= 0
+
+
+def _trivy_image(raw: Mapping[str, Any]) -> str | None:
+    repository = _safe_image_repository(_text_at(raw, "report", "artifact", "repository"))
+    if repository is None:
+        return None
+    registry = _safe_registry_host(_text_at(raw, "report", "registry", "server"))
+    tag = _safe_image_tag(_text_at(raw, "report", "artifact", "tag"))
+    image = f"{registry}/{repository}" if registry is not None else repository
+    return f"{image}:{tag}" if tag is not None else image
+
+
+def _safe_registry_host(value: str | None) -> str | None:
+    if value is None or any(character.isspace() for character in value):
+        return None
+    candidate = value
+    if "://" in value:
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
+            return None
+        candidate = parsed.netloc
+    if not candidate or "@" in candidate or "/" in candidate:
+        return None
+    return candidate
+
+
+def _safe_image_repository(value: str | None) -> str | None:
+    if value is None or any(character.isspace() for character in value):
+        return None
+    allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-")
+    return value if all(character in allowed for character in value) else None
+
+
+def _safe_image_tag(value: str | None) -> str | None:
+    if value is None or any(character.isspace() for character in value):
+        return None
+    allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+    return value if all(character in allowed for character in value) else None
+
+
+def _safe_external_http_url(value: object) -> str | None:
+    url = _text(value)
+    if url is None or any(character.isspace() for character in url):
+        return None
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    return url
+
+
+def _vulnerability_severity(
+    value: object,
+) -> Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]:
+    normalized = (_text(value) or "UNKNOWN").upper()
+    if normalized in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
+        return normalized
+    return "UNKNOWN"
+
+
+def _reported_or_calculated_count(raw: Mapping[str, Any], field: str, calculated: int) -> int:
+    reported = _nonnegative_safe_int_at(raw, "report", "summary", field)
+    return reported if reported is not None else calculated
+
+
+def _bounded_score(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    score = float(value)
+    return score if isfinite(score) and 0 <= score <= 10 else None
+
+
 PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (INFRASTRUCTURE_GROUP, "AWSMachine"): _aws_machine,
     (INFRASTRUCTURE_GROUP, "AWSManagedCluster"): _aws_managed_cluster,
@@ -1061,7 +2100,13 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (CERT_MANAGER_GROUP, "CertificateRequest"): _certificate_request,
     (COMPLIANCE_GROUP, "ClusterComplianceReport"): _cluster_compliance_report,
     (ARGO_GROUP, "CronWorkflow"): _cron_workflow,
+    (ARGO_GROUP, "Workflow"): _workflow,
     (EXTERNAL_SECRETS_GROUP, "ExternalSecret"): _external_secret,
+    (EXTERNAL_SECRETS_GROUP, "SecretStore"): _secret_store,
+    (EXTERNAL_SECRETS_GROUP, "ClusterSecretStore"): _cluster_secret_store,
+    (SEALED_SECRETS_GROUP, "SealedSecret"): _sealed_secret,
+    ("", "PersistentVolumeClaim"): _persistent_volume_claim,
+    ("", "Secret"): _secret,
     (GATEWAY_GROUP, "GatewayClass"): _gateway_class,
     (INFRASTRUCTURE_GROUP, "GCPMachine"): _gcp_machine,
     (INFRASTRUCTURE_GROUP, "GCPManagedControlPlane"): _gcp_managed_control_plane,
@@ -1069,9 +2114,23 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (GATEWAY_GROUP, "GRPCRoute"): _grpc_route,
     (GATEWAY_GROUP, "HTTPRoute"): _http_route,
     (BATCH_GROUP, "Job"): _job,
+    (KARPENTER_AWS_GROUP, "EC2NodeClass"): _karpenter_ec2_node_class,
+    (KARPENTER_GROUP, "NodeClaim"): _karpenter_node_claim,
+    (KARPENTER_GROUP, "NodePool"): _karpenter_node_pool,
+    (KEDA_GROUP, "ScaledObject"): _keda_scaled_object,
+    (KEDA_GROUP, "ScaledJob"): _keda_scaled_job,
+    (COMPLIANCE_GROUP, "SbomReport"): _sbom_report,
+    (COMPLIANCE_GROUP, "ClusterSbomReport"): _sbom_report,
+    (COMPLIANCE_GROUP, "VulnerabilityReport"): _vulnerability_report,
+    (PROMETHEUS_GROUP, "PrometheusRule"): _prometheus_rule,
+    (GATEWAY_GROUP, "TCPRoute"): _tcp_route,
+    (GATEWAY_GROUP, "TLSRoute"): _tls_route,
 }
 
-PROVIDER_DETAIL_MATCHERS: tuple[ProviderDetailMatcher, ...] = (_crossplane_composite,)
+PROVIDER_DETAIL_MATCHERS: tuple[ProviderDetailMatcher, ...] = (
+    _crossplane_managed_resource,
+    _crossplane_composite,
+)
 
 
 def _conditions(raw: Mapping[str, Any]) -> list[ProviderCondition]:
@@ -1174,12 +2233,31 @@ def _text(value: object) -> str | None:
     return normalized[:MAX_TEXT_LENGTH] if normalized else None
 
 
+def _bounded_text(value: object, limit: int) -> str | None:
+    normalized = _text(value)
+    if normalized is None or len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: max(0, limit - 1)]}…"
+
+
 def _text_at(value: Mapping[str, Any], *path: str) -> str | None:
     return _text(_value_at(value, *path))
 
 
 def _bool(value: object) -> bool | None:
     return value if isinstance(value, bool) else None
+
+
+def _bool_text(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    return None
 
 
 def _bool_at(value: Mapping[str, Any], *path: str) -> bool | None:
@@ -1195,13 +2273,23 @@ def _int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _nonnegative_safe_int_at(value: Mapping[str, Any], *path: str) -> int | None:
+    parsed = _int_at(value, *path)
+    return parsed if parsed is not None and 0 <= parsed <= MAX_SAFE_INTEGER else None
+
+
 def _first_present_int(*values: int | None) -> int | None:
     return next((value for value in values if value is not None), None)
 
 
 def _scalar_text_at(value: Mapping[str, Any], *path: str) -> str | None:
-    raw = _value_at(value, *path)
-    return _text(raw) if isinstance(raw, str) else str(raw) if _int(raw) is not None else None
+    return _scalar_text(_value_at(value, *path))
+
+
+def _scalar_text(value: object) -> str | None:
+    return (
+        _text(value) if isinstance(value, str) else str(value) if _int(value) is not None else None
+    )
 
 
 def _standard_replicas(raw: Mapping[str, Any]) -> ProviderReplicas:
@@ -1243,6 +2331,15 @@ def _named_reference(value: Mapping[str, Any]) -> ProviderNamedReference | None:
         namespace=_text(value.get("namespace")),
         name=name,
     )
+
+
+def _named_reference_with_namespace(
+    value: Mapping[str, Any], default_namespace: str | None
+) -> ProviderNamedReference | None:
+    reference = _named_reference(value)
+    if reference is None or reference.namespace is not None or default_namespace is None:
+        return reference
+    return reference.model_copy(update={"namespace": default_namespace})
 
 
 def _cluster_name(raw: Mapping[str, Any]) -> str | None:
@@ -1301,9 +2398,13 @@ def _mapping_items_at(value: Mapping[str, Any], *path: str) -> list[dict[str, An
 
 
 def _mapping_items(raw: object) -> list[dict[str, Any]]:
+    return _bounded_mapping_items(raw, MAX_COLLECTION_ITEMS)
+
+
+def _bounded_mapping_items(raw: object, limit: int) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
-    return [_mapping(item) for item in raw[:MAX_COLLECTION_ITEMS] if isinstance(item, Mapping)]
+    return [_mapping(item) for item in raw[:limit] if isinstance(item, Mapping)]
 
 
 def _text_items_at(value: Mapping[str, Any], *path: str) -> list[str]:
@@ -1328,6 +2429,25 @@ def _key_values_at(value: Mapping[str, Any], *path: str) -> list[ProviderKeyValu
         if key is not None and normalized is not None:
             result.append(ProviderKeyValue(key=key, value=normalized))
     return result
+
+
+def _safe_key_values_at(value: Mapping[str, Any], *path: str) -> list[ProviderKeyValue]:
+    return _safe_key_values(_mapping_at(value, *path))
+
+
+def _safe_key_values(value: Mapping[str, Any]) -> list[ProviderKeyValue]:
+    result: list[ProviderKeyValue] = []
+    for raw_key, raw in sorted(value.items())[:MAX_COLLECTION_ITEMS]:
+        key = _text(raw_key)
+        normalized = _text(str(raw)) if isinstance(raw, (str, int, float, bool)) else None
+        if key is not None and not _sensitive_dynamic_key(key) and normalized is not None:
+            result.append(ProviderKeyValue(key=key, value=normalized))
+    return result
+
+
+def _sensitive_dynamic_key(value: str) -> bool:
+    normalized = value.strip().lower().replace("_", "-")
+    return any(part in normalized for part in SENSITIVE_DYNAMIC_KEY_PARTS)
 
 
 def _present_at(value: Mapping[str, Any], *path: str) -> bool | None:

@@ -38,6 +38,7 @@ from domains.rca.test_scenarios import test_scenario_by_id, test_scenario_catalo
 from domains.target.management_guard import is_management_registration
 from packages.ai.rule_catalog import validate_catalog_yaml
 from packages.config.constants import Command, CommandStatus
+from packages.config.environments import normalize_environment
 from packages.config.security import RCA_TEST_TARGET_ENVIRONMENTS, rca_test_runs_enabled
 from packages.config.settings import env
 from packages.contracts.auth import Actor
@@ -209,7 +210,7 @@ async def create_test_run(
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_TARGET_NOT_FOUND)
     if is_management_registration(registration):
         raise HTTPException(status_code=400, detail=RCA_TEST_MANAGEMENT_CLUSTER_DENIED)
-    registration_environment = str(registration.get("environment") or "").strip().lower()
+    registration_environment = normalize_environment(str(registration.get("environment") or ""))
     if registration_environment not in RCA_TEST_TARGET_ENVIRONMENTS:
         raise HTTPException(status_code=HTTP_CONFLICT, detail=RCA_TEST_TARGET_ENVIRONMENT_DENIED)
 

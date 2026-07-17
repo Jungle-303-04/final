@@ -17,10 +17,12 @@ from domains.inventory.repository import (
     inventory_resource_key,
     labels_match,
     normalize_inventory_resource,
+    preserve_existing_inventory_keys,
     selector_labels,
     snapshot_resources,
 )
 from domains.inventory.router import (
+    get_cluster_api_resources,
     get_inventory_resource_detail,
     get_inventory_summary,
     list_inventory_workloads,
@@ -209,13 +211,110 @@ def inventory_resource(
 
 
 def test_inventory_resource_key_is_stable_for_same_kubernetes_identity() -> None:
-    first = inventory_resource_key("ws-1", "cluster-1", "workload", "default", "Deployment", "api")
-    second = inventory_resource_key("ws-1", "cluster-1", "workload", "default", "Deployment", "api")
+    first = inventory_resource_key(
+        "ws-1", "cluster-1", "workload", "apps/v1", "default", "Deployment", "api"
+    )
+    second = inventory_resource_key(
+        "ws-1", "cluster-1", "workload", "apps/v1", "default", "Deployment", "api"
+    )
 
     assert first == second
     assert first != inventory_resource_key(
-        "ws-1", "cluster-1", "workload", "prod", "Deployment", "api"
+        "ws-1", "cluster-1", "workload", "apps/v1", "prod", "Deployment", "api"
     )
+
+
+def test_inventory_resource_key_separates_cross_group_resource_identity() -> None:
+    first = inventory_resource_key(
+        "ws-1",
+        "cluster-1",
+        "custom_resource",
+        "alpha.example.io/v1",
+        "default",
+        "Widget",
+        "api",
+    )
+    second = inventory_resource_key(
+        "ws-1",
+        "cluster-1",
+        "custom_resource",
+        "beta.example.io/v1",
+        "default",
+        "Widget",
+        "api",
+    )
+
+    assert first != second
+
+
+def test_existing_inventory_identity_keeps_legacy_key_during_key_upgrade() -> None:
+    observed_at = datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    current = normalize_inventory_resource(
+        {
+            "resource_type": "custom_resource",
+            "api_version": "alpha.example.io/v1",
+            "kind": "Widget",
+            "namespace": "default",
+            "name": "api",
+        },
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-2",
+        observed_at=observed_at,
+    )
+    previous = {**current, "inventory_key": "legacy-key", "snapshot_id": "snapshot-1"}
+
+    preserved = preserve_existing_inventory_keys([current], [previous])
+
+    assert preserved[0]["inventory_key"] == "legacy-key"
+
+
+def test_existing_inventory_key_is_not_reused_across_api_groups() -> None:
+    observed_at = datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    previous = normalize_inventory_resource(
+        {
+            "resource_type": "custom_resource",
+            "api_version": "alpha.example.io/v1",
+            "kind": "Widget",
+            "namespace": "default",
+            "name": "api",
+        },
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-1",
+        observed_at=observed_at,
+    )
+    current = normalize_inventory_resource(
+        {
+            "resource_type": "custom_resource",
+            "api_version": "beta.example.io/v1",
+            "kind": "Widget",
+            "namespace": "default",
+            "name": "api",
+        },
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-2",
+        observed_at=observed_at,
+    )
+
+    preserved = preserve_existing_inventory_keys([current], [previous])
+
+    assert preserved[0]["inventory_key"] == current["inventory_key"]
+    assert preserved[0]["inventory_key"] != previous["inventory_key"]
+
+
+def test_inventory_resource_accepts_full_kubernetes_api_version_length() -> None:
+    api_version = f"{'g' * 253}/{'v' * 63}"
+
+    resource = InventoryResource(
+        resource_type="custom_resource",
+        api_version=api_version,
+        kind="Widget",
+        name="api",
+    )
+
+    assert resource.api_version == api_version
 
 
 def test_snapshot_resources_adds_health_and_usage_rollups() -> None:
@@ -589,6 +688,114 @@ def test_inventory_resource_detail_returns_gateway_route_projection_after_rbac()
     assert "raw" not in response.resource.model_dump()
 
 
+def test_inventory_resource_detail_redacts_keda_trigger_metadata_after_rbac() -> None:
+    scaled_object = inventory_resource("scaledobject", "ScaledObject", "api")
+    scaled_object["api_version"] = "keda.sh/v1alpha1"
+    scaled_object["raw"] = {
+        "metadata": {"namespace": "default"},
+        "spec": {
+            "scaleTargetRef": {"kind": "Deployment", "name": "api"},
+            "triggers": [
+                {
+                    "type": "rabbitmq",
+                    "metadata": {
+                        "queueName": "orders",
+                        "authToken": "must-not-leak-trigger-token",
+                    },
+                    "authenticationRef": {
+                        "kind": "TriggerAuthentication",
+                        "name": "rabbitmq",
+                    },
+                }
+            ],
+        },
+        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="scaledobject",
+            kind="ScaledObject",
+            namespace="default",
+            name="api",
+            related_limit=10,
+            event_limit=10,
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=StubInventoryDb([scaled_object]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "keda-scaled-object"
+    serialized = response.provider_detail.model_dump_json()
+    assert "queueName" in serialized
+    assert "authToken" not in serialized
+    assert "must-not-leak" not in serialized
+    assert "raw" not in response.resource.model_dump()
+
+
+def test_inventory_resource_detail_redacts_vulnerability_payload_after_rbac() -> None:
+    report = inventory_resource(
+        "vulnerabilityreport",
+        "VulnerabilityReport",
+        "api-container",
+    )
+    report["api_version"] = "aquasecurity.github.io/v1alpha1"
+    report["raw"] = {
+        "metadata": {
+            "namespace": "default",
+            "labels": {"trivy-operator.container.name": "api"},
+        },
+        "report": {
+            "artifact": {"repository": "platform/api", "tag": "1.2.3"},
+            "registry": {"server": "registry.example.test"},
+            "summary": {"criticalCount": 1},
+            "vulnerabilities": [
+                {
+                    "vulnerabilityID": "CVE-2026-0001",
+                    "severity": "CRITICAL",
+                    "resource": "openssl",
+                    "primaryLink": "https://user:must-not-leak@example.test/CVE-2026-0001",
+                    "description": "must-not-leak-description",
+                }
+            ],
+        },
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="vulnerabilityreport",
+            kind="VulnerabilityReport",
+            namespace="default",
+            name="api-container",
+            related_limit=10,
+            event_limit=10,
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=StubInventoryDb([report]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "vulnerability-report"
+    serialized = response.provider_detail.model_dump_json()
+    assert "CVE-2026-0001" in serialized
+    assert "must-not-leak" not in serialized
+    assert "primary_link" in serialized
+    assert "raw" not in response.resource.model_dump()
+
+
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     async def run():
         return await get_inventory_summary(
@@ -601,6 +808,80 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
 
     assert response.latest_snapshot == {"snapshot_id": "snapshot-1", "resource_count": 1}
     assert response.counts == [{"resource_type": "workload", "health": "healthy", "count": 1}]
+
+
+def test_cluster_api_resources_returns_latest_dynamic_catalog() -> None:
+    class DiscoveryInventoryDb(StubInventoryDb):
+        def latest_inventory_snapshot(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+        ) -> dict[str, object]:
+            assert workspace_id == "ws-1"
+            assert cluster_id == "cluster-1"
+            return {
+                "snapshot_id": "snapshot-api-1",
+                "summary": {
+                    "summary": {
+                        "api_resource_discovery": {
+                            "observed_at": "2026-07-16T12:00:00Z",
+                            "completeness": "exact",
+                            "reason_codes": [],
+                            "resources": [
+                                {
+                                    "group": "stable.example.com",
+                                    "version": "v1",
+                                    "api_version": "stable.example.com/v1",
+                                    "name": "crontabs",
+                                    "singular_name": "crontab",
+                                    "kind": "CronTab",
+                                    "namespaced": True,
+                                    "is_crd": True,
+                                    "verbs": ["delete", "get", "list"],
+                                }
+                            ],
+                        }
+                    }
+                },
+            }
+
+    async def run():
+        return await get_cluster_api_resources(
+            "cluster-1",
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=DiscoveryInventoryDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.snapshot_id == "snapshot-api-1"
+    assert response.unavailable_reason is None
+    assert response.discovery is not None
+    assert response.discovery.resources[0].kind == "CronTab"
+    assert response.discovery.resources[0].is_crd is True
+
+
+def test_cluster_api_resources_fails_closed_without_observation() -> None:
+    async def run():
+        return await get_cluster_api_resources(
+            "cluster-1",
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=StubInventoryDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.snapshot_id == "snapshot-1"
+    assert response.discovery is None
+    assert response.unavailable_reason == "api_resource_discovery_not_observed"
 
 
 def test_management_cluster_inventory_read_remains_available() -> None:

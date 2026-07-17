@@ -38,6 +38,7 @@ from domains.target.router import (
     router,
     schedule_evidence_jobs,
     target_install_manifest,
+    target_rbac_manifest_for_admin,
     target_registration_preflight,
     unregister_cluster,
     update_cluster_policy,
@@ -61,6 +62,10 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import ClusterSummary
+from packages.contracts.target import (
+    TARGET_RBAC_MANIFEST_VERSION,
+    TARGET_RBAC_VERSION_ANNOTATION,
+)
 
 
 class StubDb:
@@ -471,11 +476,15 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
+    assert 'NODE_CONTROL_ENABLED: "true"' in manifest
+    assert "name: cluster-agent-node-control" in manifest
+    assert 'resources: ["nodes"]\n    verbs: ["get", "patch"]' in manifest
     assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
     assert (
         'name: REALTIME_GATEWAY_URL\n              value: "ws://management.local:30080"' in manifest
     )
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
+    assert 'TARGET_AGENT_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
     assert 'resources: ["pods", "nodes"]' in manifest
@@ -483,6 +492,85 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'resources: ["configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
+
+
+def test_target_install_manifest_versions_admin_applied_rbac() -> None:
+    documents = [
+        item
+        for item in yaml.safe_load_all(target_install_manifest(target_request(), "agent-secret"))
+        if isinstance(item, dict)
+    ]
+    read_role = next(
+        item
+        for item in documents
+        if item.get("kind") == "ClusterRole"
+        and item.get("metadata", {}).get("name") == "cluster-agent-read"
+    )
+
+    assert read_role["metadata"]["annotations"][TARGET_RBAC_VERSION_ANNOTATION] == (
+        TARGET_RBAC_MANIFEST_VERSION
+    )
+    self_manage = next(
+        item
+        for item in documents
+        if item.get("kind") == "Role"
+        and item.get("metadata", {}).get("name") == "cluster-agent-self-manage"
+    )
+    config_rule = next(
+        rule for rule in self_manage["rules"] if rule.get("resources") == ["configmaps"]
+    )
+    assert set(config_rule["resourceNames"]) == {
+        "target-agent-policy",
+        "target-runtime-config",
+    }
+
+
+class _AdminRbacManifestDb:
+    def __init__(self, role: str = "target") -> None:
+        self.role = role
+
+    def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        assert workspace_id == "workspace-a"
+        assert cluster_id == "customer-cluster"
+        settings = target_request().model_dump(exclude={"apply", "kube_context"})
+        settings.update({"cluster_id": cluster_id, "cluster_role": self.role})
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": settings,
+        }
+
+
+def test_admin_rbac_manifest_is_rbac_only_and_excludes_management_cluster() -> None:
+    response = asyncio.run(
+        target_rbac_manifest_for_admin(
+            "customer-cluster",
+            current=SimpleNamespace(workspace_id="workspace-a"),
+            db=_AdminRbacManifestDb(),
+        )
+    )
+    documents = [item for item in yaml.safe_load_all(response.body.decode()) if item]
+    assert documents
+    assert {str(item["kind"]) for item in documents} <= {
+        "Role",
+        "RoleBinding",
+        "ClusterRole",
+        "ClusterRoleBinding",
+    }
+    assert response.headers["x-target-rbac-manifest-version"] == TARGET_RBAC_MANIFEST_VERSION
+    assert all(item["kind"] not in {"Secret", "ConfigMap", "Deployment"} for item in documents)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            target_rbac_manifest_for_admin(
+                "customer-cluster",
+                current=SimpleNamespace(workspace_id="workspace-a"),
+                db=_AdminRbacManifestDb(role="management"),
+            )
+        )
+    assert exc.value.status_code == 400
 
 
 def test_target_uninstall_rbac_is_exact_name_scoped_and_cannot_delete_namespaces() -> None:
@@ -624,7 +712,7 @@ def test_target_install_manifest_does_not_enable_rca_test_actions_without_both_g
     assert "RCA_TEST_RUNS_ENABLED:" not in manifest
 
 
-def test_management_install_manifest_is_read_only() -> None:
+def test_management_install_manifest_limits_writes_to_gitops_controller_resources() -> None:
     request = target_request().model_copy(update={"cluster_role": "management"})
 
     manifest = target_install_manifest(request, "agent-secret")
@@ -638,6 +726,9 @@ def test_management_install_manifest_is_read_only() -> None:
     assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
     assert "cluster-agent-uninstall" not in manifest
+    assert "cluster-agent-node-control" not in manifest
+    assert "cluster-agent-gitops-control" in manifest
+    assert 'NODE_CONTROL_ENABLED: "false"' in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
@@ -650,6 +741,19 @@ def test_management_install_manifest_is_read_only() -> None:
     )
     assert set(argo_rule["resources"]) == {"applications", "rollouts"}
     assert argo_rule["verbs"] == ["get", "list"]
+    control_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ClusterRole"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-gitops-control"
+    )
+    assert {tuple(rule["apiGroups"]) for rule in control_role["rules"]} == {
+        ("argoproj.io",),
+        ("kustomize.toolkit.fluxcd.io",),
+        ("helm.toolkit.fluxcd.io",),
+        ("source.toolkit.fluxcd.io",),
+    }
+    assert all(rule["verbs"] == ["get", "patch"] for rule in control_role["rules"])
 
 
 @pytest.mark.parametrize(
@@ -668,7 +772,7 @@ def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> No
         rule
         for role in read_roles
         for rule in role.get("rules", [])
-        if "argoproj.io" in rule.get("apiGroups", [])
+        if "argoproj.io" in rule.get("apiGroups", []) and "rollouts" in rule.get("resources", [])
     ]
 
     assert len(argo_rules) == 1
@@ -678,13 +782,16 @@ def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> No
     assert forbidden.isdisjoint(argo_rules[0]["verbs"])
 
 
-def test_static_management_agent_manifest_is_read_only() -> None:
+def test_static_management_agent_limits_writes_to_gitops_control() -> None:
     manifest_path = Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml"
     docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
     forbidden_verbs = {"create", "update", "patch", "delete", "deletecollection", "apply"}
 
     for doc in docs:
         if doc.get("kind") not in {"Role", "ClusterRole"}:
+            continue
+        if doc.get("metadata", {}).get("name") == "cluster-agent-gitops-control":
+            assert all(rule["verbs"] == ["get", "patch"] for rule in doc["rules"])
             continue
         verbs = {verb for rule in doc.get("rules", []) for verb in rule.get("verbs", [])}
         assert verbs.isdisjoint(forbidden_verbs)
@@ -706,9 +813,11 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         "name": "management-runtime-config",
         "key": "MANAGEMENT_CLUSTER_ID",
     }
+    assert env["AGENT_DIRECT_COMMANDS_ENABLED"]["value"] == "true"
     assert set(apps_rule["resources"]) == {
         "deployments",
         "replicasets",
+        "controllerrevisions",
         "daemonsets",
         "statefulsets",
     }
@@ -860,6 +969,18 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
             "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
             "query": "*",
             "collection_scope": "cluster_events",
+        },
+        {
+            "name": "cluster_api_discovery",
+            "description": "Discover authorized Kubernetes API resources and CRD identities.",
+            "query": "*",
+            "collection_scope": "cluster_discovery",
+        },
+        {
+            "name": "cluster_access_snapshot",
+            "description": "Collect complete bounded Kubernetes RBAC reverse-lookup evidence.",
+            "query": "*",
+            "collection_scope": "cluster_access",
         },
     ]
     assert all(
@@ -1340,6 +1461,7 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
     assert response.cluster_id == "cluster-1"
     assert response.connection_status == "online"
     assert response.connection_stage == "ready"
+    assert response.refresh_after_seconds == 0.5
     assert response.last_agent_id == "agent-1"
     assert response.agents[0].capabilities == ["inventory", "commands"]
 
@@ -1358,6 +1480,7 @@ def test_cluster_connection_status_reports_pending_install_before_ttl() -> None:
 
     assert response.connection_status == "pending_install"
     assert response.connection_stage == "awaiting_install"
+    assert response.refresh_after_seconds == 0.5
     assert response.connect_timeout_seconds == 1800
     assert response.connect_expires_at == expires_at
 
@@ -1376,6 +1499,7 @@ def test_cluster_connection_status_reports_install_expired_after_ttl() -> None:
 
     assert response.connection_status == "install_expired"
     assert response.connection_stage == "expired"
+    assert response.refresh_after_seconds is None
 
 
 def test_cluster_summary_registered_provider_overrides_detected_provider() -> None:
@@ -2435,11 +2559,96 @@ def test_install_manifest_injects_control_namespaces_when_specified() -> None:
     assert 'CONTROL_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
     assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
 
+    docs = [document for document in yaml.safe_load_all(manifest) if document]
+    cronjob_roles = [
+        document
+        for document in docs
+        if document.get("kind") == "Role"
+        and document.get("metadata", {}).get("name") == "cluster-agent-cronjob-control"
+    ]
+    cronjob_bindings = [
+        document
+        for document in docs
+        if document.get("kind") == "RoleBinding"
+        and document.get("metadata", {}).get("name") == "cluster-agent-cronjob-control"
+    ]
+    assert {role["metadata"]["namespace"] for role in cronjob_roles} == {
+        "sandbox",
+        "prod-web",
+    }
+    assert {binding["metadata"]["namespace"] for binding in cronjob_bindings} == {
+        "sandbox",
+        "prod-web",
+    }
+    for role in cronjob_roles:
+        assert role["rules"] == [
+            {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create"]},
+            {"apiGroups": ["batch"], "resources": ["cronjobs"], "verbs": ["patch"]},
+        ]
+
 
 def test_install_manifest_omits_control_namespaces_by_default() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
     assert "CONTROL_ALLOWED_NAMESPACES" not in manifest
     assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox"' in manifest
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        target_install_manifest(target_request(), "agent-secret"),
+        (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text(
+            encoding="utf-8"
+        ),
+    ],
+)
+def test_target_manifest_packages_exact_cronjob_read_and_control_rbac(manifest: str) -> None:
+    docs = [document for document in yaml.safe_load_all(manifest) if document]
+    read_role = next(
+        document
+        for document in docs
+        if document.get("kind") == "ClusterRole"
+        and document.get("metadata", {}).get("name") == "cluster-agent-read"
+    )
+    batch_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == ["batch"])
+    assert batch_read == {
+        "apiGroups": ["batch"],
+        "resources": ["jobs", "cronjobs"],
+        "verbs": ["get", "list", "watch"],
+    }
+    apps_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == ["apps"])
+    assert set(apps_read["resources"]) == {
+        "deployments",
+        "replicasets",
+        "controllerrevisions",
+        "daemonsets",
+        "statefulsets",
+    }
+    assert apps_read["verbs"] == ["get", "list", "watch"]
+    core_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == [""])
+    assert {"serviceaccounts", "resourcequotas"}.issubset(core_read["resources"])
+    rbac_read = next(
+        rule
+        for rule in read_role["rules"]
+        if rule.get("apiGroups") == ["rbac.authorization.k8s.io"]
+    )
+    assert rbac_read == {
+        "apiGroups": ["rbac.authorization.k8s.io"],
+        "resources": ["roles", "clusterroles", "rolebindings", "clusterrolebindings"],
+        "verbs": ["get", "list", "watch"],
+    }
+
+    control_role = next(
+        document
+        for document in docs
+        if document.get("kind") == "Role"
+        and document.get("metadata", {}).get("name") == "cluster-agent-cronjob-control"
+    )
+    assert control_role["metadata"]["namespace"] == "sandbox"
+    assert control_role["rules"] == [
+        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create"]},
+        {"apiGroups": ["batch"], "resources": ["cronjobs"], "verbs": ["patch"]},
+    ]
 
 
 def test_dev_runtime_can_default_target_control_namespaces(monkeypatch) -> None:

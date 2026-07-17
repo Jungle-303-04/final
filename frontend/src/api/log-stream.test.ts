@@ -14,7 +14,7 @@ describe("log stream API", () => {
   it("encodes exact pod identity and parses strict default-message envelopes", async () => {
     const onEvent = vi.fn();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse([
-      { type: "connected", stream_id: "stream-1" },
+      { type: "connected", stream_id: "stream-1", containers: ["app", "sidecar"] },
       {
         type: "log",
         id: "line-1",
@@ -115,7 +115,7 @@ describe("log stream API", () => {
   it("fails closed when the transport reaches EOF without a terminal envelope", async () => {
     const onFailure = vi.fn();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse([
-      { type: "connected", stream_id: "stream-1" },
+      { type: "connected", stream_id: "stream-1", containers: [] },
     ]));
 
     openPodLogStream("cluster-1", "shop", "checkout", null, {

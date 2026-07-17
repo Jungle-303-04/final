@@ -47,7 +47,11 @@ describe("ProductShell bottom log dock", () => {
 
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
     flushEventFrame(() => {
-      stream.emit("checkout", { type: "connected", streamId: "stream-checkout" });
+      stream.emit("checkout", {
+        type: "connected",
+        streamId: "stream-checkout",
+        containers: ["app"],
+      });
       stream.emit("checkout", {
         type: "log",
         id: "line-1",
@@ -67,7 +71,7 @@ describe("ProductShell bottom log dock", () => {
     await user.click(screen.getByRole("button", { name: "payment 로그 열기" }));
     flushEventFrame(() => stream.emit(
       "payment",
-      { type: "connected", streamId: "stream-payment" },
+      { type: "connected", streamId: "stream-payment", containers: ["app"] },
     ));
     expect(screen.getByRole("tab", { name: /로그: checkout/u })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /로그: payment/u })).toBeTruthy();
@@ -101,7 +105,7 @@ describe("ProductShell bottom log dock", () => {
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
     flushEventFrame(() => stream.emit(
       "checkout",
-      { type: "connected", streamId: "stream-checkout" },
+      { type: "connected", streamId: "stream-checkout", containers: ["app"] },
     ));
     await waitFor(() => expect(screen.getByText("실시간")).toBeTruthy());
     await user.click(screen.getByRole("button", { name: "현재 로그를 Opsia AI에 질문" }));
@@ -131,7 +135,11 @@ describe("ProductShell bottom log dock", () => {
     const second = stream.latest("checkout");
     expect(second).not.toBe(first);
     first.onFailure(new LogStreamFailure("offline"));
-    flushEventFrame(() => second.onEvent({ type: "connected", streamId: "stream-current" }));
+    flushEventFrame(() => second.onEvent({
+      type: "connected",
+      streamId: "stream-current",
+      containers: ["app"],
+    }));
     await waitFor(() => expect(screen.getByText("실시간")).toBeTruthy());
     expect(screen.queryByText("연결 실패")).toBeNull();
   });

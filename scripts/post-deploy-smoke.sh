@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/env.sh"
+source "${SCRIPT_DIR}/lib/cluster-curl.sh"
 
 BASE_URL="${BASE_URL:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-}"
@@ -15,6 +16,7 @@ EXPECTED_CONSOLE_IMAGE="${EXPECTED_CONSOLE_IMAGE:-}"
 SERVICE_ROLLBACK_PLAN="${SERVICE_ROLLBACK_PLAN:-}"
 CONSOLE_ROLLBACK_PLAN="${CONSOLE_ROLLBACK_PLAN:-}"
 SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
+CLUSTER_CURL_POD_PREFIX="deploy-smoke-post"
 IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
 IN_CLUSTER_CONSOLE_URL="http://console-dev.${MGMT_NS}.svc.cluster.local"
 
@@ -61,21 +63,6 @@ cleanup() {
   rm -f "${index_file}" "${health_file}" "${port_forward_log}"
 }
 trap cleanup EXIT
-
-cluster_curl() {
-  local url="$1"
-  local pod_name="deploy-smoke-post-${GITHUB_RUN_ID:-local}-${RANDOM}"
-
-  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" run "${pod_name}" \
-    --rm -i --restart=Never \
-    --image="${SMOKE_CURL_IMAGE}" \
-    --quiet -- \
-    curl --silent --show-error \
-      --connect-timeout 5 \
-      --max-time 15 \
-      --write-out $'\n%{http_code}' \
-      "${url}"
-}
 
 start_api_port_forward() {
   local attempt

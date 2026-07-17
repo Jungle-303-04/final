@@ -130,6 +130,8 @@ def _issue() -> dict[str, object]:
         "resource_name": "checkout",
         "symptom": "CrashLoopBackOff",
         "severity": "critical",
+        "category": "container_restart",
+        "category_completeness": "exact",
         "issue_state": "open",
         "current_subject": "incidents.detected",
         "pipeline_status": "followup_required",
@@ -159,6 +161,8 @@ def test_issue_filter_item_separates_list_and_detail_identity() -> None:
     assert item.issue_id != item.detail_id
     assert item.cluster_id == "cluster-a"
     assert item.issue_state == "open"
+    assert item.category == "container_restart"
+    assert item.category_completeness == "exact"
     assert item.pipeline_status == "followup_required"
 
     issue_without_detail = _issue() | {"detail_id": None}

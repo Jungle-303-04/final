@@ -268,6 +268,24 @@ class RepoChangeRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
+    def delete_workspace_credential(self, workspace_id: str, provider: str, scope: str) -> bool:
+        """Delete one exact workspace credential scope without reading its secret value."""
+
+        if not workspace_id or not provider or not scope:
+            return False
+        table = WorkspaceCredential.__table__
+        statement = (
+            table.delete()
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.provider == provider,
+                table.c.scope == scope,
+            )
+            .returning(table.c.credential_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).scalar_one_or_none() is not None
+
     def get_repository_by_ref(self, workspace_id: str, repo_ref: str) -> JsonObject | None:
         if not workspace_id or not repo_ref:
             return None

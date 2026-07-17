@@ -430,6 +430,61 @@ def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("handler", "expected_status", "expected_message"),
+    [
+        (release_router.pause_release_run, "paused", "Release run paused."),
+        (release_router.resume_release_run, "running", "Release run resumed."),
+    ],
+)
+def test_pause_and_resume_release_run_use_the_shared_audited_transition(
+    monkeypatch,
+    handler,
+    expected_status: str,
+    expected_message: str,
+) -> None:
+    db = ReleaseRunActionDb()
+    permissions: list[str] = []
+
+    def allow_permission(
+        _db: object,
+        _current: object,
+        _workspace_id: str,
+        _steps: list[dict[str, object]],
+        permission: str,
+    ) -> None:
+        permissions.append(permission)
+
+    monkeypatch.setattr(
+        release_router,
+        "require_plan_application_permission_access",
+        allow_permission,
+    )
+    current = SimpleNamespace(
+        workspace_id="workspace-a",
+        user_id="operator",
+        roles=("release_operator",),
+    )
+
+    response = asyncio.run(
+        handler(
+            "release-run-1",
+            release_router.ReleaseRunActionRequest(reason="operator handoff"),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.run["run_id"] == "release-run-1"
+    assert permissions == [release_router.Permission.DEPLOY_RUN.value]
+    assert db.updated[0]["args"] == ("workspace-a", "release-run-1", expected_status)
+    assert db.updated[0]["message"] == expected_message
+    assert db.updated[0]["details"] == {
+        "reason": "operator handoff",
+        "operator_action": expected_status,
+    }
+
+
 def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
     db = ReleaseRunActionDb()
     events = AcceptingEventGateway()

@@ -2,7 +2,13 @@
 
 실제 서비스 통합 기준은 AWS EKS의 management/target 클러스터다. live 제품 배포의 유일한
 진입점은 `.github/workflows/dev-deploy.yml`이다. 이 workflow는 Dev Gate 성공 SHA만 받아
-service와 console을 같은 SHA의 immutable digest로 배포하고 `scripts/smoke.sh`를 실행한다.
+최신 원본·UI delta·feature-ledger 구조를 다시 검증하고, service와 console을 같은 SHA의
+immutable digest로 배포한 뒤 `scripts/smoke.sh`를 실행한다.
+
+증분 Dev 패치는 `make release-governance-web-patch`를 통과해야 한다. 이 게이트는 미완료
+동등성 행을 완료로 바꾸지 않으며, frozen source 무결성·최신 UI delta 전수 분류·기능 계약
+구조를 검증한다. 최종 Python/React 동등성 인증은 별도의
+`make release-governance-web`이 모든 baseline 행을 완료로 판정할 때만 통과한다.
 
 이 변경은 제품 내부 자동화를 제거한다는 뜻이 아니다. `workflow-controller`와 GitOps 이벤트
 체인은 계속 배포 정의, 승인, 적용, 롤아웃을 자동으로 처리한다. 여기서 없앤 것은 저장소 밖의

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, fields, is_dataclass
 from typing import Any, cast
@@ -18,7 +17,7 @@ from packages.contracts.event_bus.interfaces import (
 from packages.contracts.gateway.fields import Gateway
 from packages.events.bus import RecordedEventClient
 from packages.events.envelope import event
-from packages.storage.engine import has_active_connection
+from packages.runtime.async_db import run_sync_with_uow_affinity
 from packages.storage.retry import to_thread_db_retry
 
 LOGGER = get_logger(__name__)
@@ -103,10 +102,7 @@ class ApiEventGateway:
                 if transactional_stage is not None:
                     transactional_stage(conn, evt)
 
-        if has_active_connection():
-            await asyncio.to_thread(stage)
-        else:
-            await to_thread_db_retry(stage)
+        await run_sync_with_uow_affinity(stage, thread_runner=to_thread_db_retry)
         return AcceptedEvent(evt)
 
     async def accept_body(

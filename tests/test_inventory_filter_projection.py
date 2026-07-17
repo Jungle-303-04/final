@@ -84,6 +84,7 @@ def test_filter_projection_models_preserve_temporal_snapshot_and_index_contract(
 
     assert isinstance(revision.c.revision_id.type, BigInteger)
     assert revision.c.snapshot_id.unique is True
+    assert revision.c.change_ledger_epoch.nullable is True
     assert version.c.valid_to_revision.nullable is True
     assert version.c.content_hash.nullable is False
     assert tuple(column.name for column in label.primary_key.columns) == ("version_id", "key")

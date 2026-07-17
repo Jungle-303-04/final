@@ -2,6 +2,7 @@ import {
   createEmptyProductDetailQuery,
   type ProductDetailQuery,
   type CostRange,
+  type RightsizingClassFilter,
   type TimelineRange,
 } from "./filterContract";
 import { parseBooleanQuery } from "./filterUrlScalars";
@@ -10,6 +11,7 @@ import {
   appendNullableStableText,
   appendText,
   hasQueryKey,
+  isKubernetesNamespace,
   readMultiValues,
   readStableText,
   type StrictQuery,
@@ -20,6 +22,7 @@ const WORKFLOW_VIEWS = ["overview", "edit", "runs", "yaml"] as const;
 const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 const COST_RANGES = ["6h", "24h", "7d"] as const;
+const RIGHTSIZING_CLASSES = ["increase", "reduction", "review", "in_range", "need_data"] as const;
 
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
   appendNullableStableText(pairs, "detail", detail.detail);
@@ -48,6 +51,10 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   if (detail.costRange && detail.costRange !== "24h") {
     appendText(pairs, "cost.range", detail.costRange);
   }
+  if (detail.rightsizingClass) appendText(pairs, "rfClass", detail.rightsizingClass);
+  appendNullableStableText(pairs, "rfKind", detail.rightsizingKind ?? null);
+  appendNullableStableText(pairs, "rfNs", detail.rightsizingNamespace ?? null);
+  appendNullableStableText(pairs, "rfQ", detail.rightsizingQuery ?? null);
   if (detail.timeAt !== undefined) appendText(pairs, "t.at", String(detail.timeAt));
   if (detail.graphCollapsed) appendText(pairs, "graph", "0");
 }
@@ -87,6 +94,18 @@ export function parseProductDetailQuery(
   const costRange = readScalar(params, "cost.range", invalidCostRange);
   if (costRange !== null && isCostRange(costRange)) detail.costRange = costRange;
   else if (costRange !== null) invalidCostRange.push(costRange);
+  const rightsizingClass = readStableText(params, "rfClass");
+  if (rightsizingClass !== null && isRightsizingClass(rightsizingClass)) {
+    detail.rightsizingClass = rightsizingClass;
+  }
+  const rightsizingKind = boundedStableText(params, "rfKind", 253);
+  if (rightsizingKind !== null) detail.rightsizingKind = rightsizingKind;
+  const rightsizingNamespace = readStableText(params, "rfNs");
+  if (rightsizingNamespace !== null && isKubernetesNamespace(rightsizingNamespace)) {
+    detail.rightsizingNamespace = rightsizingNamespace;
+  }
+  const rightsizingQuery = boundedStableText(params, "rfQ", 200);
+  if (rightsizingQuery !== null) detail.rightsizingQuery = rightsizingQuery;
   const timeAt = readScalar(params, "t.at", invalidTimeAt);
   if (timeAt !== null && /^\d{1,16}$/.test(timeAt)) {
     const parsed = Number(timeAt);
@@ -111,6 +130,19 @@ function isTimelineRange(value: string): value is TimelineRange {
 
 function isCostRange(value: string): value is CostRange {
   return COST_RANGES.some((range) => range === value);
+}
+
+function isRightsizingClass(value: string): value is RightsizingClassFilter {
+  return RIGHTSIZING_CLASSES.some((classification) => classification === value);
+}
+
+function boundedStableText(
+  params: StrictQuery,
+  key: string,
+  maxLength: number,
+): string | null {
+  const value = readStableText(params, key);
+  return value !== null && value.length <= maxLength ? value : null;
 }
 
 function isResourceTopologyView(

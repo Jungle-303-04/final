@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Index, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,6 +49,18 @@ class TimelineLedgerEvent(Base):
             "namespace",
             "occurred_at",
             "sequence",
+        ),
+        Index(
+            "ix_timeline_events_inventory_changes",
+            "workspace_id",
+            "cluster_id",
+            "occurred_at",
+            "event_id",
+            postgresql_where=text(
+                "source = 'inventory' "
+                "AND activity = 'change' "
+                "AND event_type IN ('add', 'update', 'delete')"
+            ),
         ),
     )
 

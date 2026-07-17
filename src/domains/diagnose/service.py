@@ -41,6 +41,10 @@ class UnavailableDiagnoseEngine:
     async def start(self, run: DiagnoseRun) -> None:
         raise RuntimeError("a Diagnose engine adapter is required before a run can start")
 
+    async def continue_run(self, run: DiagnoseRun, question: str) -> None:
+        del run, question
+        raise RuntimeError("a Diagnose engine adapter is required before a turn can start")
+
 
 class DiagnoseService:
     """Coordinates durable state first, stream fan-out second, and engine dispatch last."""
@@ -137,6 +141,58 @@ class DiagnoseService:
             created=created,
             deduplicated=not created,
         )
+
+    async def add_turn(self, run: DiagnoseRun, question: str) -> DiagnoseRunTransition:
+        timestamp = self._now()
+        transition = await self._repository.transition(
+            run,
+            expected_statuses=("completed",),
+            next_status="running",
+            event=DiagnoseEventDraft(
+                kind="turn",
+                payload={"question": question},
+                occurred_at=timestamp,
+            ),
+        )
+        if not transition.changed:
+            return transition
+        assert transition.event is not None
+        await self._stream.publish(transition.event, scope=transition.run.target.scope)
+        try:
+            await self._engine.continue_run(transition.run, question)
+        except Exception as error:
+            failed = await self._repository.transition(
+                transition.run,
+                expected_statuses=("running",),
+                next_status="failed",
+                status_reason=_adapter_error_reason(error),
+                event=DiagnoseEventDraft(
+                    kind="error",
+                    payload={"code": "engine_turn_failed", "status": "failed"},
+                    occurred_at=self._now(),
+                ),
+            )
+            if failed.changed:
+                assert failed.event is not None
+                await self._stream.publish(failed.event, scope=failed.run.target.scope)
+            return failed
+        return transition
+
+    async def stop_run(self, run: DiagnoseRun) -> DiagnoseRunTransition:
+        transition = await self._repository.transition(
+            run,
+            expected_statuses=("queued", "running", "awaiting_confirmation"),
+            next_status="stopped",
+            event=DiagnoseEventDraft(
+                kind="closed",
+                payload={"status": "stopped", "reason": "user_requested"},
+                occurred_at=self._now(),
+            ),
+        )
+        if transition.changed:
+            assert transition.event is not None
+            await self._stream.publish(transition.event, scope=transition.run.target.scope)
+        return transition
 
 
 def _phase_payload(status: str, reason: str | None = None) -> dict[str, str]:

@@ -27,7 +27,26 @@ const ISSUE_LIST = {
     issue_severity: "critical",
     severity_availability: "available",
     severity_reason_code: null,
+    category: "container_restart",
+    category_availability: "available",
+    category_reason_code: null,
   }],
+  total: 1,
+  total_matched: 3,
+  count_completeness: "exact",
+  recent_changes: [],
+  visibility: {
+    state: "partial",
+    completeness: "partial",
+    authorized_cluster_count: 1,
+    requested_namespaces: ["cluster-1/payments"],
+    reason_codes: ["legacy_category_projection_incomplete"],
+  },
+  facets: {
+    namespaces: [{ value: "cluster-1/payments", count: 3 }],
+    severities: [{ value: "critical", count: 2 }],
+    categories: [{ value: "container_restart", count: 2 }],
+  },
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -43,9 +62,15 @@ describe("additive RCA Issues API", () => {
   it("reads the versioned additive projection without changing the legacy timeline route", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(ISSUE_LIST));
 
-    await expect(listRcaIssues({ clusterId: "cluster-1", limit: 25 })).resolves.toEqual(ISSUE_LIST);
+    await expect(listRcaIssues({
+      clusterId: "cluster-1",
+      namespaces: ["cluster-1/payments"],
+      severities: ["critical"],
+      categories: ["container_restart"],
+      limit: 25,
+    })).resolves.toEqual(ISSUE_LIST);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/dashboard/rca/issues?cluster_id=cluster-1&limit=25",
+      "/api/dashboard/rca/issues?cluster_id=cluster-1&namespaces=cluster-1%2Fpayments&severity=critical&category=container_restart&contract_version=2&limit=25",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -57,6 +82,12 @@ describe("additive RCA Issues API", () => {
         issue_severity: null,
         severity_availability: "available",
       }],
+      total: 1,
+      total_matched: 1,
+      count_completeness: "exact",
+      recent_changes: [],
+      visibility: ISSUE_LIST.visibility,
+      facets: ISSUE_LIST.facets,
     }));
 
     await expect(listRcaIssues()).rejects.toMatchObject({ kind: "invalid-payload" });

@@ -44,7 +44,8 @@ interface ResourcesDataFrameInput {
   onRequestSuccess: (target: ResourcesRequestTarget) => void;
   port: ResourcesPort;
   reportUnauthorized: () => void;
-  revision: number;
+  catalogRevision: number;
+  listRevision: number;
   selectedClusterExists: boolean;
   selectedClusterId: string | null;
   selectedResourceType: string | null;
@@ -62,7 +63,8 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     onRequestSuccess,
     port,
     reportUnauthorized,
-    revision,
+    catalogRevision,
+    listRevision,
     selectedClusterExists,
     selectedClusterId,
     selectedResourceType,
@@ -146,7 +148,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     const request = acquireSharedRequest(
       port,
-      `resources:catalog:${catalogScope}:r${revision}`,
+      `resources:catalog:${catalogScope}:r${catalogRevision}`,
       (signal) => port.loadCatalog(selectedClusterId, signal),
     );
     void request.promise.then(
@@ -164,7 +166,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     return () => { active = false; request.release(); };
   }, [
     catalogQuerySupported, catalogScope, handleFailure, onRequestSuccess, port, recoverDeniedTarget,
-    revision, selectedClusterId,
+    catalogRevision, selectedClusterId,
   ]);
 
   const selectedTypeExists = catalog.phase === "ready" && selectedResourceType !== null &&
@@ -184,7 +186,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     const request = acquireSharedRequest(
       port,
-      `resources:list:${listScope}:r${revision}`,
+      `resources:list:${listScope}:r${listRevision}`,
       (signal) => port.listResources(selectedClusterId, {
         includeDeleted,
         limit: RESOURCE_LIST_LIMIT,
@@ -207,7 +209,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     return () => { active = false; request.release(); };
   }, [
     handleFailure, includeDeleted, listScope, namespace, onRequestSuccess, port,
-    recoverDeniedTarget, revision, selectedClusterId, selectedResourceType,
+    recoverDeniedTarget, listRevision, selectedClusterId, selectedResourceType,
   ]);
 
   const detailScope = detailIdentity && detailClusterId
@@ -225,7 +227,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     const request = acquireSharedRequest(
       port,
-      `resources:detail:${detailScope}:r${revision}`,
+      `resources:detail:${detailScope}:r${listRevision}`,
       (signal) => port.loadResourceDetail(detailClusterId, detailIdentity, signal),
     );
     void request.promise.then(
@@ -243,7 +245,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     return () => { active = false; request.release(); };
   }, [
     detailClusterId, detailIdentity, detailScope, handleFailure, onRequestSuccess, port,
-    recoverDeniedTarget, revision,
+    recoverDeniedTarget, listRevision,
   ]);
 
   return {

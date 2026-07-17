@@ -17,6 +17,10 @@ export interface IssuesSurfaceCopy {
   listEmpty: string;
   listLoading: string;
   listCount: (count: number) => string;
+  listMatchedCount: (returned: number, matched: number) => string;
+  visibilityLabel: string;
+  visibilityPartial: string;
+  visibilityRestricted: string;
   listBrowseResources: string;
   listBrowseAlerts: string;
   detailLabel: string;

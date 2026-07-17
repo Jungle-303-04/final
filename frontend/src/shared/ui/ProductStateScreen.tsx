@@ -165,6 +165,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
       <section
         aria-labelledby={titleId}
         className="grid min-h-full place-items-center bg-background p-6 text-foreground"
+        data-product-state={kind}
         tabIndex={-1}
       >
         {content}
@@ -176,6 +177,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
     <main
       aria-labelledby={titleId}
       className="grid min-h-svh place-items-center bg-background p-6 text-foreground"
+      data-product-state={kind}
       id="product-main"
       tabIndex={-1}
     >

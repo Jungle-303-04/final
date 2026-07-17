@@ -182,6 +182,27 @@ class InventoryFilterApiDb:
             ),
         }
 
+    def search_resource_identities(self, **kwargs: Any) -> dict[str, Any]:
+        self.data_calls.append(("resource-search", dict(kwargs)))
+        resource = _resource()
+        return {
+            "items": [
+                {
+                    "id": resource["inventory_key"],
+                    "cluster_id": resource["cluster_id"],
+                    "api_version": resource["api_version"],
+                    "kind": resource["kind"],
+                    "namespace": resource["namespace"],
+                    "name": resource["name"],
+                    "uid": resource["uid"],
+                    "resource_type": resource["resource_type"],
+                    "observed_at": resource["observed_at"],
+                    "matched_fields": ["name"],
+                }
+            ],
+            "total": 1,
+        }
+
     def list_label_facets(self, **kwargs: Any) -> dict[str, Any]:
         self.data_calls.append(("labels", dict(kwargs)))
         return {
@@ -424,6 +445,51 @@ def test_global_filter_facets_do_not_turn_missing_projection_into_exact_zero() -
     assert body.applications[0].count_completeness == "unavailable"
 
 
+def test_resource_search_returns_exact_identity_and_authorized_scopes() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    client, _auth = _make_client(db)
+
+    response = client.get(
+        "/search",
+        params={
+            "q": "checkout",
+            "clusters": CLUSTER_ID,
+            "namespaces": f"{CLUSTER_ID}/shop",
+            "include": "resources",
+            "globalNs": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scopes"] == [
+        {
+            "workspace_id": WORKSPACE_ID,
+            "cluster_id": CLUSTER_ID,
+            "namespaces": [],
+            "freshness": "live",
+        }
+    ]
+    assert body["hits"][0]["resource"] == {
+        "api_group": "apps",
+        "version": "v1",
+        "kind": "Deployment",
+        "namespace": "shop",
+        "name": "checkout",
+        "uid": "uid-checkout",
+    }
+    assert body["hits"][0]["resource_type"] == "workload"
+    assert body["hits"][0]["matched_fields"] == ["name"]
+    assert body["total"] == 1
+    assert body["total_completeness"] == "exact"
+    call = [item for item in db.data_calls if item[0] == "resource-search"][-1][1]
+    assert call["filters"].clusters == (CLUSTER_ID,)
+    assert call["filters"].namespaces == ()
+
+
 @pytest.mark.parametrize(
     ("query", "forbidden_value"),
     [
@@ -494,6 +560,84 @@ def test_resources_returns_strict_rows_and_normalizes_all_filter_axes() -> None:
     assert filters.include_deleted is True
     assert kwargs["allowed_cluster_ids"] == {"cluster-a", "tenant/eu/prod"}
     assert kwargs["allowed_application_ids"] == {"app-a", "app-b"}
+
+
+def test_resources_attaches_pinned_pod_and_node_table_metrics_to_existing_rows() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    pod = {
+        **_resource(),
+        "inventory_key": "cluster-a:v1:Pod:shop:checkout-0",
+        "snapshot_id": "snapshot-42",
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "name": "checkout-0",
+        "uid": "uid-checkout-0",
+        "summary": {
+            "cpu_mcores": 250,
+            "mem_mib": 192,
+            "cpu_request_mcores": 150,
+            "cpu_limit_mcores": 600,
+            "mem_request_mib": 192,
+            "mem_limit_mib": 384,
+            "metrics_observed_at": "2026-07-17T01:00:00Z",
+            "metrics_window": "30s",
+        },
+    }
+    node = {
+        **_resource(),
+        "inventory_key": "cluster-a:v1:Node::worker-a",
+        "snapshot_id": "snapshot-42",
+        "resource_type": "node",
+        "api_version": "v1",
+        "kind": "Node",
+        "namespace": None,
+        "name": "worker-a",
+        "uid": "uid-worker-a",
+        "summary": {
+            "cpu_mcores": 1200,
+            "mem_mib": 4096,
+            "allocatable": {"cpu": "3900m", "memory": "8Gi", "pods": "58"},
+            "pod_count": 23,
+            "metrics_observed_at": "2026-07-17T01:00:00Z",
+            "metrics_window": "30s",
+        },
+    }
+
+    def list_rows(**kwargs: Any) -> dict[str, Any]:
+        db.data_calls.append(("resources", dict(kwargs)))
+        return {
+            "items": [
+                {
+                    "resource": resource,
+                    "cluster": {"cluster_id": CLUSTER_ID, "name": "prod", "provider": "eks"},
+                    "application_ids": [],
+                    "application_binding_completeness": "exact",
+                }
+                for resource in (pod, node)
+            ],
+            "filtered_count": 2,
+            "unfiltered_count": 2,
+            "has_more": False,
+            "next_position": None,
+        }
+
+    db.list_filtered_resources = list_rows  # type: ignore[method-assign]
+    client, _auth = _make_client(db)
+
+    response = client.get("/resources", params={"clusters": CLUSTER_ID})
+
+    assert response.status_code == 200
+    body = FilteredInventoryResourceListResponse.model_validate(response.json())
+    assert body.snapshot.snapshot_revision == 42
+    assert body.items[0].metrics.kind == "pod"
+    assert body.items[0].metrics.cpu_limit_mcores == 600
+    assert body.items[1].metrics.kind == "node"
+    assert body.items[1].metrics.cpu_allocatable_mcores == 3900
+    assert body.items[1].metrics.pod_count == 23
 
 
 def test_resources_signed_cursor_rejects_changed_filter_auth_and_workspace() -> None:

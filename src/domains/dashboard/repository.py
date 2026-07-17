@@ -13,6 +13,7 @@ from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
+from domains.dashboard.ready_stream import DashboardReadySnapshot
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
@@ -175,6 +176,71 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
 
 class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
+
+    def latest_dashboard_ready_snapshot(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> DashboardReadySnapshot | None:
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(table.c.snapshot_id, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
+            )
+            .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return (
+            DashboardReadySnapshot(
+                snapshot_id=str(row["snapshot_id"]),
+                created_at=row["created_at"],
+            )
+            if row is not None
+            else None
+        )
+
+    def list_dashboard_ready_snapshots(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        after: DashboardReadySnapshot,
+        limit: int,
+    ) -> tuple[DashboardReadySnapshot, ...]:
+        effective_limit = max(1, min(int(limit), 100))
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(table.c.snapshot_id, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
+                or_(
+                    table.c.created_at > after.created_at,
+                    and_(
+                        table.c.created_at == after.created_at,
+                        table.c.snapshot_id > after.snapshot_id,
+                    ),
+                ),
+            )
+            .order_by(table.c.created_at.asc(), table.c.snapshot_id.asc())
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return tuple(
+            DashboardReadySnapshot(
+                snapshot_id=str(row["snapshot_id"]),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        )
 
     def list_metric_query_presets(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
         table = MetricQueryPreset.__table__
@@ -358,7 +424,13 @@ class DashboardRepository(DatabaseConnection):
             key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
             for key in preserve_when_missing
         }
-        for value_name in ("severity", "environment", "application_ids", "labels"):
+        for value_name in (
+            "severity",
+            "category",
+            "environment",
+            "application_ids",
+            "labels",
+        ):
             complete_name = f"{value_name}_complete"
             existing_value = getattr(table.c, value_name)
             incoming_value = getattr(insert.excluded, value_name)
@@ -919,6 +991,8 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
     raw_severity = _first_string(payload, ("severity",))
     severity = raw_severity.casefold() if raw_severity is not None else None
+    raw_category = _first_string(payload, ("incident", "category"), ("category",))
+    category = raw_category.casefold() if raw_category is not None else None
     is_incident_detection = str(evt.subject) == EventSubject.INCIDENT_DETECTED.value
     row: JsonObject = {
         "workspace_id": workspace_id,
@@ -928,6 +1002,8 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
         **projection,
         "severity": severity if is_incident_detection else None,
         "severity_complete": is_incident_detection and severity is not None,
+        "category": category if is_incident_detection else None,
+        "category_complete": is_incident_detection and category is not None,
         "environment": None,
         "environment_complete": False,
         "application_ids": None,

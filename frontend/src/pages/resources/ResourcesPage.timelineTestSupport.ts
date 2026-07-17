@@ -19,6 +19,16 @@ export function resourcesChangeTimelinePort(
         severity: "critical",
       }],
       gaps: [],
+      freshnessPolicy: {
+        staleAfterSeconds: 5,
+        refreshAfterSeconds: 15,
+        keepLastSuccess: true,
+        pauseWhenHidden: true,
+        eventInvalidation: true,
+        retryAfterSeconds: null,
+        retryLimit: null,
+        postMutationRefreshAfterSeconds: null,
+      },
     })),
     ...overrides,
   };

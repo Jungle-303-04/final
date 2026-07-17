@@ -2,7 +2,6 @@ export type ProductSurfaceId =
   | "home"
   | "resources"
   | "issues"
-  | "topology"
   | "applications"
   | "timeline"
   | "traffic"
@@ -39,7 +38,6 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("home", "Home", "/home", "g h", { match: "exact", landing: true, family: "reference-primary" }),
   route("resources", "Resources", "/resources", "g r", { family: "reference-primary" }),
   route("issues", "Incidents", "/issues", "g i", { family: "reference-primary" }),
-  route("topology", "Topology", "/topology", "g t", { family: "reference-primary" }),
   route("applications", "Applications", "/applications", "g a", { family: "reference-primary" }),
   route("timeline", "Timeline", "/timeline", "g l", { family: "reference-primary" }),
   route("traffic", "Traffic", "/traffic", "g f", { family: "reference-primary" }),

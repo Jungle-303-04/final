@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from span import get_tracer
 
@@ -16,6 +16,7 @@ TRACER = get_tracer("target-cluster-agent.policy")
 LOGGER = get_logger(__name__)
 
 PolicyApplier = Callable[[AgentPolicy], JsonObject]
+PolicyStatusDetails = Callable[[], Awaitable[JsonObject]]
 
 
 class AgentPolicySync:
@@ -27,12 +28,22 @@ class AgentPolicySync:
         default_policy: AgentPolicy,
         apply_policy: PolicyApplier,
         interval_seconds: int,
+        status_details: PolicyStatusDetails | None = None,
     ) -> None:
         self.cluster_id = cluster_id
         self.store = store
         self.default_policy = default_policy
         self.apply_policy = apply_policy
         self.interval_seconds = interval_seconds
+        self.status_details = status_details
+
+    async def runtime_status_details(self) -> JsonObject:
+        if self.status_details is None:
+            return {}
+        try:
+            return dict(await self.status_details())
+        except Exception as exc:
+            return {"status_details_error": type(exc).__name__}
 
     def apply_stored_or_default(self) -> JsonObject:
         stored_policy = self.store.load_policy()
@@ -63,13 +74,14 @@ class AgentPolicySync:
             span.attr("policy.generation", generation)
             payload = await client.fetch_policy(self.cluster_id, generation)
             if payload is None:
+                details = await self.runtime_status_details()
                 await client.report_policy_status(
                     {
                         "cluster_id": self.cluster_id,
                         "generation": generation,
                         "status": "unchanged",
                         "message": "policy unchanged",
-                        "details": {},
+                        "details": details,
                     }
                 )
                 return "unchanged"
@@ -82,6 +94,7 @@ class AgentPolicySync:
                     incoming_policy,
                 )
                 details = self.apply_policy(policy)
+                details.update(await self.runtime_status_details())
                 self.store.save_policy(policy)
                 await client.report_policy_status(
                     {
@@ -95,13 +108,14 @@ class AgentPolicySync:
                 return "applied"
             except Exception as exc:
                 span.error(exc)
+                details = await self.runtime_status_details()
                 await client.report_policy_status(
                     {
                         "cluster_id": self.cluster_id,
                         "generation": attempted_generation,
                         "status": "failed",
                         "message": str(exc),
-                        "details": {},
+                        "details": details,
                     }
                 )
                 return "failed"

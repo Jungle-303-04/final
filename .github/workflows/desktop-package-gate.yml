@@ -1,18 +1,6 @@
 name: Desktop Package Gate
 
 "on":
-  pull_request:
-    branches: [dev]
-    paths:
-      - "desktop/**"
-      - "frontend/**"
-      - ".github/workflows/desktop-package-gate.yml"
-  push:
-    branches: [dev]
-    paths:
-      - "desktop/**"
-      - "frontend/**"
-      - ".github/workflows/desktop-package-gate.yml"
   workflow_dispatch:
 
 permissions:

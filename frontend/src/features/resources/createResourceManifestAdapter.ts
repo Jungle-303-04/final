@@ -5,12 +5,14 @@ import type {
 import {
   ResourceManifestPortFailure,
   type ResourceManifestPort,
+  type ResourceManifestCreatePort,
   type ResourceManifestSourceChoice,
 } from "./resourceManifestContract";
+import { toResourceActionReceipt } from "./resourceCapabilitiesCanonical";
 
 export function createResourceManifestAdapter(
   dependencies: ResourceManifestEndpointDependencies,
-): ResourceManifestPort {
+): ResourceManifestPort & ResourceManifestCreatePort {
   return {
     async loadSource(resourceId, applicationId, signal) {
       return withFailure(async () => {
@@ -39,6 +41,15 @@ export function createResourceManifestAdapter(
           diff: value.diff,
           errors: value.errors,
           warnings: value.warnings,
+          applyAvailability: value.apply_availability,
+          applyReasonCodes: value.apply_reason_codes,
+          impact: value.impact.map((item) => ({
+            apiVersion: item.api_version,
+            kind: item.kind,
+            namespace: item.namespace,
+            name: item.name,
+            selected: item.selected,
+          })),
         };
       });
     },
@@ -56,6 +67,60 @@ export function createResourceManifestAdapter(
           syncState: "awaiting-pr-merge" as const,
         };
       });
+    },
+    async applyNow(resourceId, input, signal) {
+      return withFailure(async () => toResourceActionReceipt(
+        await dependencies.applyResourceManifestNow(
+          resourceId,
+          {
+            applicationId: input.applicationId,
+            baseSha: input.baseSha,
+            sourceSha256: input.sourceSha256,
+            editedYaml: input.editedYaml,
+            expectedDesiredSha256: input.desiredSha256,
+            confirmation: true,
+            reason: input.reason,
+          },
+          signal,
+        ),
+      ));
+    },
+    async loadCreateCapability(clusterId, namespace, signal) {
+      return withFailure(async () => {
+        const value = await dependencies.getResourceManifestCreateCapability(
+          clusterId,
+          namespace,
+          signal,
+        );
+        return {
+          clusterId: value.cluster_id,
+          namespace: value.namespace,
+          snapshotId: value.snapshot_id,
+          available: value.available,
+          reasonCodes: value.reason_codes,
+          maxDocuments: value.max_documents,
+          maxBytes: value.max_bytes,
+          resources: value.resources.map((item) => ({
+            apiVersion: item.api_version,
+            kind: item.kind,
+            resource: item.resource,
+            forceSupported: item.force_supported,
+          })),
+        };
+      });
+    },
+    async dryRunCreate(input, signal) {
+      return withFailure(async () => toResourceActionReceipt(
+        await dependencies.dryRunResourceManifestCreate(input, signal),
+      ));
+    },
+    async createResources(input, signal) {
+      return withFailure(async () => toResourceActionReceipt(
+        await dependencies.createResourceManifest({
+          ...input,
+          confirmation: true,
+        }, signal),
+      ));
     },
   };
 }

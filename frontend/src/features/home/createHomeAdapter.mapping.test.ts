@@ -8,6 +8,25 @@ import { createHomeAdapter } from "./createHomeAdapter";
 import { CLUSTER_LIST, endpoints } from "./createHomeAdapter.testSupport";
 
 describe("canonical Home adapter mapping", () => {
+  it("loads only the composition-injected dashboard refresh policy", async () => {
+    const policy = {
+      staleAfterSeconds: 15,
+      refreshAfterSeconds: 37,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: true,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    };
+    const getPolicy = vi.fn().mockResolvedValue(policy);
+
+    await expect(
+      createHomeAdapter(endpoints(), { getPolicy }).loadDashboardRefreshPolicy(),
+    ).resolves.toBe(policy);
+    expect(getPolicy).toHaveBeenCalledWith("dashboard", undefined);
+  });
+
   it("maps the session-visible cluster list and forwards the AbortSignal", async () => {
     const controller = new AbortController();
     const dependencies = endpoints();
@@ -136,6 +155,74 @@ describe("canonical Home adapter mapping", () => {
     } satisfies HomeClusterOverview);
   });
 
+  it("maps bounded custom resource counts and Helm coverage without browser inference", async () => {
+    await expect(createHomeAdapter(endpoints()).loadInsights("cluster-1")).resolves.toEqual({
+      clusterId: "cluster-1",
+      customResources: {
+        coverage: {
+          availability: "available",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: [],
+        },
+        items: [{
+          apiGroup: "argoproj.io",
+          version: "v1alpha1",
+          kind: "Application",
+          count: 7,
+        }],
+        totalKinds: 1,
+        totalResources: 7,
+        hasMore: false,
+      },
+      helm: {
+        coverage: {
+          availability: "partial",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: ["source_resources_incomplete"],
+        },
+        releaseCount: 2,
+        statusCounts: { deployed: 1, failed: 1 },
+      },
+      certificateExpiry: {
+        coverage: {
+          availability: "available",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: [],
+        },
+        items: [{
+          secret: {
+            apiGroup: "",
+            version: "v1",
+            kind: "Secret",
+            namespace: "shop",
+            name: "api-tls",
+            uid: "secret-api-tls",
+          },
+          sourceCertificate: {
+            apiGroup: "cert-manager.io",
+            version: "v1",
+            kind: "Certificate",
+            namespace: "shop",
+            name: "api-certificate",
+            uid: "certificate-api",
+          },
+          notAfter: "2026-07-20T10:00:00.000Z",
+          status: "expiring",
+          secondsRemaining: 345_600,
+          observedAt: "2026-07-12T10:00:00.000Z",
+        }],
+        tlsSecretCount: 1,
+        observedExpiryCount: 1,
+        expiringCount: 1,
+        expiredCount: 0,
+        earliestExpiry: "2026-07-20T10:00:00.000Z",
+        warningBeforeSeconds: 2_592_000,
+        hasMore: false,
+      },
+      refreshAfterSeconds: 30,
+    });
+  });
+
   it("maps nodes without claiming endpoint completeness or stable identity", async () => {
     await expect(createHomeAdapter(endpoints()).loadNodes("cluster-1")).resolves.toEqual({
       clusterId: "cluster-1",
@@ -145,6 +232,7 @@ describe("canonical Home adapter mapping", () => {
           id: "node:cluster-1/worker-a",
           identityStability: "ephemeral",
           name: "worker-a",
+          kubernetesVersion: "v1.30.7",
           ready: true,
           health: "healthy",
           podsRunning: 9,
@@ -158,6 +246,7 @@ describe("canonical Home adapter mapping", () => {
           id: "node:cluster-1/worker-b",
           identityStability: "ephemeral",
           name: "worker-b",
+          kubernetesVersion: "v1.30.7",
           ready: false,
           health: "warning",
           podsRunning: 8,

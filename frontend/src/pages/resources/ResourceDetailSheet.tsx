@@ -8,7 +8,9 @@ import {
 import type {
   ResourceDetail,
   ResourceIdentity,
+  ResourceSummary,
 } from "../../features/resources/resourcesContract";
+import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
 import {
   useI18n,
   type I18nController,
@@ -19,6 +21,7 @@ import { StatusMark } from "../../shared/ui/StatusMark";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
+import { Button } from "../../shared/ui/primitives/button";
 import {
   Tabs,
   TabsContent,
@@ -33,12 +36,16 @@ import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDat
 import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
 import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { ResourceIssuesSection } from "../../features/issues/ResourceIssuesSection";
+import { ResourceAccessPanel } from "./ResourceAccessPanel";
 
 export function ResourceDetailBody({
   detail,
   full,
   identity,
   metricHistory,
+  metricRange,
+  onMetricRangeChange,
+  onNavigateResource,
   resourceIssues,
   onTabChange,
   tab,
@@ -47,6 +54,9 @@ export function ResourceDetailBody({
   full: boolean;
   identity: ResourceIdentity | null;
   metricHistory: ResourceMetricsHistoryFrame;
+  metricRange: ResourceMetricTimeRange;
+  onMetricRangeChange: (range: ResourceMetricTimeRange) => void;
+  onNavigateResource: (identity: ResourceIdentity) => void;
   resourceIssues: ResourceIssuesFrame;
   onTabChange: (tab: string) => void;
   tab: string;
@@ -144,13 +154,20 @@ export function ResourceDetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
+        {detail.data.access ? <ResourceAccessPanel access={detail.data.access} /> : null}
         {detail.data.providerDetail ? (
-          <ProviderResourceDetailPanel detail={detail.data.providerDetail} />
+          <ProviderResourceDetailPanel
+            detail={detail.data.providerDetail}
+            metricHistory={metricHistory}
+            resourceId={resource.inventoryKey}
+          />
         ) : null}
         <ResourceIssuesSection frame={resourceIssues} />
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
           <ResourceMetricsCharts
             frame={metricHistory}
+            onRangeChange={onMetricRangeChange}
+            range={metricRange}
             resourceId={resource.inventoryKey}
             wide={full}
           />
@@ -169,8 +186,15 @@ export function ResourceDetailBody({
                   key={item.id}
                 >
                   <OverflowIdentity
-                    className="min-w-0 flex-1"
-                    render={<span data-slot="resource-related-identity" />}
+                    className="h-auto min-w-0 flex-1 justify-start px-0 text-left"
+                    render={(
+                      <Button
+                        data-slot="resource-related-identity"
+                        onClick={() => onNavigateResource(resourceIdentity(item))}
+                        type="button"
+                        variant="link"
+                      />
+                    )}
                     value={`${item.kind} · ${item.namespace ?? t("resources.detail.clusterScope")}/${item.name}`}
                   />
                   <StatusMark label={item.healthStatus} tone={item.health} />
@@ -184,6 +208,8 @@ export function ResourceDetailBody({
       <TabsContent className="grid gap-3 py-4" value="metrics">
         <ResourceMetricsCharts
           frame={metricHistory}
+          onRangeChange={onMetricRangeChange}
+          range={metricRange}
           resourceId={resource.inventoryKey}
           wide={full}
         />
@@ -236,6 +262,15 @@ export function ResourceDetailBody({
       </TabsContent>
     </Tabs>
   );
+}
+
+function resourceIdentity(resource: ResourceSummary): ResourceIdentity {
+  return {
+    resourceType: resource.resourceType,
+    kind: resource.kind,
+    namespace: resource.namespace,
+    name: resource.name,
+  };
 }
 
 function hasMetricPoints(frame: ResourceMetricsHistoryFrame, resourceId: string): boolean {

@@ -13,6 +13,22 @@ describe("canonical Resources catalog and list mapping", () => {
         clusterId: "cluster-1",
         completeness: "unknown",
         observedAt: "2026-07-12T10:00:00.000Z",
+        apiDiscovery: {
+          completeness: "exact",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: [],
+          resources: [{
+            apiVersion: "v1",
+            group: "",
+            version: "v1",
+            pluralName: "pods",
+            singularName: "pod",
+            kind: "Pod",
+            namespaced: true,
+            isCrd: false,
+            verbs: ["get", "list", "watch"],
+          }],
+        },
         items: [
           {
             resourceType: "pod",

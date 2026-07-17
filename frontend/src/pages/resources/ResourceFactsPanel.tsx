@@ -75,6 +75,16 @@ function factsEntries(
     [t("resources.detail.fact.count"), numberText(facts.occurrenceCount, formatNumber)],
     [t("resources.detail.fact.reporter"), facts.reportingComponent],
   ]);
+  if (facts.type === "resource-quota") return [
+    ...facts.hard.map(({ key, value }) => [
+      t("resources.detail.fact.quotaHard", { name: key }),
+      value,
+    ] satisfies [string, string]),
+    ...facts.used.map(({ key, value }) => [
+      t("resources.detail.fact.quotaUsed", { name: key }),
+      value,
+    ] satisfies [string, string]),
+  ];
   return [];
 }
 

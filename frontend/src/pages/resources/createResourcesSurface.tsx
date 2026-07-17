@@ -6,7 +6,10 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceMetricsHistoryPort,
+  ResourcesRefreshPolicyKey,
+} from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
@@ -18,6 +21,10 @@ import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
+import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
+import type { TimelinePort } from "../../features/timeline/timelineContract";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -27,12 +34,16 @@ export function createResourcesSurface(
   nodePodsPort: Pick<HomePort, "loadNodePods">,
   relationTopologyPort: RelationTopologyPort,
   changeTimelinePort: ChangeTimelinePort,
+  timelinePort: TimelinePort,
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
   resourceCapabilitiesPort: ResourceCapabilitiesPort,
   resourceActionsPort: ResourceActionsPort,
   podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort?: ResourceManifestPort,
   resourceIssuesPort?: ResourceIssuesPort,
+  serviceAccessPort?: ServiceAccessPort,
+  portForwardSessions?: PortForwardSessionPort,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -43,12 +54,16 @@ export function createResourcesSurface(
         nodePodsPort={nodePodsPort}
         relationTopologyPort={relationTopologyPort}
         changeTimelinePort={changeTimelinePort}
+        timelinePort={timelinePort}
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}
+        refreshPolicies={refreshPolicies}
         resourceCapabilitiesPort={resourceCapabilitiesPort}
         resourceActionsPort={resourceActionsPort}
         podTerminalPort={podTerminalPort}
         resourceManifestPort={resourceManifestPort}
         resourceIssuesPort={resourceIssuesPort}
+        serviceAccessPort={serviceAccessPort}
+        portForwardSessions={portForwardSessions}
         port={port}
       />
     );

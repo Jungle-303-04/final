@@ -6,6 +6,9 @@ import pytest
 
 from domains.inventory.provider_detail import (
     MAX_COLLECTION_ITEMS,
+    MAX_PROMETHEUS_RULES,
+    MAX_SBOM_COMPONENTS,
+    MAX_VULNERABILITIES,
     provider_detail_projection,
 )
 
@@ -742,6 +745,486 @@ def test_gateway_route_projection_bounds_nested_collections() -> None:
     assert len(detail.rules[0].backends) == 50
 
 
+@pytest.mark.parametrize(
+    ("kind", "api_version", "raw", "detail_type"),
+    [
+        (
+            "EC2NodeClass",
+            "karpenter.k8s.aws/v1",
+            {
+                "spec": {
+                    "role": "KarpenterNodeRole",
+                    "amiFamily": "AL2023",
+                    "amiSelectorTerms": [{"alias": "al2023@latest"}],
+                    "blockDeviceMappings": [
+                        {
+                            "deviceName": "/dev/xvda",
+                            "ebs": {
+                                "volumeType": "gp3",
+                                "volumeSize": "100Gi",
+                                "iops": 3000,
+                                "throughput": 125,
+                                "encrypted": True,
+                                "deleteOnTermination": True,
+                            },
+                        }
+                    ],
+                    "tags": {"team": "platform"},
+                },
+                "status": {
+                    "instanceProfile": "nodes",
+                    "amis": [{"id": "ami-123", "name": "al2023"}],
+                    "subnets": [{"id": "subnet-a", "zone": "ap-northeast-2a"}],
+                    "securityGroups": [{"id": "sg-a", "name": "nodes"}],
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "karpenter-ec2-node-class",
+        ),
+        (
+            "NodeClaim",
+            "karpenter.sh/v1",
+            {
+                "metadata": {
+                    "labels": {
+                        "karpenter.sh/capacity-type": "spot",
+                        "karpenter.sh/nodepool": "general",
+                        "topology.kubernetes.io/zone": "ap-northeast-2a",
+                        "kubernetes.io/arch": "arm64",
+                    }
+                },
+                "spec": {
+                    "requirements": [
+                        {
+                            "key": "node.kubernetes.io/instance-type",
+                            "operator": "In",
+                            "values": ["m7g.large"],
+                        }
+                    ],
+                    "nodeClassRef": {
+                        "group": "karpenter.k8s.aws",
+                        "kind": "EC2NodeClass",
+                        "name": "default",
+                    },
+                    "expireAfter": "720h",
+                },
+                "status": {
+                    "nodeName": "ip-10-0-0-1",
+                    "imageID": "ami-123",
+                    "capacity": {"cpu": "2", "memory": "8Gi", "pods": "29"},
+                    "conditions": [
+                        {"type": "Launched", "status": "True"},
+                        {"type": "Registered", "status": "True"},
+                    ],
+                },
+            },
+            "karpenter-node-claim",
+        ),
+        (
+            "NodePool",
+            "karpenter.sh/v1",
+            {
+                "spec": {
+                    "limits": {"cpu": "100", "memory": "400Gi"},
+                    "weight": 50,
+                    "disruption": {
+                        "consolidationPolicy": "WhenEmptyOrUnderutilized",
+                        "consolidateAfter": "5m",
+                        "budgets": [{"nodes": "10%", "duration": "2h"}],
+                    },
+                    "template": {
+                        "metadata": {"labels": {"team": "platform"}},
+                        "spec": {
+                            "nodeClassRef": {
+                                "group": "karpenter.k8s.aws",
+                                "kind": "EC2NodeClass",
+                                "name": "default",
+                            },
+                            "requirements": [
+                                {
+                                    "key": "kubernetes.io/arch",
+                                    "operator": "In",
+                                    "values": ["arm64"],
+                                }
+                            ],
+                        },
+                    },
+                },
+                "status": {
+                    "resources": {"cpu": "24", "memory": "96Gi"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "karpenter-node-pool",
+        ),
+        (
+            "ScaledObject",
+            "keda.sh/v1alpha1",
+            {
+                "metadata": {"namespace": "shop"},
+                "spec": {
+                    "scaleTargetRef": {"kind": "Deployment", "name": "api"},
+                    "minReplicaCount": 1,
+                    "maxReplicaCount": 20,
+                    "pollingInterval": 15,
+                    "cooldownPeriod": 60,
+                    "triggers": [
+                        {
+                            "type": "rabbitmq",
+                            "name": "orders",
+                            "metadata": {"queueName": "orders"},
+                            "authenticationRef": {
+                                "kind": "TriggerAuthentication",
+                                "name": "rabbitmq",
+                            },
+                        }
+                    ],
+                },
+                "status": {
+                    "hpaName": "keda-hpa-api",
+                    "conditions": [{"type": "Active", "status": "True"}],
+                },
+            },
+            "keda-scaled-object",
+        ),
+        (
+            "ScaledJob",
+            "keda.sh/v1alpha1",
+            {
+                "metadata": {"namespace": "batch"},
+                "spec": {
+                    "jobTargetRef": {"name": "worker"},
+                    "scalingStrategy": {"strategy": "accurate"},
+                    "maxReplicaCount": 10,
+                    "triggers": [{"type": "kafka", "metadata": {"topic": "jobs"}}],
+                },
+                "status": {
+                    "conditions": [
+                        {"type": "Ready", "status": "True"},
+                        {"type": "Active", "status": "False"},
+                    ]
+                },
+            },
+            "keda-scaled-job",
+        ),
+        (
+            "PrometheusRule",
+            "monitoring.coreos.com/v1",
+            {
+                "spec": {
+                    "groups": [
+                        {
+                            "name": "api",
+                            "interval": "30s",
+                            "rules": [
+                                {
+                                    "alert": "HighErrorRate",
+                                    "expr": "rate(http_errors_total[5m]) > 0.05",
+                                    "for": "10m",
+                                    "labels": {"severity": "critical"},
+                                    "annotations": {"summary": "API error rate is high"},
+                                },
+                                {
+                                    "record": "api:http_requests:rate5m",
+                                    "expr": "rate(http_requests_total[5m])",
+                                },
+                            ],
+                        }
+                    ]
+                }
+            },
+            "prometheus-rule",
+        ),
+        (
+            "TCPRoute",
+            "gateway.networking.k8s.io/v1alpha2",
+            {
+                "metadata": {"namespace": "network"},
+                "spec": {
+                    "parentRefs": [{"name": "public"}],
+                    "rules": [{"backendRefs": [{"name": "tcp-api", "port": 9000}]}],
+                },
+            },
+            "tcp-route",
+        ),
+        (
+            "TLSRoute",
+            "gateway.networking.k8s.io/v1alpha2",
+            {
+                "metadata": {"namespace": "network"},
+                "spec": {
+                    "hostnames": ["tls.example.test"],
+                    "rules": [{"backendRefs": [{"name": "tls-api", "port": 9443}]}],
+                },
+            },
+            "tls-route",
+        ),
+    ],
+)
+def test_provider_detail_projects_karpenter_keda_prometheus_and_simple_routes(
+    kind: str,
+    api_version: str,
+    raw: dict[str, Any],
+    detail_type: str,
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    assert detail.type == detail_type
+    assert "raw" not in detail.model_dump()
+
+
+def test_dynamic_extension_projection_redacts_untyped_secret_values() -> None:
+    node_class = provider_detail_projection(
+        resource(
+            "EC2NodeClass",
+            {
+                "spec": {
+                    "amiSelectorTerms": [
+                        {
+                            "alias": "al2023@latest",
+                            "userData": "must-not-leak-user-data",
+                        }
+                    ],
+                    "blockDeviceMappings": [
+                        {
+                            "ebs": {
+                                "volumeType": "gp3",
+                                "kmsKeyID": "must-not-leak-kms-key",
+                            }
+                        }
+                    ],
+                    "tags": {
+                        "team": "platform",
+                        "password": "must-not-leak-tag-value",
+                    },
+                }
+            },
+            api_version="karpenter.k8s.aws/v1",
+        )
+    )
+    scaled_object = provider_detail_projection(
+        resource(
+            "ScaledObject",
+            {
+                "spec": {
+                    "triggers": [
+                        {
+                            "type": "rabbitmq",
+                            "metadata": {
+                                "queueName": "orders",
+                                "authToken": "must-not-leak-trigger-token",
+                                "connectionString": "must-not-leak-connection",
+                            },
+                        }
+                    ]
+                }
+            },
+            api_version="keda.sh/v1alpha1",
+        )
+    )
+    prometheus_rule = provider_detail_projection(
+        resource(
+            "PrometheusRule",
+            {
+                "spec": {
+                    "groups": [
+                        {
+                            "name": "api",
+                            "rules": [
+                                {
+                                    "alert": "HighErrorRate",
+                                    "expr": "vector(1)",
+                                    "labels": {
+                                        "severity": "critical",
+                                        "apiKey": "must-not-leak-label",
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+            api_version="monitoring.coreos.com/v1",
+        )
+    )
+
+    serialized = " ".join(
+        detail.model_dump_json()
+        for detail in (node_class, scaled_object, prometheus_rule)
+        if detail is not None
+    )
+    assert "must-not-leak" not in serialized
+    assert "queueName" in serialized
+    assert "authToken" not in serialized
+
+
+def test_prometheus_rule_projection_applies_one_global_rule_budget() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "PrometheusRule",
+            {
+                "spec": {
+                    "groups": [
+                        {
+                            "name": f"group-{group}",
+                            "rules": [
+                                {"record": f"metric_{group}_{rule}", "expr": "vector(1)"}
+                                for rule in range(MAX_COLLECTION_ITEMS)
+                            ],
+                        }
+                        for group in range(10)
+                    ]
+                }
+            },
+            api_version="monitoring.coreos.com/v1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "prometheus-rule"
+    assert detail.total_rules == 1_000
+    assert detail.projected_rules == MAX_PROMETHEUS_RULES
+    assert detail.truncated is True
+    assert sum(len(group.rules) for group in detail.groups) == MAX_PROMETHEUS_RULES
+
+
+def test_trivy_report_projection_redacts_open_fields_and_unsafe_urls() -> None:
+    sbom = provider_detail_projection(
+        resource(
+            "SbomReport",
+            {
+                "metadata": {
+                    "labels": {"trivy-operator.container.name": "api"},
+                },
+                "report": {
+                    "artifact": {"repository": "platform/api", "tag": "1.2.3"},
+                    "registry": {"server": "registry.example.test"},
+                    "scanner": {"name": "Trivy", "version": "0.64.1"},
+                    "summary": {"componentsCount": 2, "dependenciesCount": 1},
+                    "components": {
+                        "bomFormat": "CycloneDX",
+                        "specVersion": "1.6",
+                        "components": [
+                            {
+                                "name": "fastapi",
+                                "version": "0.116.0",
+                                "type": "library",
+                                "purl": "pkg:pypi/fastapi@0.116.0?repository_url=https://user:must-not-leak@example.test",
+                                "licenses": [{"license": {"id": "MIT"}}],
+                                "properties": {"token": "must-not-leak-component"},
+                            },
+                            {
+                                "name": "uvicorn",
+                                "version": "0.35.0",
+                                "type": "library",
+                            },
+                        ],
+                    },
+                },
+            },
+            api_version="aquasecurity.github.io/v1alpha1",
+        )
+    )
+    vulnerability = provider_detail_projection(
+        resource(
+            "VulnerabilityReport",
+            {
+                "metadata": {
+                    "labels": {"trivy-operator.container.name": "api"},
+                },
+                "report": {
+                    "artifact": {"repository": "platform/api", "tag": "1.2.3"},
+                    "registry": {"server": "https://registry.example.test"},
+                    "summary": {"criticalCount": 1, "highCount": 1},
+                    "vulnerabilities": [
+                        {
+                            "vulnerabilityID": "CVE-2026-0001",
+                            "severity": "CRITICAL",
+                            "score": 9.8,
+                            "resource": "openssl",
+                            "installedVersion": "3.0.1",
+                            "fixedVersion": "3.0.2",
+                            "primaryLink": "https://security.example.test/CVE-2026-0001",
+                            "title": "must-not-leak-title",
+                            "description": "must-not-leak-description",
+                        },
+                        {
+                            "vulnerabilityID": "CVE-2026-0002",
+                            "severity": "HIGH",
+                            "primaryLink": "https://user:must-not-leak@example.test/CVE-2026-0002",
+                        },
+                    ],
+                },
+            },
+            api_version="aquasecurity.github.io/v1alpha1",
+        )
+    )
+
+    assert sbom is not None
+    assert sbom.type == "sbom-report"
+    assert sbom.image == "registry.example.test/platform/api:1.2.3"
+    assert sbom.components[0].package_url == "pkg:pypi/fastapi@0.116.0"
+    assert sbom.components[0].package_url_qualifiers_redacted is True
+    assert vulnerability is not None
+    assert vulnerability.type == "vulnerability-report"
+    assert vulnerability.vulnerabilities[0].primary_link == (
+        "https://security.example.test/CVE-2026-0001"
+    )
+    assert vulnerability.vulnerabilities[1].primary_link is None
+    serialized = f"{sbom.model_dump_json()} {vulnerability.model_dump_json()}"
+    assert "must-not-leak" not in serialized
+    assert "description" not in serialized
+    assert "raw" not in serialized
+
+
+def test_trivy_report_projection_applies_global_collection_budgets() -> None:
+    sbom = provider_detail_projection(
+        resource(
+            "ClusterSbomReport",
+            {
+                "report": {
+                    "components": {
+                        "components": [
+                            {"name": f"component-{index}"}
+                            for index in range(MAX_SBOM_COMPONENTS + 7)
+                        ]
+                    }
+                }
+            },
+            api_version="aquasecurity.github.io/v1alpha1",
+        )
+    )
+    vulnerability = provider_detail_projection(
+        resource(
+            "VulnerabilityReport",
+            {
+                "report": {
+                    "vulnerabilities": [
+                        {
+                            "vulnerabilityID": f"CVE-2026-{index:04d}",
+                            "severity": "LOW",
+                        }
+                        for index in range(MAX_VULNERABILITIES + 7)
+                    ]
+                }
+            },
+            api_version="aquasecurity.github.io/v1alpha1",
+        )
+    )
+
+    assert sbom is not None
+    assert sbom.type == "sbom-report"
+    assert sbom.observed_component_count == MAX_SBOM_COMPONENTS + 7
+    assert sbom.projected_component_count == MAX_SBOM_COMPONENTS
+    assert sbom.truncated is True
+    assert vulnerability is not None
+    assert vulnerability.type == "vulnerability-report"
+    assert vulnerability.observed_vulnerability_count == MAX_VULNERABILITIES + 7
+    assert vulnerability.projected_vulnerability_count == MAX_VULNERABILITIES
+    assert vulnerability.truncated is True
+
+
 def test_provider_detail_projects_crossplane_composite_by_bounded_shape() -> None:
     detail = provider_detail_projection(
         resource(
@@ -776,22 +1259,252 @@ def test_provider_detail_projects_crossplane_composite_by_bounded_shape() -> Non
     assert detail.composition_ref.name == "postgres"
 
 
-def test_provider_detail_does_not_misclassify_crossplane_managed_resource() -> None:
-    assert (
-        provider_detail_projection(
-            resource(
-                "Bucket",
-                {
-                    "spec": {
-                        "providerConfigRef": {"name": "prod"},
-                        "resourceRefs": [],
+def test_provider_detail_projects_crossplane_managed_resource_without_values() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Bucket",
+            {
+                "metadata": {
+                    "annotations": {
+                        "crossplane.io/external-name": "observed-bucket",
+                        "crossplane.io/paused": "true",
                     }
                 },
-                api_version="s3.aws.upbound.io/v1beta1",
-            )
+                "spec": {
+                    "providerConfigRef": {"name": "prod"},
+                    "forProvider": {
+                        "region": "ap-northeast-2",
+                        "secretAccessKey": "must-not-project",
+                    },
+                    "managementPolicies": ["Observe", "Update"],
+                    "deletionPolicy": "Orphan",
+                },
+                "status": {
+                    "atProvider": {
+                        "arn": "arn:aws:s3:::observed-bucket",
+                        "password": "must-not-project",
+                    },
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            api_version="s3.aws.upbound.io/v1beta1",
         )
-        is None
     )
+
+    assert detail is not None
+    assert detail.type == "crossplane-managed-resource"
+    assert detail.external_name == "observed-bucket"
+    assert detail.paused is True
+    assert detail.observed_spec_fields == ["region", "secretAccessKey"]
+    assert detail.observed_status_fields == ["arn", "password"]
+    serialized = detail.model_dump_json()
+    assert "must-not-project" not in serialized
+    assert "arn:aws" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("kind", "api_version", "raw", "detail_type"),
+    [
+        (
+            "PersistentVolumeClaim",
+            "v1",
+            {
+                "metadata": {
+                    "annotations": {
+                        "volume.kubernetes.io/storage-provisioner": "ebs.csi.aws.com",
+                        "pv.kubernetes.io/bind-completed": "true",
+                    }
+                },
+                "spec": {
+                    "storageClassName": "gp3",
+                    "accessModes": ["ReadWriteOnce"],
+                    "volumeMode": "Filesystem",
+                    "volumeName": "pvc-volume",
+                    "resources": {"requests": {"storage": "20Gi"}},
+                },
+                "status": {
+                    "phase": "Bound",
+                    "capacity": {"storage": "20Gi"},
+                },
+            },
+            "persistent-volume-claim",
+        ),
+        (
+            "SealedSecret",
+            "sealedsecrets.bitnami.com/v1alpha1",
+            {
+                "metadata": {
+                    "name": "database",
+                    "annotations": {
+                        "sealedsecrets.bitnami.com/namespace-wide": "true",
+                    },
+                },
+                "spec": {
+                    "encryptedData": {
+                        "password": "encrypted-secret-value",
+                        "username": "encrypted-secret-value",
+                    },
+                    "template": {
+                        "type": "Opaque",
+                        "metadata": {
+                            "labels": {"app": "database"},
+                            "annotations": {
+                                "description": "database credentials",
+                                "token-hint": "must-not-project",
+                            },
+                        },
+                    },
+                },
+                "status": {
+                    "observedGeneration": 3,
+                    "conditions": [{"type": "Synced", "status": "True"}],
+                },
+            },
+            "sealed-secret",
+        ),
+        (
+            "Secret",
+            "v1",
+            {
+                "type": "Opaque",
+                "immutable": True,
+                "data": {
+                    "password": "c2VjcmV0",
+                    "username": "YWRtaW4=",
+                },
+            },
+            "secret",
+        ),
+        (
+            "SecretStore",
+            "external-secrets.io/v1beta1",
+            {
+                "spec": {
+                    "provider": {
+                        "aws": {
+                            "region": "ap-northeast-2",
+                            "service": "SecretsManager",
+                            "auth": {
+                                "jwt": {
+                                    "serviceAccountRef": {
+                                        "name": "external-secrets",
+                                        "token": "must-not-project",
+                                    }
+                                }
+                            },
+                            "secretAccessKey": "must-not-project",
+                        }
+                    },
+                    "retrySettings": {"maxRetries": 5, "retryInterval": "10s"},
+                },
+                "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+            },
+            "secret-store",
+        ),
+    ],
+)
+def test_provider_detail_projects_storage_and_secret_metadata_without_values(
+    kind: str,
+    api_version: str,
+    raw: dict[str, Any],
+    detail_type: str,
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    assert detail.type == detail_type
+    serialized = detail.model_dump_json()
+    assert "encrypted-secret-value" not in serialized
+    assert "c2VjcmV0" not in serialized
+    assert "YWRtaW4=" not in serialized
+    assert "must-not-project" not in serialized
+
+
+def test_provider_detail_projects_bounded_workflow_execution_without_retry_false_positive() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Workflow",
+            {
+                "metadata": {"name": "retry-workflow", "namespace": "shop"},
+                "spec": {
+                    "workflowTemplateRef": {"name": "release"},
+                    "arguments": {
+                        "parameters": [
+                            {"name": "environment", "value": "production"},
+                            {"name": "token", "value": "must-not-project"},
+                        ]
+                    },
+                },
+                "status": {
+                    "phase": "Succeeded",
+                    "progress": "1/1",
+                    "nodes": {
+                        "root": {
+                            "displayName": "retry-workflow",
+                            "type": "Retry",
+                            "phase": "Succeeded",
+                            "children": ["attempt"],
+                        },
+                        "attempt": {
+                            "displayName": "retry-workflow(0)",
+                            "type": "Pod",
+                            "phase": "Failed",
+                            "message": "first attempt failed",
+                        },
+                    },
+                },
+            },
+            api_version="argoproj.io/v1alpha1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "workflow"
+    assert detail.problem_summaries == []
+    assert detail.argument_names == ["environment", "token"]
+    assert [node.id for node in detail.execution_nodes] == ["root", "attempt"]
+    assert {node.id: node.depth for node in detail.execution_nodes} == {
+        "root": 0,
+        "attempt": 1,
+    }
+    assert detail.workflow_template_ref is not None
+    assert detail.workflow_template_ref.name == "release"
+    assert "production" not in detail.model_dump_json()
+    assert "must-not-project" not in detail.model_dump_json()
+
+
+def test_provider_detail_bounds_workflow_failure_summaries() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Workflow",
+            {
+                "status": {
+                    "phase": "Failed",
+                    "message": "workflow failed",
+                    "nodes": {
+                        "root": {
+                            "displayName": "prepare",
+                            "type": "Pod",
+                            "phase": "Failed",
+                            "message": "x" * 500,
+                        },
+                        "publish": {
+                            "displayName": "publish",
+                            "type": "Pod",
+                            "phase": "Error",
+                        },
+                    },
+                }
+            },
+            api_version="argoproj.io/v1alpha1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "workflow"
+    assert detail.problem_summaries[0] == "workflow failed"
+    assert "publish failed" in detail.problem_summaries
+    assert all(len(summary) <= 300 for summary in detail.problem_summaries)
 
 
 @pytest.mark.parametrize(
@@ -809,6 +1522,17 @@ def test_provider_detail_does_not_misclassify_crossplane_managed_resource() -> N
         ("GRPCRoute", "attacker.test/v1"),
         ("HTTPRoute", "attacker.test/v1"),
         ("Job", "attacker.test/v1"),
+        ("EC2NodeClass", "attacker.test/v1"),
+        ("NodeClaim", "attacker.test/v1"),
+        ("NodePool", "attacker.test/v1"),
+        ("ScaledObject", "attacker.test/v1"),
+        ("ScaledJob", "attacker.test/v1"),
+        ("SbomReport", "attacker.test/v1"),
+        ("ClusterSbomReport", "attacker.test/v1"),
+        ("VulnerabilityReport", "attacker.test/v1"),
+        ("PrometheusRule", "attacker.test/v1"),
+        ("TCPRoute", "attacker.test/v1"),
+        ("TLSRoute", "attacker.test/v1"),
     ],
 )
 def test_operational_extension_projectors_reject_kind_collisions(

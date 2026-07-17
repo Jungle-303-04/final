@@ -29,13 +29,19 @@ def workflow_triggers(document: dict[object, object]) -> dict[str, object]:
 def test_make_gate_is_the_single_full_gate_entrypoint() -> None:
     recipe = make_recipe("gate")
 
-    assert "bash scripts/test.sh" in recipe
-    assert "bash scripts/manifest-check.sh" in recipe
-    assert "npm ci" in recipe
-    assert "npm run typecheck" in recipe
-    assert "npm run lint" in recipe
-    assert "npm test" in recipe
-    assert "npm run build" in recipe
+    assert "$(MAKE) gate-backend" in recipe
+    assert "$(MAKE) gate-frontend" in recipe
+
+    backend_recipe = make_recipe("gate-backend")
+    assert "bash scripts/test.sh" in backend_recipe
+    assert "bash scripts/manifest-check.sh" in backend_recipe
+
+    frontend_recipe = make_recipe("gate-frontend")
+    assert "npm ci" in frontend_recipe
+    assert "npm run typecheck" in frontend_recipe
+    assert "npm run lint" in frontend_recipe
+    assert "npm test" in frontend_recipe
+    assert "npm run build" in frontend_recipe
 
 
 def test_make_gate_fast_keeps_static_checks_and_explicit_changed_tests() -> None:
@@ -108,14 +114,15 @@ def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:
     assert triggers["push"]["branches"] == ["dev"]
     assert triggers["pull_request"]["branches"] == ["dev"]
     jobs = workflow["jobs"]
-    helm_step = next(step for step in jobs["gate"]["steps"] if step.get("name") == "Set up Helm")
+    assert set(jobs) == {"source-proof", "backend", "frontend", "gate"}
+    assert all("needs" not in jobs[job_id] for job_id in ("source-proof", "backend", "frontend"))
+    assert jobs["gate"]["needs"] == ["source-proof", "backend", "frontend"]
+    helm_step = next(step for step in jobs["backend"]["steps"] if step.get("name") == "Set up Helm")
     assert helm_step["uses"] == "Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310"
     assert helm_step["with"]["version"] == "v4.2.2"
-    assert any(
-        step.get("run") == "make gate" for step in jobs["gate"]["steps"] if isinstance(step, dict)
-    )
-    for job_id, job in jobs.items():
+    assert jobs["backend"]["steps"][-1]["run"] == "make gate-backend"
+    assert jobs["frontend"]["steps"][-1]["run"] == "make gate-frontend"
+    for job_id in jobs:
         if "deploy" not in job_id.lower():
             continue
-        needs = job.get("needs", [])
-        assert "gate" in ([needs] if isinstance(needs, str) else needs)
+        raise AssertionError(f"Dev Gate must not contain a deployment job: {job_id}")

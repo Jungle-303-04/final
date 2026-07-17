@@ -79,6 +79,52 @@ def write_two_target_plan(tmp_path: Path) -> Path:
     return path
 
 
+def write_grouped_target_plan(tmp_path: Path) -> Path:
+    path = write_two_target_plan(tmp_path)
+    document = json.loads(path.read_text())
+    document["targets"].insert(
+        1,
+        {
+            "namespace": "management",
+            "resource": "deployment/api-gateway",
+            "container": "sidecar",
+            "image": DIGEST,
+        },
+    )
+    path.write_text(json.dumps(document))
+    return path
+
+
+def exact_live_document(*, api_image: str = DIGEST, audit_image: str = DIGEST) -> str:
+    return json.dumps(
+        {
+            "items": [
+                {
+                    "metadata": {"name": "api-gateway"},
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "containers": [
+                                    {"name": "api-gateway", "image": api_image},
+                                    {"name": "sidecar", "image": api_image},
+                                ]
+                            }
+                        }
+                    },
+                },
+                {
+                    "metadata": {"name": "audit-worker"},
+                    "spec": {
+                        "template": {
+                            "spec": {"containers": [{"name": "audit-worker", "image": audit_image}]}
+                        }
+                    },
+                },
+            ]
+        }
+    )
+
+
 def test_rollback_plan_requires_immutable_digest(tmp_path: Path) -> None:
     path = write_plan(tmp_path, image="registry.example/opsia/service:latest")
 
@@ -104,7 +150,12 @@ def test_apply_uses_explicit_context_digest_and_rollout_status(
 
     def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(tuple(command))
-        stdout = "opsia-dev\n" if command[1:3] == ("config", "get-contexts") else ""
+        if command[1:3] == ("config", "get-contexts"):
+            stdout = "opsia-dev\n"
+        elif command[-4:] == ("get", "deployments", "-o", "json"):
+            stdout = exact_live_document()
+        else:
+            stdout = ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout)
 
     monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
@@ -135,6 +186,17 @@ def test_apply_uses_explicit_context_digest_and_rollout_status(
             "deployment/api-gateway",
             "--timeout=300s",
         ),
+        (
+            "kubectl",
+            "--context",
+            "opsia-dev",
+            "-n",
+            "management",
+            "get",
+            "deployments",
+            "-o",
+            "json",
+        ),
     ]
     assert all("undo" not in command for call in calls for command in call)
     assert all("alembic" not in command for call in calls for command in call)
@@ -157,6 +219,153 @@ def test_apply_fails_closed_when_explicit_context_is_missing(
         revert_image_digests.apply_plan(plan, context="opsia-dev", timeout="300s")
 
     assert calls == 1
+
+
+def test_rollback_groups_containers_and_sets_every_image_before_waiting(tmp_path: Path) -> None:
+    plan = revert_image_digests.load_plan(write_grouped_target_plan(tmp_path))
+
+    commands = revert_image_digests.kubectl_commands(
+        plan,
+        context="opsia-dev",
+        timeout="300s",
+    )
+
+    assert [command[5:7] for command in commands[1:3]] == [
+        ("set", "image"),
+        ("set", "image"),
+    ]
+    assert commands[1][-2:] == (
+        f"api-gateway={DIGEST}",
+        f"sidecar={DIGEST}",
+    )
+    assert [command[5:7] for command in commands[3:]] == [
+        ("rollout", "status"),
+        ("rollout", "status"),
+    ]
+    assert [command[-2] for command in commands[3:]] == [
+        "deployment/api-gateway",
+        "deployment/audit-worker",
+    ]
+
+
+def test_apply_batches_mutations_parallel_waits_and_verifies_exact_digests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = revert_image_digests.load_plan(write_two_target_plan(tmp_path))
+    status_barrier = threading.Barrier(2)
+    events: list[str] = []
+
+    def fake_run(
+        command: tuple[str, ...],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        if command[1:3] == ("config", "get-contexts"):
+            return subprocess.CompletedProcess(command, 0, stdout="opsia-dev\n")
+        if command[-4:] == ("get", "deployments", "-o", "json"):
+            events.append("verify")
+            return subprocess.CompletedProcess(command, 0, stdout=exact_live_document())
+        if command[5:7] == ("set", "image"):
+            events.append(f"set:{command[7]}")
+            return subprocess.CompletedProcess(command, 0)
+        if command[5:7] == ("rollout", "status"):
+            assert events[:2] == [
+                "set:deployment/api-gateway",
+                "set:deployment/audit-worker",
+            ]
+            assert isinstance(kwargs.get("timeout"), float)
+            events.append(f"wait:{command[-2]}")
+            status_barrier.wait(timeout=2)
+            return subprocess.CompletedProcess(command, 0)
+        raise AssertionError(command)
+
+    monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
+
+    revert_image_digests.apply_plan(plan, context="opsia-dev", timeout="300s")
+
+    assert set(events[2:4]) == {
+        "wait:deployment/api-gateway",
+        "wait:deployment/audit-worker",
+    }
+    assert events[4:] == ["verify"]
+
+
+def test_parallel_wait_uses_one_deadline_for_queued_unavailable_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = revert_image_digests.load_plan(write_grouped_target_plan(tmp_path))
+    commands = revert_image_digests.kubectl_commands(
+        plan,
+        context="opsia-dev",
+        timeout="1s",
+    )[3:]
+    now = [0.0]
+    calls: list[tuple[str, ...]] = []
+
+    def fake_monotonic() -> float:
+        return now[0]
+
+    def fake_run(
+        command: tuple[str, ...],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        assert kwargs["timeout"] == 1.0
+        now[0] = 1.1
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(revert_image_digests.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="audit-worker"):
+        revert_image_digests.wait_for_rollout_statuses(
+            commands,
+            timeout="1s",
+            max_workers=1,
+        )
+
+    assert len(calls) == 1
+
+
+def test_apply_attempts_all_mutations_and_fails_on_final_digest_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = revert_image_digests.load_plan(write_two_target_plan(tmp_path))
+    next_digest = "registry.example/opsia/service@sha256:" + "c" * 64
+    set_resources: list[str] = []
+
+    def fake_run(
+        command: tuple[str, ...],
+        **_kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        if command[1:3] == ("config", "get-contexts"):
+            return subprocess.CompletedProcess(command, 0, stdout="opsia-dev\n")
+        if command[-4:] == ("get", "deployments", "-o", "json"):
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=exact_live_document(api_image=next_digest),
+            )
+        if command[5:7] == ("set", "image"):
+            set_resources.append(command[7])
+            if command[7] == "deployment/api-gateway":
+                raise subprocess.CalledProcessError(1, command)
+            return subprocess.CompletedProcess(command, 0)
+        if command[5:7] == ("rollout", "status"):
+            return subprocess.CompletedProcess(command, 0)
+        raise AssertionError(command)
+
+    monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="digest mismatch"):
+        revert_image_digests.apply_plan(plan, context="opsia-dev", timeout="300s")
+
+    assert set_resources == [
+        "deployment/api-gateway",
+        "deployment/audit-worker",
+    ]
 
 
 def deployment_manifest(tmp_path: Path) -> Path:

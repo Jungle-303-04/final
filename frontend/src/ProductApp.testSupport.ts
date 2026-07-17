@@ -69,6 +69,7 @@ export function homeApiResponse(path: string): Response {
           mem_pct: 47,
           restarts_recent: 0,
           conditions: [],
+          kubernetes_version: "v1.30.7",
         },
       ],
     },
@@ -95,6 +96,27 @@ export function homeApiResponse(path: string): Response {
       cluster_id: "cluster-1",
       latest_snapshot: { collected_at: "2026-07-12T10:00:00Z" },
       counts: [{ resource_type: "pod", health: "healthy", count: 1 }],
+    },
+    "/api/clusters/cluster-1/api-resources": {
+      cluster_id: "cluster-1",
+      snapshot_id: "snapshot-1",
+      discovery: {
+        observed_at: "2026-07-12T10:00:00Z",
+        completeness: "exact",
+        reason_codes: [],
+        resources: [{
+          group: "",
+          version: "v1",
+          api_version: "v1",
+          name: "pods",
+          singular_name: "pod",
+          kind: "Pod",
+          namespaced: true,
+          is_crd: false,
+          verbs: ["get", "list", "watch"],
+        }],
+      },
+      unavailable_reason: null,
     },
     "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200":
       {

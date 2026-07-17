@@ -98,11 +98,49 @@ PRE_ACK_NAMESPACED_CLEANUP = (
         "rbac.authorization.k8s.io",
         "v1",
         SANDBOX_NAMESPACE,
+        "rolebindings",
+        "cluster-agent-cronjob-control",
+    ),
+    NamespacedCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        SANDBOX_NAMESPACE,
+        "roles",
+        "cluster-agent-cronjob-control",
+    ),
+    NamespacedCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        SANDBOX_NAMESPACE,
         "roles",
         "cluster-agent-catalog-install",
     ),
 )
 PRE_ACK_CLUSTER_CLEANUP = (
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterrolebindings",
+        "cluster-agent-gitops-control",
+    ),
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterroles",
+        "cluster-agent-gitops-control",
+    ),
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterrolebindings",
+        "cluster-agent-node-control",
+    ),
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterroles",
+        "cluster-agent-node-control",
+    ),
     ClusterCleanupResource(
         "rbac.authorization.k8s.io", "v1", "clusterrolebindings", "cluster-agent-read"
     ),
@@ -131,10 +169,16 @@ SANDBOX_RBAC_RESOURCES = (
     "role/cluster-agent-catalog-install",
     "rolebinding/cluster-agent-sandbox-write",
     "rolebinding/cluster-agent-catalog-install",
+    "role/cluster-agent-cronjob-control",
+    "rolebinding/cluster-agent-cronjob-control",
 )
 CLUSTER_SCOPED_RESOURCES = (
+    "clusterrolebinding/cluster-agent-gitops-control",
+    "clusterrolebinding/cluster-agent-node-control",
     "clusterrolebinding/cluster-agent-read",
     "clusterrolebinding/cluster-agent-uninstall",
+    "clusterrole/cluster-agent-node-control",
+    "clusterrole/cluster-agent-gitops-control",
     "clusterrole/cluster-agent-read",
     "clusterrole/cluster-agent-uninstall",
     "priorityclass/gitops-control-critical",

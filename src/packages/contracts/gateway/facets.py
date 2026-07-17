@@ -27,6 +27,7 @@ ISSUE_FILTER_FACET_AXES = (
     "namespaces",
     "applications",
     "severity",
+    "category",
     "status",
     "environment",
 )

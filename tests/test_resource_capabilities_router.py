@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from domains.identity.dependencies import require_session
+from packages.config.constants import Command
 from packages.contracts.gateway.responses import ResourceCapabilitiesResponse
 from packages.runtime.dependencies import get_db
 
@@ -36,6 +37,37 @@ def pod_resource() -> dict[str, object]:
     }
 
 
+def cronjob_resource() -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": "resource-cronjob-nightly",
+        "kind": "CronJob",
+        "name": "nightly",
+        "raw": {"spec": {"suspend": False}},
+    }
+
+
+def workload_resource(kind: str, name: str) -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": f"resource-{kind.casefold()}-{name}",
+        "kind": kind,
+        "name": name,
+    }
+
+
+def node_resource(*, cordoned: bool) -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": "resource-node-worker-a",
+        "resource_type": "node",
+        "kind": "Node",
+        "namespace": None,
+        "name": "worker-a",
+        "raw": {"spec": {"unschedulable": cordoned}},
+    }
+
+
 class ResourceCapabilitiesDb:
     def __init__(
         self,
@@ -44,7 +76,11 @@ class ResourceCapabilitiesDb:
         deploy_permitted: bool = True,
         pod_exec_permitted: bool = True,
         command_supported: bool = True,
+        cronjob_supported: bool = True,
         pod_exec_supported: bool = True,
+        node_control_supported: bool = True,
+        delete_supported: bool = False,
+        workload_rollback_supported: bool = False,
         management: bool = False,
         resource: dict[str, object] | None = None,
     ) -> None:
@@ -52,11 +88,16 @@ class ResourceCapabilitiesDb:
         self.deploy_permitted = deploy_permitted
         self.pod_exec_permitted = pod_exec_permitted
         self.command_supported = command_supported
+        self.cronjob_supported = cronjob_supported
         self.pod_exec_supported = pod_exec_supported
+        self.node_control_supported = node_control_supported
+        self.delete_supported = delete_supported
+        self.workload_rollback_supported = workload_rollback_supported
         self.management = management
         self.resource = deployment_resource() if resource is None else resource
         self.lookups: list[tuple[str, str]] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
+        self.revision_rows: list[dict[str, object]] = []
 
     def get_inventory_resource_by_key(
         self,
@@ -97,9 +138,20 @@ class ResourceCapabilitiesDb:
         capabilities = ["collector"]
         if self.command_supported:
             capabilities.append("command_receiver")
+        if self.cronjob_supported:
+            capabilities.append("cronjob_control.v1")
         if self.pod_exec_supported:
             capabilities.append("pod_exec_stream")
+        if self.node_control_supported:
+            capabilities.append("node_control.v1")
+        if self.delete_supported:
+            capabilities.append(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
+        if self.workload_rollback_supported:
+            capabilities.append(Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY)
         return [{"status": "connected", "capabilities": capabilities}]
+
+    def list_inventory_resources(self, **_kwargs: object) -> list[dict[str, object]]:
+        return [dict(row) for row in self.revision_rows]
 
     def get_cluster_registration(
         self,
@@ -189,6 +241,90 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
     assert [check[-1] for check in db.access_checks] == ["inventory.read", "deploy.run"]
 
 
+def test_capabilities_projects_delete_only_with_exact_cas_and_agent_support() -> None:
+    exact_resource = {
+        **deployment_resource(),
+        "uid": "deployment-uid-1",
+        "resource_version": "42",
+        "deleted_at": None,
+    }
+    response = client(ResourceCapabilitiesDb(resource=exact_resource, delete_supported=True)).get(
+        "/capabilities", params={"resource": exact_resource["inventory_key"]}
+    )
+
+    assert response.status_code == 200
+    delete = next(
+        item
+        for item in response.json()["capabilities"]
+        if item["capability_id"] == "resource.delete"
+    )
+    assert delete["path"] == "/resource-deletions/resource-deployment-api"
+    assert delete["confirmation_required"] is True
+    assert delete["realtime"] is True
+
+    unavailable = client(ResourceCapabilitiesDb(resource=exact_resource)).get(
+        "/capabilities", params={"resource": exact_resource["inventory_key"]}
+    )
+    assert all(
+        item["capability_id"] != "resource.delete" for item in unavailable.json()["capabilities"]
+    )
+
+
+def test_capabilities_projects_rollback_only_from_complete_exact_revision_evidence() -> None:
+    current_template = {"spec": {"containers": [{"name": "api", "image": "checkout:v2"}]}}
+    resource = {
+        **deployment_resource(),
+        "api_version": "apps/v1",
+        "uid": "deployment-uid-1",
+        "resource_version": "42",
+        "raw": {
+            "pod_template": current_template,
+            "revision_history_complete": True,
+            "revision_history_count": 2,
+        },
+    }
+    db = ResourceCapabilitiesDb(
+        resource=resource,
+        workload_rollback_supported=True,
+    )
+    db.revision_rows = [
+        {
+            "inventory_key": f"revision-{number}",
+            "snapshot_id": "snapshot-42",
+            "cluster_id": "cluster-a",
+            "resource_type": "workload_revision",
+            "api_version": "apps/v1",
+            "kind": "ReplicaSet",
+            "namespace": "sandbox",
+            "name": f"checkout-api-r{number}",
+            "uid": f"revision-uid-{number}",
+            "resource_version": str(number),
+            "raw": {
+                "owner_kind": "Deployment",
+                "owner_name": "checkout-api",
+                "owner_uid": "deployment-uid-1",
+                "revision": str(number),
+                "template": template,
+            },
+        }
+        for number, template in (
+            (1, {"spec": {"containers": [{"name": "api", "image": "checkout:v1"}]}}),
+            (2, current_template),
+        )
+    ]
+
+    response = client(db).get("/capabilities", params={"resource": resource["inventory_key"]})
+
+    assert response.status_code == 200
+    rollback = next(
+        item
+        for item in response.json()["capabilities"]
+        if item["capability_id"] == "workload.rollback"
+    )
+    assert rollback["path"] == "/resource-rollbacks/resource-deployment-api"
+    assert rollback["realtime"] is True
+
+
 def test_capabilities_are_server_owned_execution_descriptors() -> None:
     response = client(ResourceCapabilitiesDb()).get(
         "/capabilities",
@@ -212,6 +348,132 @@ def test_capabilities_are_server_owned_execution_descriptors() -> None:
             "maximum": 100,
             "default": 1,
         }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("kind", "name", "capability_ids"),
+    [
+        ("StatefulSet", "checkout-db", ["statefulset.restart", "statefulset.scale"]),
+        ("DaemonSet", "node-agent", ["daemonset.restart"]),
+    ],
+)
+def test_workload_capabilities_reuse_server_owned_command_handoff(
+    kind: str,
+    name: str,
+    capability_ids: list[str],
+) -> None:
+    resource = workload_resource(kind, name)
+    response = client(ResourceCapabilitiesDb(resource=resource)).get(
+        "/capabilities",
+        params={"resource": resource["inventory_key"]},
+    )
+
+    assert response.status_code == 200
+    capabilities = response.json()["capabilities"]
+    assert [item["capability_id"] for item in capabilities] == capability_ids
+    assert all(item["execution"] == "command" for item in capabilities)
+    assert all(item["confirmation_required"] is True for item in capabilities)
+    assert all(item["realtime"] is True for item in capabilities)
+    assert all(
+        item["path"].startswith(
+            f"/clusters/cluster-a/namespaces/sandbox/workloads/{kind.casefold()}/{name}/"
+        )
+        for item in capabilities
+    )
+
+
+@pytest.mark.parametrize(
+    ("cordoned", "capability_id", "path_suffix"),
+    [
+        (False, "node.cordon", "/cordon"),
+        (True, "node.uncordon", "/uncordon"),
+    ],
+)
+def test_node_capability_is_derived_from_observed_scheduling_state(
+    cordoned: bool,
+    capability_id: str,
+    path_suffix: str,
+) -> None:
+    resource = node_resource(cordoned=cordoned)
+    response = client(ResourceCapabilitiesDb(resource=resource)).get(
+        "/capabilities",
+        params={"resource": resource["inventory_key"]},
+    )
+
+    assert response.status_code == 200
+    capabilities = response.json()["capabilities"]
+    assert [item["capability_id"] for item in capabilities] == [capability_id]
+    assert capabilities[0]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
+    assert capabilities[0]["realtime"] is True
+
+
+def test_node_capability_is_hidden_without_agent_node_control_capability() -> None:
+    resource = node_resource(cordoned=False)
+    response = client(
+        ResourceCapabilitiesDb(
+            resource=resource,
+            node_control_supported=False,
+        )
+    ).get("/capabilities", params={"resource": resource["inventory_key"]})
+
+    assert response.status_code == 200
+    assert response.json()["capabilities"] == []
+
+
+def test_capabilities_expose_exact_cronjob_actions_only_with_permission_and_agent_support() -> None:
+    response = client(ResourceCapabilitiesDb(resource=cronjob_resource())).get(
+        "/capabilities",
+        params={"resource": "resource-cronjob-nightly"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["subject"] == {
+        "resource_id": "resource-cronjob-nightly",
+        "snapshot_id": "snapshot-42",
+        "cluster_id": "cluster-a",
+        "resource_type": "workload",
+        "kind": "CronJob",
+        "namespace": "sandbox",
+        "name": "nightly",
+    }
+    assert [item["capability_id"] for item in body["capabilities"]] == [
+        "cronjob.suspend",
+        "cronjob.trigger",
+    ]
+    assert [item["path"] for item in body["capabilities"]] == [
+        "/clusters/cluster-a/namespaces/sandbox/cronjobs/nightly/suspend",
+        "/clusters/cluster-a/namespaces/sandbox/cronjobs/nightly/trigger",
+    ]
+    assert all(item["confirmation_required"] is True for item in body["capabilities"])
+    assert all(item["realtime"] is True for item in body["capabilities"])
+
+    unsupported = client(
+        ResourceCapabilitiesDb(resource=cronjob_resource(), cronjob_supported=False)
+    ).get("/capabilities", params={"resource": "resource-cronjob-nightly"})
+    forbidden = client(
+        ResourceCapabilitiesDb(resource=cronjob_resource(), deploy_permitted=False)
+    ).get("/capabilities", params={"resource": "resource-cronjob-nightly"})
+
+    assert unsupported.status_code == 200
+    assert unsupported.json()["capabilities"] == []
+    assert forbidden.status_code == 200
+    assert forbidden.json()["capabilities"] == []
+
+
+def test_capabilities_switch_cronjob_schedule_action_from_observed_state() -> None:
+    suspended_resource = cronjob_resource()
+    suspended_resource["raw"] = {"spec": {"suspend": True}}
+    response = client(ResourceCapabilitiesDb(resource=suspended_resource)).get(
+        "/capabilities",
+        params={"resource": "resource-cronjob-nightly"},
+    )
+
+    assert response.status_code == 200
+    assert [item["capability_id"] for item in response.json()["capabilities"]] == [
+        "cronjob.resume",
+        "cronjob.trigger",
     ]
 
 

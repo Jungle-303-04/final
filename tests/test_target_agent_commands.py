@@ -12,6 +12,17 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from packages.config.constants import Command
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HelmArtifactResult,
+)
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+    SERVICE_REQUEST_MAX_BODY_BYTES,
+)
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "agent.py"
 
@@ -40,6 +51,7 @@ def load_agent_module():
         "commands.kubernetes",
         "commands.outbox",
         "commands.registry",
+        "commands.service_access",
         "control",
         "control.policy",
         "control.reconciler",
@@ -87,6 +99,8 @@ def load_agent_module():
 class StubKubernetesClient:
     def __init__(self) -> None:
         self.patches: list[dict[str, object]] = []
+        self.cluster_patches: list[dict[str, object]] = []
+        self.creates: list[dict[str, object]] = []
         self.namespaced_deletes: list[dict[str, object]] = []
         self.cluster_deletes: list[dict[str, object]] = []
 
@@ -96,6 +110,14 @@ class StubKubernetesClient:
     async def patch_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.patches.append(kwargs)
         return {"patched": True}
+
+    async def patch_cluster_resource(self, **kwargs: object) -> dict[str, object]:
+        self.cluster_patches.append(kwargs)
+        return {"patched": True}
+
+    async def create_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.creates.append(kwargs)
+        return {"metadata": {"name": "nightly-manual-abc"}}
 
     async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.namespaced_deletes.append(kwargs)
@@ -163,6 +185,167 @@ def register_agent_commands(module: object, agent: object) -> None:
     )
 
 
+class ServiceKubernetesClient(StubKubernetesClient):
+    def __init__(self, service: dict[str, object]) -> None:
+        super().__init__()
+        self.service = service
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        return self.service
+
+
+class CronJobKubernetesClient(StubKubernetesClient):
+    def __init__(self, *, uid: str = "cronjob-uid-1") -> None:
+        super().__init__()
+        self.gets: list[dict[str, object]] = []
+        self.uid = uid
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        return {
+            "apiVersion": "batch/v1",
+            "kind": "CronJob",
+            "metadata": {
+                "name": "nightly",
+                "namespace": str(kwargs["namespace"]),
+                "uid": self.uid,
+            },
+            "spec": {
+                "jobTemplate": {
+                    "metadata": {"labels": {"job": "nightly"}},
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "restartPolicy": "Never",
+                                "containers": [{"name": "job", "image": "example/job:v1"}],
+                            }
+                        }
+                    },
+                }
+            },
+        }
+
+
+class GitOpsKubernetesClient(StubKubernetesClient):
+    def __init__(self, root: dict[str, object], source: dict[str, object] | None = None) -> None:
+        super().__init__()
+        self.root = root
+        self.source = source
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        if kwargs.get("resource") == "gitrepositories" and self.source is not None:
+            return self.source
+        return self.root
+
+
+class WorkloadRollbackKubernetesClient(StubKubernetesClient):
+    def __init__(self, *, workload_uid: str = "deployment-uid") -> None:
+        super().__init__()
+        self.workload_uid = workload_uid
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        if kwargs["resource"] == "deployments":
+            return {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {
+                    "name": "checkout",
+                    "namespace": "sandbox",
+                    "uid": self.workload_uid,
+                    "resourceVersion": "42",
+                },
+                "spec": {
+                    "template": {
+                        "metadata": {"labels": {"app": "checkout"}},
+                        "spec": {"containers": [{"name": "api", "image": "checkout:v3"}]},
+                    }
+                },
+            }
+        return {
+            "apiVersion": "apps/v1",
+            "kind": "ReplicaSet",
+            "metadata": {
+                "name": "checkout-r2",
+                "namespace": "sandbox",
+                "uid": "revision-uid-2",
+                "resourceVersion": "2",
+                "annotations": {"deployment.kubernetes.io/revision": "2"},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "apps/v1",
+                        "kind": "Deployment",
+                        "name": "checkout",
+                        "uid": "deployment-uid",
+                        "controller": True,
+                    }
+                ],
+            },
+            "spec": {
+                "template": {
+                    "metadata": {"labels": {"app": "checkout"}},
+                    "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+                }
+            },
+        }
+
+
+def workload_rollback_payload() -> dict[str, object]:
+    target_template = {
+        "metadata": {"labels": {"app": "checkout"}},
+        "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+    }
+    return {
+        "namespace": "sandbox",
+        "name": "checkout",
+        "workload_ref": {
+            "api_group": "apps",
+            "version": "v1",
+            "kind": "Deployment",
+            "namespace": "sandbox",
+            "name": "checkout",
+            "uid": "deployment-uid",
+        },
+        "workload_resource_version": "42",
+        "target_revision_ref": {
+            "api_group": "apps",
+            "version": "v1",
+            "kind": "ReplicaSet",
+            "namespace": "sandbox",
+            "name": "checkout-r2",
+            "uid": "revision-uid-2",
+        },
+        "target_revision_resource_version": "2",
+        "target_revision": "2",
+        "target_template_sha256": "sha256:9b58a2c145b1c0bf9065a8b7f438ddae260bb80b823001515f1dd777854e96e2",
+        "target_template": target_template,
+    }
+
+
+def cronjob_command_payload(
+    *,
+    namespace: str = "team-jobs",
+    uid: str = "cronjob-uid-1",
+) -> dict[str, object]:
+    return {
+        "namespace": namespace,
+        "name": "nightly",
+        "resource_ref": {
+            "api_group": "batch",
+            "version": "v1",
+            "kind": "CronJob",
+            "namespace": namespace,
+            "name": "nightly",
+            "uid": uid,
+        },
+    }
+
+
 def approval_evidence(
     *,
     expires_at: str = "2099-01-01T00:00:00Z",
@@ -196,6 +379,261 @@ def test_agent_unwraps_queued_command_payload() -> None:
     )
 
     assert payload["query"]["source"] == "prometheus"
+
+
+def service_http_command(
+    module: object,
+    *,
+    uid: str = "uid-service-1",
+    port: int = 80,
+    path: str = "/ready",
+) -> dict[str, object]:
+    return {
+        "command_id": "cmd-service-1",
+        "action": module.SERVICE_HTTP_REQUEST_ACTION,
+        "payload": {
+            "resource": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Service",
+                "namespace": "shop",
+                "name": "checkout-api",
+                "uid": uid,
+            },
+            "port": port,
+            "scheme": "http",
+            "path": path,
+        },
+    }
+
+
+def service_api_object() -> dict[str, object]:
+    return {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "namespace": "shop",
+            "name": "checkout-api",
+            "uid": "uid-service-1",
+        },
+        "spec": {
+            "type": "ClusterIP",
+            "clusterIP": "10.96.0.10",
+            "ports": [
+                {
+                    "name": "http",
+                    "protocol": "TCP",
+                    "port": 80,
+                    "targetPort": 8080,
+                    "appProtocol": "http",
+                }
+            ],
+        },
+    }
+
+
+def configured_service_agent(module: object, transport: httpx.MockTransport):
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.kubernetes = ServiceKubernetesClient(service_api_object())
+    agent.service_http_transport = transport
+    register_agent_commands(module, agent)
+    return agent
+
+
+def test_service_http_command_revalidates_uid_and_returns_bounded_result() -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "application/json",
+                "set-cookie": "secret=session",
+            },
+            json={"ready": True},
+        )
+
+    agent = configured_service_agent(module, httpx.MockTransport(handler))
+    result = asyncio.run(agent.execute_command(service_http_command(module)))
+
+    assert result["status"] == "completed"
+    assert result["service_request"] == {
+        "status": 200,
+        "status_text": "OK",
+        "duration_ms": pytest.approx(result["service_request"]["duration_ms"]),
+        "headers": {"content-length": "14", "content-type": "application/json"},
+        "body": '{"ready":true}',
+        "truncated": False,
+        "body_bytes": 14,
+        "error": None,
+    }
+    assert requests[0].url == "http://checkout-api.shop.svc:80/ready"
+    assert agent.kubernetes.gets == [
+        {
+            "api_group": "core",
+            "version": "v1",
+            "namespace": "shop",
+            "resource": "services",
+            "name": "checkout-api",
+        }
+    ]
+
+
+def test_service_http_command_rejects_stale_uid_before_network_access() -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200)
+
+    agent = configured_service_agent(module, httpx.MockTransport(handler))
+    result = asyncio.run(
+        agent.execute_command(service_http_command(module, uid="stale-service-uid"))
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "service_identity_changed"
+    assert requests == []
+
+
+def test_service_http_command_truncates_response_and_advertises_capability() -> None:
+    module = load_agent_module()
+    body = b"x" * (SERVICE_REQUEST_MAX_BODY_BYTES + 32)
+    agent = configured_service_agent(
+        module,
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=body)),
+    )
+
+    result = asyncio.run(agent.execute_command(service_http_command(module)))
+
+    assert result["status"] == "completed"
+    assert result["service_request"]["truncated"] is True
+    assert result["service_request"]["body_bytes"] == SERVICE_REQUEST_MAX_BODY_BYTES
+    assert len(result["service_request"]["body"].encode()) == SERVICE_REQUEST_MAX_BODY_BYTES
+    assert SERVICE_HTTP_REQUEST_AGENT_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
+
+
+def test_helm_artifact_command_returns_only_the_typed_sanitized_projection(monkeypatch) -> None:
+    module = load_agent_module()
+    artifact = HelmArtifactResult(
+        artifact="manifest",
+        format="yaml",
+        namespace="storefront",
+        release_name="storefront",
+        revision=3,
+        content="---\nkind: Deployment\n",
+        content_sha256="0" * 64,
+        content_bytes=21,
+        source_bytes=64,
+        redaction_applied=True,
+    )
+    monkeypatch.setattr(
+        module,
+        "run_helm_artifact_query",
+        lambda _payload: SimpleNamespace(succeeded=True, artifact=artifact, error_code=""),
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = False
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "command_id": "cmd-helm-artifact-1",
+                "action": HELM_RELEASE_ARTIFACT_READ_ACTION,
+                "payload": {
+                    "cluster_id": "cluster-1",
+                    "namespace": "storefront",
+                    "release_name": "storefront",
+                    "artifact": "manifest",
+                    "revision": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["artifact"] == artifact.model_dump(mode="json", exclude_none=True)
+    assert HELM_RELEASE_ARTIFACT_READ_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
+
+
+def test_helm_structured_diff_command_never_emits_raw_hook_manifests(monkeypatch) -> None:
+    module = load_agent_module()
+    artifact = HelmArtifactResult(
+        artifact="hooks_diff",
+        format="structured",
+        namespace="storefront",
+        release_name="storefront",
+        revision=2,
+        comparison_revision=3,
+        source_bytes=200,
+        redaction_applied=True,
+        projection_sha256="0" * 64,
+        projection_bytes=128,
+        hooks_diff={
+            "revision1": 2,
+            "revision2": 3,
+            "added": [],
+            "removed": [],
+            "modified": [
+                {
+                    "api_version": "batch/v1",
+                    "kind": "Job",
+                    "name": "migrate",
+                    "namespace": "storefront",
+                    "events": ["pre-upgrade"],
+                    "weight": 1,
+                    "delete_policies": [],
+                    "output_log_policies": [],
+                    "manifest_changed": True,
+                }
+            ],
+            "unchanged": [],
+            "parse_error_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_helm_artifact_query",
+        lambda _payload: SimpleNamespace(succeeded=True, artifact=artifact, error_code=""),
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = False
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "command_id": "cmd-helm-hooks-1",
+                "action": HELM_RELEASE_ARTIFACT_READ_ACTION,
+                "payload": {
+                    "cluster_id": "cluster-1",
+                    "namespace": "storefront",
+                    "release_name": "storefront",
+                    "artifact": "hooks_diff",
+                    "revision": 2,
+                    "comparison_revision": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["artifact"]["hooks_diff"]["modified"][0]["name"] == "migrate"
+    assert "manifest" not in result["artifact"]["hooks_diff"]["modified"][0]
+    assert "must-not-leak" not in str(result)
 
 
 def test_apply_manifest_keeps_plan_diff_payload() -> None:
@@ -243,6 +681,158 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     assert result["applied"] is True
     assert applied["namespace"] == "sandbox"
     assert applied["manifest"]["kind"] == "ConfigMap"
+
+
+def test_apply_manifest_reports_each_document_and_partial_failure() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    applied: list[str] = []
+
+    async def stub_apply(
+        manifest: dict[str, object],
+        namespace: str,
+        *,
+        expected_uid: str | None = None,
+    ) -> tuple[bool, str, dict]:
+        metadata = manifest["metadata"]
+        assert isinstance(metadata, dict)
+        name = str(metadata["name"])
+        applied.append(name)
+        assert namespace == "sandbox"
+        if name == "checkout-api":
+            assert expected_uid == "deployment-uid-1"
+            return True, "manifest applied", {}
+        assert expected_uid is None
+        return False, "configmap rejected", {}
+
+    agent.apply_kubernetes_manifest = stub_apply
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.APPLY_MANIFEST_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "diff": {
+                        "resource": "Deployment/checkout-api",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "apps/v1",
+                            "kind": "Deployment",
+                            "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+                        },
+                    },
+                    "payload": {
+                        "resource_ref": {
+                            "kind": "Deployment",
+                            "namespace": "sandbox",
+                            "name": "checkout-api",
+                            "uid": "deployment-uid-1",
+                        },
+                        "desired_documents": [
+                            {
+                                "apiVersion": "apps/v1",
+                                "kind": "Deployment",
+                                "metadata": {
+                                    "name": "checkout-api",
+                                    "namespace": "sandbox",
+                                },
+                            },
+                            {
+                                "apiVersion": "v1",
+                                "kind": "ConfigMap",
+                                "metadata": {"name": "shared", "namespace": "sandbox"},
+                            },
+                        ],
+                    },
+                },
+            }
+        )
+    )
+
+    assert applied == ["checkout-api", "shared"]
+    assert result["status"] == "failed"
+    assert result["applied"] is True
+    assert result["completeness"] == "partial"
+    assert [(item["resource"], item["status"]) for item in result["resources"]] == [
+        ("Deployment/checkout-api", "completed"),
+        ("ConfigMap/shared", "failed"),
+    ]
+
+
+def test_create_manifest_dry_run_reports_per_document_partial_without_applied_state() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[tuple[str, bool, bool]] = []
+
+    async def stub_create(
+        manifest: dict[str, object],
+        namespace: str,
+        *,
+        dry_run: bool,
+        force: bool,
+        field_manager: str,
+    ) -> tuple[bool, str, dict[str, object]]:
+        metadata = manifest["metadata"]
+        assert isinstance(metadata, dict)
+        name = str(metadata["name"])
+        assert namespace == "sandbox"
+        assert field_manager == "opsia-resource-create"
+        calls.append((name, dry_run, force))
+        return (name == "checkout-api", f"validated {name}", {})
+
+    agent.create_kubernetes_manifest = stub_create
+    register_agent_commands(module, agent)
+    desired_sha256 = "sha256:" + "d" * 64
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.APPLY_MANIFEST_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "diff": {"namespace": "sandbox"},
+                    "payload": {
+                        "create_mode": True,
+                        "dry_run": True,
+                        "force": False,
+                        "force_confirmation": False,
+                        "field_manager": "opsia-resource-create",
+                        "desired_sha256": desired_sha256,
+                        "desired_documents": [
+                            {
+                                "apiVersion": "apps/v1",
+                                "kind": "Deployment",
+                                "metadata": {
+                                    "name": "checkout-api",
+                                    "namespace": "sandbox",
+                                },
+                            },
+                            {
+                                "apiVersion": "v1",
+                                "kind": "ConfigMap",
+                                "metadata": {"name": "shared", "namespace": "sandbox"},
+                            },
+                        ],
+                    },
+                },
+            }
+        )
+    )
+
+    assert calls == [("checkout-api", True, False), ("shared", True, False)]
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["dry_run"] is True
+    assert result["desired_sha256"] == desired_sha256
+    assert result["completeness"] == "partial"
 
 
 def test_rollout_restart_keeps_plan_diff_payload() -> None:
@@ -362,6 +952,115 @@ def test_target_agent_advertises_catalog_helm_runner_capability() -> None:
     module = load_agent_module()
 
     assert "catalog_helm_install" in module.AgentConfig.AGENT_CAPABILITIES
+    assert "catalog_helm_upgrade_cas.v1" in module.AgentConfig.AGENT_CAPABILITIES
+
+
+def test_catalog_helm_upgrade_rejects_stale_secret_before_runner(monkeypatch) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_catalog_helm_install",
+        lambda payload: calls.append(payload),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-redis",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "storefront",
+                    "release_name": "storefront",
+                    "values": {"master.persistence.storageClass": "gp3"},
+                    "upgrade_guard": {
+                        "expected_revision": 3,
+                        "storage": {
+                            "api_group": "",
+                            "version": "v1",
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "sh.helm.release.v1.storefront.v3",
+                            "uid": "storage-uid-3",
+                        },
+                        "storage_resource_version": "1042",
+                        "chart_name": "redis",
+                        "chart_version": "22.0.0",
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "helm_release_guard_stale"
+    assert calls == []
+
+
+def test_catalog_helm_upgrade_fails_closed_when_secret_read_is_unavailable(
+    monkeypatch,
+) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+
+    class UnavailableKubernetesClient(StubKubernetesClient):
+        async def get_namespaced_resource(self, **_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("credential material must not leak")
+
+    agent.kubernetes = UnavailableKubernetesClient()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        module,
+        "run_catalog_helm_install",
+        lambda payload: calls.append(payload),
+        raising=False,
+    )
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CATALOG_HELM_INSTALL_ACTION,
+                "payload": {
+                    "catalog_item_id": "catalog-redis",
+                    "catalog_version": "1.0.0",
+                    "namespace": "sandbox",
+                    "application_name": "storefront",
+                    "release_name": "storefront",
+                    "values": {"master.persistence.storageClass": "gp3"},
+                    "upgrade_guard": {
+                        "expected_revision": 3,
+                        "storage": {
+                            "api_group": "",
+                            "version": "v1",
+                            "kind": "Secret",
+                            "namespace": "sandbox",
+                            "name": "sh.helm.release.v1.storefront.v3",
+                            "uid": "storage-uid-3",
+                        },
+                        "storage_resource_version": "1042",
+                        "chart_name": "redis",
+                        "chart_version": "22.0.0",
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "helm_release_guard_unavailable"
+    assert "credential material" not in str(result)
+    assert calls == []
 
 
 def test_catalog_helm_install_command_preserves_runner_failure(monkeypatch) -> None:
@@ -1585,6 +2284,413 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
     assert agent.kubernetes.patches[0]["body"] == {"spec": {"replicas": 3}}
 
 
+@pytest.mark.parametrize(
+    ("action", "resource", "replicas"),
+    [
+        (Command.KUBERNETES_STATEFULSET_SCALE_ACTION, "statefulsets", 3),
+        (Command.KUBERNETES_STATEFULSET_RESTART_ACTION, "statefulsets", None),
+        (Command.KUBERNETES_DAEMONSET_RESTART_ACTION, "daemonsets", None),
+    ],
+)
+def test_workload_commands_use_exact_registered_kubernetes_resource(
+    action: str,
+    resource: str,
+    replicas: int | None,
+) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+    payload: dict[str, object] = {"namespace": "sandbox", "name": "checkout"}
+    if replicas is not None:
+        payload["replicas"] = replicas
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": action,
+                "direct_execution": True,
+                "payload": payload,
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    patch = agent.kubernetes.patches[0]
+    assert patch["resource"] == resource
+    if replicas is None:
+        assert patch["body"] == module.build_rollout_restart_patch()
+        assert patch.get("subresource") is None
+    else:
+        assert patch["body"] == {"spec": {"replicas": replicas}}
+        assert patch["subresource"] == "scale"
+
+
+def test_workload_rollback_revalidates_both_cas_identities_before_patch() -> None:
+    module = load_agent_module()
+    kubernetes = WorkloadRollbackKubernetesClient()
+    payload = workload_rollback_payload()
+    payload["target_template_sha256"] = module.workload_template_sha256(
+        {
+            "metadata": {"labels": {"app": "checkout"}},
+            "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+        }
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+                "direct_execution": True,
+                "payload": payload,
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["revision"] == "2"
+    assert result["partial_failure"] is False
+    assert [item["resource"] for item in kubernetes.gets] == ["deployments", "replicasets"]
+    assert kubernetes.patches == [
+        {
+            "api_group": "apps",
+            "version": "v1",
+            "namespace": "sandbox",
+            "resource": "deployments",
+            "name": "checkout",
+            "body": {
+                "metadata": {"resourceVersion": "42"},
+                "spec": {
+                    "template": {
+                        "metadata": {"labels": {"app": "checkout"}},
+                        "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+                    }
+                },
+            },
+        }
+    ]
+
+
+def test_workload_rollback_rejects_recreated_workload_without_any_patch() -> None:
+    module = load_agent_module()
+    kubernetes = WorkloadRollbackKubernetesClient(workload_uid="recreated-uid")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+                "direct_execution": True,
+                "payload": workload_rollback_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "stale" in result["message"]
+    assert kubernetes.patches == []
+
+
+@pytest.mark.parametrize(
+    ("action", "unschedulable"),
+    [
+        (Command.KUBERNETES_NODE_CORDON_ACTION, True),
+        (Command.KUBERNETES_NODE_UNCORDON_ACTION, False),
+    ],
+)
+def test_node_scheduling_command_uses_exact_cluster_resource_patch(
+    action: str,
+    unschedulable: bool,
+) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": action,
+                "direct_execution": True,
+                "payload": {
+                    "name": "worker-a",
+                    "unschedulable": unschedulable,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["unschedulable"] is unschedulable
+    assert agent.kubernetes.cluster_patches == [
+        {
+            "api_group": "core",
+            "version": "v1",
+            "resource": "nodes",
+            "name": "worker-a",
+            "body": {"spec": {"unschedulable": unschedulable}},
+        }
+    ]
+
+
+def test_node_scheduling_command_fails_closed_when_profile_is_disabled() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": Command.KUBERNETES_NODE_CORDON_ACTION,
+                "direct_execution": True,
+                "payload": {"name": "worker-a", "unschedulable": True},
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "node control is disabled by agent profile"
+    assert agent.kubernetes.cluster_patches == []
+
+
+def test_node_control_capability_is_advertised_only_when_enabled() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
+
+    agent.node_control_enabled = True
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY in agent.advertised_capabilities()
+    agent.direct_commands_enabled = False
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
+
+
+def test_cronjob_trigger_uses_observed_template_and_advertised_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = CronJobKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+                "direct_execution": True,
+                "payload": cronjob_command_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert module.Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY in (
+        module.AgentConfig.AGENT_CAPABILITIES
+    )
+    registered = agent.command_registry.handlers[module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION]
+    assert registered.spec.kubernetes.resource == "jobs"
+    assert registered.spec.kubernetes.verb == "create"
+    assert agent.kubernetes.gets == [
+        {
+            "api_group": "batch",
+            "version": "v1",
+            "namespace": "team-jobs",
+            "resource": "cronjobs",
+            "name": "nightly",
+        }
+    ]
+    created = agent.kubernetes.creates[0]
+    assert created["resource"] == "jobs"
+    assert created["namespace"] == "team-jobs"
+    assert created["body"]["metadata"]["generateName"] == "nightly-manual-"
+    assert (
+        created["body"]["metadata"]["annotations"]["opsia.io/source-cronjob-uid"] == "cronjob-uid-1"
+    )
+    assert created["body"]["spec"]["template"]["spec"]["restartPolicy"] == "Never"
+
+
+def test_cronjob_trigger_generate_name_reserves_the_kubernetes_suffix_boundary() -> None:
+    module = load_agent_module()
+    cronjob_name = "a" * 52
+    cronjob = {
+        "metadata": {
+            "name": cronjob_name,
+            "namespace": "team-jobs",
+            "uid": "cronjob-uid-1",
+        },
+        "spec": {
+            "jobTemplate": {
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [{"name": "job", "image": "example/job:v1"}],
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    body = module.cronjob_job_body(
+        cronjob,
+        namespace="team-jobs",
+        name=cronjob_name,
+    )
+    prefix = body["metadata"]["generateName"]
+
+    assert prefix.endswith("-manual-")
+    assert len(prefix) == 58
+    assert len(f"{prefix}abcde") == 63
+
+
+def test_cronjob_capability_is_hidden_when_direct_commands_are_disabled() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.direct_commands_enabled = False
+
+    assert (
+        module.Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY not in agent.advertised_capabilities()
+    )
+
+
+@pytest.mark.parametrize(
+    ("action", "suspended"),
+    [
+        ("KUBERNETES_CRONJOB_SUSPEND_ACTION", True),
+        ("KUBERNETES_CRONJOB_RESUME_ACTION", False),
+    ],
+)
+def test_cronjob_schedule_control_is_typed_and_namespace_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+    suspended: bool,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.cluster_role = "management"
+    agent.kubernetes = CronJobKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": getattr(module.Command, action),
+                "direct_execution": True,
+                "payload": cronjob_command_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert agent.kubernetes.patches == [
+        {
+            "api_group": "batch",
+            "version": "v1",
+            "namespace": "team-jobs",
+            "resource": "cronjobs",
+            "name": "nightly",
+            "body": {"spec": {"suspend": suspended}},
+        }
+    ]
+    assert agent.kubernetes.gets == [
+        {
+            "api_group": "batch",
+            "version": "v1",
+            "namespace": "team-jobs",
+            "resource": "cronjobs",
+            "name": "nightly",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "KUBERNETES_CRONJOB_TRIGGER_ACTION",
+        "KUBERNETES_CRONJOB_SUSPEND_ACTION",
+        "KUBERNETES_CRONJOB_RESUME_ACTION",
+    ],
+)
+def test_cronjob_control_rejects_a_recreated_uid_before_any_write(
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = CronJobKubernetesClient(uid="cronjob-uid-recreated")
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": getattr(module.Command, action),
+                "direct_execution": True,
+                "payload": cronjob_command_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "selected CronJob identity is stale"
+    assert agent.kubernetes.creates == []
+    assert agent.kubernetes.patches == []
+
+
+def test_cronjob_control_rejects_namespace_outside_agent_policy() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = CronJobKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+                "direct_execution": True,
+                "payload": cronjob_command_payload(namespace="kube-system"),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "namespace is not allowed by control policy"
+    assert agent.kubernetes.gets == []
+    assert agent.kubernetes.creates == []
+
+
 def test_kubernetes_scale_requires_approval_evidence() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -1856,3 +2962,340 @@ def test_management_agent_default_policy_enables_only_kubernetes_provider() -> N
     }
 
     assert enabled == {"kubernetes"}
+
+
+class ExactResourceDeleteClient(StubKubernetesClient):
+    def __init__(self, *, fail_name: str | None = None) -> None:
+        super().__init__()
+        self.fail_name = fail_name
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        name = str(kwargs["name"])
+        return {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": name,
+                "namespace": str(kwargs["namespace"]),
+                "uid": f"uid-{name}",
+                "resourceVersion": f"rv-{name}",
+            },
+        }
+
+    async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.namespaced_deletes.append(kwargs)
+        if kwargs["name"] == self.fail_name:
+            raise RuntimeError("delete denied")
+        return {"deleted": True, "status_code": 200}
+
+
+def test_exact_resource_delete_checks_cas_and_reports_each_root() -> None:
+    module = load_agent_module()
+    kubernetes = ExactResourceDeleteClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "resources": [
+                        {
+                            "api_group": "apps",
+                            "version": "v1",
+                            "kind": "Deployment",
+                            "namespace": "shop",
+                            "name": "checkout",
+                            "uid": "uid-checkout",
+                            "resource_version": "rv-checkout",
+                            "plural": "deployments",
+                        },
+                        {
+                            "api_group": "apps",
+                            "version": "v1",
+                            "kind": "Deployment",
+                            "namespace": "shop",
+                            "name": "payments",
+                            "uid": "uid-payments",
+                            "resource_version": "rv-payments",
+                            "plural": "deployments",
+                        },
+                    ],
+                    "propagation_policy": "Foreground",
+                    "request_fingerprint": "a" * 64,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["completeness"] == "exact"
+    assert [item["status"] for item in result["resources"]] == ["deleted", "deleted"]
+    assert kubernetes.namespaced_deletes[0]["preconditions"] == {
+        "uid": "uid-checkout",
+        "resourceVersion": "rv-checkout",
+    }
+    assert kubernetes.namespaced_deletes[0]["propagation_policy"] == "Foreground"
+
+
+def test_exact_resource_delete_preserves_partial_failure_without_retargeting() -> None:
+    module = load_agent_module()
+    kubernetes = ExactResourceDeleteClient(fail_name="payments")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "resources": [
+                        {
+                            "api_group": "apps",
+                            "version": "v1",
+                            "kind": "Deployment",
+                            "namespace": "shop",
+                            "name": name,
+                            "uid": f"uid-{name}",
+                            "resource_version": f"rv-{name}",
+                            "plural": "deployments",
+                        }
+                        for name in ("checkout", "payments")
+                    ],
+                    "propagation_policy": "Foreground",
+                    "request_fingerprint": "b" * 64,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["completeness"] == "partial"
+    assert result["applied"] is True
+    assert result["resources"] == [
+        {
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout",
+            "uid": "uid-checkout",
+            "status": "deleted",
+        },
+        {
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "payments",
+            "uid": "uid-payments",
+            "status": "failed",
+            "error": "delete denied",
+        },
+    ]
+
+
+def test_gitops_flux_sync_with_source_revalidates_both_resources_before_patching() -> None:
+    module = load_agent_module()
+    root = {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+            "namespace": "flux-system",
+            "name": "storefront",
+            "uid": "root-uid",
+            "resourceVersion": "17",
+        },
+        "spec": {"sourceRef": {"kind": "GitRepository", "name": "storefront-source"}},
+    }
+    source = {
+        "apiVersion": "source.toolkit.fluxcd.io/v1",
+        "kind": "GitRepository",
+        "metadata": {
+            "namespace": "flux-system",
+            "name": "storefront-source",
+            "uid": "source-uid",
+            "resourceVersion": "9",
+        },
+    }
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = GitOpsKubernetesClient(root, source)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.GITOPS_RESOURCE_CONTROL_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "action": "sync_with_source",
+                    "requested_at": "2026-07-17T04:15:00Z",
+                    "resource_ref": {
+                        "api_group": "kustomize.toolkit.fluxcd.io",
+                        "version": "v1",
+                        "kind": "Kustomization",
+                        "namespace": "flux-system",
+                        "name": "storefront",
+                        "uid": "root-uid",
+                    },
+                    "resource_version": "17",
+                    "source_ref": {
+                        "api_group": "source.toolkit.fluxcd.io",
+                        "version": "v1",
+                        "kind": "GitRepository",
+                        "namespace": "flux-system",
+                        "name": "storefront-source",
+                        "uid": "source-uid",
+                    },
+                    "source_resource_version": "9",
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert [patch["resource"] for patch in agent.kubernetes.patches] == [
+        "gitrepositories",
+        "kustomizations",
+    ]
+    for patch in agent.kubernetes.patches:
+        assert patch["body"]["metadata"]["annotations"]["reconcile.fluxcd.io/requestedAt"] == (
+            "2026-07-17T04:15:00Z"
+        )
+
+
+def test_gitops_command_rejects_stale_uid_and_resource_version_without_patch() -> None:
+    module = load_agent_module()
+    root = {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "namespace": "argocd",
+            "name": "storefront",
+            "uid": "different-uid",
+            "resourceVersion": "18",
+        },
+    }
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = GitOpsKubernetesClient(root)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.GITOPS_RESOURCE_CONTROL_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "action": "refresh",
+                    "requested_at": "2026-07-17T04:15:00Z",
+                    "refresh_mode": "normal",
+                    "resource_ref": {
+                        "api_group": "argoproj.io",
+                        "version": "v1alpha1",
+                        "kind": "Application",
+                        "namespace": "argocd",
+                        "name": "storefront",
+                        "uid": "root-uid",
+                    },
+                    "resource_version": "17",
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "stale" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
+def test_gitops_argo_selective_sync_revalidates_live_controller_ownership() -> None:
+    module = load_agent_module()
+    root = {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "namespace": "argocd",
+            "name": "storefront",
+            "uid": "root-uid",
+            "resourceVersion": "17",
+        },
+        "status": {
+            "resources": [
+                {
+                    "group": "apps",
+                    "kind": "Deployment",
+                    "namespace": "shop",
+                    "name": "checkout",
+                }
+            ]
+        },
+    }
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = GitOpsKubernetesClient(root)
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.GITOPS_RESOURCE_CONTROL_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "action": "sync",
+                    "requested_at": "2026-07-17T04:15:00Z",
+                    "resource_ref": {
+                        "api_group": "argoproj.io",
+                        "version": "v1alpha1",
+                        "kind": "Application",
+                        "namespace": "argocd",
+                        "name": "storefront",
+                        "uid": "root-uid",
+                    },
+                    "resource_version": "17",
+                    "sync_options": {
+                        "resources": [
+                            {
+                                "api_group": "apps",
+                                "kind": "Deployment",
+                                "namespace": "shop",
+                                "name": "payments",
+                            }
+                        ]
+                    },
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "ownership" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
+def test_gitops_capability_tracks_direct_command_policy() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.node_control_enabled = False
+    agent.direct_commands_enabled = True
+    assert module.Command.GITOPS_RESOURCE_CONTROL_CAPABILITY in agent.advertised_capabilities()
+
+    agent.direct_commands_enabled = False
+    assert module.Command.GITOPS_RESOURCE_CONTROL_CAPABILITY not in agent.advertised_capabilities()

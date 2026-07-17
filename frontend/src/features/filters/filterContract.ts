@@ -13,6 +13,12 @@ export interface KubernetesLabelFilter {
 export type ResourceView = "graph" | "table";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
 export type CostRange = "6h" | "24h" | "7d";
+export type RightsizingClassFilter =
+  | "increase"
+  | "reduction"
+  | "review"
+  | "in_range"
+  | "need_data";
 
 export interface UnifiedFilterState {
   common: {
@@ -30,6 +36,7 @@ export interface UnifiedFilterState {
   };
   issues: {
     severity: readonly string[];
+    category: readonly string[];
     status: readonly string[];
     environment: readonly string[];
     query: string;
@@ -76,6 +83,10 @@ export interface ProductDetailQuery {
   workflowMode?: "new" | null;
   timeRange?: TimelineRange;
   costRange?: CostRange;
+  rightsizingClass?: RightsizingClassFilter | null;
+  rightsizingKind?: string | null;
+  rightsizingNamespace?: string | null;
+  rightsizingQuery?: string | null;
   timeAt?: number;
   graphCollapsed?: true;
 }
@@ -90,6 +101,7 @@ export interface InvalidFilterValues {
   resourcesIncludeDeleted: readonly string[];
   resourcesView: readonly string[];
   issuesSeverity: readonly string[];
+  issuesCategory: readonly string[];
   issuesStatus: readonly string[];
   issuesEnvironment: readonly string[];
   applicationsEnvironment: readonly string[];
@@ -175,6 +187,7 @@ export function createEmptyUnifiedFilterState(): UnifiedFilterState {
     },
     issues: {
       severity: [],
+      category: [],
       status: [],
       environment: [],
       query: "",

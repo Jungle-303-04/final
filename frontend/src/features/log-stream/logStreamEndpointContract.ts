@@ -1,5 +1,5 @@
 export type LogStreamEndpointEvent =
-  | { type: "connected"; stream_id: string }
+  | { type: "connected"; stream_id: string; containers: string[] }
   | {
       type: "log";
       id: string;

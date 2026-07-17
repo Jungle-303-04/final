@@ -6,10 +6,26 @@ import { createPortRegistry } from "./PortRegistry";
 
 const EmptySurface = () => null;
 const homePort: HomePort = {
+  loadDashboardRefreshPolicy: async () => ({
+    staleAfterSeconds: 15,
+    refreshAfterSeconds: 30,
+    keepLastSuccess: true,
+    pauseWhenHidden: true,
+    eventInvalidation: true,
+    retryAfterSeconds: null,
+    retryLimit: null,
+    postMutationRefreshAfterSeconds: null,
+  }),
   listClusterChoices: async () => ({ clusters: [], completeness: "unknown" }),
   loadClusterOverview: async () => { throw new Error("not used"); },
+  loadInsights: async () => { throw new Error("not used"); },
   loadNodes: async () => { throw new Error("not used"); },
   loadNodePods: async () => { throw new Error("not used"); },
+  subscribeDashboardInvalidations: () => ({
+    async *[Symbol.asyncIterator]() {
+      yield* [];
+    },
+  }),
 };
 
 describe("authenticated port registry", () => {

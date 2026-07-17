@@ -32,6 +32,55 @@ describe("server-discovered resource action API", () => {
     );
   });
 
+  it("binds a CronJob mutation to the exact capability snapshot, ResourceRef, and idempotency key", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      accepted: true,
+      event_id: "event-cronjob-1",
+      audit_event_id: "event-cronjob-1",
+      correlation_id: "correlation-cronjob-1",
+      command_id: "command-cronjob-1",
+      status: "queued",
+    }), { status: 202 }));
+
+    await executeResourceCapability(
+      "/clusters/cluster-1/namespaces/shop/cronjobs/nightly/trigger",
+      {},
+      {
+        capabilityId: "cronjob.trigger",
+        idempotencyKey: "resource-action-cronjob-key-1",
+        resourceId: "resource-cronjob-nightly",
+        snapshotId: "snapshot-42",
+        revision: "a".repeat(64),
+        resource: {
+          apiGroup: "batch",
+          version: "v1",
+          kind: "CronJob",
+          namespace: "shop",
+          name: "nightly",
+          uid: "cronjob-uid-1",
+        },
+      },
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(request.headers).get("Idempotency-Key"))
+      .toBe("resource-action-cronjob-key-1");
+    expect(request.body).toBe(JSON.stringify({
+      resource_id: "resource-cronjob-nightly",
+      snapshot_id: "snapshot-42",
+      capability_revision: "a".repeat(64),
+      resource: {
+        api_group: "batch",
+        version: "v1",
+        kind: "CronJob",
+        namespace: "shop",
+        name: "nightly",
+        uid: "cronjob-uid-1",
+      },
+      confirmation: true,
+    }));
+  });
+
   it("rejects paths that cannot be a same-origin API capability", () => {
     expect(() => executeResourceCapability("https://invalid.example/action", {})).toThrow(TypeError);
     expect(() => executeResourceCapability("//invalid.example/action", {})).toThrow(TypeError);

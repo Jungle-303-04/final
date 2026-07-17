@@ -83,18 +83,22 @@ rebaseline gate:
   remains deterministic while analysis is underway.
 - `make reference-ui-delta-rebaseline-check` additionally requires the feature
   inventory's declared source revision to equal the target and requires every
-  delta row to be classified. It currently fails honestly: the inventory still
-  declares `3ff2…`, and 249 of 276 UI rows remain pending.
-- `make reference-feature-parity-check` depends on that rebaseline gate, so a
-  release cannot claim latest-source parity before the mismatch and pending
-  analysis are resolved.
+  delta row to be classified.
+- `make reference-feature-parity-check` depends on that rebaseline gate and
+  requires every product feature row to have complete implementation evidence.
+  It remains the final all-surface parity certification.
+- `make release-governance-web` is the final Python/React baseline parity
+  certification. It excludes deferred OS packaging but still requires every
+  baseline web feature row to be complete.
 
-The `Dev Deploy` workflow prepares the approved upstream Git objects and runs
-`make release-governance` before either service or console image build. This is
-intentionally blocking today: the inventory and empty sourceKey alias manifest
-still declare `3ff2…`, and 249 UI delta files are pending. A successful PR
-diagnostic gate is therefore not authorization to deploy until those latest
-source proofs are complete.
+The `Dev Deploy` workflow is the only live patch entry point. It accepts only
+the exact SHA that passed `Dev Gate`, prepares the approved upstream Git
+objects, and runs `make release-governance-web-patch` before building either
+service or console images. The patch gate verifies the frozen source ledger,
+the fully classified latest UI delta and the complete feature-ledger structure
+without falsely marking unfinished parity rows as complete. Final parity
+certification remains separately blocked by `make release-governance-web`
+until all baseline rows are implemented.
 
 Regenerate it only after replacing `references/upstream` with the approved
 snapshot:

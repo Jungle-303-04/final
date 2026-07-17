@@ -3,6 +3,7 @@ import type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointDependencies,
+  HomeEndpointInsights,
   HomeEndpointNodeCollection,
   HomeEndpointPodCollection,
 } from "./createHomeAdapter";
@@ -122,6 +123,7 @@ export const NODE_COLLECTION: HomeEndpointNodeCollection = {
       mem_pct: 54,
       restarts_recent: 0,
       conditions: [],
+      kubernetes_version: "v1.30.7",
     },
     {
       name: "worker-b",
@@ -133,8 +135,75 @@ export const NODE_COLLECTION: HomeEndpointNodeCollection = {
       mem_pct: null,
       restarts_recent: 3,
       conditions: ["MemoryPressure"],
+      kubernetes_version: "v1.30.7",
     },
   ],
+};
+
+export const HOME_INSIGHTS: HomeEndpointInsights = {
+  cluster_id: "cluster-1",
+  custom_resources: {
+    coverage: {
+      availability: "available",
+      observed_at: "2026-07-12T10:00:00Z",
+      reason_codes: [],
+    },
+    items: [{
+      api_group: "argoproj.io",
+      version: "v1alpha1",
+      kind: "Application",
+      count: 7,
+    }],
+    total_kinds: 1,
+    total_resources: 7,
+    has_more: false,
+  },
+  helm: {
+    coverage: {
+      availability: "partial",
+      observed_at: "2026-07-12T10:00:00Z",
+      reason_codes: ["source_resources_incomplete"],
+    },
+    release_count: 2,
+    status_counts: { deployed: 1, failed: 1 },
+  },
+  certificate_expiry: {
+    coverage: {
+      availability: "available",
+      observed_at: "2026-07-12T10:00:00Z",
+      reason_codes: [],
+    },
+    items: [{
+      secret: {
+        api_group: "",
+        version: "v1",
+        kind: "Secret",
+        namespace: "shop",
+        name: "api-tls",
+        uid: "secret-api-tls",
+      },
+      source_certificate: {
+        api_group: "cert-manager.io",
+        version: "v1",
+        kind: "Certificate",
+        namespace: "shop",
+        name: "api-certificate",
+        uid: "certificate-api",
+      },
+      not_after: "2026-07-20T10:00:00Z",
+      status: "expiring",
+      seconds_remaining: 345_600,
+      observed_at: "2026-07-12T10:00:00Z",
+    }],
+    tls_secret_count: 1,
+    observed_expiry_count: 1,
+    expiring_count: 1,
+    expired_count: 0,
+    earliest_expiry: "2026-07-20T10:00:00Z",
+    warning_before_seconds: 2_592_000,
+    has_more: false,
+  },
+  refresh_after_seconds: 30,
 };
 
 export const POD_COLLECTION: HomeEndpointPodCollection = {
@@ -163,11 +232,21 @@ export function endpoints(overrides: Partial<HomeEndpointDependencies> = {}) {
     getClusterSummary: vi.fn(
       overrides.getClusterSummary ?? (() => Promise.resolve(CLUSTER_OVERVIEW)),
     ),
+    getHomeInsights: vi.fn(
+      overrides.getHomeInsights ?? (() => Promise.resolve(HOME_INSIGHTS)),
+    ),
     getClusterNodesSummary: vi.fn(
       overrides.getClusterNodesSummary ?? (() => Promise.resolve(NODE_COLLECTION)),
     ),
     getNodePodsSummary: vi.fn(
       overrides.getNodePodsSummary ?? (() => Promise.resolve(POD_COLLECTION)),
+    ),
+    subscribeHomeDashboardEvents: vi.fn(
+      overrides.subscribeHomeDashboardEvents ?? (() => ({
+        async *[Symbol.asyncIterator]() {
+          yield* [];
+        },
+      })),
     ),
   };
 }

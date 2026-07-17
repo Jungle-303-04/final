@@ -4,6 +4,10 @@ from typing import Any, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from packages.contracts.ai_conversation import (
+    BOUNDED_MESSAGE_HISTORY_REASON,
+    MAX_CONVERSATION_MESSAGE_LIMIT,
+)
 from packages.contracts.cost.observations import (
     CostObservedWorkloadAllocation,
     CostWorkloadAllocation,
@@ -12,7 +16,9 @@ from packages.contracts.cost.observations import (
 from packages.contracts.gateway import facets as gateway_facets
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
+from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.contracts.parity import ClusterScope, ResourceRef
+from packages.contracts.resource_access import ResourceAccessDetail
 
 JsonMap = dict[str, Any]
 AuditJourneyStage = Literal[
@@ -222,8 +228,92 @@ class RcaIssueItem(RcaTimelineItem):
         return self
 
 
-class RcaIssueListResponse(StrictModel):
+class RecentChangeItem(StrictModel):
+    event_id: str
+    changed_at: str
+    namespace: str
+    resource_kind: str
+    resource_name: str
+    image_before: str | None = None
+    image_after: str | None = None
+    pr_url: str | None = None
+    commit_sha: str
+    repository_id: str
+    repo_ref: str
+    workflow_run_id: str
+
+
+class RcaIssueLegacyListResponse(StrictModel):
     items: list[RcaIssueItem]
+
+
+class RcaIssueQueueItem(RcaIssueItem):
+    category: str | None = Field(default=None, min_length=1)
+    category_availability: Literal["available", "unavailable"]
+    category_reason_code: Literal["source_incomplete"] | None = None
+
+    @model_validator(mode="after")
+    def validate_category_projection(self) -> Self:
+        if self.category_availability == "available":
+            if self.category is None or self.category_reason_code is not None:
+                raise ValueError("available issue category requires a value without a reason")
+        elif self.category is not None or self.category_reason_code is None:
+            raise ValueError("unavailable issue category requires a reason without a value")
+        return self
+
+
+class RcaIssueQueueRecentChange(RecentChangeItem):
+    incident_id: str = Field(min_length=1)
+
+
+class RcaIssueQueueFacet(StrictModel):
+    value: str = Field(min_length=1)
+    count: int = Field(ge=0)
+
+
+class RcaIssueQueueFacets(StrictModel):
+    namespaces: list[RcaIssueQueueFacet] = Field(default_factory=list)
+    severities: list[RcaIssueQueueFacet] = Field(default_factory=list)
+    categories: list[RcaIssueQueueFacet] = Field(default_factory=list)
+
+
+class RcaIssueQueueVisibility(StrictModel):
+    state: Literal["complete", "partial", "restricted"]
+    completeness: Literal["exact", "partial", "unavailable"]
+    authorized_cluster_count: int = Field(ge=0)
+    requested_namespaces: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_visibility_reason(self) -> Self:
+        if self.state != "complete" and not self.reason_codes:
+            raise ValueError("incomplete issue visibility requires a reason")
+        if self.state == "complete" and self.completeness != "exact":
+            raise ValueError("complete issue visibility requires exact completeness")
+        if self.state == "restricted" and self.authorized_cluster_count != 0:
+            raise ValueError("restricted issue visibility cannot authorize clusters")
+        return self
+
+
+class RcaIssueListResponse(StrictModel):
+    items: list[RcaIssueQueueItem]
+    total: int = Field(ge=0)
+    total_matched: int = Field(ge=0)
+    count_completeness: Literal["exact"] = "exact"
+    recent_changes: list[RcaIssueQueueRecentChange] = Field(default_factory=list)
+    visibility: RcaIssueQueueVisibility
+    facets: RcaIssueQueueFacets
+
+    @model_validator(mode="after")
+    def validate_queue_counts(self) -> Self:
+        if self.total != len(self.items):
+            raise ValueError("issue queue total must equal returned items")
+        if self.total > self.total_matched:
+            raise ValueError("issue queue total cannot exceed matched total")
+        returned_incidents = {item.incident_id for item in self.items if item.incident_id}
+        if any(change.incident_id not in returned_incidents for change in self.recent_changes):
+            raise ValueError("issue queue changes must reference returned incidents")
+        return self
 
 
 class ResourceIssueOnset(StrictModel):
@@ -341,21 +431,6 @@ class AuditTimelineResponse(StrictModel):
     limit: int
     has_more: bool
     next_cursor: str | None = None
-
-
-class RecentChangeItem(StrictModel):
-    event_id: str
-    changed_at: str
-    namespace: str
-    resource_kind: str
-    resource_name: str
-    image_before: str | None = None
-    image_after: str | None = None
-    pr_url: str | None = None
-    commit_sha: str
-    repository_id: str
-    repo_ref: str
-    workflow_run_id: str
 
 
 class RecentChangeListResponse(StrictModel):
@@ -772,6 +847,7 @@ class InventoryResourceDetailResponse(StrictModel):
     identity: JsonMap
     resource: InventoryResourceResponse
     provider_detail: ResourceProviderDetail | None = None
+    access: ResourceAccessDetail | None = None
     related: dict[str, list[InventoryResourceResponse]] = Field(default_factory=dict)
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
@@ -850,6 +926,79 @@ class ResourceCapabilitiesResponse(StrictModel):
         return self
 
 
+class ResourceDeletePreviewRef(ResourceRef):
+    """Exact observed identity used by the delete confirmation and CAS."""
+
+    resource_version: str = Field(min_length=1)
+
+
+class ResourceDeletePreviewResponse(StrictModel):
+    """Bounded authoritative owner-reference cascade for one exact root."""
+
+    root: ResourceDeletePreviewRef
+    dependents: list[ResourceDeletePreviewRef] = Field(default_factory=list, max_length=200)
+    revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    truncated: Literal[False] = False
+    max_dependents: int = Field(default=200, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def validate_distinct_resources(self) -> Self:
+        identities = [(item.uid, item.resource_version) for item in [self.root, *self.dependents]]
+        if len(identities) != len(set(identities)):
+            raise ValueError("delete preview resources must be unique")
+        return self
+
+
+class WorkloadRollbackChange(StrictModel):
+    path: str = Field(min_length=1, max_length=500)
+    before: str = Field(max_length=500)
+    after: str = Field(max_length=500)
+
+
+class WorkloadRollbackCurrent(StrictModel):
+    resource: ResourceRef
+    resource_version: str = Field(min_length=1, max_length=253)
+    template_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class WorkloadRollbackRevision(StrictModel):
+    revision: str = Field(min_length=1, max_length=253)
+    resource: ResourceRef
+    resource_version: str = Field(min_length=1, max_length=253)
+    created_at: str | None = None
+    template_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    preview_revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    changes: list[WorkloadRollbackChange] = Field(default_factory=list, max_length=200)
+
+
+class WorkloadRevisionHistoryResponse(StrictModel):
+    availability: Literal["available", "unavailable"]
+    completeness: Literal["exact", "partial"]
+    reason: str | None = Field(default=None, max_length=160)
+    snapshot_id: str = Field(min_length=1)
+    current: WorkloadRollbackCurrent
+    revisions: list[WorkloadRollbackRevision] = Field(default_factory=list, max_length=50)
+    next_cursor: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> Self:
+        if self.availability == "available" and (
+            self.completeness != "exact" or self.reason is not None or not self.revisions
+        ):
+            raise ValueError("available rollback history requires exact revisions without a reason")
+        if self.availability == "unavailable" and (
+            self.reason is None or self.revisions or self.next_cursor is not None
+        ):
+            raise ValueError("unavailable rollback history cannot expose revisions")
+        revision_ids = [item.revision for item in self.revisions]
+        resource_ids = [(item.resource.uid, item.resource_version) for item in self.revisions]
+        if len(revision_ids) != len(set(revision_ids)) or len(resource_ids) != len(
+            set(resource_ids)
+        ):
+            raise ValueError("rollback revisions must have unique revision and resource identities")
+        return self
+
+
 class ResourceManifestSourceChoice(StrictModel):
     application_id: str
     application_name: str
@@ -870,6 +1019,14 @@ class ResourceManifestSourceResponse(StrictModel):
     reason: str | None = None
 
 
+class ResourceManifestImpact(StrictModel):
+    api_version: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+    selected: bool = False
+
+
 class ResourceManifestPreviewResponse(StrictModel):
     valid: bool
     changed: bool
@@ -879,6 +1036,27 @@ class ResourceManifestPreviewResponse(StrictModel):
     diff: str
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    apply_availability: Literal["available", "unavailable"] = "unavailable"
+    apply_reason_codes: list[str] = Field(default_factory=list)
+    impact: list[ResourceManifestImpact] = Field(default_factory=list)
+
+
+class ResourceManifestCreateCapabilityResource(StrictModel):
+    api_version: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    resource: str = Field(min_length=1)
+    force_supported: bool
+
+
+class ResourceManifestCreateCapabilityResponse(StrictModel):
+    cluster_id: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    snapshot_id: str | None = None
+    available: bool
+    reason_codes: list[str] = Field(default_factory=list)
+    max_documents: int = Field(ge=1)
+    max_bytes: int = Field(ge=1)
+    resources: list[ResourceManifestCreateCapabilityResource] = Field(default_factory=list)
 
 
 class ResourceManifestApproveResponse(StrictModel):
@@ -995,10 +1173,108 @@ class GlobalFilterFacetsResponse(StrictModel):
     resources: list[GlobalResourceFacetItem] = Field(default_factory=list)
 
 
+class ResourceIdentitySearchHit(StrictModel):
+    id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    resource: ResourceRef
+    matched_fields: list[
+        Literal["name", "kind", "namespace", "api_version", "resource_type", "uid"]
+    ] = Field(default_factory=list)
+    observed_at: str | None = None
+
+
+class ResourceIdentitySearchResponse(StrictModel):
+    scopes: list[ClusterScope] = Field(default_factory=list)
+    hits: list[ResourceIdentitySearchHit] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    total_completeness: FilterCountCompleteness
+    snapshot: FilterSnapshotMeta
+
+
 class InventoryResourceClusterIdentity(StrictModel):
     cluster_id: str = Field(min_length=1)
     name: str | None = None
     provider: str | None = None
+
+
+class ResourceTableMetricEvidence(StrictModel):
+    resource_uid: str | None = Field(default=None, min_length=1)
+    source_snapshot_id: str = Field(min_length=1)
+    observed_at: str | None = Field(default=None, min_length=1)
+    measurement_window: str | None = Field(default=None, min_length=1, max_length=64)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    memory_mib: float | None = Field(default=None, ge=0)
+    completeness: FilterCountCompleteness
+    reason_codes: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def validate_reason_codes(cls, values: list[str]) -> list[str]:
+        if values != sorted(set(values)) or any(not value for value in values):
+            raise ValueError("resource table metric reasons must be unique and ordered")
+        return values
+
+    def validate_evidence(self, required: tuple[float | int | str | None, ...]) -> Self:
+        if self.completeness == "exact" and (
+            any(value is None for value in required) or self.reason_codes
+        ):
+            raise ValueError("exact resource table metrics require complete evidence")
+        if self.completeness == "partial" and not self.reason_codes:
+            raise ValueError("partial resource table metrics require reason codes")
+        if self.completeness == "unavailable" and (
+            self.cpu_mcores is not None or self.memory_mib is not None or not self.reason_codes
+        ):
+            raise ValueError("unavailable resource table metrics cannot expose usage")
+        return self
+
+
+class ResourceTablePodMetrics(ResourceTableMetricEvidence):
+    kind: Literal["pod"] = "pod"
+    cpu_request_mcores: float | None = Field(default=None, gt=0)
+    cpu_limit_mcores: float | None = Field(default=None, gt=0)
+    memory_request_mib: float | None = Field(default=None, gt=0)
+    memory_limit_mib: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_pod_evidence(self) -> Self:
+        return self.validate_evidence(
+            (
+                self.resource_uid,
+                self.observed_at,
+                self.measurement_window,
+                self.cpu_mcores,
+                self.memory_mib,
+                self.cpu_request_mcores,
+                self.cpu_limit_mcores,
+                self.memory_request_mib,
+                self.memory_limit_mib,
+            )
+        )
+
+
+class ResourceTableNodeMetrics(ResourceTableMetricEvidence):
+    kind: Literal["node"] = "node"
+    cpu_allocatable_mcores: float | None = Field(default=None, ge=0)
+    memory_allocatable_mib: float | None = Field(default=None, ge=0)
+    pod_count: int | None = Field(default=None, ge=0)
+    pod_allocatable: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_node_evidence(self) -> Self:
+        return self.validate_evidence(
+            (
+                self.resource_uid,
+                self.observed_at,
+                self.measurement_window,
+                self.cpu_mcores,
+                self.memory_mib,
+                self.cpu_allocatable_mcores,
+                self.memory_allocatable_mib,
+                self.pod_count,
+                self.pod_allocatable,
+            )
+        )
 
 
 class FilteredInventoryResourceItem(StrictModel):
@@ -1006,10 +1282,24 @@ class FilteredInventoryResourceItem(StrictModel):
     cluster: InventoryResourceClusterIdentity
     application_ids: list[str] = Field(default_factory=list)
     application_binding_completeness: FilterCountCompleteness
+    metrics: ResourceTablePodMetrics | ResourceTableNodeMetrics | None = None
+
+    @model_validator(mode="after")
+    def validate_metric_identity(self) -> Self:
+        metrics = self.metrics
+        if metrics is None:
+            return self
+        if metrics.kind != self.resource.resource_type:
+            raise ValueError("resource table metrics must match resource type")
+        if metrics.source_snapshot_id != self.resource.snapshot_id:
+            raise ValueError("resource table metrics must match source snapshot")
+        if metrics.resource_uid != self.resource.uid:
+            raise ValueError("resource table metrics must match resource uid")
+        return self
 
 
 class FilteredInventoryResourceListResponse(StrictModel):
-    items: list[FilteredInventoryResourceItem] = Field(default_factory=list)
+    items: list[FilteredInventoryResourceItem] = Field(default_factory=list, max_length=200)
     next_cursor: str | None = None
     has_more: bool
     counts: FilterResultCounts
@@ -1022,6 +1312,59 @@ class ResourceMetricHistoryPoint(StrictModel):
     mem_mib: float | None = Field(default=None, ge=0)
 
 
+class ResourceMetricContainerObservation(StrictModel):
+    name: str = Field(min_length=1, max_length=253)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def require_observed_metric(self) -> Self:
+        if self.cpu_mcores is None and self.mem_mib is None:
+            raise ValueError("container metric observation requires CPU or memory")
+        return self
+
+
+class ResourceMetricContainerHistorySeries(StrictModel):
+    name: str = Field(min_length=1, max_length=253)
+    points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
+    completeness: FilterCountCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_history(self) -> Self:
+        observed_at = [point.observed_at for point in self.points]
+        if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
+            raise ValueError("container metric history points must be unique and ordered")
+        if self.completeness == "unavailable" and self.points:
+            raise ValueError("unavailable container history cannot expose points")
+        if self.completeness == "exact" and (not self.points or self.partial_reason_codes):
+            raise ValueError("exact container history requires points without reasons")
+        return self
+
+
+class ResourceMetricCurrentObservation(StrictModel):
+    observed_at: str = Field(min_length=1)
+    measurement_window: str = Field(min_length=1, max_length=64)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+    containers: list[ResourceMetricContainerObservation] = Field(
+        default_factory=list,
+        max_length=64,
+    )
+    container_metrics_complete: bool = False
+
+    @model_validator(mode="after")
+    def require_observed_metric(self) -> Self:
+        if self.cpu_mcores is None and self.mem_mib is None:
+            raise ValueError("current metric observation requires CPU or memory")
+        names = [container.name for container in self.containers]
+        if names != sorted(names) or len(set(names)) != len(names):
+            raise ValueError("container metric observations must be unique and ordered")
+        if self.container_metrics_complete and not self.containers:
+            raise ValueError("complete container metrics require an observed container")
+        return self
+
+
 class ResourceMetricHistorySeries(StrictModel):
     resource_id: str = Field(min_length=1)
     cluster_id: str = Field(min_length=1)
@@ -1029,6 +1372,13 @@ class ResourceMetricHistorySeries(StrictModel):
     namespace: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1)
     points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
+    current_observation: ResourceMetricCurrentObservation | None = None
+    container_series: list[ResourceMetricContainerHistorySeries] = Field(
+        default_factory=list,
+        max_length=64,
+    )
+    container_history_completeness: FilterCountCompleteness = "unavailable"
+    container_history_reason_codes: list[str] = Field(default_factory=list)
     has_sparkline_points: bool
     completeness: FilterCountCompleteness
     partial_reason_codes: list[str] = Field(default_factory=list)
@@ -1039,6 +1389,32 @@ class ResourceMetricHistorySeries(StrictModel):
             raise ValueError("pod metric history requires a namespace")
         if self.resource_type == "node" and self.namespace is not None:
             raise ValueError("node metric history must be cluster scoped")
+        if self.resource_type == "node" and (
+            self.container_series
+            or self.container_history_completeness != "unavailable"
+            or self.container_history_reason_codes != ["container_metrics_not_applicable"]
+            or (
+                self.current_observation is not None
+                and (
+                    self.current_observation.containers
+                    or self.current_observation.container_metrics_complete
+                )
+            )
+        ):
+            raise ValueError("node current metrics cannot expose Pod containers")
+        container_names = [item.name for item in self.container_series]
+        if container_names != sorted(container_names) or len(set(container_names)) != len(
+            container_names
+        ):
+            raise ValueError("container metric history series must be unique and ordered")
+        if self.container_history_completeness == "unavailable" and self.container_series:
+            raise ValueError("unavailable container metric history cannot expose series")
+        if self.container_history_completeness == "exact" and (
+            not self.container_series
+            or self.container_history_reason_codes
+            or any(item.completeness != "exact" for item in self.container_series)
+        ):
+            raise ValueError("exact container metric history requires exact series")
         observed_at = [point.observed_at for point in self.points]
         if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
             raise ValueError("resource metric history points must be unique and ordered")
@@ -1057,6 +1433,12 @@ class ResourceMetricHistorySeries(StrictModel):
 
 
 class ResourceMetricsHistoryResponse(StrictModel):
+    refresh_policy_key: Literal[
+        "metrics_kubernetes",
+        "metrics_prometheus",
+        "metrics_pvc",
+        "metrics_rightsizing",
+    ]
     series: list[ResourceMetricHistorySeries] = Field(default_factory=list)
     completeness: FilterCountCompleteness
     partial_reason_codes: list[str] = Field(default_factory=list)
@@ -1559,6 +1941,8 @@ class IssueFilterItem(StrictModel):
     resource_name: str | None = None
     symptom: str | None = None
     severity: str | None = None
+    category: str | None = None
+    category_completeness: FilterCountCompleteness = "unavailable"
     issue_state: Literal["open", "resolved", "unknown"]
     current_subject: str = Field(min_length=1)
     pipeline_status: str = Field(min_length=1)
@@ -1603,7 +1987,15 @@ class IssueFilterCapability(StrictModel):
 
 
 class IssueSelectedFacetResolution(StrictModel):
-    axis: Literal["cluster", "namespace", "application", "severity", "status", "environment"]
+    axis: Literal[
+        "cluster",
+        "namespace",
+        "application",
+        "severity",
+        "category",
+        "status",
+        "environment",
+    ]
     value: str = Field(min_length=1)
     status: Literal["resolved", "zero", "restricted", "unavailable"]
     display_label: str | None = None
@@ -1657,6 +2049,21 @@ class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None
     counts: list[JsonMap] = Field(default_factory=list)
+
+
+class KubernetesApiResourcesResponse(StrictModel):
+    cluster_id: str
+    snapshot_id: str | None = None
+    discovery: ApiResourceDiscoveryObservation | None = None
+    unavailable_reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> Self:
+        if self.discovery is None and not self.unavailable_reason:
+            raise ValueError("unavailable API resources require a reason")
+        if self.discovery is not None and self.unavailable_reason is not None:
+            raise ValueError("available API resources cannot include an unavailable reason")
+        return self
 
 
 class FleetClusterSummaryItem(StrictModel):
@@ -1755,10 +2162,148 @@ class ClusterSummaryDetailResponse(StrictModel):
     usage: ClusterUsageSnapshot | None = None
 
 
+HomeInsightAvailability = Literal["available", "partial", "unavailable"]
+
+
+class HomeInsightCoverage(StrictModel):
+    availability: HomeInsightAvailability
+    observed_at: str | None = None
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def incomplete_coverage_has_a_reason(self) -> Self:
+        if self.availability != "available" and not self.reason_codes:
+            raise ValueError("incomplete Home insight coverage requires a reason")
+        return self
+
+
+class HomeCustomResourceCount(StrictModel):
+    api_group: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    count: int = Field(ge=1)
+
+
+class HomeCustomResourceSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    items: tuple[HomeCustomResourceCount, ...] = Field(default=(), max_length=20)
+    total_kinds: int | None = Field(default=None, ge=0)
+    total_resources: int | None = Field(default=None, ge=0)
+    has_more: bool = False
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable and (
+            self.items or self.total_kinds is not None or self.total_resources is not None
+        ):
+            raise ValueError("unavailable custom resource coverage cannot expose counts")
+        if not unavailable and (self.total_kinds is None or self.total_resources is None):
+            raise ValueError("observed custom resource coverage requires totals")
+        if self.total_kinds is not None and self.total_kinds < len(self.items):
+            raise ValueError("custom resource total kinds cannot be smaller than items")
+        if self.total_resources is not None and self.total_resources < sum(
+            item.count for item in self.items
+        ):
+            raise ValueError("custom resource total cannot be smaller than visible counts")
+        if self.has_more != (self.total_kinds is not None and self.total_kinds > len(self.items)):
+            raise ValueError("custom resource has_more must match the bounded result")
+        return self
+
+
+class HomeHelmSummary(StrictModel):
+    coverage: HomeInsightCoverage
+    release_count: int | None = Field(default=None, ge=0)
+    status_counts: dict[str, int] = Field(default_factory=dict, max_length=20)
+
+    @model_validator(mode="after")
+    def release_counts_match_coverage(self) -> Self:
+        if self.coverage.availability == "unavailable":
+            if self.release_count is not None or self.status_counts:
+                raise ValueError("unavailable Helm coverage cannot expose release counts")
+            return self
+        if self.release_count is None:
+            raise ValueError("observed Helm coverage requires a release count")
+        if any(
+            not status.strip() or len(status) > 120 or count < 1
+            for status, count in self.status_counts.items()
+        ):
+            raise ValueError("Helm status counts must be positive and named")
+        if sum(self.status_counts.values()) > self.release_count:
+            raise ValueError("Helm status counts cannot exceed the release count")
+        return self
+
+
+HomeCertificateExpiryStatus = Literal["valid", "expiring", "expired"]
+
+
+class HomeCertificateExpiryItem(StrictModel):
+    secret: ResourceRef
+    source_certificate: ResourceRef
+    not_after: str = Field(min_length=1)
+    status: HomeCertificateExpiryStatus
+    seconds_remaining: int
+    observed_at: str | None = None
+
+
+class HomeCertificateExpirySummary(StrictModel):
+    coverage: HomeInsightCoverage
+    items: tuple[HomeCertificateExpiryItem, ...] = Field(default=(), max_length=20)
+    tls_secret_count: int | None = Field(default=None, ge=0)
+    observed_expiry_count: int | None = Field(default=None, ge=0)
+    expiring_count: int | None = Field(default=None, ge=0)
+    expired_count: int | None = Field(default=None, ge=0)
+    earliest_expiry: str | None = None
+    warning_before_seconds: int = Field(ge=1, le=315_360_000)
+    has_more: bool = False
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        counts = (
+            self.tls_secret_count,
+            self.observed_expiry_count,
+            self.expiring_count,
+            self.expired_count,
+        )
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable:
+            if any(value is not None for value in counts) or self.items or self.earliest_expiry:
+                raise ValueError("unavailable certificate coverage cannot expose observations")
+            if self.has_more:
+                raise ValueError("unavailable certificate coverage cannot be truncated")
+            return self
+        if any(value is None for value in counts):
+            raise ValueError("observed certificate coverage requires counts")
+        assert self.tls_secret_count is not None
+        assert self.observed_expiry_count is not None
+        assert self.expiring_count is not None
+        assert self.expired_count is not None
+        if self.observed_expiry_count > self.tls_secret_count:
+            raise ValueError("observed certificate expiries cannot exceed TLS Secrets")
+        if self.expiring_count + self.expired_count > self.observed_expiry_count:
+            raise ValueError("certificate health counts cannot exceed observations")
+        if self.observed_expiry_count == 0 or self.earliest_expiry is None:
+            raise ValueError("observed certificate coverage requires an earliest expiry")
+        if self.has_more != self.observed_expiry_count > len(self.items):
+            raise ValueError("certificate has_more must match the bounded result")
+        if len({item.secret.uid for item in self.items}) != len(self.items):
+            raise ValueError("certificate summary Secret identities must be unique")
+        return self
+
+
+class HomeInsightsResponse(StrictModel):
+    cluster_id: str = Field(min_length=1)
+    custom_resources: HomeCustomResourceSummary
+    helm: HomeHelmSummary
+    certificate_expiry: HomeCertificateExpirySummary
+    refresh_after_seconds: int = Field(ge=1, le=3600)
+
+
 class NodeSummaryItem(StrictModel):
     name: str
     ready: bool
     health: str
+    kubernetes_version: str | None = None
     pods_running: int = 0
     pods_capacity: int = 0
     cpu_pct: float | None = None
@@ -1877,6 +2422,7 @@ class ClusterConnectionStatusResponse(StrictModel):
     cluster_id: str
     connection_status: str
     connection_stage: str | None = None
+    refresh_after_seconds: float | None = Field(default=None, ge=0.25, le=30)
     last_agent_id: str | None = None
     last_seen_at: str | None = None
     agents: list[ClusterAgentStatus] = Field(default_factory=list)
@@ -2004,6 +2550,28 @@ class AiConversationAcceptedResponse(StrictModel):
 class AiConversationResponse(StrictModel):
     conversation: JsonMap
     messages: list[JsonMap]
+    limit: int = Field(ge=1, le=MAX_CONVERSATION_MESSAGE_LIMIT)
+    has_more: bool
+    next_cursor: str | None = None
+    messages_completeness: Literal["complete", "partial"]
+    partial_reason_codes: list[str]
+
+    @model_validator(mode="after")
+    def validate_message_page(self) -> Self:
+        if self.has_more:
+            if (
+                self.next_cursor is None
+                or self.messages_completeness != "partial"
+                or BOUNDED_MESSAGE_HISTORY_REASON not in self.partial_reason_codes
+            ):
+                raise ValueError("partial message page requires cursor and bounded history reason")
+        elif (
+            self.next_cursor is not None
+            or self.messages_completeness != "complete"
+            or self.partial_reason_codes
+        ):
+            raise ValueError("complete message page cannot carry partial pagination state")
+        return self
 
 
 class AiConversationListResponse(StrictModel):

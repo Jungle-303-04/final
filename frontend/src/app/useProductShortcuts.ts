@@ -13,8 +13,12 @@ interface ProductShortcutOptions {
   isCommandPaletteOpen: boolean;
   isHelpOpen: boolean;
   onCommandPaletteOpen: () => void;
+  onContextOpen: () => void;
+  onDiagnosticsOpen: () => void;
   onHelpToggle: () => void;
+  onNamespaceOpen: () => void;
   onRouteSelect: (routeDefinition: ProductRouteDefinition) => void;
+  onSearchFocus: () => void;
   onThemeToggle: () => void;
 }
 
@@ -62,6 +66,22 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
 
       if (definition.id === "command") {
         current.onCommandPaletteOpen();
+        return;
+      }
+      if (definition.id === "diagnostics") {
+        current.onDiagnosticsOpen();
+        return;
+      }
+      if (definition.id === "namespace") {
+        current.onNamespaceOpen();
+        return;
+      }
+      if (definition.id === "context") {
+        current.onContextOpen();
+        return;
+      }
+      if (definition.id === "search") {
+        current.onSearchFocus();
         return;
       }
       if (definition.id === "theme") {

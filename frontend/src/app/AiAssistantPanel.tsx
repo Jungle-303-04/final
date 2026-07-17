@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  ListChecks,
   Send,
   Sparkles,
   Square,
@@ -33,6 +34,8 @@ import {
   clampAiAssistantPanelWidth,
 } from "./AiAssistantResizeHandle";
 import { AiAlertRuleActionCard } from "./AiAlertRuleActionCard";
+import { DiagnoseSurface } from "../features/diagnose/DiagnoseSurface";
+import { useOptionalDiagnoseSession } from "../features/diagnose/DiagnoseSessionContext";
 
 const AI_ASSISTANT_PANEL_WIDTH_STORAGE_KEY = "opsia.ai-assistant.panel-width";
 
@@ -62,6 +65,7 @@ export function AiAssistantPanel({
   const { locale, t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
+  const diagnose = useOptionalDiagnoseSession();
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingController = useRef<AbortController | null>(null);
@@ -188,6 +192,45 @@ export function AiAssistantPanel({
             </Button>
           </header>
 
+          {diagnose ? (
+            <div className="grid grid-cols-2 gap-1 border-b p-2" role="tablist">
+              <Button
+                aria-selected={diagnose.surface === "assistant"}
+                onClick={diagnose.showAssistant}
+                role="tab"
+                size="sm"
+                type="button"
+                variant={diagnose.surface === "assistant" ? "secondary" : "ghost"}
+              >
+                <Sparkles aria-hidden="true" />
+                {locale === "ko" ? "질문" : "Ask"}
+              </Button>
+              <Button
+                aria-selected={diagnose.surface === "investigations"}
+                onClick={diagnose.showInvestigations}
+                role="tab"
+                size="sm"
+                type="button"
+                variant={diagnose.surface === "investigations" ? "secondary" : "ghost"}
+              >
+                <ListChecks aria-hidden="true" />
+                {locale === "ko" ? "조사" : "Investigations"}
+              </Button>
+            </div>
+          ) : null}
+
+          {diagnose?.surface === "investigations" ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+              <DiagnoseSurface
+                activeRunId={diagnose.activeRunId}
+                onActiveRunChange={(runId) => (
+                  runId === null ? diagnose.closeRun() : diagnose.openRun(runId)
+                )}
+                port={diagnose.port}
+              />
+            </div>
+          ) : (
+            <>
           <div
             aria-label={locale === "ko" ? "AI 대화" : "AI conversation"}
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
@@ -315,6 +358,8 @@ export function AiAssistantPanel({
               )}
             </div>
           </form>
+            </>
+          )}
         </div>
       </aside>
       {!open ? <Button

@@ -7,8 +7,9 @@ clients consume the resulting descriptor and never repeat an action list.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import quote
 
 from domains.command.actions import command_action_spec
@@ -23,9 +24,19 @@ from packages.contracts.gateway.responses import (
     ResourceCapabilitySubject,
 )
 from packages.contracts.identity import Permission
+from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
-NamespacePolicy = Literal["control", "terminal"]
+NamespacePolicy = Literal["control", "terminal", "cluster", "resource"]
 ExecutionTransport = Literal["command", "terminal"]
+ResourceState = Literal[
+    "always",
+    "deletable",
+    "cronjob-running",
+    "cronjob-suspended",
+    "node-cordoned",
+    "node-schedulable",
+    "rollback-available",
+]
 
 
 @dataclass(frozen=True)
@@ -36,24 +47,42 @@ class ResourceActionDefinition:
     execution: ExecutionTransport
     method: Literal["POST", "WEBSOCKET"]
     path_template: str
-    resource_type: str
-    kind: str
+    resource_type: str | None
+    kind: str | None
     permission: str
     agent_capability: str
     namespace_policy: NamespacePolicy
     command_action: str | None = None
     inputs: tuple[ResourceCapabilityInput, ...] = ()
+    resource_state: ResourceState = "always"
 
-    def applies_to(self, subject: ResourceCapabilitySubject) -> bool:
-        if subject.resource_type.casefold() != self.resource_type:
+    def applies_to(
+        self,
+        subject: ResourceCapabilitySubject,
+        resource: Mapping[str, Any],
+    ) -> bool:
+        if (
+            self.resource_type is not None
+            and subject.resource_type.casefold() != self.resource_type
+        ):
             return False
-        if subject.kind.casefold() != self.kind or subject.namespace is None:
+        if self.kind is not None and subject.kind.casefold() != self.kind:
             return False
-        if self.namespace_policy == "control":
+        if self.namespace_policy == "cluster":
+            allowed_namespace = subject.namespace is None
+        elif self.namespace_policy == "resource":
+            allowed_namespace = True
+        elif subject.namespace is None:
+            return False
+        elif self.namespace_policy == "control":
             allowed_namespace = control_namespace_allowed(subject.namespace)
+        elif self.namespace_policy == "terminal":
+            allowed_namespace = pod_exec_namespace_allowed(subject.namespace)
         else:
             allowed_namespace = pod_exec_namespace_allowed(subject.namespace)
         if not allowed_namespace:
+            return False
+        if not _resource_state_matches(self.resource_state, resource):
             return False
         return self.command_action is None or _command_action_allows(
             self.command_action, subject.namespace
@@ -64,6 +93,11 @@ class ResourceActionDefinition:
             "cluster_id": quote(subject.cluster_id, safe=""),
             "namespace": quote(subject.namespace or "", safe=""),
             "deployment": quote(subject.name, safe=""),
+            "cronjob": quote(subject.name, safe=""),
+            "kind": quote(subject.kind.casefold(), safe=""),
+            "workload": quote(subject.name, safe=""),
+            "node": quote(subject.name, safe=""),
+            "resource_id": quote(subject.resource_id, safe=""),
         }
         return ResourceActionCapability(
             capability_id=self.capability_id,
@@ -78,12 +112,72 @@ class ResourceActionDefinition:
         )
 
 
-def _command_action_allows(action: str, namespace: str) -> bool:
+def _command_action_allows(action: str, namespace: str | None) -> bool:
     spec = command_action_spec(action)
-    return spec is not None and spec.allows_namespace(namespace)
+    return spec is not None and spec.allows_namespace(namespace or "")
 
 
 RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
+    ResourceActionDefinition(
+        capability_id="workload.rollback",
+        label="Rollback",
+        description="Restore an exact observed Deployment revision and stream the result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+        resource_type="workload",
+        kind="deployment",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        resource_state="rollback-available",
+    ),
+    ResourceActionDefinition(
+        capability_id="workload.rollback",
+        label="Rollback",
+        description="Restore an exact observed StatefulSet revision and stream the result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+        resource_type="workload",
+        kind="statefulset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        resource_state="rollback-available",
+    ),
+    ResourceActionDefinition(
+        capability_id="workload.rollback",
+        label="Rollback",
+        description="Restore an exact observed DaemonSet revision and stream the result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+        resource_type="workload",
+        kind="daemonset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        resource_state="rollback-available",
+    ),
+    ResourceActionDefinition(
+        capability_id="resource.delete",
+        label="Delete",
+        description="Delete this exact resource after reviewing its owner-reference cascade.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_DELETE_PATH,
+        resource_type=None,
+        kind=None,
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY,
+        namespace_policy="resource",
+        command_action=Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        resource_state="deletable",
+    ),
     ResourceActionDefinition(
         capability_id="deployment.restart",
         label="Restart",
@@ -124,6 +218,89 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         ),
     ),
     ResourceActionDefinition(
+        capability_id="statefulset.restart",
+        label="Restart",
+        description="Restart this StatefulSet and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_WORKLOAD_RESTART_PATH,
+        resource_type="workload",
+        kind="statefulset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability="command_receiver",
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+    ),
+    ResourceActionDefinition(
+        capability_id="statefulset.scale",
+        label="Scale",
+        description="Change the desired replica count and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_WORKLOAD_SCALE_PATH,
+        resource_type="workload",
+        kind="statefulset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability="command_receiver",
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        inputs=(
+            ResourceCapabilityInput(
+                key="replicas",
+                label="Replicas",
+                type="integer",
+                required=True,
+                minimum=0,
+                maximum=MAX_DEPLOYMENT_REPLICAS,
+                default=1,
+            ),
+        ),
+    ),
+    ResourceActionDefinition(
+        capability_id="daemonset.restart",
+        label="Restart",
+        description="Restart this DaemonSet and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_WORKLOAD_RESTART_PATH,
+        resource_type="workload",
+        kind="daemonset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability="command_receiver",
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+    ),
+    ResourceActionDefinition(
+        capability_id="node.cordon",
+        label="Cordon",
+        description="Mark this node unschedulable and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_CORDON_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_CORDON_ACTION,
+        resource_state="node-schedulable",
+    ),
+    ResourceActionDefinition(
+        capability_id="node.uncordon",
+        label="Uncordon",
+        description="Mark this node schedulable and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_UNCORDON_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        resource_state="node-cordoned",
+    ),
+    ResourceActionDefinition(
         capability_id="pod.exec",
         label="Terminal",
         description="Open an audited terminal session and stream its output.",
@@ -133,14 +310,108 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         resource_type="pod",
         kind="pod",
         permission=Permission.POD_EXEC.value,
-        agent_capability="pod_exec_stream",
+        agent_capability=POD_EXEC_AGENT_CAPABILITY,
         namespace_policy="terminal",
+    ),
+    ResourceActionDefinition(
+        capability_id="cronjob.resume",
+        label="Resume",
+        description="Resume this CronJob and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_CRONJOB_RESUME_PATH,
+        resource_type="workload",
+        kind="cronjob",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        resource_state="cronjob-suspended",
+    ),
+    ResourceActionDefinition(
+        capability_id="cronjob.suspend",
+        label="Suspend",
+        description="Suspend this CronJob and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_CRONJOB_SUSPEND_PATH,
+        resource_type="workload",
+        kind="cronjob",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        resource_state="cronjob-running",
+    ),
+    ResourceActionDefinition(
+        capability_id="cronjob.trigger",
+        label="Trigger",
+        description="Create one Job from this CronJob and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_CRONJOB_TRIGGER_PATH,
+        resource_type="workload",
+        kind="cronjob",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
     ),
 )
 
 
 def applicable_resource_actions(
     subject: ResourceCapabilitySubject,
+    resource: Mapping[str, Any],
 ) -> tuple[ResourceActionDefinition, ...]:
     """Return only catalog definitions whose immutable resource policy applies."""
-    return tuple(definition for definition in RESOURCE_ACTIONS if definition.applies_to(subject))
+    return tuple(
+        definition for definition in RESOURCE_ACTIONS if definition.applies_to(subject, resource)
+    )
+
+
+def resource_action_capability_id(command_action: str) -> str | None:
+    """Resolve a command action through the canonical resource-action catalog."""
+
+    return next(
+        (
+            definition.capability_id
+            for definition in RESOURCE_ACTIONS
+            if definition.command_action == command_action
+        ),
+        None,
+    )
+
+
+def _resource_state_matches(state: ResourceState, resource: Mapping[str, Any]) -> bool:
+    if state == "always":
+        return True
+    if state == "deletable":
+        return bool(
+            str(resource.get("uid") or "").strip()
+            and str(resource.get("resource_version") or "").strip()
+            and resource.get("deleted_at") is None
+        )
+    if state == "rollback-available":
+        raw = resource.get("raw")
+        raw_object = raw if isinstance(raw, Mapping) else {}
+        return bool(
+            str(resource.get("uid") or "").strip()
+            and str(resource.get("resource_version") or "").strip()
+            and isinstance(raw_object.get("pod_template"), Mapping)
+            and raw_object.get("revision_history_complete") is True
+            and isinstance(raw_object.get("revision_history_count"), int)
+            and int(raw_object["revision_history_count"]) > 1
+        )
+    raw = resource.get("raw")
+    raw_object = raw if isinstance(raw, Mapping) else {}
+    spec = raw_object.get("spec")
+    spec_object = spec if isinstance(spec, Mapping) else {}
+    if state in {"node-cordoned", "node-schedulable"}:
+        unschedulable = spec_object.get("unschedulable")
+        cordoned = unschedulable if isinstance(unschedulable, bool) else False
+        return cordoned if state == "node-cordoned" else not cordoned
+    suspended = spec_object.get("suspend")
+    if not isinstance(suspended, bool):
+        return False
+    return suspended if state == "cronjob-suspended" else not suspended

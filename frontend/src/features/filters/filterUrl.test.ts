@@ -37,6 +37,7 @@ describe("VP-010 unified filter URL", () => {
       },
       issues: {
         severity: ["warning", "critical"],
+        category: ["scheduling", "container_restart"],
         status: ["open"],
         environment: ["prod"],
         query: "payments",
@@ -73,6 +74,7 @@ describe("VP-010 unified filter URL", () => {
       "&resources.q=checkout%20api" +
       "&resources.view=graph" +
       "&issues.severity=critical,warning" +
+      "&issues.category=container_restart,scheduling" +
       "&issues.status=open" +
       "&issues.environment=prod" +
       "&issues.q=payments" +
@@ -104,7 +106,11 @@ describe("VP-010 unified filter URL", () => {
         ],
       },
       resources: { ...state.resources, types: ["Deployment", "Pod"], health: ["degraded", "healthy"] },
-      issues: { ...state.issues, severity: ["critical", "warning"] },
+      issues: {
+        ...state.issues,
+        severity: ["critical", "warning"],
+        category: ["container_restart", "scheduling"],
+      },
     });
   });
 

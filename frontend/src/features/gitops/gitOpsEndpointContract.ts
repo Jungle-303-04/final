@@ -10,6 +10,91 @@ import type {
   GitOpsReasonCode,
 } from "./gitOpsContract";
 
+type EndpointResourceRef = GitOpsApplicationDetailEndpoint["application"]["resource"];
+type EndpointClusterScope = NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>;
+
+export interface GitOpsResourceTreeEndpoint {
+  scope: EndpointClusterScope;
+  root: EndpointResourceRef;
+  nodes: {
+    id: string;
+    resource: EndpointResourceRef;
+    role: "root" | "declared" | "generated" | "source" | "dependency";
+    status: string | null;
+    health: string | null;
+  }[];
+  edges: { source: string; target: string; relationship: "owns" | "source" | "depends_on" }[];
+  coverage: {
+    state: "complete" | "partial";
+    reason_codes: string[];
+    observed_count: number;
+    returned_count: number;
+  };
+}
+
+export interface GitOpsResourceInsightsEndpoint {
+  insights: {
+    scope: EndpointClusterScope;
+    resource: EndpointResourceRef;
+    resource_version: string;
+    provider: "argo" | "flux";
+    status: string | null;
+    health: string | null;
+    revision: string | null;
+    source: EndpointResourceRef | null;
+    conditions: {
+      type: string;
+      status: string;
+      reason: string | null;
+      message: string | null;
+      observed_at: string | null;
+    }[];
+    history: {
+      id: string | null;
+      revision: string | null;
+      deployed_at: string | null;
+      phase: string | null;
+      message: string | null;
+      initiated_by: string | null;
+    }[];
+    capabilities: {
+      scope: EndpointClusterScope;
+      resource: EndpointResourceRef;
+      revision: string;
+      actions: ("reconcile" | "sync_with_source" | "suspend" | "resume" | "sync" | "refresh")[];
+    };
+  };
+}
+
+export interface GitOpsResourceActionEndpointRequest {
+  cluster_id: string;
+  resource: EndpointResourceRef;
+  resource_version: string;
+  capability_revision: string;
+  action: "reconcile" | "sync_with_source" | "suspend" | "resume" | "sync" | "refresh";
+  confirmation: true;
+  reason: string;
+  refresh_mode?: "normal" | "hard";
+  options?: {
+    revision?: string;
+    prune: boolean;
+    dry_run: boolean;
+    force: boolean;
+    apply_only: boolean;
+    sync_options: string[];
+    resources: { api_group: string; kind: string; namespace: string | null; name: string }[];
+  };
+}
+
+export interface GitOpsCommandAcceptedEndpoint {
+  accepted: true;
+  event_id: string;
+  audit_event_id: string;
+  correlation_id: string;
+  command_id: string;
+  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+}
+
 export interface GitOpsApplicationDetailEndpoint {
   application: {
     application_id: string;
@@ -81,6 +166,20 @@ export interface GitOpsEndpointDependencies {
     applicationId: string,
     signal?: AbortSignal,
   ): Promise<GitOpsApplicationDetailEndpoint>;
+  getResourceTree?(
+    locator: { clusterId: string; apiVersion: string; kind: string; namespace: string; name: string },
+    signal?: AbortSignal,
+  ): Promise<GitOpsResourceTreeEndpoint>;
+  getResourceInsights?(
+    locator: { clusterId: string; apiVersion: string; kind: string; namespace: string; name: string },
+    signal?: AbortSignal,
+  ): Promise<GitOpsResourceInsightsEndpoint>;
+  executeResourceAction?(
+    locator: { clusterId: string; apiVersion: string; kind: string; namespace: string; name: string },
+    request: GitOpsResourceActionEndpointRequest,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<GitOpsCommandAcceptedEndpoint>;
   listApplications(signal?: AbortSignal): Promise<{
     applications: Record<string, unknown>[];
   }>;

@@ -76,6 +76,7 @@ async def list_filtered_issues(
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
     issues_severity: str | None = Query(default=None, alias=gateway_params.ISSUES_SEVERITY_QUERY),
+    issues_category: str | None = Query(default=None, alias=gateway_params.ISSUES_CATEGORY_QUERY),
     issues_status: str | None = Query(default=None, alias=gateway_params.ISSUES_STATUS_QUERY),
     issues_environment: str | None = Query(
         default=None,
@@ -92,6 +93,7 @@ async def list_filtered_issues(
         namespaces=namespaces,
         applications=applications,
         severities=issues_severity,
+        categories=issues_category,
         statuses=issues_status,
         environments=issues_environment,
         labels=labels,
@@ -143,6 +145,7 @@ async def list_issue_filter_facets(
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
     issues_severity: str | None = Query(default=None, alias=gateway_params.ISSUES_SEVERITY_QUERY),
+    issues_category: str | None = Query(default=None, alias=gateway_params.ISSUES_CATEGORY_QUERY),
     issues_status: str | None = Query(default=None, alias=gateway_params.ISSUES_STATUS_QUERY),
     issues_environment: str | None = Query(
         default=None,
@@ -160,6 +163,7 @@ async def list_issue_filter_facets(
         namespaces=namespaces,
         applications=applications,
         severities=issues_severity,
+        categories=issues_category,
         statuses=issues_status,
         environments=issues_environment,
         labels=labels,
@@ -227,6 +231,7 @@ async def list_issue_label_facets(
     applications: str | None = Query(default=None),
     labels: str | None = Query(default=None),
     issues_severity: str | None = Query(default=None, alias=gateway_params.ISSUES_SEVERITY_QUERY),
+    issues_category: str | None = Query(default=None, alias=gateway_params.ISSUES_CATEGORY_QUERY),
     issues_status: str | None = Query(default=None, alias=gateway_params.ISSUES_STATUS_QUERY),
     issues_environment: str | None = Query(
         default=None,
@@ -244,6 +249,7 @@ async def list_issue_label_facets(
         namespaces=namespaces,
         applications=applications,
         severities=issues_severity,
+        categories=issues_category,
         statuses=issues_status,
         environments=issues_environment,
         labels=labels,
@@ -442,7 +448,10 @@ def _results_response(
 def _safe_issue_item(row: Any) -> dict[str, Any]:
     if not isinstance(row, Mapping):
         raise HTTPException(status_code=500, detail="issue filter projection is invalid")
-    return {key: row.get(key) for key in IssueFilterItem.model_fields}
+    item = {key: row.get(key) for key in IssueFilterItem.model_fields}
+    if item["category_completeness"] is None:
+        item["category_completeness"] = "unavailable"
+    return item
 
 
 def _counts(result: Mapping[str, Any]) -> FilterResultCounts:
@@ -502,6 +511,7 @@ def _capabilities(result: Mapping[str, Any]) -> list[IssueFilterCapability]:
         isinstance(item, Mapping) and "key" in item and "value" in item for item in items
     )
     projections = {
+        "category": _row_projection_availability(items, "category_completeness"),
         "environment": _row_projection_availability(items, "environment_completeness"),
         "applications": _row_projection_availability(
             items,
@@ -531,6 +541,13 @@ def _capabilities(result: Mapping[str, Any]) -> list[IssueFilterCapability]:
             "partial",
             "legacy_rows_may_omit_severity",
             "incident_event_severity",
+        ),
+        "category": (
+            projections["category"],
+            None
+            if projections["category"] == "available"
+            else "event_time_issue_category_not_projected",
+            "incident_detector_category",
         ),
         "status": ("available", None, "timeline_issue_state_projection"),
         "environment": (
@@ -610,6 +627,8 @@ def _facet_items(
             "applications": "applications",
             "severities": "severity",
             "severity": "severity",
+            "categories": "category",
+            "category": "category",
             "statuses": "status",
             "status": "status",
             "environments": "environment",
@@ -839,6 +858,7 @@ def _empty_capabilities() -> list[IssueFilterCapability]:
             ("namespaces", "incident_event_resource_identity"),
             ("applications", "incident_event_time_snapshot"),
             ("severity", "incident_event_severity"),
+            ("category", "incident_detector_category"),
             ("status", "timeline_issue_state_projection"),
             ("environment", "incident_event_time_snapshot"),
             ("labels", "incident_event_time_evidence_resource_snapshot"),

@@ -5,9 +5,13 @@ from typing import Any, Self
 
 from telemetry_registry import ensure_sources_loaded, telemetry
 
+from packages.contracts.kubernetes_discovery import DynamicResourceCollectionSpec
 from packages.contracts.target import (
     KUBERNETES_ALL_NAMESPACES_QUERY,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
     KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+    KUBERNETES_QUERY_SCOPE_DYNAMIC_RESOURCE,
     KUBERNETES_QUERY_SCOPE_NAMESPACE,
 )
 
@@ -29,6 +33,7 @@ class TelemetryQueryDefinition:
     step_seconds: int | None = None
     label_selector: str | None = None
     collection_scope: str | None = None
+    dynamic_resource: DynamicResourceCollectionSpec | None = None
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> Self:
@@ -46,6 +51,7 @@ class TelemetryQueryDefinition:
             step_seconds=_optional_positive_int(payload, "step_seconds"),
             label_selector=_optional_text(payload, "label_selector"),
             collection_scope=_optional_text(payload, "collection_scope"),
+            dynamic_resource=_dynamic_resource(payload.get("dynamic_resource")),
         )
 
     def to_provider_query(self) -> Any:
@@ -70,6 +76,7 @@ class TelemetryQueryDefinition:
                 self.query,
                 self.label_selector,
                 self.collection_scope or KUBERNETES_QUERY_SCOPE_NAMESPACE,
+                self.dynamic_resource,
             )
         return query_type(self.name, self.description, self.query)
 
@@ -159,6 +166,15 @@ def _optional_text(payload: dict[str, Any], key: str) -> str | None:
     return value.strip()
 
 
+def _dynamic_resource(value: object) -> DynamicResourceCollectionSpec | None:
+    if value is None:
+        return None
+    try:
+        return DynamicResourceCollectionSpec.model_validate(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid dynamic Kubernetes resource contract: {exc}") from exc
+
+
 @dataclass(frozen=True)
 class PrometheusInstantQuery:
     """Describe one Prometheus instant query."""
@@ -201,31 +217,61 @@ class OpenTelemetrySpanQuery:
 
 @dataclass(frozen=True)
 class KubernetesSnapshotQuery:
-    """Describe one Kubernetes namespace or all-namespace Event capture query."""
+    """Describe one bounded Kubernetes evidence query."""
 
     query_name: str
     description: str
     namespace: str
     label_selector: str | None = None
     collection_scope: str = KUBERNETES_QUERY_SCOPE_NAMESPACE
+    dynamic_resource: DynamicResourceCollectionSpec | None = None
 
     def __post_init__(self) -> None:
         if self.collection_scope not in {
             KUBERNETES_QUERY_SCOPE_NAMESPACE,
             KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
+            KUBERNETES_QUERY_SCOPE_DYNAMIC_RESOURCE,
         }:
             raise ValueError(f"unsupported Kubernetes collection scope: {self.collection_scope}")
-        if (
-            self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
-            and self.namespace != KUBERNETES_ALL_NAMESPACES_QUERY
-        ):
-            raise ValueError("cluster_events collection scope requires the all-namespaces query")
-        if self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS and self.label_selector:
-            raise ValueError("cluster_events collection scope does not allow a label selector")
+        if self.collection_scope in {
+            KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
+            KUBERNETES_QUERY_SCOPE_DYNAMIC_RESOURCE,
+        }:
+            if self.namespace != KUBERNETES_ALL_NAMESPACES_QUERY:
+                raise ValueError(
+                    f"{self.collection_scope} collection scope requires the all-namespaces query"
+                )
+            if self.label_selector:
+                raise ValueError(
+                    f"{self.collection_scope} collection scope does not allow a label selector"
+                )
+        if self.collection_scope == KUBERNETES_QUERY_SCOPE_DYNAMIC_RESOURCE:
+            if self.dynamic_resource is None:
+                raise ValueError("dynamic Kubernetes resource collection requires an identity")
+        elif self.dynamic_resource is not None:
+            raise ValueError(
+                "dynamic Kubernetes resource identity requires the dynamic_resource scope"
+            )
 
     @property
     def is_cluster_wide_event_capture(self) -> bool:
         return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
+
+    @property
+    def is_cluster_api_discovery(self) -> bool:
+        return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY
+
+    @property
+    def is_dynamic_resource_collection(self) -> bool:
+        return self.collection_scope == KUBERNETES_QUERY_SCOPE_DYNAMIC_RESOURCE
+
+    @property
+    def is_cluster_access_snapshot(self) -> bool:
+        return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS
 
 
 @dataclass(frozen=True)

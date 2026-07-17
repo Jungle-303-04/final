@@ -106,15 +106,19 @@ describe("ResourcesPage URL-backed detail", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "상세 전체 화면으로 보기" }));
     expect(document.querySelector('[data-detail-layout="full"]')).toBeTruthy();
-    expect(document.querySelector('[data-slot="resources-list-column"]')?.className)
-      .toContain("hidden");
+    const hiddenList = document.querySelector('[data-slot="resources-list-column"]');
+    expect(hiddenList?.className).toContain("hidden");
+    expect(hiddenList?.getAttribute("aria-hidden")).toBe("true");
+    expect(hiddenList?.hasAttribute("inert")).toBe(true);
     expect(screen.getByRole("dialog", { name: "checkout-api-0 상세" })).toBe(dialog);
     expect(within(dialog).getByRole("button", { name: "목록과 상세 함께 보기" })).toBeTruthy();
 
     await user.click(within(dialog).getByRole("button", { name: "목록과 상세 함께 보기" }));
     expect(document.querySelector('[data-detail-layout="peek"]')).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "checkout-api-0 상세" })).toBe(dialog);
-    expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
+    const restoredList = document.querySelector('[data-slot="resources-list-column"]');
+    expect(restoredList?.getAttribute("aria-hidden")).toBe("false");
+    expect(restoredList?.hasAttribute("inert")).toBe(false);
   });
 
   it("opens the real log stream contract from the detail command bar", async () => {
