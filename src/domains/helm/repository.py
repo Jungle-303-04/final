@@ -343,6 +343,7 @@ class HelmReleaseRepository(DatabaseConnection):
             table.c.namespace,
             table.c.name,
             table.c.uid,
+            table.c.resource_version,
             table.c.labels,
             table.c.observed_at,
         ).where(
@@ -496,6 +497,7 @@ def _serialize_storage_row(row: dict[str, Any]) -> dict[str, Any]:
         "namespace": str(row.get("namespace") or ""),
         "name": str(row.get("name") or ""),
         "uid": str(row.get("uid") or "") or None,
+        "resource_version": str(row.get("resource_version") or "") or None,
         "labels": dict(row.get("labels") or {}),
         "observed_at": iso_or_none(row.get("observed_at")),
     }

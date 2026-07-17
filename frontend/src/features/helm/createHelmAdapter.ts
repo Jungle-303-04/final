@@ -217,6 +217,7 @@ function toRelease(value: Awaited<ReturnType<HelmEndpointDependencies["listHelmR
     name: value.name,
     storageNamespace: value.storage_namespace,
     storage: toResourceRef(value.storage),
+    storageResourceVersion: value.storage_resource_version,
     chart: value.chart,
     chartVersion: value.chart_version,
     chartReasonCodes: value.chart_reason_codes,

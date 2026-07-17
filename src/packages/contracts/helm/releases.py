@@ -186,6 +186,7 @@ class HelmRelease(StrictModel):
     name: str = Field(min_length=1)
     storage_namespace: str = Field(min_length=1)
     storage: ResourceRef
+    storage_resource_version: str | None = Field(default=None, min_length=1, max_length=253)
     chart: str | None = Field(default=None, min_length=1, max_length=512)
     chart_version: str | None = Field(default=None, min_length=1, max_length=256)
     chart_reason_codes: tuple[str, ...] = ()

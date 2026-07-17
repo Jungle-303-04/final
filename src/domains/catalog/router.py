@@ -157,7 +157,7 @@ def catalog_install_plan(
                 "release_name": payload.release_name,
             },
         },
-        "payload": payload.model_dump(),
+        "payload": payload.model_dump(exclude_none=True),
         "steps": ["target Agent Helm install"],
         "lease": {
             "lease_seconds": DEFAULT_COMMAND_LEASE_SECONDS,
@@ -261,7 +261,7 @@ async def install_catalog_item(
     request_fingerprint = canonical_hash(
         {
             "cluster_id": payload.cluster_id,
-            "payload": command_payload.model_dump(),
+            "payload": command_payload.model_dump(exclude_none=True),
             "recipe_digest": recipe.chart_digest,
             "recipe_fixed_values": recipe.fixed_values,
         }

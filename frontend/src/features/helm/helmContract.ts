@@ -234,6 +234,7 @@ export interface HelmRelease {
   name: string;
   storageNamespace: string;
   storage: HelmResourceRef;
+  storageResourceVersion: string | null;
   chart: string | null;
   chartVersion: string | null;
   chartReasonCodes: readonly string[];

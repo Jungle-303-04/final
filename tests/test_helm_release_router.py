@@ -90,6 +90,7 @@ class HelmReleaseDb:
                 "namespace": "storefront",
                 "name": "sh.helm.release.v1.storefront.v3",
                 "uid": "uid-storefront-v3",
+                "resource_version": "1042",
                 "labels": {
                     "owner": "helm",
                     "name": "storefront",
@@ -268,6 +269,7 @@ class HelmUpgradeDb(HelmReleaseDb):
                 "capabilities": [
                     "command_receiver",
                     Command.CATALOG_HELM_INSTALL_CAPABILITY,
+                    Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
                     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
                 ],
             }
@@ -663,6 +665,20 @@ def test_release_upgrade_reuses_the_real_catalog_agent_command_and_audit_receipt
         "application_name": "storefront",
         "release_name": "storefront",
         "values": {"master.persistence.storageClass": "gp3"},
+        "upgrade_guard": {
+            "expected_revision": 3,
+            "storage": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Secret",
+                "namespace": "sandbox",
+                "name": "sh.helm.release.v1.storefront.v3",
+                "uid": "uid-storefront-v3",
+            },
+            "storage_resource_version": "1042",
+            "chart_name": "redis",
+            "chart_version": "22.0.0",
+        },
     }
     assert command.diff.basis["expected_revision"] == 3
     assert command.diff.basis["catalog_item_id"] == "catalog-redis"

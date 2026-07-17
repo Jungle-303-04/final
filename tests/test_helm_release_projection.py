@@ -21,6 +21,7 @@ def _row(
         "namespace": namespace,
         "name": f"sh.helm.release.v1.{release}.v{revision}",
         "uid": f"uid-{revision}",
+        "resource_version": f"resource-version-{revision}",
         "labels": {
             "owner": "helm",
             "name": release,
@@ -117,6 +118,7 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
                 "name": "sh.helm.release.v1.storefront.v3",
                 "uid": "uid-3",
             },
+            "storage_resource_version": "resource-version-3",
             "chart": "storefront",
             "chart_version": "1.2.3",
             "chart_reason_codes": [],

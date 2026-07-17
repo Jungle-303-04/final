@@ -708,6 +708,11 @@ def _semver(value: str) -> _SemVer | None:
     if match is None:
         return None
     prerelease = tuple((match.group(4) or "").split(".")) if match.group(4) else ()
+    if any(
+        identifier.isdigit() and len(identifier) > 1 and identifier.startswith("0")
+        for identifier in prerelease
+    ):
+        return None
     try:
         return _SemVer(
             major=int(match.group(1)),

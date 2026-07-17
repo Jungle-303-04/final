@@ -6,9 +6,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import Field
+
 from domains.catalog.repository import BOOTSTRAP_CATALOG_ITEMS
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.parity import ResourceRef
 
 DNS_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 HELM_RELEASE_PATTERN = DNS_LABEL_PATTERN
@@ -26,6 +29,30 @@ class CatalogRecipeUnsupported(ValueError):
     pass
 
 
+class CatalogHelmUpgradeGuard(StrictModel):
+    expected_revision: int = Field(ge=1)
+    storage: ResourceRef
+    storage_resource_version: str = Field(min_length=1, max_length=253)
+    chart_name: str = Field(min_length=1, max_length=512)
+    chart_version: str = Field(min_length=1, max_length=256)
+
+    def validate_target(self, *, namespace: str, release_name: str) -> None:
+        if (
+            self.expected_revision < 1
+            or not self.storage_resource_version
+            or not self.chart_name
+            or not self.chart_version
+            or self.storage.api_group
+            or self.storage.version != "v1"
+            or self.storage.kind.casefold() != "secret"
+            or self.storage.namespace != namespace
+            or not self.storage.name
+            or not self.storage.uid
+            or not release_name
+        ):
+            raise CatalogInstallValidationError("Helm upgrade guard is invalid")
+
+
 class CatalogHelmInstallPayload(StrictModel):
     catalog_item_id: str
     catalog_version: str
@@ -33,6 +60,7 @@ class CatalogHelmInstallPayload(StrictModel):
     application_name: str
     release_name: str
     values: dict[str, Any]
+    upgrade_guard: CatalogHelmUpgradeGuard | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +77,12 @@ class ServerHelmRecipe:
     @property
     def digest_reference(self) -> str:
         return f"{self.package_ref}@{self.chart_digest}"
+
+    @property
+    def chart_name(self) -> str:
+        """Return the exact OCI chart segment owned by this server recipe."""
+
+        return self.package_ref.rsplit("/", maxsplit=1)[-1]
 
 
 def server_helm_recipe(item_id: str, version: str) -> ServerHelmRecipe:

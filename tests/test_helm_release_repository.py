@@ -52,6 +52,7 @@ def test_helm_storage_query_selects_only_allowlisted_metadata() -> None:
         "namespace",
         "name",
         "uid",
+        "resource_version",
         "labels",
         "observed_at",
     }

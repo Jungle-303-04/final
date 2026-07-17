@@ -26,7 +26,11 @@ from commands import (
     validate_exact_resource,
     workload_template_sha256,
 )
-from commands.helm import run_catalog_helm_install, run_helm_artifact_query
+from commands.helm import (
+    run_catalog_helm_install,
+    run_helm_artifact_query,
+    validate_catalog_helm_upgrade_secret,
+)
 from commands.service_access import (
     ServiceAccessExecutionError,
     ServiceRequestCancelled,
@@ -1429,6 +1433,29 @@ class TargetClusterAgent:
             ctx.metadata.get(Gateway.DIRECT_EXECUTION)
         ):
             return ctx.fail(MANAGEMENT_READONLY_CODE)
+        if ctx.payload.upgrade_guard is not None:
+            guard = ctx.payload.upgrade_guard
+            try:
+                live_storage = await ctx.kubernetes.get_namespaced_resource(
+                    api_group="core",
+                    version="v1",
+                    namespace=ctx.payload.namespace,
+                    resource="secrets",
+                    name=guard.storage.name,
+                )
+                validate_catalog_helm_upgrade_secret(live_storage, ctx.payload)
+            except ValueError:
+                return ctx.fail(
+                    "catalog Helm upgrade guard rejected stale release evidence",
+                    error_code="helm_release_guard_stale",
+                    retryable=False,
+                )
+            except Exception:
+                return ctx.fail(
+                    "catalog Helm upgrade guard could not verify release evidence",
+                    error_code="helm_release_guard_unavailable",
+                    retryable=False,
+                )
         result = await asyncio.to_thread(run_catalog_helm_install, ctx.payload)
         fields = {
             "catalog_item_id": ctx.payload.catalog_item_id,

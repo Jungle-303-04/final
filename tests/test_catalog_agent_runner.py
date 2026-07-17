@@ -217,6 +217,7 @@ def test_helm_upgrade_guard_checks_live_status_immediately_before_upgrade() -> N
 
     assert result.succeeded is True
     assert [args[1] for args in calls] == ["status", "upgrade"]
+    assert "--install" not in calls[1]
 
 
 def test_helm_runner_reports_timeout_without_subprocess_output() -> None:

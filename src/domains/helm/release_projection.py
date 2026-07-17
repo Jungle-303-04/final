@@ -61,6 +61,7 @@ class ObservedHelmStorage:
     release_name: str
     storage_namespace: str
     storage: ResourceRef
+    storage_resource_version: str | None
     revision: int | None
     status: str | None
     observed_at: str | None
@@ -297,6 +298,7 @@ def _observed_storage(
             name=_text(row.get("name")) or inventory_key,
             uid=_optional_text(row.get("uid")) or inventory_key,
         ),
+        storage_resource_version=_optional_text(row.get("resource_version")),
         revision=_revision(labels.get(HELM_RELEASE_REVISION_LABEL)),
         status=_optional_text(labels.get(HELM_RELEASE_STATUS_LABEL)),
         observed_at=_iso(row.get("observed_at")),
@@ -321,6 +323,7 @@ def _release(
         name=item.release_name,
         storage_namespace=item.storage_namespace,
         storage=item.storage,
+        storage_resource_version=item.storage_resource_version,
         chart=chart,
         chart_version=chart_version,
         chart_reason_codes=chart_reasons,
@@ -383,12 +386,13 @@ def _chart_identity(
 
 def _parse_chart_label(value: str) -> tuple[str, str] | None:
     parts = value.strip().split("-")
+    candidates: set[tuple[str, str]] = set()
     for index in range(1, len(parts)):
         chart = "-".join(parts[:index]).strip()
         version = "-".join(parts[index:]).strip()
         if chart and _SEMVER_SUFFIX.fullmatch(version):
-            return chart, version.replace("_", "+")
-    return None
+            candidates.add((chart, version.replace("_", "+")))
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
 
 def _owned_resource_index(

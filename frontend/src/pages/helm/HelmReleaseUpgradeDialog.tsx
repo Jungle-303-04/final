@@ -4,6 +4,7 @@ import {
   HelmPortFailure,
   type HelmPort,
   type HelmReleaseDetail,
+  type HelmReleaseVersionList,
   type HelmUpgradeInput,
   type HelmUpgradeTarget,
 } from "../../features/helm/helmContract";
@@ -17,10 +18,12 @@ import { Input } from "../../shared/ui/primitives/input";
 type FormValues = Readonly<Record<string, string>>;
 
 export function HelmReleaseUpgradeDialog({
+  availableVersions,
   detail,
   onAccepted,
   port,
 }: {
+  availableVersions: HelmReleaseVersionList;
   detail: HelmReleaseDetail;
   onAccepted: () => void;
   port: HelmPort;
@@ -33,12 +36,27 @@ export function HelmReleaseUpgradeDialog({
   const [targetKey, setTargetKey] = useState("");
   const [values, setValues] = useState<FormValues>({});
   const requestRef = useRef<AbortController | null>(null);
-  const targets = commands.availability === "available" ? commands.upgradeTargets : [];
+  const authorizedVersions = new Set(
+    availableVersions.availability !== "unavailable"
+    && availableVersions.chartName === detail.release.chart
+    && chartVersionsEqual(availableVersions.currentVersion, detail.release.chartVersion)
+      ? availableVersions.versions
+        .filter((item) => !item.deprecated)
+        .map((item) => comparableChartVersion(item.version))
+        .filter((item): item is string => item !== null)
+      : [],
+  );
+  const targets = commands.availability === "available"
+    ? commands.upgradeTargets.filter((item) => {
+      const version = comparableChartVersion(item.chartVersion);
+      return version !== null && authorizedVersions.has(version);
+    })
+    : [];
   const target = targets.find((item) => upgradeTargetKey(item) === targetKey) ?? targets[0] ?? null;
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
-  if (commands.availability !== "available") return null;
+  if (commands.availability !== "available" || targets.length === 0) return null;
 
   const changeOpen = (next: boolean) => {
     if (pending) return;
@@ -192,6 +210,20 @@ function UpgradeInputField({
 
 function upgradeTargetKey(target: HelmUpgradeTarget): string {
   return `${target.itemId}\u001f${target.version}`;
+}
+
+function chartVersionsEqual(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return false;
+  const normalizedLeft = comparableChartVersion(left);
+  return normalizedLeft !== null && normalizedLeft === comparableChartVersion(right);
+}
+
+function comparableChartVersion(value: string): string | null {
+  const normalized = value.trim().replace(/_/g, "+");
+  const match = normalized.match(
+    /^v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/,
+  );
+  return match?.[1] ?? null;
 }
 
 function initialValues(target: HelmUpgradeTarget): FormValues {

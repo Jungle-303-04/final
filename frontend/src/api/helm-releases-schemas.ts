@@ -123,6 +123,7 @@ export const helmReleaseSchema = z.strictObject({
   name: z.string().min(1),
   storage_namespace: z.string().min(1),
   storage: helmResourceRefSchema,
+  storage_resource_version: nullableTextSchema,
   chart: nullableTextSchema,
   chart_version: nullableTextSchema,
   chart_reason_codes: z.array(z.string().min(1)),

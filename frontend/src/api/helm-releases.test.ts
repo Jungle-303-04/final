@@ -248,6 +248,7 @@ function release() {
       name: "sh.helm.release.v1.storefront.v3",
       uid: "storage-3",
     },
+    storage_resource_version: "1042",
     chart: null,
     chart_version: null,
     chart_reason_codes: ["helm_chart_identity_unavailable"],

@@ -16,6 +16,7 @@ from domains.helm.source_router import (
     accessible_helm_chart_source_ids,
     load_helm_provider_credential,
 )
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.helm.releases import HelmRelease
 from packages.contracts.helm.sources import (
     HelmChartVersionObservation,
@@ -26,6 +27,8 @@ from packages.security.credentials import CredentialEncryptionError
 
 HELM_UPGRADE_MAX_SOURCES = 20
 HELM_UPGRADE_PROVIDER_CONCURRENCY = 8
+HELM_CHART_SOURCE_PROVIDER_ERROR = "helm_chart_source_provider_error"
+HELM_CHART_SOURCE_BATCH_TIMEOUT = "helm_chart_source_batch_timeout"
 
 
 async def resolve_helm_release_catalogs(
@@ -111,7 +114,6 @@ async def _observe_chart_sources(
             )
         except CredentialEncryptionError:
             credential_failures.add(source_id)
-    semaphore = asyncio.Semaphore(HELM_UPGRADE_PROVIDER_CONCURRENCY)
 
     async def observe(
         row: Mapping[str, Any],
@@ -125,23 +127,59 @@ async def _observe_chart_sources(
                 availability="unavailable",
                 reason_codes=(HELM_CHART_CREDENTIAL_UNAVAILABLE,),
             )
-        async with semaphore:
+        try:
             return await provider.fetch_versions(
                 source,
                 chart_name,
                 credential=credentials.get(source.source_id),
             )
+        except Exception:
+            return HelmChartVersionObservation(
+                source=source,
+                chart_name=chart_name,
+                availability="unavailable",
+                reason_codes=(HELM_CHART_SOURCE_PROVIDER_ERROR,),
+            )
 
-    tasks = {
-        (chart_name, str(row.get("source_id") or "")): asyncio.create_task(observe(row, chart_name))
-        for chart_name in chart_names
-        for row in records
-    }
+    jobs = tuple((chart_name, row) for chart_name in chart_names for row in records)
+    results: list[HelmChartVersionObservation | None] = [None] * len(jobs)
+    next_job = iter(enumerate(jobs))
+
+    async def worker() -> None:
+        for index, (chart_name, row) in next_job:
+            results[index] = await observe(row, chart_name)
+
+    workers = tuple(
+        asyncio.create_task(worker())
+        for _ in range(min(HELM_UPGRADE_PROVIDER_CONCURRENCY, len(jobs)))
+    )
+    if workers:
+        try:
+            async with asyncio.timeout(float(integral_refresh_after_seconds("helm_detail"))):
+                await asyncio.gather(*workers)
+        except TimeoutError:
+            for task in workers:
+                task.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
+        except BaseException:
+            for task in workers:
+                task.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
+            raise
+
     grouped: dict[str, list[HelmChartVersionObservation]] = {
         chart_name: [] for chart_name in chart_names
     }
-    for (chart_name, _source_id), task in tasks.items():
-        grouped[chart_name].append(await task)
+    for index, (chart_name, row) in enumerate(jobs):
+        result = results[index]
+        if result is None:
+            result = HelmChartVersionObservation(
+                source=helm_chart_source_from_row(row),
+                chart_name=chart_name,
+                availability="unavailable",
+                reason_codes=(HELM_CHART_SOURCE_BATCH_TIMEOUT,),
+            )
+        grouped[chart_name].append(result)
     return {chart_name: tuple(items) for chart_name, items in grouped.items()}
 
 

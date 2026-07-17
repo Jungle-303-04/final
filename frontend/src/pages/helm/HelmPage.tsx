@@ -395,6 +395,7 @@ function HelmDetailBoundary({
         <div className="flex flex-wrap items-center gap-2">
           {detail.commands.availability === "available" ? (
             <HelmReleaseUpgradeDialog
+              availableVersions={detail.availableVersions}
               detail={detail}
               onAccepted={onMutationAccepted}
               port={port}

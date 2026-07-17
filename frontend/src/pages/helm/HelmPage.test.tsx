@@ -182,6 +182,9 @@ describe("HelmPage", () => {
         storageNamespace: "sandbox",
         scope: { ...upgradeDetail.release.scope, namespaces: ["sandbox"] },
         storage: { ...upgradeDetail.release.storage, namespace: "sandbox" },
+        chart: "redis",
+        chartVersion: "22.0.0",
+        chartReasonCodes: [],
       },
       commands: availableUpgradeCommands(),
     });
@@ -721,6 +724,7 @@ function release(): HelmRelease {
       name: "sh.helm.release.v1.storefront.v3",
       uid: "storage-3",
     },
+    storageResourceVersion: "1042",
     chart: null,
     chartVersion: null,
     chartReasonCodes: ["helm_chart_identity_unavailable"],

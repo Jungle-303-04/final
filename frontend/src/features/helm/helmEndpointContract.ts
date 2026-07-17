@@ -69,6 +69,7 @@ export interface HelmEndpointRelease {
   name: string;
   storage_namespace: string;
   storage: HelmEndpointResourceRef;
+  storage_resource_version: string | null;
   chart: string | null;
   chart_version: string | null;
   chart_reason_codes: string[];

@@ -23,6 +23,7 @@ from domains.catalog.install import (
     validate_catalog_values,
     validate_install_names,
 )
+from domains.helm.source_provider import compare_helm_chart_versions
 from domains.release_flow.redaction import (
     REDACTED_VALUE,
     is_sensitive_key,
@@ -45,6 +46,7 @@ from packages.security.log_lines import redact_log_line
 
 HELM_OPERATION_TIMEOUT_SECONDS = 300
 HELM_SUBPROCESS_TIMEOUT_SECONDS = 330
+HELM_STATUS_MAX_BYTES = 1024 * 1024
 HELM_ENV_ALLOWLIST = (
     "PATH",
     "LANG",
@@ -161,6 +163,22 @@ def run_catalog_helm_install(
             raise CatalogInstallValidationError(
                 "catalog installs are limited to the sandbox control namespace"
             )
+        if payload.upgrade_guard is not None:
+            payload.upgrade_guard.validate_target(
+                namespace=payload.namespace,
+                release_name=payload.release_name,
+            )
+            if (
+                recipe.chart_name != payload.upgrade_guard.chart_name
+                or compare_helm_chart_versions(
+                    recipe.chart_version,
+                    payload.upgrade_guard.chart_version,
+                )
+                <= 0
+            ):
+                raise CatalogInstallValidationError(
+                    "catalog recipe does not upgrade the guarded Helm chart"
+                )
         user_values = nested_helm_values(
             validate_catalog_values(recipe.values_schema, payload.values)
         )
@@ -180,23 +198,34 @@ def run_catalog_helm_install(
             encoding="utf-8",
         )
         values_path.chmod(0o600)
-        args = [
-            executable,
-            "upgrade",
-            "--install",
-            payload.release_name,
-            recipe.digest_reference,
-            "--version",
-            recipe.chart_version,
-            "--namespace",
-            payload.namespace,
-            "--values",
-            str(values_path),
-            "--wait",
-            "--atomic",
-            "--timeout",
-            f"{HELM_OPERATION_TIMEOUT_SECONDS}s",
-        ]
+        if payload.upgrade_guard is not None:
+            guard_result = _validate_live_helm_status(
+                executable,
+                payload,
+                run=run,
+                env=helm_subprocess_env(runtime_dir),
+            )
+            if guard_result is not None:
+                return guard_result
+        args = [executable, "upgrade"]
+        if payload.upgrade_guard is None:
+            args.append("--install")
+        args.extend(
+            [
+                payload.release_name,
+                recipe.digest_reference,
+                "--version",
+                recipe.chart_version,
+                "--namespace",
+                payload.namespace,
+                "--values",
+                str(values_path),
+                "--wait",
+                "--atomic",
+                "--timeout",
+                f"{HELM_OPERATION_TIMEOUT_SECONDS}s",
+            ]
+        )
         try:
             completed = run(
                 args,
@@ -217,6 +246,95 @@ def run_catalog_helm_install(
     if completed.returncode != 0:
         return HelmRunResult(False, "helm_exit_nonzero", completed.returncode)
     return HelmRunResult(True, returncode=completed.returncode)
+
+
+def validate_catalog_helm_upgrade_secret(
+    observed: Mapping[str, Any],
+    payload: CatalogHelmInstallPayload,
+) -> None:
+    guard = payload.upgrade_guard
+    if guard is None:
+        return
+    metadata_value = observed.get("metadata")
+    metadata = metadata_value if isinstance(metadata_value, Mapping) else {}
+    labels_value = metadata.get("labels")
+    labels = labels_value if isinstance(labels_value, Mapping) else {}
+    if (
+        str(observed.get("apiVersion") or "") != "v1"
+        or str(observed.get("kind") or "").casefold() != "secret"
+        or str(metadata.get("namespace") or "") != payload.namespace
+        or str(metadata.get("name") or "") != guard.storage.name
+        or str(metadata.get("uid") or "") != guard.storage.uid
+        or str(metadata.get("resourceVersion") or "") != guard.storage_resource_version
+        or str(labels.get("owner") or "").casefold() != "helm"
+        or str(labels.get("name") or "") != payload.release_name
+        or str(labels.get("version") or "") != str(guard.expected_revision)
+    ):
+        raise ValueError("Helm release storage identity is stale")
+
+
+def _validate_live_helm_status(
+    executable: str,
+    payload: CatalogHelmInstallPayload,
+    *,
+    run: RunCommand,
+    env: dict[str, str],
+) -> HelmRunResult | None:
+    guard = payload.upgrade_guard
+    if guard is None:
+        return None
+    args = [
+        executable,
+        "status",
+        payload.release_name,
+        "--namespace",
+        payload.namespace,
+        "--output",
+        "json",
+    ]
+    try:
+        completed = run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=HELM_SUBPROCESS_TIMEOUT_SECONDS,
+            shell=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return HelmRunResult(False, "helm_release_guard_timeout")
+    except (FileNotFoundError, PermissionError):
+        return HelmRunResult(False, "helm_not_available")
+    except OSError:
+        return HelmRunResult(False, "helm_release_guard_error")
+    if completed.returncode != 0:
+        return HelmRunResult(False, "helm_release_guard_unavailable", completed.returncode)
+    encoded = completed.stdout.encode("utf-8", errors="replace")
+    if len(encoded) > HELM_STATUS_MAX_BYTES:
+        return HelmRunResult(False, "helm_release_guard_invalid")
+    try:
+        status = json.loads(completed.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return HelmRunResult(False, "helm_release_guard_invalid")
+    chart_value = status.get("chart") if isinstance(status, Mapping) else None
+    chart = chart_value if isinstance(chart_value, Mapping) else {}
+    metadata_value = chart.get("metadata")
+    chart_metadata = metadata_value if isinstance(metadata_value, Mapping) else {}
+    if (
+        str(status.get("name") or "") != payload.release_name
+        or str(status.get("namespace") or "") != payload.namespace
+        or str(status.get("version") or "") != str(guard.expected_revision)
+        or str(chart_metadata.get("name") or "") != guard.chart_name
+        or not str(chart_metadata.get("version") or "")
+        or compare_helm_chart_versions(
+            str(chart_metadata.get("version") or ""),
+            guard.chart_version,
+        )
+        != 0
+    ):
+        return HelmRunResult(False, "helm_release_guard_stale")
+    return None
 
 
 def run_helm_artifact_query(

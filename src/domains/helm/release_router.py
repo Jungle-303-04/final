@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.catalog.install import (
     CatalogHelmInstallPayload,
+    CatalogHelmUpgradeGuard,
     CatalogInstallValidationError,
     CatalogRecipeUnsupported,
     server_helm_recipe,
@@ -30,7 +31,10 @@ from domains.command.router import (
 from domains.gitops.events import Diff
 from domains.helm.release_projection import helm_release_detail, helm_release_list
 from domains.helm.repository import HelmOwnedResourceObservationBatch
-from domains.helm.source_provider import HelmChartVersionProvider
+from domains.helm.source_provider import (
+    HelmChartVersionProvider,
+    compare_helm_chart_versions,
+)
 from domains.helm.source_router import get_helm_chart_version_provider
 from domains.helm.upgrade_projection import (
     helm_release_upgrade_info,
@@ -82,6 +86,8 @@ ARTIFACT_CAPACITY_DETAIL = "too many active Helm artifact reads"
 UPGRADE_AGENT_UNAVAILABLE_DETAIL = "Helm release upgrade runner is unavailable"
 UPGRADE_STALE_REVISION_DETAIL = "Helm release revision changed; refresh before upgrading"
 UPGRADE_RECIPE_INVALID_DETAIL = "Helm release upgrade recipe is invalid"
+UPGRADE_CHART_MISMATCH_DETAIL = "Helm release chart does not match the selected upgrade"
+UPGRADE_SOURCE_TARGET_DETAIL = "Helm upgrade target is unavailable from the authorized source"
 UPGRADE_NAMESPACE_UNAVAILABLE = "helm_upgrade_namespace_not_supported"
 UPGRADE_PERMISSION_UNAVAILABLE = "helm_upgrade_permission_denied"
 UPGRADE_AGENT_UNAVAILABLE = "helm_upgrade_agent_unavailable"
@@ -218,6 +224,9 @@ async def get_helm_release(
         workspace_id,
         selected_cluster,
         selected_namespace,
+        detail.detail.release.chart,
+        detail.detail.release.chart_version,
+        detail.detail.release.storage_resource_version,
         detail.detail.release.revision,
         selected_cluster in deploy_clusters,
     )
@@ -330,6 +339,7 @@ async def create_helm_release_upgrade(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
 ) -> CommandReceipt:
     """Upgrade one observed release through the existing digest-pinned agent executor."""
 
@@ -353,27 +363,50 @@ async def create_helm_release_upgrade(
         selected_cluster,
     ):
         raise HTTPException(status_code=409, detail=UPGRADE_AGENT_UNAVAILABLE_DETAIL)
-    storage_rows = await asyncio.to_thread(
-        db.list_helm_storage_observations,
-        workspace_id=workspace_id,
-        cluster_ids=(selected_cluster,),
-        namespaces=(selected_namespace,),
+    detail = await get_helm_release(
+        selected_namespace,
+        selected_release,
+        selected_cluster,
+        current,
+        db,
     )
-    observed_revision = _release_observed_revision(storage_rows, selected_release)
-    if observed_revision is None:
-        raise HTTPException(status_code=404, detail=RELEASE_NOT_FOUND_DETAIL)
-    if observed_revision != payload.expected_revision:
+    release = detail.detail.release
+    if release.revision != payload.expected_revision:
+        raise HTTPException(status_code=409, detail=UPGRADE_STALE_REVISION_DETAIL)
+    if release.storage_resource_version is None:
         raise HTTPException(status_code=409, detail=UPGRADE_STALE_REVISION_DETAIL)
     try:
         recipe = server_helm_recipe(payload.catalog_item_id, payload.catalog_version)
+        if not _recipe_matches_release(recipe, release.chart, release.chart_version):
+            raise HTTPException(status_code=409, detail=UPGRADE_CHART_MISMATCH_DETAIL)
         validate_install_names(
             application_name=selected_release,
             namespace=selected_namespace,
             release_name=selected_release,
         )
         values = validate_catalog_values(recipe.values_schema, payload.values)
+    except HTTPException:
+        raise
     except (CatalogRecipeUnsupported, CatalogInstallValidationError) as error:
         raise HTTPException(status_code=422, detail=UPGRADE_RECIPE_INVALID_DETAIL) from error
+
+    catalogs = await resolve_helm_release_catalogs(
+        db=db,
+        current=current,
+        releases=(release,),
+        provider=provider,
+    )
+    resolution = catalogs[helm_release_upgrade_key(release)]
+    if (
+        resolution.availability == "unavailable"
+        or resolution.source is None
+        or not any(
+            not item.deprecated
+            and compare_helm_chart_versions(item.version, recipe.chart_version) == 0
+            for item in resolution.versions
+        )
+    ):
+        raise HTTPException(status_code=409, detail=UPGRADE_SOURCE_TARGET_DETAIL)
 
     command_payload = CatalogHelmInstallPayload(
         catalog_item_id=recipe.item_id,
@@ -382,6 +415,13 @@ async def create_helm_release_upgrade(
         application_name=selected_release,
         release_name=selected_release,
         values=values,
+        upgrade_guard=CatalogHelmUpgradeGuard(
+            expected_revision=payload.expected_revision,
+            storage=release.storage,
+            storage_resource_version=release.storage_resource_version or "",
+            chart_name=release.chart or "",
+            chart_version=release.chart_version or "",
+        ),
     )
     command = CommandRequestedBody(
         cluster_id=selected_cluster,
@@ -394,11 +434,11 @@ async def create_helm_release_upgrade(
             resource=f"helm-release/{selected_namespace}/{selected_release}",
             namespace=selected_namespace,
             desired_image=f"catalog:{recipe.item_id}@{recipe.version}",
-            actual_image=f"helm-revision:{observed_revision}",
+            actual_image=f"helm-revision:{release.revision}",
             risk=RiskLevel.SANDBOX_ONLY,
             status="upgrade",
             basis={
-                "expected_revision": observed_revision,
+                "expected_revision": release.revision,
                 "catalog_item_id": recipe.item_id,
                 "catalog_version": recipe.version,
                 "chart_version": recipe.chart_version,
@@ -592,31 +632,14 @@ def _release_is_observed(rows: list[dict[str, Any]], release_name: str) -> bool:
     return False
 
 
-def _release_observed_revision(
-    rows: list[dict[str, Any]],
-    release_name: str,
-) -> int | None:
-    revisions: list[int] = []
-    for row in rows:
-        labels = row.get("labels")
-        if not isinstance(labels, Mapping):
-            continue
-        if str(labels.get("name") or "").strip() != release_name:
-            continue
-        try:
-            revision = int(str(labels.get("version") or ""))
-        except ValueError:
-            continue
-        if revision > 0:
-            revisions.append(revision)
-    return max(revisions) if revisions else None
-
-
 def _release_upgrade_commands(
     db: Any,
     workspace_id: str,
     cluster_id: str,
     namespace: str,
+    chart_name: str | None,
+    chart_version: str | None,
+    storage_resource_version: str | None,
     revision: int | None,
     has_deploy_access: bool,
 ) -> HelmFeatureAvailability | HelmReleaseCommands:
@@ -626,17 +649,24 @@ def _release_upgrade_commands(
         return HelmFeatureAvailability(reason_code=UPGRADE_NAMESPACE_UNAVAILABLE)
     if revision is None:
         return HelmFeatureAvailability(reason_code=UPGRADE_REVISION_UNAVAILABLE)
+    if chart_name is None or chart_version is None or storage_resource_version is None:
+        return HelmFeatureAvailability(reason_code=UPGRADE_TARGETS_UNAVAILABLE)
     if not _agent_supports_release_upgrade(db, workspace_id, cluster_id):
         return HelmFeatureAvailability(reason_code=UPGRADE_AGENT_UNAVAILABLE)
-    targets = _helm_upgrade_targets()
+    targets = _helm_upgrade_targets(chart_name, chart_version)
     if not targets:
         return HelmFeatureAvailability(reason_code=UPGRADE_TARGETS_UNAVAILABLE)
     return HelmReleaseCommands(upgrade_targets=targets)
 
 
-def _helm_upgrade_targets() -> tuple[HelmUpgradeTarget, ...]:
+def _helm_upgrade_targets(
+    chart_name: str,
+    current_version: str,
+) -> tuple[HelmUpgradeTarget, ...]:
     targets: list[HelmUpgradeTarget] = []
     for recipe in server_helm_recipes():
+        if not _recipe_matches_release(recipe, chart_name, current_version):
+            continue
         inputs = _upgrade_inputs(recipe.values_schema)
         if inputs is None:
             continue
@@ -650,6 +680,19 @@ def _helm_upgrade_targets() -> tuple[HelmUpgradeTarget, ...]:
             )
         )
     return tuple(targets)
+
+
+def _recipe_matches_release(
+    recipe: Any,
+    chart_name: str | None,
+    current_version: str | None,
+) -> bool:
+    return (
+        chart_name is not None
+        and current_version is not None
+        and recipe.chart_name == chart_name
+        and compare_helm_chart_versions(recipe.chart_version, current_version) > 0
+    )
 
 
 def _upgrade_inputs(schema: Mapping[str, Any]) -> tuple[HelmUpgradeInput, ...] | None:
@@ -696,7 +739,11 @@ def _agent_supports_release_upgrade(
     reader = getattr(db, "list_cluster_agent_statuses", None)
     if not callable(reader):
         return False
-    required = {"command_receiver", Command.CATALOG_HELM_INSTALL_CAPABILITY}
+    required = {
+        "command_receiver",
+        Command.CATALOG_HELM_INSTALL_CAPABILITY,
+        Command.CATALOG_HELM_UPGRADE_CAS_CAPABILITY,
+    }
     return any(
         isinstance(item, Mapping)
         and cluster_connection_status(item) == AGENT_STATUS_ONLINE
