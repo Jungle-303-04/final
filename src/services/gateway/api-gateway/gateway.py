@@ -107,6 +107,7 @@ from packages.storage.sessions import (
     SessionStoreUnavailable,
 )
 from services.ai.agent.playbooks.cause import registered_cause_profiles
+from services.mcp.internal_control.ai_runtime import request_context_mcp_engine
 
 LOGGER = get_logger(__name__)
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -336,6 +337,7 @@ class ApiGateway:
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
         app = self.app
+        app.state.context_mcp_engine_factory = request_context_mcp_engine
         self._register_frontend_proxy(app)
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from fastapi import Request
 
 from packages.ai.engine import DEFAULT_MAX_TOOL_CALLS, ConversationEngine
 from packages.ai.llm import LlmClient
@@ -14,6 +17,7 @@ from services.mcp.internal_control.api_client import ManagementApiClient, Manage
 from services.mcp.internal_control.config import (
     OPSIA_MCP_ENABLE_WRITES_ENV,
     McpConfigurationError,
+    configured_session_cookie_name,
     load_settings,
     load_settings_with_auth,
 )
@@ -72,6 +76,39 @@ PROPOSAL_ONLY_WRITE_ARGUMENTS = frozenset(
         DRY_RUN_ARGUMENT,
     }
 )
+
+
+@asynccontextmanager
+async def request_context_mcp_engine(request: Request, llm: LlmClient):
+    """Create one request-scoped read-only MCP engine at the service boundary."""
+    bearer_token = _request_bearer_token(request)
+    session_cookie = ""
+    if not bearer_token:
+        session_cookie = request.cookies.get(configured_session_cookie_name(), "")
+    if not bearer_token and not session_cookie:
+        yield None
+        return
+    try:
+        client = management_client_from_auth(
+            bearer_token=bearer_token,
+            session_cookie=session_cookie,
+            writes_enabled=False,
+        )
+    except McpConfigurationError:
+        yield None
+        return
+    try:
+        yield mcp_conversation_engine(llm, client, include_write_tools=False)
+    finally:
+        await client.aclose()
+
+
+def _request_bearer_token(request: Request) -> str:
+    authorization = request.headers.get("authorization", "").strip()
+    scheme, separator, credential = authorization.partition(" ")
+    if not separator or scheme.casefold() != "bearer":
+        return ""
+    return credential.strip()
 
 
 @dataclass(frozen=True, slots=True)

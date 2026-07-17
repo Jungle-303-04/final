@@ -35,14 +35,6 @@ from packages.contracts.gateway.responses import (
     AiSuggestionsResponse,
 )
 from packages.contracts.identity import Permission
-from services.mcp.internal_control.ai_runtime import (
-    management_client_from_auth,
-    mcp_conversation_engine,
-)
-from services.mcp.internal_control.config import (
-    McpConfigurationError,
-    configured_session_cookie_name,
-)
 
 AiResourceKind = Literal[
     "pods",
@@ -139,40 +131,12 @@ async def get_context_mcp_engine(
     if llm is None:
         yield None
         return
-    try:
-        client = _context_mcp_client(request)
-    except McpConfigurationError:
+    factory = getattr(request.app.state, "context_mcp_engine_factory", None)
+    if not callable(factory):
         yield None
         return
-    if client is None:
-        yield None
-        return
-    try:
-        yield mcp_conversation_engine(llm, client, include_write_tools=False)
-    finally:
-        await client.aclose()
-
-
-def _context_mcp_client(request: Request) -> Any | None:
-    bearer_token = _request_bearer_token(request)
-    session_cookie = ""
-    if not bearer_token:
-        session_cookie = request.cookies.get(configured_session_cookie_name(), "")
-    if not bearer_token and not session_cookie:
-        return None
-    return management_client_from_auth(
-        bearer_token=bearer_token,
-        session_cookie=session_cookie,
-        writes_enabled=False,
-    )
-
-
-def _request_bearer_token(request: Request) -> str:
-    authorization = request.headers.get("authorization", "").strip()
-    scheme, separator, credential = authorization.partition(" ")
-    if not separator or scheme.casefold() != "bearer":
-        return ""
-    return credential.strip()
+    async with factory(request, llm) as engine:
+        yield engine
 
 
 @dataclass(frozen=True)
