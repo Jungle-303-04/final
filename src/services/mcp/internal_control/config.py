@@ -91,7 +91,9 @@ class McpSettings:
             )
         session_cookie_name = self.session_cookie_name.strip()
         if not COOKIE_NAME_RE.fullmatch(session_cookie_name):
-            raise McpConfigurationError(f"{OPSIA_MCP_SESSION_COOKIE_NAME_ENV} is not a valid cookie name")
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_SESSION_COOKIE_NAME_ENV} is not a valid cookie name"
+            )
         auth_mechanisms = self.auth_mechanisms()
         if not auth_mechanisms:
             raise McpConfigurationError(
@@ -143,7 +145,9 @@ class McpSettings:
             _validate_header_value(name, value)
         session_cookie_name = self.session_cookie_name.strip()
         if not COOKIE_NAME_RE.fullmatch(session_cookie_name):
-            raise McpConfigurationError(f"{OPSIA_MCP_SESSION_COOKIE_NAME_ENV} is not a valid cookie name")
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_SESSION_COOKIE_NAME_ENV} is not a valid cookie name"
+            )
         headers: dict[str, str] = {"accept": "application/json"}
         if self.bearer_token.strip():
             headers["authorization"] = f"Bearer {self.bearer_token.strip()}"

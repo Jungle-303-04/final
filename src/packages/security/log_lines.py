@@ -164,6 +164,5 @@ def _is_sensitive_value_key(key: str) -> bool:
     normalized = _normalized_sensitive_key(key)
     compact = normalized.replace("_", "")
     return any(
-        part in normalized or part.replace("_", "") in compact
-        for part in SENSITIVE_VALUE_KEY_PARTS
+        part in normalized or part.replace("_", "") in compact for part in SENSITIVE_VALUE_KEY_PARTS
     )

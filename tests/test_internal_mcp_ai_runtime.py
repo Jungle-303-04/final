@@ -129,7 +129,7 @@ def _sample_registry() -> ToolRegistry:
                             "type": "boolean",
                             "description": "Must be true after operator approval.",
                             "default": False,
-                        }
+                        },
                     },
                     "required": [],
                     "additionalProperties": False,
@@ -171,11 +171,7 @@ def test_runtime_tools_default_to_read_only_default_registry_tools() -> None:
     registry = default_tool_registry()
     raw_tools = registry.list_tools()
     expected_names = tuple(
-        sorted(
-            tool["name"]
-            for tool in raw_tools
-            if tool["annotations"]["readOnlyHint"] is True
-        )
+        sorted(tool["name"] for tool in raw_tools if tool["annotations"]["readOnlyHint"] is True)
     )
 
     runtime_tools = tools_from_mcp_registry(registry)
@@ -267,27 +263,36 @@ def test_provider_formatters_require_write_enabled_before_describing_write_tools
     with pytest.raises(McpConfigurationError, match="OPSIA_MCP_ENABLE_WRITES=true"):
         gemini_function_declarations(registry, include_write_tools=True)
 
-    assert len(
-        openai_tools(
-            registry,
-            include_write_tools=True,
-            write_tools_enabled=True,
+    assert (
+        len(
+            openai_tools(
+                registry,
+                include_write_tools=True,
+                write_tools_enabled=True,
+            )
         )
-    ) == 2
-    assert len(
-        anthropic_tools(
-            registry,
-            include_write_tools=True,
-            write_tools_enabled=True,
+        == 2
+    )
+    assert (
+        len(
+            anthropic_tools(
+                registry,
+                include_write_tools=True,
+                write_tools_enabled=True,
+            )
         )
-    ) == 2
-    assert len(
-        gemini_function_declarations(
-            registry,
-            include_write_tools=True,
-            write_tools_enabled=True,
+        == 2
+    )
+    assert (
+        len(
+            gemini_function_declarations(
+                registry,
+                include_write_tools=True,
+                write_tools_enabled=True,
+            )
         )
-    ) == 2
+        == 2
+    )
 
 
 def test_neutral_formatter_includes_safety_contract() -> None:

@@ -231,8 +231,7 @@ OPERATIONAL_INDEXES = (
 )
 INVENTORY_FILTER_COMPAT_COLUMNS = {
     "change_ledger_epoch": (
-        "alter table inventory_filter_revisions "
-        "add column if not exists change_ledger_epoch text"
+        "alter table inventory_filter_revisions add column if not exists change_ledger_epoch text"
     ),
 }
 INVENTORY_CHANGE_TIMELINE_COMPAT_INDEXES = (

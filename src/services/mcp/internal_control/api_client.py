@@ -137,12 +137,7 @@ def _request_headers(base: dict[str, str], extra: dict[str, str]) -> dict[str, s
     headers = dict(base)
     existing = {key.casefold() for key in headers}
     for key, value in extra.items():
-        if (
-            not isinstance(key, str)
-            or not key
-            or _has_unsafe_url_character(key)
-            or ":" in key
-        ):
+        if not isinstance(key, str) or not key or _has_unsafe_url_character(key) or ":" in key:
             raise ManagementApiError(0, "unsafe management API header name")
         normalized_key = key.casefold()
         if normalized_key not in ALLOWED_MANAGEMENT_API_EXTRA_HEADERS:
