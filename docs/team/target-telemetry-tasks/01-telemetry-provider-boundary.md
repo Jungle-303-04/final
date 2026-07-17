@@ -30,7 +30,7 @@
 ## 선형 절차
 
 1. `@telemetry.source(...)`로 source, evidence key, query type이 등록되는지 확인한다.
-2. Kubernetes, Prometheus, Loki, Tempo, Metadata provider가 각각 어떤 API나 metadata snapshot을 호출/구성하는지 확인한다.
+2. Kubernetes, Prometheus, Loki, Tempo, `MetadataProvider`가 각각 어떤 API나 metadata snapshot을 호출/구성하는지 확인한다.
 3. node-collector의 `/metrics`가 Prometheus scrape target이라는 설명을 문서에 넣는다.
 4. `deploy/target/*.yaml`의 관측성 backend manifest를 확인한다.
 5. evidence job schedule/poll/result 경로로 provider 결과가 aggregate되는지 문서에 고정한다.
@@ -69,7 +69,7 @@ target observability manifests:
 ## 검증
 
 ```bash
-rg "KubernetesSnapshotProvider|PrometheusRangeQuery|LokiLogsProvider|TempoTracesProvider|@telemetry.source" src/services/target/cluster-agent
+rg "KubernetesSnapshotProvider|PrometheusRangeQuery|LokiLogsProvider|TempoTracesProvider|MetadataProvider|@telemetry.source" src/services/target/cluster-agent
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_telemetry_registry.py tests/test_target_kubernetes_evidence.py tests/test_target_metric_evidence.py -q
 git diff --check -- docs/team/member-guides/target-agent-command-evidence-flow.md docs/team/target-telemetry-tasks/01-telemetry-provider-boundary.md
 ```
