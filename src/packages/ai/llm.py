@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -77,6 +78,36 @@ _PROVIDER_ALIASES = {
     "openai": PROVIDER_OPENAI,
 }
 
+OPENAI_NATIVE_TOOL_EXTRA_PROTECTED_KEYS = frozenset(
+    {
+        "max_tokens",
+        "messages",
+        "model",
+        "response_format",
+        "temperature",
+        "tool_choice",
+        "tools",
+    }
+)
+ANTHROPIC_NATIVE_TOOL_EXTRA_PROTECTED_KEYS = frozenset(
+    {
+        "max_tokens",
+        "messages",
+        "model",
+        "system",
+        "temperature",
+        "tools",
+    }
+)
+GEMINI_NATIVE_TOOL_EXTRA_PROTECTED_KEYS = frozenset(
+    {
+        "contents",
+        "generationConfig",
+        "systemInstruction",
+        "tools",
+    }
+)
+
 
 class LlmClient(Protocol):
     """에이전트가 사용하는 추상 LLM port"""
@@ -100,6 +131,48 @@ class LlmRequest:
     max_tokens: int | None = None
     response_format: dict[str, Any] | None = None
     extra: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class LlmToolCall:
+    id: str
+    name: str
+    arguments: Any = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class LlmToolDefinition:
+    name: str
+    description: str
+    input_schema: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class LlmMessage:
+    role: str
+    content: str = ""
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+    tool_calls: tuple[LlmToolCall, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class LlmTurnRequest:
+    system_prompt: str
+    messages: tuple[LlmMessage, ...]
+    tools: tuple[LlmToolDefinition, ...]
+    model: str
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int | None = None
+    tool_choice: Any = "auto"
+    response_format: dict[str, Any] | None = None
+    extra: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class LlmTurnResponse:
+    content: str
+    tool_calls: tuple[LlmToolCall, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +223,40 @@ class LlmGateway:
             max_retries=settings.max_retries,
         )
 
+    async def complete_turn(self, **options: Any) -> LlmTurnResponse:
+        request_options = dict(options)
+        provider = normalize_provider(str(request_options.pop("provider", self.default_provider)))
+        settings = self._provider_settings(provider)
+        request = LlmTurnRequest(
+            system_prompt=str(request_options.pop("system_prompt", "")),
+            messages=tuple(request_options.pop("messages", ())),
+            tools=tuple(request_options.pop("tools", ())),
+            model=str(request_options.pop("model", settings.model)),
+            temperature=float(request_options.pop("temperature", DEFAULT_TEMPERATURE)),
+            max_tokens=_optional_int(request_options.pop("max_tokens", None)),
+            tool_choice=request_options.pop("tool_choice", "auto"),
+            response_format=request_options.pop("response_format", None),
+            extra=request_options,
+        )
+        adapter = self._provider_adapter(provider)
+        if not _adapter_supports_tool_calls(adapter):
+            content = await self._call_with_retry(
+                lambda: adapter.complete(_turn_request_to_text_request(request)),
+                max_retries=settings.max_retries,
+            )
+            return LlmTurnResponse(content=str(content))
+        complete_turn = getattr(adapter, "complete_turn", None)
+        if not callable(complete_turn):
+            content = await self._call_with_retry(
+                lambda: adapter.complete(_turn_request_to_text_request(request)),
+                max_retries=settings.max_retries,
+            )
+            return LlmTurnResponse(content=str(content))
+        return await self._call_with_retry(
+            lambda: complete_turn(request),
+            max_retries=settings.max_retries,
+        )
+
     async def complete_json(self, prompt: str, schema: dict[str, Any], **options: Any) -> Any:
         json_prompt = (
             f"{prompt}\n\n"
@@ -169,6 +276,13 @@ class LlmGateway:
             except json.JSONDecodeError as exc:
                 last_error = exc
         raise ValueError("LLM did not return valid JSON") from last_error
+
+    def supports_tool_calls(self) -> bool:
+        try:
+            adapter = self._provider_adapter(self.default_provider)
+        except ValueError:
+            return False
+        return _adapter_supports_tool_calls(adapter)
 
     def metadata(self, *, provider: str | None = None) -> dict[str, Any]:
         selected_provider = normalize_provider(provider or self.default_provider)
@@ -194,10 +308,10 @@ class LlmGateway:
 
     async def _call_with_retry(
         self,
-        action: Callable[[], Awaitable[str]],
+        action: Callable[[], Awaitable[Any]],
         *,
         max_retries: int,
-    ) -> str:
+    ) -> Any:
         attempt = 0
         while True:
             server_delay: float | None = None
@@ -221,6 +335,9 @@ class OpenAiChatCompletionsAdapter:
     settings: LlmProviderSettings
     transport: httpx.AsyncBaseTransport | None = None
 
+    def supports_tool_calls(self) -> bool:
+        return self.settings.provider == PROVIDER_OPENAI
+
     async def complete(self, request: LlmRequest) -> str:
         payload: dict[str, Any] = {
             "model": request.model,
@@ -243,6 +360,35 @@ class OpenAiChatCompletionsAdapter:
         )
         return _extract_openai_text(data)
 
+    async def complete_turn(self, request: LlmTurnRequest) -> LlmTurnResponse:
+        payload: dict[str, Any] = {
+            "model": request.model,
+            "messages": _openai_messages(request),
+            "temperature": request.temperature,
+        }
+        if request.max_tokens is not None:
+            payload["max_tokens"] = request.max_tokens
+        if request.response_format is not None:
+            payload["response_format"] = request.response_format
+        if request.tools:
+            payload["tools"] = [_openai_tool(tool) for tool in request.tools]
+            payload["tool_choice"] = request.tool_choice or "auto"
+        _merge_native_tool_extra(
+            payload,
+            request.extra,
+            protected_keys=OPENAI_NATIVE_TOOL_EXTRA_PROTECTED_KEYS,
+        )
+
+        data = await self._post_json(
+            f"{self.settings.base_url}/chat/completions",
+            headers={
+                "authorization": f"Bearer {self.settings.api_key}",
+                "content-type": "application/json",
+            },
+            payload=payload,
+        )
+        return _extract_openai_turn(data)
+
     async def _post_json(
         self,
         url: str,
@@ -263,6 +409,9 @@ class OpenAiChatCompletionsAdapter:
 class AnthropicMessagesAdapter:
     settings: LlmProviderSettings
     transport: httpx.AsyncBaseTransport | None = None
+
+    def supports_tool_calls(self) -> bool:
+        return True
 
     async def complete(self, request: LlmRequest) -> str:
         payload: dict[str, Any] = {
@@ -289,11 +438,47 @@ class AnthropicMessagesAdapter:
             response.raise_for_status()
             return _extract_anthropic_text(response.json())
 
+    async def complete_turn(self, request: LlmTurnRequest) -> LlmTurnResponse:
+        payload: dict[str, Any] = {
+            "model": request.model,
+            "messages": _anthropic_messages(request),
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens or self.settings.default_max_tokens,
+        }
+        if request.system_prompt:
+            payload["system"] = request.system_prompt
+        if request.tools:
+            payload["tools"] = [_anthropic_tool(tool) for tool in request.tools]
+        _merge_native_tool_extra(
+            payload,
+            request.extra,
+            protected_keys=ANTHROPIC_NATIVE_TOOL_EXTRA_PROTECTED_KEYS,
+        )
+
+        async with httpx.AsyncClient(
+            timeout=self.settings.timeout_seconds,
+            transport=self.transport,
+        ) as client:
+            response = await client.post(
+                f"{self.settings.base_url}/v1/messages",
+                headers={
+                    "x-api-key": self.settings.api_key,
+                    "anthropic-version": self.settings.anthropic_version,
+                    "content-type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            return _extract_anthropic_turn(response.json())
+
 
 @dataclass(slots=True)
 class GeminiGenerateContentAdapter:
     settings: LlmProviderSettings
     transport: httpx.AsyncBaseTransport | None = None
+
+    def supports_tool_calls(self) -> bool:
+        return True
 
     async def complete(self, request: LlmRequest) -> str:
         generation_config: dict[str, Any] = {"temperature": request.temperature}
@@ -322,12 +507,59 @@ class GeminiGenerateContentAdapter:
             response.raise_for_status()
             return _extract_gemini_text(response.json())
 
+    async def complete_turn(self, request: LlmTurnRequest) -> LlmTurnResponse:
+        generation_config: dict[str, Any] = {"temperature": request.temperature}
+        if request.max_tokens is not None:
+            generation_config["maxOutputTokens"] = request.max_tokens
+        if (request.response_format or {}).get("type") == "json_object":
+            generation_config["responseMimeType"] = "application/json"
+        payload: dict[str, Any] = {
+            "contents": _gemini_contents(request),
+            "generationConfig": generation_config,
+        }
+        if request.system_prompt:
+            payload["systemInstruction"] = {"parts": [{"text": request.system_prompt}]}
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "functionDeclarations": [
+                        _gemini_function_declaration(tool) for tool in request.tools
+                    ]
+                }
+            ]
+        _merge_native_tool_extra(
+            payload,
+            request.extra,
+            protected_keys=GEMINI_NATIVE_TOOL_EXTRA_PROTECTED_KEYS,
+        )
+
+        async with httpx.AsyncClient(
+            timeout=self.settings.timeout_seconds,
+            transport=self.transport,
+        ) as client:
+            response = await client.post(
+                f"{self.settings.base_url}/models/{request.model}:generateContent",
+                headers={
+                    "x-goog-api-key": self.settings.api_key,
+                    "content-type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            return _extract_gemini_turn(response.json())
+
 
 @dataclass(slots=True)
 class UnconfiguredLlmAdapter:
     settings: LlmProviderSettings
 
+    def supports_tool_calls(self) -> bool:
+        return False
+
     async def complete(self, request: LlmRequest) -> str:
+        raise ValueError(f"{LLM_PROVIDER_ENV} is required")
+
+    async def complete_turn(self, request: LlmTurnRequest) -> LlmTurnResponse:
         raise ValueError(f"{LLM_PROVIDER_ENV} is required")
 
 
@@ -504,6 +736,208 @@ def _optional_int(value: Any) -> int | None:
     return int(value)
 
 
+def _merge_native_tool_extra(
+    payload: dict[str, Any],
+    extra: Mapping[str, Any],
+    *,
+    protected_keys: frozenset[str],
+) -> None:
+    if not isinstance(extra, Mapping):
+        raise ValueError("LLM request extra must be a mapping")
+    invalid_keys = sorted(str(key) for key in extra if not isinstance(key, str))
+    if invalid_keys:
+        raise ValueError("LLM request extra keys must be strings")
+    blocked_keys = sorted(set(extra) & protected_keys)
+    if blocked_keys:
+        blocked = ", ".join(blocked_keys)
+        raise ValueError(f"LLM request extra cannot override protected native tool fields: {blocked}")
+    payload.update(extra)
+
+
+def _adapter_supports_tool_calls(adapter: Any) -> bool:
+    marker = getattr(adapter, "supports_tool_calls", None)
+    if not callable(marker):
+        return False
+    try:
+        return bool(marker())
+    except Exception:
+        return False
+
+
+def _turn_request_to_text_request(request: LlmTurnRequest) -> LlmRequest:
+    rows = []
+    if request.system_prompt:
+        rows.append(f"[system] {request.system_prompt}")
+    for message in request.messages:
+        rows.append(f"[{message.role}] {message.content}")
+    return LlmRequest(
+        prompt="\n".join(rows),
+        model=request.model,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        response_format=request.response_format,
+        extra=request.extra,
+    )
+
+
+def _openai_messages(request: LlmTurnRequest) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    if request.system_prompt:
+        messages.append({"role": "system", "content": request.system_prompt})
+    for message in request.messages:
+        if message.role == "tool":
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": message.tool_call_id or "",
+                    "content": message.content,
+                }
+            )
+            continue
+        payload: dict[str, Any] = {
+            "role": _openai_role(message.role),
+            "content": message.content,
+        }
+        if message.tool_calls:
+            payload["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {
+                        "name": call.name,
+                        "arguments": json.dumps(call.arguments, ensure_ascii=False),
+                    },
+                }
+                for call in message.tool_calls
+            ]
+        messages.append(payload)
+    return messages
+
+
+def _openai_role(role: str) -> str:
+    return role if role in {"assistant", "system", "user"} else "user"
+
+
+def _openai_tool(tool: LlmToolDefinition) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": deepcopy(dict(tool.input_schema)),
+        },
+    }
+
+
+def _anthropic_messages(request: LlmTurnRequest) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    for message in request.messages:
+        if message.role == "tool":
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": message.tool_call_id or "",
+                            "content": message.content,
+                        }
+                    ],
+                }
+            )
+            continue
+        role = "assistant" if message.role == "assistant" else "user"
+        content: list[dict[str, Any]] = []
+        if message.content:
+            content.append({"type": "text", "text": message.content})
+        for call in message.tool_calls:
+            tool_input = call.arguments if isinstance(call.arguments, dict) else {}
+            content.append(
+                {
+                    "type": "tool_use",
+                    "id": call.id,
+                    "name": call.name,
+                    "input": tool_input,
+                }
+            )
+        messages.append({"role": role, "content": content or [{"type": "text", "text": ""}]})
+    return messages
+
+
+def _anthropic_tool(tool: LlmToolDefinition) -> dict[str, Any]:
+    return {
+        "name": tool.name,
+        "description": tool.description,
+        "input_schema": deepcopy(dict(tool.input_schema)),
+    }
+
+
+def _gemini_contents(request: LlmTurnRequest) -> list[dict[str, Any]]:
+    contents: list[dict[str, Any]] = []
+    for message in request.messages:
+        if message.role == "tool":
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "functionResponse": {
+                                "name": message.tool_name or "",
+                                "response": _gemini_function_response(message.content),
+                            }
+                        }
+                    ],
+                }
+            )
+            continue
+        role = "model" if message.role == "assistant" else "user"
+        parts: list[dict[str, Any]] = []
+        if message.content:
+            parts.append({"text": message.content})
+        for call in message.tool_calls:
+            args = call.arguments if isinstance(call.arguments, dict) else {}
+            parts.append({"functionCall": {"name": call.name, "args": args}})
+        contents.append({"role": role, "parts": parts or [{"text": ""}]})
+    return contents
+
+
+def _gemini_function_response(content: str) -> dict[str, Any]:
+    parsed = _parse_json_arguments(content)
+    if isinstance(parsed, dict):
+        return parsed
+    return {"content": content}
+
+
+def _gemini_function_declaration(tool: LlmToolDefinition) -> dict[str, Any]:
+    return {
+        "name": tool.name,
+        "description": tool.description,
+        "parameters": _gemini_schema(dict(tool.input_schema)),
+    }
+
+
+def _gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    converted: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "type" and isinstance(value, str):
+            converted[key] = value.upper()
+        elif key == "properties" and isinstance(value, dict):
+            converted[key] = {
+                str(name): _gemini_schema(child)
+                for name, child in value.items()
+                if isinstance(child, dict)
+            }
+        elif isinstance(value, dict):
+            converted[key] = _gemini_schema(value)
+        elif isinstance(value, list):
+            converted[key] = [
+                _gemini_schema(item) if isinstance(item, dict) else item for item in value
+            ]
+        else:
+            converted[key] = value
+    return converted
+
+
 def _extract_openai_text(data: dict[str, Any]) -> str:
     choices = data.get("choices") or []
     if not choices:
@@ -523,6 +957,32 @@ def _extract_openai_text(data: dict[str, Any]) -> str:
     raise ValueError("LLM response message content is missing")
 
 
+def _extract_openai_turn(data: dict[str, Any]) -> LlmTurnResponse:
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError("LLM response did not include choices")
+    message = choices[0].get("message") or {}
+    content = _content_text(message.get("content"))
+    tool_calls: list[LlmToolCall] = []
+    for index, item in enumerate(message.get("tool_calls") or []):
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function") or {}
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        tool_calls.append(
+            LlmToolCall(
+                id=str(item.get("id") or f"call_{index}"),
+                name=name,
+                arguments=_parse_json_arguments(function.get("arguments")),
+            )
+        )
+    return LlmTurnResponse(content=content, tool_calls=tuple(tool_calls))
+
+
 def _extract_anthropic_text(data: dict[str, Any]) -> str:
     content = data.get("content")
     if isinstance(content, str):
@@ -538,6 +998,31 @@ def _extract_anthropic_text(data: dict[str, Any]) -> str:
     raise ValueError("Anthropic response text content is missing")
 
 
+def _extract_anthropic_turn(data: dict[str, Any]) -> LlmTurnResponse:
+    content = data.get("content")
+    if isinstance(content, str):
+        return LlmTurnResponse(content=content)
+    if not isinstance(content, list):
+        raise ValueError("Anthropic response content is missing")
+    text_parts: list[str] = []
+    tool_calls: list[LlmToolCall] = []
+    for index, item in enumerate(content):
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type == "text" and item.get("text"):
+            text_parts.append(str(item["text"]))
+        elif item_type == "tool_use" and item.get("name"):
+            tool_calls.append(
+                LlmToolCall(
+                    id=str(item.get("id") or f"toolu_{index}"),
+                    name=str(item["name"]),
+                    arguments=_tool_arguments_or_empty(item.get("input")),
+                )
+            )
+    return LlmTurnResponse(content="\n".join(text_parts), tool_calls=tuple(tool_calls))
+
+
 def _extract_gemini_text(data: dict[str, Any]) -> str:
     candidates = data.get("candidates") or []
     if not candidates:
@@ -550,3 +1035,61 @@ def _extract_gemini_text(data: dict[str, Any]) -> str:
     if text_parts:
         return "\n".join(text_parts)
     raise ValueError("Gemini response text content is missing")
+
+
+def _extract_gemini_turn(data: dict[str, Any]) -> LlmTurnResponse:
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise ValueError("Gemini response did not include candidates")
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts") or []
+    text_parts: list[str] = []
+    tool_calls: list[LlmToolCall] = []
+    for index, part in enumerate(parts):
+        if not isinstance(part, dict):
+            continue
+        if part.get("text"):
+            text_parts.append(str(part["text"]))
+        function_call = part.get("functionCall")
+        if isinstance(function_call, dict) and function_call.get("name"):
+            arguments = function_call.get("args")
+            tool_calls.append(
+                LlmToolCall(
+                    id=str(function_call.get("id") or f"function_call_{index}"),
+                    name=str(function_call["name"]),
+                    arguments=_tool_arguments_or_empty(arguments),
+                )
+            )
+    return LlmTurnResponse(content="\n".join(text_parts), tool_calls=tuple(tool_calls))
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            str(item.get("text") or item.get("content"))
+            for item in content
+            if isinstance(item, dict) and (item.get("text") or item.get("content"))
+        ]
+        return "\n".join(parts)
+    return ""
+
+
+def _parse_json_arguments(raw: Any) -> Any:
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str):
+        return raw
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def _tool_arguments_or_empty(raw: Any) -> Any:
+    if raw is None:
+        return {}
+    return raw

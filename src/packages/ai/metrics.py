@@ -7,8 +7,9 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from packages.ai.llm import LlmClient, describe_llm_client
+from packages.ai.llm import LlmClient, LlmTurnResponse, describe_llm_client
 from packages.config.settings import env
+from packages.security.log_lines import redact_sensitive_value
 
 LLM_INPUT_COST_PER_1M_TOKENS_ENV = "LLM_INPUT_COST_PER_1M_TOKENS"
 LLM_OUTPUT_COST_PER_1M_TOKENS_ENV = "LLM_OUTPUT_COST_PER_1M_TOKENS"
@@ -101,6 +102,42 @@ class MeteredLlmClient:
         )
         return output
 
+    async def complete_turn(self, **options: Any) -> LlmTurnResponse:
+        complete_turn = getattr(self.inner, "complete_turn", None)
+        if not callable(complete_turn):
+            raise AttributeError("inner LLM client does not support tool calls")
+        started_at = time.perf_counter()
+        measured_prompt = turn_options_for_metrics(options)
+        try:
+            output = await complete_turn(**options)
+        except Exception as exc:
+            await self._record(
+                operation="complete_turn",
+                status="failed",
+                latency_ms=elapsed_ms(started_at),
+                prompt=measured_prompt,
+                output="",
+                error_type=type(exc).__name__,
+            )
+            raise
+        await self._record(
+            operation="complete_turn",
+            status="succeeded",
+            latency_ms=elapsed_ms(started_at),
+            prompt=measured_prompt,
+            output=turn_response_for_metrics(output),
+        )
+        return output
+
+    def supports_tool_calls(self) -> bool:
+        marker = getattr(self.inner, "supports_tool_calls", None)
+        if callable(marker):
+            try:
+                return bool(marker())
+            except Exception:
+                return False
+        return False
+
     def metadata(self, *, provider: str | None = None) -> dict[str, Any]:
         metadata = getattr(self.inner, "metadata", None)
         if callable(metadata):
@@ -180,3 +217,47 @@ def estimated_cost_micros(prompt_tokens: int, completion_tokens: int) -> int:
     input_price = float(env(LLM_INPUT_COST_PER_1M_TOKENS_ENV, "0") or 0)
     output_price = float(env(LLM_OUTPUT_COST_PER_1M_TOKENS_ENV, "0") or 0)
     return max(0, round(prompt_tokens * input_price + completion_tokens * output_price))
+
+
+def turn_options_for_metrics(options: dict[str, Any]) -> str:
+    messages = [
+        {
+            "role": getattr(message, "role", ""),
+            "content": redact_sensitive_value(getattr(message, "content", "")),
+            "tool_name": redact_sensitive_value(getattr(message, "tool_name", None)),
+        }
+        for message in options.get("messages", ()) or ()
+    ]
+    tools = [
+        {
+            "name": redact_sensitive_value(getattr(tool, "name", "")),
+            "description": redact_sensitive_value(getattr(tool, "description", "")),
+        }
+        for tool in options.get("tools", ()) or ()
+    ]
+    return json.dumps(
+        {
+            "system_prompt": redact_sensitive_value(options.get("system_prompt", "")),
+            "messages": messages,
+            "tools": tools,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def turn_response_for_metrics(response: LlmTurnResponse) -> str:
+    return json.dumps(
+        {
+            "content": redact_sensitive_value(response.content),
+            "tool_calls": [
+                {
+                    "id": redact_sensitive_value(call.id),
+                    "name": redact_sensitive_value(call.name),
+                }
+                for call in response.tool_calls
+            ],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )

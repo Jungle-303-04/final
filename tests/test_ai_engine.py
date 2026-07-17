@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from packages.ai.engine import MAX_TOOL_CALLS_LIMIT, ConversationEngine, EngineResult
+from packages.ai.llm import LlmToolCall, LlmTurnResponse
 from packages.ai.tools import ToolContext, ToolRegistry
 from packages.security.log_lines import MAX_LOG_LINE_LENGTH, TRUNCATED_LOG_LINE_SUFFIX
 
@@ -24,6 +25,28 @@ class ScriptedLlm:
         self.prompts.append(prompt)
         index = min(len(self.prompts) - 1, len(self.replies) - 1)
         return self.replies[index]
+
+
+class NativeToolLlm:
+    def __init__(self, *replies: LlmTurnResponse) -> None:
+        self.replies = list(replies)
+        self.requests: list[dict[str, Any]] = []
+
+    def supports_tool_calls(self) -> bool:
+        return True
+
+    async def complete_turn(self, **options: Any) -> LlmTurnResponse:
+        self.requests.append(dict(options))
+        index = min(len(self.requests) - 1, len(self.replies) - 1)
+        return self.replies[index]
+
+    async def complete(self, prompt: str, **options: Any) -> str:
+        raise AssertionError("native tool tests should not use text completion")
+
+
+class AccidentalTurnLlm(ScriptedLlm):
+    async def complete_turn(self, **options: Any) -> LlmTurnResponse:
+        raise AssertionError("complete_turn requires explicit supports_tool_calls opt-in")
 
 
 def make_registry() -> ToolRegistry:
@@ -103,6 +126,77 @@ def test_single_tool_call_loop_feeds_result_back() -> None:
     assert "ws-1:pods-value" in llm.prompts[1]
 
 
+def test_native_tool_call_loop_feeds_result_back() -> None:
+    llm = NativeToolLlm(
+        LlmTurnResponse(
+            content="",
+            tool_calls=(
+                LlmToolCall(id="call-1", name="lookup", arguments={"key": "pods"}),
+            ),
+        ),
+        LlmTurnResponse(content="native answer"),
+    )
+    engine = ConversationEngine(llm, make_registry())
+
+    result = respond(engine)
+
+    assert result.content == "native answer"
+    assert result.tool_trace == [
+        {
+            "tool": "lookup",
+            "arguments": {"key": "pods"},
+            "ok": True,
+            "result": {"key": "pods", "value": "ws-1:pods-value"},
+        }
+    ]
+    first_tools = llm.requests[0]["tools"]
+    assert first_tools[0].name == "lookup"
+    assert first_tools[0].input_schema["required"] == ["key"]
+    second_messages = llm.requests[1]["messages"]
+    assert second_messages[-1].role == "tool"
+    assert second_messages[-1].tool_call_id == "call-1"
+    assert "ws-1:pods-value" in second_messages[-1].content
+
+
+def test_complete_turn_without_support_marker_uses_json_protocol() -> None:
+    llm = AccidentalTurnLlm(tool_call("lookup", key="pods"), final("fallback answer"))
+    engine = ConversationEngine(llm, make_registry())
+
+    result = respond(engine)
+
+    assert result.content == "fallback answer"
+    assert len(llm.prompts) == 2
+
+
+def test_native_parallel_tool_calls_do_not_exceed_execution_budget() -> None:
+    llm = NativeToolLlm(
+        LlmTurnResponse(
+            content="",
+            tool_calls=(
+                LlmToolCall(id="call-1", name="lookup", arguments={"key": "pods"}),
+                LlmToolCall(id="call-2", name="lookup", arguments={"key": "nodes"}),
+            ),
+        ),
+        LlmTurnResponse(content="budgeted answer"),
+    )
+    engine = ConversationEngine(llm, make_registry(), max_tool_calls=1)
+
+    result = respond(engine)
+
+    assert result.content == "budgeted answer"
+    assert result.tool_trace == [
+        {
+            "tool": "lookup",
+            "arguments": {"key": "pods"},
+            "ok": True,
+            "result": {"key": "pods", "value": "ws-1:pods-value"},
+        }
+    ]
+    assert len(llm.requests) == 2
+    assert len(llm.requests[1]["messages"][-3].tool_calls) == 1
+    assert llm.requests[1]["messages"][-3].tool_calls[0].id == "call-1"
+
+
 def test_unknown_tool_error_is_fed_back_to_llm() -> None:
     llm = ScriptedLlm(tool_call("nope"), final("복구된 답변"))
     engine = ConversationEngine(llm, make_registry())
@@ -173,6 +267,34 @@ def test_non_object_tool_arguments_are_rejected_before_execution() -> None:
     assert result.tool_trace[0]["ok"] is False
     assert result.tool_trace[0]["error"] == "tool arguments must be an object"
     assert "tool arguments must be an object" in llm.prompts[1]
+
+
+def test_native_non_object_tool_arguments_are_rejected_before_execution() -> None:
+    registry = ToolRegistry()
+    calls = 0
+
+    @registry.tool(name="zero_arg", description="no-op", parameters={})
+    async def zero_arg(_context: ToolContext) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"called": True}
+
+    llm = NativeToolLlm(
+        LlmTurnResponse(
+            content="",
+            tool_calls=(LlmToolCall(id="call-1", name="zero_arg", arguments=["bad"]),),
+        ),
+        LlmTurnResponse(content="handled"),
+    )
+    engine = ConversationEngine(llm, registry)
+
+    result = respond(engine)
+
+    assert calls == 0
+    assert result.content == "handled"
+    assert result.tool_trace[0]["ok"] is False
+    assert result.tool_trace[0]["error"] == "tool arguments must be an object"
+    assert "tool arguments must be an object" in llm.requests[1]["messages"][-1].content
 
 
 def test_tool_trace_and_transcript_truncate_large_values() -> None:

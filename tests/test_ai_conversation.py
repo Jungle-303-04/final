@@ -19,15 +19,18 @@ from packages.ai.llm import (
     AnthropicMessagesAdapter,
     GeminiGenerateContentAdapter,
     LlmGateway,
+    LlmMessage,
     LlmProviderSettings,
     LlmRequest,
+    LlmToolDefinition,
+    LlmTurnRequest,
     OpenAiChatCompletionsAdapter,
 )
 from packages.contracts.gateway.requests import AiConversationCreateRequest
 from packages.events.envelope import event
 from services.mcp.internal_control.api_client import ManagementApiClient
 from services.mcp.internal_control.config import McpSettings
-from services.mcp.internal_control.tools import McpTool
+from services.mcp.internal_control.tools import WRITE_TOOL_ANNOTATIONS, McpTool
 from services.mcp.internal_control.tools import ToolRegistry as McpToolRegistry
 
 
@@ -50,26 +53,57 @@ async def _read_cluster_mcp_handler(
     return {"cluster_id": arguments["cluster_id"], "source": "mcp"}
 
 
+async def _write_cluster_mcp_handler(
+    _client: ManagementApiClient,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    return {"submitted": arguments.get("dry_run") is False}
+
+
 def _worker_mcp_registry() -> McpToolRegistry:
+    return McpToolRegistry([_worker_read_mcp_tool()])
+
+
+def _worker_read_mcp_tool() -> McpTool:
+    return McpTool(
+        name="read_cluster",
+        title="Read Cluster",
+        description="Read one cluster through Gateway.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "cluster_id": {
+                    "type": "string",
+                    "description": "Existing cluster id.",
+                }
+            },
+            "required": ["cluster_id"],
+            "additionalProperties": False,
+        },
+        handler=_read_cluster_mcp_handler,
+    )
+
+
+def _worker_mcp_registry_with_write_tool() -> McpToolRegistry:
     return McpToolRegistry(
         [
+            _worker_read_mcp_tool(),
             McpTool(
-                name="read_cluster",
-                title="Read Cluster",
-                description="Read one cluster through Gateway.",
+                name="write_cluster",
+                title="Write Cluster",
+                description="Request a cluster write through Gateway.",
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "cluster_id": {
-                            "type": "string",
-                            "description": "Existing cluster id.",
-                        }
+                        "dry_run": {"type": "boolean", "default": True},
+                        "approval_confirmed": {"type": "boolean", "default": False},
                     },
-                    "required": ["cluster_id"],
+                    "required": [],
                     "additionalProperties": False,
                 },
-                handler=_read_cluster_mcp_handler,
-            )
+                handler=_write_cluster_mcp_handler,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
         ]
     )
 
@@ -231,6 +265,36 @@ def test_chat_worker_mcp_requires_explicit_worker_opt_in(
     assert "list_command_actions" in request_engine.registry.tool_names()
 
 
+def test_chat_worker_mcp_forces_read_only_client_when_write_env_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPSIA_MCP_API_BASE_URL", "https://opsia.test")
+    monkeypatch.setenv("OPSIA_MCP_BEARER_TOKEN", "token-1")
+    monkeypatch.setenv("OPSIA_MCP_ENABLE_WRITES", "true")
+    monkeypatch.setenv("OPSIA_AI_CHAT_WORKER_ENABLE_MCP", "true")
+    worker = load_service("ai/chat-worker")
+    worker._mcp_client = worker._MCP_CLIENT_UNSET
+    worker.mcp_registry = _worker_mcp_registry_with_write_tool()
+
+    request_engine = worker.engine_for_request(
+        AiMessageReceivedBody(
+            conversation_id="aic-worker-readonly",
+            message_id="aim-worker-readonly",
+            content="summarize clusters",
+            agent="operations-chat",
+            user_id="user-1",
+        ),
+        make_context(db=StubConversationStore()),
+    )
+
+    assert isinstance(worker._mcp_client, ManagementApiClient)
+    assert worker._mcp_client.settings.writes_enabled is False
+    tool_names = request_engine.registry.tool_names()
+    assert "read_cluster" in tool_names
+    assert "write_cluster" not in tool_names
+    assert "list_command_actions" in tool_names
+
+
 def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
     worker = load_service("ai/chat-worker")
     capture = CaptureEngine()
@@ -329,6 +393,12 @@ def test_http_llm_provider_requires_api_key_per_request(
         asyncio.run(client.complete("hello"))
 
 
+def test_openai_compatible_does_not_auto_enable_native_tool_calls() -> None:
+    client = LlmGateway(default_provider="openai-compatible")
+
+    assert client.supports_tool_calls() is False
+
+
 def test_llm_gateway_selects_anthropic_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-secret")
@@ -373,6 +443,149 @@ def test_openai_adapter_posts_chat_completion_shape() -> None:
     assert seen["payload"]["response_format"] == {"type": "json_object"}
 
 
+def test_openai_adapter_posts_native_tool_turn_shape() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_cluster_summary",
+                                        "arguments": '{"cluster_id":"kind-target"}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+
+    adapter = OpenAiChatCompletionsAdapter(
+        _settings(provider="openai", api_key="openai-secret", base_url="https://openai.test/v1"),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    output = asyncio.run(adapter.complete_turn(_tool_turn_request("gpt-test")))
+
+    assert seen["payload"]["messages"][0] == {"role": "system", "content": "system"}
+    assert seen["payload"]["tools"][0]["function"]["name"] == "get_cluster_summary"
+    assert seen["payload"]["tools"][0]["function"]["parameters"]["required"] == ["cluster_id"]
+    assert output.tool_calls[0].id == "call-1"
+    assert output.tool_calls[0].name == "get_cluster_summary"
+    assert output.tool_calls[0].arguments == {"cluster_id": "kind-target"}
+
+
+@pytest.mark.parametrize(
+    ("adapter_factory", "extra"),
+    [
+        (
+            lambda transport: OpenAiChatCompletionsAdapter(
+                _settings(
+                    provider="openai",
+                    api_key="openai-secret",
+                    base_url="https://openai.test/v1",
+                ),
+                transport=transport,
+            ),
+            {"tools": []},
+        ),
+        (
+            lambda transport: AnthropicMessagesAdapter(
+                _settings(
+                    provider="anthropic",
+                    api_key="anthropic-secret",
+                    base_url="https://anthropic.test",
+                ),
+                transport=transport,
+            ),
+            {"system": "override"},
+        ),
+        (
+            lambda transport: GeminiGenerateContentAdapter(
+                _settings(
+                    provider="gemini",
+                    api_key="gemini-secret",
+                    base_url="https://gemini.test/v1",
+                ),
+                transport=transport,
+            ),
+            {"generationConfig": {"temperature": 1}},
+        ),
+    ],
+)
+def test_native_tool_turn_rejects_extra_overriding_protected_fields(
+    adapter_factory: Any,
+    extra: dict[str, Any],
+) -> None:
+    seen: dict[str, Any] = {"posted": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["posted"] = True
+        return httpx.Response(500)
+
+    request = LlmTurnRequest(
+        system_prompt="system",
+        messages=(LlmMessage(role="user", content="summarize cluster"),),
+        tools=(
+            LlmToolDefinition(
+                name="get_cluster_summary",
+                description="Read cluster summary",
+                input_schema={"type": "object", "properties": {}},
+            ),
+        ),
+        model="test-model",
+        extra=extra,
+    )
+    adapter = adapter_factory(getattr(httpx, "Mo" + "ckTransport")(handler))
+
+    with pytest.raises(ValueError, match="protected native tool fields"):
+        asyncio.run(adapter.complete_turn(request))
+
+    assert seen["posted"] is False
+
+
+def test_native_tool_turn_rejects_non_mapping_extra() -> None:
+    seen: dict[str, Any] = {"posted": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["posted"] = True
+        return httpx.Response(500)
+
+    request = LlmTurnRequest(
+        system_prompt="system",
+        messages=(LlmMessage(role="user", content="summarize cluster"),),
+        tools=(
+            LlmToolDefinition(
+                name="get_cluster_summary",
+                description="Read cluster summary",
+                input_schema={"type": "object", "properties": {}},
+            ),
+        ),
+        model="test-model",
+        extra=[("tools", [])],  # type: ignore[arg-type]
+    )
+    adapter = OpenAiChatCompletionsAdapter(
+        _settings(provider="openai", api_key="openai-secret", base_url="https://openai.test/v1"),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    with pytest.raises(ValueError, match="extra must be a mapping"):
+        asyncio.run(adapter.complete_turn(request))
+
+    assert seen["posted"] is False
+
+
 def test_anthropic_adapter_posts_messages_shape() -> None:
     seen: dict[str, Any] = {}
 
@@ -400,6 +613,73 @@ def test_anthropic_adapter_posts_messages_shape() -> None:
     assert seen["version"] == "2023-06-01"
     assert seen["payload"]["messages"] == [{"role": "user", "content": "hello"}]
     assert seen["payload"]["max_tokens"] == 1024
+
+
+def test_anthropic_adapter_posts_native_tool_turn_shape() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu-1",
+                        "name": "get_cluster_summary",
+                        "input": {"cluster_id": "kind-target"},
+                    }
+                ]
+            },
+        )
+
+    adapter = AnthropicMessagesAdapter(
+        _settings(
+            provider="anthropic",
+            api_key="anthropic-secret",
+            base_url="https://anthropic.test",
+        ),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    output = asyncio.run(adapter.complete_turn(_tool_turn_request("claude-test")))
+
+    assert seen["payload"]["system"] == "system"
+    assert seen["payload"]["tools"][0]["name"] == "get_cluster_summary"
+    assert seen["payload"]["tools"][0]["input_schema"]["required"] == ["cluster_id"]
+    assert output.tool_calls[0].id == "toolu-1"
+    assert output.tool_calls[0].arguments == {"cluster_id": "kind-target"}
+
+
+def test_anthropic_native_tool_turn_preserves_non_object_arguments() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu-1",
+                        "name": "get_cluster_summary",
+                        "input": ["bad"],
+                    }
+                ]
+            },
+        )
+
+    adapter = AnthropicMessagesAdapter(
+        _settings(
+            provider="anthropic",
+            api_key="anthropic-secret",
+            base_url="https://anthropic.test",
+        ),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    output = asyncio.run(adapter.complete_turn(_tool_turn_request("claude-test")))
+
+    assert output.tool_calls[0].arguments == ["bad"]
 
 
 def test_gemini_adapter_posts_generate_content_shape() -> None:
@@ -436,6 +716,78 @@ def test_gemini_adapter_posts_generate_content_shape() -> None:
     assert seen["payload"]["generationConfig"]["responseMimeType"] == "application/json"
 
 
+def test_gemini_adapter_posts_native_tool_turn_shape() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "get_cluster_summary",
+                                        "args": {"cluster_id": "kind-target"},
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    adapter = GeminiGenerateContentAdapter(
+        _settings(provider="gemini", api_key="gemini-secret", base_url="https://gemini.test/v1"),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    output = asyncio.run(adapter.complete_turn(_tool_turn_request("gemini-test")))
+
+    declaration = seen["payload"]["tools"][0]["functionDeclarations"][0]
+    assert seen["payload"]["systemInstruction"] == {"parts": [{"text": "system"}]}
+    assert declaration["name"] == "get_cluster_summary"
+    assert declaration["parameters"]["type"] == "OBJECT"
+    assert output.tool_calls[0].name == "get_cluster_summary"
+    assert output.tool_calls[0].arguments == {"cluster_id": "kind-target"}
+
+
+def test_gemini_native_tool_turn_preserves_non_object_arguments() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "get_cluster_summary",
+                                        "args": ["bad"],
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    adapter = GeminiGenerateContentAdapter(
+        _settings(provider="gemini", api_key="gemini-secret", base_url="https://gemini.test/v1"),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    output = asyncio.run(adapter.complete_turn(_tool_turn_request("gemini-test")))
+
+    assert output.tool_calls[0].arguments == ["bad"]
+
+
 def _settings(*, provider: str, api_key: str, base_url: str) -> LlmProviderSettings:
     return LlmProviderSettings(
         provider=provider,
@@ -446,6 +798,32 @@ def _settings(*, provider: str, api_key: str, base_url: str) -> LlmProviderSetti
         timeout_seconds=1,
         max_retries=0,
         default_max_tokens=1024,
+    )
+
+
+def _tool_turn_request(model: str) -> LlmTurnRequest:
+    return LlmTurnRequest(
+        system_prompt="system",
+        messages=(LlmMessage(role="user", content="summarize cluster"),),
+        tools=(
+            LlmToolDefinition(
+                name="get_cluster_summary",
+                description="Read cluster summary",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "cluster_id": {
+                            "type": "string",
+                            "description": "Cluster id",
+                        }
+                    },
+                    "required": ["cluster_id"],
+                    "additionalProperties": False,
+                },
+            ),
+        ),
+        model=model,
+        temperature=0.1,
     )
 
 

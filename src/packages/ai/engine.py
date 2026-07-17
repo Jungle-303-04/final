@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from packages.ai.llm import LlmClient
+from packages.ai.llm import LlmClient, LlmMessage, LlmToolDefinition, LlmTurnResponse
 from packages.ai.tools import ToolContext, ToolRegistry
 from packages.security.log_lines import redact_log_line, redact_sensitive_value
 
@@ -92,6 +93,31 @@ class ConversationEngine:
         llm_timeout_seconds: float | None = None,
     ) -> EngineResult:
         """대화 1턴 처리 — tool_call 루프를 돌고 최종 답변을 반환함."""
+        if self._supports_native_tool_calls():
+            return await self._respond_with_native_tool_calls(
+                system_prompt=system_prompt,
+                history=history,
+                user_message=user_message,
+                context=context,
+                llm_timeout_seconds=llm_timeout_seconds,
+            )
+        return await self._respond_with_json_protocol(
+            system_prompt=system_prompt,
+            history=history,
+            user_message=user_message,
+            context=context,
+            llm_timeout_seconds=llm_timeout_seconds,
+        )
+
+    async def _respond_with_json_protocol(
+        self,
+        *,
+        system_prompt: str,
+        history: list[dict[str, Any]],
+        user_message: str,
+        context: ToolContext,
+        llm_timeout_seconds: float | None,
+    ) -> EngineResult:
         transcript = [f"[{row.get('role', 'user')}] {row.get('content', '')}" for row in history]
         transcript.append(f"[user] {user_message}")
         tool_trace: list[dict[str, Any]] = []
@@ -115,6 +141,69 @@ class ConversationEngine:
         content = reply.get("content") if reply.get("type") == REPLY_TYPE_FINAL else raw.strip()
         return EngineResult(str(content or ""), tool_trace, raw_length)
 
+    async def _respond_with_native_tool_calls(
+        self,
+        *,
+        system_prompt: str,
+        history: list[dict[str, Any]],
+        user_message: str,
+        context: ToolContext,
+        llm_timeout_seconds: float | None,
+    ) -> EngineResult:
+        messages = _history_messages(history)
+        messages.append(LlmMessage(role="user", content=user_message))
+        tools = _tool_definitions(self.registry)
+        tool_trace: list[dict[str, Any]] = []
+        raw_length = 0
+
+        for _ in range(self.max_tool_calls):
+            response = await self._complete_turn(
+                system_prompt,
+                messages,
+                tools,
+                llm_timeout_seconds,
+            )
+            raw_length += _turn_response_length(response)
+            if not response.tool_calls:
+                return EngineResult(response.content, tool_trace, raw_length)
+            remaining_tool_calls = self.max_tool_calls - len(tool_trace)
+            selected_tool_calls = response.tool_calls[:remaining_tool_calls]
+            if not selected_tool_calls:
+                break
+            messages.append(
+                LlmMessage(
+                    role="assistant",
+                    content=response.content,
+                    tool_calls=selected_tool_calls,
+                )
+            )
+            for call in selected_tool_calls:
+                trace = await self._run_tool(
+                    {"tool": call.name, "arguments": call.arguments},
+                    context,
+                )
+                tool_trace.append(trace)
+                messages.append(
+                    LlmMessage(
+                        role="tool",
+                        content=json.dumps(trace, ensure_ascii=False),
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                    )
+                )
+            if len(selected_tool_calls) < len(response.tool_calls):
+                break
+
+        messages.append(LlmMessage(role="user", content=_FORCE_FINAL_NOTICE))
+        response = await self._complete_turn(
+            system_prompt,
+            messages,
+            (),
+            llm_timeout_seconds,
+        )
+        raw_length += _turn_response_length(response)
+        return EngineResult(response.content, tool_trace, raw_length)
+
     async def _complete(
         self, system_prompt: str, transcript: list[str], timeout: float | None
     ) -> str:
@@ -126,6 +215,36 @@ class ConversationEngine:
         if timeout is None:
             return await self.llm.complete(prompt)
         return await asyncio.wait_for(self.llm.complete(prompt), timeout=timeout)
+
+    async def _complete_turn(
+        self,
+        system_prompt: str,
+        messages: list[LlmMessage],
+        tools: tuple[LlmToolDefinition, ...],
+        timeout: float | None,
+    ) -> LlmTurnResponse:
+        complete_turn = getattr(self.llm, "complete_turn", None)
+        if not callable(complete_turn):
+            raise AttributeError("LLM client does not support native tool calls")
+        call = complete_turn(
+            system_prompt=system_prompt,
+            messages=tuple(messages),
+            tools=tools,
+        )
+        if timeout is None:
+            return await call
+        return await asyncio.wait_for(call, timeout=timeout)
+
+    def _supports_native_tool_calls(self) -> bool:
+        if not self.registry.tools():
+            return False
+        marker = getattr(self.llm, "supports_tool_calls", None)
+        if callable(marker):
+            try:
+                return bool(marker())
+            except Exception:
+                return False
+        return False
 
     async def _run_tool(self, reply: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         """도구 1회 실행 — 미등록/인자 오류/핸들러 예외는 오류로 기록해 LLM 에 회신함."""
@@ -166,6 +285,68 @@ def _parse_reply(raw: str) -> dict[str, Any]:
     if isinstance(parsed, dict) and parsed.get("type") in {REPLY_TYPE_FINAL, REPLY_TYPE_TOOL_CALL}:
         return parsed
     return {"type": REPLY_TYPE_FINAL, "content": raw.strip()}
+
+
+def _history_messages(history: list[dict[str, Any]]) -> list[LlmMessage]:
+    messages: list[LlmMessage] = []
+    for row in history:
+        role = str(row.get("role") or "user")
+        if role not in {"assistant", "user"}:
+            role = "user"
+        messages.append(LlmMessage(role=role, content=str(row.get("content") or "")))
+    return messages
+
+
+def _tool_definitions(registry: ToolRegistry) -> tuple[LlmToolDefinition, ...]:
+    return tuple(
+        LlmToolDefinition(
+            name=spec.name,
+            description=spec.description,
+            input_schema=_tool_input_schema(spec.parameters),
+        )
+        for spec in registry.tools()
+    )
+
+
+def _tool_input_schema(parameters: dict[str, Any]) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for name, schema in parameters.items():
+        property_schema = deepcopy(schema)
+        if property_schema.get("required") is True:
+            required.append(name)
+            property_schema.pop("required", None)
+        elif property_schema.get("required") is False:
+            property_schema.pop("required", None)
+        properties[name] = property_schema
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
+    if required:
+        input_schema["required"] = required
+    return input_schema
+
+
+def _turn_response_length(response: LlmTurnResponse) -> int:
+    return len(
+        json.dumps(
+            {
+                "content": response.content,
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }
+                    for call in response.tool_calls
+                ],
+            },
+            ensure_ascii=False,
+            default=str,
+        )
+    )
 
 
 def _validate_max_tool_calls(value: int) -> int:

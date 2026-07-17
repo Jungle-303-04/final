@@ -158,11 +158,12 @@ class McpSettings:
         return headers
 
 
-def load_settings() -> McpSettings:
+def load_settings(*, writes_enabled: bool | None = None) -> McpSettings:
     return load_settings_with_auth(
         bearer_token=env(OPSIA_MCP_BEARER_TOKEN_ENV, ""),
         cookie_header=env(OPSIA_MCP_COOKIE_ENV, ""),
         session_cookie=env(OPSIA_MCP_SESSION_COOKIE_ENV, ""),
+        writes_enabled=writes_enabled,
     )
 
 

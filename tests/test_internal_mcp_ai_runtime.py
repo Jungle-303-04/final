@@ -9,6 +9,7 @@ import pytest
 
 from packages.ai.tools import ToolContext
 from packages.ai.tools import ToolRegistry as AiToolRegistry
+from services.mcp.internal_control import limits as mcp_limits
 from services.mcp.internal_control.ai_runtime import (
     AiRuntimeMcpExecutor,
     ai_tool_registry_from_mcp,
@@ -361,6 +362,45 @@ def test_runtime_executor_rejects_non_object_arguments_before_registry_call() ->
             await executor.call("read_cluster", [])  # type: ignore[arg-type]
         with pytest.raises(ToolInputError, match="tool name is required"):
             await executor.call("", {})
+
+    asyncio.run(run())
+
+
+def test_runtime_executor_rejects_oversized_arguments_before_registry_call() -> None:
+    async def run() -> None:
+        calls = 0
+
+        async def handler(
+            _client: ManagementApiClient,
+            _arguments: dict[str, Any],
+        ) -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            return {"ok": True}
+
+        registry = ToolRegistry(
+            [
+                McpTool(
+                    name="read_cluster",
+                    title="Read Cluster",
+                    description="Read one cluster through Gateway.",
+                    input_schema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                    handler=handler,
+                )
+            ]
+        )
+        executor = AiRuntimeMcpExecutor(registry, _client())
+        large_value = "x" * mcp_limits.MAX_JSONRPC_LINE_BYTES
+
+        with pytest.raises(ToolInputError, match="tool arguments must be at most"):
+            await executor.call("read_cluster", {"cluster_id": large_value})
+
+        assert calls == 0
 
     asyncio.run(run())
 

@@ -122,7 +122,7 @@ def _mcp_client_from_env() -> ManagementApiClient | None:
             _mcp_client = None
         else:
             try:
-                _mcp_client = management_client_from_env()
+                _mcp_client = management_client_from_env(writes_enabled=False)
             except McpConfigurationError:
                 _mcp_client = None
     return _mcp_client if isinstance(_mcp_client, ManagementApiClient) else None

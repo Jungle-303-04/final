@@ -98,6 +98,24 @@ def test_complete_json_raises_after_repeated_invalid_json() -> None:
         asyncio.run(_gateway(adapter).complete_json("prompt", schema={"type": "object"}))
 
 
+def test_completion_only_adapter_falls_back_for_turn_completion() -> None:
+    adapter = _ScriptedAdapter(["fallback ok"])
+    gateway = _gateway(adapter)
+
+    assert gateway.supports_tool_calls() is False
+    result = asyncio.run(
+        gateway.complete_turn(
+            system_prompt="system",
+            messages=(),
+            tools=(),
+        )
+    )
+
+    assert result.content == "fallback ok"
+    assert result.tool_calls == ()
+    assert adapter.calls == 1
+
+
 def test_retry_after_header_parsing() -> None:
     request = httpx.Request("POST", "http://llm.test")
 

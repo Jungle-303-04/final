@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -13,6 +14,7 @@ from packages.ai.llm import LlmClient
 from packages.ai.tools import ToolContext
 from packages.ai.tools import ToolRegistry as AiToolRegistry
 from packages.security.log_lines import redact_log_line, redact_sensitive_value
+from services.mcp.internal_control import limits as mcp_limits
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
 from services.mcp.internal_control.config import (
     OPSIA_MCP_ENABLE_WRITES_ENV,
@@ -76,6 +78,7 @@ PROPOSAL_ONLY_WRITE_ARGUMENTS = frozenset(
         DRY_RUN_ARGUMENT,
     }
 )
+MAX_AI_RUNTIME_ARGUMENT_BYTES = mcp_limits.MAX_JSONRPC_LINE_BYTES
 
 
 @asynccontextmanager
@@ -191,6 +194,7 @@ class AiRuntimeMcpExecutor:
         runtime_tool = self._tool_by_name.get(name)
         if runtime_tool is None:
             raise ToolInputError("tool is not exposed to the AI runtime")
+        _validate_runtime_arguments(arguments)
         if not runtime_tool.read_only:
             _assert_proposal_only_write_arguments(arguments)
         try:
@@ -309,8 +313,8 @@ def mcp_conversation_engine(
     return ConversationEngine(llm, ai_registry, max_tool_calls=max_tool_calls)
 
 
-def management_client_from_env() -> ManagementApiClient:
-    return ManagementApiClient(load_settings())
+def management_client_from_env(*, writes_enabled: bool | None = None) -> ManagementApiClient:
+    return ManagementApiClient(load_settings(writes_enabled=writes_enabled))
 
 
 def management_client_from_auth(
@@ -450,6 +454,23 @@ def _assert_proposal_only_write_arguments(arguments: dict[str, Any]) -> None:
         raise ToolInputError(PROPOSAL_ONLY_WRITE_REJECTION)
     if arguments.get(APPROVAL_CONFIRMED_ARGUMENT) is True:
         raise ToolInputError(PROPOSAL_ONLY_WRITE_REJECTION)
+
+
+def _validate_runtime_arguments(arguments: dict[str, Any]) -> None:
+    try:
+        encoded = json.dumps(
+            arguments,
+            allow_nan=False,
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ToolInputError("tool arguments must be a finite JSON object") from exc
+    if len(encoded) > MAX_AI_RUNTIME_ARGUMENT_BYTES:
+        raise ToolInputError(
+            f"tool arguments must be at most {MAX_AI_RUNTIME_ARGUMENT_BYTES} bytes "
+            "when encoded as JSON"
+        )
 
 
 def _proposal_only_input_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
