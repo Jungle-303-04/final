@@ -104,11 +104,13 @@ export {
 } from "./timeline";
 export {
   checkHelmReleaseUpgrades,
+  applyHelmReleaseValues,
   getHelmRelease,
   getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASE_ROLLBACK_STREAM_PATH,
+  HELM_RELEASE_VALUES_PATH,
   HELM_RELEASES_PATH,
   HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,

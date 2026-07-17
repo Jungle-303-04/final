@@ -509,6 +509,36 @@ async def create_helm_release_upgrade_stream(
     )
 
 
+@router.put(
+    gateway_routes.HELM_RELEASE_VALUES_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def apply_helm_release_values(
+    namespace: str,
+    release_name: str,
+    payload: HelmReleaseUpgradeRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> CommandReceipt:
+    """Apply reviewed values through the exact same revision-bound upgrade command."""
+
+    return await create_helm_release_upgrade(
+        namespace,
+        release_name,
+        payload,
+        current,
+        db,
+        events,
+        operation_events,
+        provider,
+    )
+
+
 @router.post(
     gateway_routes.HELM_RELEASE_ROLLBACK_STREAM_PATH,
     response_model=CommandReceipt,

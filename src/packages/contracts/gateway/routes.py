@@ -107,6 +107,7 @@ HELM_RELEASE_ARTIFACT_PATH = "/helm/releases/{namespace}/{release_name}/artifact
 HELM_RELEASE_UPGRADE_PATH = "/helm/releases/{namespace}/{release_name}/upgrade"
 HELM_RELEASE_UPGRADE_STREAM_PATH = "/helm/releases/{namespace}/{release_name}/upgrade-stream"
 HELM_RELEASE_ROLLBACK_STREAM_PATH = "/helm/releases/{namespace}/{release_name}/rollback-stream"
+HELM_RELEASE_VALUES_PATH = "/helm/releases/{namespace}/{release_name}/values"
 HELM_RELEASE_UPGRADE_INFO_PATH = "/helm/releases/{namespace}/{release_name}/upgrade-info"
 HELM_RELEASE_VERSIONS_PATH = "/helm/releases/{namespace}/{release_name}/versions"
 HELM_UPGRADE_CHECK_PATH = "/helm/upgrade-check"

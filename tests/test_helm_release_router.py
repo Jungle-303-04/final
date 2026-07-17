@@ -694,6 +694,17 @@ def test_release_upgrade_reuses_the_real_catalog_agent_command_and_audit_receipt
     assert command.diff.basis["catalog_item_id"] == "catalog-redis"
 
 
+def test_release_values_apply_is_the_reviewed_upgrade_contract() -> None:
+    module = importlib.import_module("domains.helm.release_router")
+    app = FastAPI()
+    app.include_router(module.router)
+
+    operation = app.openapi()["paths"]["/helm/releases/{namespace}/{release_name}/values"]["put"]
+
+    assert "202" in operation["responses"]
+    assert operation["requestBody"]["required"] is True
+
+
 def test_release_rollback_reuses_common_receipt_and_revision_bound_agent_command(
     monkeypatch,
 ) -> None:

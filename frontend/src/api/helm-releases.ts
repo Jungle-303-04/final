@@ -26,6 +26,8 @@ export const HELM_RELEASE_UPGRADE_PATH =
   "/api/helm/releases/{namespace}/{release_name}/upgrade" as const;
 export const HELM_RELEASE_ROLLBACK_STREAM_PATH =
   "/api/helm/releases/{namespace}/{release_name}/rollback-stream" as const;
+export const HELM_RELEASE_VALUES_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/values" as const;
 export const HELM_RELEASE_UPGRADE_INFO_PATH =
   "/api/helm/releases/{namespace}/{release_name}/upgrade-info" as const;
 export const HELM_RELEASE_VERSIONS_PATH =
@@ -164,6 +166,32 @@ export function startHelmReleaseUpgrade(
       expected_revision: input.expectedRevision,
       catalog_item_id: catalogItemId,
       catalog_version: catalogVersion,
+      values: input.values,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
+export function applyHelmReleaseValues(
+  input: Parameters<typeof startHelmReleaseUpgrade>[0],
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const path = HELM_RELEASE_VALUES_PATH
+    .replace("{namespace}", encodePathSegment(requiredIdentity(input.namespace, "namespace")))
+    .replace("{release_name}", encodePathSegment(requiredIdentity(input.releaseName, "releaseName"))) as ApiPath;
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    throw new RangeError("expectedRevision must be a positive integer");
+  }
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: requiredIdentity(input.clusterId, "clusterId"),
+      expected_revision: input.expectedRevision,
+      catalog_item_id: requiredIdentity(input.catalogItemId, "catalogItemId"),
+      catalog_version: requiredIdentity(input.catalogVersion, "catalogVersion"),
       values: input.values,
       confirmation: input.confirmation,
       reason: input.reason,

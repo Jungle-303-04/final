@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   checkHelmReleaseUpgrades,
+  applyHelmReleaseValues,
   getHelmRelease,
   getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_ROLLBACK_STREAM_PATH,
+  HELM_RELEASE_VALUES_PATH,
   HELM_RELEASE_UPGRADE_INFO_PATH,
   HELM_RELEASE_VERSIONS_PATH,
   HELM_RELEASE_PATH,
@@ -205,6 +207,25 @@ describe("Helm release API", () => {
       reason: "rollback failed release",
     });
     expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+  });
+
+  it("applies reviewed values through the revision-bound upgrade contract", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(receipt()));
+
+    await applyHelmReleaseValues({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "redis",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.size": "16Gi" },
+      confirmation: true,
+    });
+
+    expect(HELM_RELEASE_VALUES_PATH).toBe("/api/helm/releases/{namespace}/{release_name}/values");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/helm/releases/sandbox/redis/values");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PUT");
   });
 
   it("reads server-resolved upgrade info, versions, and bounded batch decoration", async () => {
