@@ -96,7 +96,7 @@ describe("HomePage", () => {
     renderHome(homePort(), ["/?clusters=cluster-1&applications=checkout"]);
 
     const live = await screen.findByRole("region", { name: "라이브 관측" });
-    expect(within(live).getByText("리소스 관계")).toBeTruthy();
+    expect(await within(live).findByText("리소스 관계")).toBeTruthy();
     expect(within(live).getByText("12 리소스 · 9 관계")).toBeTruthy();
     expect(within(live).getByRole("link", { name: "리소스 관계 열기" }).getAttribute("href"))
       .toBe("/resources?clusters=cluster-1&applications=checkout&view=relations");

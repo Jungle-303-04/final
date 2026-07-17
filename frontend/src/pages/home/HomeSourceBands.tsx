@@ -13,7 +13,6 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomeInsights } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { Surface } from "../../shared/ui/Surface";
-import { Badge } from "../../shared/ui/primitives/badge";
 import { buttonVariants } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { CertificateExpiryCard, HelmSummaryCard } from "./HomeInsightsBand";
