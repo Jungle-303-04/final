@@ -1223,9 +1223,7 @@ def _release_upgrade_commands(
         return HelmFeatureAvailability(reason_code=UPGRADE_REVISION_UNAVAILABLE)
     if chart_name is None or chart_version is None or storage_resource_version is None:
         return HelmFeatureAvailability(reason_code=UPGRADE_TARGETS_UNAVAILABLE)
-    if not _agent_supports_release_upgrade(
-        db, workspace_id, cluster_id
-    ) or not _agent_supports_values_preview(db, workspace_id, cluster_id):
+    if not _agent_supports_release_upgrade(db, workspace_id, cluster_id):
         return HelmFeatureAvailability(reason_code=UPGRADE_AGENT_UNAVAILABLE)
     targets = _helm_upgrade_targets(chart_name, chart_version)
     if not targets:
