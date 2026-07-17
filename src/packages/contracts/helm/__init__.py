@@ -1,5 +1,14 @@
 """Typed contracts for Helm release observations and agent commands."""
 
+from packages.contracts.helm.artifacthub import (
+    ARTIFACTHUB_PAGE_MAX,
+    ARTIFACTHUB_VERSION_MAX,
+    ArtifactHubChart,
+    ArtifactHubChartDetail,
+    ArtifactHubChartVersion,
+    ArtifactHubRepository,
+    ArtifactHubSearchPage,
+)
 from packages.contracts.helm.artifacts import (
     HELM_ARTIFACT_CONTENT_MAX_BYTES,
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
@@ -59,6 +68,8 @@ from packages.contracts.helm.sources import (
 )
 
 __all__ = [
+    "ARTIFACTHUB_PAGE_MAX",
+    "ARTIFACTHUB_VERSION_MAX",
     "HELM_ARTIFACT_CONTENT_MAX_BYTES",
     "HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER",
     "HELM_CHART_SOURCE_PAGE_MAX",
@@ -67,6 +78,11 @@ __all__ = [
     "HELM_RELEASE_ARTIFACT_READ_CAPABILITY",
     "HELM_UPGRADE_BATCH_MAX_RELEASES",
     "HelmAvailability",
+    "ArtifactHubChart",
+    "ArtifactHubChartDetail",
+    "ArtifactHubChartVersion",
+    "ArtifactHubRepository",
+    "ArtifactHubSearchPage",
     "HelmArtifactCommandPayload",
     "HelmArtifactReadRequest",
     "HelmArtifactResult",

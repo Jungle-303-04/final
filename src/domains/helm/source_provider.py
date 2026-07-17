@@ -130,10 +130,12 @@ class HelmChartVersionProvider:
         timeout_seconds: float = HELM_CHART_PROVIDER_TIMEOUT_SECONDS,
         transport: httpx.AsyncBaseTransport | None = None,
         resolver: HostResolver | None = None,
+        allowed_hosts: str | None = None,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.transport = transport
         self.resolver = resolver or resolve_host_addresses
+        self.allowed_hosts = allowed_hosts
         self._repository_index_tasks: dict[
             tuple[str, str, str],
             asyncio.Task[Mapping[Any, Any]],
@@ -425,7 +427,11 @@ class HelmChartVersionProvider:
             raise _HelmProviderFailure("helm_chart_source_transport_error") from exc
 
     async def _pinned_destination(self, url: str) -> _PinnedDestination:
-        allowed_hosts = env(HELM_CHART_SOURCE_ALLOWED_HOSTS_ENV, "").strip()
+        allowed_hosts = (
+            self.allowed_hosts
+            if self.allowed_hosts is not None
+            else env(HELM_CHART_SOURCE_ALLOWED_HOSTS_ENV, "").strip()
+        )
         try:
             hostname = validate_outbound_url_syntax(
                 url,
