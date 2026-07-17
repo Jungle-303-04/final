@@ -4582,26 +4582,31 @@
       }
     },
     "reference.feature.223": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.shell_state",
-      "frontendContract": "frontend/src/pages/settings",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.integrations",
+      "frontendContract": "frontend/src/features/settings",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
+        "tests/test_prometheus_integration.py",
+        "tests/test_target_agent_client.py",
+        "frontend/src/api/prometheus-integration.test.ts",
+        "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
         "frontend/src/pages/settings/SettingsPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py",
-          "reason": "No workspace integration repository owns Prometheus URL metadata, write-only headers, owner authorization, live client replacement, bounded probe, or audit evidence.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/integrations/prometheus.py#update_prometheus_integration",
+          "consumer": "src/services/target/cluster-agent/agent.py#apply_runtime_configurations",
+          "reason": "The owner-authorized Python integration contract persists encrypted write-only headers, atomically versions policy and audit evidence, streams one superseding probe operation, and replaces the target-agent metrics provider only after a bounded live probe.",
+          "test": "tests/test_prometheus_integration.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/settings/SettingsPage.tsx",
-          "reason": "The settings route does not store provider credentials in browser state or claim that a metrics reader can reconfigure its provider.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/settings/PrometheusIntegrationCard.tsx#PrometheusIntegrationCard",
+          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "reason": "The typed settings adapter exposes configured header names without secret values, preserves omitted secrets only for the same origin, requires re-entry after origin changes, and follows the shared operation event stream for live probe feedback.",
+          "test": "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx"
         }
       }
     },

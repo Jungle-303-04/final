@@ -1123,12 +1123,24 @@ test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차�
     "reference.feature.134",
     "reference.feature.221",
     "reference.feature.222",
-    "reference.feature.223",
   ]) {
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     assert.equal(feature.sourceKey, aliases.aliases[contractId]);
     assert.notEqual(feature.deliveryStatus, "implemented");
   }
+  const prometheusFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.223",
+  );
+  assert.equal(prometheusFeature.sourceKey, aliases.aliases["reference.feature.223"]);
+  assert.equal(prometheusFeature.deliveryStatus, "implemented");
+  assert.equal(
+    portMap.features["reference.feature.223"].coverage.backend.destination,
+    "src/domains/integrations/prometheus.py#update_prometheus_integration",
+  );
+  assert.equal(
+    portMap.features["reference.feature.223"].coverage.frontend.destination,
+    "frontend/src/pages/settings/PrometheusIntegrationCard.tsx#PrometheusIntegrationCard",
+  );
   assert.equal(
     permissions.interactions.find((interaction) =>
       interaction.sourceKey === "upstream-ui:settings:permissions:kubernetes-subject-rules:v1"
