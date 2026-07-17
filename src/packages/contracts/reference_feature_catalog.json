@@ -9182,7 +9182,7 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.shell_state",
       "frontendContract": "frontend/src/features/shell-state",
       "desktopContract": null,
@@ -9194,17 +9194,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "not_required",
           "destination": "src/domains/shell_state/router.py#get_settings",
           "consumer": "src/domains/shell_state/repository.py#get_ui_preferences",
-          "reason": "User-scoped theme and locale preferences are revisioned server state; host kubeconfig, listener, browser, MCP, timeline, and secret integration configuration remain deployment-owned and unavailable to browser reads.",
+          "reason": "The source contract reads process-local Go runtime arguments such as kubeconfig paths, listener ports, browser launch, MCP, and timeline retention. That runtime is excluded from the Python and outbound-Agent product architecture, so these deployment-owned values are deliberately unavailable to browser reads; user preferences and Agent-managed integrations remain separate typed contracts.",
           "test": "tests/test_shell_state_router.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "not_required",
           "destination": "frontend/src/pages/settings/SettingsPage.tsx#SettingsPage",
           "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
-          "reason": "The route consumes only the safe user preference and access profile contracts and exposes no fake host configuration.",
+          "reason": "The Settings route names the unavailable host boundary and exposes no fake process configuration, while independently implemented preference and integration cards consume their own server contracts.",
           "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
         },
         "desktop": null,
@@ -9226,7 +9226,7 @@
       "streaming": false,
       "area": "cost-settings",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.shell_state",
       "frontendContract": "frontend/src/features/shell-state",
       "desktopContract": null,
@@ -9237,17 +9237,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "not_required",
           "destination": "src/domains/shell_state/router.py#update_settings",
           "consumer": "src/domains/shell_state/repository.py#put_ui_preferences",
-          "reason": "User preferences use optimistic revision checks and an atomic audit event; browser mutation of process-level host configuration remains intentionally blocked.",
+          "reason": "A browser request cannot replace deployment process arguments or mutate host kubeconfig paths in the Python and outbound-Agent architecture. User preferences still use optimistic revision checks and an atomic audit event, and live Agent integrations use their dedicated command receipts.",
           "test": "tests/test_shell_state_router.py"
         },
         "frontend": {
-          "state": "implemented",
+          "state": "not_required",
           "destination": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
           "consumer": "frontend/src/features/shell-state/createShellStateAdapter.ts#createShellStateAdapter",
-          "reason": "One shared synchronizer persists validated preferences and reloads server authority on revision conflict.",
+          "reason": "No host-config save control or restart promise is exposed. The existing synchronizer persists only validated user preferences and reloads server authority on revision conflict.",
           "test": "frontend/src/features/shell-state/createShellStateAdapter.test.ts"
         },
         "desktop": null,

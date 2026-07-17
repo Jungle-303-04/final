@@ -1251,7 +1251,10 @@ test("설정 권한과 호스트 설정 delta는 분리된 권한 주체와 명�
   ]) {
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     assert.equal(feature.sourceKey, aliases.aliases[contractId]);
-    assert.notEqual(feature.deliveryStatus, "implemented");
+    assert.equal(feature.deliveryStatus, "not_applicable");
+    assert.equal(portMap.features[contractId].coverage.backend.state, "not_required");
+    assert.equal(portMap.features[contractId].coverage.frontend.state, "not_required");
+    assert.match(portMap.features[contractId].coverage.backend.reason, /outbound-Agent/);
   }
   const permissionsFeature = ledger.features.find(
     (candidate) => candidate.contractId === "reference.feature.134",
