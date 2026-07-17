@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { executeGitOpsResourceAction, getGitOpsResourceTree } from "./gitops-resource-detail";
+import {
+  executeGitOpsResourceAction,
+  getGitOpsResourceInsights,
+  getGitOpsResourceTree,
+} from "./gitops-resource-detail";
 
 const locator = {
   clusterId: "cluster-a",
@@ -22,6 +26,17 @@ describe("GitOps resource endpoints", () => {
     });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "/api/gitops/resources/Application/argocd/storefront/tree?cluster_id=cluster-a&api_version=argoproj.io%2Fv1alpha1",
+    );
+  });
+
+  it("owns the insights endpoint contract and rejects an invalid wire response", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}));
+
+    await expect(getGitOpsResourceInsights(locator)).rejects.toMatchObject({
+      kind: "invalid-payload",
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/gitops/resources/Application/argocd/storefront/insights?cluster_id=cluster-a&api_version=argoproj.io%2Fv1alpha1",
     );
   });
 
