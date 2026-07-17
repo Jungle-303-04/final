@@ -2574,7 +2574,7 @@
       }
     },
     "reference.feature.141": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.gateway.responses.ClusterConnectResponse",
       "frontendContract": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
       "desktopContract": null,
@@ -2585,21 +2585,21 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "src/domains/target/router.py",
-          "reason": "Cluster registration does not authorize or export a management-cluster CAPI Secret as a one-time kubeconfig artifact.",
+          "reason": "The product never exports a management-cluster CAPI Secret as a browser-downloadable kubeconfig. Cluster credentials stay inside the cluster and every managed connection is established by an installed outbound Agent, while CAPI resource detail remains available through persisted Agent observations.",
           "test": "tests/test_target_registration.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
-          "reason": "The connect dialog cannot offer a CAPI kubeconfig download without secret redaction, encrypted delivery, expiry, and audit policy.",
+          "reason": "The connect dialog intentionally offers Agent installation guidance instead of a CAPI kubeconfig download, so no credential bytes, temporary artifact URL, or browser secret lifecycle exists.",
           "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
         }
       }
     },
     "reference.feature.142": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.gateway.responses.ClusterConnectResponse",
       "frontendContract": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
       "desktopContract": null,
@@ -2610,15 +2610,15 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "src/domains/target/router.py",
-          "reason": "The existing target registration flow requires an installed agent and cannot treat a CAPI Secret as an authenticated live connection.",
+          "reason": "A CAPI Secret cannot become an authenticated live server connection. The existing target registration contract requires the workload cluster to install and authenticate its outbound Agent before any inventory or command capability is exposed.",
           "test": "tests/test_target_registration.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "not_required",
           "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
-          "reason": "No CAPI capability, audited command receipt, connection progress stream, or resulting managed-cluster identity exists.",
+          "reason": "The browser does not expose a direct CAPI connect action; it resumes the canonical Agent registration flow and waits for the authenticated outbound heartbeat that creates the managed-cluster identity.",
           "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
         }
       }

@@ -19,6 +19,9 @@ const PROVIDER_BLOCKED = new Set([
   "reference.feature.138",
   "reference.feature.139",
   "reference.feature.140",
+]);
+
+const AGENT_ARCHITECTURE_EXCLUDED = new Set([
   "reference.feature.141",
   "reference.feature.142",
 ]);
@@ -82,6 +85,11 @@ test("resource, metrics, logs, and service access rows own immutable source evid
         contractId,
       );
       assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    } else if (AGENT_ARCHITECTURE_EXCLUDED.has(contractId)) {
+      assert.equal(port.deliveryStatus, "not_applicable", contractId);
+      assert.equal(port.coverage.backend.state, "not_required", contractId);
+      assert.equal(port.coverage.frontend.state, "not_required", contractId);
+      assert.match(port.coverage.backend.reason, /outbound Agent/u, contractId);
     } else {
       assert.equal(port.deliveryStatus, "in_progress", contractId);
       assert.ok(
