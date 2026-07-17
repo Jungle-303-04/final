@@ -6,7 +6,7 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, or_, select, union_all
 
 from domains.target.models import EvidenceWindow
 from packages.contracts.cost.observations import (
@@ -50,11 +50,14 @@ def cost_evidence_statement(
     since: datetime,
     limit_per_cluster: int,
 ) -> Select[Any]:
-    """Return a window-ranked query so one noisy cluster cannot consume the batch."""
+    """Use one index-bounded branch per cluster so noisy clusters cannot consume the batch."""
 
     table = EvidenceWindow.__table__
     metric_results = table.c.payload["metrics"]["results"]
-    ranked = (
+    metric_filter = or_(
+        *(metric_results.has_key(metric) for metric in COST_EVIDENCE_METRICS)  # noqa: W601
+    )
+    branches = [
         select(
             table.c.evidence_key,
             table.c.workspace_id,
@@ -62,33 +65,26 @@ def cost_evidence_statement(
             table.c.window_start,
             table.c.payload,
             table.c.updated_at,
-            func.row_number()
-            .over(
-                partition_by=table.c.cluster_id,
-                order_by=(table.c.updated_at.desc(), table.c.evidence_key.desc()),
-            )
-            .label("recency_rank"),
         )
         .where(
             table.c.workspace_id == workspace_id,
-            table.c.cluster_id.in_(cluster_ids),
+            table.c.cluster_id == cluster_id,
             table.c.updated_at >= since,
-            or_(*(metric_results.has_key(metric) for metric in COST_EVIDENCE_METRICS)),  # noqa: W601
+            metric_filter,
         )
-        .subquery("ranked_cost_evidence")
-    )
-    return (
-        select(
-            ranked.c.evidence_key,
-            ranked.c.workspace_id,
-            ranked.c.cluster_id,
-            ranked.c.window_start,
-            ranked.c.payload,
-            ranked.c.updated_at,
-        )
-        .where(ranked.c.recency_rank <= limit_per_cluster)
-        .order_by(ranked.c.updated_at.asc(), ranked.c.evidence_key.asc())
-    )
+        .order_by(table.c.updated_at.desc(), table.c.evidence_key.desc())
+        .limit(limit_per_cluster)
+        for cluster_id in cluster_ids
+    ]
+    bounded = union_all(*branches).subquery("bounded_cost_evidence")
+    return select(
+        bounded.c.evidence_key,
+        bounded.c.workspace_id,
+        bounded.c.cluster_id,
+        bounded.c.window_start,
+        bounded.c.payload,
+        bounded.c.updated_at,
+    ).order_by(bounded.c.updated_at.asc(), bounded.c.evidence_key.asc())
 
 
 class CostObservationRepository(DatabaseConnection):

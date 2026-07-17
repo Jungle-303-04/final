@@ -21,10 +21,11 @@ def test_cost_evidence_batch_is_workspace_cluster_time_and_rank_bounded() -> Non
     sql = " ".join(str(compiled).lower().split())
 
     assert "evidence_windows.workspace_id = 'workspace-a'" in sql
-    assert "evidence_windows.cluster_id in ('cluster-a', 'cluster-b')" in sql
+    assert "evidence_windows.cluster_id = 'cluster-a'" in sql
+    assert "evidence_windows.cluster_id = 'cluster-b'" in sql
     assert "evidence_windows.updated_at >= '2026-07-10 00:00:00+00:00'" in sql
-    assert "row_number() over (partition by evidence_windows.cluster_id" in sql
-    assert "ranked_cost_evidence.recency_rank <= 480" in sql
+    assert "union all" in sql
+    assert sql.count("limit 480") == 2
     assert "opencost_namespace_hourly_rate" in sql
     assert "opencost_namespace_storage_rate" in sql
     assert "opencost_pod_cpu_hourly_rate" in sql
