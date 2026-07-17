@@ -2,6 +2,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { BrowserRouter } from "react-router-dom";
 import { createApiComposition } from "./app/apiComposition";
+import { createDemoComposition } from "./app/demoComposition";
 import { ProductErrorBoundary } from "./app/ProductErrorBoundary";
 import { ProductRouter } from "./app/ProductRouter";
 import { AuthBarrier } from "./features/auth/AuthBarrier";
@@ -29,7 +30,7 @@ export default function ProductApp() {
 }
 
 function ProductRuntime() {
-  const [composition] = useState(createApiComposition);
+  const [composition] = useState(createRuntimeComposition);
 
   return (
     <BrowserRouter>
@@ -38,4 +39,9 @@ function ProductRuntime() {
       </AuthBarrier>
     </BrowserRouter>
   );
+}
+
+function createRuntimeComposition() {
+  const demoMode = import.meta.env.DEV && import.meta.env.VITE_DEMO_MODE !== "false";
+  return demoMode ? createDemoComposition() : createApiComposition();
 }

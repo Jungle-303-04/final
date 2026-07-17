@@ -1,4 +1,4 @@
-import { Activity, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
@@ -13,7 +13,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarInset,
   SidebarProvider,
   SidebarText,
@@ -46,6 +45,7 @@ import { Toaster, toast } from "../shared/ui/primitives/sonner";
 import { AiAssistantPanel } from "./AiAssistantPanel";
 import { createAiAssistantContext } from "./aiAssistantContext";
 import { ProductSidebarTrigger } from "./ProductShellSidebar";
+import { ProductShellBrand } from "./ProductShellBrand";
 import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
 import { BottomDock } from "./BottomDock";
@@ -66,6 +66,7 @@ interface ProductShellProps {
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
   alertEventsPort?: AlertEventsPort;
+  mode?: "api" | "demo";
 }
 
 export function ProductShell({
@@ -76,6 +77,7 @@ export function ProductShell({
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  mode = "api",
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
@@ -87,6 +89,7 @@ export function ProductShell({
                 auth={auth}
                 aiAssistantPort={aiAssistantPort}
                 globalFilterPort={globalFilterPort}
+                mode={mode}
                 releasedSurfaceIds={releasedSurfaceIds}
               />
             </AlertEventsProvider>
@@ -102,7 +105,8 @@ function ProductShellFrame({
   auth,
   releasedSurfaceIds,
   globalFilterPort,
-}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
+  mode = "api",
+}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "mode">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
   const location = useLocation();
@@ -176,17 +180,7 @@ function ProductShellFrame({
         mobileDescription={t("shell.menu.mobileDescription")}
         mobileTitle={t("shell.menu.mobileTitle")}
       >
-        <SidebarHeader className="h-14 flex-row items-center gap-2 px-2 py-0">
-          <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[state=collapsed]/sidebar:hidden">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-primary-soft-border bg-primary-soft text-primary-soft-foreground">
-              <Activity aria-hidden="true" className="size-4" />
-            </span>
-            <SidebarText className="text-sm font-semibold tracking-tight">
-              {t("product.name")}
-            </SidebarText>
-          </div>
-          {!isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
-        </SidebarHeader>
+        <ProductShellBrand isMobile={isMobile} mode={mode} />
 
         <SidebarContent className="p-0">
           <SidebarNavigation aria-label={t("shell.menu.primary")} id="product-primary-navigation">

@@ -1,6 +1,7 @@
 import type { ShellMessageKey } from "../../keys/shell";
 
 export const shellKo = {
+  "shell.demo.badge": "DEMO",
   "shell.locale.english": "영어",
   "shell.locale.korean": "한국어",
   "shell.locale.label": "언어",

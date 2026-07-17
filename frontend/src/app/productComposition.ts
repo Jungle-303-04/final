@@ -28,6 +28,7 @@ export interface ProductSurfaceRegistration {
 }
 
 export interface ProductComposition {
+  mode: "api" | "demo";
   auth: AuthPort;
   clusterScope: ClusterScopePort;
   globalFilter: GlobalFilterPort;
@@ -46,6 +47,7 @@ export function createProductComposition(
   aiAssistant: AiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStream: LogStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEvents: AlertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  mode: ProductComposition["mode"] = "api",
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -68,6 +70,7 @@ export function createProductComposition(
   }
 
   return {
+    mode,
     auth,
     clusterScope,
     globalFilter,

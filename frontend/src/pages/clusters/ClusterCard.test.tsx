@@ -62,9 +62,25 @@ describe("ClusterCard", () => {
     expect(card?.className).not.toContain("bg-muted/30");
     expect(card?.className).not.toContain("saturate-0");
     expect(card?.className).not.toContain("text-cluster-card-muted-foreground");
-    expect(card?.className).toContain("hover:border-status-stale");
-    expect(card?.className).toContain("hover:ring-status-stale/30");
-    expect(card?.className).toContain("hover:shadow-status-stale/30");
+    expect(card?.className).toContain("hover:border-status-warning");
+    expect(card?.className).toContain("hover:ring-status-warning/30");
+    expect(card?.className).toContain("hover:shadow-status-warning/30");
+    expect(container.querySelector("[data-slot='status-mark']")?.getAttribute("data-status"))
+      .toBe("warning");
+  });
+
+  it("uses the critical red treatment for disconnected clusters", () => {
+    const { container } = renderCard({
+      ...cluster,
+      connectionState: "offline",
+    });
+
+    const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).toContain("hover:border-destructive");
+    expect(card?.className).toContain("hover:ring-destructive/30");
+    expect(card?.className).toContain("hover:shadow-destructive/30");
+    expect(container.querySelector("[data-slot='status-mark']")?.getAttribute("data-status"))
+      .toBe("critical");
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {

@@ -25,8 +25,10 @@ export function ProductRouter({
   }
 
   const fallbackRoute = routeDefinitionForSurface(composition.surfaces[0].id);
-  const landingRoute = composition.releasedSurfaceIds.has("clusters")
-    ? routeDefinitionForSurface("clusters")
+  const landingRoute = composition.mode === "demo" && composition.releasedSurfaceIds.has("home")
+    ? routeDefinitionForSurface("home")
+    : composition.releasedSurfaceIds.has("clusters")
+      ? routeDefinitionForSurface("clusters")
     : fallbackRoute;
 
   return (
@@ -43,6 +45,7 @@ export function ProductRouter({
               aiAssistantPort={composition.aiAssistant}
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
+              mode={composition.mode}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>
@@ -52,7 +55,7 @@ export function ProductRouter({
               const routePath = routeDefinition.match === "prefix"
                 ? `${routeDefinition.path}/*`
                 : routeDefinition.path;
-              const element = id === "home" && composition.releasedSurfaceIds.has("clusters")
+              const element = id === "home" && composition.mode !== "demo" && composition.releasedSurfaceIds.has("clusters")
                 ? <ProductFallbackRedirect path="/clusters" />
                 : <Component />;
               return <Route key={id} path={routePath} element={element} />;

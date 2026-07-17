@@ -67,7 +67,7 @@ export function clusterDisplayLabel(cluster: {
 function connectionTone(state: ClusterConnectionState): StatusTone {
   const tones: Record<ClusterConnectionState, StatusTone> = {
     online: "healthy",
-    stale: "stale",
+    stale: "warning",
     pending: "warning",
     offline: "critical",
     unknown: "unknown",

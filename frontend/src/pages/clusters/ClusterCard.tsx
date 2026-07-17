@@ -30,17 +30,17 @@ const connectionLabelKeys: Record<HomeConnectionState, MessageKey> = {
 
 const connectionTones: Record<HomeConnectionState, StatusTone> = {
   online: "healthy",
-  stale: "stale",
+  stale: "warning",
   pending: "warning",
-  offline: "unknown",
+  offline: "critical",
   unknown: "unknown",
 };
 
 const connectionHoverClasses: Record<HomeConnectionState, string> = {
   online: "hover:border-status-healthy hover:ring-2 hover:ring-status-healthy/30 hover:shadow-status-healthy/30",
-  stale: "hover:border-status-stale hover:ring-2 hover:ring-status-stale/30 hover:shadow-status-stale/30",
+  stale: "hover:border-status-warning hover:ring-2 hover:ring-status-warning/30 hover:shadow-status-warning/30",
   pending: "hover:border-status-warning hover:ring-2 hover:ring-status-warning/30 hover:shadow-status-warning/30",
-  offline: "hover:border-status-unknown hover:ring-2 hover:ring-status-unknown/30 hover:shadow-status-unknown/30",
+  offline: "hover:border-destructive hover:ring-2 hover:ring-destructive/30 hover:shadow-destructive/30",
   unknown: "hover:border-status-unknown hover:ring-2 hover:ring-status-unknown/30 hover:shadow-status-unknown/30",
 };
 

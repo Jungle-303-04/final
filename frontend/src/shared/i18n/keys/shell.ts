@@ -1,4 +1,5 @@
 export type ShellMessageKey =
+  | "shell.demo.badge"
   | "shell.locale.english"
   | "shell.locale.korean"
   | "shell.locale.label"
