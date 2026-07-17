@@ -19,6 +19,7 @@ import {
 import type {
   GitOpsApplicationDetailEndpoint,
   GitOpsEndpointDependencies,
+  GitOpsOverviewItemEndpoint,
 } from "./gitOpsEndpointContract";
 
 export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitOpsPort {
@@ -128,7 +129,7 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
 }
 
 function toOverviewSyncTarget(
-  item: import("../../api/gitops-overview-schemas").GitOpsOverviewEndpoint["items"][number],
+  item: GitOpsOverviewItemEndpoint,
 ): GitOpsSyncTarget {
   if (!item.id || !item.display_name || !item.scope.cluster_id) {
     throw new GitOpsPortFailure("invalid-response");

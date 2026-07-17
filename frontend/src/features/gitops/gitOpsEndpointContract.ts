@@ -10,10 +10,30 @@ import type {
   GitOpsReasonCode,
   GitOpsSyncTargetQuery,
 } from "./gitOpsContract";
-import type { GitOpsOverviewEndpoint } from "../../api/gitops-overview-schemas";
 
 type EndpointResourceRef = GitOpsApplicationDetailEndpoint["application"]["resource"];
 type EndpointClusterScope = NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>;
+
+export interface GitOpsOverviewItemEndpoint {
+  id: string;
+  authority: "registered" | "controller";
+  provider: "internal" | "argo" | "flux";
+  display_name: string;
+  application_ids: string[];
+  binding_id: string | null;
+  scope: EndpointClusterScope;
+  resource: EndpointResourceRef | null;
+  environment: string | null;
+  status: string | null;
+  health: string | null;
+  revision: string | null;
+  observed_at: string | null;
+  partial_reason_codes: string[];
+}
+
+export interface GitOpsOverviewEndpoint {
+  items: GitOpsOverviewItemEndpoint[];
+}
 
 export interface GitOpsResourceTreeEndpoint {
   scope: EndpointClusterScope;
