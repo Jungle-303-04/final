@@ -1,4 +1,5 @@
 import { useI18n } from "../../shared/i18n";
+import { cn } from "../../shared/lib/cn";
 import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import type { PhysicalTopologyLiveState } from "./usePhysicalTopologyRealtime";
 
@@ -11,6 +12,7 @@ export function ResourcesLiveStatus({
   if (state.status === "idle") return null;
   const degraded = degradedMessage(state.degradedReason);
   const connected = state.status === "connected";
+  const updatedAt = state.updatedAt > 0 ? state.updatedAt : 0;
   const label = connected
     ? state.actualIntervalSeconds === null
       ? t("resources.live.connectedUnknown")
@@ -22,7 +24,7 @@ export function ResourcesLiveStatus({
     : t(`resources.live.${state.status}`);
   return (
     <div
-      className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs"
+      className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center justify-end gap-x-2 text-xs"
       data-slot="resources-live-status"
       data-state={state.status}
       data-updated-at={state.updatedAt > 0 ? state.updatedAt : undefined}
@@ -32,23 +34,34 @@ export function ResourcesLiveStatus({
         <LiveStatusDot state={state.status} tone={liveStatusTone(state.status, degraded !== null)} />
         <span className="tabular-nums">{label}</span>
       </span>
-      {degraded === null ? null : (
-        <span className="max-w-full truncate text-warning" title={t(degraded)}>
-          {t(degraded)}
-        </span>
-      )}
-      {state.updatedAt > 0 ? (
-        <span
-          className="whitespace-nowrap tabular-nums text-muted-foreground"
-          title={formatDate(state.updatedAt, { dateStyle: "medium", timeStyle: "medium" })}
-        >
-          {t("resources.table.updated")} {formatDate(state.updatedAt, {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })}
-        </span>
-      ) : null}
+      <span
+        aria-hidden={degraded === null || undefined}
+        className={cn(
+          "min-w-0 truncate text-right text-warning",
+          degraded === null && "invisible",
+        )}
+        data-slot="resources-live-degraded"
+        title={degraded === null ? undefined : t(degraded)}
+      >
+        {t(degraded ?? "resources.live.degraded.unavailable")}
+      </span>
+      <span
+        aria-hidden={state.updatedAt <= 0 || undefined}
+        className={cn(
+          "whitespace-nowrap tabular-nums text-muted-foreground",
+          state.updatedAt <= 0 && "invisible",
+        )}
+        data-slot="resources-live-updated"
+        title={state.updatedAt > 0
+          ? formatDate(updatedAt, { dateStyle: "medium", timeStyle: "medium" })
+          : undefined}
+      >
+        {t("resources.table.updated")} {formatDate(updatedAt, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })}
+      </span>
     </div>
   );
 }

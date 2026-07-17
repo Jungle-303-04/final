@@ -144,7 +144,7 @@ export function FreshnessControl({
           aria-live="polite"
           className={cn(
             "min-w-0 text-xs",
-            phase === "failed" ? "text-destructive" : "text-muted-foreground",
+            phase === "failed" ? "text-destructive" : "sr-only",
           )}
           role={phase === "failed" ? "alert" : "status"}
         >

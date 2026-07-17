@@ -9,6 +9,7 @@ const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
 const NETWORK_OBSERVATION_MS = 3_000;
+const ROUTE_STABLE_SAMPLE_COUNT = 3;
 const DIAGNOSTIC_ITEM_LIMIT = 50;
 const SENSITIVE_ASSIGNMENT_PATTERN = /\b(authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)\s*([:=])\s*(?:Bearer\s+)?[^\s,"']+/giu;
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+\/=-]+/giu;
@@ -32,6 +33,12 @@ export function orderRoutesForTraversal(routes, currentPathname) {
   const otherRoutes = routes.filter(({ pathname }) => pathname !== currentPathname);
   const currentRoutes = routes.filter(({ pathname }) => pathname === currentPathname);
   return [...otherRoutes, ...currentRoutes];
+}
+
+export function isStableRouteSurfaceSample(previous, current) {
+  return previous !== null
+    && current.routeTitle === previous.routeTitle
+    && current.bodyFingerprint === previous.bodyFingerprint;
 }
 
 export function isChangeTimelineLimitResponse(status, rawUrl) {
@@ -328,6 +335,8 @@ async function waitForRouteSurface(
 ) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
+  let stable = null;
+  let stableSamples = 0;
 
   while (Date.now() < deadline) {
     last = await readRouteSurface(page);
@@ -342,15 +351,23 @@ async function waitForRouteSurface(
         last.routeTitle !== previous.routeTitle
         && last.bodyFingerprint !== previous.bodyFingerprint
       );
-    if (
+    const ready = (
       last.pathname === expectedPathname
       && last.documentTitle
       && last.routeTitle
       && last.mainText
       && !last.productStates.includes("loading")
       && transitioned
-    ) {
-      return last;
+    );
+    if (ready) {
+      stableSamples = isStableRouteSurfaceSample(stable, last)
+        ? stableSamples + 1
+        : 1;
+      stable = last;
+      if (stableSamples >= ROUTE_STABLE_SAMPLE_COUNT) return last;
+    } else {
+      stable = null;
+      stableSamples = 0;
     }
     await page.waitForTimeout(200);
   }
