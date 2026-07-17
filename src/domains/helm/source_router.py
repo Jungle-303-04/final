@@ -12,6 +12,7 @@ from fastapi.routing import APIRoute
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from domains.helm.artifacthub_provider import ArtifactHubProvider
 from domains.helm.events import HelmChartSourceDeletedBody
 from domains.helm.repository import (
     HelmChartSourceConflict,
@@ -35,6 +36,11 @@ from domains.identity.dependencies import (
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import AcceptedResponse
+from packages.contracts.helm.artifacthub import (
+    ARTIFACTHUB_PAGE_MAX,
+    ArtifactHubChartDetail,
+    ArtifactHubSearchPage,
+)
 from packages.contracts.helm.sources import (
     HELM_CHART_SOURCE_PAGE_MAX,
     HelmChartSource,
@@ -87,10 +93,97 @@ HELM_CHART_SOURCE_RESOURCE_TYPE = AccessResourceType.HELM_CHART_SOURCE.value
 HELM_CHART_SOURCE_NOT_FOUND = "Helm chart source not found"
 HELM_CHART_SOURCE_CONFLICT = "Helm chart source already exists"
 HELM_CHART_CREDENTIAL_UNAVAILABLE = "helm_chart_source_credential_unavailable"
+_artifacthub_provider = ArtifactHubProvider()
 
 
 def get_helm_chart_version_provider() -> HelmChartVersionProvider:
     return HelmChartVersionProvider()
+
+
+def get_artifacthub_provider() -> ArtifactHubProvider:
+    return _artifacthub_provider
+
+
+@router.get(
+    gateway_routes.HELM_ARTIFACTHUB_SEARCH_PATH,
+    response_model=ArtifactHubSearchPage,
+)
+async def search_artifacthub_charts(
+    q: str = Query(min_length=1, max_length=200),
+    offset: int = Query(default=0, ge=0, le=100_000),
+    limit: int = Query(default=20, ge=1, le=ARTIFACTHUB_PAGE_MAX),
+    sort: str = Query(default="relevance", pattern=r"^(relevance|stars|last_updated)$"),
+    official: bool = Query(default=False),
+    verified: bool = Query(default=False),
+    current: Any = Depends(require_session),
+    provider: ArtifactHubProvider = Depends(get_artifacthub_provider),
+) -> ArtifactHubSearchPage:
+    _ = current
+    try:
+        return await provider.search(
+            query=q,
+            offset=offset,
+            limit=limit,
+            sort=sort,  # type: ignore[arg-type]
+            official=official,
+            verified=verified,
+        )
+    except RuntimeError as exc:
+        raise _artifacthub_http_error(exc) from exc
+
+
+@router.get(
+    gateway_routes.HELM_ARTIFACTHUB_CHART_PATH,
+    response_model=ArtifactHubChartDetail,
+)
+async def get_artifacthub_chart(
+    repository: str = Path(min_length=1, max_length=253),
+    chart: str = Path(min_length=1, max_length=253),
+    current: Any = Depends(require_session),
+    provider: ArtifactHubProvider = Depends(get_artifacthub_provider),
+) -> ArtifactHubChartDetail:
+    _ = current
+    return await _artifacthub_chart(provider, repository, chart, None)
+
+
+@router.get(
+    gateway_routes.HELM_ARTIFACTHUB_CHART_VERSION_PATH,
+    response_model=ArtifactHubChartDetail,
+)
+async def get_artifacthub_chart_version(
+    repository: str = Path(min_length=1, max_length=253),
+    chart: str = Path(min_length=1, max_length=253),
+    version: str = Path(min_length=1, max_length=256),
+    current: Any = Depends(require_session),
+    provider: ArtifactHubProvider = Depends(get_artifacthub_provider),
+) -> ArtifactHubChartDetail:
+    _ = current
+    return await _artifacthub_chart(provider, repository, chart, version)
+
+
+async def _artifacthub_chart(
+    provider: ArtifactHubProvider,
+    repository: str,
+    chart: str,
+    version: str | None,
+) -> ArtifactHubChartDetail:
+    try:
+        return await provider.chart(repository, chart, version)
+    except RuntimeError as exc:
+        raise _artifacthub_http_error(exc) from exc
+
+
+def _artifacthub_http_error(error: RuntimeError) -> HTTPException:
+    code = str(error)
+    if code == "artifacthub_chart_not_found":
+        return HTTPException(status_code=404, detail=code)
+    if code in {
+        "artifacthub_query_invalid",
+        "artifacthub_pagination_invalid",
+        "artifacthub_chart_identity_invalid",
+    }:
+        return HTTPException(status_code=422, detail=code)
+    return HTTPException(status_code=502, detail=code)
 
 
 @router.get(
