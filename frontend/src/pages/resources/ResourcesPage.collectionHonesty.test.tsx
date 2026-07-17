@@ -57,10 +57,15 @@ describe("ResourcesPage collection honesty", () => {
     );
   });
 
-  it("does not present an unknown-completeness empty catalog as a confirmed empty scope", async () => {
+  it("does not present a partial empty catalog as a confirmed empty scope", async () => {
     renderResources(
       resourcesPort({
-        loadCatalog: vi.fn().mockResolvedValue({ ...CATALOG, items: [] }),
+        loadCatalog: vi.fn().mockResolvedValue({
+          ...CATALOG,
+          completeness: "partial",
+          items: [],
+          reasonCodes: ["inventory_collection_partial"],
+        }),
       }),
       "/resources?clusters=cluster-1",
     );
@@ -75,6 +80,27 @@ describe("ResourcesPage collection honesty", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("heading", { name: "표시할 데이터가 없습니다" }),
+    ).toBeNull();
+  });
+
+  it("presents an observed empty catalog as a confirmed empty scope", async () => {
+    renderResources(
+      resourcesPort({
+        loadCatalog: vi.fn().mockResolvedValue({
+          ...CATALOG,
+          completeness: "observed",
+          items: [],
+          reasonCodes: [],
+        }),
+      }),
+      "/resources?clusters=cluster-1",
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "표시할 데이터가 없습니다" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("전체 범위의 부재는 확인할 수 없습니다."),
     ).toBeNull();
   });
 
