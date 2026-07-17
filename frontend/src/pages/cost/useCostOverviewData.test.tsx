@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CostPort } from "../../features/cost/costContract";
@@ -30,6 +30,62 @@ describe("useCostOverview", () => {
       phase: "ready",
       data: { summary: { hourlyCost: null } },
     });
+    rendered.unmount();
+  });
+
+  it("renders validated Cost data without waiting for a delayed refresh policy", async () => {
+    const pendingPolicy = deferred<Awaited<ReturnType<CostPort["loadRefreshPolicy"]>>>();
+    const port = costPort();
+    let policySignal: AbortSignal | undefined;
+    port.loadRefreshPolicy.mockImplementation((_channel, signal) => {
+      policySignal = signal;
+      return pendingPolicy.promise;
+    });
+    const rendered = renderHook(() => useCostOverview(port, {
+      clusterIds: ["cluster-a"],
+      namespaces: [],
+      timeRange: "24h",
+    }));
+
+    await waitFor(() => expect(rendered.result.current.frame.phase).toBe("ready"));
+    expect(port.getOverview).toHaveBeenCalledOnce();
+    expect(port.loadRefreshPolicy).toHaveBeenCalledOnce();
+
+    rendered.unmount();
+    await act(async () => Promise.resolve());
+    expect(policySignal?.aborted).toBe(true);
+  });
+
+  it("keeps validated Cost data ready when the refresh policy fails", async () => {
+    const port = costPort();
+    port.loadRefreshPolicy.mockRejectedValueOnce(new Error("policy unavailable"));
+    const rendered = renderHook(() => useCostOverview(port, {
+      clusterIds: ["cluster-a"],
+      namespaces: [],
+      timeRange: "24h",
+    }));
+
+    await waitFor(() => expect(rendered.result.current.frame.phase).toBe("ready"));
+    expect(rendered.result.current.frame).toMatchObject({
+      phase: "ready",
+      data: { summary: { hourlyCost: null } },
+    });
+    rendered.unmount();
+  });
+
+  it("retries an initial Cost data failure without coupling the policy request", async () => {
+    const port = costPort();
+    port.getOverview.mockRejectedValueOnce(new Error("overview unavailable"));
+    const rendered = renderHook(() => useCostOverview(port, {
+      clusterIds: ["cluster-a"],
+      namespaces: [],
+      timeRange: "24h",
+    }));
+
+    await waitFor(() => expect(rendered.result.current.frame.phase).toBe("failed"));
+    act(() => rendered.result.current.refresh());
+    await waitFor(() => expect(rendered.result.current.frame.phase).toBe("ready"));
+    expect(port.getOverview).toHaveBeenCalledTimes(2);
     rendered.unmount();
   });
 
@@ -84,7 +140,7 @@ function costPort(intervals: Partial<Record<"summary" | "trend" | "nodes", numbe
   return {
     getOverview: vi.fn().mockResolvedValue(overview()),
     getNodes: vi.fn().mockResolvedValue(nodePage()),
-    loadRefreshPolicy: vi.fn(async (channel: "summary" | "trend" | "nodes") => ({
+    loadRefreshPolicy: vi.fn<CostPort["loadRefreshPolicy"]>(async (channel) => ({
       staleAfterSeconds: 30,
       refreshAfterSeconds: intervals[channel] ?? 1,
       keepLastSuccess: true as const,
@@ -149,4 +205,18 @@ function overview() {
       reasonCodes: ["cost_observation_unavailable"],
     },
   };
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(reason?: unknown): void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }

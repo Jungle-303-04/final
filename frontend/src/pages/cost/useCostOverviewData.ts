@@ -51,25 +51,33 @@ export function useCostOverview(
 
   useEffect(() => {
     let active = true;
+    let dataSucceeded = false;
+    let policyAccepted = false;
+    let refreshPolicy: Awaited<ReturnType<CostPort["loadRefreshPolicy"]>> | null = null;
+    const acceptRefreshPolicy = () => {
+      if (!active || !dataSucceeded || policyAccepted || refreshPolicy === null) return;
+      policyAccepted = true;
+      refreshController.acceptSuccess(refreshPolicy);
+    };
     queueMicrotask(() => {
       if (active) setFrame((current) => startAsyncResource(current));
     });
-    const sharedRequest = acquireSharedRequest(
+    const dataRequest = acquireSharedRequest(
       port,
       `cost-overview:${scopeKey}:${request.timeRange}:${refreshChannel}:r${revision}`,
-      async (signal) => {
-        const [data, refreshPolicy] = await Promise.all([
-          port.getOverview(canonicalRequest, signal),
-          port.loadRefreshPolicy(refreshChannel, signal),
-        ]);
-        return { data, refreshPolicy };
-      },
+      (signal) => port.getOverview(canonicalRequest, signal),
     );
-    void sharedRequest.promise.then(
-      ({ data, refreshPolicy }) => {
+    const policyRequest = acquireSharedRequest(
+      port,
+      `cost-refresh-policy:${refreshChannel}`,
+      (signal) => port.loadRefreshPolicy(refreshChannel, signal),
+    );
+    void dataRequest.promise.then(
+      (data) => {
         if (!active) return;
+        dataSucceeded = true;
         setFrame(asyncResourceSuccess(data));
-        refreshController.acceptSuccess(refreshPolicy);
+        acceptRefreshPolicy();
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
@@ -77,9 +85,19 @@ export function useCostOverview(
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
+    void policyRequest.promise.then(
+      (policy) => {
+        refreshPolicy = policy;
+        acceptRefreshPolicy();
+      },
+      (error: unknown) => {
+        if (active && !isAbortError(error)) refreshController.backgroundFailure();
+      },
+    );
     return () => {
       active = false;
-      sharedRequest.release();
+      dataRequest.release();
+      policyRequest.release();
     };
   }, [
     canonicalRequest,
