@@ -185,6 +185,7 @@ describe("HelmPage", () => {
       },
       commands: availableUpgradeCommands(),
     });
+    port.listReleaseVersions.mockResolvedValue(redisUpgradeVersions());
     const store = {
       start: vi.fn(),
       subscribe: vi.fn(() => () => undefined),
@@ -218,6 +219,29 @@ describe("HelmPage", () => {
     await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(2));
     await vi.advanceTimersByTimeAsync(1_200);
     await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(3));
+  });
+
+  it("does not expose an upgrade when the authorized source lacks the server target", async () => {
+    const port = helmPort();
+    port.getRelease.mockResolvedValue({
+      ...detail(),
+      release: {
+        ...release(),
+        chart: "redis",
+        chartVersion: "22.0.0",
+        chartReasonCodes: [],
+      },
+      commands: availableUpgradeCommands(),
+    });
+    port.listReleaseVersions.mockResolvedValue({
+      ...redisUpgradeVersions(),
+      versions: [{ version: "22.0.0", appVersion: null, deprecated: false }],
+    });
+
+    renderRoute("/helm/detail/cluster-a/sandbox/storefront", port);
+
+    expect(await screen.findByRole("heading", { name: "storefront" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
   });
 
   it("maps known and unknown coverage reasons to safe copy", async () => {
@@ -737,6 +761,32 @@ function availableUpgradeCommands() {
         allowedValues: [],
       }],
     }],
+  };
+}
+
+function redisUpgradeVersions() {
+  return {
+    availability: "available" as const,
+    chartName: "redis",
+    currentVersion: "22.0.0",
+    source: {
+      id: "source-redis",
+      provider: "repository" as const,
+      name: "Redis stable",
+      reference: "https://charts.example.test/stable",
+      status: "active" as const,
+      actions: [],
+      credentialsConfigured: false,
+      observedAt: "2026-07-17T00:00:00Z",
+    },
+    versions: [
+      { version: "23.1.1", appVersion: null, deprecated: false },
+      { version: "22.0.0", appVersion: null, deprecated: false },
+    ],
+    observedAt: "2026-07-17T00:01:00Z",
+    truncated: false,
+    reasonCodes: [],
+    refreshAfterSeconds: 10,
   };
 }
 

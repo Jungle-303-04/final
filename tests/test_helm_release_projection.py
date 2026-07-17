@@ -153,6 +153,22 @@ def test_release_chart_identity_fails_closed_for_conflicting_owned_resource_labe
     assert body["releases"][0]["chart_reason_codes"] == ["helm_chart_identity_ambiguous"]
 
 
+def test_release_chart_identity_never_guesses_when_the_label_has_multiple_semver_splits() -> None:
+    body = helm_release_list(
+        [_row()],
+        contexts=_contexts("cluster-a"),
+        agent_statuses=_online_agents("cluster-a"),
+        selected_cluster_ids=("cluster-a",),
+        owned_resource_rows=[
+            _owned_row(chart_label="storefront-1.2.3-plugin-2.0.0"),
+        ],
+    ).model_dump(mode="json")
+
+    assert body["releases"][0]["chart"] is None
+    assert body["releases"][0]["chart_version"] is None
+    assert body["releases"][0]["chart_reason_codes"] == ["helm_chart_identity_invalid"]
+
+
 def test_incomplete_label_collection_is_partial_so_empty_result_is_not_misleading() -> None:
     contexts = _contexts("cluster-a")
     contexts["cluster-a"]["labels_complete"] = False

@@ -190,6 +190,8 @@ class HelmUpgradeDb(HelmReleaseDb):
             Permission.DEPLOY_RUN.value,
         }:
             return {"cluster-a"}
+        if resource_type == "helm_chart_source" and permission == Permission.CATALOG_READ.value:
+            return {"source-redis"}
         return set()
 
     def list_helm_storage_observations(
@@ -223,7 +225,34 @@ class HelmUpgradeDb(HelmReleaseDb):
         rows = [dict(row) for row in batch.rows]
         rows[0]["namespace"] = "sandbox"
         rows[0]["release_namespace"] = "sandbox"
+        rows[0]["chart_label"] = "redis-22.0.0"
         return HelmOwnedResourceObservationBatch(rows=tuple(rows), truncated=False)
+
+    def list_helm_chart_source_records(
+        self,
+        *,
+        workspace_id: str,
+        source_ids: set[str] | None,
+        limit: int,
+    ) -> SimpleNamespace:
+        assert workspace_id == "workspace-a"
+        assert source_ids == {"source-redis"}
+        assert limit > 0
+        return SimpleNamespace(
+            rows=(
+                {
+                    "source_id": "source-redis",
+                    "workspace_id": "workspace-a",
+                    "provider": "repository",
+                    "name": "redis-stable",
+                    "canonical_ref": "https://charts.example.test/stable",
+                    "credential_ref": None,
+                    "status": "active",
+                    "updated_at": datetime(2026, 7, 17, tzinfo=UTC),
+                },
+            ),
+            truncated=False,
+        )
 
     def list_cluster_agent_statuses(
         self,
@@ -321,6 +350,29 @@ class HelmUpgradeInfoProvider:
             versions=(
                 HelmChartVersion(version="2.0.0"),
                 HelmChartVersion(version="1.2.3"),
+            ),
+            observed_at="2026-07-17T00:01:00+00:00",
+        )
+
+
+class HelmUpgradeProvider:
+    async def fetch_versions(
+        self,
+        source: HelmChartSource,
+        chart_name: str,
+        *,
+        credential: object = None,
+    ) -> HelmChartVersionObservation:
+        assert source.source_id == "source-redis"
+        assert chart_name == "redis"
+        assert credential is None
+        return HelmChartVersionObservation(
+            source=source,
+            chart_name=chart_name,
+            availability="available",
+            versions=(
+                HelmChartVersion(version="23.1.1"),
+                HelmChartVersion(version="22.0.0"),
             ),
             observed_at="2026-07-17T00:01:00+00:00",
         )
@@ -549,8 +601,7 @@ def test_release_detail_exposes_only_the_real_agent_upgrade_with_server_inputs()
     assert commands["actions"] == ["upgrade"]
     assert commands["confirmation_required"] is True
     assert commands["realtime"] is True
-    assert commands["upgrade_targets"]
-    assert commands["upgrade_targets"][0]["item_id"].startswith("catalog-")
+    assert [target["item_id"] for target in commands["upgrade_targets"]] == ["catalog-redis"]
     assert commands["upgrade_targets"][0]["inputs"]
     assert "package_ref" not in response.text
     assert "chart_digest" not in response.text
@@ -595,6 +646,7 @@ def test_release_upgrade_reuses_the_real_catalog_agent_command_and_audit_receipt
             db=HelmUpgradeDb(),
             events=SimpleNamespace(),
             operation_events=SimpleNamespace(),
+            provider=HelmUpgradeProvider(),
         )
     )
 
@@ -648,6 +700,7 @@ def test_release_upgrade_fails_closed_for_a_stale_revision_before_command_accept
                 db=HelmUpgradeDb(),
                 events=SimpleNamespace(),
                 operation_events=SimpleNamespace(),
+                provider=HelmUpgradeProvider(),
             )
         )
 
@@ -685,8 +738,52 @@ def test_release_upgrade_rejects_unknown_values_before_command_acceptance(monkey
                 db=HelmUpgradeDb(),
                 events=SimpleNamespace(),
                 operation_events=SimpleNamespace(),
+                provider=HelmUpgradeProvider(),
             )
         )
 
     assert captured.value.status_code == 422
     assert captured.value.detail == "Helm release upgrade recipe is invalid"
+
+
+def test_release_upgrade_rejects_a_recipe_for_a_different_observed_chart(
+    monkeypatch,
+) -> None:
+    async def unexpected_accept(*_args, **_kwargs):
+        raise AssertionError("an incompatible chart must not queue an agent command")
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        unexpected_accept,
+    )
+
+    with pytest.raises(HTTPException) as captured:
+        asyncio.run(
+            create_helm_release_upgrade(
+                namespace="sandbox",
+                release_name="storefront",
+                payload=HelmReleaseUpgradeRequest(
+                    cluster_id="cluster-a",
+                    expected_revision=3,
+                    catalog_item_id="catalog-postgresql",
+                    catalog_version="1.0.0",
+                    values={
+                        "auth.database": "storefront",
+                        "primary.persistence.storageClass": "gp3",
+                    },
+                    confirmation=True,
+                ),
+                current=SimpleNamespace(
+                    user_id="user-a",
+                    workspace_id="workspace-a",
+                    roles=("user",),
+                ),
+                db=HelmUpgradeDb(),
+                events=SimpleNamespace(),
+                operation_events=SimpleNamespace(),
+                provider=HelmUpgradeProvider(),
+            )
+        )
+
+    assert captured.value.status_code == 409
+    assert captured.value.detail == "Helm release chart does not match the selected upgrade"
