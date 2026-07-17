@@ -1690,7 +1690,7 @@
       }
     },
     "reference.feature.113": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ClusterSummaryDetailResponse",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
@@ -1703,18 +1703,25 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
           "consumer": "src/domains/dashboard/fleet_router.py#build_cluster_summary_detail",
-          "reason": "The normalized Python endpoints provide authorized health, workload, warning, incident, usage, Node, and Pod sections, but not the complete monolithic topology, traffic, posture, and deferred-loading response.",
+          "reason": "The normalized Python boundary deliberately decomposes the source monolith into authorized cluster summary, insights, Node, Pod, relation, Traffic, and Checks contracts. Each section owns scope, completeness, observation time, and failure without coupling healthy data to an unavailable provider; optional provider bands remain independently tracked by their own feature rows.",
           "test": "tests/test_fleet_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/home/useHomeClusterFrame.ts#useHomeClusterFrame",
           "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "Home preserves last-success, partial failure, forbidden access, and scope generation per section, while provider-specific dashboard sections remain unavailable.",
+          "reason": "One Home adapter and frame compose independent strict sections, preserve last success through partial failure, reject stale cluster and refresh generations, report forbidden access once, and follow the server-owned refresh policy instead of recreating a browser dashboard object.",
           "test": "frontend/src/pages/home/useHomePageState.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#subscribeDashboardInvalidations",
+          "reason": "Durable snapshot state remains replay authority while the bounded deferred-ready and heartbeat stream only invalidates the matching active cluster generation.",
+          "test": "frontend/src/features/home/createHomeAdapter.stream.test.ts"
         }
       }
     },

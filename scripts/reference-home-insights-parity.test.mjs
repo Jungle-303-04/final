@@ -30,10 +30,12 @@ const IMPLEMENTED = new Set([
   "reference.feature.042",
   "reference.feature.063",
   "reference.feature.065",
+  "reference.feature.113",
   "reference.feature.114",
   "reference.feature.115",
   "reference.feature.116",
   "reference.feature.117",
+  "reference.feature.118",
   "reference.feature.119",
   "reference.feature.120",
   "reference.feature.121",
@@ -203,4 +205,26 @@ test("workspace audit findings reuse the outbound Agent Checks projection", asyn
   assert.match(checksProjection, /source\.get\("checks_observation"\)/u);
   assert.match(checksPage, /alertEventResourceHref/u);
   assert.doesNotMatch(checksRouter, /\/audit/u);
+});
+
+test("dashboard source response is normalized into independent Home sections", async () => {
+  const [ports, adapter, frame, responses] = await Promise.all([
+    readJson("docs/migration/reference-feature-port-map.json"),
+    readText("frontend/src/features/home/createHomeAdapter.ts"),
+    readText("frontend/src/pages/home/useHomeClusterFrame.ts"),
+    readText("src/packages/contracts/gateway/responses.py"),
+  ]);
+  const port = ports.features["reference.feature.113"];
+
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(port.coverage.realtime.state, "implemented");
+  assert.match(adapter, /loadClusterOverview\(clusterId, signal\)/u);
+  assert.match(adapter, /loadInsights\(clusterId, signal\)/u);
+  assert.match(adapter, /loadNodes\(clusterId, signal\)/u);
+  assert.match(adapter, /loadNodePods\(clusterId, nodeName, signal\)/u);
+  assert.match(frame, /resourceFailure\(currentSection, failure\)/u);
+  assert.match(frame, /isCurrentFrame\(current, scopeKey, revision\)/u);
+  assert.match(responses, /class ClusterSummaryDetailResponse\(StrictModel\):/u);
 });

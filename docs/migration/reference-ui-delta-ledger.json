@@ -9620,7 +9620,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product reuses smaller authorized Python projections and one Home adapter rather than duplicating the source monolithic dashboard response."
+            "rationale": "The product reuses smaller authorized Python projections and one Home adapter rather than duplicating the source monolithic dashboard response; section-scoped last-success, failure, freshness, generation, and deferred-ready semantics are now covered by contract and interaction tests."
           }
         },
         {
