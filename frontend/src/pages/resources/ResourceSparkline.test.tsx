@@ -86,7 +86,11 @@ describe("ResourceSparkline", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("button", { name: /CPU trend/u }).className)
-      .toContain("h-7");
+    const measured = screen.getByRole("button", { name: /CPU trend/u });
+    const measuredClasses = measured.className.split(/\s+/u);
+
+    expect(measuredClasses).toContain("h-7");
+    expect(measuredClasses).toContain("flex");
+    expect(measuredClasses).not.toContain("inline-flex");
   });
 });

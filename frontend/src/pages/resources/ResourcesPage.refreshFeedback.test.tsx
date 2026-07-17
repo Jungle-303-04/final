@@ -71,9 +71,17 @@ describe("ResourcesPage refresh feedback", () => {
 
     const row = document.querySelector('[data-slot="resources-status-row"]');
     expect(row).toBeTruthy();
-    expect(row?.className).toContain("min-h-8");
+    const rowClasses = row?.className.split(/\s+/u) ?? [];
+    expect(rowClasses).toContain("h-8");
+    expect(rowClasses).not.toContain("min-h-8");
     expect(row?.className).toContain("flex-nowrap");
     expect(row?.className).not.toContain("flex-wrap");
+
+    const fallback = row?.querySelector('[data-slot="resources-polling-fallback"]');
+    const fallbackClasses = fallback?.className.split(/\s+/u) ?? [];
+    expect(fallback).toBeTruthy();
+    expect(fallbackClasses).toContain("h-8");
+    expect(fallbackClasses).toContain("shrink-0");
   });
 });
 

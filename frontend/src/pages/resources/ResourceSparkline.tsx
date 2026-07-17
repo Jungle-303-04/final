@@ -31,7 +31,7 @@ export function ResourceSparkline({
   return (
     <Button
       aria-label={`${t("resources.table.openDetail", { name })}: ${t("resources.table.trend")}`}
-      className="h-7 w-24 px-0"
+      className="flex h-7 w-24 px-0"
       onClick={() => onOpen(identity)}
       title={series.completeness === "exact" ? undefined : t("common.state.partial")}
       type="button"
