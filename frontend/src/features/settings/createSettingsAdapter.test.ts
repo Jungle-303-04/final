@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSettingsAdapter } from "./createSettingsAdapter";
 
 describe("createSettingsAdapter", () => {
-  it("maps server-owned permission decisions and unavailable evidence", async () => {
+  it("maps product decisions and observed cluster-agent execution access", async () => {
     const adapter = createSettingsAdapter({
       getSettingsAccessProfile: vi.fn().mockResolvedValue({
         workspace_id: "workspace-a",
@@ -13,14 +13,36 @@ describe("createSettingsAdapter", () => {
         authority: "opsia_rbac",
         permissions: [{ permission: "cluster.read", category: "cluster", allowed: true }],
         kubernetes_rules: {
-          status: "unavailable",
-          reason_code: "subject_identity_not_delegated",
-          detail: "No delegated Kubernetes subject.",
+          status: "observed",
+          authority: "cluster_agent_service_account",
+          namespace: "shop",
+          observed_at: "2026-07-17T00:00:00Z",
+          subject: { kind: "ServiceAccount", namespace: "agent-system", name: "cluster-agent" },
+          resource_rules: [{
+            verbs: ["get", "list"],
+            api_groups: [""],
+            resources: ["pods"],
+            resource_names: [],
+            non_resource_urls: [],
+          }],
+          non_resource_rules: [],
+          truncated: false,
         },
         restricted_resource_types: {
-          status: "unavailable",
-          reason_code: "visibility_cause_not_observed",
-          detail: "No denial-cause observation.",
+          status: "observed",
+          authority: "cluster_agent_service_account",
+          namespace: "shop",
+          observed_at: "2026-07-17T00:00:00Z",
+          completeness: "exact",
+          reason_codes: [],
+          items: [{
+            api_group: "apps",
+            version: "v1",
+            resource: "deployments",
+            kind: "Deployment",
+            namespaced: true,
+            reason_code: "list_permission_not_observed",
+          }],
         },
         revision: "a".repeat(64),
       }),
@@ -36,14 +58,36 @@ describe("createSettingsAdapter", () => {
       authority: "opsia_rbac",
       permissions: [{ permission: "cluster.read", category: "cluster", allowed: true }],
       kubernetesRules: {
-        status: "unavailable",
-        reasonCode: "subject_identity_not_delegated",
-        detail: "No delegated Kubernetes subject.",
+        status: "observed",
+        authority: "cluster_agent_service_account",
+        namespace: "shop",
+        observedAt: "2026-07-17T00:00:00Z",
+        subject: { kind: "ServiceAccount", namespace: "agent-system", name: "cluster-agent" },
+        resourceRules: [{
+          verbs: ["get", "list"],
+          apiGroups: [""],
+          resources: ["pods"],
+          resourceNames: [],
+          nonResourceUrls: [],
+        }],
+        nonResourceRules: [],
+        truncated: false,
       },
       restrictedResourceTypes: {
-        status: "unavailable",
-        reasonCode: "visibility_cause_not_observed",
-        detail: "No denial-cause observation.",
+        status: "observed",
+        authority: "cluster_agent_service_account",
+        namespace: "shop",
+        observedAt: "2026-07-17T00:00:00Z",
+        completeness: "exact",
+        reasonCodes: [],
+        items: [{
+          apiGroup: "apps",
+          version: "v1",
+          resource: "deployments",
+          kind: "Deployment",
+          namespaced: true,
+          reasonCode: "list_permission_not_observed",
+        }],
       },
       revision: "a".repeat(64),
     });

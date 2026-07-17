@@ -58,7 +58,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("heading", { name: "Prometheus" })).toBeTruthy();
   });
 
-  it("renders server-owned access decisions and never fabricates Kubernetes rules", async () => {
+  it("renders product decisions beside observed cluster-agent execution access", async () => {
     renderSettings("/settings?clusters=cluster-1#profile");
 
     expect(await screen.findByText("현재 권한 주체")).toBeTruthy();
@@ -68,10 +68,14 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("combobox", { name: "네임스페이스 범위" }).textContent)
       .toContain("shop");
     expect(screen.getByText("Kubernetes 사용자 규칙")).toBeTruthy();
-    expect(screen.getByText("The signed-in product identity is not delegated to Kubernetes."))
-      .toBeTruthy();
-    expect(screen.getByText("The missing-resource cause is not observed.")).toBeTruthy();
-    expect(settingsPort.getAccessProfile).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
+    expect(screen.getByText("cluster-agent")).toBeTruthy();
+    expect(screen.getByText("get, list")).toBeTruthy();
+    expect(screen.getByText("Deployment")).toBeTruthy();
+    expect(settingsPort.getAccessProfile).toHaveBeenCalledWith(
+      "cluster-1",
+      "shop",
+      expect.any(AbortSignal),
+    );
     expect(shellStatePort.getNamespaceScope).toHaveBeenCalledWith(
       "cluster-1",
       expect.any(AbortSignal),
@@ -160,14 +164,36 @@ const settingsPort: SettingsPort = {
       { permission: "pod.exec", category: "pod", allowed: false },
     ],
     kubernetesRules: {
-      status: "unavailable",
-      reasonCode: "subject_identity_not_delegated",
-      detail: "The signed-in product identity is not delegated to Kubernetes.",
+      status: "observed",
+      authority: "cluster_agent_service_account",
+      namespace: "shop",
+      observedAt: "2026-07-17T00:00:00Z",
+      subject: { kind: "ServiceAccount", namespace: "agent-system", name: "cluster-agent" },
+      resourceRules: [{
+        verbs: ["get", "list"],
+        apiGroups: [""],
+        resources: ["pods"],
+        resourceNames: [],
+        nonResourceUrls: [],
+      }],
+      nonResourceRules: [],
+      truncated: false,
     },
     restrictedResourceTypes: {
-      status: "unavailable",
-      reasonCode: "visibility_cause_not_observed",
-      detail: "The missing-resource cause is not observed.",
+      status: "observed",
+      authority: "cluster_agent_service_account",
+      namespace: "shop",
+      observedAt: "2026-07-17T00:00:00Z",
+      completeness: "exact",
+      reasonCodes: [],
+      items: [{
+        apiGroup: "apps",
+        version: "v1",
+        resource: "deployments",
+        kind: "Deployment",
+        namespaced: true,
+        reasonCode: "list_permission_not_observed",
+      }],
     },
     revision: "a".repeat(64),
   }),

@@ -4,6 +4,7 @@ import pytest
 
 from domains.resource_access.projection import (
     ResourceAccessUnavailable,
+    agent_execution_access_projection,
     namespace_access_projection,
     resource_access_projection,
     role_access_projection,
@@ -193,3 +194,111 @@ def test_partial_access_snapshot_fails_closed() -> None:
             namespace="shop",
             name="checkout",
         )
+
+
+def test_agent_execution_projection_resolves_subject_and_namespace_capabilities() -> None:
+    inventory = {
+        "agent_id": "checkout-7d9",
+        "summary": {
+            "summary": {
+                "resource_access": exact_access_snapshot(),
+                "api_resource_discovery": {
+                    "observed_at": "2026-07-17T00:00:00+00:00",
+                    "completeness": "exact",
+                    "reason_codes": [],
+                    "resources": [
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "pods",
+                            "singular_name": "pod",
+                            "kind": "Pod",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list", "watch"],
+                        },
+                        {
+                            "group": "apps",
+                            "version": "v1",
+                            "api_version": "apps/v1",
+                            "name": "deployments",
+                            "singular_name": "deployment",
+                            "kind": "Deployment",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list", "watch"],
+                        },
+                    ],
+                },
+            }
+        },
+    }
+
+    result = agent_execution_access_projection(inventory, namespace="shop")
+
+    assert result.subject.model_dump() == {
+        "kind": "ServiceAccount",
+        "namespace": "shop",
+        "name": "checkout",
+    }
+    assert result.namespace == "shop"
+    assert {tuple(rule.verbs) for rule in result.resource_rules} == {
+        ("get", "list"),
+        ("get",),
+    }
+    assert [item.resource for item in result.restricted_resource_types] == ["deployments"]
+    assert result.completeness == "exact"
+
+
+def test_agent_execution_projection_does_not_reuse_other_namespace_role_bindings() -> None:
+    inventory = {
+        "agent_id": "checkout-7d9",
+        "summary": {
+            "summary": {
+                "resource_access": exact_access_snapshot(),
+                "api_resource_discovery": {
+                    "observed_at": "2026-07-17T00:00:00+00:00",
+                    "completeness": "exact",
+                    "reason_codes": [],
+                    "resources": [
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "pods",
+                            "singular_name": "pod",
+                            "kind": "Pod",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list", "watch"],
+                        }
+                    ],
+                },
+            }
+        },
+    }
+
+    result = agent_execution_access_projection(inventory, namespace="team-a")
+
+    assert [item.resource for item in result.restricted_resource_types] == ["pods"]
+
+
+def test_agent_execution_projection_requires_agent_pod_identity() -> None:
+    inventory = {
+        "agent_id": "different-agent-pod",
+        "summary": {
+            "summary": {
+                "resource_access": exact_access_snapshot(),
+                "api_resource_discovery": {
+                    "observed_at": "2026-07-17T00:00:00+00:00",
+                    "completeness": "exact",
+                    "reason_codes": [],
+                    "resources": [],
+                },
+            }
+        },
+    }
+
+    with pytest.raises(ResourceAccessUnavailable, match="agent execution subject"):
+        agent_execution_access_projection(inventory, namespace="shop")
