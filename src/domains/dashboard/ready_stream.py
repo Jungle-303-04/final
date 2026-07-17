@@ -204,7 +204,7 @@ def _scope_key(workspace_id: str, cluster_id: str) -> tuple[str, str]:
 def dashboard_ready_heartbeat_seconds() -> float:
     return _bounded_number(
         DASHBOARD_READY_HEARTBEAT_SECONDS_ENV,
-        default="15",
+        default="30",
         minimum=1,
         maximum=60,
     )

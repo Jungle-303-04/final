@@ -1,3 +1,9 @@
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
+import type {
+  ClusterScope,
+  ScopeTransitionOperationEvent,
+} from "../../shared/parity/referenceParity";
+
 export type HomeHealthTone =
   | "healthy"
   | "warning"
@@ -244,6 +250,7 @@ export interface HomeDashboardInvalidation {
 }
 
 export interface HomeDashboardInvalidationSubscription {
+  onScopeOperation?: (event: ScopeTransitionOperationEvent) => void;
   signal?: AbortSignal;
 }
 
@@ -280,8 +287,7 @@ export interface HomePort {
     signal?: AbortSignal,
   ): Promise<HomePodCollection>;
   subscribeDashboardInvalidations(
-    clusterId: string,
+    scope: ClusterScope,
     subscription?: HomeDashboardInvalidationSubscription,
   ): AsyncIterable<HomeDashboardInvalidation>;
 }
-import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";

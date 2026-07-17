@@ -591,6 +591,77 @@
         "frontend": {"state": "implemented", "destination": "frontend/src/app/composition/surfaces/resources.ts#loadResourcesSurface", "consumer": "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts#usePhysicalTopologyRealtime", "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"}
       }
     },
+    "reference.feature.061": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts#ScopeTransitionOperationEvent",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_home_dashboard_ready_stream.py",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "scripts/reference-realtime-context-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "src/domains/dashboard/ready_stream.py#dashboard_ready_heartbeat_seconds",
+          "reason": "The authenticated Python stream validates workspace and cluster access before emitting a scope-bound connected frame; the product never changes an in-process kube-context or contacts Kubernetes directly.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The single global scope owner projects connecting and reconnecting phases as progress OperationEvent semantics and keeps stable layout state while the authenticated replacement scope connects.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/home/createHomeAdapter.ts#scopeReconnectDelayMs",
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "reason": "Initial and resumed failures use the existing scope stream with a 3-second 1.5x reconnect bounded at 30 seconds; no second EventSource is created per screen.",
+          "test": "frontend/src/features/home/createHomeAdapter.stream.test.ts"
+        }
+      }
+    },
+    "reference.feature.062": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts#ClusterScopeValue",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_home_dashboard_ready_stream.py",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/pages/home/useHomePageState.test.tsx",
+        "scripts/reference-realtime-context-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "src/domains/dashboard/ready_stream.py#DashboardReadyCursorBinding",
+          "reason": "The signed cursor binds user, authorization revision, workspace, and cluster so a prior context cannot resume into a replacement authority.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "consumer": "frontend/src/pages/home/useHomePageState.ts#useHomePageState",
+          "reason": "The completed context event advances the selected scope authority; the previous AbortSignal is closed, late operations are discarded, and one shared invalidation revision refreshes consumers without retaining stale cache state.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/api/home-dashboard-events.ts#subscribeHomeDashboardEvents",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "Every frame is strict-decoded and must match the requested workspace and cluster before it can rotate or invalidate the active browser authority.",
+          "test": "frontend/src/features/home/createHomeAdapter.stream.test.ts"
+        }
+      }
+    },
     "reference.feature.063": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
@@ -5066,7 +5137,7 @@
       }
     },
     "reference.feature.224": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.runtime.operation_events",
       "frontendContract": "frontend/src/shared/streaming",
       "desktopContract": null,
@@ -5076,29 +5147,32 @@
         "tests/test_timeline_sse_router.py",
         "frontend/src/api/operation-events.test.ts",
         "frontend/src/api/timeline.test.ts",
-        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "scripts/reference-realtime-context-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/command/router.py#command_events",
-          "consumer": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
-          "reason": "Durable command events, retained timeline SSE, and typed topology resync are implemented as scoped streams; namespace context changes remain transactional responses rather than a separate progress stream.",
-          "test": "tests/test_operation_event_hub.py"
+          "state": "implemented",
+          "destination": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
+          "consumer": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "reason": "Python serves existing purpose-scoped operation, timeline, topology, and dashboard streams. Context progress is normalized onto the authenticated dashboard scope lifecycle rather than recreating the upstream direct Kubernetes broadcaster.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
-          "reason": "The browser resumes exact operation and timeline cursors and resynchronizes topology without a mixed global event store; context-switch progress is not yet streamed.",
-          "test": "frontend/src/api/operation-events.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "One scope owner reuses the shared SSE parser and maps connected, reconnecting, deferred-ready, and heartbeat behavior onto OperationEvent progress/completed semantics plus scoped cache invalidation.",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
         },
         "realtime": {
           "state": "implemented",
           "destination": "frontend/src/shared/streaming/sse.ts#parseSseFrames",
-          "consumer": "src/packages/runtime/operation_events.py#RedisOperationEventBroker",
-          "reason": "All implemented streams share bounded parsing, durable ordering or typed resync, reconnect policy, and render coalescing instead of per-feature ad hoc loops.",
-          "test": "frontend/src/api/operation-events.test.ts"
+          "consumer": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#useScopeRealtime",
+          "reason": "All live surfaces share strict frame parsing, durable replay or typed resync, a 30-second heartbeat, bounded reconnect, obsolete authority abort, and render-coalesced consumers instead of per-feature ad hoc loops.",
+          "test": "scripts/reference-realtime-context-parity.test.mjs"
         }
       }
     },

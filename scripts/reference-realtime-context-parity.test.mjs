@@ -9,7 +9,11 @@ const CONTRACT_IDS = [
   "reference.feature.062",
   "reference.feature.224",
 ];
-const SOURCE_KEY = "upstream-ui:events:scoped:durable-streams:v1";
+const SOURCE_KEYS = {
+  "reference.feature.061": "upstream-ui:events:context-switch-progress:scoped-operation:v1",
+  "reference.feature.062": "upstream-ui:events:context-changed:authority-rotation:v1",
+  "reference.feature.224": "upstream-ui:events:scoped:durable-streams:v1",
+};
 const SOURCE_EVIDENCE = [
   {
     path: "web/src/hooks/useEventSource.ts",
@@ -33,29 +37,36 @@ async function sourceSha256(relativePath) {
 }
 
 test("realtime context 기능은 frozen 원본의 exact identity를 공유한다", async () => {
-  const [aliases, identities, sourceLedger, featureLedger] = await Promise.all([
+  const [aliases, identities, classifications, sourceLedger, featureLedger] = await Promise.all([
     readJson("docs/migration/reference-feature-source-aliases.json"),
     readJson("docs/migration/reference-feature-source-identities.json"),
+    readJson("docs/migration/reference-ui-delta-classifications.json"),
     readJson("docs/migration/reference-source-ledger.json"),
     readJson("docs/migration/reference-feature-ledger.json"),
   ]);
 
   for (const contractId of CONTRACT_IDS) {
-    assert.equal(aliases.aliases[contractId], SOURCE_KEY);
+    const sourceKey = SOURCE_KEYS[contractId];
+    assert.equal(aliases.aliases[contractId], sourceKey);
     const feature = featureLedger.features.find(
       (candidate) => candidate.contractId === contractId,
     );
-    assert.equal(feature?.sourceKey, SOURCE_KEY);
+    assert.equal(feature?.sourceKey, sourceKey);
     assert.equal(feature?.identityStatus, "source-key");
     assert.equal(feature?.deliveryStatus, "implemented");
   }
   const identitiesForSource = identities.identities.filter(
-    (candidate) => candidate.sourceKey === SOURCE_KEY,
+    (candidate) => CONTRACT_IDS.includes(candidate.legacyContractId),
   );
-  assert.equal(identitiesForSource.length, CONTRACT_IDS.length);
+  assert.equal(identitiesForSource.length, 2);
   for (const identity of identitiesForSource) {
+    assert.equal(identity.sourceKey, SOURCE_KEYS[identity.legacyContractId]);
     assert.deepEqual(identity.evidence, SOURCE_EVIDENCE);
   }
+  const eventStreamOwner = classifications.classifications["web/src/hooks/useEventSource.ts"]
+    .interactions.find((interaction) => interaction.sourceKey === SOURCE_KEYS["reference.feature.224"]);
+  assert.deepEqual(eventStreamOwner?.legacyContractIds, ["reference.feature.224"]);
+  assert.equal(eventStreamOwner?.opsiaPort.state, "in_progress");
 
   const sourceFiles = new Map(sourceLedger.files.map((file) => [file.path, file]));
   for (const evidence of SOURCE_EVIDENCE) {

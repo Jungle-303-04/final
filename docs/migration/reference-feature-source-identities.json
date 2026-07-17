@@ -74,6 +74,40 @@
       "interaction": "The product preserves its bounded log and operation dock, existing Agent-backed exec lifecycle, and native local-terminal and port-forward owners; one browser registry projects live counts before a cluster-scope change because those sessions are distributed rather than owned by a single Python process."
     },
     {
+      "sourceKey": "upstream-ui:events:context-switch-progress:scoped-operation:v1",
+      "legacyContractId": "reference.feature.061",
+      "evidence": [
+        {
+          "path": "web/src/hooks/useEventSource.ts",
+          "sha256": "6a6e8e36d16083045264a87f8a75c443181ddbd40f6a118f47e37bf6404b488a",
+          "symbol": "useEventSource"
+        },
+        {
+          "path": "internal/server/sse.go",
+          "sha256": "885e7ece397603b1283036adcb8faaff7db7b95382bc75c31141407582d879ed",
+          "symbol": "registerContextSwitchCallback"
+        }
+      ],
+      "interaction": "The upstream single-process Kubernetes context progress callback is normalized into the authenticated workspace and cluster scope stream. Its connection lifecycle uses OperationEvent progress/completed semantics without mutating a server kube-context or opening a direct cluster connection."
+    },
+    {
+      "sourceKey": "upstream-ui:events:context-changed:authority-rotation:v1",
+      "legacyContractId": "reference.feature.062",
+      "evidence": [
+        {
+          "path": "web/src/hooks/useEventSource.ts",
+          "sha256": "6a6e8e36d16083045264a87f8a75c443181ddbd40f6a118f47e37bf6404b488a",
+          "symbol": "useEventSource"
+        },
+        {
+          "path": "internal/server/sse.go",
+          "sha256": "885e7ece397603b1283036adcb8faaff7db7b95382bc75c31141407582d879ed",
+          "symbol": "registerContextSwitchCallback"
+        }
+      ],
+      "interaction": "A completed authenticated scope hand-off rotates the browser authority epoch, aborts the superseded stream, invalidates the selected scope revision, and accepts only frames whose workspace and cluster match the active outbound-Agent authority."
+    },
+    {
       "sourceKey": "upstream-ui:bootstrap:health:runtime-diagnostics:v1",
       "legacyContractId": "reference.feature.089",
       "evidence": [

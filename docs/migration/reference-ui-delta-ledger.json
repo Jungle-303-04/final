@@ -10059,46 +10059,6 @@
           }
         },
         {
-          "sourceKey": "upstream-ui:events:scoped:durable-streams:v1",
-          "legacyContractIds": [
-            "reference.feature.224"
-          ],
-          "symbol": "global events stream and reconnect policy",
-          "interaction": "browser live updates are decomposed into authenticated topology, retained timeline, and command-operation streams with explicit scope, replay, reconnect, and render-coalescing contracts",
-          "transport": "sse",
-          "realtime": {
-            "resume": "timeline and command streams resume from durable cursors while topology performs a typed resync after sequence loss",
-            "backpressure": "bounded queues, negotiated frame rates, server replay limits, and animation-frame notification coalescing prevent unbounded paint work",
-            "merge": "each stream applies only records whose workspace, cluster, resource, query, and command identities match its active subscription"
-          },
-          "motion": null,
-          "opsiaPort": {
-            "destinations": [
-              "frontend/src/api/timeline.ts",
-              "frontend/src/api/operation-events.ts",
-              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
-              "frontend/src/features/operations/OperationStatusStore.tsx",
-              "src/domains/timeline/router.py",
-              "src/domains/command/router.py",
-              "src/services/realtime/realtime-gateway/app.py"
-            ],
-            "requiredBackendContracts": [
-              "packages.contracts.timeline",
-              "packages.contracts.parity",
-              "packages.contracts.realtime",
-              "packages.runtime.operation_events"
-            ],
-            "plannedTestIds": [
-              "events.timeline.resume",
-              "events.operation.resume",
-              "events.topology.resync"
-            ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The product reuses stronger domain-scoped streams instead of one mixed global EventSource. Timeline, topology, and audited operation delivery are implemented; a context-switch progress stream is still represented by transactional shell-state completion rather than a separate live channel."
-          }
-        },
-        {
           "sourceKey": "upstream-ui:rightsizing:client-contract:observed-scan-fields:v1",
           "legacyContractIds": [],
           "symbol": "rightsizing row, scan coverage, provenance, confidence, fit, and cache policy",
@@ -16409,6 +16369,55 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The source delta is limited to connecting lifecycle semantics. Opsia deliberately uses its authenticated typed WebSocket gateway rather than the source EventSource runtime, preserving a stricter negotiated policy, resync, and scope model."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:events:scoped:durable-streams:v1",
+          "legacyContractIds": [
+            "reference.feature.224"
+          ],
+          "symbol": "useEventSource global events stream and reconnect policy",
+          "interaction": "browser live updates are decomposed into authenticated operation, timeline, topology, and one shared scope stream with explicit authority, replay, reconnect, and render-coalescing contracts",
+          "transport": "sse",
+          "realtime": {
+            "resume": "timeline and command streams resume from durable cursors, topology performs a typed resync, and the shared scope stream resumes its authorization-bound snapshot cursor",
+            "backpressure": "bounded queues, server replay limits, one scope owner, and animation-frame notification coalescing prevent duplicate streams and unbounded paint work",
+            "merge": "each stream applies only records whose workspace, cluster, resource, query, command, and active authority epoch match its subscription"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.ts",
+              "frontend/src/api/operation-events.ts",
+              "frontend/src/api/home-dashboard-events.ts",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
+              "src/domains/timeline/router.py",
+              "src/domains/command/router.py",
+              "src/domains/dashboard/fleet_router.py",
+              "src/domains/dashboard/ready_stream.py",
+              "src/packages/runtime/operation_events.py",
+              "src/services/realtime/realtime-gateway/app.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "packages.contracts.parity",
+              "packages.contracts.realtime",
+              "packages.contracts.freshness",
+              "packages.runtime.operation_events"
+            ],
+            "plannedTestIds": [
+              "events.timeline.resume",
+              "events.operation.resume",
+              "events.topology.resync",
+              "events.scope.authority-rotation",
+              "events.scope.bounded-reconnect"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses stronger purpose-scoped streams instead of one mixed direct-Kubernetes EventSource. The global scope owner projects context progress and completion from the existing authenticated dashboard stream, emits a 30-second heartbeat, bounds reconnect at 30 seconds, aborts obsolete authorities, and forwards one invalidation revision to consumers."
           }
         }
       ]

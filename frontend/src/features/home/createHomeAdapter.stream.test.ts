@@ -112,6 +112,33 @@ describe("Home dashboard invalidation adapter", () => {
     await iterator.return?.();
   });
 
+  it("caps repeated scope reconnect attempts at thirty seconds", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const operations: ScopeTransitionOperationEvent[] = [];
+    const adapter = createHomeAdapter(endpoints({
+      subscribeHomeDashboardEvents() {
+        calls += 1;
+        return calls <= 8
+          ? failedEvents({ kind: "network" })
+          : events([
+              event("connected", "cursor-1"),
+              event("deferred_ready", "cursor-2", "snapshot-2"),
+            ]);
+      },
+    }));
+    const iterator = adapter.subscribeDashboardInvalidations(scope(), {
+      onScopeOperation: (operation) => operations.push(operation),
+    })[Symbol.asyncIterator]();
+    const pending = iterator.next();
+
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toMatchObject({ value: { snapshotId: "snapshot-2" } });
+    expect(operations.flatMap((operation) => operation.retryAfterMs ?? []))
+      .toEqual([3_000, 4_500, 6_750, 10_125, 15_188, 22_781, 30_000, 30_000]);
+    await iterator.return?.();
+  });
+
   it("fails closed when the authenticated stream returns another workspace authority", async () => {
     const connected = event("connected", "cursor-1");
     const adapter = createHomeAdapter(endpoints({
@@ -169,8 +196,12 @@ function events(items: readonly HomeEndpointDashboardEvent[]): AsyncIterable<Hom
 
 function failedEvents(error: unknown): AsyncIterable<HomeEndpointDashboardEvent> {
   return {
-    async *[Symbol.asyncIterator]() {
-      throw error;
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<HomeEndpointDashboardEvent>> {
+          return Promise.reject(error);
+        },
+      };
     },
   };
 }
