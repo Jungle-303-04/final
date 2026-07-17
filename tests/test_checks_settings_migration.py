@@ -12,6 +12,7 @@ from alembic.script import ScriptDirectory
 from alembic import command
 
 ROOT = Path(__file__).resolve().parents[1]
+HEAD_REVISION = "20260717_2000"
 REVISION = "20260717_1915"
 DOWN_REVISION = "20260717_1810"
 
@@ -35,7 +36,7 @@ def test_checks_settings_migration_creates_user_workspace_revision_authority(mon
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert tuple(script.get_heads()) == (REVISION,)
+    assert tuple(script.get_heads()) == (HEAD_REVISION,)
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
     assert "create table user_checks_settings" in sql

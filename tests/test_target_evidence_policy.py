@@ -40,6 +40,10 @@ def test_standard_agent_policy_collects_server_owned_opencost_observations() -> 
 
     assert by_name[COST_NAMESPACE_HOURLY_METRIC]["query"] == COST_NAMESPACE_HOURLY_QUERY
     assert by_name[COST_NAMESPACE_STORAGE_METRIC]["query"] == COST_NAMESPACE_STORAGE_QUERY
+    expected_matchers = {
+        COST_NAMESPACE_HOURLY_METRIC: ['namespace!=""'],
+        COST_NAMESPACE_STORAGE_METRIC: ['claim_namespace!=""'],
+    }
     for name in (COST_NAMESPACE_HOURLY_METRIC, COST_NAMESPACE_STORAGE_METRIC):
         assert by_name[name]["collection_scope"] == "cluster_cost_observation"
         assert by_name[name]["provenance"] == {
@@ -48,5 +52,5 @@ def test_standard_agent_policy_collects_server_owned_opencost_observations() -> 
             "backend_scope": "cluster_local",
             "query_scope": "cluster",
             "namespaces": [],
-            "required_matchers": [],
+            "required_matchers": expected_matchers[name],
         }

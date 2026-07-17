@@ -49,7 +49,7 @@ COST_NAMESPACE_STORAGE_QUERY = """sum by (namespace) (
   max by (persistentvolume) (pv_hourly_cost)
   * on(persistentvolume) group_left(namespace)
   max by (persistentvolume, namespace) (
-    label_replace(kube_persistentvolume_claim_ref, "namespace", "$1", "claim_namespace", "(.+)")
+    label_replace(kube_persistentvolume_claim_ref{claim_namespace!=""}, "namespace", "$1", "claim_namespace", "(.+)")
   )
 )"""
 
@@ -220,6 +220,7 @@ def evidence_provider_queries(
             cluster_id=cluster_id,
             evidence_profile=evidence_profile,
             query_scope="cluster",
+            required_matchers=('namespace!=""',),
         )
         queries = [
             _namespace_query(
@@ -255,7 +256,12 @@ def evidence_provider_queries(
                 name=COST_NAMESPACE_STORAGE_METRIC,
                 description="Namespace persistent-volume hourly rate from OpenCost metrics.",
                 query=COST_NAMESPACE_STORAGE_QUERY,
-                provenance=cost_provenance,
+                provenance=_provenance(
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                    query_scope="cluster",
+                    required_matchers=('claim_namespace!=""',),
+                ),
                 collection_scope="cluster_cost_observation",
             ),
         ]
