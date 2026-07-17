@@ -5,6 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomePortFailure } from "../home/homeContract";
 import type { ClusterScopePort } from "./clusterScopeContract";
+import type {
+  ClusterScope,
+  ScopeTransitionOperationEvent,
+} from "../../shared/parity/referenceParity";
 import {
   collection,
   deferred,
@@ -256,4 +260,123 @@ describe("ClusterScopeProvider", () => {
     expect(secondA).toMatch(/^cluster-a:/u);
     expect(new Set([firstA, clusterB, secondA])).toHaveLength(3);
   });
+
+  it("owns one scoped stream and discards late operations from the replaced authority", async () => {
+    const user = userEvent.setup();
+    const streams: ScopeStream[] = [];
+    const port = {
+      listClusterChoices: vi.fn(async () => collection()),
+      loadDashboardRefreshPolicy: vi.fn(async () => ({
+        staleAfterSeconds: 15,
+        refreshAfterSeconds: 30,
+        keepLastSuccess: true as const,
+        pauseWhenHidden: true as const,
+        eventInvalidation: true,
+        retryAfterSeconds: null,
+        retryLimit: null,
+        postMutationRefreshAfterSeconds: null,
+      })),
+      subscribeDashboardInvalidations(scope: ClusterScope, options?: {
+        onScopeOperation?: (event: ScopeTransitionOperationEvent) => void;
+        signal?: AbortSignal;
+      }) {
+        const stream = scopeStream(scope, options);
+        streams.push(stream);
+        return stream.events;
+      },
+    } satisfies ClusterScopePort;
+
+    renderScope(port, "/?clusters=cluster-a");
+    await waitFor(() => expect(streams).toHaveLength(1));
+    act(() => streams[0]?.operation("progress"));
+    expect(readState().scopeOperation).toMatchObject({
+      kind: "progress",
+      scope: { clusterId: "cluster-a" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "select cluster-b" }));
+    await waitFor(() => expect(streams).toHaveLength(2));
+    expect(streams[0]?.signal?.aborted).toBe(true);
+    act(() => {
+      streams[0]?.operation("completed");
+      streams[0]?.emit("obsolete");
+    });
+    expect(readState().scopeOperation).not.toMatchObject({
+      kind: "completed",
+      scope: { clusterId: "cluster-a" },
+    });
+    expect(readState().scopeInvalidationRevision).toBe(0);
+
+    act(() => {
+      streams[1]?.operation("completed");
+      streams[1]?.emit("snapshot-b");
+    });
+    await waitFor(() => expect(readState()).toMatchObject({
+      scopeInvalidationRevision: 1,
+      scopeOperation: {
+        kind: "completed",
+        scope: { clusterId: "cluster-b" },
+      },
+    }));
+  });
 });
+
+interface ScopeStream {
+  events: AsyncIterable<{ snapshotId: string }>;
+  signal: AbortSignal | undefined;
+  emit(snapshotId: string): void;
+  operation(kind: "progress" | "completed"): void;
+}
+
+function scopeStream(
+  scope: ClusterScope,
+  options: {
+    onScopeOperation?: (event: ScopeTransitionOperationEvent) => void;
+    signal?: AbortSignal;
+  } | undefined,
+): ScopeStream {
+  const pending: Array<{ snapshotId: string }> = [];
+  const readers: Array<(value: IteratorResult<{ snapshotId: string }>) => void> = [];
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    readers.splice(0).forEach((resolve) => resolve({ done: true, value: undefined }));
+  };
+  options?.signal?.addEventListener("abort", close, { once: true });
+  return {
+    signal: options?.signal,
+    emit(snapshotId) {
+      if (closed) return;
+      const value = { snapshotId };
+      const reader = readers.shift();
+      if (reader) reader({ done: false, value });
+      else pending.push(value);
+    },
+    operation(kind) {
+      options?.onScopeOperation?.({
+        attempt: 0,
+        kind,
+        phase: kind === "progress" ? "context_switch_progress" : "context_changed",
+        retryAfterMs: null,
+        scope,
+      });
+    },
+    events: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<{ snapshotId: string }>> {
+            const value = pending.shift();
+            if (value) return Promise.resolve({ done: false, value });
+            if (closed) return Promise.resolve({ done: true, value: undefined });
+            return new Promise((resolve) => readers.push(resolve));
+          },
+          return(): Promise<IteratorResult<{ snapshotId: string }>> {
+            close();
+            return Promise.resolve({ done: true, value: undefined });
+          },
+        };
+      },
+    },
+  };
+}
