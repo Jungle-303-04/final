@@ -380,7 +380,7 @@ def test_home_insights_composes_revisioned_custom_resources_and_helm_summary() -
             "coverage": {
                 "availability": "unavailable",
                 "observed_at": None,
-                "reason_codes": ["traffic_observation_not_integrated"],
+                "reason_codes": [f"traffic_evidence_window_unavailable:{CLUSTER_ID}"],
             }
         },
         "cost": {

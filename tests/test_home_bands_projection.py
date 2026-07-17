@@ -64,7 +64,9 @@ def test_home_explore_summary_omits_unobserved_traffic_and_cost_instead_of_zeroe
 
     assert summary.traffic.coverage.availability == "unavailable"
     assert summary.cost.coverage.availability == "unavailable"
-    assert summary.traffic.coverage.reason_codes == ("traffic_observation_not_integrated",)
+    assert summary.traffic.coverage.reason_codes == (
+        f"traffic_evidence_window_unavailable:{CLUSTER_ID}",
+    )
     assert summary.cost.coverage.reason_codes == ("cost_observation_unavailable",)
 
 
