@@ -37,6 +37,7 @@ export const clustersKo = {
   "clusters.disconnect.cardProgress": "연결 해제 중 · {step}/3",
   "clusters.disconnect.resume": "연결 해제 진행 보기",
   "clusters.disconnect.progress.description": "{name}의 에이전트와 등록 정보를 안전하게 정리합니다.",
+  "clusters.disconnect.progress.aria": "클러스터 연결 해제 진행",
   "clusters.disconnect.progress.request": "연결 해제 요청",
   "clusters.disconnect.progress.agent": "에이전트 실행 중단",
   "clusters.disconnect.progress.registration": "등록 정보 만료",

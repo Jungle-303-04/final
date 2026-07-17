@@ -75,4 +75,19 @@ describe("AI alert action card", () => {
       payload: expect.objectContaining({ threshold: 75 }),
     }));
   });
+
+  it("renders action scope labels from the English catalog", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <MemoryRouter>
+          <UnifiedFilterProvider>
+            <AiAlertRuleActionCard action={ACTION} onCreate={vi.fn()} />
+          </UnifiedFilterProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Cluster: cluster-2")).toBeTruthy();
+    expect(screen.queryByText("클러스터: cluster-2")).toBeNull();
+  });
 });

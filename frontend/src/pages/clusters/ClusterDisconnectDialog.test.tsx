@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +11,13 @@ import {
   type ClusterDisconnectReceipt,
 } from "../../features/clusters/clustersContract";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
-import { I18nProvider } from "../../shared/i18n";
+import {
+  en,
+  I18nProvider,
+  ko,
+  useI18n,
+  type I18nController,
+} from "../../shared/i18n";
 import { ClusterDisconnectDialog } from "./ClusterDisconnectDialog";
 
 const CLUSTER: HomeClusterChoice = {
@@ -35,6 +41,54 @@ afterEach(() => {
 });
 
 describe("ClusterDisconnectDialog", () => {
+  it("updates progress accessibility copy immediately when the locale changes", async () => {
+    const user = userEvent.setup();
+    let setLocale: I18nController["setLocale"] | null = null;
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <LocaleCapture capture={(nextSetLocale) => { setLocale = nextSetLocale; }} />
+        <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+          <ClusterDisconnectDialog
+            cluster={CLUSTER}
+            onDisconnected={vi.fn()}
+            onOpenChange={vi.fn()}
+            open
+            port={{
+              disconnect: vi.fn(() => new Promise<ClusterDisconnectReceipt>(() => undefined)),
+              loadDisconnect: vi.fn(),
+            }}
+          />
+        </AuthSessionGateProvider>
+      </I18nProvider>,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Enter the cluster name to confirm" }),
+      "Production",
+    );
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(screen.getByRole("list", { name: "Cluster disconnection progress" })).toBeTruthy();
+
+    act(() => { setLocale?.("ko"); });
+
+    expect(screen.getByRole("list", { name: "클러스터 연결 해제 진행" })).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Cluster disconnection progress" })).toBeNull();
+  });
+
+  it("keeps Korean and English placeholders aligned across operations pages", () => {
+    for (const prefix of ["home.", "issues.", "alerts.", "clusters."]) {
+      const englishKeys = (Object.keys(en) as Array<keyof typeof en>)
+        .filter((key) => key.startsWith(prefix));
+      const koreanKeys = (Object.keys(ko) as Array<keyof typeof ko>)
+        .filter((key) => key.startsWith(prefix));
+
+      expect(koreanKeys.sort()).toEqual(englishKeys.sort());
+      for (const key of englishKeys) {
+        expect(placeholders(ko[key]), key).toEqual(placeholders(en[key]));
+      }
+    }
+  });
+
   it("requires the exact cluster name and shows the real submit and refresh handoff states", async () => {
     const user = userEvent.setup();
     let resolveDisconnect: () => void = () => {
@@ -179,6 +233,22 @@ function cleanupRequiredReceipt() {
     commandId: "cmd-uninstall-1",
     failureReason: "agent is offline",
   };
+}
+
+function LocaleCapture({
+  capture,
+}: {
+  capture: (setLocale: I18nController["setLocale"]) => void;
+}) {
+  capture(useI18n().setLocale);
+  return null;
+}
+
+function placeholders(message: string): string[] {
+  return Array.from(
+    message.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\}/g),
+    (match) => match[1]!,
+  ).sort();
 }
 
 function renderDialog(

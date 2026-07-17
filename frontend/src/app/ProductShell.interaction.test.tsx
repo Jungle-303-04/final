@@ -49,6 +49,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(dialog.textContent).toContain("홈 화면 열기");
     expect(dialog.textContent).toContain("인시던트 화면 열기");
+    expect(dialog.textContent).toContain("Shift 키와 D 키");
     expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
     expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));

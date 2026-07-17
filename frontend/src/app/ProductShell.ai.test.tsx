@@ -11,7 +11,10 @@ import {
 } from "./__tests__/ProductShellInteractionSupport";
 
 beforeEach(() => installMatchMedia(false));
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 describe("ProductShell AI panel", () => {
   it("opens from the right, hides its floating trigger, and keeps complete suggestions", async () => {
@@ -106,6 +109,26 @@ describe("ProductShell AI panel", () => {
 
     expect(await screen.findByText(answer)).toBeTruthy();
     expect(screen.queryByText("그 답을 뒷받침할 근거 데이터가 없습니다.")).toBeNull();
+  });
+
+  it("updates AI conversation and pending-action labels immediately with locale", async () => {
+    const user = userEvent.setup();
+    renderShell({
+      aiAssistantPort: assistantPort({
+        ask: vi.fn(() => new Promise<never>(() => undefined)),
+      }),
+    });
+    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    expect(screen.getByRole("log", { name: "AI 대화" })).toBeTruthy();
+
+    await user.click(screen.getByRole("combobox", { name: "현재 언어: 한국어" }));
+    await user.click(await screen.findByRole("option", { name: "영어" }));
+
+    expect(screen.getByRole("log", { name: "AI conversation" })).toBeTruthy();
+    const input = screen.getByRole("textbox", { name: "Ask about what you are viewing…" });
+    await user.type(input, "What changed?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByRole("button", { name: "Stop" })).toBeTruthy();
   });
 
   it("submits with Enter, keeps Shift+Enter in the input, scrolls, and aborts a pending turn", async () => {

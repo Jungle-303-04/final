@@ -24,6 +24,11 @@ describe("i18n catalogs", () => {
     expect(koreanKeys).toEqual(englishKeys);
     expect(en["shell.nav.home"]).toBe("Home");
     expect(ko["shell.nav.home"]).toBe("홈");
+    for (const key of englishKeys) {
+      expect(placeholders(en[key as MessageKey])).toEqual(
+        placeholders(ko[key as MessageKey]),
+      );
+    }
   });
 
   it("accepts only a MessageKey as the translation lookup key", () => {
@@ -125,4 +130,9 @@ function memoryStorage(seed: Record<string, string> = {}): StorageLike {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => { values.set(key, value); },
   };
+}
+
+function placeholders(message: string): string[] {
+  return Array.from(message.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\}/gu), ([, name]) => name)
+    .sort();
 }

@@ -37,6 +37,7 @@ export const clustersEn = {
   "clusters.disconnect.cardProgress": "Disconnecting · {step}/3",
   "clusters.disconnect.resume": "View disconnection progress",
   "clusters.disconnect.progress.description": "Safely cleaning up the agent and registration for {name}.",
+  "clusters.disconnect.progress.aria": "Cluster disconnection progress",
   "clusters.disconnect.progress.request": "Disconnect requested",
   "clusters.disconnect.progress.agent": "Stop agent execution",
   "clusters.disconnect.progress.registration": "Expire registration",

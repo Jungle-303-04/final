@@ -62,7 +62,7 @@ export function AiAssistantPanel({
   open: boolean;
   port: AiAssistantPort;
 }) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
   const diagnose = useOptionalDiagnoseSession();
@@ -88,7 +88,7 @@ export function AiAssistantPanel({
   const visibleEntries = entries.filter((entry) => entry.contextKey === contextKey);
   const visibleSuggestions = suggestions.contextKey === contextKey ? suggestions.items : [];
   const chips = aiAssistantContextChips(context);
-  const stopLabel = locale === "ko" ? "중단" : "Stop";
+  const stopLabel = t("shell.ai.stop");
   const canCreateAlertRule = session?.roles.includes("service_admin") ?? false;
 
   useEffect(() => {
@@ -203,7 +203,7 @@ export function AiAssistantPanel({
                 variant={diagnose.surface === "assistant" ? "secondary" : "ghost"}
               >
                 <Sparkles aria-hidden="true" />
-                {locale === "ko" ? "질문" : "Ask"}
+                {t("shell.ai.send")}
               </Button>
               <Button
                 aria-selected={diagnose.surface === "investigations"}
@@ -214,7 +214,7 @@ export function AiAssistantPanel({
                 variant={diagnose.surface === "investigations" ? "secondary" : "ghost"}
               >
                 <ListChecks aria-hidden="true" />
-                {locale === "ko" ? "조사" : "Investigations"}
+                {t("shell.ai.investigations")}
               </Button>
             </div>
           ) : null}
@@ -232,7 +232,7 @@ export function AiAssistantPanel({
           ) : (
             <>
           <div
-            aria-label={locale === "ko" ? "AI 대화" : "AI conversation"}
+            aria-label={t("shell.ai.conversation")}
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
             data-slot="ai-conversation"
             role="log"

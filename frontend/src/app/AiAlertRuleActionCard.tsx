@@ -7,7 +7,7 @@ import type {
   AiAlertRuleActionPayload,
 } from "../features/ai-assistant/aiAssistantContract";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
-import { useI18n } from "../shared/i18n";
+import { useI18n, type TranslationFunction } from "../shared/i18n";
 import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
 import { Badge } from "../shared/ui/primitives/badge";
 import { Button, buttonVariants } from "../shared/ui/primitives/button";
@@ -110,7 +110,11 @@ export function AiAlertRuleActionCard({
 
       <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 rounded-lg border bg-background/70 p-3 text-xs">
         <Fact label={t("shell.ai.action.name")} value={draft.name} wide />
-        <Fact label={t("shell.ai.action.scope")} value={scopeLabel(draft, t("shell.ai.action.currentScope"))} wide />
+        <Fact
+          label={t("shell.ai.action.scope")}
+          value={scopeLabel(draft, t("shell.ai.action.currentScope"), t)}
+          wide
+        />
         <Fact label={t("shell.ai.action.condition")} value={`${metricLabel(draft.metric, t)} ${draft.comparator} ${formatNumber(draft.threshold)}%`} />
         <Fact label={t("shell.ai.action.duration")} value={t("shell.ai.action.seconds", { count: formatNumber(draft.forSeconds) })} />
         <Fact label={t("shell.ai.action.severity")} value={t(`alerts.severity.${draft.severity}`)} />
@@ -213,7 +217,9 @@ export function AiAlertRuleActionCard({
             <div className="sm:col-span-2 rounded-lg border bg-muted/30 p-3">
               <p className="text-xs font-medium text-muted-foreground">{t("shell.ai.action.scope")}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {scopeValues(draft).map((value) => <Badge key={value} variant="outline">{value}</Badge>)}
+                {scopeValues(draft, t).map((value) => (
+                  <Badge key={value} variant="outline">{value}</Badge>
+                ))}
               </div>
             </div>
           </div>
@@ -318,17 +324,24 @@ function validDraft(draft: AiAlertRuleActionPayload): boolean {
     Number.isInteger(draft.forSeconds) && draft.forSeconds > 0;
 }
 
-function scopeValues(payload: AiAlertRuleActionPayload): string[] {
+function scopeValues(
+  payload: AiAlertRuleActionPayload,
+  t: TranslationFunction,
+): string[] {
   return [
-    ...payload.scope.clusters.map((value) => `클러스터: ${value}`),
-    ...payload.scope.namespaces.map((value) => `네임스페이스: ${value}`),
-    ...payload.scope.applications.map((value) => `애플리케이션: ${value}`),
-    ...payload.scope.labels.map((value) => `라벨: ${value}`),
+    ...payload.scope.clusters.map((value) => t("shell.ai.action.scopeCluster", { value })),
+    ...payload.scope.namespaces.map((value) => t("shell.ai.action.scopeNamespace", { value })),
+    ...payload.scope.applications.map((value) => t("shell.ai.action.scopeApplication", { value })),
+    ...payload.scope.labels.map((value) => t("shell.ai.action.scopeLabel", { value })),
   ];
 }
 
-function scopeLabel(payload: AiAlertRuleActionPayload, fallback: string): string {
-  return scopeValues(payload).join(" · ") || fallback;
+function scopeLabel(
+  payload: AiAlertRuleActionPayload,
+  fallback: string,
+  t: TranslationFunction,
+): string {
+  return scopeValues(payload, t).join(" · ") || fallback;
 }
 
 function metricLabel(

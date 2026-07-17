@@ -294,7 +294,10 @@ function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: Translati
     { label: t("clusters.disconnect.progress.registration"), state: "pending" },
   ];
   return (
-    <ol className="grid gap-2 rounded-xl border bg-muted/30 p-3" aria-label="클러스터 연결 해제 진행">
+    <ol
+      aria-label={t("clusters.disconnect.progress.aria")}
+      className="grid gap-2 rounded-xl border bg-muted/30 p-3"
+    >
       {steps.map((step) => (
         <li className="flex min-w-0 items-center gap-2 text-sm" key={step.label}>
           {step.state === "complete" ? (

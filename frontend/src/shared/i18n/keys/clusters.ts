@@ -35,6 +35,7 @@ export type ClustersMessageKey =
   | "clusters.disconnect.cardProgress"
   | "clusters.disconnect.resume"
   | "clusters.disconnect.progress.description"
+  | "clusters.disconnect.progress.aria"
   | "clusters.disconnect.progress.request"
   | "clusters.disconnect.progress.agent"
   | "clusters.disconnect.progress.registration"

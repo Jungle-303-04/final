@@ -8,8 +8,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ReactElement } from "react";
-import { I18nProvider } from "../i18n";
+import type { ReactElement, ReactNode } from "react";
+import { I18nProvider, useI18n } from "../i18n";
 import { ProductStateScreen } from "./ProductStateScreen";
 
 afterEach(cleanup);
@@ -202,6 +202,33 @@ describe("ProductStateScreen", () => {
     expect(screen.getByRole("alert").textContent).toContain("Connection error");
   });
 
+  it("updates loading and unknown-error copy immediately when locale changes", async () => {
+    renderBase(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <LocaleSwitchFixture>
+          <ProductStateScreen
+            issue={{ code: "unknown" }}
+            kind="error"
+            placement="content"
+          />
+          <ProductStateScreen kind="loading" placement="content" />
+        </LocaleSwitchFixture>
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("heading", {
+      name: "Unable to read the verified response",
+    })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Loading" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Response error");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "한국어로 전환" }));
+
+    expect(screen.getByRole("heading", { name: "정보를 불러오지 못했습니다" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "불러오는 중" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("응답 오류");
+  });
+
   it("uses a named section instead of nesting main landmarks for content placement", () => {
     render(
       <main>
@@ -230,6 +257,16 @@ function renderWithLocale(element: ReactElement, navigatorLanguage: string) {
       </I18nProvider>
     ),
   });
+}
+
+function LocaleSwitchFixture({ children }: { children: ReactNode }) {
+  const { setLocale } = useI18n();
+  return (
+    <>
+      <button onClick={() => setLocale("ko")} type="button">한국어로 전환</button>
+      {children}
+    </>
+  );
 }
 
 function assertProductStateTypeContracts() {
