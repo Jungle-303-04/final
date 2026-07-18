@@ -10,7 +10,6 @@ import {
 } from "react";
 import {
   browserLocaleStorage,
-  browserNavigatorLanguage,
   persistLocale,
   resolveInitialLocale,
   type LocaleStorage,
@@ -47,9 +46,7 @@ export function I18nProvider({
   navigatorLanguage,
 }: I18nProviderProps) {
   const resolvedStorage = storage === undefined ? browserLocaleStorage() : storage;
-  const resolvedNavigatorLanguage = navigatorLanguage === undefined
-    ? browserNavigatorLanguage()
-    : navigatorLanguage;
+  const resolvedNavigatorLanguage = navigatorLanguage ?? null;
   const [locale, setLocaleState] = useState<SupportedLocale>(() =>
     resolveInitialLocale({
       storage: resolvedStorage,

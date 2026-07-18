@@ -20,7 +20,7 @@ describe("I18nProvider", () => {
   it("defaults to Korean when no explicit locale was persisted", () => {
     const controller: { current: I18nController | null } = { current: null };
     render(
-      <I18nProvider storage={window.localStorage} navigatorLanguage="en-US">
+      <I18nProvider storage={window.localStorage}>
         <Consumer capture={(value) => { controller.current = value; }} />
       </I18nProvider>,
     );

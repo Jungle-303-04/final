@@ -31,13 +31,13 @@ describe("HomePage", () => {
       .toBe("/resources?clusters=cluster-1&applications=checkout&resources.health=warning");
   });
 
-  it("renders English by default without translating Kubernetes nouns or backend values", async () => {
+  it("renders Korean by default without translating Kubernetes nouns or backend values", async () => {
     renderHome(homePort(), ["/?clusters=cluster-1"], vi.fn(), null);
 
-    expect(await screen.findByRole("heading", { name: "Cluster status" }, { timeout: 5_000 }))
+    expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
       .toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "Active issues" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Node and Pod" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "활성 이슈" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Node와 Pod" })).toBeTruthy();
     expect(await screen.findByText("Restart loop", {}, { timeout: 5_000 })).toBeTruthy();
     expect(screen.getByText("Running", { exact: false })).toBeTruthy();
   }, 15_000);

@@ -21,7 +21,9 @@ export function isSupportedLocale(value: unknown): value is SupportedLocale {
 export function detectNavigatorLocale(language: string | null | undefined): SupportedLocale {
   if (typeof language !== "string") return DEFAULT_LOCALE;
   const normalized = language.trim().toLowerCase().replace(/_/g, "-");
-  return normalized === "ko" || normalized.startsWith("ko-") ? "ko" : DEFAULT_LOCALE;
+  if (normalized === "ko" || normalized.startsWith("ko-")) return "ko";
+  if (normalized === "en" || normalized.startsWith("en-")) return "en";
+  return DEFAULT_LOCALE;
 }
 
 export function readPersistedLocale(storage: LocaleStorage | null | undefined): SupportedLocale | null {
