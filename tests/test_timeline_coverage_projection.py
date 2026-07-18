@@ -433,10 +433,10 @@ def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
     ).lower()
     assert "cluster_inventory_snapshots.workspace_id = 'workspace-a'" in sql
     assert "cluster_inventory_snapshots.status != 'ignored_stale'" in sql
-    assert "kubernetes_event_capture" in sql
+    assert "cluster_inventory_snapshots.event_capture" in sql
     assert "is not null" in sql
     assert "cluster_inventory_snapshots.event_capture_observed_at <" in sql
-    assert "cluster_inventory_snapshots.summary as summary" not in sql
+    assert "cluster_inventory_snapshots.summary" not in sql
     assert "raw" not in sql
     assert connection.execution_options_kwargs == {
         "max_row_buffer": 128,

@@ -12,7 +12,7 @@ from alembic.script import ScriptDirectory
 from alembic import command
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "20260718_0400"
+HEAD_REVISION = "20260719_0500"
 REVISION = "20260717_1915"
 DOWN_REVISION = "20260717_1810"
 

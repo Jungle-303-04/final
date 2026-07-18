@@ -361,7 +361,24 @@ def test_snapshot_mutation_reads_prestate_under_inventory_lock_before_building_e
             "source": "cluster-agent",
             "collected_at": "2026-07-15T00:00:00Z",
             "replace": True,
-            "summary": {"resources_complete": True, "labels_complete": True},
+            "summary": {
+                "resources_complete": True,
+                "labels_complete": True,
+                "kubernetes_event_capture": {
+                    "complete": False,
+                    "truncated": False,
+                    "reason": "timeout",
+                    "freshness": {
+                        "observed_at": "2026-07-15T00:00:00Z",
+                        "max_age_seconds": 120,
+                    },
+                    "coverage": {
+                        "scope": "all_namespaces",
+                        "pagination": "continue",
+                        "gap": "timeout",
+                    },
+                },
+            },
             "resources": [
                 {
                     "resource_type": "pod",
@@ -389,6 +406,27 @@ def test_snapshot_mutation_reads_prestate_under_inventory_lock_before_building_e
         if "from cluster_inventory_resources" in item and item.lstrip().startswith("select")
     )
     assert lock_index < prestate_index
+    snapshot_insert = next(
+        statement
+        for statement in connection.statements
+        if "insert into cluster_inventory_snapshots"
+        in str(statement.compile(dialect=postgresql.dialect())).lower()
+    )
+    snapshot_params = snapshot_insert.compile(dialect=postgresql.dialect()).params
+    assert snapshot_params["event_capture"] == {
+        "complete": False,
+        "truncated": False,
+        "reason": "timeout",
+        "freshness": {
+            "observed_at": "2026-07-15T00:00:00+00:00",
+            "max_age_seconds": 120,
+        },
+        "coverage": {
+            "scope": "all_namespaces",
+            "pagination": "continue",
+            "gap": "timeout",
+        },
+    }
     assert mutation.result["accepted"] is True
     assert [event.event_type for event in mutation.timeline_events] == ["add"]
     assert mutation.timeline_events[0].metadata == {

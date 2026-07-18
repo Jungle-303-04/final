@@ -29,6 +29,7 @@ from domains.inventory.change_correlation import correlate_inventory_timeline_ev
 from domains.inventory.kubernetes_events import (
     EVENT_CAPTURE_REASON_COMPLETE,
     EVENT_CAPTURE_SUMMARY_KEY,
+    KubernetesEventCapture,
     KubernetesEventFactBatch,
     kubernetes_event_fact_timeline_events,
 )
@@ -678,7 +679,7 @@ def _timeline_coverage_statement(
     """
     canonical_cluster_ids = tuple(sorted(set(cluster_ids)))
     snapshots = ClusterInventorySnapshotRecord.__table__
-    event_capture = snapshots.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
+    event_capture = snapshots.c.event_capture
     capture_observed_at = snapshots.c.event_capture_observed_at
     requested = (
         values(column("cluster_id", Text), name="requested_timeline_coverage_clusters")
@@ -841,6 +842,22 @@ def _timeline_capture_recovery_clause(event_capture: Any) -> Any:
     )
 
 
+def _event_capture_projection(capture: KubernetesEventCapture) -> JsonObject | None:
+    """Persist only the small proof Timeline needs, detached from the inventory summary."""
+    if capture.observed_at is None:
+        return None
+    return {
+        "complete": capture.complete,
+        "truncated": capture.truncated,
+        "reason": capture.reason,
+        "freshness": {
+            "observed_at": capture.observed_at.isoformat(),
+            "max_age_seconds": capture.max_age_seconds,
+        },
+        "coverage": dict(capture.coverage),
+    }
+
+
 class InventoryRepository(DatabaseConnection):
     def snapshot_timeline_coverage(
         self,
@@ -986,6 +1003,7 @@ class InventoryRepository(DatabaseConnection):
         marked_deleted = 0
         source_summary = dict(summary.get("summary") or {})
         current_event_batch = KubernetesEventFactBatch.from_snapshot_summary(source_summary)
+        event_capture_projection = _event_capture_projection(current_event_batch.capture)
         collection_limits = source_summary.get("collection_limits")
         source_truncated = (
             isinstance(collection_limits, dict) and collection_limits.get("truncated") is True
@@ -1027,6 +1045,7 @@ class InventoryRepository(DatabaseConnection):
                         status="ignored_stale",
                         collected_at=observed_at,
                         event_capture_observed_at=current_event_batch.capture.observed_at,
+                        event_capture=event_capture_projection,
                         resource_count=len(normalized),
                         summary=summary,
                     )
@@ -1092,6 +1111,7 @@ class InventoryRepository(DatabaseConnection):
                     status=str(payload.get("status") or "accepted"),
                     collected_at=observed_at,
                     event_capture_observed_at=current_event_batch.capture.observed_at,
+                    event_capture=event_capture_projection,
                     resource_count=len(normalized),
                     summary=summary,
                 )

@@ -7,8 +7,11 @@ the same strict frame contract will be reused by the resumable SSE endpoint.
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from threading import Event
+from time import monotonic
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -38,6 +41,8 @@ from domains.timeline.service import (
     resolve_timeline_read,
 )
 from domains.timeline.settings import (
+    timeline_coverage_cache_seconds,
+    timeline_coverage_refresh_seconds,
     timeline_coverage_source_availability,
     timeline_overview_bucket_width_ms,
     timeline_replay_poll_seconds,
@@ -76,6 +81,29 @@ COVERAGE_UNAVAILABLE_DETAIL = "timeline coverage is unavailable"
 OVERVIEW_UNAVAILABLE_DETAIL = "timeline overview is unavailable"
 PIN_REVISION_CONFLICT_DETAIL = "timeline pins revision conflicts with the current set"
 TIMELINE_CLIENT_DISCONNECT_POLL_SECONDS = 0.05
+TIMELINE_COVERAGE_CACHE_MAX_ENTRIES = 64
+
+
+@dataclass(frozen=True)
+class _TimelineCoverageCacheEntry:
+    expires_at: float
+    coverage: tuple[TimelineCoverage, ...]
+
+
+@dataclass
+class _TimelineCoverageInflight:
+    task: asyncio.Task[tuple[TimelineCoverage, ...]]
+    cancelled: Event
+    waiters: int = 0
+
+
+@dataclass
+class _TimelineCoverageCacheState:
+    entries: OrderedDict[tuple[object, ...], _TimelineCoverageCacheEntry] = field(
+        default_factory=OrderedDict
+    )
+    inflight: dict[tuple[object, ...], _TimelineCoverageInflight] = field(default_factory=dict)
+
 
 router = APIRouter()
 
@@ -332,6 +360,7 @@ async def _timeline_sse_body(
 ) -> AsyncIterator[str]:
     """Emit only durable facts; local fan-out is a wake-up optimization."""
     delivered = after_sequence
+    coverage_refresh_due = False
     try:
         delivered_coverage = await _read_timeline_coverage(
             coverage_reader,
@@ -348,6 +377,9 @@ async def _timeline_sse_body(
         )
         await subscription.close()
         return
+    next_coverage_refresh_at = (
+        asyncio.get_running_loop().time() + timeline_coverage_refresh_seconds()
+    )
     try:
         if delivered_coverage:
             yield encode_sse_frame(
@@ -387,35 +419,41 @@ async def _timeline_sse_body(
                         event=record.event,
                     )
                 )
-            try:
-                observed_coverage = await _read_timeline_coverage(
-                    coverage_reader,
-                    resolution,
-                    request=request,
-                )
-            except Exception:
-                yield encode_sse_frame(
-                    TimelineStreamFrame(
-                        kind="error",
-                        cursor=_cursor_at(cursor_codec, resolution, delivered),
-                        reason=COVERAGE_UNAVAILABLE_DETAIL,
+            if coverage_refresh_due:
+                try:
+                    observed_coverage = await _read_timeline_coverage(
+                        coverage_reader,
+                        resolution,
+                        request=request,
+                        force_refresh=True,
                     )
-                )
-                return
-            coverage_delta = coverage_additions(delivered_coverage, observed_coverage)
-            if coverage_delta:
-                delivered_coverage = (*delivered_coverage, *coverage_delta)
-                yield encode_sse_frame(
-                    TimelineStreamFrame(
-                        kind="coverage",
-                        cursor=_cursor_at(
-                            cursor_codec,
-                            resolution,
-                            max(delivered, replay.high_water_sequence),
-                        ),
-                        coverage=coverage_delta,
+                except Exception:
+                    yield encode_sse_frame(
+                        TimelineStreamFrame(
+                            kind="error",
+                            cursor=_cursor_at(cursor_codec, resolution, delivered),
+                            reason=COVERAGE_UNAVAILABLE_DETAIL,
+                        )
                     )
+                    return
+                coverage_refresh_due = False
+                next_coverage_refresh_at = (
+                    asyncio.get_running_loop().time() + timeline_coverage_refresh_seconds()
                 )
+                coverage_delta = coverage_additions(delivered_coverage, observed_coverage)
+                if coverage_delta:
+                    delivered_coverage = (*delivered_coverage, *coverage_delta)
+                    yield encode_sse_frame(
+                        TimelineStreamFrame(
+                            kind="coverage",
+                            cursor=_cursor_at(
+                                cursor_codec,
+                                resolution,
+                                max(delivered, replay.high_water_sequence),
+                            ),
+                            coverage=coverage_delta,
+                        )
+                    )
             # A full replay batch may have more durable records immediately
             # behind it. Drain it before waiting for a wake-up signal.
             if len(replay.records) >= resolution.policy.max_batch_events:
@@ -427,13 +465,16 @@ async def _timeline_sse_body(
             delivered = max(delivered, replay.high_water_sequence)
             try:
                 await asyncio.wait_for(subscription.next(), timeout=timeline_replay_poll_seconds())
+                coverage_refresh_due = asyncio.get_running_loop().time() >= next_coverage_refresh_at
             except TimeoutError:
                 # Cross-process fan-out is deliberately not a source of truth;
-                # this bounded server-side replay repairs any missed wake-up.
+                # repair coverage on its own slower cadence, not every ledger poll.
+                coverage_refresh_due = asyncio.get_running_loop().time() >= next_coverage_refresh_at
                 yield ": keep-alive\n\n"
             except TimelineFanoutOverflow:
                 # The queue deliberately discarded its local acceleration path.
                 # The next loop recovers the exact ordered suffix from PostgreSQL.
+                coverage_refresh_due = asyncio.get_running_loop().time() >= next_coverage_refresh_at
                 continue
             except TimelineFanoutClosed:
                 yield encode_sse_frame(
@@ -461,17 +502,17 @@ async def _read_timeline_coverage(
     resolution: TimelineReadResolution,
     *,
     request: Request | None = None,
+    force_refresh: bool = False,
 ) -> tuple[TimelineCoverage, ...]:
     """Read only durable coverage and apply the same source/query boundary as events."""
+    if not kubernetes_event_coverage_visible_for_query(resolution.query):
+        return ()
     raw_coverage = await _run_cancellable_timeline_coverage_read(
         coverage_reader,
         resolution,
         request=request,
+        force_refresh=force_refresh,
     )
-    if not isinstance(raw_coverage, (list, tuple)):
-        raise TypeError("timeline coverage reader returned an invalid result")
-    if not kubernetes_event_coverage_visible_for_query(resolution.query):
-        return ()
     return authorized_kubernetes_event_coverage(
         resolution.read_scope,
         window=resolution.query.window,
@@ -484,39 +525,120 @@ async def _run_cancellable_timeline_coverage_read(
     resolution: TimelineReadResolution,
     *,
     request: Request | None,
-) -> object:
-    """Bound a sync coverage scan and signal its DB cursor when the HTTP read disappears."""
-    if request is None:
-        return await asyncio.to_thread(
-            coverage_reader,
-            resolution.read_scope,
-            window=resolution.query.window,
+    force_refresh: bool,
+) -> tuple[TimelineCoverage, ...]:
+    """Coalesce one proof scan and cancel it only after every HTTP waiter disappears."""
+    state = _timeline_coverage_cache_state(coverage_reader)
+    cache_key = _timeline_coverage_cache_key(resolution)
+    now = monotonic()
+    cached = None if force_refresh else state.entries.get(cache_key)
+    if cached is not None and cached.expires_at > now:
+        state.entries.move_to_end(cache_key)
+        return cached.coverage
+    if cached is not None:
+        state.entries.pop(cache_key, None)
+    loop_key = (id(asyncio.get_running_loop()), *cache_key)
+    inflight = state.inflight.get(loop_key)
+    if inflight is None:
+        cancelled = Event()
+        worker = asyncio.create_task(
+            _load_timeline_coverage(
+                coverage_reader,
+                resolution,
+                state=state,
+                cache_key=cache_key,
+                loop_key=loop_key,
+                cancelled=cancelled,
+            )
         )
-    cancelled = Event()
-    worker = asyncio.create_task(
-        asyncio.to_thread(
+        inflight = _TimelineCoverageInflight(task=worker, cancelled=cancelled)
+        state.inflight[loop_key] = inflight
+    inflight.waiters += 1
+    try:
+        while not inflight.task.done():
+            if request is not None and await request.is_disconnected():
+                raise asyncio.CancelledError
+            await asyncio.wait(
+                {inflight.task},
+                timeout=TIMELINE_CLIENT_DISCONNECT_POLL_SECONDS,
+            )
+        return inflight.task.result()
+    finally:
+        inflight.waiters -= 1
+        if inflight.waiters == 0 and not inflight.task.done():
+            inflight.cancelled.set()
+            inflight.task.add_done_callback(_consume_timeline_worker_result)
+
+
+async def _load_timeline_coverage(
+    coverage_reader: Any,
+    resolution: TimelineReadResolution,
+    *,
+    state: _TimelineCoverageCacheState,
+    cache_key: tuple[object, ...],
+    loop_key: tuple[object, ...],
+    cancelled: Event,
+) -> tuple[TimelineCoverage, ...]:
+    try:
+        raw_coverage = await asyncio.to_thread(
             coverage_reader,
             resolution.read_scope,
             window=resolution.query.window,
             cancelled=cancelled.is_set,
         )
-    )
-    try:
-        while not worker.done():
-            if request is not None and await request.is_disconnected():
-                cancelled.set()
-                worker.add_done_callback(_consume_timeline_worker_result)
-                raise asyncio.CancelledError
-            await asyncio.wait(
-                {worker},
-                timeout=TIMELINE_CLIENT_DISCONNECT_POLL_SECONDS,
+        if cancelled.is_set():
+            raise asyncio.CancelledError
+        if not isinstance(raw_coverage, (list, tuple)):
+            raise TypeError("timeline coverage reader returned an invalid result")
+        coverage = tuple(raw_coverage)
+        state.entries[cache_key] = _TimelineCoverageCacheEntry(
+            expires_at=monotonic() + timeline_coverage_cache_seconds(),
+            coverage=coverage,
+        )
+        state.entries.move_to_end(cache_key)
+        while len(state.entries) > TIMELINE_COVERAGE_CACHE_MAX_ENTRIES:
+            state.entries.popitem(last=False)
+        return coverage
+    finally:
+        state.inflight.pop(loop_key, None)
+
+
+def _timeline_coverage_cache_state(coverage_reader: Any) -> _TimelineCoverageCacheState:
+    owner = getattr(coverage_reader, "__self__", coverage_reader)
+    state = getattr(owner, "_opsia_timeline_coverage_cache", None)
+    if not isinstance(state, _TimelineCoverageCacheState):
+        state = _TimelineCoverageCacheState()
+        try:
+            owner._opsia_timeline_coverage_cache = state
+        except (AttributeError, TypeError):
+            # Exotic callables without an attribute dictionary remain correct;
+            # they simply cannot share a process-local optimization.
+            return _TimelineCoverageCacheState()
+    return state
+
+
+def _timeline_coverage_cache_key(
+    resolution: TimelineReadResolution,
+) -> tuple[object, ...]:
+    read_scope = resolution.read_scope
+    scope_keys = tuple(
+        sorted(
+            (
+                str(getattr(scope, "workspace_id", "")),
+                str(getattr(scope, "cluster_id", "")),
+                tuple(getattr(scope, "namespaces", ())),
+                str(getattr(scope, "freshness", "")),
             )
-        return worker.result()
-    except asyncio.CancelledError:
-        cancelled.set()
-        if not worker.done():
-            worker.add_done_callback(_consume_timeline_worker_result)
-        raise
+            for scope in getattr(read_scope, "scopes", ())
+        )
+    )
+    return (
+        str(getattr(read_scope, "workspace_id", "")),
+        tuple(sorted(getattr(read_scope, "kubernetes_event_cluster_ids", ()))),
+        scope_keys,
+        resolution.query.window.from_ms,
+        resolution.query.window.to_ms,
+    )
 
 
 def _consume_timeline_worker_result(worker: asyncio.Task[object]) -> None:

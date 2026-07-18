@@ -32,6 +32,8 @@ TIMELINE_MAX_FRAMES_PER_SECOND_ENV = "TIMELINE_MAX_FRAMES_PER_SECOND"
 TIMELINE_RETENTION_SECONDS_ENV = "TIMELINE_RETENTION_SECONDS"
 TIMELINE_MAX_WINDOW_SECONDS_ENV = "TIMELINE_MAX_WINDOW_SECONDS"
 TIMELINE_REPLAY_POLL_SECONDS_ENV = "TIMELINE_REPLAY_POLL_SECONDS"
+TIMELINE_COVERAGE_CACHE_SECONDS_ENV = "TIMELINE_COVERAGE_CACHE_SECONDS"
+TIMELINE_COVERAGE_REFRESH_SECONDS_ENV = "TIMELINE_COVERAGE_REFRESH_SECONDS"
 TIMELINE_RECONNECT_MIN_DELAY_MS_ENV = "TIMELINE_RECONNECT_MIN_DELAY_MS"
 TIMELINE_RECONNECT_MAX_DELAY_MS_ENV = "TIMELINE_RECONNECT_MAX_DELAY_MS"
 TIMELINE_LIVE_SESSION_MAX_AGE_MS_ENV = "TIMELINE_LIVE_SESSION_MAX_AGE_MS"
@@ -41,6 +43,8 @@ DEFAULT_MAX_FRAMES_PER_SECOND = 60
 DEFAULT_RETENTION_SECONDS = 86_400
 DEFAULT_MAX_WINDOW_SECONDS = 2_592_000
 DEFAULT_REPLAY_POLL_SECONDS = 1.0
+DEFAULT_COVERAGE_CACHE_SECONDS = 2.0
+DEFAULT_COVERAGE_REFRESH_SECONDS = 15.0
 DEFAULT_RECONNECT_MIN_DELAY_MS = 500
 DEFAULT_RECONNECT_MAX_DELAY_MS = 30_000
 DEFAULT_LIVE_SESSION_MAX_AGE_MS = 30_000
@@ -350,6 +354,33 @@ def timeline_replay_poll_seconds() -> float:
     value = float(env(TIMELINE_REPLAY_POLL_SECONDS_ENV, str(DEFAULT_REPLAY_POLL_SECONDS)))
     if not 0.1 <= value <= 60:
         raise ValueError(f"{TIMELINE_REPLAY_POLL_SECONDS_ENV} must be between 0.1 and 60")
+    return value
+
+
+def timeline_coverage_cache_seconds() -> float:
+    """Coalesce identical overview/snapshot/SSE coverage reads inside one worker."""
+    return _bounded_float(
+        TIMELINE_COVERAGE_CACHE_SECONDS_ENV,
+        default=DEFAULT_COVERAGE_CACHE_SECONDS,
+        minimum=0.1,
+        maximum=30.0,
+    )
+
+
+def timeline_coverage_refresh_seconds() -> float:
+    """Refresh SSE coverage independently from the one-second ledger repair cadence."""
+    return _bounded_float(
+        TIMELINE_COVERAGE_REFRESH_SECONDS_ENV,
+        default=DEFAULT_COVERAGE_REFRESH_SECONDS,
+        minimum=1.0,
+        maximum=300.0,
+    )
+
+
+def _bounded_float(name: str, *, default: float, minimum: float, maximum: float) -> float:
+    value = float(env(name, str(default)))
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum:g} and {maximum:g}")
     return value
 
 
