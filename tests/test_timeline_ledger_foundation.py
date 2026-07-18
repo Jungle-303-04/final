@@ -609,6 +609,10 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
             self.records = records
             self.calls: list[dict[str, object]] = []
 
+        @contextmanager
+        def unit_of_work(self) -> Iterator[None]:
+            yield
+
         def _cursor_state(self, _workspace_id: str) -> tuple[int, int]:
             return 12, 9
 

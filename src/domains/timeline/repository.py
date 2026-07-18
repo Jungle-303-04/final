@@ -484,18 +484,19 @@ class TimelineLedgerRepository(DatabaseConnection):
         predicate: TimelineEvidencePredicate,
         limit: int = 1_000,
     ) -> TimelineLedgerSnapshot:
-        """Read one scoped history snapshot in stable evidence order."""
+        """Read one scoped history snapshot from one cursor-consistent transaction."""
         _validate_requested_limit(limit)
-        cursor_state = self._cursor_state(read_scope.workspace_id)
-        records = self._read_records(
-            read_scope,
-            after_sequence=cursor_state[1] - 1,
-            through_sequence=cursor_state[0],
-            predicate=predicate,
-            phase="snapshot",
-            limit=limit + 1,
-            replay_order=False,
-        )
+        with self.unit_of_work():
+            cursor_state = self._cursor_state(read_scope.workspace_id)
+            records = self._read_records(
+                read_scope,
+                after_sequence=cursor_state[1] - 1,
+                through_sequence=cursor_state[0],
+                predicate=predicate,
+                phase="snapshot",
+                limit=limit + 1,
+                replay_order=False,
+            )
         if len(records) > limit:
             raise TimelineSnapshotLimitExceeded(limit)
         return TimelineLedgerSnapshot(
@@ -556,52 +557,53 @@ class TimelineLedgerRepository(DatabaseConnection):
         """
         if bucket_width_ms < 1_000:
             raise ValueError("timeline overview bucket width is invalid")
-        bucket_rows = self._overview_rows(
-            _timeline_overview_buckets_statement(
-                read_scope,
-                predicate=predicate,
-                bucket_width_ms=bucket_width_ms,
-            )
-        )
-        activity_predicate = predicate.with_filters(
-            TimelineFilters(
-                activity=(),
-                kinds=predicate.replay_identity.filters.kinds,
-                include_deleted=predicate.replay_identity.filters.include_deleted,
-                query=predicate.replay_identity.filters.search,
-            )
-        )
-        activity_rows = self._overview_rows(
-            _timeline_overview_activity_facets_statement(
-                read_scope,
-                predicate=activity_predicate,
-            )
-        )
-        kind_predicate = predicate.with_filters(
-            TimelineFilters(
-                activity=predicate.replay_identity.filters.activity,
-                kinds=(),
-                include_deleted=predicate.replay_identity.filters.include_deleted,
-                query=predicate.replay_identity.filters.search,
-            )
-        )
-        kind_rows = self._overview_rows(
-            _timeline_overview_kind_facets_statement(
-                read_scope,
-                predicate=kind_predicate,
-            )
-        )
-        later_predicate = predicate.after_frozen_window()
-        new_evidence_count = (
-            None
-            if later_predicate is None
-            else self._overview_count(
-                _timeline_overview_later_count_statement(
+        with self.unit_of_work():
+            bucket_rows = self._overview_rows(
+                _timeline_overview_buckets_statement(
                     read_scope,
-                    predicate=later_predicate,
+                    predicate=predicate,
+                    bucket_width_ms=bucket_width_ms,
                 )
             )
-        )
+            activity_predicate = predicate.with_filters(
+                TimelineFilters(
+                    activity=(),
+                    kinds=predicate.replay_identity.filters.kinds,
+                    include_deleted=predicate.replay_identity.filters.include_deleted,
+                    query=predicate.replay_identity.filters.search,
+                )
+            )
+            activity_rows = self._overview_rows(
+                _timeline_overview_activity_facets_statement(
+                    read_scope,
+                    predicate=activity_predicate,
+                )
+            )
+            kind_predicate = predicate.with_filters(
+                TimelineFilters(
+                    activity=predicate.replay_identity.filters.activity,
+                    kinds=(),
+                    include_deleted=predicate.replay_identity.filters.include_deleted,
+                    query=predicate.replay_identity.filters.search,
+                )
+            )
+            kind_rows = self._overview_rows(
+                _timeline_overview_kind_facets_statement(
+                    read_scope,
+                    predicate=kind_predicate,
+                )
+            )
+            later_predicate = predicate.after_frozen_window()
+            new_evidence_count = (
+                None
+                if later_predicate is None
+                else self._overview_count(
+                    _timeline_overview_later_count_statement(
+                        read_scope,
+                        predicate=later_predicate,
+                    )
+                )
+            )
         return TimelineOverviewAggregate(
             buckets=tuple(
                 TimelineOverviewBucketAggregate(

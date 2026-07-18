@@ -25,6 +25,7 @@ from domains.inventory.models import (
     ClusterInventorySnapshotRecord,
     ClusterUsageSampleRecord,
     live_inventory_snapshot_clause,
+    timeline_coverage_snapshot_clause,
 )
 from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
@@ -622,6 +623,36 @@ def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
     return str(image) if image else None
 
 
+def _timeline_coverage_statement(
+    *,
+    workspace_id: str,
+    cluster_ids: Iterable[str],
+    window: TimelineWindow,
+) -> Any:
+    """Build the ordered coverage proof scan backed by its partial index."""
+    snapshots = ClusterInventorySnapshotRecord.__table__
+    event_capture = snapshots.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
+    return (
+        select(
+            snapshots.c.cluster_id,
+            snapshots.c.status,
+            event_capture.label("event_capture"),
+        )
+        .where(
+            snapshots.c.workspace_id == workspace_id,
+            snapshots.c.cluster_id.in_(tuple(sorted(set(cluster_ids)))),
+            timeline_coverage_snapshot_clause(snapshots),
+            snapshots.c.collected_at < datetime.fromtimestamp(window.to_ms / 1_000, tz=UTC),
+        )
+        .order_by(
+            snapshots.c.cluster_id.asc(),
+            snapshots.c.collected_at.asc(),
+            snapshots.c.created_at.asc(),
+            snapshots.c.snapshot_id.asc(),
+        )
+    )
+
+
 class InventoryRepository(DatabaseConnection):
     def snapshot_timeline_coverage(
         self,
@@ -649,27 +680,10 @@ class InventoryRepository(DatabaseConnection):
         workspace_id = str(getattr(read_scope, "workspace_id", "") or "").strip()
         if not workspace_id:
             return ()
-        snapshots = ClusterInventorySnapshotRecord.__table__
-        event_capture = snapshots.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
-        statement = (
-            select(
-                snapshots.c.cluster_id,
-                snapshots.c.status,
-                event_capture.label("event_capture"),
-            )
-            .where(
-                snapshots.c.workspace_id == workspace_id,
-                snapshots.c.cluster_id.in_(tuple(sorted(cluster_ids))),
-                snapshots.c.status != "ignored_stale",
-                snapshots.c.collected_at < datetime.fromtimestamp(window.to_ms / 1_000, tz=UTC),
-                event_capture.is_not(None),
-            )
-            .order_by(
-                snapshots.c.cluster_id.asc(),
-                snapshots.c.collected_at.asc(),
-                snapshots.c.created_at.asc(),
-                snapshots.c.snapshot_id.asc(),
-            )
+        statement = _timeline_coverage_statement(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
+            window=window,
         )
         with self.connection() as conn:
             rows = conn.execution_options(

@@ -24,6 +24,7 @@ from domains.timeline.repository import (
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260718_0200"
 DOWN_REVISION = "20260718_0100"
+HEAD_REVISION = "20260718_0300"
 INDEX_NAME = "ix_timeline_events_diagnostics"
 
 
@@ -122,7 +123,7 @@ def test_timeline_diagnostics_index_migration_is_online_safe(monkeypatch: Any) -
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert tuple(script.get_heads()) == (REVISION,)
+    assert tuple(script.get_heads()) == (HEAD_REVISION,)
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     upgrade = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
