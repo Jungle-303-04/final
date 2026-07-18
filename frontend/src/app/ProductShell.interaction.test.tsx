@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
+import "./apiComposition";
 import { I18nProvider } from "../shared/i18n";
 import type { AuthPort } from "../features/auth/authContract";
 import type { GlobalFilterSuggestion } from "../features/global-filter/globalFilterContract";
@@ -16,6 +17,56 @@ import {
   testAuth,
   testClusterScope,
 } from "./__tests__/ProductShellInteractionSupport";
+
+const moduleImportNetwork = vi.hoisted(() => {
+  const spies = {
+    eventSource: vi.fn(),
+    fetch: vi.fn(),
+    sendBeacon: vi.fn(),
+    webSocket: vi.fn(),
+    xhr: vi.fn(),
+  };
+  const replacements = [
+    replace(globalThis, "fetch", spies.fetch),
+    replace(globalThis, "WebSocket", spies.webSocket),
+    replace(globalThis, "EventSource", spies.eventSource),
+    replace(globalThis, "XMLHttpRequest", spies.xhr),
+    replace(globalThis.navigator, "sendBeacon", spies.sendBeacon),
+  ];
+  return {
+    calls: () => ({
+      eventSource: spies.eventSource.mock.calls.length,
+      fetch: spies.fetch.mock.calls.length,
+      sendBeacon: spies.sendBeacon.mock.calls.length,
+      webSocket: spies.webSocket.mock.calls.length,
+      xhr: spies.xhr.mock.calls.length,
+    }),
+    restore: () => replacements.reverse().forEach((restore) => restore()),
+  };
+
+  function replace(
+    owner: object,
+    property: PropertyKey,
+    value: unknown,
+  ): () => void {
+    const descriptor = Object.getOwnPropertyDescriptor(owner, property);
+    Object.defineProperty(owner, property, {
+      configurable: true,
+      value,
+      writable: true,
+    });
+    return () => {
+      if (descriptor) {
+        Object.defineProperty(owner, property, descriptor);
+      } else {
+        Reflect.deleteProperty(owner, property);
+      }
+    };
+  }
+});
+
+const moduleImportNetworkCalls = moduleImportNetwork.calls();
+moduleImportNetwork.restore();
 
 const testAuthPort: AuthPort = {
   listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
@@ -420,8 +471,13 @@ describe("ProductShell keyboard and help interaction", () => {
     ];
 
     try {
-      vi.resetModules();
-      await Promise.all([import("./ProductRouter"), import("./apiComposition")]);
+      expect(moduleImportNetworkCalls).toEqual({
+        eventSource: 0,
+        fetch: 0,
+        sendBeacon: 0,
+        webSocket: 0,
+        xhr: 0,
+      });
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(webSocketSpy).not.toHaveBeenCalled();
       expect(eventSourceSpy).not.toHaveBeenCalled();
