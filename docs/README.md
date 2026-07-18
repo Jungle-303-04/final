@@ -161,6 +161,11 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 루트 문서는 아래에 있다.
 
+- [BLOCKERS](BLOCKERS.md)
+- [CODEX-DIRECTIVE](CODEX-DIRECTIVE.md)
+- [G1-BRANCH-AUDIT](G1-BRANCH-AUDIT.md)
+- [GOAL-LOG](GOAL-LOG.md)
+- [PRODUCTION-READINESS-PLAN](PRODUCTION-READINESS-PLAN.md)
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture/agent-port-forward-boundary](architecture/agent-port-forward-boundary.md)
@@ -178,6 +183,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [current-service-state](current-service-state.md)
 - [security-review-20260710](security-review-20260710.md)
 - [unimplemented-review-20260711](unimplemented-review-20260711.md)
+- [api-requests/G3-BACKEND-CONTRACTS-RESOLVED](api-requests/G3-BACKEND-CONTRACTS-RESOLVED.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
