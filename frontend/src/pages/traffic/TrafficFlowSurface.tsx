@@ -12,9 +12,9 @@ import type {
 } from "../../features/traffic/trafficContract";
 import { trafficCopy, type TrafficCopy } from "../../features/traffic/trafficCopy";
 import { useI18n } from "../../shared/i18n";
+import { SurfaceSection } from "../../shared/ui/Surface";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import {
   Sheet,
   SheetContent,
@@ -58,12 +58,10 @@ export function TrafficFlowSurface({
   const lastSelectedFlow = useRef<string | null>(state.selectedFlowId);
   if (overview.relationships.availability === "unavailable") {
     return (
-      <Card>
-        <CardHeader className="border-b"><CardTitle>{copy.relationships}</CardTitle></CardHeader>
-        <CardContent className="grid gap-2">
-          <p className="text-sm text-muted-foreground">{copy.relationshipsUnavailable}</p>
-        </CardContent>
-      </Card>
+      <SurfaceSection className="grid min-w-0 gap-2 p-4" role="region" aria-label={copy.relationships}>
+        <h3 className="text-base font-semibold">{copy.relationships}</h3>
+        <p className="text-sm text-muted-foreground">{copy.relationshipsUnavailable}</p>
+      </SurfaceSection>
     );
   }
   const relationships = overview.relationships;
@@ -82,62 +80,60 @@ export function TrafficFlowSurface({
     ? -1
     : relationships.edges.findIndex((edge) => edge.flowId === selected.flowId);
   return (
-    <section aria-labelledby="traffic-relationships-title" className="grid min-w-0 gap-4">
+    <>
       <TrafficFlowFilters
         facets={relationships.facets}
         onChange={onChangeFilters}
         state={state}
       />
       <TrafficFlowMap edges={relationships.edges.slice(0, 8)} onSelect={selectFlow} />
-      <Card className="min-w-0">
-        <CardHeader className="border-b">
+      <SurfaceSection className="min-w-0" role="region" aria-labelledby="traffic-relationships-title">
+        <header className="border-b p-4">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-            <CardTitle id="traffic-relationships-title">{copy.relationships}</CardTitle>
+            <h3 className="text-base font-semibold" id="traffic-relationships-title">{copy.relationships}</h3>
             <Badge variant="outline">
               {t("traffic.flow.count", { count: relationships.totalCount })}
             </Badge>
           </div>
-        </CardHeader>
-        <CardContent className="min-w-0 p-0">
-          {relationships.edges.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">{copy.observedEmpty}</p>
-          ) : (
-            <Table scrollAreaLabel={copy.flowTable}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{copy.source}</TableHead>
-                  <TableHead>{copy.destination}</TableHead>
-                  <TableHead>{copy.protocol}</TableHead>
-                  <TableHead>{copy.verdict}</TableHead>
-                  <TableHead className="text-right">{copy.connections}</TableHead>
-                  <TableHead>{copy.observedAt}</TableHead>
+        </header>
+        {relationships.edges.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">{copy.observedEmpty}</p>
+        ) : (
+          <Table scrollAreaLabel={copy.flowTable}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{copy.source}</TableHead>
+                <TableHead>{copy.destination}</TableHead>
+                <TableHead>{copy.protocol}</TableHead>
+                <TableHead>{copy.verdict}</TableHead>
+                <TableHead className="text-right">{copy.connections}</TableHead>
+                <TableHead>{copy.observedAt}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {relationships.edges.map((edge) => (
+                <TableRow data-state={edge.flowId === state.selectedFlowId ? "selected" : undefined} key={edge.flowId}>
+                  <TableCell>
+                    <FlowButton edge={edge} endpoint="source" onSelect={selectFlow} />
+                  </TableCell>
+                  <TableCell><EndpointLabel edge={edge} endpoint="target" /></TableCell>
+                  <TableCell>{edge.protocol.toUpperCase()}{edge.port ? `:${edge.port}` : ""}</TableCell>
+                  <TableCell><Badge variant={edge.verdict === "forwarded" ? "secondary" : "outline"}>{edge.verdict}</Badge></TableCell>
+                  <TableCell className="text-right tabular-nums">{edge.connections.toLocaleString()}</TableCell>
+                  <TableCell><ObservedAt value={edge.observedAt} /></TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {relationships.edges.map((edge) => (
-                  <TableRow data-state={edge.flowId === state.selectedFlowId ? "selected" : undefined} key={edge.flowId}>
-                    <TableCell>
-                      <FlowButton edge={edge} endpoint="source" onSelect={selectFlow} />
-                    </TableCell>
-                    <TableCell><EndpointLabel edge={edge} endpoint="target" /></TableCell>
-                    <TableCell>{edge.protocol.toUpperCase()}{edge.port ? `:${edge.port}` : ""}</TableCell>
-                    <TableCell><Badge variant={edge.verdict === "forwarded" ? "secondary" : "outline"}>{edge.verdict}</Badge></TableCell>
-                    <TableCell className="text-right tabular-nums">{edge.connections.toLocaleString()}</TableCell>
-                    <TableCell><ObservedAt value={edge.observedAt} /></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          {relationships.hasMore && relationships.nextCursor ? (
-            <div className="flex justify-end border-t p-3">
-              <Button onClick={() => onNextPage(relationships.nextCursor ?? "")} type="button" variant="outline">
-                {copy.nextPage}
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {relationships.hasMore && relationships.nextCursor ? (
+          <div className="flex justify-end border-t p-3">
+            <Button onClick={() => onNextPage(relationships.nextCursor ?? "")} type="button" variant="outline">
+              {copy.nextPage}
+            </Button>
+          </div>
+        ) : null}
+      </SurfaceSection>
       <TrafficFlowDetailSheet
         edge={selected}
         onClose={() => selectFlow(null)}
@@ -146,7 +142,7 @@ export function TrafficFlowSurface({
           if (next) selectFlow(next.flowId);
         }}
       />
-    </section>
+    </>
   );
 }
 
@@ -166,61 +162,59 @@ function TrafficFlowFilters({
   const protocol = state.protocols.length === 1 ? state.protocols[0] : "";
   const verdict = state.verdicts.length === 1 ? state.verdicts[0] : "";
   return (
-    <Card size="sm">
-      <CardContent className="flex min-w-0 flex-wrap items-end gap-3">
-        <FilterSelect
-          id="time-range"
-          label={copy.timeRange}
-          onChange={(value) => onChange({ since: value as TrafficSince })}
-          options={[
-            ["1m", copy.oneMinute],
-            ["5m", copy.fiveMinutes],
-            ["15m", copy.fifteenMinutes],
-            ["1h", copy.oneHour],
-          ]}
-          value={state.since}
-        />
-        <FilterSelect
-          id="protocol"
-          label={copy.protocol}
-          onChange={(value) => onChange({ protocols: value ? [value as TrafficProtocol] : [] })}
-          options={[["", copy.allProtocols], ...facets.protocols.map((item) => [
-            item.value,
-            `${item.value.toUpperCase()} (${item.count})`,
-          ] as const)]}
-          value={protocol}
-        />
-        <FilterSelect
-          id="verdict"
-          label={copy.verdict}
-          onChange={(value) => onChange({ verdicts: value ? [value as TrafficVerdict] : [] })}
-          options={[["", copy.allVerdicts], ...facets.verdicts.map((item) => [
-            item.value,
-            `${item.value} (${item.count})`,
-          ] as const)]}
-          value={verdict}
-        />
-        <FilterSelect
-          id="sort"
-          label={copy.sort}
-          onChange={(value) => onChange({ sort: value as TrafficSort })}
-          options={[
-            ["connections", copy.connections],
-            ["last_seen", copy.observedAt],
-            ["source", copy.source],
-            ["destination", copy.destination],
-          ]}
-          value={state.sort}
-        />
-        <FilterSelect
-          id="order"
-          label={copy.order}
-          onChange={(value) => onChange({ order: value as TrafficSortOrder })}
-          options={[["desc", copy.descending], ["asc", copy.ascending]]}
-          value={state.order}
-        />
-      </CardContent>
-    </Card>
+    <SurfaceSection className="flex min-w-0 flex-wrap items-end gap-3 p-4">
+      <FilterSelect
+        id="time-range"
+        label={copy.timeRange}
+        onChange={(value) => onChange({ since: value as TrafficSince })}
+        options={[
+          ["1m", copy.oneMinute],
+          ["5m", copy.fiveMinutes],
+          ["15m", copy.fifteenMinutes],
+          ["1h", copy.oneHour],
+        ]}
+        value={state.since}
+      />
+      <FilterSelect
+        id="protocol"
+        label={copy.protocol}
+        onChange={(value) => onChange({ protocols: value ? [value as TrafficProtocol] : [] })}
+        options={[["", copy.allProtocols], ...facets.protocols.map((item) => [
+          item.value,
+          `${item.value.toUpperCase()} (${item.count})`,
+        ] as const)]}
+        value={protocol}
+      />
+      <FilterSelect
+        id="verdict"
+        label={copy.verdict}
+        onChange={(value) => onChange({ verdicts: value ? [value as TrafficVerdict] : [] })}
+        options={[["", copy.allVerdicts], ...facets.verdicts.map((item) => [
+          item.value,
+          `${item.value} (${item.count})`,
+        ] as const)]}
+        value={verdict}
+      />
+      <FilterSelect
+        id="sort"
+        label={copy.sort}
+        onChange={(value) => onChange({ sort: value as TrafficSort })}
+        options={[
+          ["connections", copy.connections],
+          ["last_seen", copy.observedAt],
+          ["source", copy.source],
+          ["destination", copy.destination],
+        ]}
+        value={state.sort}
+      />
+      <FilterSelect
+        id="order"
+        label={copy.order}
+        onChange={(value) => onChange({ order: value as TrafficSortOrder })}
+        options={[["desc", copy.descending], ["asc", copy.ascending]]}
+        value={state.order}
+      />
+    </SurfaceSection>
   );
 }
 
@@ -263,28 +257,29 @@ function TrafficFlowMap({
   const copy = useTrafficCopy();
   if (edges.length === 0) return null;
   return (
-    <Card className="min-w-0">
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2"><Network aria-hidden="true" />{copy.flowMap}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="grid min-w-0 gap-2 lg:grid-cols-2" aria-label={copy.flowMap}>
-          {edges.map((edge) => (
-            <li key={edge.flowId}>
-              <button
-                className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg border p-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
-                onClick={() => onSelect(edge.flowId)}
-                type="button"
-              >
-                <EndpointLabel edge={edge} endpoint="source" />
-                <ArrowRight aria-hidden="true" className="text-muted-foreground" />
-                <EndpointLabel edge={edge} endpoint="target" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+    <SurfaceSection className="grid min-w-0 gap-3 p-4" role="region" aria-labelledby="traffic-flow-map-title">
+      <h3 className="flex items-center gap-2 text-base font-semibold" id="traffic-flow-map-title">
+        <Network aria-hidden="true" />{copy.flowMap}
+      </h3>
+      <ul className="grid min-w-0 lg:grid-cols-2" aria-label={copy.flowMap}>
+        {edges.map((edge) => (
+          <li
+            className="border-t first:border-t-0 lg:odd:border-r lg:[&:nth-child(2)]:border-t-0"
+            key={edge.flowId}
+          >
+            <button
+              className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none"
+              onClick={() => onSelect(edge.flowId)}
+              type="button"
+            >
+              <EndpointLabel edge={edge} endpoint="source" />
+              <ArrowRight aria-hidden="true" className="text-muted-foreground" />
+              <EndpointLabel edge={edge} endpoint="target" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </SurfaceSection>
   );
 }
 

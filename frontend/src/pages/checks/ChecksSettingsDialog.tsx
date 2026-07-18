@@ -188,10 +188,10 @@ function ChecksSettingsEditor({
 
       <SettingsSection description={t("checks.settings.checks.description")} title={t("checks.settings.checks.title")}>
         {checks.length === 0 ? <p className="text-sm text-muted-foreground">{t("checks.settings.checks.empty")}</p> : (
-          <ul className="grid gap-1">
+          <ul className="divide-y">
             {checks.map((check) => (
-              <li key={check.id}>
-                <label className="flex min-w-0 items-start gap-3 rounded-lg border p-3">
+              <li className="py-3 first:pt-0 last:pb-0" key={check.id}>
+                <label className="flex min-w-0 items-start gap-3">
                   <input
                     checked={!draft.hiddenCheckIds.includes(check.id)}
                     className="mt-0.5 size-4"
@@ -234,9 +234,9 @@ function ChecksSettingsEditor({
       </SettingsSection>
 
       <SettingsSection description={t("checks.settings.namespaces.description")} title={t("checks.settings.namespaces.title")}>
-        <ul className="grid gap-2">
+        <ul className="divide-y">
           {draft.hiddenNamespaces.map((reference) => (
-            <li className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-3 py-2" key={reference}>
+            <li className="flex min-w-0 items-center justify-between gap-2 py-2 first:pt-0 last:pb-0" key={reference}>
               <span className="min-w-0 break-all text-sm">{reference}</span>
               <Button
                 aria-label={t("checks.settings.namespaces.remove", { reference })}

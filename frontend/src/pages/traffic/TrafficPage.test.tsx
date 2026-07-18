@@ -151,6 +151,18 @@ describe("TrafficPage", () => {
     });
   });
 
+  it("keeps source, summary, scope, and flows in one flat surface", async () => {
+    const port = trafficPort();
+    port.getOverview.mockResolvedValueOnce(observedOverview());
+
+    const view = render(<MemoryRouter><TrafficPage port={port} /></MemoryRouter>);
+
+    await screen.findByRole("list", { name: "Flow map" });
+    expect(view.container.querySelectorAll("[data-slot=surface]")).toHaveLength(1);
+    expect(view.container.querySelector("[data-slot=surface] [data-slot=surface]")).toBeNull();
+    expect(view.container.querySelector("[data-slot=card]")).toBeNull();
+  });
+
   it("refreshes through the existing cluster Agent invalidation revision", async () => {
     const port = trafficPort();
     const view = render(<MemoryRouter><TrafficPage port={port} /></MemoryRouter>);

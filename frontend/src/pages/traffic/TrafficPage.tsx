@@ -20,10 +20,10 @@ import type { CommandReceipt } from "../../shared/parity/referenceParity";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { Surface, SurfaceSection } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import {
   Dialog,
   DialogContent,
@@ -147,22 +147,24 @@ function TrafficReadyPage({
   return (
     <ProductPageFrame className="gap-4">
       <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight" id="traffic-title">{copy.title}</h1>
         <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
       </header>
-      <TrafficSourcesSection
-        frame={data.sourcesFrame}
-        onRefresh={refresh}
-        port={port}
-      />
-      <TrafficContent
-        frame={data.frame}
-        onChangeFilters={onChangeFilters}
-        onNextPage={onNextPage}
-        onRefresh={refresh}
-        onSelectFlow={onSelectFlow}
-        trafficState={trafficState}
-      />
+      <Surface aria-labelledby="traffic-title" className="min-w-0">
+        <TrafficSourcesSection
+          frame={data.sourcesFrame}
+          onRefresh={refresh}
+          port={port}
+        />
+        <TrafficContent
+          frame={data.frame}
+          onChangeFilters={onChangeFilters}
+          onNextPage={onNextPage}
+          onRefresh={refresh}
+          onSelectFlow={onSelectFlow}
+          trafficState={trafficState}
+        />
+      </Surface>
     </ProductPageFrame>
   );
 }
@@ -195,25 +197,21 @@ function TrafficSourcesSection({
 
   if (frame.phase === "idle" || frame.phase === "loading") {
     return (
-      <Card aria-labelledby="traffic-sources-title">
-        <CardHeader>
-          <CardTitle id="traffic-sources-title">{copy.sources}</CardTitle>
-        </CardHeader>
-        <CardContent><ProductStateScreen kind="loading" placement="content" /></CardContent>
-      </Card>
+      <SurfaceSection className="grid min-w-0 gap-3 p-4">
+        <h2 className="text-lg font-semibold" id="traffic-sources-title">{copy.sources}</h2>
+        <ProductStateScreen kind="loading" placement="content" />
+      </SurfaceSection>
     );
   }
   if (frame.phase === "failed") {
     return (
-      <Card aria-labelledby="traffic-sources-title">
-        <CardHeader><CardTitle id="traffic-sources-title">{copy.sources}</CardTitle></CardHeader>
-        <CardContent className="grid gap-3">
-          <p className="text-sm text-destructive">{copy.sourceObservationFailed}</p>
-          <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" />{copy.refresh}
-          </Button>
-        </CardContent>
-      </Card>
+      <SurfaceSection className="grid min-w-0 gap-3 p-4">
+        <h2 className="text-lg font-semibold" id="traffic-sources-title">{copy.sources}</h2>
+        <p className="text-sm text-destructive">{copy.sourceObservationFailed}</p>
+        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
+          <RefreshCw aria-hidden="true" />{copy.refresh}
+        </Button>
+      </SurfaceSection>
     );
   }
 
@@ -252,42 +250,45 @@ function TrafficSourcesSection({
   };
 
   return (
-    <section aria-labelledby="traffic-sources-title" className="grid min-w-0 gap-3">
-      <div className="grid min-w-0 gap-1">
-        <h2 className="text-lg font-semibold" id="traffic-sources-title">{copy.sources}</h2>
-        <p className="text-sm text-muted-foreground">{copy.sourcesDescription}</p>
-      </div>
-      {sources.availability === "available" ? null : (
-        <Alert>
-          <AlertTitle>{copy.sourcesUnavailable}</AlertTitle>
-          <AlertDescription><ReasonCodes reasons={sources.reasonCodes} /></AlertDescription>
-        </Alert>
-      )}
-      {sources.clusters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{copy.notObserved}</p>
-      ) : (
-        <div className="grid min-w-0 gap-3 xl:grid-cols-2">
-          {sources.clusters.map((catalog) => (
-            <TrafficSourceCatalogCard
-              catalog={catalog}
-              key={catalog.scope.clusterId}
-              onAction={(source, action) => {
-                setCommandFailed(false);
-                setReason("");
-                setPendingAction({ catalog, source, action });
-              }}
-            />
-          ))}
+    <>
+      <SurfaceSection className="grid min-w-0 gap-3 p-4">
+        <div className="grid min-w-0 gap-1">
+          <h2 className="text-lg font-semibold" id="traffic-sources-title">{copy.sources}</h2>
+          <p className="text-sm text-muted-foreground">{copy.sourcesDescription}</p>
         </div>
-      )}
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{copy.sourceObservationFailed}</p> : null}
-      {commandFailed ? <p className="text-sm text-destructive">{copy.commandFailed}</p> : null}
-      {receipt ? (
-        operationStore
-          ? <OperationStatusFeedback commandId={receipt.commandId} correlationId={receipt.correlationId} />
-          : <output className="break-all text-xs text-muted-foreground">
-              {t("traffic.sources.accepted", { id: receipt.correlationId })}
-            </output>
+        {sources.availability === "available" ? null : (
+          <Alert>
+            <AlertTitle>{copy.sourcesUnavailable}</AlertTitle>
+            <AlertDescription><ReasonCodes reasons={sources.reasonCodes} /></AlertDescription>
+          </Alert>
+        )}
+        {sources.clusters.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{copy.notObserved}</p>
+        ) : null}
+      </SurfaceSection>
+      {sources.clusters.map((catalog) => (
+        <TrafficSourceCatalogSection
+          catalog={catalog}
+          key={catalog.scope.clusterId}
+          onAction={(source, action) => {
+            setCommandFailed(false);
+            setReason("");
+            setPendingAction({ catalog, source, action });
+          }}
+        />
+      ))}
+      {frame.refreshFailure || commandFailed || receipt ? (
+        <SurfaceSection className="grid min-w-0 gap-2 p-4">
+          {frame.refreshFailure ? <p className="text-sm text-destructive">{copy.sourceObservationFailed}</p> : null}
+          {commandFailed ? <p className="text-sm text-destructive">{copy.commandFailed}</p> : null}
+          {receipt ? (
+            operationStore
+              ? <OperationStatusFeedback commandId={receipt.commandId} correlationId={receipt.correlationId} />
+              : <output className="break-all text-xs text-muted-foreground">
+                  {t("traffic.sources.accepted", { id: receipt.correlationId })}
+                </output>
+          ) : null}
+        </SurfaceSection>
       ) : null}
       <TrafficSourceActionDialog
         action={pendingAction}
@@ -299,11 +300,11 @@ function TrafficSourcesSection({
         setReason={setReason}
         submitting={submitting}
       />
-    </section>
+    </>
   );
 }
 
-function TrafficSourceCatalogCard({
+function TrafficSourceCatalogSection({
   catalog,
   onAction,
 }: {
@@ -312,10 +313,10 @@ function TrafficSourceCatalogCard({
 }) {
   const copy = useTrafficCopy();
   return (
-    <Card className="min-w-0">
-      <CardHeader className="border-b">
+    <SurfaceSection className="grid min-w-0 gap-3 p-4">
+      <div className="grid min-w-0 gap-1">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-          <CardTitle className="truncate" title={catalog.scope.clusterId}>{catalog.scope.clusterId}</CardTitle>
+          <h3 className="truncate text-base font-semibold" title={catalog.scope.clusterId}>{catalog.scope.clusterId}</h3>
           <Badge variant={catalog.freshness === "live" ? "secondary" : "outline"}>{catalog.freshness}</Badge>
         </div>
         {catalog.cluster ? (
@@ -324,10 +325,10 @@ function TrafficSourceCatalogCard({
             {catalog.cluster.kubernetesVersion ? ` · ${catalog.cluster.kubernetesVersion}` : ""}
           </p>
         ) : null}
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
+      </div>
+      <ul className="min-w-0 divide-y">
         {catalog.sources.map((source) => (
-          <div className="grid min-w-0 gap-2 rounded-lg border p-3" key={source.key}>
+          <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0" key={source.key}>
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <p className="min-w-0 truncate font-medium" title={source.label}>{source.label}</p>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -355,11 +356,11 @@ function TrafficSourceCatalogCard({
                 ))}
               </div>
             )}
-          </div>
+          </li>
         ))}
-        <ReasonCodes reasons={catalog.reasonCodes} />
-      </CardContent>
-    </Card>
+      </ul>
+      <ReasonCodes reasons={catalog.reasonCodes} />
+    </SurfaceSection>
   );
 }
 
@@ -444,21 +445,23 @@ function TrafficContent({
 
   const overview = frame.data;
   return (
-    <section aria-labelledby="traffic-overview-title" className="grid min-w-0 gap-4">
-      <div className="relative flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <>
+      <SurfaceSection className="relative flex min-w-0 flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="sr-only" id="traffic-overview-title">{copy.title}</h2>
         <p className="min-w-0 break-words text-sm text-muted-foreground">{scopeDescription(overview, copy.notObserved)}</p>
         <Button onClick={onRefresh} size="sm" type="button" variant="outline">
           <RefreshCw aria-hidden="true" />{copy.refresh}
         </Button>
-      </div>
+      </SurfaceSection>
       <ObservationNotice overview={overview} />
-      <section className="grid min-w-0 gap-3 xl:grid-cols-3" aria-label={copy.summary}>
-        <SummaryCard label={copy.totalFlows} value={overview.summary.totalFlowCount} />
-        <SummaryCard label={copy.deniedFlows} value={overview.summary.deniedFlowCount} />
-        <SummaryCard label={copy.externalFlows} value={overview.summary.externalFlowCount} />
-      </section>
-      <ScopeCard overview={overview} />
+      <SurfaceSection className="p-4">
+        <dl className="grid min-w-0 gap-y-4 sm:grid-cols-3" aria-label={copy.summary}>
+          <SummaryMetric label={copy.totalFlows} value={overview.summary.totalFlowCount} />
+          <SummaryMetric label={copy.deniedFlows} value={overview.summary.deniedFlowCount} />
+          <SummaryMetric label={copy.externalFlows} value={overview.summary.externalFlowCount} />
+        </dl>
+      </SurfaceSection>
+      <ScopeSection overview={overview} />
       <TrafficFlowSurface
         onChangeFilters={onChangeFilters}
         onNextPage={onNextPage}
@@ -466,8 +469,12 @@ function TrafficContent({
         overview={overview}
         state={trafficState}
       />
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{copy.refreshFailed}</p> : null}
-    </section>
+      {frame.refreshFailure ? (
+        <SurfaceSection className="p-4">
+          <p className="text-sm text-destructive">{copy.refreshFailed}</p>
+        </SurfaceSection>
+      ) : null}
+    </>
   );
 }
 
@@ -476,48 +483,48 @@ function ObservationNotice({ overview }: { overview: TrafficOverview }) {
   const copy = useTrafficCopy();
   const observation = overview.observation;
   return (
-    <Alert>
-      <Activity aria-hidden="true" />
-      <AlertTitle>{copy.status}</AlertTitle>
-      <AlertDescription>
-        <p>{observation.availability !== "unavailable"
-          ? t("traffic.status.observed", { sources: observation.sourceKeys.join(", ") })
-          : copy.statusUnavailable}</p>
-        <ReasonCodes reasons={observation.reasonCodes} />
-      </AlertDescription>
-    </Alert>
+    <SurfaceSection className="p-4">
+      <Alert>
+        <Activity aria-hidden="true" />
+        <AlertTitle>{copy.status}</AlertTitle>
+        <AlertDescription>
+          <p>{observation.availability !== "unavailable"
+            ? t("traffic.status.observed", { sources: observation.sourceKeys.join(", ") })
+            : copy.statusUnavailable}</p>
+          <ReasonCodes reasons={observation.reasonCodes} />
+        </AlertDescription>
+      </Alert>
+    </SurfaceSection>
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: number | null }) {
+function SummaryMetric({ label, value }: { label: string; value: number | null }) {
   const { formatNumber } = useI18n();
   const copy = useTrafficCopy();
   return (
-    <Card size="sm">
-      <CardHeader><CardTitle>{label}</CardTitle></CardHeader>
-      <CardContent><p className="text-lg font-semibold tabular-nums">{value === null ? copy.notObserved : formatNumber(value)}</p></CardContent>
-    </Card>
+    <div className="grid min-w-0 gap-1 border-t pt-3 first:border-t-0 first:pt-0 sm:border-l sm:border-t-0 sm:px-4 sm:pt-0 sm:first:border-l-0 sm:first:pl-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-lg font-semibold tabular-nums">{value === null ? copy.notObserved : formatNumber(value)}</dd>
+    </div>
   );
 }
 
-function ScopeCard({ overview }: { overview: TrafficOverview }) {
+function ScopeSection({ overview }: { overview: TrafficOverview }) {
   const copy = useTrafficCopy();
   const coverage = overview.scopeCoverage;
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <CardTitle>{copy.scope}</CardTitle>
+    <SurfaceSection className="grid min-w-0 gap-3 p-4">
+      <div className="grid min-w-0 gap-1">
+        <h3 className="text-base font-semibold">{copy.scope}</h3>
         {coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground">{copy.scopeUnavailable}</p>}
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
-        {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{copy.notObserved}</p> : (
-          <ul className="grid min-w-0 gap-2" aria-label={copy.scope}>
-            {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
-          </ul>
-        )}
-        <ReasonCodes reasons={coverage.reasonCodes} />
-      </CardContent>
-    </Card>
+      </div>
+      {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{copy.notObserved}</p> : (
+        <ul className="min-w-0 divide-y" aria-label={copy.scope}>
+          {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
+        </ul>
+      )}
+      <ReasonCodes reasons={coverage.reasonCodes} />
+    </SurfaceSection>
   );
 }
 
@@ -527,7 +534,7 @@ function ScopeRow({ scope }: { scope: TrafficClusterScope }) {
     ? copy.noNamespaces
     : scope.namespaces.join(", ");
   return (
-    <li className="grid min-w-0 gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <p className="truncate font-medium" title={scope.clusterId}>{scope.clusterId}</p>
         <p className="mt-0.5 break-words text-xs text-muted-foreground">{namespaces}</p>
