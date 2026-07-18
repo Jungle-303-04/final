@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
 import { WidgetFrame, KpiValue, RatioBar, MiniBars, Donut, RankList, MultiLine, MiniTimeline } from "./devpreview/widgets";
+import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, costModel, timelineItems } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
@@ -1126,7 +1127,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
 }
 
 // ── 전역 내비게이션 레일 — 병합 IA 8항목(D19). 트래픽은 리소스의 '흐름' 관점으로,
-//    애플리케이션·GitOps·Helm은 '배포'로 흡수. 미구현 서피스는 비활성 표시(가짜 목적지 금지).
+//    애플리케이션·GitOps·Helm은 '배포'로 흡수. 8항목 전부 실서피스다.
 const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }[] = [
   { id: "home", label: "홈", icon: Home },
   { id: "resources", label: "리소스", icon: ListTree },
@@ -1137,13 +1138,13 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }
   { id: "cost", label: "비용", icon: Coins },
 ];
 // 연결은 내비 항목이 아니다(D7·D20) — 클러스터 뷰 '+ 연결' 카드와 배포 탭 '+ 저장소 연결'에서 모달로만 연다.
-// 설정은 8항목 IA(D19)의 일원 — 데모에 화면이 없으므로 다른 미구현 서피스와 동일하게 '비활성'으로 존재를 보존한다.
+// 설정은 전역 앱 설정만(D20) — 연결·클러스터 관리는 각자의 문맥 팝업이 오너.
 const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [
   { id: "settings", label: "설정", icon: Settings },
 ];
 
-type Surface = "home" | "resources" | "connect";
-const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources" };
+type Surface = "home" | "resources" | "connect" | "deploy" | "issues" | "timeline" | "checks" | "cost" | "settings";
+const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources", deploy: "deploy", issues: "issues", timeline: "timeline", checks: "checks", cost: "cost", settings: "settings" };
 // 리소스 서피스의 관점(D18) — 한 서피스, 세 관점. 스코프는 관점을 넘어 보존된다.
 type ResView = "map" | "list" | "flow";
 
@@ -1212,11 +1213,11 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPickNs, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPickNs, onWidgetDeepLink, pendingCl = [], pendingRepo = [] }: {
   clusterMeta: Record<string, Record<string, number>>;
   onDrillCluster: (clId: string) => void; onConnect: () => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
-  pendingCl?: string[]; pendingRepo?: string[];
+  pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void;
 }) {
   const pods = useMemo(() => podInventory(), []);
   const nodes = useMemo(() => nodeInventory(), []);
@@ -1258,17 +1259,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       ...warn.map((p) => ({ id: p.name, tone: "warn" as const, title: `${p.name} · ${p.status === "Pending" ? "Pending" : "재시작 반복"}`, sub: `${p.svc} · ${p.cluster}`, right: `재시작 ${p.restarts}` })),
     ].slice(0, 5);
   }, [pods, crit]);
-  const changes = useMemo(() => {
-    const c0 = crit[0]; const r0 = outSync[0];
-    // 절대시각 대신 상대시각 — 시연 시점과 모순이 생기지 않는다
-    return [
-      c0 && { id: "c1", time: "2분 전", tone: "crit" as const, title: `${c0.name} ${c0.status} — 재시작 ${c0.restarts}회`, ref: { kind: "Pod", name: c0.name } },
-      r0 && { id: "c2", time: "17분 전", tone: "warn" as const, title: `${r0.repo} 동기화 지연 · 리비전 ${r0.rev}` },
-      { id: "c3", time: "44분 전", tone: "ok" as const, title: `shop-api 스케일 아웃 완료 — 파드 ${pods.filter((p) => p.svc === "shop-api").length}개 유지` },
-      { id: "c4", time: "1시간 전", tone: "ok" as const, title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
-      { id: "c5", time: "2시간 전", tone: "ok" as const, title: "Jungle-303-04/final main 배포 · 정상" },
-    ].filter(Boolean) as { id: string; time: string; tone: "ok" | "warn" | "crit"; title: string; ref?: { kind: string; name: string } }[];
-  }, [crit, outSync, pods]);
+  const changes = useMemo(() => timelineItems().slice(0, 5).map(({ cat: _c, ...it }) => it), []);
 
   const body = (id: string) => {
     switch (id) {
@@ -1293,12 +1284,15 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       }
       case "W5": return <Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} />;
       case "W6": return <RankList onPick={onOpenPod} rows={watch} />;
-      case "W7": return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <KpiValue value="$1,284" delta="+4.2%" deltaTone="warn" summary={<>지난달보다 <b style={{ color: "#B25A00" }}>$52</b> 증가 — 노드 {nodes.length}대 · 스팟 비중 38%</>} />
-          <MiniBars values={[860, 920, 1010, 980, 1120, 1180, 1232, 1284]} labels={["12", "1", "2", "3", "4", "5", "6", "7"]} currentIndex={7} tone={HP.warn} />
-        </div>
-      );
+      case "W7": {
+        const c = costModel();
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <KpiValue value={`$${c.total.toLocaleString()}`} delta={c.delta} deltaTone="warn" summary={<>지난달보다 <b style={{ color: "#B25A00" }}>${c.diff}</b> 증가 — 노드 {nodes.length}대 · 스팟 절감 ${c.spotSave}</>} />
+            <MiniBars values={c.monthly} labels={c.labels} currentIndex={c.monthly.length - 1} tone={HP.warn} />
+          </div>
+        );
+      }
       case "W8": return <MiniTimeline items={changes} onPick={(r) => onOpenPod(r.name)} />;
       default: return null;
     }
@@ -1366,6 +1360,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
           return (
             <motion.div key={id} layout transition={SPRING} style={{ gridColumn: def.span === 2 ? "span 2" : undefined, minWidth: 0 }}>
               <WidgetFrame title={def.title} info={def.info}
+                onDeepLink={onWidgetDeepLink ? () => onWidgetDeepLink(id) : undefined} deepLabel="전체 보기"
                 collapsed={board.collapsed.includes(id)}
                 onToggle={() => save({ ...board, collapsed: board.collapsed.includes(id) ? board.collapsed.filter((x) => x !== id) : [...board.collapsed, id] })}
                 editing={editing}
@@ -1585,7 +1580,7 @@ function App() {
           <Search size={13} style={{ color: UI.ink3 }} />
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
           <input ref={searchRef} value={q}
-            onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface === "home") { setSurface("resources"); setResView("list"); } }}
+            onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface !== "resources") { setSurface("resources"); setResView("list"); } }}
             placeholder="리소스 검색" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
@@ -1683,9 +1678,28 @@ function App() {
         <div style={{ position: "relative", minHeight: `calc(100vh / ${PRESENT_SCALE} - 57px)`, background: UI.bg }}>
           <ConnectWizard key={connectView ?? "launcher"} embedded initialView={connectView} />
         </div>
+      ) : surface === "deploy" ? (
+        <DeploySurface pendingRepos={pendingRepo} onOpenRef={openRef} onAddRepo={() => setConnectModal("repo")} />
+      ) : surface === "issues" ? (
+        <IssuesSurface sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} />
+      ) : surface === "timeline" ? (
+        <TimelineSurface onOpenRef={openRef} />
+      ) : surface === "checks" ? (
+        <ChecksSurface onOpenRef={openRef} />
+      ) : surface === "cost" ? (
+        <CostSurface onOpenRef={openRef} />
+      ) : surface === "settings" ? (
+        <SettingsSurface />
       ) : surface === "home" ? (
         /* 홈 — 위젯 보드 (D21). 카드 클릭=지도 드릴, 위젯 액션=전부 실 목적지 */
         <HomeSurface clusterMeta={clusterMeta} pendingCl={pendingCl} pendingRepo={pendingRepo}
+          onWidgetDeepLink={(id) => {
+            if (id === "W2") setSurface("issues");
+            else if (id === "W3") setSurface("deploy");
+            else if (id === "W4" || id === "W8") setSurface("timeline");
+            else if (id === "W7") setSurface("cost");
+            else { setSurface("resources"); setResView("list"); setKindId("Pod"); }
+          }}
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
           onConnect={() => setConnectModal("cluster")}
           onOpenPod={(name) => openRef("Pod", name)}
@@ -1772,7 +1786,7 @@ function App() {
             <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
               style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : resView === "flow" ? "트래픽 흐름" : resView === "list" ? "리소스 목록" : "리소스 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "인시던트" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽 흐름" : resView === "list" ? "리소스 목록" : "리소스 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}

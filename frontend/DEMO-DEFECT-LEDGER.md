@@ -28,5 +28,11 @@
 - Service 표에 shop-web·redis·worker 행 부재(맵 렌즈엔 존재) / 벨 이벤트 상대시각 W8과 불일치 — 데이터 스펙 확장 P3
 - YAML replicas가 행 READY와 무관 / Esc가 YAML 편집 초안을 무경고 폐기 — 상세 시트 재작성(P4)에서
 - 벨 repo 카드가 클릭 불가인데 클릭형과 동일 외형 / AI 대화 목록 행 무동작 / AI 스크롤 effect deps — 소품질, P4·P5
+- 벨 알림의 상대시각이 타임라인 서피스와 개별 생성(타임라인·W8은 `timelineItems()` 단일화 완료) — P4 벨 통합 시 동일 소스로
+
+## 추가 해소 (서피스 신설 커밋)
+- 6개 서피스(배포·인시던트·타임라인·점검·비용·설정) 데모 구현 — 비활성 메뉴 해제, 전 정보 단일 인벤토리 파생
+- WidgetFrame 딥링크(`>`) 배선 — 목적지 서피스가 생겨 전 위젯에 "전체 보기" 활성
+- 비용 단일 소스 `costModel()`(노드 스펙 파생) — W7·/cost 동일 숫자 보장, W8·타임라인 `timelineItems()` 단일화
 - 미사용 잔재: `Kind.view`, `belowContent`, `NAV_ITEMS.href`, ClusterRow의 `onKind`·`related`, theme의 TYPE/RADIUS/ELEV 미사용+TINT_G 중복 — 데모 동결 전 일괄 정리 커밋 1회로
 - WidgetFrame 딥링크(`>`) 미사용 — 목적지 서피스(인시던트 등)가 데모에 없는 동안은 정의대로 미노출

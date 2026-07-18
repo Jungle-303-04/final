@@ -114,6 +114,10 @@ export function podInventory(): PodInv[] {
 export function repoInventory() {
   return REPOS.map((r) => ({ repo: r, ...REPO_META[r] }));
 }
+// 서비스 카탈로그 — 배포(애플리케이션) 서피스가 앱 목록을 같은 세계에서 파생한다
+export function svcCatalog() {
+  return Object.entries(SVC).map(([id, m]) => ({ ...m, id }));
+}
 export type NodeInv = { id: string; cluster: string; zone: string; instance: string; cap: number; state: NodeState; podCount: number; cpu: number; mem: number };
 export function nodeInventory(): NodeInv[] {
   const pods = genPods();
