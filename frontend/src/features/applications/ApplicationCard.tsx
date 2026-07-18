@@ -80,78 +80,80 @@ export function ApplicationCard({
             />
           </div>
         </CardHeader>
-        <CardContent className="grid flex-1 content-start gap-3">
-          <div className="flex min-w-0 items-center justify-between gap-3 border-y py-2.5 text-sm">
-            <span className="text-muted-foreground">{copy.runtime}</span>
-            <ApplicationReadyBar
-              runtimeReadiness={application.runtimeReadiness}
-              label={copy.pods}
-              unavailable={copy.unavailable}
-            />
-          </div>
-          <div className="grid gap-1 rounded-lg bg-muted/45 px-3 py-2.5 text-sm" data-testid="application-deployment-panel">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {copy.delivery}
-            </span>
-            <ApplicationDeliveryStateChannel
-              delivery={application.delivery}
-              labels={deliveryLabels}
-              unavailable={copy.unavailable}
-            />
-            <span className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {copy.deployment}
-            </span>
-            <ApplicationDeploymentChannel
-              deployment={deployment}
-              unavailable={copy.unavailable}
-              withIcon
-            />
-            {deployment ? (
-              <span className="truncate text-xs text-muted-foreground">
-                {[formatObservedTime(deployment.deployedAt, locale), deployment.deployedBy].filter(Boolean).join(" · ")}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-background/60 px-2.5 py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {copy.batchRuntime}
-            </span>
-            <ApplicationBatchRuntimeChannel
-              batchRuntime={application.batchRuntime}
-              counterLabels={batchCounterLabels}
-              labels={batchLabels}
-              partial={copy.partial}
-              unavailable={copy.unavailable}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="grid min-w-0 gap-1 rounded-lg border bg-background/60 px-2.5 py-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {copy.drift}
-              </span>
-              <ApplicationDriftChannel
-                aligned={copy.aligned}
-                application={application}
-                drift={copy.drift}
+        <CardContent className="grid flex-1 content-start px-0">
+          <div className="divide-y border-t">
+            <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-3 text-sm">
+              <span className="text-muted-foreground">{copy.runtime}</span>
+              <ApplicationReadyBar
+                runtimeReadiness={application.runtimeReadiness}
+                label={copy.pods}
                 unavailable={copy.unavailable}
               />
             </div>
-            <div className="grid min-w-0 gap-1 rounded-lg border bg-background/60 px-2.5 py-2">
+            <div className="grid gap-1 px-4 py-3 text-sm" data-testid="application-deployment-panel">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {copy.incidents}
+                {copy.delivery}
               </span>
-              <ApplicationIncidentChannel
-                count={application.openIncidents}
-                noIncidents={copy.noIncidents}
-                openIncidents={copy.openIncidents}
+              <ApplicationDeliveryStateChannel
+                delivery={application.delivery}
+                labels={deliveryLabels}
+                unavailable={copy.unavailable}
+              />
+              <span className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {copy.deployment}
+              </span>
+              <ApplicationDeploymentChannel
+                deployment={deployment}
+                unavailable={copy.unavailable}
+                withIcon
+              />
+              {deployment ? (
+                <span className="truncate text-xs text-muted-foreground">
+                  {[formatObservedTime(deployment.deployedAt, locale), deployment.deployedBy].filter(Boolean).join(" · ")}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {copy.batchRuntime}
+              </span>
+              <ApplicationBatchRuntimeChannel
+                batchRuntime={application.batchRuntime}
+                counterLabels={batchCounterLabels}
+                labels={batchLabels}
+                partial={copy.partial}
                 unavailable={copy.unavailable}
               />
             </div>
-          </div>
-          <div className="flex min-h-5 items-center justify-end text-xs text-muted-foreground">
-            {resourceTotal === null ? null : (
-              <span>{copy.resources} <strong className="font-medium tabular-nums text-foreground">{resourceTotal}</strong>{application.resourceCountsCompleteness === "partial" ? ` · ${copy.partial}` : ""}</span>
-            )}
+            <div className="grid grid-cols-2 divide-x">
+              <div className="grid min-w-0 gap-1 px-4 py-3">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {copy.drift}
+                </span>
+                <ApplicationDriftChannel
+                  aligned={copy.aligned}
+                  application={application}
+                  drift={copy.drift}
+                  unavailable={copy.unavailable}
+                />
+              </div>
+              <div className="grid min-w-0 gap-1 px-4 py-3">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {copy.incidents}
+                </span>
+                <ApplicationIncidentChannel
+                  count={application.openIncidents}
+                  noIncidents={copy.noIncidents}
+                  openIncidents={copy.openIncidents}
+                  unavailable={copy.unavailable}
+                />
+              </div>
+            </div>
+            <div className="flex min-h-11 items-center justify-end px-4 py-3 text-xs text-muted-foreground">
+              {resourceTotal === null ? null : (
+                <span>{copy.resources} <strong className="font-medium tabular-nums text-foreground">{resourceTotal}</strong>{application.resourceCountsCompleteness === "partial" ? ` · ${copy.partial}` : ""}</span>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

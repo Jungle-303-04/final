@@ -14,7 +14,7 @@ describe("application catalog items", () => {
   it("separates runtime readiness, latest delivery, last success, and batch evidence on a card", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
-    renderUi(<ApplicationCard application={application} onOpen={onOpen} />);
+    const { container } = renderUi(<ApplicationCard application={application} onOpen={onOpen} />);
 
     const ready = screen.getByTestId("application-ready-bar");
     expect(ready.textContent).toContain("2/3");
@@ -32,6 +32,8 @@ describe("application catalog items", () => {
 
     expect(screen.getByTestId("application-drift-channel").textContent).toContain("spec.replicas differs");
     expect(screen.getByTestId("application-incident-channel").textContent).toContain("Open incidents 1");
+    expect(container.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+    expect(screen.getByTestId("application-deployment-panel").className).not.toMatch(/rounded|bg-/u);
 
     await user.click(screen.getByRole("button", { name: /checkout-api/i }));
     expect(onOpen).toHaveBeenCalledOnce();
