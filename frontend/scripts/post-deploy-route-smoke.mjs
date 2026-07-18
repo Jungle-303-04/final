@@ -314,7 +314,7 @@ async function runWithDiagnostics(diagnostics) {
       loadCatalog: () => requestBrowserJson(page, baseUrl, "/api/auth/workspaces"),
       loadSession: () => requestBrowserJson(page, baseUrl, "/api/auth/session"),
     });
-    await verifyWorkspaceSwitcherPlacement(page, currentWorkspace.name);
+    await verifyWorkspaceSwitcherPlacement(page, currentWorkspace.workspace_id);
     process.stdout.write("authenticated real workspace evidence passed\n");
     const routes = await collectReleasedRoutes(page);
     const traversal = orderRoutesForTraversal(routes, new URL(page.url()).pathname);
