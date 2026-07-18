@@ -3,11 +3,13 @@ import {
   resourceManifestApproveSchema,
   resourceManifestApplySchema,
   resourceManifestCreateCapabilitySchema,
+  resourceManifestDeploySchema,
   resourceManifestPreviewSchema,
   resourceManifestSourceSchema,
   type ResourceManifestApproveEndpoint,
   type ResourceManifestApplyEndpoint,
   type ResourceManifestCreateCapabilityEndpoint,
+  type ResourceManifestDeployEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
 } from "./resource-manifests-schemas";
@@ -27,6 +29,11 @@ export interface ResourceManifestApprovalInput extends ResourceManifestEditInput
 
 export interface ResourceManifestDirectApplyInput extends ResourceManifestEditInput {
   expectedDesiredSha256: string;
+  confirmation: true;
+  reason: string;
+}
+
+export interface ResourceManifestDeployInput extends ResourceManifestEditInput {
   confirmation: true;
   reason: string;
 }
@@ -108,6 +115,26 @@ export function applyResourceManifestNow(
   });
 }
 
+export function deployResourceManifestEdit(
+  resourceId: string,
+  input: ResourceManifestDeployInput,
+  signal?: AbortSignal,
+): Promise<ResourceManifestDeployEndpoint> {
+  return apiRequest(resourceManifestPath(resourceId, "deploy"), resourceManifestDeploySchema, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "Idempotency-Key": manifestDeployIdempotencyKey(resourceId, input),
+    },
+    body: JSON.stringify({
+      ...requestBody(input),
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
 export function getResourceManifestCreateCapability(
   clusterId: string,
   namespace: string,
@@ -150,8 +177,17 @@ export function createResourceManifest(
   });
 }
 
-function resourceManifestPath(resourceId: string, action: "preview" | "approve" | "apply"): ApiPath {
+function resourceManifestPath(resourceId: string, action: "preview" | "approve" | "apply" | "deploy"): ApiPath {
   return `/api/resource-manifests/${encodePathSegment(resourceId)}/${action}` as ApiPath;
+}
+
+function manifestDeployIdempotencyKey(
+  resourceId: string,
+  input: ResourceManifestDeployInput,
+): string {
+  const key = [resourceId, input.applicationId, input.baseSha, input.sourceSha256, input.editedYaml]
+    .join(":");
+  return `manifest-deploy:${simpleHash(key)}:${input.sourceSha256.replace("sha256:", "").slice(0, 32)}`;
 }
 
 function manifestApplyIdempotencyKey(

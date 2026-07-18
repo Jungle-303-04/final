@@ -253,6 +253,7 @@ export function ResourceDetailWorkspace({
             {manifestPort ? (
               <ResourceManifestEditor
                 detail={detail.data}
+                onInvalidate={onResourceActionInvalidation}
                 onUnauthorized={onUnauthorized}
                 port={manifestPort}
                 ref={manifestEditorRef}

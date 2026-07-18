@@ -32,24 +32,33 @@ export function createResourceManifestAdapter(
     async preview(resourceId, input, signal) {
       return withFailure(async () => {
         const value = await dependencies.previewResourceManifestEdit(resourceId, input, signal);
+        return toPreview(value);
+      });
+    },
+    async saveAndDeploy(resourceId, input, signal) {
+      return withFailure(async () => {
+        const value = await dependencies.deployResourceManifestEdit(
+          resourceId,
+          { ...input, confirmation: true },
+          signal,
+        );
         return {
-          valid: value.valid,
-          changed: value.changed,
-          baseSha: value.base_sha,
-          sourceSha256: value.source_sha256,
-          desiredSha256: value.desired_sha256,
-          diff: value.diff,
-          errors: value.errors,
-          warnings: value.warnings,
-          applyAvailability: value.apply_availability,
-          applyReasonCodes: value.apply_reason_codes,
-          impact: value.impact.map((item) => ({
-            apiVersion: item.api_version,
-            kind: item.kind,
-            namespace: item.namespace,
-            name: item.name,
-            selected: item.selected,
+          accepted: value.accepted,
+          pathway: value.pathway,
+          operationId: value.operation_id,
+          correlationId: value.correlation_id,
+          currentStage: value.current_stage,
+          preview: toPreview(value.preview),
+          stages: value.stages.map((stage) => ({
+            stage: stage.stage,
+            status: stage.status,
+            evidence: stage.evidence,
+            reasonCode: stage.reason_code,
           })),
+          commandId: value.command_id,
+          eventId: value.event_id,
+          approvalId: value.approval_id,
+          pendingReasonCodes: value.pending_reason_codes,
         };
       });
     },
@@ -122,6 +131,28 @@ export function createResourceManifestAdapter(
         }, signal),
       ));
     },
+  };
+}
+
+function toPreview(value: import("./resourceManifestEndpointContract").ResourceManifestPreviewEndpoint) {
+  return {
+    valid: value.valid,
+    changed: value.changed,
+    baseSha: value.base_sha,
+    sourceSha256: value.source_sha256,
+    desiredSha256: value.desired_sha256,
+    diff: value.diff,
+    errors: value.errors,
+    warnings: value.warnings,
+    applyAvailability: value.apply_availability,
+    applyReasonCodes: value.apply_reason_codes,
+    impact: value.impact.map((item) => ({
+      apiVersion: item.api_version,
+      kind: item.kind,
+      namespace: item.namespace,
+      name: item.name,
+      selected: item.selected,
+    })),
   };
 }
 

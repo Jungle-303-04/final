@@ -61,6 +61,7 @@ from packages.contracts.gateway.requests import (
     ResourceManifestApproveRequest,
     ResourceManifestCreateDryRunRequest,
     ResourceManifestCreateRequest,
+    ResourceManifestDeployRequest,
     ResourceManifestDirectApplyRequest,
     ResourceManifestPreviewRequest,
 )
@@ -68,6 +69,8 @@ from packages.contracts.gateway.responses import (
     ResourceManifestApproveResponse,
     ResourceManifestCreateCapabilityResource,
     ResourceManifestCreateCapabilityResponse,
+    ResourceManifestDeploymentStage,
+    ResourceManifestDeployResponse,
     ResourceManifestImpact,
     ResourceManifestPreviewResponse,
     ResourceManifestSourceChoice,
@@ -217,6 +220,147 @@ async def preview_resource_manifest_edit(
         apply_availability="available" if not reason_codes else "unavailable",
         apply_reason_codes=reason_codes,
         impact=impact,
+    )
+
+
+@router.post(
+    gateway_routes.RESOURCE_MANIFEST_DEPLOY_PATH,
+    response_model=ResourceManifestDeployResponse,
+    status_code=202,
+)
+async def deploy_resource_manifest_edit(
+    resource_id: str,
+    payload: ResourceManifestDeployRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+    fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
+) -> ResourceManifestDeployResponse:
+    """Validate, diff, select the authority-owned path, and submit one operation."""
+
+    if IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
+        raise HTTPException(status_code=422, detail="invalid Idempotency-Key")
+    preview = await preview_resource_manifest_edit(
+        resource_id,
+        ResourceManifestPreviewRequest(
+            application_id=payload.application_id,
+            base_sha=payload.base_sha,
+            source_sha256=payload.source_sha256,
+            edited_yaml=payload.edited_yaml,
+        ),
+        current=current,
+        db=db,
+        fallback_service=fallback_service,
+    )
+    if not preview.valid:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "manifest_invalid", "detail": preview.errors[0]},
+        )
+    validation_stage = ResourceManifestDeploymentStage(
+        stage="validation",
+        status="completed",
+        evidence={
+            "base_sha": preview.base_sha,
+            "source_sha256": preview.source_sha256,
+            "desired_sha256": preview.desired_sha256,
+        },
+    )
+    audit_reason = payload.reason.strip() or "manifest update requested from resource detail"
+    if payload.application_id is not None:
+        approval = await approve_resource_manifest_edit(
+            resource_id,
+            ResourceManifestApproveRequest(
+                application_id=payload.application_id,
+                base_sha=payload.base_sha,
+                source_sha256=payload.source_sha256,
+                edited_yaml=payload.edited_yaml,
+                confirmed=True,
+                reason=audit_reason,
+            ),
+            current=current,
+            db=db,
+            events=events,
+            fallback_service=fallback_service,
+        )
+        return ResourceManifestDeployResponse(
+            accepted=approval.accepted,
+            pathway="git",
+            operation_id=approval.workflow_run_id,
+            correlation_id=approval.correlation_id,
+            current_stage="pull_request",
+            preview=preview,
+            approval_id=approval.approval_id,
+            event_id=approval.event_id,
+            pending_reason_codes=["safe_pr_worker_pending"],
+            stages=[
+                validation_stage,
+                ResourceManifestDeploymentStage(stage="commit", status="pending"),
+                ResourceManifestDeploymentStage(
+                    stage="pull_request",
+                    status="accepted",
+                    evidence={"approval_id": approval.approval_id},
+                ),
+                ResourceManifestDeploymentStage(stage="merge", status="pending"),
+                ResourceManifestDeploymentStage(stage="sync", status="pending"),
+                ResourceManifestDeploymentStage(stage="rollout", status="pending"),
+                ResourceManifestDeploymentStage(stage="done", status="pending"),
+            ],
+        )
+
+    receipt = await apply_resource_manifest_now(
+        resource_id,
+        ResourceManifestDirectApplyRequest(
+            application_id=None,
+            base_sha=payload.base_sha,
+            source_sha256=payload.source_sha256,
+            edited_yaml=payload.edited_yaml,
+            expected_desired_sha256=preview.desired_sha256,
+            confirmation=True,
+            reason=audit_reason,
+        ),
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+        fallback_service=fallback_service,
+    )
+    return ResourceManifestDeployResponse(
+        accepted=receipt.accepted,
+        pathway="agent",
+        operation_id=receipt.command_id,
+        correlation_id=receipt.correlation_id,
+        current_stage="rollout",
+        preview=preview,
+        command_id=receipt.command_id,
+        event_id=receipt.event_id,
+        stages=[
+            validation_stage,
+            ResourceManifestDeploymentStage(
+                stage="commit", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="pull_request", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="merge", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="sync", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="rollout",
+                status="accepted",
+                evidence={"command_id": receipt.command_id, "receipt_status": receipt.status},
+            ),
+            ResourceManifestDeploymentStage(stage="done", status="pending"),
+        ],
     )
 
 

@@ -85,6 +85,7 @@ export const workflowsKo = {
   "workflows.resource.confirm": "실행 전에 정확한 리소스, 영향 범위, 옵션을 확인하세요.",
   "workflows.resource.reason": "실행 사유",
   "workflows.resource.syncOptions": "동기화 옵션(쉼표 구분)",
+  "workflows.resource.rateLimited": "요청이 너무 많습니다. {seconds}초 후 다시 시도하세요.",
   "workflows.resource.prune": "불필요 리소스 정리",
   "workflows.resource.dryRun": "실행 전 검증",
   "workflows.resource.force": "강제 적용",

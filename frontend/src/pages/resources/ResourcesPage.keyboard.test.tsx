@@ -176,6 +176,7 @@ describe("ResourcesPage keyboard navigation", () => {
       preview: vi.fn(),
       approve: vi.fn(),
       applyNow: vi.fn(),
+      saveAndDeploy: vi.fn(),
     };
     renderWithManifest(manifestPort);
     const table = await screen.findByRole("table", { name: "리소스 목록" });

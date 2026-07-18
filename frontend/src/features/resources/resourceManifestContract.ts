@@ -52,6 +52,27 @@ export interface ResourceManifestDirectApplyInput extends ResourceManifestEditIn
   reason: string;
 }
 
+export interface ResourceManifestDeploymentStage {
+  stage: "validation" | "commit" | "pull_request" | "merge" | "sync" | "rollout" | "done";
+  status: "completed" | "accepted" | "pending" | "failed" | "unavailable";
+  evidence: Record<string, string>;
+  reasonCode: string | null;
+}
+
+export interface ResourceManifestDeployment {
+  accepted: boolean;
+  pathway: "git" | "agent";
+  operationId: string;
+  correlationId: string;
+  currentStage: Exclude<ResourceManifestDeploymentStage["stage"], "validation">;
+  preview: ResourceManifestPreview;
+  stages: ResourceManifestDeploymentStage[];
+  commandId: string | null;
+  eventId: string | null;
+  approvalId: string | null;
+  pendingReasonCodes: string[];
+}
+
 export interface ResourceManifestCreateCapability {
   clusterId: string;
   namespace: string;
@@ -145,5 +166,10 @@ export interface ResourceManifestPort extends Partial<ResourceManifestCreatePort
     input: ResourceManifestDirectApplyInput,
     signal?: AbortSignal,
   ): Promise<CommandReceipt>;
+  saveAndDeploy(
+    resourceId: string,
+    input: ResourceManifestEditInput & { reason: string },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestDeployment>;
 }
 import type { CommandReceipt } from "../../shared/parity/referenceParity";

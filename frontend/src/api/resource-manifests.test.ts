@@ -4,6 +4,7 @@ import {
   applyResourceManifestNow,
   createResourceManifest,
   dryRunResourceManifestCreate,
+  deployResourceManifestEdit,
   approveResourceManifestEdit,
   getResourceManifestSource,
   getResourceManifestCreateCapability,
@@ -136,6 +137,68 @@ describe("resource manifest API", () => {
       expected_desired_sha256: `sha256:${"c".repeat(64)}`,
       confirmation: true,
       reason: "apply reviewed manifest",
+    });
+  });
+
+  it("submits validation, routing, and deployment through one idempotent endpoint", async () => {
+    const preview = {
+      valid: true,
+      changed: true,
+      base_sha: "a".repeat(40),
+      source_sha256: `sha256:${"b".repeat(64)}`,
+      desired_sha256: `sha256:${"c".repeat(64)}`,
+      diff: "+spec: {}\n",
+      errors: [],
+      warnings: [],
+      apply_availability: "available",
+      apply_reason_codes: [],
+      impact: [{
+        api_version: "apps/v1",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "checkout",
+        selected: true,
+      }],
+    };
+    const deployment = {
+      accepted: true,
+      pathway: "git",
+      operation_id: "workflow-1",
+      correlation_id: "correlation-1",
+      current_stage: "pull_request",
+      preview,
+      stages: [{
+        stage: "validation",
+        status: "completed",
+        evidence: { desired_sha256: preview.desired_sha256 },
+        reason_code: null,
+      }],
+      command_id: null,
+      event_id: "event-1",
+      approval_id: "approval-1",
+      pending_reason_codes: ["safe_pr_worker_pending"],
+    } as const;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(deployment), { status: 202 }),
+    );
+
+    await expect(deployResourceManifestEdit("resource-1", {
+      applicationId: "app-1",
+      baseSha: preview.base_sha,
+      sourceSha256: preview.source_sha256,
+      editedYaml: SOURCE.content,
+      confirmation: true,
+      reason: "",
+    })).resolves.toEqual(deployment);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/resource-manifests/resource-1/deploy");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get("Idempotency-Key"))
+      .toMatch(/^manifest-deploy:[0-9a-f]{8}:[0-9a-f]{32}$/u);
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      application_id: "app-1",
+      confirmation: true,
+      reason: "",
     });
   });
 

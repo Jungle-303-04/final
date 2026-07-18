@@ -10,6 +10,7 @@ from domains.gitops.repository_discovery import RepositoryDiscoveryService
 from domains.manifest_editor.router import (
     apply_resource_manifest_now,
     approve_resource_manifest_edit,
+    deploy_resource_manifest_edit,
     edit_workflow_id,
     ensure_source_is_current,
     get_resource_manifest_source,
@@ -26,6 +27,7 @@ from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.contracts.auth import Actor
 from packages.contracts.gateway.requests import (
     ResourceManifestApproveRequest,
+    ResourceManifestDeployRequest,
     ResourceManifestDirectApplyRequest,
     ResourceManifestPreviewRequest,
 )
@@ -398,6 +400,105 @@ def test_approval_records_exact_authority_before_requesting_safe_pr() -> None:
     assert approval["details"]["source_sha256"] == manifest_sha256(SOURCE)
     assert approval["details"]["desired_sha256"] == manifest_sha256(desired)
     assert approval["details"]["patch_sha256"] == safe_pr_patch_sha256(request.patches)
+
+
+def test_deploy_endpoint_validates_and_routes_git_authority_in_one_request() -> None:
+    desired = SOURCE.replace("replicas: 2", "replicas: 3")
+    db = ManifestApprovalDb()
+    events = ManifestApprovalEvents()
+
+    response = asyncio.run(
+        deploy_resource_manifest_edit(
+            "resource-1",
+            ResourceManifestDeployRequest(
+                application_id="app-1",
+                base_sha="a" * 40,
+                source_sha256=manifest_sha256(SOURCE),
+                edited_yaml=desired,
+                confirmation=True,
+                reason="",
+            ),
+            "manifest-deploy-git-001",
+            SimpleNamespace(
+                workspace_id="workspace-1",
+                user_id="operator-1",
+                roles=("release_operator",),
+            ),
+            db,
+            events,
+            ManifestOperationEvents(),
+            RepositoryDiscoveryService(PinnedManifestClient(SOURCE)),
+        )
+    )
+
+    assert response.pathway == "git"
+    assert response.current_stage == "pull_request"
+    assert response.command_id is None
+    assert response.preview.desired_sha256 == manifest_sha256(desired)
+    assert [stage.stage for stage in response.stages] == [
+        "validation",
+        "commit",
+        "pull_request",
+        "merge",
+        "sync",
+        "rollout",
+        "done",
+    ]
+    assert response.stages[0].status == "completed"
+    assert response.stages[2].status == "accepted"
+    assert response.stages[-1].status == "pending"
+    assert db.approvals[0]["reason"] == "manifest update requested from resource detail"
+
+
+def test_deploy_endpoint_routes_unbound_live_source_to_outbound_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "shop")
+    db = LiveManifestDb()
+    current = SimpleNamespace(
+        workspace_id="workspace-1",
+        user_id="operator-1",
+        roles=("release_operator",),
+    )
+    source = asyncio.run(
+        get_resource_manifest_source(
+            "resource-1",
+            None,
+            current,
+            db,
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+    assert source.content is not None
+    desired = source.content.replace("replicas: 2", "replicas: 3")
+    operation_events = ManifestOperationEvents()
+
+    response = asyncio.run(
+        deploy_resource_manifest_edit(
+            "resource-1",
+            ResourceManifestDeployRequest(
+                application_id=None,
+                base_sha=source.base_sha,
+                source_sha256=source.source_sha256,
+                edited_yaml=desired,
+                confirmation=True,
+                reason="",
+            ),
+            "manifest-deploy-agent-001",
+            current,
+            db,
+            ManifestApprovalEvents(),
+            operation_events,
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+
+    assert response.pathway == "agent"
+    assert response.current_stage == "rollout"
+    assert response.command_id == response.operation_id
+    assert response.stages[5].status == "accepted"
+    assert response.stages[-1].status == "pending"
+    assert operation_events.published[0]["command_id"] == response.command_id
 
 
 def test_direct_apply_builds_server_owned_exact_command_and_common_receipt(

@@ -166,6 +166,11 @@ class ResourceManifestDirectApplyRequest(ResourceManifestPreviewRequest):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ResourceManifestDeployRequest(ResourceManifestPreviewRequest):
+    confirmation: Literal[True]
+    reason: str = Field(default="", max_length=500)
+
+
 class ResourceDeleteRequest(StrictModel):
     """One exact, preview-pinned destructive resource command."""
 
