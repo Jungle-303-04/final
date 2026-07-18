@@ -85,9 +85,9 @@ export function HelmArtifactHubPanel({ port }: { port: HelmPort }) {
           <p className="text-sm text-muted-foreground">{copy.artifactHubEmpty}</p>
         ) : null}
         {state.phase === "ready" && state.page.items.length > 0 ? (
-          <ul className="grid gap-2">
+          <ul className="divide-y border-y">
             {state.page.items.map((chart) => (
-              <li className="grid min-w-0 gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto]" key={chart.packageId}>
+              <li className="grid min-w-0 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]" key={chart.packageId}>
                 <div className="min-w-0">
                   <Button className="h-auto max-w-full justify-start p-0 text-left" onClick={() => void openDetail(chart)} type="button" variant="link">
                     <span className="truncate">{chart.repository.name}/{chart.name} {chart.version}</span>
@@ -105,7 +105,7 @@ export function HelmArtifactHubPanel({ port }: { port: HelmPort }) {
         ) : null}
         {detailLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner decorative />{copy.artifactHubDetailLoading}</div> : null}
         {detail ? (
-          <section aria-labelledby="helm-artifacthub-detail" className="grid min-w-0 gap-2 rounded-lg border bg-muted/30 p-3">
+          <section aria-labelledby="helm-artifacthub-detail" className="grid min-w-0 gap-2 border-t pt-4">
             <h3 className="font-semibold" id="helm-artifacthub-detail">{detail.chart.repository.name}/{detail.chart.name}</h3>
             <p className="break-words text-sm text-muted-foreground">
               {detail.availableVersions.map((item) => item.version).join(", ")}

@@ -203,7 +203,7 @@ export function PrometheusIntegrationCard({ settingsPort }: { settingsPort: Sett
                 </Button>
               </div>
               {headers.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                <p className="border-y py-3 text-xs text-muted-foreground">
                   {t("settings.integrations.prometheus.noHeaders")}
                 </p>
               ) : (

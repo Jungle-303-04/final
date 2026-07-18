@@ -249,7 +249,7 @@ export function HelmReleaseUpgradeDialog({
             ) : null}
           </div>
           {previewMatches && previewResult ? (
-            <section className="grid max-h-80 min-w-0 gap-3 overflow-auto rounded-md border bg-muted/20 p-3">
+            <section className="grid max-h-80 min-w-0 gap-3 overflow-auto border-t pt-3">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">{t("helm.upgrade.previewReady")}</h3>
                 <span className="text-xs text-muted-foreground">

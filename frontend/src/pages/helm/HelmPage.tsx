@@ -458,9 +458,9 @@ function HelmDetailBoundary({
       <section className="grid gap-2" aria-labelledby="helm-release-history-title">
         <h2 className="text-base font-semibold" id="helm-release-history-title">{copy.history}</h2>
         {detail.history.length === 0 ? <p className="text-sm text-muted-foreground">{copy.unavailableValue}</p> : (
-          <ul className="grid gap-2">
+          <ul className="divide-y border-y">
             {detail.history.map((entry) => (
-              <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-sm" key={entry.storage.uid}>
+              <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-3 text-sm" key={entry.storage.uid}>
                 <span className="min-w-0 truncate font-medium">{entry.storage.name}</span>
                 <span className="text-muted-foreground">{entry.revision ?? copy.unavailableValue}</span>
                 <StatusBadge status={entry.status} />
@@ -478,7 +478,7 @@ function HelmDetailBoundary({
       />
       <section className="grid gap-2" aria-labelledby="helm-release-integrations-title">
         <h2 className="text-base font-semibold" id="helm-release-integrations-title">{copy.integrations}</h2>
-        <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+        <dl className="min-w-0 divide-y border-y">
           <ResourceHealthFact health={detail.release.resourceHealth} />
           <UnavailableFact feature={detail.manifest} label={copy.manifest} />
           <UnavailableFact feature={detail.values} label={copy.values} />
@@ -486,7 +486,7 @@ function HelmDetailBoundary({
           {detail.commands.availability === "unavailable" ? (
             <UnavailableFact feature={detail.commands} label={copy.commands} />
           ) : (
-            <Fact label={copy.commands} value={detail.commands.actions.join(", ")} />
+            <Fact flat label={copy.commands} value={detail.commands.actions.join(", ")} />
           )}
         </dl>
       </section>
@@ -505,17 +505,19 @@ function HelmUpgradeEvidence({ detail }: { detail: HelmReleaseDetailView }) {
   const versions = availableVersions.versions.map((item) => item.version).join(", ");
 
   return (
-    <section aria-labelledby="helm-release-upgrade-evidence-title" className="grid min-w-0 gap-2 rounded-lg border bg-card p-3">
+    <section aria-labelledby="helm-release-upgrade-evidence-title" className="grid min-w-0 gap-3 border-y py-4">
       <h2 className="text-base font-semibold" id="helm-release-upgrade-evidence-title">
         {copy.upgradeAvailability}
       </h2>
       <dl className="grid min-w-0 gap-2 sm:grid-cols-3">
-        <Fact label={copy.upgradeVersionTransition} value={transition} />
+        <Fact flat label={copy.upgradeVersionTransition} value={transition} />
         <Fact
+          flat
           label={copy.upgradeSource}
           value={source ? `${source.name} · ${source.provider}` : copy.upgradeSourceUnavailable}
         />
         <Fact
+          flat
           label={copy.upgradeVersions}
           value={versions || copy.unavailableValue}
         />
@@ -831,7 +833,7 @@ function HelmHooksDiffResult({
         section.items.length > 0 ? (
           <section className="grid min-w-0 gap-2" key={section.heading}>
             <h3 className="text-sm font-semibold">{section.heading}</h3>
-            <ul className="grid min-w-0 gap-2">
+            <ul className="min-w-0 divide-y border-y">
               {section.items.map((item) => (
                 <HelmHookDiffItemCard
                   item={item}
@@ -857,7 +859,7 @@ function HelmHooksDiffResult({
 function HelmHookDiffItemCard({ item }: { item: HelmHookDiffItem }) {
   const copy = useHelmCopy();
   return (
-    <li className="grid min-w-0 gap-2 rounded-md border bg-background p-3 text-xs">
+    <li className="grid min-w-0 gap-2 py-3 text-xs">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="font-mono font-medium">{item.kind}/{item.name}</span>
         {item.manifestChanged ? (
@@ -993,13 +995,24 @@ function EmptyReleaseList({ query }: { query: string }) {
   );
 }
 
-function Fact({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="grid min-w-0 gap-1 bg-card px-3 py-2"><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="m-0 min-w-0 break-words text-sm">{value}</dd></div>;
+function Fact({
+  flat = false,
+  label,
+  value,
+}: {
+  flat?: boolean;
+  label: string;
+  value: React.ReactNode;
+}) {
+  const className = flat
+    ? "grid min-w-0 gap-1 py-3"
+    : "grid min-w-0 gap-1 bg-card px-3 py-2";
+  return <div className={className}><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="m-0 min-w-0 break-words text-sm">{value}</dd></div>;
 }
 
 function UnavailableFact({ feature, label }: { feature: HelmUnavailableFeature; label: string }) {
   const copy = useHelmCopy();
-  return <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2"><dt className="text-sm font-medium">{label}</dt><dd className="m-0 break-words text-xs text-muted-foreground">{featureReasonCopy(feature.reasonCode, copy)}</dd></div>;
+  return <div className="grid min-w-0 gap-1 py-3"><dt className="text-sm font-medium">{label}</dt><dd className="m-0 break-words text-xs text-muted-foreground">{featureReasonCopy(feature.reasonCode, copy)}</dd></div>;
 }
 
 function ResourceHealthFact({ health }: { health: HelmResourceHealth }) {
@@ -1008,7 +1021,7 @@ function ResourceHealthFact({ health }: { health: HelmResourceHealth }) {
     return <UnavailableFact feature={health} label={copy.resourceHealth} />;
   }
   return (
-    <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2">
+    <div className="grid min-w-0 gap-1 py-3">
       <dt className="text-sm font-medium">{copy.resourceHealth}</dt>
       <dd className="m-0 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <HealthBadge health={health.health} />
@@ -1025,7 +1038,7 @@ function OwnedResourcesFact({ ownedResources }: { ownedResources: HelmOwnedResou
     return <UnavailableFact feature={ownedResources} label={copy.ownedResources} />;
   }
   return (
-    <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2">
+    <div className="grid min-w-0 gap-1 py-3">
       <dt className="text-sm font-medium">{copy.ownedResources}</dt>
       <dd className="m-0 break-words text-xs text-muted-foreground">
         {copy.resourceCount}: {ownedResources.items.length}
@@ -1050,7 +1063,7 @@ function OwnedResourcesPanel({ ownedResources }: { ownedResources: HelmOwnedReso
         </div>
       ) : null}
       {ownedResources.items.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy.ownedResourcesEmpty}</p>
+        <p className="border-y py-4 text-sm text-muted-foreground">{copy.ownedResourcesEmpty}</p>
       ) : (
         <Table scrollAreaLabel={copy.ownedResources}>
           <TableHeader>

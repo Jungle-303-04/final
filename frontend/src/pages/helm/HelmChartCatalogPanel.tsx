@@ -158,11 +158,11 @@ function CatalogBoundary({ catalog, onSelect }: { catalog: CatalogState; onSelec
   return (
     <div className="grid min-w-0 gap-2">
       {catalog.page.availability === "partial" ? <Alert><AlertDescription>{copy.chartCatalogPartial}</AlertDescription></Alert> : null}
-      {catalog.page.items.length === 0 ? <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.chartCatalogEmpty}</p> : (
-        <ul className="grid min-w-0 gap-2 md:grid-cols-2 xl:grid-cols-3">
+      {catalog.page.items.length === 0 ? <p className="border-y py-6 text-sm text-muted-foreground">{copy.chartCatalogEmpty}</p> : (
+        <ul className="min-w-0 divide-y border-y">
           {catalog.page.items.map((chart) => (
             <li key={`${chart.source.id}:${chart.name}:${chart.version}`}>
-              <Button aria-label={`${chart.source.name}/${chart.name} ${chart.version}`} className="h-auto w-full min-w-0 justify-start whitespace-normal p-3 text-left" onClick={() => onSelect(chart)} type="button" variant="outline">
+              <Button aria-label={`${chart.source.name}/${chart.name} ${chart.version}`} className="h-auto w-full min-w-0 justify-start whitespace-normal rounded-none px-0 py-3 text-left" onClick={() => onSelect(chart)} type="button" variant="ghost">
                 <span className="grid min-w-0 gap-1">
                   <span className="truncate font-medium">{chart.source.name}/{chart.name} {chart.version}</span>
                   {chart.description ? <span className="line-clamp-2 text-xs font-normal text-muted-foreground">{chart.description}</span> : null}
@@ -183,7 +183,7 @@ function DetailBoundary({ clusterId, detail, port }: { clusterId: string | null;
   if (detail.phase === "failed" || detail.detail.chart === null) return <Alert variant="destructive"><AlertDescription>{copy.chartCatalogDetailFailed}</AlertDescription></Alert>;
   const chart = detail.detail.chart;
   return (
-    <section className="grid min-w-0 gap-3 rounded-lg border p-4" aria-labelledby="helm-chart-detail-title">
+    <section className="grid min-w-0 gap-3 border-t pt-4" aria-labelledby="helm-chart-detail-title">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <h3 className="truncate text-lg font-semibold" id="helm-chart-detail-title">{chart.source.name}/{chart.name}</h3>
