@@ -39,7 +39,7 @@ if [[ -z "${CLUSTER_CONTEXTS}" ]]; then
   CLUSTER_CONTEXTS="${MGMT_CONTEXT:-} ${TARGET_CONTEXT:-}"
 fi
 if [[ -z "${CLUSTER_CONTEXTS// }" ]]; then
-  CLUSTER_CONTEXTS="cluster-1 cluster-2"
+  CLUSTER_CONTEXTS="management-server game-server demo-server"
 fi
 
 if [[ -n "${EXTERNAL_CONSOLE_URL}" && -n "${EXTERNAL_CONSOLE_TOKEN}" ]]; then

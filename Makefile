@@ -226,7 +226,7 @@ external-instances: ## 외부 콘솔 인스턴스별 Console/CD 상태 확인
 external-kubeconfig: ## 외부 콘솔 클러스터 kubeconfig 동기화/검증
 	bash scripts/external-console-kubeconfig.sh
 
-cluster-interactions: ## 두 클러스터 read-only 상태/서비스/Helm/event 확인
+cluster-interactions: ## management/game/demo 세 클러스터 read-only 상태/서비스/Helm/event 확인
 	bash scripts/cluster-interactions.sh
 
 aws-up: ## AWS EKS management + target 2개 테스트 환경 생성

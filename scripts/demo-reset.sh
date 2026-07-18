@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 라이브 데모 시작 상태 복구 도우미.
 #
-# management 워크로드는 건드리지 않고 cluster-1 데모 시작 상태만 되돌린다.
-# 기본값은 sandbox 데모 리소스 삭제와 public API 기반 cluster-1 등록 해제다.
+# management 워크로드는 건드리지 않고 game-server 데모 시작 상태만 되돌린다.
+# 기본값은 sandbox 데모 리소스 삭제와 public API 기반 game-server 등록 해제다.
 # 실제 미연결 상태부터 리허설해야 할 때만 --uninstall-agent 를 붙인다.
 # 붙이지 않으면 아직 떠 있는 agent가 다시 연결될 수 있다.
 set -euo pipefail
@@ -15,8 +15,8 @@ source "${SCRIPT_DIR}/lib/auth.sh"
 
 BASE_URL="${BASE_URL:-https://k8s.woonyong.org/api}"
 WEB_BASE_URL="${WEB_BASE_URL:-https://k8s.woonyong.org}"
-TARGET_CONTEXT="${TARGET_CONTEXT:-cluster-1}"
-CLUSTER_ID="${CLUSTER_ID:-cluster-1}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-game-server}"
+CLUSTER_ID="${CLUSTER_ID:-game-server}"
 SANDBOX_NAMESPACE="${SANDBOX_NAMESPACE:-sandbox}"
 AGENT_NAMESPACE="${AGENT_NAMESPACE:-target}"
 COOKIE_JAR="${COOKIE_JAR:-$(mktemp)}"
@@ -38,8 +38,8 @@ Usage:
 Environment:
   BASE_URL            API 기본 주소. 기본값: https://k8s.woonyong.org/api
   WEB_BASE_URL        same-origin write header 에 넣을 콘솔 origin.
-  TARGET_CONTEXT      target cluster kubeconfig context. 기본값: cluster-1
-  CLUSTER_ID          등록 해제할 platform cluster id. 기본값: cluster-1
+  TARGET_CONTEXT      target cluster kubeconfig context. 기본값: game-server
+  CLUSTER_ID          등록 해제할 platform cluster id. 기본값: game-server
   SANDBOX_NAMESPACE   데모 앱 namespace. 기본값: sandbox
   AGENT_NAMESPACE     설치된 cluster-agent namespace. 기본값: target
 

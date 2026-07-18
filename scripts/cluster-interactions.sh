@@ -58,7 +58,7 @@ if [[ -z "${CLUSTER_CONTEXTS}" ]]; then
   CLUSTER_CONTEXTS="${MGMT_CONTEXT:-} ${TARGET_CONTEXT:-}"
 fi
 if [[ -z "${CLUSTER_CONTEXTS// }" ]]; then
-  CLUSTER_CONTEXTS="cluster-1 cluster-2"
+  CLUSTER_CONTEXTS="management-server game-server demo-server"
 fi
 
 INTERACTION_NAMESPACES="${INTERACTION_NAMESPACES:-management target sandbox default kube-system}"

@@ -12,6 +12,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 E2E_SCRIPT = ROOT / "scripts" / "e2e_test.py"
 STATUS_SCRIPT = ROOT / "scripts" / "status.sh"
+CLUSTER_INTERACTIONS_SCRIPT = ROOT / "scripts" / "cluster-interactions.sh"
+EXTERNAL_KUBECONFIG_SCRIPT = ROOT / "scripts" / "external-console-kubeconfig.sh"
+DEMO_RESET_SCRIPT = ROOT / "scripts" / "demo-reset.sh"
+EXTERNAL_CONSOLE_ENV = ROOT / "config" / "env" / "external-console.env.example"
 
 
 def load_e2e_module() -> Any:
@@ -111,3 +115,20 @@ exit "${FALLBACK_STATUS}"
         "https://service.test/api/healthz",
         "https://service.test/healthz",
     ]
+
+
+def test_operational_cluster_defaults_use_canonical_real_eks_names() -> None:
+    interaction_script = CLUSTER_INTERACTIONS_SCRIPT.read_text(encoding="utf-8")
+    kubeconfig_script = EXTERNAL_KUBECONFIG_SCRIPT.read_text(encoding="utf-8")
+    reset_script = DEMO_RESET_SCRIPT.read_text(encoding="utf-8")
+    external_env = EXTERNAL_CONSOLE_ENV.read_text(encoding="utf-8")
+
+    canonical_contexts = 'CLUSTER_CONTEXTS="management-server game-server demo-server"'
+    for text in (interaction_script, kubeconfig_script, external_env):
+        assert canonical_contexts in text
+        assert "cluster-1" not in text
+        assert "cluster-2" not in text
+
+    assert 'TARGET_CONTEXT="${TARGET_CONTEXT:-game-server}"' in reset_script
+    assert 'CLUSTER_ID="${CLUSTER_ID:-game-server}"' in reset_script
+    assert "cluster-1" not in reset_script

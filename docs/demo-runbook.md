@@ -5,7 +5,7 @@
 ## 사전 준비
 
 - 콘솔: `https://k8s.woonyong.org`
-- management context: `mgmt`
+- management context: `management-server`
 - target context: `game-server`
 - 데모 레포: `Jungle-303-04/k8s-incident-demo-target`
 - 브랜치: `main`

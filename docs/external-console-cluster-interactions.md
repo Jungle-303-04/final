@@ -24,7 +24,7 @@ EXTERNAL_CONSOLE_CLI=
 EXTERNAL_CONSOLE_URL=
 EXTERNAL_CONSOLE_TOKEN=
 EXTERNAL_CLUSTER_HANDLES="game-server demo-server"
-CLUSTER_CONTEXTS="game-server demo-server"
+CLUSTER_CONTEXTS="management-server game-server demo-server"
 
 # 기존 management/target 스크립트까지 연결할 때만 지정
 MGMT_CONTEXT=
@@ -75,10 +75,10 @@ make cluster-interactions
 한 클러스터를 management, 다른 클러스터를 target으로 정하면 기존 스크립트를 그대로 사용할 수 있다.
 
 ```bash
-MGMT_CONTEXT=<management-context> TARGET_CONTEXT=<target-context> make status
-TARGET_CONTEXT=<target-context> make install-telemetry
-MGMT_CONTEXT=<management-context> make scale DEPLOYMENT=rca-worker REPLICAS=2
-MGMT_CONTEXT=<management-context> make kill-pod DEPLOYMENT=rca-worker
+MGMT_CONTEXT=management-server TARGET_CONTEXT=game-server make status
+TARGET_CONTEXT=game-server make install-telemetry
+MGMT_CONTEXT=management-server make scale DEPLOYMENT=rca-worker REPLICAS=2
+MGMT_CONTEXT=management-server make kill-pod DEPLOYMENT=rca-worker
 ```
 
 `install-telemetry`, `scale`, `kill-pod`, `register-target.sh`는 실제 클러스터를 변경한다. 실행 전 context를 반드시 확인한다.
