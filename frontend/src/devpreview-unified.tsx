@@ -292,48 +292,47 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
 };
 
 // ── 종류 인덱스 (레퍼런스 구조 그대로) ─────────────────────────────
-type KindView = "physical" | "relation" | "table";
-type Kind = { id: string; label: string; icon: typeof Rocket; group: string; view: KindView; count: number };
+type Kind = { id: string; label: string; icon: typeof Rocket; group: string; count: number };
 // 그룹·종류·개수는 실제 기준 인스턴스(cluster-1)에서 확인한 값 그대로
 const GROUPS = ["워크로드", "네트워킹", "구성", "스토리지", "접근 제어", "클러스터", "ARGO", "AWS VPC CNI", "API 등록"] as const;
 const BASE_KINDS: Kind[] = [
-  { id: "CronJob", label: "CronJob", icon: Timer, group: "워크로드", view: "table", count: 1 },
-  { id: "DaemonSet", label: "DaemonSet", icon: LayoutGrid, group: "워크로드", view: "table", count: 9 },
-  { id: "Deployment", label: "Deployment", icon: Rocket, group: "워크로드", view: "physical", count: 22 },
-  { id: "Job", label: "Job", icon: Play, group: "워크로드", view: "table", count: 3 },
-  { id: "Pod", label: "Pod", icon: Boxes, group: "워크로드", view: "physical", count: 49 },
-  { id: "ReplicaSet", label: "ReplicaSet", icon: Copy, group: "워크로드", view: "table", count: 38 },
-  { id: "StatefulSet", label: "StatefulSet", icon: Database, group: "워크로드", view: "physical", count: 5 },
-  { id: "Endpoints", label: "Endpoints", icon: Radio, group: "네트워킹", view: "table", count: 0 },
-  { id: "EndpointSlice", label: "EndpointSlice", icon: Radio, group: "네트워킹", view: "table", count: 37 },
-  { id: "Ingress", label: "Ingress", icon: DoorOpen, group: "네트워킹", view: "relation", count: 1 },
-  { id: "NetworkPolicy", label: "NetworkPolicy", icon: ShieldCheck, group: "네트워킹", view: "table", count: 7 },
-  { id: "Service", label: "Service", icon: Plug, group: "네트워킹", view: "relation", count: 35 },
-  { id: "ConfigMap", label: "ConfigMap", icon: FileCog, group: "구성", view: "table", count: 50 },
-  { id: "HPA", label: "HorizontalPodAutoscaler", icon: MoveDiagonal, group: "구성", view: "table", count: 1 },
-  { id: "Lease", label: "Lease", icon: Hourglass, group: "구성", view: "table", count: 0 },
-  { id: "MutatingWebhookConfiguration", label: "MutatingWebhookConfiguration", icon: Webhook, group: "구성", view: "table", count: 0 },
-  { id: "PodDisruptionBudget", label: "PodDisruptionBudget", icon: ShieldCheck, group: "구성", view: "table", count: 3 },
-  { id: "PriorityClass", label: "PriorityClass", icon: SignalHigh, group: "구성", view: "table", count: 0 },
-  { id: "RuntimeClass", label: "RuntimeClass", icon: Cpu, group: "구성", view: "table", count: 0 },
-  { id: "Secret", label: "Secret", icon: KeyRound, group: "구성", view: "table", count: 19 },
-  { id: "ValidatingWebhookConfiguration", label: "ValidatingWebhookConfiguration", icon: Webhook, group: "구성", view: "table", count: 0 },
-  { id: "PVC", label: "PersistentVolumeClaim", icon: HardDrive, group: "스토리지", view: "table", count: 1 },
-  { id: "StorageClass", label: "StorageClass", icon: HardDrive, group: "스토리지", view: "table", count: 1 },
-  { id: "VolumeAttachment", label: "VolumeAttachment", icon: HardDrive, group: "스토리지", view: "table", count: 0 },
-  { id: "ClusterRole", label: "ClusterRole", icon: ShieldCheck, group: "접근 제어", view: "table", count: 107 },
-  { id: "ClusterRoleBinding", label: "ClusterRoleBinding", icon: ShieldCheck, group: "접근 제어", view: "table", count: 92 },
-  { id: "Role", label: "Role", icon: ShieldCheck, group: "접근 제어", view: "table", count: 34 },
-  { id: "RoleBinding", label: "RoleBinding", icon: ShieldCheck, group: "접근 제어", view: "table", count: 35 },
-  { id: "ServiceAccount", label: "ServiceAccount", icon: UserCog, group: "접근 제어", view: "table", count: 85 },
-  { id: "Event", label: "Event", icon: Activity, group: "클러스터", view: "table", count: 60 },
-  { id: "Namespace", label: "Namespace", icon: Folder, group: "클러스터", view: "table", count: 20 },
-  { id: "Node", label: "Node", icon: Cpu, group: "클러스터", view: "physical", count: 2 },
-  { id: "Application", label: "Application", icon: Rocket, group: "ARGO", view: "table", count: 11 },
-  { id: "ApplicationSet", label: "ApplicationSet", icon: Copy, group: "ARGO", view: "table", count: 2 },
-  { id: "AppProject", label: "AppProject", icon: Folder, group: "ARGO", view: "table", count: 2 },
-  { id: "CNINode", label: "CNINode", icon: Network, group: "AWS VPC CNI", view: "table", count: 2 },
-  { id: "APIService", label: "APIService", icon: Plug, group: "API 등록", view: "table", count: 30 },
+  { id: "CronJob", label: "CronJob", icon: Timer, group: "워크로드", count: 1 },
+  { id: "DaemonSet", label: "DaemonSet", icon: LayoutGrid, group: "워크로드", count: 9 },
+  { id: "Deployment", label: "Deployment", icon: Rocket, group: "워크로드", count: 22 },
+  { id: "Job", label: "Job", icon: Play, group: "워크로드", count: 3 },
+  { id: "Pod", label: "Pod", icon: Boxes, group: "워크로드", count: 49 },
+  { id: "ReplicaSet", label: "ReplicaSet", icon: Copy, group: "워크로드", count: 38 },
+  { id: "StatefulSet", label: "StatefulSet", icon: Database, group: "워크로드", count: 5 },
+  { id: "Endpoints", label: "Endpoints", icon: Radio, group: "네트워킹", count: 0 },
+  { id: "EndpointSlice", label: "EndpointSlice", icon: Radio, group: "네트워킹", count: 37 },
+  { id: "Ingress", label: "Ingress", icon: DoorOpen, group: "네트워킹", count: 1 },
+  { id: "NetworkPolicy", label: "NetworkPolicy", icon: ShieldCheck, group: "네트워킹", count: 7 },
+  { id: "Service", label: "Service", icon: Plug, group: "네트워킹", count: 35 },
+  { id: "ConfigMap", label: "ConfigMap", icon: FileCog, group: "구성", count: 50 },
+  { id: "HPA", label: "HorizontalPodAutoscaler", icon: MoveDiagonal, group: "구성", count: 1 },
+  { id: "Lease", label: "Lease", icon: Hourglass, group: "구성", count: 0 },
+  { id: "MutatingWebhookConfiguration", label: "MutatingWebhookConfiguration", icon: Webhook, group: "구성", count: 0 },
+  { id: "PodDisruptionBudget", label: "PodDisruptionBudget", icon: ShieldCheck, group: "구성", count: 3 },
+  { id: "PriorityClass", label: "PriorityClass", icon: SignalHigh, group: "구성", count: 0 },
+  { id: "RuntimeClass", label: "RuntimeClass", icon: Cpu, group: "구성", count: 0 },
+  { id: "Secret", label: "Secret", icon: KeyRound, group: "구성", count: 19 },
+  { id: "ValidatingWebhookConfiguration", label: "ValidatingWebhookConfiguration", icon: Webhook, group: "구성", count: 0 },
+  { id: "PVC", label: "PersistentVolumeClaim", icon: HardDrive, group: "스토리지", count: 1 },
+  { id: "StorageClass", label: "StorageClass", icon: HardDrive, group: "스토리지", count: 1 },
+  { id: "VolumeAttachment", label: "VolumeAttachment", icon: HardDrive, group: "스토리지", count: 0 },
+  { id: "ClusterRole", label: "ClusterRole", icon: ShieldCheck, group: "접근 제어", count: 107 },
+  { id: "ClusterRoleBinding", label: "ClusterRoleBinding", icon: ShieldCheck, group: "접근 제어", count: 92 },
+  { id: "Role", label: "Role", icon: ShieldCheck, group: "접근 제어", count: 34 },
+  { id: "RoleBinding", label: "RoleBinding", icon: ShieldCheck, group: "접근 제어", count: 35 },
+  { id: "ServiceAccount", label: "ServiceAccount", icon: UserCog, group: "접근 제어", count: 85 },
+  { id: "Event", label: "Event", icon: Activity, group: "클러스터", count: 60 },
+  { id: "Namespace", label: "Namespace", icon: Folder, group: "클러스터", count: 20 },
+  { id: "Node", label: "Node", icon: Cpu, group: "클러스터", count: 2 },
+  { id: "Application", label: "Application", icon: Rocket, group: "ARGO", count: 11 },
+  { id: "ApplicationSet", label: "ApplicationSet", icon: Copy, group: "ARGO", count: 2 },
+  { id: "AppProject", label: "AppProject", icon: Folder, group: "ARGO", count: 2 },
+  { id: "CNINode", label: "CNINode", icon: Network, group: "AWS VPC CNI", count: 2 },
+  { id: "APIService", label: "APIService", icon: Plug, group: "API 등록", count: 30 },
 ];
 // 사이드바 카운트 = 실제 표 행 수 — 숫자와 표가 어긋나는 논리 모순을 구조적으로 차단
 const KINDS: Kind[] = BASE_KINDS.map((k) => ({ ...k, count: SPEC[k.id] ? SPEC[k.id].rows(rng(k.id.length * 977 + 13)).length : 0 }));
@@ -1136,7 +1135,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
 
 // ── 전역 내비게이션 레일 — 병합 IA 8항목(D19). 트래픽은 리소스의 '흐름' 관점으로,
 //    애플리케이션·GitOps·Helm은 '배포'로 흡수. 8항목 전부 실서피스다.
-const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }[] = [
+const NAV_ITEMS: { id: string; label: string; icon: typeof Home }[] = [
   { id: "home", label: "홈", icon: Home },
   { id: "resources", label: "리소스", icon: ListTree },
   { id: "deploy", label: "배포", icon: Rocket },
@@ -1147,7 +1146,7 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }
 ];
 // 연결은 내비 항목이 아니다(D7·D20) — 클러스터 뷰 '+ 연결' 카드와 배포 탭 '+ 저장소 연결'에서 모달로만 연다.
 // 설정은 전역 앱 설정만(D20) — 연결·클러스터 관리는 각자의 문맥 팝업이 오너.
-const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [
+const NAV_BOTTOM: { id: string; label: string; icon: typeof Home }[] = [
   { id: "settings", label: "설정", icon: Settings },
 ];
 
@@ -1163,7 +1162,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
   const Item = ({ it }: { it: (typeof NAV_ITEMS)[number] }) => {
     const sid = SURFACE_OF[it.id];
     const active = !!sid && surface === sid;
-    const enabled = active || !!it.href || !!sid;
+    const enabled = active || !!sid;
     const body = (
       <span className={enabled ? "gnav" : undefined} title={collapsed ? it.label : undefined}
         onClick={sid ? () => onSurface(sid) : undefined}
@@ -1174,9 +1173,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
         {!collapsed && <span style={{ fontSize: 13.5, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
       </span>
     );
-    return it.href
-      ? <a key={it.id} href={it.href} style={{ textDecoration: "none", display: "block" }}>{body}</a>
-      : <div key={it.id}>{body}</div>;
+    return <div key={it.id}>{body}</div>;
   };
   return (
     <motion.nav initial={false} animate={{ width: collapsed ? 60 : 208 }} transition={SOFT}

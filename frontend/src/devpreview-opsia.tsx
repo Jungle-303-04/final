@@ -510,13 +510,11 @@ function ClusterOverview({ clId, pods, tick, meta, onKind }: {
   );
 }
 
-function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
-  cl: (typeof CLUSTERS)[number]; pods: Pod[]; tick: number; related: Set<string>;
-  meta?: Record<string, number>; onOpen: () => void; onKind?: (kindId: string) => void;
+function ClusterRow({ cl, pods, tick, meta, onOpen }: {
+  cl: (typeof CLUSTERS)[number]; pods: Pod[]; tick: number;
+  meta?: Record<string, number>; onOpen: () => void;
 }) {
-  void onKind;
   const st = clusterStats(cl.id, pods, tick);
-  const rel = st.cp.filter((p) => related.has(p.id)).length;
   const healthy = st.chot === 0;
   return (
     <motion.button transition={SPRING} onClick={onOpen}
@@ -551,7 +549,6 @@ function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
         <ClusterMiniUsage label="CPU" value={st.avgC} />
         <ClusterMiniUsage label="MEM" value={st.avgM} />
       </div>
-      <span style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}>{rel}</span>
     </motion.button>
   );
 }
@@ -609,11 +606,10 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }:
   // 벽시계 기반 tick — 홈 카드와 지도 카드가 같은 순간 같은 숫자를 말하게 한다(두 화면 숫자 불일치 = 버그)
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1500));
   useEffect(() => { const iv = setInterval(() => setTick(Math.floor(Date.now() / 1500)), 1500); return () => clearInterval(iv); }, []);
-  const none = useMemo(() => new Set<string>(), []);
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14 }}>
       {CLUSTERS.map((cl) => (
-        <ClusterRow key={cl.id} cl={cl} pods={pods} tick={tick} related={none} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
+        <ClusterRow key={cl.id} cl={cl} pods={pods} tick={tick} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
       ))}
       {pending.map((n, i) => <PendingClusterCard key={n} name={n} delay={(CLUSTERS.length + i) * 0.05} />)}
       {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={(CLUSTERS.length + pending.length) * 0.05} />}
@@ -624,15 +620,13 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }:
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
   onOpenResource?: (kind: "Pod", data: Record<string, unknown>) => void;
   /** 셸의 종류 선택과 연결 보기 탭 동기화 (Service→서비스, ConfigMap·Secret→구성, Argo 앱→저장소) — 탭명은 D16(서피스명과 중복 금지) */
   lensTab?: "svc" | "cfg" | "git" | null;
-  /** 맵 콘텐츠(클러스터·노드 뷰) 바로 아래, 연결 보기 옆 왼쪽 컬럼에 붙는 내용 (셸의 리소스 표) */
-  belowContent?: React.ReactNode;
   /** 우측 패널 '리소스' 탭 내용 — 셸의 종류 탐색이 여기로 통합된다 (보조 사이드바 대체) */
   kindsTab?: React.ReactNode;
   /** 실서비스 배치: 클러스터 뷰의 '+ 연결' 카드 / 배포 탭의 '+ 저장소 연결' */
@@ -839,9 +833,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14, alignItems: "stretch" }}>
                     {CLUSTERS.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
-                        <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} meta={clusterMeta?.[cl.id]}
-                          onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)}
-                          onKind={onOpenKind ? (kid) => { go({ level: "nodes", cluster: cl.id }, 1); onOpenKind(kid); } : undefined} />
+                        <ClusterRow cl={cl} pods={pods} tick={tick} meta={clusterMeta?.[cl.id]}
+                          onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
                       </motion.div>
                     ))}
                     {(pendingClusters ?? []).map((n, i) => <PendingClusterCard key={n} name={n} delay={(CLUSTERS.length + i) * 0.05} />)}
@@ -871,8 +864,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 })()}
               </motion.div>
             </AnimatePresence>
-            {/* 셸 리소스 표 — 맵 뷰 바로 아래에 붙는다 (오른쪽 연결 보기와 나란히) */}
-            {belowContent && <div style={{ marginTop: 18 }}>{belowContent}</div>}
           </div>
 
           <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} pendingRepos={pendingRepos} />
