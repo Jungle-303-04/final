@@ -192,5 +192,4 @@ export const shellEn = {
   "shell.profile.open": "Open profile menu for {name}",
   "shell.profile.account": "Profile",
   "shell.profile.settings": "Settings",
-  "shell.profile.theme": "Theme",
 } satisfies Record<ShellMessageKey, string>;

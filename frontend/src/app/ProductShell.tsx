@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
+import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -12,7 +13,6 @@ import {
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
@@ -55,8 +55,8 @@ import { ProductSidebarTrigger } from "./ProductShellSidebar";
 import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
 import { BottomDock } from "./BottomDock";
-import { SidebarProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
-import { SidebarWorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
+import { ProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
+import { WorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
 import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
 import { AlertEventsProvider, useAlertEvents } from "../features/alerts/AlertEventsProvider";
 import {
@@ -327,34 +327,40 @@ function ProductShellFrame({
           ) : null}
         </SidebarContent>
 
-        <SidebarFooter className="gap-1.5 overflow-x-hidden">
-          <SidebarWorkspaceSwitcher auth={auth} />
-          <Separator className="mx-2 data-horizontal:w-auto" />
-          <SidebarProfileMenu
-            auth={auth}
-            settingsHref={settingsHref}
-            themeController={themeController}
-          />
-        </SidebarFooter>
       </Sidebar>
 
       <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-background text-foreground">
-        <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:flex-nowrap">
-          <div className="order-1 flex min-w-0 items-center gap-2">
+        <header
+          className="sticky top-0 z-30 grid min-h-14 min-w-0 grid-cols-1 items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75 md:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(12rem,1fr)_auto]"
+          data-slot="product-header"
+        >
+          <div className="flex min-w-0 items-center gap-1" data-slot="product-header-workspace">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
+            <WorkspaceSwitcher auth={auth} />
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
-          <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
-            <PortForwardSessionIndicator
-              resourcesAvailable={releasedSurfaceIds.has("resources")}
+          <div className="min-w-0 md:col-start-2 md:row-start-1">
+            <UnifiedFilterBar
+              port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
+              ref={unifiedFilterRef}
             />
-            <VersionUpdateNotice port={runtimeStatusPort} />
-            <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
+          </div>
+          <div
+            className="flex min-w-0 flex-wrap items-center justify-end gap-1 md:col-span-2 lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:flex-nowrap"
+            data-slot="product-header-account"
+          >
+            <LocaleToggle />
+            <ThemeToggle controller={themeController} />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}
               open={isShortcutHelpOpen}
             />
+            <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
+            <PortForwardSessionIndicator
+              resourcesAvailable={releasedSurfaceIds.has("resources")}
+            />
+            <VersionUpdateNotice port={runtimeStatusPort} />
             {isCommandPaletteOpen ? (
               <Suspense fallback={null}>
                 <ProductCommandPalette
@@ -367,12 +373,9 @@ function ProductShellFrame({
               </Suspense>
             ) : null}
             <DesktopLocalTerminalEntry />
-            <LocaleToggle />
-          </div>
-          <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar
-              port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
-              ref={unifiedFilterRef}
+            <ProfileMenu
+              auth={auth}
+              settingsHref={settingsHref}
             />
           </div>
         </header>

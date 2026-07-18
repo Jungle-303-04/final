@@ -189,5 +189,4 @@ export type ShellMessageKey =
   | "shell.profile.label"
   | "shell.profile.open"
   | "shell.profile.account"
-  | "shell.profile.settings"
-  | "shell.profile.theme";
+  | "shell.profile.settings";

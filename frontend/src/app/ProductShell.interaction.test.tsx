@@ -85,7 +85,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
     await user.keyboard("t");
     expect(window.localStorage.getItem("theme")).toBe("system");
-    await user.click(screen.getByRole("button", { name: "test-use… 프로필 메뉴 열기" }));
+    await user.click(screen.getByRole("button", { name: "테마 선택" }));
     expect(screen.getByRole("button", { name: "운영체제" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "다크" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "라이트" })).toBeTruthy();
@@ -264,19 +264,25 @@ describe("ProductShell keyboard and help interaction", () => {
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
   });
 
-  it("keeps the workspace catalog and account actions in the sidebar footer", async () => {
+  it("keeps the workspace catalog on the top-left and account actions on the top-right", async () => {
     const user = userEvent.setup();
-    renderShell();
+    const { container } = renderShell();
 
-    await user.click(screen.getByRole("button", {
+    const workspaceTrigger = screen.getByRole("button", {
       name: "현재 워크스페이스: test-workspace",
-    }));
+    });
+    const profileTrigger = screen.getByRole("button", { name: "test-use… 프로필 메뉴 열기" });
+    expect(workspaceTrigger.closest('[data-slot="product-header-workspace"]')).toBeTruthy();
+    expect(profileTrigger.closest('[data-slot="product-header-account"]')).toBeTruthy();
+    expect(container.querySelector('[data-slot="sidebar-footer"]')).toBeNull();
+
+    await user.click(workspaceTrigger);
     expect(await screen.findByText(
       "접근 가능한 워크스페이스가 없습니다.",
     )).toBeTruthy();
     await user.keyboard("{Escape}");
 
-    await user.click(screen.getByRole("button", { name: "test-use… 프로필 메뉴 열기" }));
+    await user.click(profileTrigger);
     expect(screen.getByRole("link", { name: "프로필" }).getAttribute("href"))
       .toBe("/settings?clusters=cluster-1#profile");
     expect(screen.getByRole("link", { name: "설정" }).getAttribute("href"))
@@ -326,7 +332,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
   });
 
-  it("lets Tab leave the non-modal mobile filter popup for page content", async () => {
+  it("lets Tab leave the non-modal mobile filter popup for the next header control", async () => {
     installMatchMedia(true);
     vi.stubGlobal("ResizeObserver", class {
       disconnect() {}
@@ -343,7 +349,7 @@ describe("ProductShell keyboard and help interaction", () => {
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "모든 필터 지우기" }));
       await user.tab();
-      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "화면 입력" }));
+      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "현재 언어: 한국어" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     } finally {
       vi.unstubAllGlobals();
@@ -362,12 +368,15 @@ describe("ProductShell keyboard and help interaction", () => {
 
     expect(tabOrder).toEqual([
       "모바일 사이드바 열기",
-      "런타임 진단 열기",
-      "키보드 단축키",
-      "현재 언어: 한국어",
+      "현재 워크스페이스: test-workspace",
       "클러스터, 앱, 라벨, 리소스 필터",
       "클러스터, 앱, 라벨, 리소스 필터",
       "모든 필터 지우기",
+      "현재 언어: 한국어",
+      "테마 선택",
+      "키보드 단축키",
+      "런타임 진단 열기",
+      "test-use… 프로필 메뉴 열기",
     ]);
   });
 
@@ -383,10 +392,15 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Open profile menu for test-use…" }));
+    await user.click(screen.getByRole("button", { name: "Choose theme" }));
     expect(screen.getByRole("button", { name: "Operating system" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Dark" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Light" })).toBeTruthy();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Open profile menu for test-use…" }));
+    expect(screen.getByRole("link", { name: "Profile" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Operating system" })).toBeNull();
     expect(window.localStorage.getItem("opsia.locale")).toBe("en");
   });
 

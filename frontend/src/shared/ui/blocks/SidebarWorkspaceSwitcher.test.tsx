@@ -9,8 +9,7 @@ import type {
   ProductWorkspaceList,
 } from "../../../features/auth/authContract";
 import { I18nProvider, type SupportedLocale } from "../../i18n";
-import { SidebarProvider } from "../primitives/sidebar";
-import { SidebarWorkspaceSwitcher } from "./SidebarWorkspaceSwitcher";
+import { WorkspaceSwitcher } from "./SidebarWorkspaceSwitcher";
 
 const SESSION: ProductSession = {
   authEnabled: true,
@@ -49,7 +48,7 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("SidebarWorkspaceSwitcher", () => {
+describe("WorkspaceSwitcher", () => {
   it("exposes loading and an accessible English selection catalog", async () => {
     const catalog = deferred<ProductWorkspaceList>();
     renderSwitcher("en", vi.fn(() => catalog.promise));
@@ -103,28 +102,47 @@ describe("SidebarWorkspaceSwitcher", () => {
     switched.resolve({ ...SESSION, workspaceId: "workspace-b" });
     await waitFor(() => expect(screen.queryByRole("list", { name: "Workspace" })).toBeNull());
   });
+
+  it.each(["en", "ko"] as const)(
+    "keeps a stable toolbar width and truncates long identity text in %s",
+    (locale) => {
+      const longWorkspaceId = "workspace-with-a-deliberately-long-human-readable-identity";
+      renderSwitcher(locale, vi.fn().mockResolvedValue({
+        currentWorkspaceId: longWorkspaceId,
+        items: [],
+      }), undefined, longWorkspaceId);
+
+      const trigger = screen.getByRole("button", {
+        name: locale === "ko"
+          ? `현재 워크스페이스: ${longWorkspaceId}`
+          : `Current workspace: ${longWorkspaceId}`,
+      });
+      expect(trigger.className).toContain("sm:w-(--product-toolbar-identity-width)");
+      expect(trigger.querySelector(".truncate")?.textContent).toBe(
+        locale === "ko" ? "워크스페이스" : "Workspace",
+      );
+      expect(trigger.querySelectorAll(".truncate")).toHaveLength(2);
+    },
+  );
 });
 
 function renderSwitcher(
   locale: SupportedLocale,
   listWorkspaces: AuthenticatedAuthState["listWorkspaces"],
-  switchWorkspace: AuthenticatedAuthState["switchWorkspace"] = async () => {
-    throw new Error("not used");
-  },
+  switchWorkspace: AuthenticatedAuthState["switchWorkspace"] | undefined = undefined,
+  workspaceId = SESSION.workspaceId,
 ) {
   const auth: AuthenticatedAuthState = {
     listWorkspaces,
-    session: SESSION,
+    session: { ...SESSION, workspaceId },
     signOutIssue: null,
     signOutPending: false,
     onSignOut: vi.fn(),
-    switchWorkspace,
+    switchWorkspace: switchWorkspace ?? (async () => { throw new Error("not used"); }),
   };
   return render(
     <I18nProvider navigatorLanguage={locale} storage={null}>
-      <SidebarProvider>
-        <SidebarWorkspaceSwitcher auth={auth} />
-      </SidebarProvider>
+      <WorkspaceSwitcher auth={auth} />
     </I18nProvider>,
   );
 }

@@ -7,14 +7,9 @@ import type {
 } from "../../../features/auth/authContract";
 import { cn } from "../../lib/cn";
 import { useI18n } from "../../i18n";
-import {
-  SidebarMenu,
-  SidebarMenuItem,
-} from "../primitives/sidebar-menu";
-import { SidebarText, useSidebar } from "../primitives/sidebar";
-import { Popover, PopoverContent } from "../primitives/popover";
+import { Button } from "../primitives/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../primitives/popover";
 import { Spinner } from "../primitives/spinner";
-import { SidebarMenuPopoverTrigger } from "./SidebarMenuPopoverTrigger";
 
 type CatalogState =
   | { kind: "idle" }
@@ -22,14 +17,13 @@ type CatalogState =
   | { kind: "ready"; catalog: ProductWorkspaceList }
   | { kind: "error" };
 
-export function SidebarWorkspaceSwitcher({ auth }: { auth: AuthenticatedAuthState }) {
+export function WorkspaceSwitcher({ auth }: { auth: AuthenticatedAuthState }) {
   const [open, setOpen] = useState(false);
   const [catalogState, setCatalogState] = useState<CatalogState>({ kind: "idle" });
   const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);
   const [switchFailed, setSwitchFailed] = useState(false);
   const requestRef = useRef<AbortController | null>(null);
   const { t } = useI18n();
-  const { isMobile } = useSidebar();
   const workspaceId = auth.session.workspaceId;
   const label = t("shell.workspace.current", { workspace: workspaceId });
 
@@ -79,27 +73,36 @@ export function SidebarWorkspaceSwitcher({ auth }: { auth: AuthenticatedAuthStat
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuPopoverTrigger label={label} tooltip={label}>
-            <span className="grid size-7 shrink-0 place-items-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
-              <Building2 aria-hidden="true" className="size-4" />
-            </span>
-            <SidebarText className="flex-1">
-              <span className="block truncate text-xs text-sidebar-foreground/60">
-                {t("shell.workspace.label")}
-              </span>
-              <span className="block truncate">{workspaceId}</span>
-            </SidebarText>
-            <ChevronsUpDown aria-hidden="true" className="ml-auto size-4 shrink-0 text-sidebar-foreground/50" />
-          </SidebarMenuPopoverTrigger>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <PopoverTrigger
+        render={(
+          <Button
+            aria-label={label}
+            className="min-w-0 gap-2 px-2 sm:w-(--product-toolbar-identity-width) sm:justify-start"
+            data-slot="workspace-switcher-trigger"
+            title={label}
+            variant="ghost"
+          />
+        )}
+      >
+        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-accent-foreground">
+          <Building2 aria-hidden="true" className="size-4" />
+        </span>
+        <span className="hidden min-w-0 flex-1 flex-col items-start leading-tight sm:flex">
+          <span className="block w-full truncate text-[0.625rem] font-normal text-muted-foreground">
+            {t("shell.workspace.label")}
+          </span>
+          <span className="block w-full truncate text-xs">{workspaceId}</span>
+        </span>
+        <ChevronsUpDown
+          aria-hidden="true"
+          className="hidden size-3.5 shrink-0 text-muted-foreground sm:block"
+        />
+      </PopoverTrigger>
       <PopoverContent
         align="start"
         aria-label={t("shell.workspace.label")}
-        className="w-72 p-3"
-        side={isMobile ? "top" : "right"}
+        className="w-72 max-w-[calc(100vw-1rem)] p-3"
+        side="bottom"
       >
         <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {t("shell.workspace.label")}

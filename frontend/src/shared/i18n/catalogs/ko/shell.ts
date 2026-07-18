@@ -192,5 +192,4 @@ export const shellKo = {
   "shell.profile.open": "{name} 프로필 메뉴 열기",
   "shell.profile.account": "프로필",
   "shell.profile.settings": "설정",
-  "shell.profile.theme": "테마",
 } satisfies Record<ShellMessageKey, string>;

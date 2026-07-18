@@ -70,6 +70,11 @@ describe("ProductShell", () => {
     expect(markup).not.toContain("workspace_id");
     expect(markup).toContain("Open profile menu for test-use…");
     expect(markup).toContain("Current workspace: test-workspace");
+    expect(markup).toContain('data-slot="product-header-workspace"');
+    expect(markup).toContain('data-slot="workspace-switcher-trigger"');
+    expect(markup).toContain('data-slot="product-header-account"');
+    expect(markup).toContain('data-slot="profile-menu-trigger"');
+    expect(markup).not.toContain('data-slot="sidebar-footer"');
     expect(markup).toContain('aria-label="Current language: English"');
     expect(markup).toContain("test-user");
     expect(markup).toContain("overflow-x-hidden");
@@ -78,6 +83,18 @@ describe("ProductShell", () => {
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
     expect(markup.match(/data-slot="unified-filter-bar"/gu)).toHaveLength(1);
+    expect(markup.indexOf('data-slot="workspace-switcher-trigger"')).toBeLessThan(
+      markup.indexOf('data-slot="unified-filter-bar"'),
+    );
+    expect(markup.indexOf('data-slot="unified-filter-bar"')).toBeLessThan(
+      markup.indexOf('aria-label="Current language: English"'),
+    );
+    expect(markup.indexOf('aria-label="Current language: English"')).toBeLessThan(
+      markup.indexOf('aria-label="Choose theme"'),
+    );
+    expect(markup.indexOf('aria-label="Choose theme"')).toBeLessThan(
+      markup.indexOf('data-slot="profile-menu-trigger"'),
+    );
     expect(markup).toContain('id="product-main"');
     expect(markup).toContain("flex-1 overflow-y-auto");
   });

@@ -5,33 +5,22 @@ import { Link } from "react-router-dom";
 import type { AuthenticatedAuthState } from "../../../features/auth/authContract";
 import { presentProductSession } from "../../../features/auth/sessionPresentation";
 import { useI18n } from "../../i18n";
-import { ThemeSelectionList } from "../ThemeToggle";
-import type { ProductThemeController } from "../useProductTheme";
 import { Alert, AlertDescription, AlertTitle } from "../primitives/alert";
 import { Button, buttonVariants } from "../primitives/button";
 import { cn } from "@/shared/lib/cn";
-import { Popover, PopoverContent } from "../primitives/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "../primitives/popover";
 import { Separator } from "../primitives/separator";
-import {
-  SidebarMenu,
-  SidebarMenuItem,
-} from "../primitives/sidebar-menu";
-import { SidebarText, useSidebar } from "../primitives/sidebar";
 import { Spinner } from "../primitives/spinner";
-import { SidebarMenuPopoverTrigger } from "./SidebarMenuPopoverTrigger";
 
-export function SidebarProfileMenu({
+export function ProfileMenu({
   auth,
   settingsHref,
-  themeController,
 }: {
   auth: AuthenticatedAuthState;
   settingsHref: string;
-  themeController: ProductThemeController;
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useI18n();
-  const { isMobile } = useSidebar();
   const issueId = useId();
   const logoutCapabilityId = useId();
   const profile = presentProductSession(auth.session);
@@ -43,26 +32,27 @@ export function SidebarProfileMenu({
 
   return (
     <Popover onOpenChange={setOpen} open={open}>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuPopoverTrigger label={openLabel} tooltip={profile.fullIdentity}>
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sidebar-primary text-[0.65rem] font-semibold text-sidebar-primary-foreground">
-              {profile.avatarLabel}
-            </span>
-            <SidebarText className="flex-1" title={profile.fullIdentity}>
-              <span className="block truncate">{profile.displayName}</span>
-              <span className="block truncate text-xs font-normal text-sidebar-foreground/60">
-                {profile.secondaryLabel}
-              </span>
-            </SidebarText>
-          </SidebarMenuPopoverTrigger>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <PopoverTrigger
+        render={(
+          <Button
+            aria-label={openLabel}
+            className="rounded-full p-0"
+            data-slot="profile-menu-trigger"
+            size="icon"
+            title={profile.fullIdentity}
+            variant="ghost"
+          />
+        )}
+      >
+        <span className="grid size-7 place-items-center rounded-full bg-primary text-[0.65rem] font-semibold text-primary-foreground">
+          {profile.avatarLabel}
+        </span>
+      </PopoverTrigger>
       <PopoverContent
         align="end"
         aria-label={t("shell.profile.label")}
-        className="w-72 p-2"
-        side={isMobile ? "top" : "right"}
+        className="w-72 max-w-[calc(100vw-1rem)] p-2"
+        side="bottom"
       >
         <div className="flex min-w-0 items-center gap-3 px-2 py-2">
           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
@@ -90,11 +80,6 @@ export function SidebarProfileMenu({
           <Settings aria-hidden="true" data-icon="inline-start" />
           {t("shell.profile.settings")}
         </Link>
-        <Separator className="my-1" />
-        <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
-          {t("shell.profile.theme")}
-        </p>
-        <ThemeSelectionList controller={themeController} />
         <Separator className="my-1" />
         <Button
           aria-describedby={auth.signOutIssue
