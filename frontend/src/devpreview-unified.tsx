@@ -1242,6 +1242,19 @@ function App() {
   const scopedRows = useMemo(() => (inScope ? allRows.filter((r) => String(r.cluster ?? clusterOf(String(r.name ?? ""))) === scope.cluster) : allRows), [allRows, inScope, scope.cluster]);
   const nsRows = useMemo(() => (ns === "모든 네임스페이스" ? scopedRows : scopedRows.filter((r) => r.ns === undefined || String(r.ns) === ns)), [scopedRows, ns]);
   const shownRows = useMemo(() => (q ? nsRows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : nsRows), [nsRows, q]);
+  // 클러스터 카드 메타 — 표 스코프 필터와 같은 귀속 로직에서 파생 (숫자 모순 불가)
+  const clusterMeta = useMemo(() => {
+    const kinds = ["Deployment", "StatefulSet", "DaemonSet", "Service", "Ingress", "Job", "CronJob", "Namespace"] as const;
+    const count = (kid: string, cl: string) => {
+      const rows = SPEC[kid] ? SPEC[kid].rows(rng(kid.length * 977 + 13)) : [];
+      return rows.filter((r) => String(r.cluster ?? clusterOf(String(r.name ?? ""))) === cl).length;
+    };
+    const meta: Record<string, Record<string, number>> = {};
+    for (const cl of ["prod-eks", "dev-eks"]) {
+      meta[cl] = {}; for (const k of kinds) meta[cl][k] = count(k, cl);
+    }
+    return meta;
+  }, []);
   const openFromMap = (kid: string, data: Record<string, unknown>) => {
     const k = KINDS.find((x) => x.id === kid); if (k) setDetail({ kind: k, row: data });
   };
@@ -1405,6 +1418,8 @@ function App() {
             onAddCluster={() => setConnectModal("cluster")}
             onAddRepo={() => setConnectModal("repo")}
             stickyTop={topH + 12}
+            clusterMeta={clusterMeta}
+            onOpenKind={(kid) => setKindId(kid)}
             kindsTab={<KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />}
             belowContent={scope.level !== "pods" && (
               <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
