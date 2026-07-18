@@ -94,7 +94,7 @@ jobs:
             fi
           fi
           case "${scope}" in
-            FULL|BACKEND|FRONTEND) ;;
+            FULL|BACKEND|FRONTEND|SMOKE) ;;
             *)
               echo "Unknown gate scope ${scope}; retaining FULL gate scope." >&2
               scope="FULL"
@@ -116,12 +116,13 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Set up Node.js
+        if: ${{ steps.gate-scope.outputs.scope == 'FULL' || steps.gate-scope.outputs.scope == 'BACKEND' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
       - name: Set up Helm
-        if: ${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}
+        if: ${{ steps.gate-scope.outputs.scope == 'FULL' || steps.gate-scope.outputs.scope == 'BACKEND' }}
         uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.2.2
@@ -130,15 +131,19 @@ jobs:
         run: uv sync --frozen
 
       - name: Verify commit message gate rules
-        if: ${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}
+        if: ${{ steps.gate-scope.outputs.scope == 'FULL' || steps.gate-scope.outputs.scope == 'BACKEND' }}
         run: uv run pytest -q tests/test_commit_msg_gate.py
 
       - name: Run contract and manifest gate
         if: ${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}
         run: make gate-contract-manifest
 
+      - name: Run deployment smoke backend gate
+        if: ${{ steps.gate-scope.outputs.scope == 'SMOKE' }}
+        run: make gate-deploy-smoke-backend
+
       - name: Run backend and manifest gate
-        if: ${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}
+        if: ${{ steps.gate-scope.outputs.scope == 'FULL' || steps.gate-scope.outputs.scope == 'BACKEND' }}
         run: make gate-backend
 
   frontend:
@@ -166,7 +171,7 @@ jobs:
             fi
           fi
           case "${scope}" in
-            FULL|BACKEND|FRONTEND) ;;
+            FULL|BACKEND|FRONTEND|SMOKE) ;;
             *)
               echo "Unknown gate scope ${scope}; retaining FULL gate scope." >&2
               scope="FULL"
@@ -193,6 +198,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
         run: GATE_BASE="${BASE_SHA}" make gate-frontend-changed
 
+      - name: Run deployment smoke frontend gate
+        if: ${{ steps.gate-scope.outputs.scope == 'SMOKE' }}
+        run: make gate-deploy-smoke-frontend
+
       - name: Run frontend gate
         if: ${{ steps.gate-scope.outputs.scope == 'FULL' }}
         run: make gate-frontend
@@ -211,3 +220,15 @@ jobs:
           test "${{ needs.source-proof.result }}" = "success"
           test "${{ needs.backend.result }}" = "success"
           test "${{ needs.frontend.result }}" = "success"
+
+      - name: Summarize gate results
+        shell: bash
+        run: |
+          {
+            echo "### Dev Gate"
+            echo "| 검사 | 결과 |"
+            echo "| --- | --- |"
+            echo "| 소스/배포 증거 | ${{ needs.source-proof.result }} |"
+            echo "| 백엔드 | ${{ needs.backend.result }} |"
+            echo "| 프런트엔드 | ${{ needs.frontend.result }} |"
+          } >>"${GITHUB_STEP_SUMMARY}"

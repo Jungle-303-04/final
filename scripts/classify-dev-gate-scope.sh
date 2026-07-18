@@ -36,10 +36,26 @@ fi
 changed_path_count=0
 backend_changed=0
 frontend_changed=0
+smoke_changed=0
 
 while IFS= read -r -d '' path; do
   changed_path_count=$((changed_path_count + 1))
   lower_path="$(printf '%s' "${path}" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+
+  case "${path}" in
+    frontend/scripts/post-deploy-route-smoke.mjs \
+      | frontend/scripts/post-deploy-route-smoke.test.mjs \
+      | scripts/post-deploy-smoke.sh \
+      | scripts/post-deploy-console-smoke.sh \
+      | scripts/post_deploy_read_smoke.sh \
+      | scripts/pre-deploy-smoke.sh \
+      | scripts/lib/public-edge.sh \
+      | scripts/lib/cluster-curl.sh \
+      | tests/test_deploy_smoke_phases.py)
+      smoke_changed=1
+      continue
+      ;;
+  esac
 
   case "${path}" in
     .github/* \
@@ -104,7 +120,13 @@ done <"${changed_paths_file}"
 if [[ "${changed_path_count}" -eq 0 ]]; then
   fallback_full "change set is empty"
 fi
-if [[ "${backend_changed}" -eq 1 && "${frontend_changed}" -eq 1 ]]; then
+if [[ "${smoke_changed}" -eq 1 ]]; then
+  if [[ "${backend_changed}" -eq 1 || "${frontend_changed}" -eq 1 ]]; then
+    printf 'FULL\n'
+  else
+    printf 'SMOKE\n'
+  fi
+elif [[ "${backend_changed}" -eq 1 && "${frontend_changed}" -eq 1 ]]; then
   printf 'FULL\n'
 elif [[ "${backend_changed}" -eq 1 ]]; then
   printf 'BACKEND\n'

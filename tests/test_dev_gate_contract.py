@@ -136,17 +136,22 @@ def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:
     helm_step = next(step for step in jobs["backend"]["steps"] if step.get("name") == "Set up Helm")
     assert helm_step["uses"] == "Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310"
     assert helm_step["with"]["version"] == "v4.2.2"
-    assert helm_step["if"] == "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}"
+    assert helm_step["if"] == (
+        "${{ steps.gate-scope.outputs.scope == 'FULL' "
+        "|| steps.gate-scope.outputs.scope == 'BACKEND' }}"
+    )
     commit_test = next(
         step
         for step in jobs["backend"]["steps"]
         if step.get("name") == "Verify commit message gate rules"
     )
-    assert commit_test["if"] == "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}"
-    assert jobs["backend"]["steps"][-1]["run"] == "make gate-backend"
-    assert jobs["backend"]["steps"][-1]["if"] == (
-        "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}"
+    full_or_backend = (
+        "${{ steps.gate-scope.outputs.scope == 'FULL' "
+        "|| steps.gate-scope.outputs.scope == 'BACKEND' }}"
     )
+    assert commit_test["if"] == full_or_backend
+    assert jobs["backend"]["steps"][-1]["run"] == "make gate-backend"
+    assert jobs["backend"]["steps"][-1]["if"] == full_or_backend
     assert jobs["frontend"]["steps"][-1]["run"] == "make gate-frontend"
     assert jobs["frontend"]["steps"][-1]["if"] == (
         "${{ steps.gate-scope.outputs.scope == 'FULL' }}"
