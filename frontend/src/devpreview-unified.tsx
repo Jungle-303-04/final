@@ -379,7 +379,9 @@ function ResourceTable({ kind, rows, q, inScope, onOpen }: { kind: Kind; rows: R
   const filtered = rows;
   const grid = spec.cols.map((c) => c.w ?? "1fr").join(" ");
   return (
-    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflow: "hidden" }}>
+    /* 좁은 화면(200% 확대 등)에선 표가 가로 스크롤 — 컬럼이 뭉개지지 않는다 */
+    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflow: "hidden", overflowX: "auto" }}>
+    <div style={{ minWidth: 640 }}>
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD" }}>
         {spec.cols.map((c) => (
           <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
@@ -400,6 +402,7 @@ function ResourceTable({ kind, rows, q, inScope, onOpen }: { kind: Kind; rows: R
           ))}
         </div>
       ))}
+    </div>
     </div>
   );
 }
@@ -860,7 +863,7 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
   );
 }
 
-// ── 좌측 종류 인덱스 ─────────────────────────────
+// ── 종류 탐색 — 우측 패널 '리소스' 탭 내용 (보조 사이드바를 통합·대체) ─────────────────────────────
 function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, filter }: {
   sel: string; onPick: (k: Kind) => void; showEmpty: boolean; setShowEmpty: (v: boolean) => void;
   pinned: string[]; togglePin: (id: string) => void; filter: string; // 상단 ⌘K 검색이 단일 소스 — 자체 검색창 없음
@@ -882,7 +885,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
     );
   };
   return (
-    <nav style={{ width: 236, flexShrink: 0, background: UI.card, borderRight: `1px solid ${UI.line}`, padding: "14px 12px", display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
+    <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
       <div>
         <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
         {pinned.length === 0
@@ -1011,6 +1014,13 @@ function App() {
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
+  // 반응형 — 좁은 화면(200% 확대 등)에서 내비를 자동으로 아이콘만 남긴다
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1100px)");
+    const on = () => { if (mq.matches) setNavCollapsed(true); };
+    on(); mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
 
   // 표 데이터: 맵 드릴 범위(클러스터 귀속)와 검색을 실제로 적용
   const allRows = useMemo(() => { const spec = SPEC[kindId]; return spec ? spec.rows(rng(kindId.length * 977 + 13)) : []; }, [kindId]);
@@ -1059,7 +1069,7 @@ function App() {
           <input ref={searchRef} value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 12, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: 10, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: UI.ink2 }}>
+        <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: UI.ink2 }}>
           <span className="livedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신
         </span>
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
@@ -1096,7 +1106,7 @@ function App() {
           </AnimatePresence>
         </span>
         {[CircleHelp, Moon].map((I, i) => (
-          <button key={i} className="gnav" style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.045)", color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
+          <button key={i} className="gnav hide-narrow" style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.045)", color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
             <I size={14} />
           </button>
         ))}
@@ -1108,13 +1118,11 @@ function App() {
           <ConnectWizard embedded />
         </div>
       ) : (
-      <div style={{ display: "flex", alignItems: "stretch" }}>
-        <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />
-
-        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 18, padding: "16px 18px 40px" }}>
-          {/* ── 드릴 맵 + 스코프 연동 표 — 표는 맵 뷰(클러스터·노드) 바로 아래 붙는다.
+        <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 18, padding: "16px 18px 40px" }}>
+          {/* ── 드릴 맵 + 스코프 연동 표 — 종류 탐색은 우측 '탐색' 패널의 리소스 탭으로 통합.
                 파드뷰에선 맵이 파드 표를 이미 보여주므로 숨김(중복 제거) ── */}
           <OpsiaMap embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
+            kindsTab={<KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />}
             belowContent={scope.level !== "pods" && (
               <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1131,7 +1139,6 @@ function App() {
               </div>
             )} />
         </main>
-      </div>
       )}
       </div>
 
@@ -1165,7 +1172,7 @@ function App() {
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={(navCollapsed ? 60 : 208) + (surface === "resources" ? 236 : 0)} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
@@ -1205,6 +1212,8 @@ function App() {
         @keyframes lv { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
         .uni ::-webkit-scrollbar { width: 8px; } .uni ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }
         @media (prefers-reduced-motion: reduce) { .uni .livedot { animation: none !important; } }
+        /* 좁은 화면(200% 확대 등): 부가 요소를 접어 핵심만 남긴다 */
+        @media (max-width: 980px) { .uni .hide-narrow { display: none !important; } }
       `}</style>
     </div>
   );
