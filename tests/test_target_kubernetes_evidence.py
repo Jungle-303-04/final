@@ -868,7 +868,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         }
     )
 
-    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 15
+    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 16
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["detected_provider"] == "eks"
@@ -947,6 +947,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         "workload_revisions": 0,
         "services": 1,
         "endpoints": 1,
+        "ingresses": 0,
         "resourcequotas": 0,
     }
 
@@ -1086,6 +1087,51 @@ def test_resource_quota_preserves_exact_identity_and_quantities_in_inventory() -
         "hard": {"pods": "20", "requests.cpu": "4"},
         "used": {"pods": "7", "requests.cpu": "1250m"},
     }
+
+
+def test_ingress_preserves_routes_as_bounded_inventory_without_tls_secret_names() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.ingress_summary(
+        {
+            "metadata": {
+                "uid": "ingress-uid",
+                "resourceVersion": "7",
+                "name": "opsia-console",
+                "namespace": "sandbox",
+            },
+            "spec": {
+                "ingressClassName": "nginx",
+                "tls": [{"hosts": ["opsia.local"], "secretName": "must-not-leak"}],
+                "rules": [
+                    {
+                        "host": "opsia.local",
+                        "http": {
+                            "paths": [
+                                {
+                                    "path": "/",
+                                    "backend": {"service": {"name": "opsia-web"}},
+                                }
+                            ]
+                        },
+                    }
+                ],
+            },
+            "status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}},
+        }
+    )
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"ingresses": [summary]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    resource = snapshot["resources"][0]
+
+    assert resource["resource_type"] == "ingress"
+    assert resource["kind"] == "Ingress"
+    assert resource["summary"]["hosts"] == ["opsia.local"]
+    assert resource["summary"]["backend_service_names"] == ["opsia-web"]
+    assert "must-not-leak" not in str(resource)
 
 
 def test_kubernetes_snapshot_provider_deduplicates_cluster_scoped_nodes(monkeypatch) -> None:
@@ -1286,6 +1332,7 @@ def test_kubernetes_snapshot_provider_scopes_one_rca_test_run(monkeypatch) -> No
         "/apis/apps/v1/namespaces/sandbox/controllerrevisions",
         "/apis/batch/v1/namespaces/sandbox/jobs",
         "/apis/batch/v1/namespaces/sandbox/cronjobs",
+        "/apis/networking.k8s.io/v1/namespaces/sandbox/ingresses",
         "/api/v1/namespaces/sandbox/services",
     }
     assert [item["name"] for item in kubernetes["pods"]] == ["pod-a"]

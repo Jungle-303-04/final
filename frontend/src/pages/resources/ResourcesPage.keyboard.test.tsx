@@ -183,8 +183,8 @@ describe("ResourcesPage keyboard navigation", () => {
 
     await user.keyboard("y");
 
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 매니페스트 편집" }))
-      .toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "YAML", selected: true })).toBeTruthy();
+    expect(await screen.findByText("not configured")).toBeTruthy();
     expect(manifestPort.loadSource).toHaveBeenCalledWith(
       "pod:shop/checkout-api-0",
       undefined,

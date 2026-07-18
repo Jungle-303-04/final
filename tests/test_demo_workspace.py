@@ -82,6 +82,7 @@ from domains.inventory.repository import (
 )
 from domains.inventory_filter.cursor import FilterCursorCodec
 from domains.inventory_filter.graph import build_resource_graph
+from domains.inventory_filter.metrics_history import build_resource_metric_history
 from domains.registry import Database
 from domains.traffic.router import router as traffic_router
 from packages.contracts.demo_workspace import DEMO_SEED_MARKER_KEY, DemoWorkspaceDescriptor
@@ -926,7 +927,23 @@ def test_v1_descriptor_is_dedicated_complete_and_digest_stable() -> None:
     assert descriptor.inventory.summary["resources_complete"] is True
     assert descriptor.inventory.summary["labels_complete"] is True
     assert descriptor.inventory.summary["namespaces"] == ["demo-payments", "demo-shop"]
-    assert len(descriptor.inventory.resources) == 13
+    assert len(descriptor.inventory.resources) == 22
+    assert {
+        "ConfigMap",
+        "CronJob",
+        "DaemonSet",
+        "Deployment",
+        "HorizontalPodAutoscaler",
+        "Ingress",
+        "Job",
+        "NetworkPolicy",
+        "Pod",
+        "ReplicaSet",
+        "ResourceQuota",
+        "Secret",
+        "Service",
+        "StatefulSet",
+    }.issubset({resource.kind for resource in descriptor.inventory.resources})
     assert {resource.health for resource in descriptor.inventory.resources} >= {
         "healthy",
         "warning",
@@ -1138,7 +1155,7 @@ def test_seed_uses_registration_inventory_event_contract_and_is_idempotent() -> 
     assert body.workspace_id == descriptor.workspace.workspace_id
     assert body.cluster_id == descriptor.cluster.cluster_id
     assert body.snapshot_id == "snapshot-demo-v1"
-    assert body.resource_count == 15
+    assert body.resource_count == 24
 
     observation = db.evidence_writes[0]
     assert observation["source_id"] == "cluster-snapshot"
@@ -1549,13 +1566,18 @@ def test_seed_stages_inventory_event_through_gateway_outbox_contract() -> None:
             cluster_id=descriptor.cluster.cluster_id,
             snapshot_id="snapshot-demo-v1",
             agent_id=descriptor.cluster.agent_id,
-            resource_count=15,
+            resource_count=24,
             resource_types=[
+                "configmap",
                 "endpoint",
                 "event",
                 "health",
+                "horizontalpodautoscaler",
+                "ingress",
+                "networkpolicy",
                 "node",
                 "pod",
+                "resourcequota",
                 "secret",
                 "service",
                 "usage",
@@ -1580,10 +1602,10 @@ def test_seed_payload_drives_canonical_resources_home_and_timeline_projections()
     )
 
     assert graph["relation_completeness"] == "exact"
-    assert graph["node_count"] == 15
-    assert graph["edge_count"] == 10
+    assert graph["node_count"] == 24
+    assert graph["edge_count"] == 11
     assert _edge_kind_counts(graph) == {
-        "owns": 2,
+        "owns": 3,
         "routes_to": 2,
         "runs_on": 2,
         "selects": 4,
@@ -1593,8 +1615,8 @@ def test_seed_payload_drives_canonical_resources_home_and_timeline_projections()
         observed_at=observed_at.isoformat(),
     )
     assert home.coverage.availability == "available"
-    assert home.node_count == 15
-    assert home.edge_count == 10
+    assert home.node_count == 24
+    assert home.edge_count == 11
     assert (
         rollup_health(
             workloads_degraded=sum(
@@ -1622,7 +1644,7 @@ def test_seed_payload_drives_canonical_resources_home_and_timeline_projections()
         resources_complete=True,
         current_event_batch=event_batch,
     )
-    assert len(timeline) == 13
+    assert len(timeline) == 22
     assert {event.source for event in timeline} == {"inventory", "kubernetes_event"}
     assert sum(event.source == "kubernetes_event" for event in timeline) == 1
     assert next(event for event in timeline if event.source == "kubernetes_event").severity == (
@@ -1705,6 +1727,26 @@ def test_seed_payload_drives_canonical_checks_and_cost_node_projections() -> Non
     assert all(item.usage.availability == "available" for item in nodes.items)
     assert all(item.capacity.cpu_mcores == 3800.0 for item in nodes.items)
     assert nodes.pricing_coverage.availability == "unavailable"
+
+    pod_resources = [
+        {**resource, "resource_id": resource["inventory_key"]}
+        for resource in serialized
+        if resource["resource_type"] == "pod"
+    ]
+    metric_history = build_resource_metric_history(
+        pod_resources,
+        {
+            descriptor.cluster.cluster_id: [
+                {"sampled_at": observed_at.isoformat(), "usage": payload["usage"]}
+            ]
+        },
+        projection_complete=True,
+    )
+    assert metric_history["completeness"] == "exact"
+    assert len(metric_history["series"]) == 2
+    assert all(series["has_sparkline_points"] is True for series in metric_history["series"])
+    assert all(series["current_observation"] is not None for series in metric_history["series"])
+    assert all(series["container_series"] for series in metric_history["series"])
 
     overview = cost_overview(
         workspace_id=descriptor.workspace.workspace_id,

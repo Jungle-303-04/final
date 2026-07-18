@@ -4,7 +4,11 @@ import { cleanup, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { normalizeResourceKind, resourceKindIcon } from "./resourcePresentation";
+import {
+  normalizeResourceKind,
+  resourceKindIcon,
+  resourceTypePresentation,
+} from "./resourcePresentation";
 
 afterEach(cleanup);
 
@@ -36,5 +40,18 @@ describe("resource topology presentation", () => {
     const UnknownIcon = resourceKindIcon("example.io/My-Widget");
     const { container } = render(createElement(UnknownIcon, { "aria-hidden": true }));
     expect(container.querySelector(".lucide-puzzle")).toBeTruthy();
+  });
+
+  it.each([
+    ["deployment", "resources.type.deployment"],
+    ["daemonset", "resources.type.daemonset"],
+    ["statefulset", "resources.type.statefulset"],
+    ["replicaset", "resources.type.replicaset"],
+    ["networkpolicy", "resources.type.networkpolicy"],
+    ["hpa", "resources.type.hpa"],
+    ["resourcequota", "resources.type.resourcequota"],
+    ["storageclass", "resources.type.storageclass"],
+  ])("uses translated resource labels for %s", (resourceType, labelKey) => {
+    expect(resourceTypePresentation(resourceType).labelKey).toBe(labelKey);
   });
 });

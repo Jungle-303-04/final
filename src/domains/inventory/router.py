@@ -17,6 +17,11 @@ from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.provider_detail import provider_detail_projection
 from domains.inventory.resource_count_evidence import project_inventory_resource_counts_evidence
+from domains.inventory.resource_types import (
+    WORKLOAD_RESOURCE_TYPE,
+    include_discoverable_zero_counts,
+    workload_kind_for_resource_type,
+)
 from domains.inventory.workload_revisions import workload_revision_history_response
 from domains.resource_access.projection import (
     ResourceAccessUnavailable,
@@ -119,17 +124,33 @@ def inventory_list_response(
     include_deleted: bool,
     limit: int,
 ) -> InventoryResourceListResponse:
-    resources = db.list_inventory_resources(
-        workspace_id=workspace_id,
-        cluster_id=cluster_id,
-        resource_type=resource_type,
-        namespace=namespace,
-        include_deleted=include_deleted,
-        limit=limit,
-    )
+    requested_resource_type = resource_type.strip().casefold() if resource_type else None
+    workload_kind = workload_kind_for_resource_type(requested_resource_type)
+    if workload_kind is not None:
+        resources = db.list_inventory_resources_by_kind(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type=WORKLOAD_RESOURCE_TYPE,
+            kind=workload_kind,
+            namespace=namespace,
+            include_deleted=include_deleted,
+            limit=limit,
+        )
+        resources = [
+            {**resource, "resource_type": requested_resource_type} for resource in resources
+        ]
+    else:
+        resources = db.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type=requested_resource_type,
+            namespace=namespace,
+            include_deleted=include_deleted,
+            limit=limit,
+        )
     return InventoryResourceListResponse(
         cluster_id=cluster_id,
-        resource_type=resource_type,
+        resource_type=requested_resource_type,
         resources=[
             InventoryResourceResponse(**public_inventory_resource(resource))
             for resource in resources
@@ -199,10 +220,17 @@ async def get_inventory_resource_detail(
 ) -> InventoryResourceDetailResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_inventory_access(db, current, workspace_id, cluster_id)
+    requested_resource_type = resource_type.strip().casefold()
+    workload_kind = workload_kind_for_resource_type(requested_resource_type)
+    if workload_kind is not None and workload_kind.casefold() != kind.strip().casefold():
+        raise HTTPException(status_code=404, detail="inventory resource not found")
+    stored_resource_type = (
+        WORKLOAD_RESOURCE_TYPE if workload_kind is not None else requested_resource_type
+    )
     resource = db.get_inventory_resource(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
-        resource_type=resource_type,
+        resource_type=stored_resource_type,
         kind=kind,
         namespace=namespace,
         name=name,
@@ -210,6 +238,8 @@ async def get_inventory_resource_detail(
     if resource is None:
         raise HTTPException(status_code=404, detail="inventory resource not found")
     public_resource = public_inventory_resource(resource)
+    if workload_kind is not None:
+        public_resource["resource_type"] = requested_resource_type
     related = {
         group: [InventoryResourceResponse(**public_inventory_resource(item)) for item in items]
         for group, items in db.list_related_inventory_resources(
@@ -256,7 +286,7 @@ async def get_inventory_resource_detail(
     return InventoryResourceDetailResponse(
         cluster_id=cluster_id,
         identity={
-            "resource_type": resource_type.strip().lower(),
+            "resource_type": requested_resource_type,
             "kind": kind,
             "namespace": namespace,
             "name": name,
@@ -444,18 +474,32 @@ async def get_inventory_summary(
     require_inventory_access(db, current, workspace_id, cluster_id)
     namespace_scope = _inventory_count_namespaces(namespaces)
     snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
+    counts = db.inventory_resource_counts(
+        workspace_id,
+        cluster_id,
+        namespaces=namespace_scope,
+    )
+    workload_kind_counts = getattr(db, "inventory_workload_kind_counts", None)
+    if callable(workload_kind_counts):
+        counts = [
+            *counts,
+            *workload_kind_counts(
+                workspace_id,
+                cluster_id,
+                namespaces=namespace_scope,
+            ),
+        ]
+    evidence = project_inventory_resource_counts_evidence(
+        snapshot,
+        namespace_scope=namespace_scope,
+    )
+    if evidence.completeness == "observed" and not namespace_scope:
+        counts = include_discoverable_zero_counts(counts, snapshot=snapshot)
     return InventorySummaryResponse(
         cluster_id=cluster_id,
         latest_snapshot=snapshot,
-        counts=db.inventory_resource_counts(
-            workspace_id,
-            cluster_id,
-            namespaces=namespace_scope,
-        ),
-        counts_evidence=project_inventory_resource_counts_evidence(
-            snapshot,
-            namespace_scope=namespace_scope,
-        ),
+        counts=counts,
+        counts_evidence=evidence,
     )
 
 

@@ -38,7 +38,9 @@ import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { ResourceIssuesSection } from "../../features/issues/ResourceIssuesSection";
 import { ResourceAccessPanel } from "./ResourceAccessPanel";
 import type { ChecksPort } from "../../features/checks/checksContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import { ResourceChecksSection } from "./ResourceChecksSection";
+import { ResourceManifestEditor } from "./ResourceManifestEditor";
 
 export function ResourceDetailBody({
   detail,
@@ -50,6 +52,8 @@ export function ResourceDetailBody({
   onNavigateResource,
   resourceIssues,
   checksPort,
+  manifestPort,
+  onManifestUnauthorized,
   onTabChange,
   tab,
 }: {
@@ -62,6 +66,8 @@ export function ResourceDetailBody({
   onNavigateResource: (identity: ResourceIdentity) => void;
   resourceIssues: ResourceIssuesFrame;
   checksPort?: ChecksPort;
+  manifestPort?: ResourceManifestPort;
+  onManifestUnauthorized?: () => void;
   onTabChange: (tab: string) => void;
   tab: string;
 }) {
@@ -100,7 +106,10 @@ export function ResourceDetailBody({
     );
   }
   const resource = detail.data.resource;
-  const selectedTab = ["overview", "relations", "metrics", "events"].includes(tab)
+  const allowedTabs = manifestPort
+    ? ["overview", "manifest", "relations", "metrics", "events"]
+    : ["overview", "relations", "metrics", "events"];
+  const selectedTab = allowedTabs.includes(tab)
     ? tab
     : "overview";
   return (
@@ -111,6 +120,9 @@ export function ResourceDetailBody({
     >
       <TabsList aria-label={t("resources.detail.tabs.aria")} className="w-full" variant="line">
         <TabsTrigger value="overview">{t("resources.detail.overview")}</TabsTrigger>
+        {manifestPort ? (
+          <TabsTrigger value="manifest">{t("resources.detail.yaml")}</TabsTrigger>
+        ) : null}
         <TabsTrigger value="relations">
           {t("resources.detail.relatedCount", { count: detail.data.related.length })}
         </TabsTrigger>
@@ -178,6 +190,16 @@ export function ResourceDetailBody({
           />
         ) : <PointInTimeEvidenceUnavailable />}
       </TabsContent>
+      {manifestPort ? (
+        <TabsContent className="grid gap-3 py-4" value="manifest">
+          <ResourceManifestEditor
+            detail={detail.data}
+            inline
+            onUnauthorized={onManifestUnauthorized}
+            port={manifestPort}
+          />
+        </TabsContent>
+      ) : null}
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
           <EmptySection icon={Link2} text={t("resources.detail.relatedEmpty")} />

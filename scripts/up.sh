@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT_DIR}/scripts/lib/env.sh"
+source "${ROOT_DIR}/scripts/lib/auth.sh"
 
 default_github_repo() {
   local url
@@ -65,6 +66,9 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-${TARGET_CLUSTER}}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-30}"
+SEED_DEMO_WORKSPACE="${SEED_DEMO_WORKSPACE:-1}"
+AUTO_CONNECT_PROMETHEUS="${AUTO_CONNECT_PROMETHEUS:-1}"
+LOCAL_PROMETHEUS_URL="${LOCAL_PROMETHEUS_URL:-http://prometheus.target.svc.cluster.local:9090}"
 UP_WORKER_SET="${UP_WORKER_SET:-smoke}"
 ENABLE_GITHUB_POLL_WORKER="${ENABLE_GITHUB_POLL_WORKER:-${ENABLE_GITHUB_POLL_CRON:-0}}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
@@ -319,6 +323,113 @@ image_repo_and_tag() {
   else
     printf '%s\n%s\n' "${image}" "latest"
   fi
+}
+
+local_admin_user_id() {
+  python3 - "${PROJECT_SLUG}" "${AUTH_EMAIL}" <<'PY'
+import sys
+import uuid
+
+project_slug, email = sys.argv[1], sys.argv[2].strip().lower()
+print("user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{email}")))
+PY
+}
+
+seed_local_demo_workspace() {
+  if [ "${SEED_DEMO_WORKSPACE}" != "1" ]; then
+    echo "==> skipping demo workspace seed (SEED_DEMO_WORKSPACE=${SEED_DEMO_WORKSPACE})"
+    return
+  fi
+
+  local owner_user_id
+  local image_manifest="${RUNTIME_DIR}/demo-workspace-seed-image.yaml"
+  local runtime_manifest="${RUNTIME_DIR}/demo-workspace-seed-job.yaml"
+  owner_user_id="$(local_admin_user_id)"
+
+  echo "==> seeding the complete local UI demo workspace"
+  kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management delete \
+    job/management-demo-workspace-seed --ignore-not-found --wait=true
+  kubectl set image \
+    --filename "${ROOT_DIR}/deploy/management/demo-workspace-seed-job.yaml" \
+    seed="${IMAGE_NAME}" \
+    --local \
+    --output yaml >"${image_manifest}"
+  kubectl set env \
+    --filename "${image_manifest}" \
+    DEMO_WORKSPACE_OWNER_USER_ID="${owner_user_id}" \
+    --local \
+    --output yaml >"${runtime_manifest}"
+  kubectl --context "kind-${MGMT_CLUSTER}" apply --filename "${runtime_manifest}"
+  if ! kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management wait \
+    --for=condition=complete job/management-demo-workspace-seed --timeout=330s; then
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management \
+      describe job/management-demo-workspace-seed || true
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management \
+      logs job/management-demo-workspace-seed --all-containers --tail=300 || true
+    return 1
+  fi
+  kubectl --context "kind-${MGMT_CLUSTER}" -n management \
+    logs job/management-demo-workspace-seed --all-containers --tail=20
+}
+
+configure_local_prometheus() {
+  if [ "${AUTO_CONNECT_PROMETHEUS}" != "1" ]; then
+    echo "==> skipping Prometheus connection (AUTO_CONNECT_PROMETHEUS=${AUTO_CONNECT_PROMETHEUS})"
+    return
+  fi
+
+  local base_url="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
+  local api_base="${base_url%/}${API_ROOT_PATH}"
+  local cookie_jar="${RUNTIME_DIR}/prometheus-auth-cookie.txt"
+  local request_body="${RUNTIME_DIR}/prometheus-integration.json"
+  local response=""
+  local state=""
+  local attempt
+
+  echo "==> connecting Prometheus to the target cluster agent"
+  login_with_password "${api_base}" "${cookie_jar}"
+  LOCAL_PROMETHEUS_URL="${LOCAL_PROMETHEUS_URL}" \
+  TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
+    python3 - <<'PY' >"${request_body}"
+import json
+import os
+
+print(json.dumps({
+    "cluster_id": os.environ["TARGET_RUNTIME_CLUSTER_ID"],
+    "prometheus_url": os.environ["LOCAL_PROMETHEUS_URL"],
+    "headers": {},
+}))
+PY
+  curl -fsS -X PUT "${api_base}/integrations/prometheus" \
+    -b "${cookie_jar}" \
+    -H "content-type: application/json" \
+    -H "x-service-csrf: same-origin" \
+    --data-binary @"${request_body}" >/dev/null
+
+  for attempt in $(seq 1 45); do
+    response="$(curl -fsS \
+      -b "${cookie_jar}" \
+      "${api_base}/integrations/prometheus?cluster_id=${TARGET_RUNTIME_CLUSTER_ID}")"
+    state="$(PROMETHEUS_STATUS="${response}" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["PROMETHEUS_STATUS"]).get("state", ""))
+PY
+)"
+    if [ "${state}" = "connected" ]; then
+      echo "==> Prometheus connected: ${LOCAL_PROMETHEUS_URL}"
+      return
+    fi
+    if [ "${state}" = "failed" ]; then
+      echo "Prometheus connection failed: ${response}" >&2
+      return 1
+    fi
+    sleep 2
+  done
+
+  echo "Prometheus connection did not reach connected state: ${response}" >&2
+  return 1
 }
 
 if [ -z "${POSTGRES_PASSWORD}" ]; then
@@ -702,6 +813,8 @@ else
   echo "==> leaving github-poll-worker Deployment scaled to 0 (set ENABLE_GITHUB_POLL_WORKER=1 to enable)"
 fi
 
+seed_local_demo_workspace
+
 MGMT_NODE="${MGMT_CLUSTER}-control-plane"
 MGMT_NODE_IP="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${MGMT_NODE}")"
 MANAGEMENT_BASE_URL="http://${MGMT_NODE_IP}:30080"
@@ -720,6 +833,9 @@ SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}" \
 SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}" \
 bash "${ROOT_DIR}/scripts/register-target.sh"
 
+echo "==> applying local Radar showcase resources"
+kubectl --context "kind-${TARGET_CLUSTER}" apply -f "${ROOT_DIR}/deploy/kind/radar-showcase.yaml"
+
 # target 텔레메트리 스택(Prometheus/Loki/Tempo/OTel) 설치 — evidence provider 실데이터 소스.
 # helm 미설치·오프라인 환경은 INSTALL_TELEMETRY=0 으로 건너뛴 뒤 나중에 수동 실행한다.
 INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-1}"
@@ -730,6 +846,7 @@ if [ "${INSTALL_TELEMETRY}" = "1" ]; then
     TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
     bash "${ROOT_DIR}/scripts/install-telemetry.sh"; then
     echo "==> telemetry stack ready"
+    configure_local_prometheus
   else
     echo "WARN: telemetry install failed — 재시도: TARGET_CONTEXT=kind-${TARGET_CLUSTER} bash scripts/install-telemetry.sh" >&2
   fi

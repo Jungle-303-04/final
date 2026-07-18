@@ -4,7 +4,11 @@ import type {
   ResourceList,
 } from "./resourcesContract";
 import { createResourcesAdapter } from "./createResourcesAdapter";
-import { endpoints } from "./createResourcesAdapter.testSupport";
+import {
+  API_RESOURCES,
+  endpoints,
+  INVENTORY_SUMMARY,
+} from "./createResourcesAdapter.testSupport";
 
 describe("canonical Resources catalog and list mapping", () => {
   it("maps namespace-scoped observed counts and agent visibility evidence", async () => {
@@ -71,6 +75,56 @@ describe("canonical Resources catalog and list mapping", () => {
       ["shop"],
       undefined,
     );
+  });
+
+  it("keeps supported zero-count resource types selectable from API discovery", async () => {
+    const discovered = (apiVersion: string, kind: string, name: string) => ({
+      group: apiVersion.includes("/") ? apiVersion.split("/")[0] ?? "" : "",
+      version: apiVersion.includes("/") ? apiVersion.split("/")[1] ?? "v1" : apiVersion,
+      api_version: apiVersion,
+      name,
+      singular_name: name.replace(/s$/u, ""),
+      kind,
+      namespaced: true,
+      is_crd: false,
+      verbs: ["get", "list", "watch"],
+    });
+    const dependencies = endpoints({
+      getInventorySummary: async () => ({
+        ...INVENTORY_SUMMARY,
+        counts: [{ resource_type: "workload", health: "healthy", count: 2 }],
+      }),
+      getKubernetesApiResources: async () => ({
+        ...API_RESOURCES,
+        discovery: {
+          ...API_RESOURCES.discovery!,
+          resources: [
+            discovered("apps/v1", "Deployment", "deployments"),
+            discovered("batch/v1", "Job", "jobs"),
+            discovered("networking.k8s.io/v1", "Ingress", "ingresses"),
+            discovered("networking.k8s.io/v1", "NetworkPolicy", "networkpolicies"),
+            discovered("autoscaling/v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers"),
+            discovered("storage.k8s.io/v1", "StorageClass", "storageclasses"),
+            discovered("v1", "ConfigMap", "configmaps"),
+            discovered("v1", "Secret", "secrets"),
+          ],
+        },
+      }),
+    });
+
+    const catalog = await createResourcesAdapter(dependencies).loadCatalog("cluster-1");
+
+    expect(catalog.items).toEqual([
+      expect.objectContaining({ resourceType: "configmap", count: 0 }),
+      expect.objectContaining({ resourceType: "deployment", count: 0 }),
+      expect.objectContaining({ resourceType: "hpa", count: 0 }),
+      expect.objectContaining({ resourceType: "ingress", count: 0 }),
+      expect.objectContaining({ resourceType: "job", count: 0 }),
+      expect.objectContaining({ resourceType: "networkpolicy", count: 0 }),
+      expect.objectContaining({ resourceType: "secret", count: 0 }),
+      expect.objectContaining({ resourceType: "storageclass", count: 0 }),
+      expect.objectContaining({ resourceType: "workload", count: 2 }),
+    ]);
   });
 
   it("maps UID and fallback identities, safe metadata, Pod facts, and limit state", async () => {

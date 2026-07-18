@@ -57,6 +57,23 @@ export function toResourceCatalog(
     counts[tone] = safeAdd(counts[tone], nonNegativeInteger(record.count));
     byResourceType.set(resourceType, counts);
   }
+  const evidence = resourceCountEvidence(wire.counts_evidence);
+  const apiDiscovery = toApiResourceDiscovery(apiWire);
+  const hasConcreteWorkloadCounts = [...WORKLOAD_RESOURCE_TYPES].some(
+    (resourceType) => byResourceType.has(resourceType),
+  );
+  if (hasConcreteWorkloadCounts) byResourceType.delete("workload");
+  if (evidence.completeness === "observed") {
+    for (const resource of apiDiscovery.resources) {
+      if (!resource.verbs.includes("list")) continue;
+      const resourceType = DISCOVERED_RESOURCE_TYPES.get(
+        `${resource.apiVersion}:${resource.kind}`,
+      );
+      if (resourceType && !byResourceType.has(resourceType)) {
+        byResourceType.set(resourceType, emptyHealthCounts());
+      }
+    }
+  }
   const items = [...byResourceType.entries()]
     .map(([resourceType, healthCounts]) => ({
       resourceType,
@@ -64,7 +81,6 @@ export function toResourceCatalog(
       healthCounts,
     }))
     .sort((left, right) => left.resourceType.localeCompare(right.resourceType));
-  const evidence = resourceCountEvidence(wire.counts_evidence);
   return {
     clusterId: requestedClusterId,
     completeness: evidence.completeness,
@@ -73,9 +89,42 @@ export function toResourceCatalog(
     reasonCodes: evidence.reasonCodes,
     forbidden: evidence.forbidden,
     items,
-    apiDiscovery: toApiResourceDiscovery(apiWire),
+    apiDiscovery,
   };
 }
+
+const WORKLOAD_RESOURCE_TYPES = new Set([
+  "deployment",
+  "statefulset",
+  "daemonset",
+  "replicaset",
+  "job",
+  "cronjob",
+]);
+
+const DISCOVERED_RESOURCE_TYPES = new Map<string, string>([
+  ["v1:Pod", "pod"],
+  ["v1:Node", "node"],
+  ["v1:ConfigMap", "configmap"],
+  ["v1:Secret", "secret"],
+  ["apps/v1:Deployment", "deployment"],
+  ["apps/v1:StatefulSet", "statefulset"],
+  ["apps/v1:DaemonSet", "daemonset"],
+  ["apps/v1:ReplicaSet", "replicaset"],
+  ["batch/v1:Job", "job"],
+  ["batch/v1:CronJob", "cronjob"],
+  ["v1:Service", "service"],
+  ["discovery.k8s.io/v1:EndpointSlice", "endpoint"],
+  ["networking.k8s.io/v1:Ingress", "ingress"],
+  ["networking.k8s.io/v1:NetworkPolicy", "networkpolicy"],
+  ["autoscaling/v2:HorizontalPodAutoscaler", "hpa"],
+  ["autoscaling/v1:HorizontalPodAutoscaler", "hpa"],
+  ["v1:PersistentVolumeClaim", "pvc"],
+  ["v1:PersistentVolume", "persistentvolume"],
+  ["storage.k8s.io/v1:StorageClass", "storageclass"],
+  ["v1:ResourceQuota", "resourcequota"],
+  ["v1:Event", "event"],
+]);
 
 function resourceCountEvidence(
   value: ResourcesEndpointInventorySummary["counts_evidence"],

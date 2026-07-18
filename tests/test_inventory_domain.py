@@ -21,10 +21,15 @@ from domains.inventory.repository import (
     selector_labels,
     snapshot_resources,
 )
+from domains.inventory.resource_types import (
+    discoverable_product_resource_types,
+    include_discoverable_zero_counts,
+)
 from domains.inventory.router import (
     get_cluster_api_resources,
     get_inventory_resource_detail,
     get_inventory_summary,
+    list_inventory_resources,
     list_inventory_workloads,
     record_inventory_snapshot,
 )
@@ -89,6 +94,27 @@ class StubInventoryDb:
             and (include_deleted or item["deleted_at"] is None)
         ]
         return rows[:limit]
+
+    def list_inventory_resources_by_kind(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        kind: str,
+        namespace: str | None,
+        include_deleted: bool,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        rows = self.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type=resource_type,
+            namespace=namespace,
+            include_deleted=include_deleted,
+            limit=limit,
+        )
+        return [row for row in rows if str(row["kind"]).casefold() == kind.casefold()]
 
     def get_inventory_resource(
         self,
@@ -496,6 +522,32 @@ def test_inventory_workloads_route_requires_inventory_access_and_filters() -> No
     assert "raw" not in response.resources[0].model_dump()
 
 
+def test_inventory_resource_alias_lists_jobs_as_a_real_selectable_type() -> None:
+    db = StubInventoryDb(
+        [
+            inventory_resource("workload", "Deployment", "api"),
+            inventory_resource("workload", "Job", "inventory-warmup"),
+        ]
+    )
+
+    async def run():
+        return await list_inventory_resources(
+            "cluster-1",
+            resource_type="job",
+            namespace="default",
+            limit=25,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.resource_type == "job"
+    assert [(item.resource_type, item.kind, item.name) for item in response.resources] == [
+        ("job", "Job", "inventory-warmup")
+    ]
+
+
 def test_inventory_resource_detail_returns_related_resources_and_events_without_raw() -> None:
     db = StubInventoryDb(
         [
@@ -813,6 +865,160 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     assert response.counts == [{"resource_type": "workload", "health": "healthy", "count": 1}]
     assert response.counts_evidence.completeness == "unavailable"
     assert response.counts_evidence.reason_codes == ("inventory_snapshot_evidence_unavailable",)
+
+
+def test_exact_snapshot_discovery_adds_server_owned_zero_count_types() -> None:
+    snapshot = {
+        "summary": {
+            "summary": {
+                "api_resource_discovery": {
+                    "observed_at": "2026-07-17T12:00:00Z",
+                    "completeness": "exact",
+                    "reason_codes": [],
+                    "resources": [
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "configmaps",
+                            "singular_name": "configmap",
+                            "kind": "ConfigMap",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "persistentvolumes",
+                            "singular_name": "persistentvolume",
+                            "kind": "PersistentVolume",
+                            "namespaced": False,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "persistentvolumeclaims",
+                            "singular_name": "persistentvolumeclaim",
+                            "kind": "PersistentVolumeClaim",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "secrets",
+                            "singular_name": "secret",
+                            "kind": "Secret",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "",
+                            "version": "v1",
+                            "api_version": "v1",
+                            "name": "resourcequotas",
+                            "singular_name": "resourcequota",
+                            "kind": "ResourceQuota",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "batch",
+                            "version": "v1",
+                            "api_version": "batch/v1",
+                            "name": "jobs",
+                            "singular_name": "job",
+                            "kind": "Job",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "networking.k8s.io",
+                            "version": "v1",
+                            "api_version": "networking.k8s.io/v1",
+                            "name": "ingresses",
+                            "singular_name": "ingress",
+                            "kind": "Ingress",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "networking.k8s.io",
+                            "version": "v1",
+                            "api_version": "networking.k8s.io/v1",
+                            "name": "networkpolicies",
+                            "singular_name": "networkpolicy",
+                            "kind": "NetworkPolicy",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "autoscaling",
+                            "version": "v2",
+                            "api_version": "autoscaling/v2",
+                            "name": "horizontalpodautoscalers",
+                            "singular_name": "horizontalpodautoscaler",
+                            "kind": "HorizontalPodAutoscaler",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "storage.k8s.io",
+                            "version": "v1",
+                            "api_version": "storage.k8s.io/v1",
+                            "name": "storageclasses",
+                            "singular_name": "storageclass",
+                            "kind": "StorageClass",
+                            "namespaced": False,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                    ],
+                }
+            }
+        }
+    }
+
+    assert discoverable_product_resource_types(snapshot) == (
+        "configmap",
+        "hpa",
+        "ingress",
+        "job",
+        "networkpolicy",
+        "persistentvolume",
+        "pvc",
+        "resourcequota",
+        "secret",
+        "storageclass",
+    )
+    assert include_discoverable_zero_counts(
+        [{"resource_type": "job", "health": "healthy", "count": 1}],
+        snapshot=snapshot,
+    ) == [
+        {"resource_type": "configmap", "health": "unknown", "count": 0},
+        {"resource_type": "hpa", "health": "unknown", "count": 0},
+        {"resource_type": "ingress", "health": "unknown", "count": 0},
+        {"resource_type": "job", "health": "healthy", "count": 1},
+        {"resource_type": "networkpolicy", "health": "unknown", "count": 0},
+        {"resource_type": "persistentvolume", "health": "unknown", "count": 0},
+        {"resource_type": "pvc", "health": "unknown", "count": 0},
+        {"resource_type": "resourcequota", "health": "unknown", "count": 0},
+        {"resource_type": "secret", "health": "unknown", "count": 0},
+        {"resource_type": "storageclass", "health": "unknown", "count": 0},
+    ]
 
 
 def test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence() -> None:

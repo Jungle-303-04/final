@@ -40,8 +40,165 @@
         "truncated": false
       },
       "api_resource_discovery": {
+        "observed_at": "2026-07-17T00:00:00Z",
         "completeness": "exact",
-        "resources": []
+        "reason_codes": [],
+        "resources": [
+          {
+            "group": "",
+            "version": "v1",
+            "api_version": "v1",
+            "name": "pods",
+            "singular_name": "pod",
+            "kind": "Pod",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "",
+            "version": "v1",
+            "api_version": "v1",
+            "name": "services",
+            "singular_name": "service",
+            "kind": "Service",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "",
+            "version": "v1",
+            "api_version": "v1",
+            "name": "configmaps",
+            "singular_name": "configmap",
+            "kind": "ConfigMap",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "",
+            "version": "v1",
+            "api_version": "v1",
+            "name": "secrets",
+            "singular_name": "secret",
+            "kind": "Secret",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "apps",
+            "version": "v1",
+            "api_version": "apps/v1",
+            "name": "deployments",
+            "singular_name": "deployment",
+            "kind": "Deployment",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "apps",
+            "version": "v1",
+            "api_version": "apps/v1",
+            "name": "daemonsets",
+            "singular_name": "daemonset",
+            "kind": "DaemonSet",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "apps",
+            "version": "v1",
+            "api_version": "apps/v1",
+            "name": "statefulsets",
+            "singular_name": "statefulset",
+            "kind": "StatefulSet",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "apps",
+            "version": "v1",
+            "api_version": "apps/v1",
+            "name": "replicasets",
+            "singular_name": "replicaset",
+            "kind": "ReplicaSet",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "batch",
+            "version": "v1",
+            "api_version": "batch/v1",
+            "name": "jobs",
+            "singular_name": "job",
+            "kind": "Job",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "batch",
+            "version": "v1",
+            "api_version": "batch/v1",
+            "name": "cronjobs",
+            "singular_name": "cronjob",
+            "kind": "CronJob",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "networking.k8s.io",
+            "version": "v1",
+            "api_version": "networking.k8s.io/v1",
+            "name": "ingresses",
+            "singular_name": "ingress",
+            "kind": "Ingress",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "networking.k8s.io",
+            "version": "v1",
+            "api_version": "networking.k8s.io/v1",
+            "name": "networkpolicies",
+            "singular_name": "networkpolicy",
+            "kind": "NetworkPolicy",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "autoscaling",
+            "version": "v2",
+            "api_version": "autoscaling/v2",
+            "name": "horizontalpodautoscalers",
+            "singular_name": "horizontalpodautoscaler",
+            "kind": "HorizontalPodAutoscaler",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          },
+          {
+            "group": "",
+            "version": "v1",
+            "api_version": "v1",
+            "name": "resourcequotas",
+            "singular_name": "resourcequota",
+            "kind": "ResourceQuota",
+            "namespaced": true,
+            "is_crd": false,
+            "verbs": ["get", "list", "watch"]
+          }
+        ]
       },
       "kubernetes_event_capture": {
         "complete": true,
@@ -183,20 +340,38 @@
           "cpu_mcores": 740,
           "mem_mib": 612,
           "cpu_request_mcores": 500,
-          "mem_request_mib": 512
+          "cpu_limit_mcores": 1000,
+          "mem_request_mib": 512,
+          "mem_limit_mib": 768,
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
+          "container_metrics_complete": true,
+          "container_metrics": [
+            {"name": "api", "cpu_mcores": 740, "mem_mib": 612}
+          ]
         },
         "demo-shop/shop-api-6f87b7c95b-demo": {
           "uid": "demo-pod-shop-api-v1",
           "cpu_mcores": 120,
           "mem_mib": 164,
           "cpu_request_mcores": 250,
-          "mem_request_mib": 256
+          "cpu_limit_mcores": 1000,
+          "mem_request_mib": 256,
+          "mem_limit_mib": 512,
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
+          "container_metrics_complete": true,
+          "container_metrics": [
+            {"name": "api", "cpu_mcores": 120, "mem_mib": 164}
+          ]
         }
       },
       "nodes": {
         "demo-worker-1": {
           "cpu_mcores": 960,
           "mem_mib": 3358,
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
           "cpu_ratio": 0.24,
           "mem_ratio": 0.41,
           "cpu_pct": 24.0,
@@ -205,6 +380,8 @@
         "demo-worker-2": {
           "cpu_mcores": 2720,
           "mem_mib": 4751,
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
           "cpu_ratio": 0.68,
           "mem_ratio": 0.58,
           "cpu_pct": 68.0,
@@ -232,6 +409,11 @@
           "ready": true,
           "version": "v1.32.2",
           "provider_id": "kind://opsia-ui-demo/demo-worker-1",
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
+          "cpu_mcores": 960,
+          "mem_mib": 3358,
+          "pod_count": 9,
           "capacity": {
             "cpu": "4",
             "memory": "8Gi",
@@ -294,6 +476,11 @@
           "ready": false,
           "version": "v1.32.2",
           "provider_id": "kind://opsia-ui-demo/demo-worker-2",
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
+          "cpu_mcores": 2720,
+          "mem_mib": 4751,
+          "pod_count": 12,
           "capacity": {
             "cpu": "4",
             "memory": "8Gi",
@@ -434,6 +621,18 @@
           "ready": true,
           "restart_total": 1,
           "node_name": "demo-worker-1",
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
+          "cpu_mcores": 120,
+          "mem_mib": 164,
+          "cpu_request_mcores": 250,
+          "cpu_limit_mcores": 1000,
+          "mem_request_mib": 256,
+          "mem_limit_mib": 512,
+          "container_metrics_complete": true,
+          "container_metrics": [
+            {"name": "api", "cpu_mcores": 120, "mem_mib": 164}
+          ],
           "owner_kind": "Deployment",
           "owner_name": "shop-api",
           "owner_uid": "demo-deployment-shop-api-v1",
@@ -694,6 +893,18 @@
           "ready": false,
           "restart_total": 12,
           "node_name": "demo-worker-2",
+          "metrics_observed_at": "2026-07-17T00:00:00Z",
+          "metrics_window": "30s",
+          "cpu_mcores": 740,
+          "mem_mib": 612,
+          "cpu_request_mcores": 500,
+          "cpu_limit_mcores": 1000,
+          "mem_request_mib": 512,
+          "mem_limit_mib": 768,
+          "container_metrics_complete": true,
+          "container_metrics": [
+            {"name": "api", "cpu_mcores": 740, "mem_mib": 612}
+          ],
           "owner_kind": "Deployment",
           "owner_name": "payments-api",
           "owner_uid": "demo-deployment-payments-api-v1",
@@ -908,8 +1119,394 @@
           "status": {}
         }
       },
-    {
-      "resource_type": "secret",
+  {
+    "resource_type": "workload",
+    "api_version": "apps/v1",
+    "kind": "DaemonSet",
+    "namespace": "demo-shop",
+    "name": "node-log-agent",
+    "uid": "demo-daemonset-node-log-agent-v1",
+    "resource_version": "4",
+    "status": "2/2",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "node-log-agent",
+      "app.kubernetes.io/part-of": "demo-observability"
+    },
+    "summary": {
+      "desired_replicas": 2,
+      "ready_replicas": 2,
+      "available_replicas": 2,
+      "selector": {
+        "matchLabels": {
+          "app.kubernetes.io/name": "node-log-agent"
+        }
+      }
+    },
+    "raw": {
+      "apiVersion": "apps/v1",
+      "kind": "DaemonSet",
+      "metadata": {
+        "name": "node-log-agent",
+        "namespace": "demo-shop",
+        "uid": "demo-daemonset-node-log-agent-v1",
+        "resourceVersion": "4"
+      },
+      "spec": {
+        "selector": {
+          "matchLabels": {
+            "app.kubernetes.io/name": "node-log-agent"
+          }
+        }
+      },
+      "status": {
+        "desiredNumberScheduled": 2,
+        "numberReady": 2,
+        "numberAvailable": 2
+      }
+    }
+  },
+  {
+    "resource_type": "workload",
+    "api_version": "apps/v1",
+    "kind": "StatefulSet",
+    "namespace": "demo-payments",
+    "name": "payment-ledger",
+    "uid": "demo-statefulset-payment-ledger-v1",
+    "resource_version": "6",
+    "status": "2/2",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "payment-ledger",
+      "app.kubernetes.io/part-of": "demo-payments"
+    },
+    "summary": {
+      "desired_replicas": 2,
+      "ready_replicas": 2,
+      "current_replicas": 2,
+      "service_name": "payment-ledger"
+    },
+    "raw": {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "payment-ledger",
+        "namespace": "demo-payments",
+        "uid": "demo-statefulset-payment-ledger-v1",
+        "resourceVersion": "6"
+      },
+      "spec": {
+        "serviceName": "payment-ledger",
+        "replicas": 2
+      },
+      "status": {
+        "replicas": 2,
+        "readyReplicas": 2,
+        "currentReplicas": 2
+      }
+    }
+  },
+  {
+    "resource_type": "workload",
+    "api_version": "apps/v1",
+    "kind": "ReplicaSet",
+    "namespace": "demo-shop",
+    "name": "shop-api-6f87b7c95b",
+    "uid": "demo-replicaset-shop-api-v1",
+    "resource_version": "8",
+    "status": "3/3",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "shop-api",
+      "app.kubernetes.io/part-of": "demo-shop"
+    },
+    "summary": {
+      "desired_replicas": 3,
+      "ready_replicas": 3,
+      "owner_kind": "Deployment",
+      "owner_name": "shop-api",
+      "owner_uid": "demo-deployment-shop-api-v1",
+      "owner_references_complete": true
+    },
+    "raw": {
+      "apiVersion": "apps/v1",
+      "kind": "ReplicaSet",
+      "metadata": {
+        "name": "shop-api-6f87b7c95b",
+        "namespace": "demo-shop",
+        "uid": "demo-replicaset-shop-api-v1",
+        "resourceVersion": "8",
+        "ownerReferences": [
+          {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "name": "shop-api",
+            "uid": "demo-deployment-shop-api-v1",
+            "controller": true
+          }
+        ]
+      },
+      "spec": {
+        "replicas": 3
+      },
+      "status": {
+        "replicas": 3,
+        "readyReplicas": 3
+      }
+    }
+  },
+  {
+    "resource_type": "workload",
+    "api_version": "batch/v1",
+    "kind": "Job",
+    "namespace": "demo-payments",
+    "name": "ledger-migration-42",
+    "uid": "demo-job-ledger-migration-v1",
+    "resource_version": "5",
+    "status": "Complete",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "ledger-migration",
+      "app.kubernetes.io/part-of": "demo-payments"
+    },
+    "summary": {
+      "completions": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "completion_time": "2026-07-17T00:05:30Z"
+    },
+    "raw": {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "ledger-migration-42",
+        "namespace": "demo-payments",
+        "uid": "demo-job-ledger-migration-v1",
+        "resourceVersion": "5"
+      },
+      "spec": {
+        "completions": 1
+      },
+      "status": {
+        "succeeded": 1,
+        "completionTime": "2026-07-17T00:05:30Z"
+      }
+    }
+  },
+  {
+    "resource_type": "ingress",
+    "api_version": "networking.k8s.io/v1",
+    "kind": "Ingress",
+    "namespace": "demo-shop",
+    "name": "shop-public",
+    "uid": "demo-ingress-shop-public-v1",
+    "resource_version": "3",
+    "status": "Assigned",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "shop-api",
+      "app.kubernetes.io/part-of": "demo-shop"
+    },
+    "summary": {
+      "ingress_class_name": "nginx",
+      "hosts": ["shop.demo.opsia.local"],
+      "backend_services": ["shop-api"],
+      "external_hosts": ["127.0.0.1"],
+      "address_count": 1,
+      "tls_enabled": true
+    },
+    "raw": {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "Ingress",
+      "metadata": {
+        "name": "shop-public",
+        "namespace": "demo-shop",
+        "uid": "demo-ingress-shop-public-v1",
+        "resourceVersion": "3"
+      },
+      "spec": {
+        "ingressClassName": "nginx",
+        "rules": [
+          {
+            "host": "shop.demo.opsia.local",
+            "http": {
+              "paths": [
+                {
+                  "path": "/",
+                  "pathType": "Prefix",
+                  "backend": {
+                    "service": {
+                      "name": "shop-api",
+                      "port": {"number": 8080}
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "status": {
+        "loadBalancer": {
+          "ingress": [{"ip": "127.0.0.1"}]
+        }
+      }
+    }
+  },
+  {
+    "resource_type": "configmap",
+    "api_version": "v1",
+    "kind": "ConfigMap",
+    "namespace": "demo-shop",
+    "name": "shop-runtime-config",
+    "uid": "demo-configmap-shop-runtime-v1",
+    "resource_version": "2",
+    "status": "Active",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "shop-api",
+      "app.kubernetes.io/part-of": "demo-shop"
+    },
+    "summary": {
+      "data_keys": ["FEATURE_CHECKOUT_V2", "PAYMENTS_ENDPOINT"],
+      "binary_data_keys": [],
+      "immutable": false
+    },
+    "raw": {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "shop-runtime-config",
+        "namespace": "demo-shop",
+        "uid": "demo-configmap-shop-runtime-v1",
+        "resourceVersion": "2"
+      },
+      "data": {
+        "FEATURE_CHECKOUT_V2": "true",
+        "PAYMENTS_ENDPOINT": "http://payments-api.demo-payments.svc:8080"
+      }
+    }
+  },
+  {
+    "resource_type": "networkpolicy",
+    "api_version": "networking.k8s.io/v1",
+    "kind": "NetworkPolicy",
+    "namespace": "demo-payments",
+    "name": "payments-api-allow-shop",
+    "uid": "demo-networkpolicy-payments-v1",
+    "resource_version": "2",
+    "status": "Active",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "payments-api",
+      "app.kubernetes.io/part-of": "demo-payments"
+    },
+    "summary": {
+      "policy_types": ["Ingress", "Egress"],
+      "pod_selector": {"app.kubernetes.io/name": "payments-api"},
+      "ingress_rule_count": 1,
+      "egress_rule_count": 1
+    },
+    "raw": {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "payments-api-allow-shop",
+        "namespace": "demo-payments",
+        "uid": "demo-networkpolicy-payments-v1",
+        "resourceVersion": "2"
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {"app.kubernetes.io/name": "payments-api"}
+        },
+        "policyTypes": ["Ingress", "Egress"],
+        "ingress": [{}],
+        "egress": [{}]
+      }
+    }
+  },
+  {
+    "resource_type": "horizontalpodautoscaler",
+    "api_version": "autoscaling/v2",
+    "kind": "HorizontalPodAutoscaler",
+    "namespace": "demo-shop",
+    "name": "shop-api",
+    "uid": "demo-hpa-shop-api-v1",
+    "resource_version": "4",
+    "status": "3/3",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/name": "shop-api",
+      "app.kubernetes.io/part-of": "demo-shop"
+    },
+    "summary": {
+      "target_kind": "Deployment",
+      "target_name": "shop-api",
+      "min_replicas": 2,
+      "max_replicas": 8,
+      "current_replicas": 3,
+      "desired_replicas": 3,
+      "cpu_target_utilization": 70
+    },
+    "raw": {
+      "apiVersion": "autoscaling/v2",
+      "kind": "HorizontalPodAutoscaler",
+      "metadata": {
+        "name": "shop-api",
+        "namespace": "demo-shop",
+        "uid": "demo-hpa-shop-api-v1",
+        "resourceVersion": "4"
+      },
+      "spec": {
+        "scaleTargetRef": {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "name": "shop-api"
+        },
+        "minReplicas": 2,
+        "maxReplicas": 8
+      },
+      "status": {
+        "currentReplicas": 3,
+        "desiredReplicas": 3
+      }
+    }
+  },
+  {
+    "resource_type": "resourcequota",
+    "api_version": "v1",
+    "kind": "ResourceQuota",
+    "namespace": "demo-shop",
+    "name": "demo-shop-budget",
+    "uid": "demo-resourcequota-shop-v1",
+    "resource_version": "2",
+    "status": "WithinLimit",
+    "health": "healthy",
+    "labels": {
+      "app.kubernetes.io/part-of": "demo-shop"
+    },
+    "summary": {
+      "hard": {"requests.cpu": "4", "requests.memory": "8Gi", "pods": "30"},
+      "used": {"requests.cpu": "850m", "requests.memory": "1536Mi", "pods": "9"}
+    },
+    "raw": {
+      "apiVersion": "v1",
+      "kind": "ResourceQuota",
+      "metadata": {
+        "name": "demo-shop-budget",
+        "namespace": "demo-shop",
+        "uid": "demo-resourcequota-shop-v1",
+        "resourceVersion": "2"
+      },
+      "status": {
+        "hard": {"requests.cpu": "4", "requests.memory": "8Gi", "pods": "30"},
+        "used": {"requests.cpu": "850m", "requests.memory": "1536Mi", "pods": "9"}
+      }
+    }
+  },
+  {
+    "resource_type": "secret",
       "api_version": "v1",
       "kind": "Secret",
       "namespace": "demo-shop",
@@ -941,8 +1538,8 @@
             "name": "yaml-demo-helm-staging",
             "version": "1",
             "status": "deployed"
-          }
-        },
+    }
+  },
         "type": "helm.sh/release.v1"
       }
     },

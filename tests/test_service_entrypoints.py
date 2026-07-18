@@ -159,6 +159,40 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
         assert deploy in up_script
 
 
+def test_local_up_seeds_complete_demo_and_connects_prometheus() -> None:
+    up_script = read_project_file("scripts/up.sh")
+
+    assert 'SEED_DEMO_WORKSPACE="${SEED_DEMO_WORKSPACE:-1}"' in up_script
+    assert 'AUTO_CONNECT_PROMETHEUS="${AUTO_CONNECT_PROMETHEUS:-1}"' in up_script
+    assert "seed_local_demo_workspace" in up_script
+    assert "management-demo-workspace-seed" in up_script
+    assert "configure_local_prometheus" in up_script
+    assert '"${api_base}/integrations/prometheus"' in up_script
+    assert '"prometheus_url": os.environ["LOCAL_PROMETHEUS_URL"]' in up_script
+    assert 'if [ "${state}" = "connected" ]' in up_script
+
+
+def test_radar_launcher_seeds_empty_pages_and_pins_target_prometheus() -> None:
+    radar_script = read_project_file("scripts/radar.sh")
+    showcase = read_project_file("deploy/kind/radar-empty-pages.yaml")
+
+    assert 'RADAR_CONTEXTS="${RADAR_CONTEXTS:-${RADAR_CONTEXT:-cluster-1}}"' in radar_script
+    assert 'RADAR_SEED_SHOWCASE="${RADAR_SEED_SHOWCASE:-1}"' in radar_script
+    assert 'apply --filename "${RADAR_SHOWCASE_MANIFEST}"' in radar_script
+    assert 'RADAR_PROMETHEUS_NAMESPACE="${RADAR_PROMETHEUS_NAMESPACE:-target}"' in radar_script
+    assert 'RADAR_PROMETHEUS_SERVICE="${RADAR_PROMETHEUS_SERVICE:-prometheus}"' in radar_script
+    assert 'port-forward' in radar_script
+    assert '--prometheus-url "${RADAR_PROMETHEUS_URL}"' in radar_script
+    for kind in (
+        "CronJob",
+        "Ingress",
+        "HorizontalPodAutoscaler",
+        "PersistentVolumeClaim",
+        "Event",
+    ):
+        assert f"kind: {kind}" in showcase
+
+
 def test_gateway_pool_capacity_covers_agent_long_poll_fanout() -> None:
     services = read_project_file("deploy/management/services.yaml")
 

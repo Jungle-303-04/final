@@ -23,6 +23,7 @@ def kubernetes_evidence_to_inventory_snapshot(
         *(_pod_resource(item) for item in _items(kubernetes, "pods")),
         *(_node_resource(item, _items(kubernetes, "pods")) for item in _items(kubernetes, "nodes")),
         *(_service_resource(item) for item in _items(kubernetes, "services")),
+        *(_ingress_resource(item) for item in _items(kubernetes, "ingresses")),
         *(_resource_quota_resource(item) for item in _items(kubernetes, "resourcequotas")),
         *(_custom_resource(item) for item in _items(kubernetes, "custom_resources")),
         *(
@@ -325,6 +326,27 @@ def _service_resource(item: JsonObject) -> JsonObject:
     }
 
 
+def _ingress_resource(item: JsonObject) -> JsonObject:
+    hosts = item.get("hosts") if isinstance(item.get("hosts"), list) else []
+    external_hosts = (
+        item.get("external_hosts") if isinstance(item.get("external_hosts"), list) else []
+    )
+    return {
+        "resource_type": "ingress",
+        "api_version": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "namespace": _text(item.get("namespace"), "default"),
+        "name": _text(item.get("name"), "ingress"),
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
+        "status": "Address assigned" if external_hosts else "Pending",
+        "health": "healthy" if hosts else "unknown",
+        "labels": _labels(item),
+        "summary": item,
+        "raw": item,
+    }
+
+
 def _resource_quota_resource(item: JsonObject) -> JsonObject:
     return {
         "resource_type": "resourcequota",
@@ -443,6 +465,7 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
                 "pods",
                 "workloads",
                 "services",
+                "ingresses",
                 "events",
                 "endpoints",
                 "resourcequotas",
@@ -459,6 +482,7 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
             "workloads",
             "nodes",
             "services",
+            "ingresses",
             "events",
             "endpoints",
             "resourcequotas",
