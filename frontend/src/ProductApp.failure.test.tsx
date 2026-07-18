@@ -3,6 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PRODUCT_LOCALE_STORAGE_KEY } from "./shared/i18n/locale";
 
 const authenticatedRuntimeMock = vi.hoisted(() => ({ evaluations: 0 }));
 
@@ -50,6 +51,7 @@ afterEach(() => {
 
 describe("ProductApp authenticated runtime boundary", () => {
   it("does not evaluate product composition or page code for an unauthenticated visitor", async () => {
+    window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
     render(
       <StrictMode>
         <ProductApp />

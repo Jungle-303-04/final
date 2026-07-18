@@ -68,6 +68,7 @@ describe("ProductApp root recovery", () => {
   });
 
   it("loads exactly one session in StrictMode and keeps unauthenticated navigation hidden", async () => {
+    window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "Not authenticated" }), {
         status: 401,
@@ -93,6 +94,7 @@ describe("ProductApp root recovery", () => {
   }, 15_000);
 
   it("keeps the explicit Home route on the declarative Home landing", async () => {
+    window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
     window.history.replaceState({}, "", "/home?cluster=cluster-1");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -131,6 +133,7 @@ describe("ProductApp root recovery", () => {
   }, PRODUCT_TEST_TIMEOUT_MS);
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {
+    window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
     window.history.replaceState({}, "", "/resources/pod?cluster=cluster-1");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
