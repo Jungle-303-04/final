@@ -625,7 +625,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
   onOpenResource?: (kind: "Pod", data: Record<string, unknown>) => void;
-  /** 셸의 종류 선택과 연결 보기 탭 동기화 (Service→서비스, ConfigMap·Secret→설정, Argo 앱→배포) */
+  /** 셸의 종류 선택과 연결 보기 탭 동기화 (Service→서비스, ConfigMap·Secret→구성, Argo 앱→저장소) — 탭명은 D16(서피스명과 중복 금지) */
   lensTab?: "svc" | "cfg" | "git" | null;
   /** 맵 콘텐츠(클러스터·노드 뷰) 바로 아래, 연결 보기 옆 왼쪽 컬럼에 붙는 내용 (셸의 리소스 표) */
   belowContent?: React.ReactNode;
@@ -967,7 +967,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
             <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>{kindsTab ? "탐색" : "연결 보기"}</div>
             <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.04)", borderRadius: 10, padding: 3 }}>
               {/* 아이콘 통일: 서비스=Plug (셸 사이드바 Service와 동일) · 리소스 탭 = 종류 탐색(보조 사이드바 통합) */}
-              {([...(kindsTab ? [["res", "리소스", Box] as const] : []), ["svc", "서비스", Plug], ["cfg", "설정", FileCog], ["git", "배포", GithubIcon]] as const).map(([id, label, I]) => {
+              {([...(kindsTab ? [["res", "리소스", Box] as const] : []), ["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
                 const on = tab === id;
                 return (
                   <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
