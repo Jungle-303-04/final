@@ -345,7 +345,7 @@ function scriptedReply(id: string, q: string): AiTurn {
   const base = { id, role: "assistant" as const, collapsed: false, createdAt: now() };
   if (/알람|알림|alert|걸어/.test(q)) {
     return { ...base, parts: [
-      { kind: "action", proposal: { type: "create_alert_rule", rationale: "현재 화면 필터에서 CPU가 70%를 20초 이상 넘으면 알리도록 제안했습니다.", payload: { name: "파드 CPU 70% 알림", metric: "cpu_pct", comparator: ">", threshold: 70, forSeconds: 20, severity: "high", scope: { clusters: ["cluster-2"], namespaces: [], applications: [], labels: [] }, channels: [], enabled: true } } },
+      { kind: "action", proposal: { type: "create_alert_rule", rationale: "현재 화면 필터에서 CPU가 70%를 20초 이상 넘으면 알리도록 제안했습니다.", payload: { name: "파드 CPU 70% 알림", metric: "cpu_pct", comparator: ">", threshold: 70, forSeconds: 20, severity: "high", scope: { clusters: ["prod-eks"], namespaces: [], applications: [], labels: [] }, channels: [], enabled: true } } },
     ] };
   }
   if (/위험|상태|어때|health|문제|이상/.test(q)) {
@@ -354,7 +354,7 @@ function scriptedReply(id: string, q: string): AiTurn {
         { id: id + "a", label: "리소스 조회", detail: "42건 · 파드 37", state: "done" },
         { id: id + "b", label: "상태 평가", detail: "위험 1 · 경고 2", state: "done" },
       ] },
-      { kind: "result", title: "위험 1 · 경고 2", tone: "warning", summary: "checkout-api 메모리 초과가 시급", metrics: [
+      { kind: "result", title: "위험 1 · 경고 2", tone: "warning", summary: "checkout 메모리 초과가 시급", metrics: [
         { label: "위험", value: "1", tone: "critical" }, { label: "경고", value: "2", tone: "warning" }, { label: "정상", value: "34", tone: "healthy" },
       ] },
       { kind: "links", items: [{ label: "위험 리소스 열기", href: "/resources?health=critical", icon: "resources" }] },
@@ -372,7 +372,15 @@ function scriptedReply(id: string, q: string): AiTurn {
   ] };
 }
 
-function Panel() {
+export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "prod-eks" }: {
+  /** 셸 임베드: 닫기 버튼 동작 */
+  onClose?: () => void;
+  /** 셸 임베드: 고정 460px 대신 컨테이너 폭을 따른다 (리사이즈 핸들 대응) */
+  embedded?: boolean;
+  /** 현재 화면 맥락 칩 — 셸이 실제 화면·범위를 알려준다 */
+  contextView?: string;
+  contextScope?: string;
+} = {}) {
   const [turns, setTurns] = useState<AiTurn[]>(DUMMY_CONVERSATION.turns);
   const [count, setCount] = useState(1);
   const [thinking, setThinking] = useState(false);
@@ -420,18 +428,18 @@ function Panel() {
   }, [runId]);
 
   return (
-    <div className="opsia-ai relative flex h-screen w-[460px] flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl" key={runId}>
+    <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`} key={runId}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em]">Opsia AI</h2><p className="truncate text-[11.5px] text-muted-foreground">현재 화면 맥락으로 질문하고 근거를 확인합니다</p></div>
-        {[{ i: Play, t: "재생", a: () => setRunId((r) => r + 1) }, { i: SquarePen, t: "대화 목록", a: () => setListOpen((v) => !v) }, { i: Plus, t: "새 대화", a: undefined }, { i: X, t: "닫기", a: undefined }].map(({ i: Ico, t, a }) => (
+        {[{ i: Play, t: "재생", a: () => setRunId((r) => r + 1) }, { i: SquarePen, t: "대화 목록", a: () => setListOpen((v) => !v) }, { i: Plus, t: "새 대화", a: undefined }, { i: X, t: "닫기", a: onClose }].map(({ i: Ico, t, a }) => (
           <button className="grid size-8 place-items-center rounded-full text-muted-foreground/80 transition-colors hover:bg-black/[0.05] hover:text-foreground" key={t} onClick={a} title={t} type="button"><Ico className="size-[17px]" /></button>
         ))}
       </header>
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 backdrop-blur">
         <span className="text-[11px] font-medium text-muted-foreground/80">맥락</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium"><Boxes className="size-3" />resources</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium"><Server className="size-3" />cluster-2</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium"><Boxes className="size-3" />{contextView}</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium"><Server className="size-3" />{contextScope}</span>
       </div>
       {listOpen ? (
         <div className="absolute inset-x-0 top-[97px] z-10 border-b border-black/[0.06] bg-white/90 shadow-xl backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>
@@ -478,7 +486,10 @@ function Panel() {
         .chatscroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.14); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
         .chatscroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.24); background-clip: padding-box; }
         /* 애플 팔레트 토큰 + 유틸 */
-        .opsia-ai { --ap-blue:#0A84FF; --ap-red:#FF3B30; --ap-orange:#FF9500; --ap-green:#30D158; --ap-gray:#8E8E93; }
+        /* 셸 팔레트와 통일 (BLUE·HP.ok·HP.warn·HP.crit)
+           — 제품 토큰의 --primary(검정)를 패널 스코프에서 셸 블루로 오버라이드 */
+        .opsia-ai { --ap-blue:#0A84FF; --ap-red:#FF5F55; --ap-orange:#FFB340; --ap-green:#30D158; --ap-gray:#8E8E93;
+          --primary:#0A84FF; --primary-foreground:#FFFFFF; --destructive:#FF5F55; }
         .ap-accent { color: var(--ap-blue); }
         .ap-ok { color: var(--ap-green); }
         .ap-ok-bg { background: color-mix(in srgb, var(--ap-green) 15%, transparent); }
@@ -498,6 +509,9 @@ function Panel() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <div className="flex min-h-screen justify-end bg-[oklch(0.955_0.004_255)]"><Panel /></div>,
-);
+// 단독 페이지에서만 마운트 — 통합 셸에서는 AiPanel을 import해 도킹한다
+if (window.location.pathname.includes("devpreview-ai")) {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <div className="flex min-h-screen justify-end bg-[oklch(0.955_0.004_255)]"><AiPanel /></div>,
+  );
+}

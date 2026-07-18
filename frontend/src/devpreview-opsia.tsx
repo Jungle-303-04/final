@@ -5,7 +5,7 @@
 import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
-import { Box, ChevronRight, ChevronLeft, X, Layers3, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
+import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -60,9 +60,9 @@ const nodeRank = (n: { state: NodeState }) => (n.state === "Ready" ? 0 : n.state
 const nodeIdle = (n: { state: NodeState }) => n.state !== "Ready";
 const SERVICES = [
   { id: "shop-api", color: "#0A84FF", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "shop-web", color: "#28A745", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "checkout", color: "#E8930C", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "payments", color: "#E5484D", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "shop-web", color: "#30D158", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "checkout", color: "#FFB340", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "payments", color: "#FF5F55", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
   { id: "search", color: "#0FA3B1", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
   { id: "auth", color: "#8250DF", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
   { id: "redis", color: "#DC382C", repo: "opsia/platform", ns: "platform", kind: "StatefulSet" },
@@ -121,6 +121,25 @@ const pct = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
 const spanOf = (cap: number) => Math.min(3, Math.max(1, Math.ceil(cap / 10)));
 // 정렬 랭크: 임계(0) → 실행 중(1) → 대기·미할당(2)
 const rank = (p: Pod) => (isCrit(p) ? 0 : p.status === "Pending" ? 2 : 1);
+
+// ── 셸 통합용 인벤토리 — 맵과 리소스 표가 '같은 세계'를 공유하기 위한 단일 데이터 소스
+export type PodInv = { name: string; ns: string; svc: string; ownerKind: string; cfgs: string[]; status: Status; cpu: number; mem: number; restarts: number; cluster: string; node: string; bad: boolean; qos: string };
+export function podInventory(): PodInv[] {
+  return genPods().map((p) => ({
+    name: p.name, ns: SVC[p.svc].ns, svc: p.svc, ownerKind: SVC[p.svc].kind, cfgs: SVC_CFG[p.svc] || [],
+    status: p.status, cpu: p.cpu, mem: p.mem, restarts: p.restarts, cluster: p.cluster, node: p.node,
+    bad: isCrit(p), qos: qosOf(p),
+  }));
+}
+export type NodeInv = { id: string; cluster: string; zone: string; instance: string; cap: number; state: NodeState; podCount: number; cpu: number; mem: number };
+export function nodeInventory(): NodeInv[] {
+  const pods = genPods();
+  return NODES.map((n) => {
+    const on = pods.filter((p) => p.node === n.id);
+    const avg = (f: (p: Pod) => number) => (on.length ? Math.round(on.reduce((s, p) => s + f(p), 0) / on.length) : 0);
+    return { ...n, podCount: on.length, cpu: avg((p) => p.cpu), mem: avg((p) => p.mem) };
+  });
+}
 
 type Lens = { kind: "svc" | "cfg" | "git" | "crit"; id: string } | null;
 type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { level: "pods"; cluster: string; node: string };
@@ -486,7 +505,16 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boolean; onScopeChange?: (v: View) => void } = {}) {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent }: {
+  embedded?: boolean;
+  onScopeChange?: (v: View) => void;
+  /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
+  onOpenResource?: (kind: "Pod", data: Record<string, unknown>) => void;
+  /** 셸의 종류 선택과 연결 보기 탭 동기화 (Service→서비스, ConfigMap·Secret→설정, Argo 앱→배포) */
+  lensTab?: "svc" | "cfg" | "git" | null;
+  /** 맵 콘텐츠(클러스터·노드 뷰) 바로 아래, 연결 보기 옆 왼쪽 컬럼에 붙는 내용 (셸의 리소스 표) */
+  belowContent?: React.ReactNode;
+} = {}) {
   const pods = useMemo(() => genPods(), []);
   const [tick, setTick] = useState(0);
   useEffect(() => { const iv = setInterval(() => setTick((t) => t + 1), 1500); return () => clearInterval(iv); }, []);
@@ -523,7 +551,17 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
 
   const gotoNode = (p: Pod) => { go({ level: "pods", cluster: p.cluster, node: p.node }, 1); setFocusPod(p); };
   const openNodeById = (id: string) => { const n = NODES.find((x) => x.id === id); if (n) go({ level: "pods", cluster: n.cluster, node: n.id }, 1); };
-  const selectPod = (p: Pod) => setFocusPod((cur) => (cur?.id === p.id ? null : p));
+  const selectPod = (p: Pod) => {
+    // 임베드 모드에서는 상세를 셸의 최상위 오버레이 하나로 일원화한다 (내부 패널과 이원화 금지)
+    if (embedded && onOpenResource) {
+      onOpenResource("Pod", {
+        name: p.name, ns: SVC[p.svc].ns, bad: isCrit(p), status: p.status, svc: p.svc, ownerKind: SVC[p.svc].kind,
+        cfgs: SVC_CFG[p.svc] || [], qos: qosOf(p), node: p.node, cluster: p.cluster, restarts: p.restarts, age: `${3 + (p.cpu % 9)}d`,
+      });
+      return;
+    }
+    setFocusPod((cur) => (cur?.id === p.id ? null : p));
+  };
 
   const viewKey = view.level === "clusters" ? "clusters" : view.level === "nodes" ? `nodes-${view.cluster}` : `pods-${view.node}`;
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: "클러스터", onClick: view.level !== "clusters" ? () => go({ level: "clusters" }, -1) : undefined }];
@@ -604,13 +642,14 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+        {/* 좁아지면(AI 도킹 등) 어사이드가 아래로 내려간다 — 겹침 방지 */}
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
             <AnimatePresence>
               {effLens && (
                 <motion.div key="chip" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={SOFT}
                   style={{ position: "absolute", top: -46, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 7, background: UI.card, border: `1px solid ${(incident && !lens && !pin) || effLens.kind === "crit" ? "#F0B8B4" : "#BFD8FB"}`, borderRadius: 999, padding: "5px 13px", fontSize: 11.5, fontWeight: 600, color: (incident && !lens && !pin) || effLens.kind === "crit" ? HP.crit : BLUE }}>
-                  {(incident && !lens && !pin) || effLens.kind === "crit" ? <Activity size={12} /> : effLens.kind === "svc" ? <Layers3 size={12} /> : effLens.kind === "cfg" ? <FileCog size={12} /> : <GithubIcon size={12} />}
+                  {(incident && !lens && !pin) || effLens.kind === "crit" ? <Activity size={12} /> : effLens.kind === "svc" ? <Plug size={12} /> : effLens.kind === "cfg" ? <FileCog size={12} /> : <GithubIcon size={12} />}
                   <span style={{ fontFamily: MONO }}>{effLens.kind === "crit" ? "장애 필터" : incident && !lens && !pin ? `장애 조사 · ${incident.name}` : effLens.id}</span>
                   <span style={{ fontWeight: 500, opacity: 0.6 }}>{related.size} 파드</span>
                   {pin && <button onClick={() => setPin(null)} style={{ border: "none", background: "rgba(17,19,24,0.06)", borderRadius: 999, width: 15, height: 15, cursor: "pointer", fontSize: 9, lineHeight: 1, color: "inherit" }}>✕</button>}
@@ -628,7 +667,7 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
                 initial="initial" animate="animate" exit="exit" transition={PAGE}>
 
                 {view.level === "clusters" && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, alignItems: "stretch" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: embedded ? "repeat(auto-fit, minmax(230px, 1fr))" : "repeat(3, 1fr)", gap: 12, alignItems: "stretch" }}>
                     {CLUSTERS.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
                         <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
@@ -656,9 +695,11 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
                 })()}
               </motion.div>
             </AnimatePresence>
+            {/* 셸 리소스 표 — 맵 뷰 바로 아래에 붙는다 (오른쪽 연결 보기와 나란히) */}
+            {belowContent && <div style={{ marginTop: 18 }}>{belowContent}</div>}
           </div>
 
-          <SidePanel pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} />
+          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} />
         </div>
       </div>
 
@@ -717,10 +758,10 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
 }
 
 // ── 우측 패널 ─────────────────────────────
-function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode }: {
-  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void;
+function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab }: {
+  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null;
 }) {
-  const [tab, setTab] = useState<"svc" | "cfg" | "git">("svc");
+  const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
 
   const Row = ({ l, icon, label, sub, warn }: { l: Lens; icon?: React.ReactNode; label: string; sub: string; warn?: boolean }) => {
@@ -750,7 +791,8 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
           <motion.div key="lens" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={SOFT} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>연결 보기</div>
             <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.04)", borderRadius: 10, padding: 3 }}>
-              {([["svc", "서비스", Layers3], ["cfg", "설정", FileCog], ["git", "배포", GithubIcon]] as const).map(([id, label, I]) => {
+              {/* 아이콘 통일: 서비스=Plug (셸 사이드바 Service와 동일) */}
+              {([["svc", "서비스", Plug], ["cfg", "설정", FileCog], ["git", "배포", GithubIcon]] as const).map(([id, label, I]) => {
                 const on = tab === id;
                 return (
                   <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: 11.5, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>

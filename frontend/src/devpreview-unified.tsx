@@ -2,14 +2,18 @@
 // 병합 규칙: 좌측 = 무엇을(종류) · 상단 관점 = 어떻게(물리/관계/목록).
 // 워크로드·노드 계열은 관점 전환이 가능하고, 나머지는 종류별 전용 표로 정보를 잃지 않게 표시.
 import ReactDOM from "react-dom/client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
+  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Moon, CircleHelp,
+  Bell, Pencil, Check, Hourglass, Webhook, SignalHigh,
 } from "lucide-react";
-import { OpsiaMap } from "./devpreview-opsia";
+import { OpsiaMap, podInventory, nodeInventory } from "./devpreview-opsia";
+import { AiPanel } from "./devpreview-ai";
+import { ConnectWizard } from "./devpreview-connect";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -34,6 +38,11 @@ function nsFor(name: string): string {
   if (n.startsWith("shop") || ["checkout", "payments", "search"].some((s) => n.startsWith(s))) return "shop";
   if (["auth", "gateway", "worker", "notifier", "media", "redis", "backend"].some((s) => n.startsWith(s))) return "platform";
   return "sandbox";
+}
+// 이름 → 클러스터 결정 귀속 — 맵 드릴 범위와 표를 실제로 연동하기 위한 기준
+function clusterOf(name: string): string {
+  let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h % 4 === 0 ? "dev-eks" : "prod-eks";
 }
 // 이미지를 이름 기반으로 결정 — 리소스 이름과 이미지가 어긋나는 논리 모순 방지
 const imgFor = (name: string) => {
@@ -89,14 +98,13 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
     cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.8fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "140px", cell: { t: "ns" } },
       { k: "ctr", label: "CONTAINERS", w: "92px", cell: { t: "dots" } }, { k: "status", label: "STATUS", w: "92px", cell: { t: "status" } },
       { k: "cpu", label: "CPU", w: "128px", cell: { t: "meter" } }, { k: "mem", label: "MEMORY", w: "128px", cell: { t: "meter" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
-    rows: (r) => Array.from({ length: 26 }).map((_, i) => {
-      const svc = pick(r, ["argocd-server", "argocd-redis", "aws-node", "backend", "caretta-grafana", "shop-api", "checkout", "payments", "search", "auth", "gateway", "coredns"]);
-      const bad = r() < 0.08;
-      const nm = `${svc}-${Math.floor(r() * 9000) + 1000}${["-vhk2w", "-cghhs", "-j6lzb", "-k4kw5", "-xtksb"][i % 5]}`;
-      return { name: nm, ns: nsFor(svc), img: imgFor(svc),
-        ctr: 1 + Math.floor(r() * 3), status: bad ? "CrashLoopBackOff" : "Running",
-        cpu: { used: `${Math.floor(r() * 9)}m`, lim: "50m", pct: Math.floor(r() * 60) + 5 }, mem: { used: `${Math.floor(r() * 90) + 5}Mi`, lim: "300Mi", pct: Math.floor(r() * 70) + 5 }, age: age(r), bad };
-    }),
+    // 파드는 맵과 같은 인벤토리에서 파생 — 드릴 맵에 보이는 파드가 곧 이 표의 파드다
+    rows: () => podInventory().map((p) => ({
+      name: p.name, ns: p.ns, svc: p.svc, ownerKind: p.ownerKind, cfgs: p.cfgs, qos: p.qos, node: p.node, cluster: p.cluster, restarts: p.restarts,
+      img: imgFor(p.svc), ctr: 1 + (p.name.length % 3), status: p.status, bad: p.bad,
+      cpu: { used: `${p.cpu * 4}m`, lim: "400m", pct: p.cpu }, mem: { used: `${p.mem * 3}Mi`, lim: "300Mi", pct: p.mem },
+      age: `${3 + (p.cpu % 9)}d`,
+    })),
   },
   ReplicaSet: {
     cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.7fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "150px", cell: { t: "ns" } },
@@ -119,7 +127,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       { k: "sched", label: "SCHEDULE", w: "100px", cell: { t: "mono" } }, { k: "tz", label: "TIMEZONE", w: "92px", cell: { t: "text" } },
       { k: "susp", label: "SUSPEND", w: "78px", cell: { t: "text" } }, { k: "active", label: "ACTIVE", w: "68px", cell: { t: "num" } },
       { k: "last", label: "LAST SCHEDULE", w: "104px", cell: { t: "text" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
-    rows: () => [],
+    rows: () => [{ name: "backup-snapshots", ns: "platform", sched: "0 3 * * *", tz: "Asia/Seoul", susp: "False", active: 0, last: "6h", age: "12d" }],
   },
   Service: {
     cols: [{ k: "name", label: "NAME", w: "minmax(180px,1.5fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "150px", cell: { t: "ns" } },
@@ -134,7 +142,8 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
     cols: [{ k: "name", label: "NAME", w: "minmax(180px,1.5fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "150px", cell: { t: "ns" } },
       { k: "class", label: "CLASS", w: "96px", cell: { t: "badge", tone: "gray" } }, { k: "hosts", label: "HOSTS", w: "minmax(140px,1fr)", cell: { t: "mono" } },
       { k: "addr", label: "ADDRESS", w: "130px", cell: { t: "mono" } }, { k: "ports", label: "PORTS", w: "80px", cell: { t: "mono" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
-    rows: () => [],
+    // 외부 노출은 gateway 하나 — 맵의 gateway 서비스(platform)와 일치
+    rows: () => [{ name: "gateway", ns: "platform", class: "alb", hosts: "shop.opsia.io", addr: "k8s-platform-…elb.amazonaws.com", ports: "80, 443", age: "12d" }],
   },
   NetworkPolicy: {
     cols: [{ k: "name", label: "NAME", w: "minmax(220px,1.8fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "140px", cell: { t: "ns" } },
@@ -147,7 +156,11 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
     cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.6fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "150px", cell: { t: "ns" } },
       { k: "at", label: "ADDRESSTYPE", w: "108px", cell: { t: "badge", tone: "gray" } }, { k: "ports", label: "PORTS", w: "110px", cell: { t: "mono" } },
       { k: "ep", label: "ENDPOINTS", w: "minmax(120px,1fr)", cell: { t: "mono" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
-    rows: () => [],
+    // EndpointSlice는 Service마다 1개 — Service 표와 같은 시드로 파생해 이름·포트가 항상 일치
+    rows: () => SPEC.Service.rows(rng("Service".length * 977 + 13)).map((s, i) => ({
+      name: `${s.name}-${["x7k2p", "m4qnd", "r9wzt", "k2vhc", "p6sjm"][i % 5]}`, ns: s.ns, at: "IPv4",
+      ports: String(s.ports), ep: `10.0.${1 + (i % 4)}.${30 + i * 3}`, age: `${3 + (i % 10)}d`,
+    })),
   },
   ConfigMap: {
     cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.8fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "180px", cell: { t: "ns" } },
@@ -172,7 +185,12 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       { k: "ref", label: "REFERENCE", w: "minmax(150px,1fr)", cell: { t: "mono" } }, { k: "targets", label: "TARGETS", w: "110px", cell: { t: "mono" } },
       { k: "min", label: "MINPODS", w: "78px", cell: { t: "num" } }, { k: "max", label: "MAXPODS", w: "78px", cell: { t: "num" } },
       { k: "reps", label: "REPLICAS", w: "82px", cell: { t: "num" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
-    rows: () => [],
+    // HPA 현재 복제 수·사용률은 파드 인벤토리에서 계산 — 맵의 shop-api 파드 수와 일치
+    rows: () => {
+      const pods = podInventory().filter((p) => p.svc === "shop-api");
+      const avg = pods.length ? Math.round(pods.reduce((s, p) => s + p.cpu, 0) / pods.length) : 0;
+      return [{ name: "shop-api", ns: "shop", ref: "Deployment/shop-api", targets: `cpu: ${avg}%/70%`, min: 2, max: 20, reps: pods.length, age: "9d" }];
+    },
   },
   PVC: {
     cols: [{ k: "name", label: "NAME", w: "minmax(160px,1.4fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "130px", cell: { t: "ns" } },
@@ -254,17 +272,20 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
   AppProject: { cols: [{ k: "name", label: "NAME", w: "minmax(220px,2fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "140px", cell: { t: "ns" } }, { k: "desc", label: "DESCRIPTION", w: "minmax(150px,1fr)", cell: { t: "text" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
     rows: (r) => [["default", "argocd", "기본 프로젝트"], ["demo", "argocd", "데모 앱 그룹"]].map(([name, ns, desc]) => ({ name, ns, desc, age: age(r) })) },
   CNINode: { cols: [{ k: "name", label: "NAME", w: "minmax(220px,2fr)", cell: { t: "text" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
-    rows: (r) => [["ip-192-168-26-122.ap-northeast-2.compute.internal"], ["ip-192-168-81-49.ap-northeast-2.compute.internal"]].map(([name]) => ({ name, age: age(r) })) },
+    // CNINode는 클러스터에 조인된 노드마다 1개 — 프로비저닝 중인 노드에는 아직 없다
+    rows: (r) => nodeInventory().filter((n) => n.state !== "Provisioning").map((n) => ({ name: `${n.id}.ap-northeast-2.compute.internal`, cluster: n.cluster, age: age(r) })) },
   APIService: { cols: [{ k: "name", label: "NAME", w: "minmax(240px,2.4fr)", cell: { t: "text" } }, { k: "svc", label: "SERVICE", w: "minmax(140px,1fr)", cell: { t: "mono" } }, { k: "avail", label: "AVAILABLE", w: "96px", cell: { t: "badge", tone: "green" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
     rows: (r) => ["v1.", "v1.apps", "v1.batch", "v1beta1.metrics.k8s.io", "v1.argoproj.io", "v1alpha1.argoproj.io"].map((name) => ({ name, svc: name.includes("metrics") ? "kube-system/metrics-server" : "Local", avail: "True", age: age(r) })) },
   Node: {
-    cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.6fr)", cell: { t: "text" } }, { k: "st", label: "STATUS", w: "88px", cell: { t: "badge", tone: "green" } },
-      { k: "roles", label: "ROLES", w: "88px", cell: { t: "text" } }, { k: "cpu", label: "CPU", w: "150px", cell: { t: "meter" } },
-      { k: "mem", label: "MEMORY", w: "150px", cell: { t: "meter" } }, { k: "pods", label: "PODS", w: "140px", cell: { t: "meter" } }, { k: "cond", label: "CONDITIONS", w: "100px", cell: { t: "text" } }],
-    rows: () => [
-      { name: "ip-192-168-26-122.ap-…", st: "Ready", roles: "worker", cpu: { used: "381m", lim: "1930m", pct: 20 }, mem: { used: "4.5Gi", lim: "6.9Gi", pct: 64 }, pods: { used: "27", lim: "29", pct: 93 }, cond: "Healthy" },
-      { name: "ip-192-168-81-49.ap-n…", st: "Ready", roles: "worker", cpu: { used: "295m", lim: "1930m", pct: 15 }, mem: { used: "2.1Gi", lim: "6.9Gi", pct: 31 }, pods: { used: "21", lim: "29", pct: 72 }, cond: "Healthy" },
-    ],
+    cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.6fr)", cell: { t: "text" } }, { k: "st", label: "STATUS", w: "96px", cell: { t: "status" } },
+      { k: "inst", label: "INSTANCE", w: "96px", cell: { t: "mono" } }, { k: "cpu", label: "CPU", w: "150px", cell: { t: "meter" } },
+      { k: "mem", label: "MEMORY", w: "150px", cell: { t: "meter" } }, { k: "pods", label: "PODS", w: "140px", cell: { t: "meter" } }, { k: "zone", label: "ZONE", w: "76px", cell: { t: "mono" } }],
+    // 노드도 맵과 같은 인벤토리 — 맵의 노드 카드와 이 표의 행이 1:1로 일치한다
+    rows: () => nodeInventory().map((n) => ({
+      name: n.id, cluster: n.cluster, st: n.state, inst: n.instance, zone: n.zone,
+      cpu: { used: `${n.cpu * 40}m`, lim: "4000m", pct: n.cpu }, mem: { used: `${(n.mem * 0.16).toFixed(1)}Gi`, lim: "16Gi", pct: n.mem },
+      pods: { used: String(n.podCount), lim: String(n.cap), pct: Math.round((n.podCount / n.cap) * 100) },
+    })),
   },
 };
 
@@ -273,7 +294,7 @@ type KindView = "physical" | "relation" | "table";
 type Kind = { id: string; label: string; icon: typeof Rocket; group: string; view: KindView; count: number };
 // 그룹·종류·개수는 실제 기준 인스턴스(cluster-1)에서 확인한 값 그대로
 const GROUPS = ["워크로드", "네트워킹", "구성", "스토리지", "접근 제어", "클러스터", "ARGO", "AWS VPC CNI", "API 등록"] as const;
-const KINDS: Kind[] = [
+const BASE_KINDS: Kind[] = [
   { id: "CronJob", label: "CronJob", icon: Timer, group: "워크로드", view: "table", count: 1 },
   { id: "DaemonSet", label: "DaemonSet", icon: LayoutGrid, group: "워크로드", view: "table", count: 9 },
   { id: "Deployment", label: "Deployment", icon: Rocket, group: "워크로드", view: "physical", count: 22 },
@@ -288,13 +309,13 @@ const KINDS: Kind[] = [
   { id: "Service", label: "Service", icon: Plug, group: "네트워킹", view: "relation", count: 35 },
   { id: "ConfigMap", label: "ConfigMap", icon: FileCog, group: "구성", view: "table", count: 50 },
   { id: "HPA", label: "HorizontalPodAutoscaler", icon: MoveDiagonal, group: "구성", view: "table", count: 1 },
-  { id: "Lease", label: "Lease", icon: Timer, group: "구성", view: "table", count: 0 },
-  { id: "MutatingWebhookConfiguration", label: "MutatingWebhookConfiguration", icon: FileCog, group: "구성", view: "table", count: 0 },
+  { id: "Lease", label: "Lease", icon: Hourglass, group: "구성", view: "table", count: 0 },
+  { id: "MutatingWebhookConfiguration", label: "MutatingWebhookConfiguration", icon: Webhook, group: "구성", view: "table", count: 0 },
   { id: "PodDisruptionBudget", label: "PodDisruptionBudget", icon: ShieldCheck, group: "구성", view: "table", count: 3 },
-  { id: "PriorityClass", label: "PriorityClass", icon: MoveDiagonal, group: "구성", view: "table", count: 0 },
+  { id: "PriorityClass", label: "PriorityClass", icon: SignalHigh, group: "구성", view: "table", count: 0 },
   { id: "RuntimeClass", label: "RuntimeClass", icon: Cpu, group: "구성", view: "table", count: 0 },
   { id: "Secret", label: "Secret", icon: KeyRound, group: "구성", view: "table", count: 19 },
-  { id: "ValidatingWebhookConfiguration", label: "ValidatingWebhookConfiguration", icon: ShieldCheck, group: "구성", view: "table", count: 0 },
+  { id: "ValidatingWebhookConfiguration", label: "ValidatingWebhookConfiguration", icon: Webhook, group: "구성", view: "table", count: 0 },
   { id: "PVC", label: "PersistentVolumeClaim", icon: HardDrive, group: "스토리지", view: "table", count: 1 },
   { id: "StorageClass", label: "StorageClass", icon: HardDrive, group: "스토리지", view: "table", count: 1 },
   { id: "VolumeAttachment", label: "VolumeAttachment", icon: HardDrive, group: "스토리지", view: "table", count: 0 },
@@ -312,6 +333,8 @@ const KINDS: Kind[] = [
   { id: "CNINode", label: "CNINode", icon: Network, group: "AWS VPC CNI", view: "table", count: 2 },
   { id: "APIService", label: "APIService", icon: Plug, group: "API 등록", view: "table", count: 30 },
 ];
+// 사이드바 카운트 = 실제 표 행 수 — 숫자와 표가 어긋나는 논리 모순을 구조적으로 차단
+const KINDS: Kind[] = BASE_KINDS.map((k) => ({ ...k, count: SPEC[k.id] ? SPEC[k.id].rows(rng(k.id.length * 977 + 13)).length : 0 }));
 const GROUP_TOTAL = (g: string) => KINDS.filter((k) => k.group === g).reduce((s, k) => s + k.count, 0);
 
 // ── 셀 렌더러 ─────────────────────────────
@@ -333,7 +356,11 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     return <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: n }).map((_, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: 999, background: bad && i === 0 ? HP.crit : i === 0 && n > 1 ? "#D6DAE1" : HP.ok }} />)}</span>;
   }
   if (cell.t === "ready") return <span style={{ fontSize: 11, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : "#1F9D4D" }}>{String(v)}</span>;
-  if (cell.t === "status") return <Badge text={String(v)} tone={bad ? "red" : "green"} />;
+  if (cell.t === "status") {
+    const s = String(v);
+    const tone = bad || /Crash|OOM|Fail|Error|Evict/.test(s) ? "red" : /Pending|Provisioning/.test(s) ? "blue" : /Cordoned|Suspend|Terminat/.test(s) ? "gray" : "green";
+    return <Badge text={s} tone={tone} />;
+  }
   if (cell.t === "badge") return <Badge text={String(v)} tone={bad ? "red" : cell.tone ?? "gray"} />;
   if (cell.t === "num") return <span style={{ fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
   if (cell.t === "ns") return <span style={{ fontSize: 11.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
@@ -346,11 +373,10 @@ function Badge({ text, tone }: { text: string; tone: "blue" | "green" | "gray" |
 }
 
 // ── 종류별 표 ─────────────────────────────
-function ResourceTable({ kind, q, onOpen }: { kind: Kind; q: string; onOpen: (r: Row) => void }) {
+function ResourceTable({ kind, rows, q, inScope, onOpen }: { kind: Kind; rows: Row[]; q: string; inScope: boolean; onOpen: (r: Row) => void }) {
   const spec = SPEC[kind.id];
-  const rows = useMemo(() => (spec ? spec.rows(rng(kind.id.length * 977 + 13)) : []), [kind.id, spec]);
   if (!spec) return null;
-  const filtered = q ? rows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : rows;
+  const filtered = rows;
   const grid = spec.cols.map((c) => c.w ?? "1fr").join(" ");
   return (
     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflow: "hidden" }}>
@@ -363,7 +389,7 @@ function ResourceTable({ kind, q, onOpen }: { kind: Kind; q: string; onOpen: (r:
       </div>
       {filtered.length === 0 ? (
         <div style={{ padding: "40px 18px", textAlign: "center", fontSize: 12, color: UI.ink3 }}>
-          {q ? "검색 결과가 없습니다" : `이 클러스터에 ${kind.label} 리소스가 없습니다`}
+          {q ? "검색 결과가 없습니다" : inScope ? `이 범위에는 ${kind.label} 리소스가 없습니다` : `${kind.label} 리소스가 없습니다`}
         </div>
       ) : filtered.map((row, i) => (
         <div key={i} className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "9px 16px", borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
@@ -422,14 +448,46 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
   );
 }
 
-function DetailOverlay({ kind, row, onClose }: { kind: Kind; row: Row; onClose: () => void }) {
+const TOPBAR_H = 57; // 상단 크롬 높이 — 오버레이는 이 아래부터 시작한다
+
+// YAML 구문 하이라이트 — 코드 에디터 톤 (키·문자열·숫자·불리언·주석)
+function hlYaml(src: string): string {
+  return src.split("\n").map((line) => {
+    const esc = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    if (/^\s*#/.test(esc)) return `<span class="y-c">${esc}</span>`;
+    const m = esc.match(/^(\s*(?:- )?)([^\s:][^:]*)(:)(.*)$/);
+    if (!m) return esc;
+    const [, ind, key, colon, rest] = m;
+    let v = rest;
+    if (/^\s*-?\d+(\.\d+)?\s*$/.test(rest)) v = `<span class="y-n">${rest}</span>`;
+    else if (/^\s*(true|false|null|~)\s*$/.test(rest)) v = `<span class="y-b">${rest}</span>`;
+    else if (/^\s*["'].*["']\s*$/.test(rest)) v = `<span class="y-s">${rest}</span>`;
+    else if (rest.trim()) v = `<span class="y-s">${rest}</span>`;
+    return `${ind}<span class="y-k">${key}</span><span class="y-p">${colon}</span>${v}`;
+  }).join("\n");
+}
+const YAML_FONT = { fontSize: 11.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
+
+function DetailOverlay({ kind, row, onClose, onToast, forceFull = false, rightInset = 0, leftInset = 0 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; forceFull?: boolean; rightInset?: number; leftInset?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
-  const [full, setFull] = useState(false); // 전체 화면 (원본 레퍼런스의 ⤢)
+  const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
+  const full = forceFull || fullSelf;            // AI 대화창이 열리면 자연스럽게 전체 화면으로
   const name = String(row.name ?? "");
   const ns = String(row.ns ?? "–");
   const bad = !!row.bad;
-  const base = name.split("-").slice(0, 3).join("-") || name;
+  // 워크로드 기준 이름: 맵/표가 소속 서비스를 알려주면 그것이 진실 — 이름 파싱은 보조 수단
+  const base = String(row.svc ?? "") || name.split("-").slice(0, 3).join("-") || name;
+  const nodeName = String(row.node ?? "ip-10-0-1-24");
+  const hostIp = nodeName.replace(/^ip-/, "").replace(/-/g, ".");           // EKS 노드 이름 ↔ 호스트 IP 일치
+  const podIp = `10.0.${1 + (name.length % 4)}.${20 + ((name.length * 13) % 200)}`; // VPC CNI — 파드도 VPC 대역
+  const phase = String(row.status ?? (bad ? "CrashLoopBackOff" : "Running"));
+  const qos = String(row.qos ?? "BestEffort");
+  const isSts = row.ownerKind === "StatefulSet";
+  // YAML 편집 — 실제 제품처럼 보기 ↔ 편집 전환, 저장 시 kubectl apply 흐름
+  const [yamlEditing, setYamlEditing] = useState(false);
+  const [yamlDraft, setYamlDraft] = useState<string | null>(null);
+  const [yamlSaved, setYamlSaved] = useState<string | null>(null);
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
   const isPod = kind.id === "Pod";
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
@@ -454,9 +512,12 @@ status:
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(17,19,24,0.28)", backdropFilter: "blur(3px)", zIndex: 70 }} />
+        onClick={onClose} style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0, left: leftInset, background: "rgba(17,19,24,0.07)", zIndex: 70 }} />
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
-        style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: full ? "100vw" : 560, maxWidth: "100vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: "width .28s cubic-bezier(.32,.72,0,1)" }}>
+        style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0,
+          /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
+          width: full ? `calc(100vw - ${leftInset}px)` : 560, maxWidth: `calc(100vw - ${leftInset}px)`,
+          background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
         {/* 헤더 */}
         <div style={{ padding: "16px 20px 0", borderBottom: `1px solid ${UI.line}` }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -473,7 +534,7 @@ status:
                   <I size={11} />{l as string}
                 </button>
               ))}
-              <button title={full ? "패널로 축소" : "전체 화면"} onClick={() => setFull(!full)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
+              <button title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: 11, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
               <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 12, lineHeight: 1 }}>✕</button>
             </div>
           </div>
@@ -501,8 +562,8 @@ status:
                 <Sec title="운영 이슈 (1)" icon={Activity}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, border: "1px solid #F5CFCC", background: "#FFF7F6", borderRadius: 10, padding: "10px 12px" }}>
                     <Badge text="critical" tone="red" />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>워크로드 성능 저하</span>
-                    <span style={{ fontSize: 11, color: UI.ink2 }}>인스턴스 1개 사용 불가</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>{isPod ? phase : "워크로드 성능 저하"}</span>
+                    <span style={{ fontSize: 11, color: UI.ink2 }}>{isPod ? `컨테이너가 반복 종료됨 · 재시작 ${String(row.restarts ?? 3)}회` : "인스턴스 1개 사용 불가"}</span>
                   </div>
                 </Sec>
               )}
@@ -511,7 +572,7 @@ status:
               <Sec title="상태" icon={Activity}>
                 {isWorkload
                   ? ([["목표 복제본", "2"], ["현재 복제본", "2"], ["준비됨", bad ? "1" : "2"], ["최신 상태", "2"], ["가용", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono />)
-                  : ([["Phase", bad ? "CrashLoopBackOff" : "Running"], ["노드", "ip-192-168-47-62.ap-northeast-2.compute.internal"], ["파드 IP", "192.168.60.243"], ["호스트 IP", "192.168.47.62"], ["QoS 클래스", "BestEffort"], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : "#1F9D4D") : undefined} />)}
+                  : ([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : phase === "Pending" ? "#B25A00" : "#1F9D4D") : undefined} />)}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>
                   {isWorkload && <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 조정</button>}
@@ -533,7 +594,7 @@ status:
                     <span style={{ fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{comp}</span>
                     {isPod && <><Badge text="Ready" tone="green" /><Badge text="running" tone="gray" /></>}
                   </div>
-                  <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 4, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(row.img ?? `registry/${base}:v1.4.2`)}</div>
+                  <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 4, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(row.img ?? imgFor(base))}</div>
                   <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 3 }}>포트: metrics 9100/TCP · webhook 7000/TCP</div>
                 </div>
               </Sec>
@@ -622,10 +683,16 @@ status:
 
               {/* 관련 리소스 */}
               <Sec title="관련 리소스" icon={Copy}>
-                {[["소유자", "rs/", `${base}-69bddf5587`, "green"], ["디플로이먼트", "deploy/", base, "green"], ["서비스", "svc/", `${base}-metrics`, "blue"],
-                  ["파드", "pod/", `${base}-7494d5f69f-8kp4w`, "lime"], ["구성", "cm/", "argocd-cmd-params-cm", "amber"], ["네트워크 정책", "networkpolicy/", `${base}-network-policy`, "purple"]]
+                {[
+                  // StatefulSet 파드의 소유자는 sts 직접, Deployment 계열은 rs → deploy 체인
+                  ...(isSts ? [["소유자", "sts/", base, "green"]] : [["소유자", "rs/", `${base}-69bddf5587`, "green"], ["디플로이먼트", "deploy/", base, "green"]]),
+                  ["서비스", "svc/", base, "blue"],
+                  ["파드", "pod/", `${base}-7494d5f69f-8kp4w`, "lime"],
+                  // 연결된 구성: 인벤토리가 알려주면 그것을, 아니면 관례 이름
+                  ...((Array.isArray(row.cfgs) && row.cfgs.length ? row.cfgs : ["argocd-cmd-params-cm"]).map((c) => ["구성", "cm/", String(c), "amber"])),
+                  ["네트워크 정책", "networkpolicy/", `${base}-network-policy`, "purple"]]
                   .map(([label, pfx, n, tone]) => (
-                    <div key={label as string} style={{ marginBottom: 8 }}>
+                    <div key={`${label}-${n}`} style={{ marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: UI.ink3, marginBottom: 4 }}>{label as string}</div>
                       <Chip text={`${pfx as string} ${n as string}`} tone={tone as "green"} />
                     </div>
@@ -680,9 +747,50 @@ status:
             </div>
           )}
 
-          {tab === "yaml" && (
-            <pre style={{ margin: 0, fontSize: 11.5, lineHeight: 1.65, fontFamily: MONO, color: UI.ink2, background: "#FBFBFD", border: `1px solid ${UI.line2}`, borderRadius: 10, padding: 14, overflowX: "auto" }}>{yaml}</pre>
-          )}
+          {tab === "yaml" && (() => {
+            const saved = yamlSaved ?? yaml;
+            const draft = yamlDraft ?? saved;
+            const dirty = draft !== saved;
+            return (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                  <span style={{ fontSize: 10.5, fontFamily: MONO, color: UI.ink3 }}>{name}.yaml</span>
+                  {yamlEditing && dirty && <Badge text="수정됨" tone="blue" />}
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    {!yamlEditing ? (
+                      <button onClick={() => { setYamlDraft(saved); setYamlEditing(true); }}
+                        style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 11, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                        <Pencil size={11} />편집
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={() => { setYamlDraft(null); setYamlEditing(false); }}
+                          style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 11, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>취소</button>
+                        <button disabled={!dirty}
+                          onClick={() => { setYamlSaved(draft); setYamlDraft(null); setYamlEditing(false); onToast?.({ title: `${name} 적용 완료`, sub: "kubectl apply — 변경 사항이 클러스터에 반영되었습니다", tone: "ok" }); }}
+                          style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: dirty ? BLUE : "rgba(17,19,24,0.12)", borderRadius: 8, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: dirty ? "pointer" : "default" }}>
+                          <Check size={11} strokeWidth={3} />적용
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+                {yamlEditing ? (
+                  /* 하이라이트 레이어 위에 투명 텍스트 textarea — 편집 중에도 코드 에디터 색상 유지 */
+                  <div style={{ position: "relative", background: "#fff", border: "1px solid rgba(10,132,255,0.4)", boxShadow: "0 0 0 3px rgba(10,132,255,0.1)", borderRadius: 10, overflow: "auto" }}>
+                    <pre aria-hidden style={{ ...YAML_FONT, margin: 0, minHeight: 340, color: UI.ink, pointerEvents: "none" }}
+                      dangerouslySetInnerHTML={{ __html: hlYaml(draft) + "\n" }} />
+                    <textarea value={draft} onChange={(e) => setYamlDraft(e.currentTarget.value)} spellCheck={false} wrap="off"
+                      style={{ ...YAML_FONT, position: "absolute", inset: 0, width: "100%", height: "100%", margin: 0, resize: "none", overflow: "hidden",
+                        color: "transparent", caretColor: UI.ink, background: "transparent", border: "none", outline: "none", boxSizing: "border-box" }} />
+                  </div>
+                ) : (
+                  <pre style={{ ...YAML_FONT, margin: 0, color: UI.ink2, background: "#FBFBFD", border: `1px solid ${UI.line2}`, borderRadius: 10, overflowX: "auto" }}
+                    dangerouslySetInnerHTML={{ __html: hlYaml(saved) }} />
+                )}
+              </div>
+            );
+          })()}
 
           {tab === "related" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
@@ -753,12 +861,12 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
 }
 
 // ── 좌측 종류 인덱스 ─────────────────────────────
-function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, filter, setFilter }: {
+function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, filter }: {
   sel: string; onPick: (k: Kind) => void; showEmpty: boolean; setShowEmpty: (v: boolean) => void;
-  pinned: string[]; togglePin: (id: string) => void; filter: string; setFilter: (v: string) => void;
+  pinned: string[]; togglePin: (id: string) => void; filter: string; // 상단 ⌘K 검색이 단일 소스 — 자체 검색창 없음
 }) {
   const emptyCount = KINDS.filter((k) => k.count === 0).length;
-  const match = (k: Kind) => k.label.toLowerCase().includes(filter.toLowerCase());
+  const match = (k: Kind) => (k.label + k.id).toLowerCase().includes(filter.toLowerCase());
   const Row = ({ k }: { k: Kind }) => {
     const on = sel === k.id;
     return (
@@ -769,17 +877,12 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
         <span role="button" title="즐겨찾기" onClick={(e) => { e.stopPropagation(); togglePin(k.id); }} className="kpin" style={{ display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0 }}>
           <Pin size={10} style={{ color: pinned.includes(k.id) ? BLUE : UI.ink3 }} />
         </span>
-        <span style={{ fontSize: 10, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? "rgba(10,132,255,0.12)" : "rgba(17,19,24,0.05)", borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count || (k.id === "EndpointSlice" ? "–" : 0)}</span>
+        <span style={{ fontSize: 10, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? "rgba(10,132,255,0.12)" : "rgba(17,19,24,0.05)", borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count}</span>
       </button>
     );
   };
   return (
-    <nav style={{ width: 236, flexShrink: 0, borderRight: `1px solid ${UI.line}`, paddingRight: 12, display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 18, maxHeight: "calc(100vh - 40px)", overflowY: "auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 9, padding: "7px 10px" }}>
-        <Search size={12} style={{ color: UI.ink3, flexShrink: 0 }} />
-        <input value={filter} onChange={(e) => setFilter(e.currentTarget.value)} placeholder="리소스 검색…"
-          style={{ border: "none", outline: "none", background: "transparent", fontSize: 11.5, color: UI.ink, width: "100%" }} />
-      </div>
+    <nav style={{ width: 236, flexShrink: 0, background: UI.card, borderRight: `1px solid ${UI.line}`, padding: "14px 12px", display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
       <div>
         <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
         {pinned.length === 0
@@ -806,26 +909,141 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
   );
 }
 
+// ── 전역 내비게이션 레일 — 제품 셸의 바깥 틀 ─────────────────────────────
+const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }[] = [
+  { id: "home", label: "홈", icon: Home, href: "/devpreview-index.html" },
+  { id: "resources", label: "리소스", icon: ListTree },
+  { id: "issues", label: "이슈", icon: AlertTriangle },
+  { id: "topology", label: "토폴로지", icon: Share2, href: "/devpreview-topology.html" },
+  { id: "apps", label: "애플리케이션", icon: Boxes },
+  { id: "timeline", label: "타임라인", icon: Clock },
+  { id: "traffic", label: "실시간 트래픽", icon: Activity },
+  { id: "helm", label: "Helm", icon: Package },
+  { id: "gitops", label: "GitOps", icon: GitBranch },
+  { id: "checks", label: "점검", icon: ShieldCheck },
+  { id: "cost", label: "비용", icon: Coins },
+];
+const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [
+  { id: "settings", label: "연결 설정", icon: Settings }, // 셸 내 위저드 서피스 전환 (AI는 우하단 플로팅 버튼)
+];
+
+function GlobalNav({ collapsed, setCollapsed, surface, onToggleSettings }: {
+  collapsed: boolean; setCollapsed: (v: boolean) => void;
+  surface: "resources" | "connect"; onToggleSettings: () => void;
+}) {
+  const Item = ({ it }: { it: (typeof NAV_ITEMS)[number] }) => {
+    const isSettings = it.id === "settings";
+    const active = (it.id === "resources" && surface === "resources") || (isSettings && surface === "connect");
+    const enabled = active || !!it.href || isSettings || it.id === "resources";
+    const body = (
+      <span className={enabled ? "gnav" : undefined} title={collapsed ? it.label : undefined}
+        onClick={isSettings ? onToggleSettings : it.id === "resources" ? (surface === "connect" ? onToggleSettings : undefined) : undefined}
+        style={{ display: "flex", alignItems: "center", gap: 11, borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start",
+          background: active ? "rgba(10,132,255,0.09)" : "transparent", color: active ? BLUE : enabled ? UI.ink2 : UI.ink3,
+          opacity: enabled ? 1 : 0.45, cursor: enabled ? "pointer" : "default", transition: "background .14s" }}>
+        <it.icon size={16} style={{ flexShrink: 0 }} />
+        {!collapsed && <span style={{ fontSize: 12.5, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
+      </span>
+    );
+    return it.href
+      ? <a key={it.id} href={it.href} style={{ textDecoration: "none", display: "block" }}>{body}</a>
+      : <div key={it.id}>{body}</div>;
+  };
+  return (
+    <motion.nav initial={false} animate={{ width: collapsed ? 60 : 208 }} transition={SOFT}
+      style={{ flexShrink: 0, background: UI.card, borderRight: `1px solid ${UI.line}`, display: "flex", flexDirection: "column",
+        padding: "14px 10px 12px", position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}>
+      {/* 브랜드 — Opsia 워드마크 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: collapsed ? "0 0 16px" : "0 4px 16px", justifyContent: collapsed ? "center" : "flex-start" }}>
+        <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, #5AC8FA)`, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 999, border: "2px solid #fff" }} />
+        </span>
+        {!collapsed && <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>Opsia</span>}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>{NAV_ITEMS.map((it) => <Item key={it.id} it={it} />)}</div>
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 1, borderTop: `1px solid ${UI.line2}`, paddingTop: 8 }}>
+        {NAV_BOTTOM.map((it) => <Item key={it.id} it={it} />)}
+        <button onClick={() => setCollapsed(!collapsed)} className="gnav"
+          style={{ display: "flex", alignItems: "center", gap: 11, border: "none", background: "transparent", borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start", color: UI.ink3, cursor: "pointer" }}>
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          {!collapsed && <span style={{ fontSize: 12.5, fontWeight: 500 }}>접기</span>}
+        </button>
+      </div>
+    </motion.nav>
+  );
+}
+
 // ── 앱 ─────────────────────────────
+// 종류 선택 → 맵 '연결 보기' 탭 매핑 (같은 축은 한 몸으로 움직인다)
+const lensTabFor = (id: string): "svc" | "cfg" | "git" | null =>
+  id === "Service" ? "svc"
+  : id === "ConfigMap" || id === "Secret" ? "cfg"
+  : ["Application", "ApplicationSet", "AppProject"].includes(id) ? "git"
+  : null;
+
 function App() {
   const [kindId, setKindId] = useState("Deployment");
   const [showEmpty, setShowEmpty] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
-  const [filter, setFilter] = useState("");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
   const [ns, setNs] = useState("모든 네임스페이스");
-  const [detail, setDetail] = useState<Row | null>(null);
+  const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
+  const [aiDragging, setAiDragging] = useState(false);
+  const [surface, setSurface] = useState<"resources" | "connect">("resources"); // 셸 내 서피스 전환 (리소스 ↔ 연결 설정)
+  const onAiHandleDown = (e: React.PointerEvent) => {
+    e.preventDefault(); setAiDragging(true);
+    const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, window.innerWidth - ev.clientX)));
+    const up = () => { setAiDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
   const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const scopeLabel = scope.level === "clusters" ? "전체 클러스터" : scope.level === "nodes" ? `클러스터 ${scope.cluster}` : `노드 ${scope.node}`;
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") setDetail(null); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDetail(null);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
+    };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
 
+  // 표 데이터: 맵 드릴 범위(클러스터 귀속)와 검색을 실제로 적용
+  const allRows = useMemo(() => { const spec = SPEC[kindId]; return spec ? spec.rows(rng(kindId.length * 977 + 13)) : []; }, [kindId]);
+  const inScope = scope.level !== "clusters" && !!scope.cluster;
+  // 행에 실제 클러스터 귀속(cluster 필드)이 있으면 그것을 쓰고, 없으면 결정적 귀속으로 보완
+  const scopedRows = useMemo(() => (inScope ? allRows.filter((r) => String(r.cluster ?? clusterOf(String(r.name ?? ""))) === scope.cluster) : allRows), [allRows, inScope, scope.cluster]);
+  const shownRows = useMemo(() => (q ? scopedRows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : scopedRows), [scopedRows, q]);
+  const openFromMap = (kid: string, data: Record<string, unknown>) => {
+    const k = KINDS.find((x) => x.id === kid); if (k) setDetail({ kind: k, row: data });
+  };
+
+  // 알림 — 임계 파드에서 파생 (벨 배지 수 = 맵 장애 수와 항상 일치) + 작업 토스트
+  const [bellOpen, setBellOpen] = useState(false);
+  const alerts = useMemo(() => podInventory().filter((p) => p.bad), []);
+  const [toasts, setToasts] = useState<{ id: number; title: string; sub: string; tone: "ok" | "crit" }[]>([]);
+  const toastSeq = useRef(0);
+  const pushToast = (t: { title: string; sub: string; tone: "ok" | "crit" }) => {
+    const id = ++toastSeq.current;
+    setToasts((cur) => [...cur, { id, ...t }]);
+    window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
+  };
+  const openAlert = (p: (typeof alerts)[number]) => {
+    setBellOpen(false);
+    openFromMap("Pod", { ...p, age: `${3 + (p.cpu % 9)}d` });
+  };
+
   return (
-    <div className="uni" style={{ minHeight: "100vh", background: UI.bg }}>
+    <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch" }}>
+      {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
+      <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
+        surface={surface} onToggleSettings={() => setSurface(surface === "connect" ? "resources" : "connect")} />
+
+      <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
       <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 12, fontWeight: 600, color: UI.ink }}>
@@ -838,44 +1056,135 @@ function App() {
         <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />
         <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: "#FBFBFD", borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
-          <input value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="리소스·명령 검색…" style={{ border: "none", outline: "none", background: "transparent", fontSize: 12, color: UI.ink, width: "100%" }} />
+          <input ref={searchRef} value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 12, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: 10, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: UI.ink2 }}>
           <span className="livedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신
         </span>
+        {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
+        <span style={{ position: "relative" }}>
+          <button className="gnav" onClick={() => setBellOpen(!bellOpen)}
+            style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? "rgba(10,132,255,0.1)" : "rgba(17,19,24,0.045)", color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
+            <Bell size={14} />
+          </button>
+          {alerts.length > 0 && (
+            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: HP.crit, color: "#fff", fontSize: 9, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: "2px solid #fff", boxSizing: "content-box" }}>{alerts.length}</span>
+          )}
+          <AnimatePresence>
+            {bellOpen && (
+              <motion.div key="bell" initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.99 }} transition={SOFT}
+                style={{ position: "absolute", top: 38, right: 0, width: 330, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 14px", borderBottom: `1px solid ${UI.line2}` }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>알림</span>
+                  <span style={{ fontSize: 10.5, color: UI.ink3 }}>임계 상태 {alerts.length}건</span>
+                </div>
+                {alerts.map((p) => (
+                  <button key={p.name} className="rrow" onClick={() => openAlert(p)}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${UI.line2}` }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: HP.crit, marginTop: 4, flexShrink: 0 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{p.name}</span>
+                      <span style={{ display: "block", fontSize: 10.5, color: UI.ink2, marginTop: 2 }}>{p.status} · 재시작 {p.restarts}회 · {p.node}</span>
+                    </span>
+                    <span style={{ fontSize: 10, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{p.cluster}</span>
+                  </button>
+                ))}
+                <div style={{ padding: "9px 14px", fontSize: 10.5, color: UI.ink3 }}>알림을 누르면 해당 리소스 상세가 열립니다</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </span>
+        {[CircleHelp, Moon].map((I, i) => (
+          <button key={i} className="gnav" style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.045)", color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
+            <I size={14} />
+          </button>
+        ))}
       </header>
 
-      <div style={{ display: "flex", gap: 16, padding: "16px 18px 40px", alignItems: "flex-start" }}>
-        <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={filter} setFilter={setFilter} />
+      {surface === "connect" ? (
+        /* 연결 설정 — 셸 안에서 위저드 서피스로 전환 (별도 페이지 아님) */
+        <div style={{ position: "relative", minHeight: "calc(100vh - 57px)", background: UI.bg }}>
+          <ConnectWizard embedded />
+        </div>
+      ) : (
+      <div style={{ display: "flex", alignItems: "stretch" }}>
+        <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />
 
-        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* ── 드릴 맵: 클러스터 → 노드 → 파드 (스코프 탐색의 주 무대) ── */}
-          <OpsiaMap embedded onScopeChange={setScope} />
-
-          {/* ── 스코프 연동 리소스 표 — 파드뷰에선 맵이 파드 표를 이미 보여주므로 숨김(중복 제거) ── */}
-          {scope.level !== "pods" && (
-          <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <kind.icon size={15} style={{ color: BLUE }} />
-              <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
-              <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{kind.count}</span>
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: UI.ink2, background: "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
-              <span style={{ marginLeft: "auto", fontSize: 10.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
-            </div>
-            {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
-            <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
-              <ResourceTable kind={kind} q={q} onOpen={setDetail} />
-            </motion.div>
-          </div>
-          )}
+        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 18, padding: "16px 18px 40px" }}>
+          {/* ── 드릴 맵 + 스코프 연동 표 — 표는 맵 뷰(클러스터·노드) 바로 아래 붙는다.
+                파드뷰에선 맵이 파드 표를 이미 보여주므로 숨김(중복 제거) ── */}
+          <OpsiaMap embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
+            belowContent={scope.level !== "pods" && (
+              <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <kind.icon size={15} style={{ color: BLUE }} />
+                  <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
+                  <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? "rgba(10,132,255,0.08)" : "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 10.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
+                </div>
+                {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
+                <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
+                  <ResourceTable kind={kind} rows={shownRows} q={q} inScope={inScope} onOpen={(r) => setDetail({ kind, row: r })} />
+                </motion.div>
+              </div>
+            )} />
         </main>
       </div>
+      )}
+      </div>
+
+      {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
+      <AnimatePresence>
+        {aiOpen && (
+          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+            style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: "-28px 0 70px -32px rgba(17,19,24,0.3)" }}>
+            <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
+              style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : "리소스"} contextScope={scope.cluster ?? "전체 클러스터"} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AI 플로팅 버튼 — 항상 최상위(상세 위 포함) · AI 창이 열리면 사라진다 */}
+      <AnimatePresence>
+        {!aiOpen && (
+          <motion.button key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
+            initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
+            title="AI 어시스턴트"
+            style={{ position: "fixed", right: 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
+              background: `linear-gradient(135deg, ${BLUE}, #5AC8FA)`, color: "#fff", display: "grid", placeItems: "center",
+              boxShadow: "0 10px 26px -8px rgba(10,132,255,0.55), 0 2px 8px rgba(17,19,24,0.12)" }}>
+            <Sparkles size={20} />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key="detail" kind={kind} row={detail} onClose={() => setDetail(null)} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={(navCollapsed ? 60 : 208) + (surface === "resources" ? 236 : 0)} />}
       </AnimatePresence>
+
+      {/* 작업 토스트 — 우측 상단 스택 */}
+      <div style={{ position: "fixed", top: 14, right: 16, zIndex: 80, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+        <AnimatePresence>
+          {toasts.map((t) => (
+            <motion.div key={t.id} layout initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={SOFT}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: 340, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 13, padding: "11px 13px", boxShadow: "0 16px 44px -16px rgba(17,19,24,0.3)", pointerEvents: "auto" }}>
+              <span style={{ width: 26, height: 26, borderRadius: 9, background: t.tone === "ok" ? HP.ok : HP.crit, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                {t.tone === "ok" ? <Check size={14} color="#fff" strokeWidth={3} /> : <AlertTriangle size={13} color="#fff" />}
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ display: "block", fontSize: 10.5, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
+              </span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
       <style>{`
         .uni { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
@@ -884,6 +1193,14 @@ function App() {
         .uni .krow:hover .kpin { opacity: .5 !important; }
         .uni .rrow { transition: background .12s ease; }
         .uni .rrow:hover { background: rgba(17,19,24,0.028); }
+        .uni .gnav:hover { background: rgba(17,19,24,0.05) !important; }
+        /* YAML 구문 색상 — 라이트 코드 에디터 팔레트 (Badge 텍스트 톤과 동일 계열) */
+        .uni .y-k { color: #0A6CFF; }
+        .uni .y-s { color: #1F9D4D; }
+        .uni .y-n { color: #B25A00; }
+        .uni .y-b { color: #8250DF; }
+        .uni .y-p { color: #9AA0AA; }
+        .uni .y-c { color: #9AA0AA; font-style: italic; }
         .uni .livedot { animation: lv 1.6s ease-in-out infinite; }
         @keyframes lv { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
         .uni ::-webkit-scrollbar { width: 8px; } .uni ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }

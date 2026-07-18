@@ -561,7 +561,7 @@ function Toast({ data, onClose }: { data: ToastData; onClose: () => void }) {
       <div className="flex items-center gap-3.5" style={{ padding: "14px 16px" }}>
         <span className="grid size-10 shrink-0 place-items-center text-white" style={{ borderRadius: 13, background: done ? "var(--lime)" : "var(--blue)" }}>
           <AnimatePresence mode="wait">
-            {done ? <motion.span key="c" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={SPRING}><Check className="size-[19px] c-ink" strokeWidth={3} /></motion.span> : <motion.span key="s"><Spinner className="size-[19px]" decorative /></motion.span>}
+            {done ? <motion.span key="c" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={SPRING}><Check className="size-[19px] text-white" strokeWidth={3} /></motion.span> : <motion.span key="s"><Spinner className="size-[19px]" decorative /></motion.span>}
           </AnimatePresence>
         </span>
         <div className="min-w-0 flex-1">
@@ -605,16 +605,16 @@ function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
 }
 
 // ── 루트 ─────────────────────────────
-function Wizard() {
+export function ConnectWizard({ embedded = false }: { embedded?: boolean } = {}) {
   const [view, setView] = useState<null | "repo" | "cluster">(null);
   const [toast, setToast] = useState<ToastData | null>(null);
   const fireToast = (t: ToastData) => { setView(null); setToast(t); };
 
   return (
-    <div className="opsia-connect fixed inset-0">
+    <div className={`opsia-connect ${embedded ? "absolute" : "fixed"} inset-0`}>
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -left-28 -top-28 size-[440px] rounded-full" style={{ background: "radial-gradient(circle, rgba(47,91,255,0.14), transparent 70%)", filter: "blur(46px)" }} />
-        <div className="absolute -right-20 bottom-0 size-[400px] rounded-full" style={{ background: "radial-gradient(circle, rgba(198,242,78,0.28), transparent 70%)", filter: "blur(46px)" }} />
+        <div className="absolute -left-28 -top-28 size-[440px] rounded-full" style={{ background: "radial-gradient(circle, rgba(10,132,255,0.13), transparent 70%)", filter: "blur(46px)" }} />
+        <div className="absolute -right-20 bottom-0 size-[400px] rounded-full" style={{ background: "radial-gradient(circle, rgba(48,209,88,0.18), transparent 70%)", filter: "blur(46px)" }} />
       </div>
 
       {view === null && !toast && <Launcher onPick={setView} />}
@@ -644,9 +644,10 @@ function Wizard() {
           --surface: #FFFFFF;
           --ink: #111318; --ink-2: #6B7280; --ink-3: #9AA1AC;
           --line: rgba(17,19,24,0.07);
-          --blue: #2F5BFF; --accent: #2F5BFF; --lime: #C6F24E;
-          --green: #22C55E; --orange: #FF9500; --red: #FF3B30;
-          --soft: rgba(47,91,255,0.06); --soft-b: rgba(47,91,255,0.32);
+          /* 셸 팔레트와 통일: BLUE #0A84FF · HP.ok #30D158 · HP.warn #FFB340 · HP.crit #FF5F55 */
+          --blue: #0A84FF; --accent: #0A84FF; --lime: #30D158;
+          --green: #30D158; --orange: #FFB340; --red: #FF5F55;
+          --soft: rgba(10,132,255,0.06); --soft-b: rgba(10,132,255,0.32);
           --fill: #F2F3F7; --fill-2: #E9EBF1;
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif;
           color: var(--ink);
@@ -655,11 +656,11 @@ function Wizard() {
         .c-accent { color: var(--blue); } .c-green { color: var(--green); } .c-orange { color: var(--orange); } .c-red { color: var(--red); }
         .bg-surface { background: var(--surface); } .bg-soft { background: var(--soft); }
         .bg-accent { background: var(--blue); } .bg-green { background: var(--green); } .bg-lime { background: var(--lime); }
-        .green-bg { background: rgba(34,197,94,0.14); } .orange-bg { background: rgba(255,149,0,0.15); } .lime-bg { background: var(--lime); }
-        .err-bg { background: rgba(255,59,48,0.06); border: 1px solid rgba(255,59,48,0.16); }
-        .err-ic-bg { background: rgba(255,59,48,0.13); }
+        .green-bg { background: rgba(48,209,88,0.14); } .orange-bg { background: rgba(255,179,64,0.16); } .lime-bg { background: var(--lime); }
+        .err-bg { background: rgba(255,95,85,0.06); border: 1px solid rgba(255,95,85,0.18); }
+        .err-ic-bg { background: rgba(255,95,85,0.14); }
         .dot-r { background: var(--red); } .dot-o { background: var(--orange); } .dot-g { background: var(--green); }
-        .ping-g { background: rgba(34,197,94,0.5); }
+        .ping-g { background: rgba(48,209,88,0.5); }
         .toggle-off { background: rgba(17,19,24,0.14); }
         .hairline { height: 1px; background: var(--line); }
         .hdr-grad { background: var(--blue); }
@@ -667,7 +668,7 @@ function Wizard() {
         .modal-surface { background: var(--surface); }
         .notif { background: var(--surface); box-shadow: 0 14px 34px -10px rgba(17,19,24,0.24), 0 2px 8px rgba(17,19,24,0.06); }
         .field { background: var(--fill); border: 1px solid transparent; transition: background .18s, border-color .18s, box-shadow .18s; }
-        .field:focus-within { background: #fff; border-color: var(--soft-b); box-shadow: 0 0 0 4px rgba(47,91,255,0.12); }
+        .field:focus-within { background: #fff; border-color: var(--soft-b); box-shadow: 0 0 0 4px rgba(10,132,255,0.12); }
         /* 트레이형 리스트: 회색 트레이 + 선택 시 흰 카드가 떠오름 */
         .inset { background: var(--fill); border-radius: 18px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
         .inset-row { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 13px; transition: background .15s, box-shadow .15s; }
@@ -682,8 +683,8 @@ function Wizard() {
         .card-on, .card-on:hover { background: #fff; border-color: var(--soft-b); box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
         .cmd { background: var(--fill); border: none; }
         .stat { display: flex; background: var(--fill); border-radius: 16px; overflow: hidden; }
-        .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 8px 18px -8px rgba(47,91,255,0.55); transition: background .16s, transform .12s; }
-        .btn-primary:not(:disabled):hover { background: #2A50E6; }
+        .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 8px 18px -8px rgba(10,132,255,0.55); transition: background .16s, transform .12s; }
+        .btn-primary:not(:disabled):hover { background: #0973E6; }
         .btn-primary:not(:disabled):active { transform: scale(0.99); }
         .btn-ghost { background: var(--fill); border: none; transition: background .16s; }
         .btn-ghost:hover { background: var(--fill-2); }
@@ -693,6 +694,9 @@ function Wizard() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <div className="min-h-screen" style={{ background: "#EEF0F4" }}><Wizard /></div>,
-);
+// 단독 페이지에서만 마운트 — 통합 셸에서는 ConnectWizard를 import해 임베드한다
+if (window.location.pathname.includes("devpreview-connect")) {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <div className="min-h-screen" style={{ background: "#EEF0F4" }}><ConnectWizard /></div>,
+  );
+}
