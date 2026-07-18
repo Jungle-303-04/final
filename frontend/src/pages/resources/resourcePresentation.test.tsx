@@ -47,7 +47,11 @@ describe("resource topology presentation", () => {
     ["daemonset", "resources.type.daemonset"],
     ["statefulset", "resources.type.statefulset"],
     ["replicaset", "resources.type.replicaset"],
-  ])("uses translated workload labels for %s", (resourceType, labelKey) => {
+    ["networkpolicy", "resources.type.networkpolicy"],
+    ["hpa", "resources.type.hpa"],
+    ["resourcequota", "resources.type.resourcequota"],
+    ["storageclass", "resources.type.storageclass"],
+  ])("uses translated resource labels for %s", (resourceType, labelKey) => {
     expect(resourceTypePresentation(resourceType).labelKey).toBe(labelKey);
   });
 });

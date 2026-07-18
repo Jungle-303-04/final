@@ -30,6 +30,8 @@ RESOURCE_TYPE_BY_WORKLOAD_KIND = {
 RESOURCE_TYPE_BY_DISCOVERY_IDENTITY = {
     ("v1", "Pod"): "pod",
     ("v1", "Node"): "node",
+    ("v1", "ConfigMap"): "configmap",
+    ("v1", "Secret"): "secret",
     ("apps/v1", "Deployment"): "deployment",
     ("apps/v1", "StatefulSet"): "statefulset",
     ("apps/v1", "DaemonSet"): "daemonset",
@@ -39,6 +41,12 @@ RESOURCE_TYPE_BY_DISCOVERY_IDENTITY = {
     ("v1", "Service"): "service",
     ("discovery.k8s.io/v1", "EndpointSlice"): "endpoint",
     ("networking.k8s.io/v1", "Ingress"): "ingress",
+    ("networking.k8s.io/v1", "NetworkPolicy"): "networkpolicy",
+    ("autoscaling/v2", "HorizontalPodAutoscaler"): "hpa",
+    ("autoscaling/v1", "HorizontalPodAutoscaler"): "hpa",
+    ("v1", "PersistentVolumeClaim"): "pvc",
+    ("v1", "PersistentVolume"): "persistentvolume",
+    ("storage.k8s.io/v1", "StorageClass"): "storageclass",
     ("v1", "ResourceQuota"): "resourcequota",
     ("v1", "Event"): "event",
 }
