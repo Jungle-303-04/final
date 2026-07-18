@@ -154,13 +154,19 @@ def test_gate_runs_independent_backend_and_frontend_checks_in_parallel() -> None
     assert "Base fetch failed; retaining FULL gate scope." in backend_scope["run"]
     assert "Unknown gate scope ${scope}; retaining FULL gate scope." in backend_scope["run"]
 
-    backend_full = jobs["backend"]["steps"][-1]
+    backend_full = next(
+        step
+        for step in jobs["backend"]["steps"]
+        if step.get("name") == "Run backend and manifest gate"
+    )
     assert backend_full == {
         "name": "Run backend and manifest gate",
-        "if": "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}",
+        "if": "${{ steps.gate-scope.outputs.scope == 'FULL' || steps.gate-scope.outputs.scope == 'BACKEND' }}",
         "run": "make gate-backend",
     }
-    frontend_full = jobs["frontend"]["steps"][-1]
+    frontend_full = next(
+        step for step in jobs["frontend"]["steps"] if step.get("name") == "Run frontend gate"
+    )
     assert frontend_full == {
         "name": "Run frontend gate",
         "if": "${{ steps.gate-scope.outputs.scope == 'FULL' }}",
@@ -180,7 +186,10 @@ def test_frontend_scope_keeps_cross_boundary_contract_and_manifest_gate() -> Non
         "run": "make gate-contract-manifest",
     }
     helm = next(step for step in backend["steps"] if step.get("name") == "Set up Helm")
-    assert helm["if"] == "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}"
+    assert helm["if"] == (
+        "${{ steps.gate-scope.outputs.scope == 'FULL' "
+        "|| steps.gate-scope.outputs.scope == 'BACKEND' }}"
+    )
 
 
 def test_backend_scope_skips_only_the_redundant_frontend_full_gate() -> None:
@@ -211,6 +220,36 @@ def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() 
         },
         "run": 'GATE_BASE="${BASE_SHA}" make gate-frontend-changed',
     }
+
+
+def test_smoke_scope_runs_only_bounded_deployment_gates() -> None:
+    jobs = workflow_document()["jobs"]
+    backend = next(
+        step
+        for step in jobs["backend"]["steps"]
+        if step.get("name") == "Run deployment smoke backend gate"
+    )
+    frontend = next(
+        step
+        for step in jobs["frontend"]["steps"]
+        if step.get("name") == "Run deployment smoke frontend gate"
+    )
+
+    assert backend == {
+        "name": "Run deployment smoke backend gate",
+        "if": "${{ steps.gate-scope.outputs.scope == 'SMOKE' }}",
+        "run": "make gate-deploy-smoke-backend",
+    }
+    assert frontend == {
+        "name": "Run deployment smoke frontend gate",
+        "if": "${{ steps.gate-scope.outputs.scope == 'SMOKE' }}",
+        "run": "make gate-deploy-smoke-frontend",
+    }
+    for job_id in ("backend", "frontend"):
+        classifier = next(
+            step for step in jobs[job_id]["steps"] if step.get("name") == "Classify gate scope"
+        )
+        assert "FULL|BACKEND|FRONTEND|SMOKE" in classifier["run"]
 
 
 def test_full_gate_status_fails_closed_over_every_parallel_job() -> None:
@@ -334,6 +373,41 @@ def test_dev_gate_scope_promotes_mixed_and_shared_changes_to_full(tmp_path: Path
         repository, base_sha = make_repository(tmp_path / f"shared-{index}")
         commit_file(repository, path, "changed\n", "shared")
         assert classify_gate_scope(repository, base_sha) == "FULL", path
+
+
+def test_dev_gate_scope_classifies_only_deployment_smoke_changes_as_smoke(
+    tmp_path: Path,
+) -> None:
+    smoke_paths = (
+        "frontend/scripts/post-deploy-route-smoke.mjs",
+        "frontend/scripts/post-deploy-route-smoke.test.mjs",
+        "scripts/post-deploy-smoke.sh",
+        "scripts/post-deploy-console-smoke.sh",
+        "scripts/post_deploy_read_smoke.sh",
+        "scripts/pre-deploy-smoke.sh",
+        "scripts/lib/public-edge.sh",
+        "scripts/lib/cluster-curl.sh",
+        "tests/test_deploy_smoke_phases.py",
+    )
+    for index, path in enumerate(smoke_paths):
+        repository, base_sha = make_repository(tmp_path / f"smoke-{index}")
+        commit_file(repository, path, "changed\n", "smoke")
+        assert classify_gate_scope(repository, base_sha) == "SMOKE", path
+
+    mixed_repository, mixed_base = make_repository(tmp_path / "smoke-mixed")
+    commit_file(
+        mixed_repository,
+        "scripts/post-deploy-smoke.sh",
+        "changed\n",
+        "smoke",
+    )
+    commit_file(
+        mixed_repository,
+        "frontend/src/pages/home/HomePage.tsx",
+        "changed\n",
+        "product",
+    )
+    assert classify_gate_scope(mixed_repository, mixed_base) == "FULL"
 
 
 def test_dev_gate_scope_fails_closed_for_unknown_or_invalid_ranges(tmp_path: Path) -> None:

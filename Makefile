@@ -22,7 +22,7 @@ export REFERENCE_UI_BASE_REVISION
 export REFERENCE_UPSTREAM_GIT
 export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-deploy-smoke-backend gate-deploy-smoke-frontend gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -140,6 +140,16 @@ gate-backend: product-brand-boundary-check reference-ledger-check reference-feat
 gate-contract-manifest: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 교차 계약·manifest 최소 gate
 	uv run pytest -q tests/test_dev_gate_contract.py tests/test_dev_gate_workflow.py tests/test_commit_msg_gate.py
 	bash scripts/manifest-check.sh
+
+gate-deploy-smoke-backend: ## 배포 스모크 셸·회귀 테스트 전용 gate
+	bash -n scripts/pre-deploy-smoke.sh scripts/post-deploy-smoke.sh scripts/post-deploy-console-smoke.sh scripts/post_deploy_read_smoke.sh scripts/lib/public-edge.sh scripts/lib/cluster-curl.sh
+	uv run pytest -q tests/test_deploy_smoke_phases.py
+
+gate-deploy-smoke-frontend: ## 브라우저 배포 스모크 계약 전용 gate
+	cd frontend && npm ci --include=dev --no-audit --no-fund
+	cd frontend && npm exec vitest run scripts/post-deploy-route-smoke.test.mjs
+	cd frontend && npm run typecheck
+	cd frontend && npm run lint
 
 gate-frontend: ## 프론트 정적 검사·테스트·빌드 전체 gate
 	cd frontend && npm ci --include=dev --no-audit --no-fund
