@@ -134,6 +134,10 @@ export const rcaIssueItemSchema = rcaTimelineItemSchema.extend({
     "source_incomplete",
     "outside_two_tier_scale",
   ]).nullable(),
+  situation_summary: nullableStringSchema.optional(),
+  recommended_action_summary: nullableStringSchema.optional(),
+  evidence_summary: nullableStringSchema.optional(),
+  evidence_bundle_summary: nullableStringSchema.optional(),
 }).superRefine((item, context) => {
   if (
     item.severity_availability === "available"
