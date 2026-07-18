@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
-from datetime import datetime
+import threading
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -63,6 +66,27 @@ class CostDb:
         self.calls.append(
             (
                 "cost-evidence",
+                {
+                    "workspace_id": workspace_id,
+                    "cluster_ids": cluster_ids,
+                    "since": since,
+                    "limit_per_cluster": limit_per_cluster,
+                },
+            )
+        )
+        return self.cost_evidence_windows
+
+    def list_cost_overview_evidence_windows(
+        self,
+        workspace_id: str,
+        cluster_ids: tuple[str, ...],
+        *,
+        since: datetime,
+        limit_per_cluster: int = 480,
+    ) -> list[dict[str, object]]:
+        self.calls.append(
+            (
+                "cost-overview-evidence",
                 {
                     "workspace_id": workspace_id,
                     "cluster_ids": cluster_ids,
@@ -270,9 +294,10 @@ def test_cost_overview_projects_agent_evidence_with_one_bounded_batch_read() -> 
             ],
         }
     ]
-    calls = [kwargs for name, kwargs in db.calls if name == "cost-evidence"]
+    calls = [kwargs for name, kwargs in db.calls if name == "cost-overview-evidence"]
     assert len(calls) == 1
     assert calls[0]["cluster_ids"] == ("cluster-a",)
+    assert [kwargs for name, kwargs in db.calls if name == "cost-evidence"] == []
 
 
 def _cost_window(observed_at: str, *, hourly: float, storage: float) -> dict[str, object]:
@@ -305,15 +330,76 @@ def test_cost_overview_hides_unauthorized_scope_and_rejects_invalid_cluster_synt
     assert invalid.status_code == 422
 
 
-def test_cost_overview_validates_and_forwards_the_trend_range() -> None:
+@pytest.mark.parametrize(
+    ("time_range", "expected_seconds"),
+    (("6h", 6 * 60 * 60), ("24h", 24 * 60 * 60), ("7d", 7 * 24 * 60 * 60)),
+)
+def test_cost_overview_validates_and_forwards_the_trend_range(
+    time_range: str,
+    expected_seconds: int,
+) -> None:
     client = _client()
+    before = datetime.now(tz=UTC)
 
-    selected = client.get("/cost/overview?clusters=cluster-a&range=7d")
-    invalid = client.get("/cost/overview?clusters=cluster-a&range=30d")
+    selected = client.get(f"/cost/overview?clusters=cluster-a&range={time_range}")
 
     assert selected.status_code == 200
-    assert selected.json()["trend"]["range"] == "7d"
+    assert selected.json()["trend"]["range"] == time_range
+    db = client.app.state.cost_test_db
+    call = next(kwargs for name, kwargs in db.calls if name == "cost-overview-evidence")
+    elapsed = (before - call["since"]).total_seconds()
+    assert expected_seconds - 1 <= elapsed <= expected_seconds + 1
+
+
+def test_cost_overview_rejects_invalid_trend_range() -> None:
+    invalid = _client().get("/cost/overview?clusters=cluster-a&range=30d")
+
     assert invalid.status_code == 422
+
+
+def test_cost_overview_projection_does_not_block_concurrent_heartbeat(monkeypatch) -> None:
+    module = importlib.import_module("domains.cost.router")
+    original_projection = module.cost_overview
+    started = threading.Event()
+    release = threading.Event()
+    projection_thread: list[int] = []
+
+    def slow_projection(**kwargs: object) -> object:
+        projection_thread.append(threading.get_ident())
+        started.set()
+        release.wait(timeout=2)
+        return original_projection(**kwargs)
+
+    monkeypatch.setattr(module, "cost_overview", slow_projection)
+
+    async def run() -> None:
+        event_loop_thread = threading.get_ident()
+        timer = threading.Timer(1, release.set)
+        timer.start()
+        try:
+            overview = asyncio.create_task(
+                module.get_cost_overview(
+                    clusters="cluster-a",
+                    namespaces=None,
+                    time_range="24h",
+                    current=SimpleNamespace(
+                        user_id="user-a",
+                        workspace_id="workspace-a",
+                        roles=("user",),
+                    ),
+                    db=CostDb(),
+                )
+            )
+            assert await asyncio.to_thread(started.wait, 1)
+            await asyncio.wait_for(asyncio.sleep(0.01), timeout=0.25)
+            assert projection_thread and projection_thread[0] != event_loop_thread
+            release.set()
+            assert (await overview).trend.range == "24h"
+        finally:
+            release.set()
+            timer.cancel()
+
+    asyncio.run(run())
 
 
 def test_cost_nodes_are_scope_bound_paginated_and_use_one_bulk_metrics_read() -> None:

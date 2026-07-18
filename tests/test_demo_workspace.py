@@ -507,6 +507,8 @@ class FakeDemoDatabase:
             if row["workspace_id"] == workspace_id and row["cluster_id"] in cluster_ids
         ]
 
+    list_cost_overview_evidence_windows = list_cost_evidence_windows
+
     def list_latest_traffic_evidence_windows(
         self,
         workspace_id: str,

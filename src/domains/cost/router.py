@@ -91,13 +91,14 @@ async def get_cost_overview(
             selected_clusters,
         ),
         asyncio.to_thread(
-            db.list_cost_evidence_windows,
+            db.list_cost_overview_evidence_windows,
             workspace_id,
             selected_clusters,
             since=datetime.now(tz=UTC) - COST_RANGE_WINDOWS[time_range],
         ),
     )
-    return cost_overview(
+    return await asyncio.to_thread(
+        cost_overview,
         workspace_id=workspace_id,
         contexts=contexts,
         selected_cluster_ids=selected_clusters,

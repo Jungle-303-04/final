@@ -10676,8 +10676,8 @@
         "backend": {
           "state": "implemented",
           "destination": "src/domains/cost/router.py#get_cost_overview",
-          "consumer": "src/domains/cost/repository.py#CostObservationRepository.list_cost_evidence_windows",
-          "reason": "The server compiles fixed OpenCost allocation queries into the outbound cluster-agent evidence policy, persists results in evidence windows, and reads one workspace/cluster/time/rank-bounded batch to project integer micro-unit summary values without a direct Prometheus connection.",
+          "consumer": "src/domains/cost/repository.py#CostObservationRepository.list_cost_overview_evidence_windows",
+          "reason": "The server compiles fixed OpenCost allocation queries into the outbound cluster-agent evidence policy, persists results in evidence windows, and reads one workspace/cluster/time/rank-bounded batch containing only the namespace hourly and storage JSON fragments required to project integer micro-unit summary values without a direct Prometheus connection.",
           "test": "tests/test_cost_router.py#test_cost_overview_projects_agent_evidence_with_one_bounded_batch_read"
         },
         "frontend": {
