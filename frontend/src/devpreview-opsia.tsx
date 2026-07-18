@@ -372,7 +372,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
           <MetricCell label="CPU" value={avgC} unit="%" tone={avgC >= 90 ? HP.crit : avgC >= 75 ? HP.warn : HP.ok} spark={{ id: `${node.id}-c`, base: avgC, tick }} />
           <MetricCell label="MEM" value={avgM} unit="%" tone={avgM >= 90 ? HP.crit : avgM >= 75 ? HP.warn : HP.ok} spark={{ id: `${node.id}-m`, base: avgM, tick }} />
           <MetricCell label="파드 밀도" value={Math.round((np.length / node.cap) * 100)} unit="%" tone={BLUE} sub={`${np.length} / ${node.cap} 슬롯`} bar={np.length / node.cap} />
-          <MetricCell label="재시작 24h" value={np.reduce((s, p) => s + p.restarts, 0)} unit="회" tone={hot ? HP.crit : UI.ink3} sub={hot ? `임계 파드 ${hot}` : "안정"} />
+          <MetricCell label="재시작 24h" value={np.reduce((s, p) => s + p.restarts, 0)} unit="회" tone={hot ? HP.crit : UI.ink3} sub={hot ? `장애 파드 ${hot}` : "안정"} />
         </div>
       ) : (
         <div style={{ display: "flex", gap: 14 }}>
@@ -677,7 +677,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: UI.ink2 }}>
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />
-              실시간 · {CLUSTERS.length} 클러스터 · {NODES.length} 노드 · {pods.length} 파드 · 임계 <b style={{ color: crit ? HP.crit : UI.ink, fontFamily: MONO }}>{crit}</b>
+              실시간 · {CLUSTERS.length} 클러스터 · {NODES.length} 노드 · {pods.length} 파드 · 장애 <b style={{ color: crit ? HP.crit : UI.ink, fontFamily: MONO }}>{crit}</b>
             </div>
             {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
             <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: 8, paddingLeft: 14, borderLeft: `1px solid ${UI.line}` }}>
@@ -848,7 +848,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             }}>
             {tip.list.length > 1 && (
               <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: HP.crit, marginBottom: 6 }}>
-                <Activity size={11} />임계 {tip.list.length}
+                <Activity size={11} />장애 {tip.list.length}
               </div>
             )}
             {tip.list.map((p) => (

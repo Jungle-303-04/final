@@ -686,22 +686,43 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, for
   const isPod = kind.id === "Pod";
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
   const comp = base.split("-").slice(-1)[0] || base;
-  const yaml = `apiVersion: ${kind.id === "Deployment" || kind.id === "DaemonSet" || kind.id === "StatefulSet" || kind.id === "ReplicaSet" ? "apps/v1" : kind.id === "Job" || kind.id === "CronJob" ? "batch/v1" : "v1"}
+  // 종류별 올바른 K8s 스키마 — Pod에 replicas/selector를 쓰는 건 문법 오류다(관객이 바로 안다)
+  const appLabel = name.split("-")[0];
+  const yamlHead = `apiVersion: ${kind.id === "Deployment" || kind.id === "DaemonSet" || kind.id === "StatefulSet" || kind.id === "ReplicaSet" ? "apps/v1" : kind.id === "Job" || kind.id === "CronJob" ? "batch/v1" : "v1"}
 kind: ${kind.id === "HPA" ? "HorizontalPodAutoscaler" : kind.id === "PVC" ? "PersistentVolumeClaim" : kind.id}
 metadata:
   name: ${name}
   namespace: ${ns}
   labels:
-    app.kubernetes.io/name: ${name.split("-")[0]}
-    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: ${appLabel}
+    app.kubernetes.io/managed-by: Helm`;
+  const yaml = isPod
+    ? `${yamlHead}
+spec:
+  nodeName: ${nodeName}.ap-northeast-2.compute.internal
+  serviceAccountName: ${base}-sa
+  containers:
+    - name: ${comp}
+      image: ${String(row.image ?? `registry.opsia.io/${base}:v1.4.2`)}
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { cpu: 400m, memory: 300Mi }
+status:
+  phase: ${bad ? "Failed" : phase}
+  podIP: ${podIp}
+  qosClass: ${qos}`
+    : isWorkload
+    ? `${yamlHead}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${name.split("-")[0]}
+      app: ${appLabel}
 status:
   observedGeneration: 3
-  readyReplicas: ${bad ? 0 : 1}`;
+  readyReplicas: ${bad ? 0 : 1}`
+    : `${yamlHead}
+spec: {}`;
 
   return (
     <>
@@ -1175,9 +1196,9 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
 // ── 홈 서피스 (D21: 고정 헤더 + 클러스터 섹션 + 위젯 보드 W2~W8) ─────────────
 // 모든 숫자는 단일 인벤토리 파생. 위젯 배치는 localStorage 보존, 편집=숨김·추가·이동(제품은 dnd-kit 드래그).
 const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 }[] = [
-  { id: "W2", title: "인시던트", info: "임계 상태 파드에서 파생된 활성 인시던트 상위 3건", span: 1 },
+  { id: "W2", title: "인시던트", info: "장애 상태 파드에서 파생된 활성 인시던트 상위 3건", span: 1 },
   { id: "W3", title: "동기화 상태", info: "연결된 Git 저장소의 Synced/OutOfSync 비율", span: 1 },
-  { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·임계 리소스 수의 흐름", span: 1 },
+  { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", span: 1 },
   { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", span: 1 },
   { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 1 },
   { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", span: 1 },
