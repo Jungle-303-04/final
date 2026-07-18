@@ -1402,6 +1402,7 @@ function App() {
           <OpsiaMap embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
             onAddCluster={() => { setConnectView("cluster"); setSurface("connect"); }}
             onAddRepo={() => { setConnectView("repo"); setSurface("connect"); }}
+            stickyTop={topH + 12}
             kindsTab={<KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />}
             belowContent={scope.level !== "pods" && (
               <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>

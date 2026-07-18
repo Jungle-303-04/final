@@ -539,7 +539,7 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo, stickyTop }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -553,6 +553,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   /** 실서비스 배치: 클러스터 뷰의 '+ 연결' 카드 / 배포 탭의 '+ 저장소 연결' */
   onAddCluster?: () => void;
   onAddRepo?: () => void;
+  /** 탐색 패널 고정 오프셋(CSS px) — 셸 sticky 헤더 바로 아래 */
+  stickyTop?: number;
 } = {}) {
   const pods = useMemo(() => genPods(), []);
   const [tick, setTick] = useState(0);
@@ -778,7 +780,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             {belowContent && <div style={{ marginTop: 18 }}>{belowContent}</div>}
           </div>
 
-          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} />
+          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} />
         </div>
       </div>
 
@@ -837,8 +839,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 }
 
 // ── 우측 패널 ─────────────────────────────
-function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled, onAddRepo }: {
-  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean; onAddRepo?: () => void;
+function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled, onAddRepo, stickyTop }: {
+  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number;
 }) {
   const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? (kindsTab ? "res" : "svc"));
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
@@ -861,7 +863,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
 
   return (
     /* 라운드 모서리 침범 방지: 바깥은 clip, 스크롤·거터는 안쪽 컨테이너 담당 (스크롤바 유무와 무관하게 폭 고정) */
-    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - 110px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
       <AnimatePresence mode="wait">
         {focusPod ? (
