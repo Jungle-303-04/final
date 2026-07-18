@@ -184,48 +184,51 @@ def _run_public_edge_wait(
 ) -> subprocess.CompletedProcess[str]:
     expected_bundle = "" if discover_bundle else "index-newBundle.js"
     source_sha = "a" * 40
-    fake_curl = tmp_path / "curl"
-    fake_curl.write_text(
+    fake_kubectl = tmp_path / "kubectl"
+    fake_kubectl.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-output=""
-url=""
-previous=""
-for argument in "$@"; do
-  if [ "${previous}" = "--output" ]; then output="${argument}"; fi
-  case "${argument}" in https://*) url="${argument}" ;; esac
-  previous="${argument}"
-done
-test -n "${output}"
-if [[ "${url}" == */api/healthz ]]; then
-  printf '%s' '{"status":"ok","service":"api-gateway"}' >"${output}"
-elif [[ "${url}" == */assets/index-newBundle.js* ]]; then
-  printf '%s' "${SOURCE_SHA}" >"${output}"
+printf '%s\n' "$*" >>"${KUBECTL_LOG}"
+cat >/dev/null
+count=0
+if [ -f "${EDGE_COUNT}" ]; then count="$(cat "${EDGE_COUNT}")"; fi
+count=$((count + 1))
+printf '%s' "${count}" >"${EDGE_COUNT}"
+if [ "${EDGE_CONVERGE}" = "1" ] && [ "${count}" -ge 2 ]; then
+  observed_bundle="index-newBundle.js"
 else
-  count=0
-  if [ -f "${EDGE_COUNT}" ]; then count="$(cat "${EDGE_COUNT}")"; fi
-  count=$((count + 1))
-  printf '%s' "${count}" >"${EDGE_COUNT}"
-  if [ "${EDGE_CONVERGE}" = "1" ] && [ "${count}" -ge 2 ]; then
-    bundle="index-newBundle.js"
-  else
-    bundle="index-oldBundle.js"
-  fi
-  printf '<script src="/assets/%s"></script>' "${bundle}" >"${output}"
+  observed_bundle="index-oldBundle.js"
 fi
-printf '200'
+if [ "${EDGE_DISCOVER}" = "1" ]; then
+  release_bundle="${observed_bundle}"
+  if [ "${observed_bundle}" = "index-newBundle.js" ]; then
+    source_valid=true
+  else
+    source_valid=false
+  fi
+else
+  release_bundle="index-newBundle.js"
+  source_valid=true
+fi
+printf '{"health_status":200,"health_valid":true,"index_status":200,'
+printf '"observed_bundle":"%s","release_bundle":"%s",' \
+  "${observed_bundle}" "${release_bundle}"
+printf '"bundle_status":200,"source_valid":%s}\n' "${source_valid}"
 """,
         encoding="utf-8",
     )
-    fake_curl.chmod(0o755)
+    fake_kubectl.chmod(0o755)
     env = {
         **os.environ,
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
         "EDGE_CONVERGE": "1" if converge else "0",
+        "EDGE_DISCOVER": "1" if discover_bundle else "0",
         "EDGE_COUNT": str(tmp_path / "edge-count"),
+        "KUBECTL_LOG": str(tmp_path / "kubectl.log"),
+        "MGMT_CONTEXT": "opsia-test",
+        "MGMT_NS": "management",
         "PUBLIC_EDGE_MAX_ATTEMPTS": "3",
         "PUBLIC_EDGE_RETRY_SECONDS": "0",
-        "SOURCE_SHA": source_sha,
     }
     return subprocess.run(
         [
@@ -252,6 +255,14 @@ def test_public_edge_wait_blocks_until_health_bundle_and_source_converge(
     assert result.returncode == 0, result.stderr
     assert "public edge pending: attempt=1/3" in result.stderr
     assert "public edge converged: attempt=2" in result.stdout
+    assert "health=200 index=200 bundle=200" in result.stderr
+    kubectl_calls = (tmp_path / "kubectl.log").read_text(encoding="utf-8").splitlines()
+    assert len(kubectl_calls) == 2
+    assert all(
+        "--context opsia-test -n management exec -i deployment/api-gateway "
+        "-c gateway -- python -" in call
+        for call in kubectl_calls
+    )
 
 
 def test_public_edge_wait_fails_after_bounded_attempts(tmp_path: Path) -> None:
@@ -259,6 +270,8 @@ def test_public_edge_wait_fails_after_bounded_attempts(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert result.stderr.count("public edge pending:") == 3
+    assert "public edge probe diagnostic:" in result.stderr
+    assert "response=valid-json" in result.stderr
     assert "public edge failed to converge" in result.stderr
 
 
@@ -267,6 +280,21 @@ def test_public_edge_wait_can_discover_an_already_released_bundle(tmp_path: Path
 
     assert result.returncode == 0, result.stderr
     assert "bundle=index-newBundle.js" in result.stdout
+
+
+def test_public_edge_probe_preserves_public_dns_tls_without_runner_curl() -> None:
+    source = read("scripts/lib/public-edge.sh")
+
+    assert "exec -i deployment/api-gateway -c gateway" in source
+    assert "from urllib.request import Request, urlopen" in source
+    assert 'parsed.scheme != "https"' in source
+    assert 'release_url("/api/healthz")' in source
+    assert "release_url(" in source
+    assert '"source_sha": source_sha' in source
+    assert 'f"/assets/{quote(release_bundle' in source
+    assert "source_sha.encode" in source
+    assert "public edge probe diagnostic:" in source
+    assert "curl --" not in source
 
 
 def _write_post_deploy_read_fakes(

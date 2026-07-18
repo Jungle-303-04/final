@@ -11,6 +11,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/dev-gate.yml"
 SCOPE_SCRIPT = ROOT / "scripts/classify-live-deploy-scope.sh"
+GATE_SCOPE_SCRIPT = ROOT / "scripts/classify-dev-gate-scope.sh"
 
 
 def workflow_document() -> dict[str, object]:
@@ -44,7 +45,7 @@ def commit_file(repository: Path, path: str, contents: str, message: str) -> str
 
 def make_repository(tmp_path: Path) -> tuple[Path, str]:
     repository = tmp_path / "repository"
-    repository.mkdir()
+    repository.mkdir(parents=True)
     git(repository, "init", "--initial-branch=dev")
     git(repository, "config", "user.name", "Dev Gate Test")
     git(repository, "config", "user.email", "dev-gate@example.test")
@@ -104,6 +105,17 @@ def classify_scope(
     )
 
 
+def classify_gate_scope(repository: Path, base_sha: str, head_sha: str = "HEAD") -> str:
+    result = subprocess.run(
+        ["bash", str(GATE_SCOPE_SCRIPT), base_sha, head_sha],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
 def test_gate_keeps_commit_audit_bounded_but_classifies_from_last_deployment() -> None:
     document = workflow_document()
     steps = proof_steps_by_name()
@@ -130,13 +142,74 @@ def test_gate_runs_independent_backend_and_frontend_checks_in_parallel() -> None
 
     assert set(jobs) == {"source-proof", "backend", "frontend", "gate"}
     assert all("needs" not in jobs[job_id] for job_id in ("source-proof", "backend", "frontend"))
-    assert jobs["backend"]["steps"][-1] == {
+    backend_scope = next(
+        step for step in jobs["backend"]["steps"] if step.get("name") == "Classify gate scope"
+    )
+    frontend_scope = next(
+        step for step in jobs["frontend"]["steps"] if step.get("name") == "Classify gate scope"
+    )
+    assert backend_scope == frontend_scope
+    assert backend_scope["id"] == "gate-scope"
+    assert "scripts/classify-dev-gate-scope.sh" in backend_scope["run"]
+    assert "Base fetch failed; retaining FULL gate scope." in backend_scope["run"]
+    assert "Unknown gate scope ${scope}; retaining FULL gate scope." in backend_scope["run"]
+
+    backend_full = jobs["backend"]["steps"][-1]
+    assert backend_full == {
         "name": "Run backend and manifest gate",
+        "if": "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}",
         "run": "make gate-backend",
     }
-    assert jobs["frontend"]["steps"][-1] == {
+    frontend_full = jobs["frontend"]["steps"][-1]
+    assert frontend_full == {
         "name": "Run frontend gate",
+        "if": "${{ steps.gate-scope.outputs.scope == 'FULL' }}",
         "run": "make gate-frontend",
+    }
+
+
+def test_frontend_scope_keeps_cross_boundary_contract_and_manifest_gate() -> None:
+    backend = workflow_document()["jobs"]["backend"]
+    minimum = next(
+        step for step in backend["steps"] if step.get("name") == "Run contract and manifest gate"
+    )
+
+    assert minimum == {
+        "name": "Run contract and manifest gate",
+        "if": "${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}",
+        "run": "make gate-contract-manifest",
+    }
+    helm = next(step for step in backend["steps"] if step.get("name") == "Set up Helm")
+    assert helm["if"] == "${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}"
+
+
+def test_backend_scope_skips_only_the_redundant_frontend_full_gate() -> None:
+    frontend = workflow_document()["jobs"]["frontend"]
+    skipped = next(
+        step for step in frontend["steps"] if step.get("name") == "Record frontend full-gate skip"
+    )
+
+    assert skipped["if"] == "${{ steps.gate-scope.outputs.scope == 'BACKEND' }}"
+    assert "contract and manifest coverage" in skipped["run"]
+    setup_node = next(step for step in frontend["steps"] if step.get("name") == "Set up Node.js")
+    assert setup_node["if"] == "${{ steps.gate-scope.outputs.scope != 'BACKEND' }}"
+    assert setup_node["with"]["cache"] == "npm"
+    assert setup_node["with"]["cache-dependency-path"] == "frontend/package-lock.json"
+
+
+def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() -> None:
+    frontend = workflow_document()["jobs"]["frontend"]
+    changed = next(
+        step for step in frontend["steps"] if step.get("name") == "Run changed frontend gate"
+    )
+
+    assert changed == {
+        "name": "Run changed frontend gate",
+        "if": "${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}",
+        "env": {
+            "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+        },
+        "run": 'GATE_BASE="${BASE_SHA}" make gate-frontend-changed',
     }
 
 
@@ -217,3 +290,57 @@ def test_scope_fails_safe_to_full_when_deployed_sha_is_not_an_ancestor(tmp_path:
     )
 
     assert result.stdout == "FULL\n"
+
+
+def test_dev_gate_scope_classifies_product_only_changes(tmp_path: Path) -> None:
+    backend_repository, backend_base = make_repository(tmp_path / "backend")
+    commit_file(
+        backend_repository,
+        "src/domains/inventory/router.py",
+        "changed\n",
+        "backend",
+    )
+    assert classify_gate_scope(backend_repository, backend_base) == "BACKEND"
+
+    frontend_repository, frontend_base = make_repository(tmp_path / "frontend")
+    commit_file(
+        frontend_repository,
+        "frontend/src/pages/home/HomePage.tsx",
+        "changed\n",
+        "frontend",
+    )
+    assert classify_gate_scope(frontend_repository, frontend_base) == "FRONTEND"
+
+
+def test_dev_gate_scope_promotes_mixed_and_shared_changes_to_full(tmp_path: Path) -> None:
+    mixed_repository, mixed_base = make_repository(tmp_path / "mixed")
+    commit_file(mixed_repository, "src/backend.py", "changed\n", "backend")
+    commit_file(mixed_repository, "frontend/src/app.ts", "changed\n", "frontend")
+    assert classify_gate_scope(mixed_repository, mixed_base) == "FULL"
+
+    shared_paths = (
+        ".github/workflows/dev-gate.yml",
+        "frontend/package-lock.json",
+        "frontend/nginx.conf",
+        "frontend/scripts/product-design-guard.mjs",
+        "frontend/src/api/schema.ts",
+        "frontend/src/features/issues/issuesContract.ts",
+        "src/packages/contracts/gateway/routes.py",
+        "deploy/management/kustomization.yaml",
+        "scripts/test.sh",
+        "uv.lock",
+    )
+    for index, path in enumerate(shared_paths):
+        repository, base_sha = make_repository(tmp_path / f"shared-{index}")
+        commit_file(repository, path, "changed\n", "shared")
+        assert classify_gate_scope(repository, base_sha) == "FULL", path
+
+
+def test_dev_gate_scope_fails_closed_for_unknown_or_invalid_ranges(tmp_path: Path) -> None:
+    unknown_repository, unknown_base = make_repository(tmp_path / "unknown")
+    commit_file(unknown_repository, "new-root/tool.txt", "changed\n", "unknown")
+    assert classify_gate_scope(unknown_repository, unknown_base) == "FULL"
+
+    empty_repository, empty_base = make_repository(tmp_path / "empty")
+    assert classify_gate_scope(empty_repository, empty_base) == "FULL"
+    assert classify_gate_scope(empty_repository, "missing-base") == "FULL"
