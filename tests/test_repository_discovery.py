@@ -558,6 +558,60 @@ def test_manifest_batch_reuses_one_immutable_snapshot_for_five_sources() -> None
     assert len(baseline_client.content_calls) > len(batch_client.content_calls)
 
 
+def test_manifest_batch_accepts_flux_custom_resource_named_kustomization_yaml() -> None:
+    revision = "a" * 40
+    manifest_path = "gitops/flux/kustomization.yaml"
+    manifest = b"""
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: demo
+  namespace: flux-system
+spec:
+  interval: 5m
+  path: ./manifests/overlays/dev
+  sourceRef:
+    kind: GitRepository
+    name: demo
+"""
+
+    class FluxManifestClient:
+        async def branch_sha(self, _repo_ref: str, _branch: str) -> str:
+            return revision
+
+        async def tree_at_revision(
+            self,
+            _repo_ref: str,
+            _revision: str,
+        ) -> tuple[list[dict[str, object]], list[str]]:
+            return [{"type": "blob", "path": manifest_path}], []
+
+        async def content(self, _repo_ref: str, _ref: str, path: str) -> bytes:
+            assert path == manifest_path
+            return manifest
+
+    request = RepositoryManifestValidationRequest(
+        repo_ref="owner/service",
+        branch="trunk",
+        manifest_path=manifest_path,
+        source_type="raw-yaml",
+    )
+
+    batch = asyncio.run(
+        RepositoryDiscoveryService(FluxManifestClient()).validate_manifests_at_revision(
+            [request],
+            expected_revision=revision,
+        )
+    )
+
+    assert batch.revision == revision
+    assert len(batch.validations) == 1
+    validation = batch.validations[0]
+    assert validation.valid is True
+    assert validation.resource_count == 1
+    assert [(item.kind, item.name) for item in validation.resources] == [("Kustomization", "demo")]
+
+
 def test_manifest_batch_fails_atomically_with_source_specific_errors() -> None:
     revision = "a" * 40
 

@@ -546,6 +546,13 @@ class RepositoryDiscoveryService:
                 "repository revision does not match expected revision",
             )
         tree, warnings = await tree_at_revision(self.client, repo_ref, observed_revision)
+        blob_paths = {
+            path
+            for item in tree
+            if str(item.get("type") or "") == "blob"
+            for path in [normalize_tree_path(str(item.get("path") or ""))]
+            if path
+        }
         candidate_identities = {
             (candidate.path, candidate.source_type)
             for candidate in manifest_candidates_from_tree(tree)
@@ -555,7 +562,12 @@ class RepositoryDiscoveryService:
                 "selected manifest is not an attachable repository candidate"
             )
             for payload, _, _, manifest_path, source_type in normalized
-            if (manifest_path, source_type) not in candidate_identities
+            if not manifest_request_is_attachable(
+                manifest_path,
+                source_type,
+                blob_paths=blob_paths,
+                candidate_identities=candidate_identities,
+            )
         }
 
         snapshot = ImmutableRepositorySnapshotClient(
@@ -637,6 +649,32 @@ def manifest_request_identity(
     values = normalize_manifest_path(payload.values_path) if payload.values_path is not None else ""
     suffix = f"?values={values}" if values else ""
     return f"{source_type}:{manifest_path}{suffix}"
+
+
+def manifest_request_is_attachable(
+    manifest_path: str,
+    source_type: str,
+    *,
+    blob_paths: set[str],
+    candidate_identities: set[tuple[str, str]],
+) -> bool:
+    """Validate an explicit source contract without relying on its file name alone.
+
+    A Kubernetes custom resource may legitimately be named ``kustomization.yaml``.
+    The repository candidate list can still present the containing directory as a
+    conventional Kustomize root, while an explicit raw-file request is accepted
+    only when the exact repository blob and extension agree. Normal manifest
+    parsing then validates the file contents before the batch can succeed.
+    """
+
+    if source_type == "raw-yaml":
+        return manifest_path in blob_paths and manifest_extension(manifest_path) in {
+            ".yaml",
+            ".yml",
+        }
+    if source_type == "raw-json":
+        return manifest_path in blob_paths and manifest_extension(manifest_path) == ".json"
+    return (manifest_path, source_type) in candidate_identities
 
 
 async def validate_render_manifest(
