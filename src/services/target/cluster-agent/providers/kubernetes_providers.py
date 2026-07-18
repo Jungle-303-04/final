@@ -1116,9 +1116,7 @@ class KubernetesSnapshotProvider:
         raw_services = scoped_items(
             payload.get(K8S_RESOURCE_SERVICES), telemetry_query.label_selector
         )
-        raw_ingresses = scoped_items(
-            payload.get(K8S_INGRESSES_KEY), telemetry_query.label_selector
-        )
+        raw_ingresses = scoped_items(payload.get(K8S_INGRESSES_KEY), telemetry_query.label_selector)
         raw_resource_quotas = scoped_items(
             payload.get(K8S_RESOURCE_RESOURCE_QUOTAS), telemetry_query.label_selector
         )
@@ -2818,25 +2816,19 @@ def ingress_summary(item: JsonObject) -> JsonObject:
     ]
     rules = ingress_spec.get("rules") if isinstance(ingress_spec.get("rules"), list) else []
     hosts = sorted(
-        {
-            str(rule.get("host"))
-            for rule in rules
-            if isinstance(rule, dict) and rule.get("host")
-        }
+        {str(rule.get("host")) for rule in rules if isinstance(rule, dict) and rule.get("host")}
     )
     backend_names: set[str] = set()
     for rule in rules:
         http = rule.get("http") if isinstance(rule, dict) else None
         paths = http.get("paths") if isinstance(http, dict) else None
-        for path in (paths if isinstance(paths, list) else []):
+        for path in paths if isinstance(paths, list) else []:
             backend = path.get("backend") if isinstance(path, dict) else None
             service = backend.get("service") if isinstance(backend, dict) else None
             if isinstance(service, dict) and service.get("name"):
                 backend_names.add(str(service["name"]))
     default_backend = ingress_spec.get("defaultBackend")
-    default_service = (
-        default_backend.get("service") if isinstance(default_backend, dict) else None
-    )
+    default_service = default_backend.get("service") if isinstance(default_backend, dict) else None
     if isinstance(default_service, dict) and default_service.get("name"):
         backend_names.add(str(default_service["name"]))
     meta = metadata(item)

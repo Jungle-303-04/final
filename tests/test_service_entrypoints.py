@@ -181,7 +181,7 @@ def test_radar_launcher_seeds_empty_pages_and_pins_target_prometheus() -> None:
     assert 'apply --filename "${RADAR_SHOWCASE_MANIFEST}"' in radar_script
     assert 'RADAR_PROMETHEUS_NAMESPACE="${RADAR_PROMETHEUS_NAMESPACE:-target}"' in radar_script
     assert 'RADAR_PROMETHEUS_SERVICE="${RADAR_PROMETHEUS_SERVICE:-prometheus}"' in radar_script
-    assert 'port-forward' in radar_script
+    assert "port-forward" in radar_script
     assert '--prometheus-url "${RADAR_PROMETHEUS_URL}"' in radar_script
     for kind in (
         "CronJob",
