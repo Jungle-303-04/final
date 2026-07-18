@@ -662,7 +662,7 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, for
   const onEdgeDown = (e: React.PointerEvent) => {
     if (full) return;
     e.preventDefault(); setDwDragging(true);
-    const move = (ev: PointerEvent) => setDw(Math.min(window.innerWidth - leftInset - 60, Math.max(460, window.innerWidth - ev.clientX)));
+    const move = (ev: PointerEvent) => { const cssW = window.innerWidth / PRESENT_SCALE; setDw(Math.min(cssW - leftInset - 60, Math.max(460, cssW - ev.clientX / PRESENT_SCALE))); };
     const up = () => { setDwDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
@@ -1191,7 +1191,7 @@ function App() {
   const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
-    const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, window.innerWidth - ev.clientX)));
+    const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, window.innerWidth / PRESENT_SCALE - ev.clientX / PRESENT_SCALE)));
     const up = () => { setAiDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
@@ -1276,7 +1276,7 @@ function App() {
 
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
-      <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 66, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+      <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 현재 스코프 표시 — 맵 드릴과 항상 일치 (컨트롤이 아니라 사실) */}
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
@@ -1455,7 +1455,7 @@ function App() {
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
-      <div style={{ position: "fixed", top: 14, right: 16, zIndex: 80, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+      <div style={{ position: "fixed", top: topH + 10, right: 16, zIndex: 80, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div key={t.id} layout initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={SOFT}
