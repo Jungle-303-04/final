@@ -73,6 +73,8 @@
   --product-floating-action-clearance: calc(
     var(--product-floating-action-size) + var(--product-floating-action-block-end)
   );
+  --product-connection-wizard-height: 30.625rem;
+  --product-connection-wizard-height-mobile: 40rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

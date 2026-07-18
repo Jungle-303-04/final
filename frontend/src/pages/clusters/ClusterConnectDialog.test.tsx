@@ -66,7 +66,7 @@ describe("ClusterConnectDialog", () => {
     ));
   });
 
-  it("wraps the command without a horizontal scroller, keeps copy visible, and acknowledges it immediately", async () => {
+  it("truncates the command without a horizontal scroller, keeps copy visible, and acknowledges it immediately", async () => {
     const user = userEvent.setup();
     let resolveClipboard: (() => void) | undefined;
     const writeText = vi.fn(() => new Promise<void>((resolve) => {
@@ -87,8 +87,10 @@ describe("ClusterConnectDialog", () => {
     expect(commandSurface).not.toBeNull();
     expect(commandRegion.className).toContain("overflow-hidden");
     expect(commandRegion.className).not.toContain("overflow-x-auto");
-    expect(commandRegion.querySelector("pre")?.className).toContain("whitespace-pre-wrap");
-    expect(commandRegion.querySelector("pre")?.className).toContain("break-all");
+    expect(commandRegion.querySelector("pre")?.className).toContain("whitespace-nowrap");
+    expect(commandRegion.querySelector("pre")?.className).toContain("text-ellipsis");
+    expect(commandRegion.querySelector("pre")?.getAttribute("title"))
+      .toBe("curl secret-command | kubectl apply -f -");
     expect(commandRegion.contains(copyButton)).toBe(false);
     expect(commandSurface?.contains(copyButton)).toBe(true);
     expect(copyButton.className).toContain("shrink-0");
@@ -144,6 +146,13 @@ describe("ClusterConnectDialog", () => {
   it("keeps a pending connection when the dialog closes and resumes polling when it reopens", async () => {
     const user = userEvent.setup();
     const port = waitingPort();
+    vi.mocked(port.loadConnection).mockResolvedValue({
+      status: "waiting",
+      stage: "awaiting_install",
+      refreshAfterSeconds: 60,
+      agentVersion: null,
+      lastSeenAt: null,
+    });
     let now = 100_000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
     renderHarness(port);

@@ -102,8 +102,9 @@ export function ConnectionCommandStep({
           data-command-block="true"
           role="region"
           tabIndex={0}
+          title={installCommand}
         >
-          <pre className="select-text whitespace-pre-wrap break-all px-4 py-3 font-mono text-xs leading-5 [overflow-wrap:anywhere]"><code>{installCommand}</code></pre>
+          <pre className="min-w-0 select-text overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2.5 font-mono text-xs leading-5" title={installCommand}><code>{installCommand}</code></pre>
         </div>
       </div>
 

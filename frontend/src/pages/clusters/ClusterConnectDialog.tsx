@@ -75,7 +75,7 @@ export function ClusterConnectDialog({
   return (
     <Dialog onOpenChange={changeOpen} open={open}>
       <DialogContent
-        className="overflow-hidden p-0 sm:max-w-2xl"
+        className="grid h-[min(var(--product-connection-wizard-height-mobile),calc(100dvh-2rem))] grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden p-0 sm:h-(--product-connection-wizard-height) sm:max-w-2xl"
         closeLabel={t("common.action.close")}
         showCloseButton={phase !== "submitting" && phase !== "reissuing"}
       >
@@ -85,7 +85,9 @@ export function ClusterConnectDialog({
               <Server aria-hidden="true" className="size-5" />
             </span>
             <div className="min-w-0">
-              <DialogTitle>{t("clusters.connect.title")}</DialogTitle>
+              <DialogTitle className="truncate" title={t("clusters.connect.title")}>
+                {t("clusters.connect.title")}
+              </DialogTitle>
               <DialogDescription className="mt-1 leading-relaxed">
                 {t("clusters.connect.description")}
               </DialogDescription>
@@ -95,9 +97,9 @@ export function ClusterConnectDialog({
 
         <ClusterConnectSteps activeStep={step} />
 
-        <div className="px-6 pb-6 pt-5 sm:px-8 sm:pb-8">
+        <div className="min-h-0 overflow-y-auto px-6 pb-6 pt-5 sm:px-8 sm:pb-8">
           {step === 1 ? (
-            <div className="motion-wizard-stage grid gap-5">
+            <div className="motion-wizard-stage flex h-full min-h-0 flex-col gap-5">
               <div className="flex items-start gap-3 rounded-xl border bg-muted/35 px-4 py-3">
                 <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-healthy" />
                 <p className="text-xs leading-relaxed text-muted-foreground">
@@ -136,7 +138,7 @@ export function ClusterConnectDialog({
                 )}
               </label>
 
-              <DialogFooter className="mt-1">
+              <DialogFooter className="mt-auto">
                 <Button
                   aria-busy={phase === "submitting"}
                   className="h-11 w-full rounded-xl bg-data-accent text-data-accent-foreground hover:bg-data-accent/90"
@@ -152,7 +154,7 @@ export function ClusterConnectDialog({
           ) : null}
 
           {step === 2 ? (
-            <div className="motion-wizard-stage">
+            <div className="motion-wizard-stage min-h-0">
               <ConnectionCommandStep
                 copyState={copyState}
                 connectionStage={connectionStage}
@@ -170,7 +172,7 @@ export function ClusterConnectDialog({
           ) : null}
 
           {step === 3 && receipt ? (
-            <div className="motion-wizard-stage grid justify-items-center gap-5 py-2 text-center">
+            <div className="motion-wizard-stage grid min-h-0 justify-items-center gap-5 py-2 text-center">
               <span className="grid size-16 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
                 <Check aria-hidden="true" className="size-8" strokeWidth={3} />
               </span>
