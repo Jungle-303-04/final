@@ -113,7 +113,9 @@ describe("product Sidebar primitive", () => {
     const dialog = screen.getByRole("dialog", { name: "제품 탐색" });
     expect(dialog.getAttribute("data-slot")).toBe("dialog-content");
     expect(dialog.className).toContain("left-0");
-    expect(dialog.className).toContain("motion-reduce:duration-0");
+    expect(dialog.className).toContain("duration-(--motion-dock)");
+    expect(dialog.className).toContain("motion-reduce:data-open:animate-none");
+    expect(dialog.className).toContain("motion-reduce:data-closed:animate-none");
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     const close = screen.getByRole("button", { name: "모바일 사이드바 닫기" });
     close.focus();

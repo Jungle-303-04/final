@@ -133,7 +133,7 @@ export function Sidebar({
     return (
       <Dialog onOpenChange={setMobileOpen} open={currentOpen}>
         <DialogContent
-          className="inset-y-0 left-0 top-0 flex h-svh w-(--product-sidebar-width-mobile) max-w-[calc(100vw-1rem)] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-r border-sidebar-border bg-sidebar p-0 text-sidebar-foreground shadow-xl duration-200 data-open:slide-in-from-left-full data-closed:slide-out-to-left-full motion-reduce:duration-0 forced-colors:border-[CanvasText]"
+          className="inset-y-0 left-0 top-0 flex h-svh w-(--product-sidebar-width-mobile) max-w-[calc(100vw-1rem)] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-r border-sidebar-border bg-sidebar p-0 text-sidebar-foreground shadow-xl duration-(--motion-dock) data-open:slide-in-from-left-full data-closed:slide-out-to-left-full motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none forced-colors:border-[CanvasText]"
           closeLabel={closeLabel}
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>

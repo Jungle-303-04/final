@@ -39,8 +39,8 @@ describe("product motion primitives", () => {
       expect(element).toBeTruthy();
       return element as HTMLElement;
     });
+    expect(tooltip.className).toContain("duration-(--motion-instant)");
     expect(tooltip.className).toContain("motion-reduce:data-open:animate-none");
     expect(tooltip.className).toContain("motion-reduce:data-closed:animate-none");
-    expect(tooltip.className).toContain("motion-reduce:duration-0");
   });
 });

@@ -107,47 +107,6 @@ const legacyMotionLiteralBaseline = Object.freeze({
     'duration-300': 3,
     'ease-out': 3,
   },
-  'shared/ui/SearchPillInput.tsx': {
-    'duration-150': 2,
-    'ease-out': 1,
-  },
-  'shared/ui/primitives/collapse.tsx': {
-    'duration-200': 2,
-    'ease-out': 1,
-  },
-  'shared/ui/primitives/dialog.tsx': {
-    'duration-0': 2,
-    'duration-100': 2,
-  },
-  'shared/ui/primitives/item.tsx': { 'duration-100': 1 },
-  'shared/ui/primitives/motion-primitives.test.tsx': { 'duration-0': 1 },
-  'shared/ui/primitives/popover.tsx': {
-    'duration-0': 1,
-    'duration-100': 1,
-  },
-  'shared/ui/primitives/primitives.accessibility.test.tsx': { 'duration-0': 2 },
-  'shared/ui/primitives/progress.tsx': {
-    'duration-300': 1,
-    'ease-out': 1,
-  },
-  'shared/ui/primitives/select.tsx': {
-    'duration-0': 1,
-    'duration-100': 4,
-  },
-  'shared/ui/primitives/sheet.tsx': {
-    'duration-0': 1,
-    'duration-150': 1,
-    'duration-200': 1,
-    'ease-in': 1,
-  },
-  'shared/ui/primitives/sidebar-menu.tsx': { 'duration-100': 1 },
-  'shared/ui/primitives/sidebar.test.tsx': { 'duration-0': 1 },
-  'shared/ui/primitives/sidebar.tsx': {
-    'duration-0': 1,
-    'duration-200': 1,
-  },
-  'shared/ui/primitives/tabs.tsx': { 'duration-100': 1 },
-  'shared/ui/primitives/tooltip.tsx': { 'duration-0': 1 },
 })
 
 const restrictedNetworkApis = new Set([

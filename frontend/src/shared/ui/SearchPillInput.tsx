@@ -163,7 +163,7 @@ export function SearchPillInput({
       {pills.map((p, i) => (
         <span
           key={`${p.key}:${p.value}:${i}`}
-          className="inline-flex items-center gap-1 shrink-0 rounded-md bg-popover border border-border/60 pl-1.5 pr-1 py-0.5 text-xs whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none"
+          className="inline-flex items-center gap-1 shrink-0 rounded-md bg-popover border border-border/60 pl-1.5 pr-1 py-0.5 text-xs whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-(--motion-quick) motion-reduce:animate-none"
         >
           {renderPillStart?.(p)}
           <span className="text-muted-foreground/75">{p.keyLabel ?? p.key}:</span>
@@ -207,7 +207,7 @@ export function SearchPillInput({
         {rightSlot}
       </div>
       {suggesting && mod ? (
-        <div className="absolute left-0 top-full z-[130] mt-1 w-70 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out motion-reduce:animate-none">
+        <div className="absolute left-0 top-full z-[130] mt-1 w-70 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-(--motion-quick) ease-(--ease-out) motion-reduce:animate-none">
             <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/75">
               {mod.canon}
             </div>
