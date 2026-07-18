@@ -446,6 +446,29 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
 
 
 // 세그먼트 링 — 상태 분포를 원형으로 (파드 ok/warn/crit/대기, 노드 ready/예약/차단)
+
+// 클러스터 통계 — 카드·개요 스트립 공용 (단일 계산)
+function clusterStats(clId: string, pods: Pod[], tick: number) {
+  const cp = pods.filter((p) => p.cluster === clId);
+  const act = cp.filter((p) => p.status === "Running");
+  const hsh = clId.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
+  const drift = Math.sin(tick * 0.7 + hsh) * 2 + Math.sin(tick * 0.23 + hsh * 1.3);
+  const avgC = pct(act.reduce((s, p) => s + p.cpu, 0) / (act.length || 1) + drift);
+  const avgM = pct(act.reduce((s, p) => s + p.mem, 0) / (act.length || 1) + drift * 0.8);
+  const nodes = NODES.filter((n) => n.cluster === clId);
+  const ready = nodes.filter((n) => n.state === "Ready");
+  const cores = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 8 : n.instance.includes("xlarge") ? 4 : 2), 0);
+  const memGi = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 32 : n.instance.includes("xlarge") ? 16 : 8), 0);
+  return {
+    cp, nodes, ready, hsh, avgC, avgM, cores, memGi,
+    chot: cp.filter(isCrit).length,
+    net: Math.round(cp.length * 11 + drift * 14 + (hsh % 30)),
+    disk: 38 + (hsh % 21),
+    usedCores: (avgC / 100) * cores, usedMem: (avgM / 100) * memGi,
+    ver: clId.startsWith("prod") ? "v1.31.4-eks-473bce4" : "v1.32.0-eks-19f6a2d",
+  };
+}
+
 function SegRing({ size = 64, stroke = 7, segments, center, label, sub, subTone }: {
   size?: number; stroke?: number; segments: [number, string][]; center: string; label: string; sub: string; subTone?: string;
 }) {
@@ -491,98 +514,86 @@ function ClusterUsageBar({ label, used, cap, unit }: { label: string; used: numb
   );
 }
 
+
+// 클러스터 개요 스트립 — 드릴 후 상세 정보의 자리 (GKE/OpenShift 관례: 상세는 클릭 후)
+function ClusterOverview({ clId, pods, tick, meta, onKind }: {
+  clId: string; pods: Pod[]; tick: number; meta?: Record<string, number>; onKind?: (kindId: string) => void;
+}) {
+  const st = clusterStats(clId, pods, tick);
+  const KIND_LINKS: [string, string][] = [["StatefulSet", "StatefulSets"], ["DaemonSet", "DaemonSets"], ["Service", "Services"], ["Ingress", "Ingresses"], ["Job", "Jobs"], ["CronJob", "CronJobs"]];
+  return (
+    <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "12px 16px", marginBottom: 14 }}>
+      <div style={{ minWidth: 0, flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: 11, color: UI.ink2 }}>
+        <span>183548421506 · Kubernetes {st.ver} · {meta?.Namespace ?? "-"}개의 네임스페이스</span>
+        <span>CPU {st.usedCores.toFixed(1)}/{st.cores} cores · MEM {st.usedMem.toFixed(1)}/{st.memGi} GiB · NET {st.net}KB/s · DISK {st.disk}%</span>
+        <span style={{ color: UI.ink3, fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>arn:aws:eks:ap-northeast-2:183548421506:cluster/{clId}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: UI.ink3 }}>
+          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신 · 방금 전<RotateCw size={10} style={{ marginLeft: 1 }} />
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 18px", alignContent: "center" }}>
+        {KIND_LINKS.map(([kid, lb]) => (
+          <span key={kid} role="link" className="kindlink" onClick={onKind ? () => onKind(kid) : undefined}
+            style={{ display: "flex", alignItems: "baseline", gap: 5, fontSize: 12, color: UI.ink2, cursor: onKind ? "pointer" : "default" }}>
+            <b style={{ fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{meta?.[kid] ?? 0}</b>{lb}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
   cl: (typeof CLUSTERS)[number]; pods: Pod[]; tick: number; related: Set<string>;
   meta?: Record<string, number>; onOpen: () => void; onKind?: (kindId: string) => void;
 }) {
-  const cp = pods.filter((p) => p.cluster === cl.id);
-  const act = cp.filter((p) => p.status === "Running");
-  const hsh = cl.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
-  const drift = Math.sin(tick * 0.7 + hsh) * 2 + Math.sin(tick * 0.23 + hsh * 1.3);
-  const avgC = pct(act.reduce((s, p) => s + p.cpu, 0) / (act.length || 1) + drift);
-  const avgM = pct(act.reduce((s, p) => s + p.mem, 0) / (act.length || 1) + drift * 0.8);
-  const chot = cp.filter(isCrit).length;
-  const nodes = NODES.filter((n) => n.cluster === cl.id);
-  const ready = nodes.filter((n) => n.state === "Ready");
-  const prov = nodes.filter((n) => n.state === "Provisioning").length;
-  const cord = nodes.filter((n) => n.state === "Cordoned").length;
-  const rel = cp.filter((p) => related.has(p.id)).length;
-  const nOk = cp.filter((p) => p.status === "Running" && health(p) < 75).length;
-  const nWarn = cp.filter((p) => p.status === "Running" && health(p) >= 75 && !isCrit(p)).length;
-  const nPend = cp.filter((p) => p.status === "Pending").length;
-  const net = Math.round(cp.length * 11 + drift * 14 + (hsh % 30));
-  const disk = 38 + (hsh % 21);
-  const cores = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 8 : n.instance.includes("xlarge") ? 4 : 2), 0);
-  const memGi = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 32 : n.instance.includes("xlarge") ? 16 : 8), 0);
-  const usedCores = (avgC / 100) * cores, reqCores = Math.min(cores, usedCores * 1.4);
-  const usedMem = (avgM / 100) * memGi, reqMem = Math.min(memGi, usedMem * 1.18);
-  const ver = cl.env === "prod" ? "v1.31.4-eks-473bce4" : "v1.32.0-eks-19f6a2d";
-  const deploys = meta?.Deployment ?? 0;
-  const KIND_LINKS: [string, string][] = [["StatefulSet", "StatefulSets"], ["DaemonSet", "DaemonSets"], ["Service", "Services"], ["Ingress", "Ingresses"], ["Job", "Jobs"], ["CronJob", "CronJobs"]];
+  void onKind;
+  const st = clusterStats(cl.id, pods, tick);
+  const rel = st.cp.filter((p) => related.has(p.id)).length;
+  const healthy = st.chot === 0;
+  const Mini = ({ label, v }: { label: string; v: number }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <span style={{ width: 34, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
+      <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(17,19,24,0.07)", overflow: "hidden" }}>
+        <motion.span initial={false} animate={{ width: `${v}%` }} transition={{ duration: 1.2, ease: "easeInOut" }}
+          style={{ display: "block", height: "100%", borderRadius: 999, background: v >= 90 ? HP.crit : v >= 75 ? HP.warn : HP.ok }} />
+      </span>
+      <span style={{ width: 38, textAlign: "right", fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{v}%</span>
+    </div>
+  );
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
       style={{
-        display: "flex", flexDirection: "column", gap: 14, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
-        background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, boxShadow: "none", boxSizing: "border-box",
+        display: "flex", flexDirection: "column", gap: 12, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
+        background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box",
       }}>
-      {/* 헤더 */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
         <span style={{ width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg, #FF9900, #F76F00)", display: "grid", placeItems: "center", flexShrink: 0 }}>
           <AwsIcon size={17} style={{ color: "#fff" }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
             {cl.env === "prod" && <span style={{ fontSize: 10.5, fontWeight: 600, color: "#B25A00", border: "1px solid #F3D8B7", background: "#FFF8EF", borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
           </span>
-          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2 }}>Amazon EKS · {cl.region}</span>
+          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · {st.ver}</span>
         </span>
-        {chot > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 6, padding: "2px 7px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{chot}⚠</span>}
+        {healthy
+          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#1F9D4D", background: "#EDFAF1", border: "1px solid #C9EAD4", borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
+          : <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {st.chot}</span>}
       </div>
 
-      {/* 아이덴티티 */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: 11, color: UI.ink2 }}>
-        <span>183548421506 · Kubernetes {ver}</span>
-        <span>{meta?.Namespace ?? "-"}개의 네임스페이스 · NET {net}KB/s · DISK {disk}%</span>
-        <span style={{ color: UI.ink3, fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>arn:aws:eks:{cl.region}:183548421506:cluster/{cl.id}</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "inherit", fontSize: 11, color: UI.ink3, marginTop: 1 }}>
-          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신 · 방금 전
-          <RotateCw size={10} style={{ marginLeft: 1 }} />
-        </span>
+      <div style={{ display: "flex", gap: 14, fontSize: 12, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
+        <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.ready.length}/{st.nodes.length}</b> ready</span>
+        <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.cp.length}</b>{st.chot > 0 && <b style={{ color: "#C43028", fontFamily: MONO }}> · 임계 {st.chot}</b>}</span>
+        <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{meta?.Namespace ?? "-"}</b></span>
       </div>
 
-      {/* CPU·메모리 사용률 */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 7, paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3 }}><Cpu size={12} />CPU</span>
-        <ClusterUsageBar label="사용된 코어 수" used={usedCores} cap={cores} unit="cores" />
-        <ClusterUsageBar label="요청 사양" used={reqCores} cap={cores} unit="cores" />
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, marginTop: 5 }}><Server size={12} />메모리</span>
-        <ClusterUsageBar label="사용량" used={usedMem} cap={memGi} unit="GiB" />
-        <ClusterUsageBar label="요청 용량" used={reqMem} cap={memGi} unit="GiB" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: "auto" }}>
+        <Mini label="CPU" v={st.avgC} />
+        <Mini label="MEM" v={st.avgM} />
       </div>
-
-      {/* 상태 링 — 파드(상태 분포) · 디플로이먼트 · 노드 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
-        <SegRing segments={[[nOk, HP.ok], [nWarn, HP.warn], [chot, HP.crit], [nPend, HP.pending]]} center={String(cp.length)} label="PODS"
-          sub={chot > 0 ? `임계 ${chot}` : `✓ ${cp.length}`} subTone={chot > 0 ? "#C43028" : undefined} />
-        <SegRing segments={[[deploys, HP.ok]]} center={String(deploys)} label="DEPLOYMENTS" sub={`${deploys} available`} />
-        <SegRing segments={[[ready.length, HP.ok], [prov, "#0A84FF"], [cord, "#C6CAD1"]]} center={String(nodes.length)} label="NODES"
-          sub={`${ready.length} ready`} />
-      </div>
-
-      {/* 종류 링크 — 클릭 = 드릴 + 해당 표로 이동 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 10px", paddingTop: 12, marginTop: "auto", borderTop: `1px solid ${UI.line2}` }}>
-        {KIND_LINKS.map(([kid, lb]) => (
-          <span key={kid} role="link" className="kindlink"
-            onClick={onKind ? (e) => { e.stopPropagation(); onKind(kid); } : undefined}
-            style={{ display: "flex", alignItems: "baseline", gap: 5, fontSize: 12, color: UI.ink2, cursor: onKind ? "pointer" : "default", minWidth: 0 }}>
-            <b style={{ fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{meta?.[kid] ?? 0}</b>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lb}</span>
-          </span>
-        ))}
-      </div>
-
       <span style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}>{rel}</span>
     </motion.button>
   );
@@ -813,8 +824,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                   </div>
                 )}
 
-                {view.level === "nodes" && (
-                  /* 노드: 4칸 그리드 + 파드 10개당 1칸 병합 — 20개 노드 두 장이 한 줄에 맞물린다 */
+                {view.level === "nodes" && (<>
+                  <ClusterOverview clId={view.cluster} pods={pods} tick={tick} meta={clusterMeta?.[view.cluster]} onKind={onOpenKind} />
+                  {/* 노드: 4칸 그리드 + 파드 10개당 1칸 병합 — 20개 노드 두 장이 한 줄에 맞물린다 */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "dense", gap: 12 }}>
                     {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
                       <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}`, minWidth: 0, maxWidth: "100%", overflow: "hidden" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
@@ -824,7 +836,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                       </motion.div>
                     ))}
                   </div>
-                )}
+                </>)}
 
                 {view.level === "pods" && (() => {
                   const node = NODES.find((n) => n.id === view.node)!;
