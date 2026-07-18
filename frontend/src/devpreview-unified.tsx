@@ -488,7 +488,7 @@ function RelGraph({ center, centerIcon: CI, items, onOpenRef }: {
       </svg>
       {/* 관련 노드 스택 */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
-        {items.map((it, i) => {
+        {items.map((it) => {
           const t = TINT_G[it.tone] ?? TINT_G.gray;
           const clickable = !!(it.kindId && onOpenRef);
           return (
@@ -673,8 +673,6 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = fal
     if (yamlSaved && yamlSaved !== yaml) { setDiffMode(true); setTab("yaml"); }
     else onToast?.({ title: "변경 사항 없음", sub: "마지막 적용본이 서버 원본과 동일합니다", tone: "ok" });
   };
-  // 관련 리소스 접두어 → 종류 매핑 (클릭 = 해당 리소스 상세로 이동)
-  const REF_KIND: Record<string, string> = { "rs/": "ReplicaSet", "deploy/": "Deployment", "sts/": "StatefulSet", "svc/": "Service", "pod/": "Pod", "cm/": "ConfigMap", "networkpolicy/": "NetworkPolicy" };
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
   const isPod = kind.id === "Pod";
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
