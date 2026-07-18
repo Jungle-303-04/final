@@ -8,7 +8,7 @@ import {
   Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
-  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Sparkles, PanelLeftClose, PanelLeftOpen,
+  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
@@ -1113,8 +1113,10 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }
   { id: "cost", label: "비용", icon: Coins },
 ];
 // 연결은 내비 항목이 아니다(D7·D20) — 클러스터 뷰 '+ 연결' 카드와 배포 탭 '+ 저장소 연결'에서 모달로만 연다.
-// 전역 설정은 제품 전용 서피스(데모 범위 밖)라 데모 내비에 두지 않는다(가짜 목적지 금지).
-const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [];
+// 설정은 8항목 IA(D19)의 일원 — 데모에 화면이 없으므로 다른 미구현 서피스와 동일하게 '비활성'으로 존재를 보존한다.
+const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [
+  { id: "settings", label: "설정", icon: Settings },
+];
 
 type Surface = "home" | "resources" | "connect";
 const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources" };
@@ -1223,7 +1225,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
     const arr = [...m.entries()].sort((a, b) => b[1] - a[1]);
     const top = arr.slice(0, 5).map(([label, value]) => ({ label, value }));
     const rest = arr.slice(5).reduce((s, [, v]) => s + v, 0);
-    return rest > 0 ? [...top, { label: "기타", value: rest }] : top;
+    return rest > 0 ? [...top, { label: "기타", value: rest, pick: false }] : top; // '기타'는 필터 목적지가 없다 — 클릭 불가
   }, [pods]);
   const watch = useMemo(() => {
     const warn = pods.filter((p) => !p.bad && (p.status === "Pending" || p.restarts >= 2)).slice(0, 5 - Math.min(crit.length, 5));
@@ -1234,12 +1236,13 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
   }, [pods, crit]);
   const changes = useMemo(() => {
     const c0 = crit[0]; const r0 = outSync[0];
+    // 절대시각 대신 상대시각 — 시연 시점과 모순이 생기지 않는다
     return [
-      c0 && { id: "c1", time: "14:02", tone: "crit" as const, title: `${c0.name} ${c0.status} — 재시작 ${c0.restarts}회`, ref: { kind: "Pod", name: c0.name } },
-      r0 && { id: "c2", time: "13:47", tone: "warn" as const, title: `${r0.repo} 동기화 지연 · 리비전 ${r0.rev}` },
-      { id: "c3", time: "13:20", tone: "ok" as const, title: "shop-api 복제 6 → 8 스케일 완료" },
-      { id: "c4", time: "12:58", tone: "ok" as const, title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
-      { id: "c5", time: "12:31", tone: "ok" as const, title: "Jungle-303-04/final main 배포 · 정상" },
+      c0 && { id: "c1", time: "2분 전", tone: "crit" as const, title: `${c0.name} ${c0.status} — 재시작 ${c0.restarts}회`, ref: { kind: "Pod", name: c0.name } },
+      r0 && { id: "c2", time: "17분 전", tone: "warn" as const, title: `${r0.repo} 동기화 지연 · 리비전 ${r0.rev}` },
+      { id: "c3", time: "44분 전", tone: "ok" as const, title: "shop-api 복제 6 → 8 스케일 완료" },
+      { id: "c4", time: "1시간 전", tone: "ok" as const, title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
+      { id: "c5", time: "2시간 전", tone: "ok" as const, title: "Jungle-303-04/final main 배포 · 정상" },
     ].filter(Boolean) as { id: string; time: string; tone: "ok" | "warn" | "crit"; title: string; ref?: { kind: string; name: string } }[];
   }, [crit, outSync]);
 
@@ -1249,11 +1252,16 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
         ? <RankList onPick={onOpenPod} rows={crit.slice(0, 3).map((p) => ({ id: p.name, tone: "crit" as const, title: `${p.name} · ${p.status}`, sub: `${p.svc} · ${p.ns} · ${p.cluster}`, right: `재시작 ${p.restarts}` }))} />
         : <span style={{ fontSize: 12.5, color: UI.ink2 }}>활성 인시던트가 없습니다</span>;
       case "W3": return <RatioBar a={repos.length - outSync.length} b={outSync.length} aLabel="Synced" bLabel="OutOfSync" />;
-      case "W4": return <MultiLine series={[
-        { label: "배포", color: BLUE, values: wave(1, 6, 3) },
-        { label: "알림", color: HP.warn, values: wave(4, 4, 3) },
-        { label: "임계", color: HP.crit, values: wave(7, Math.min(crit.length, 4), 1.6) },
-      ]} />;
+      case "W4": {
+        // 마지막 점(=현재)은 합성 파형이 아니라 실측값 — 요약 줄·벨과 같은 숫자를 말해야 한다
+        const nowAlerts = crit.length + nodes.filter((n) => n.state !== "Ready").length + outSync.length;
+        const pin = (vs: number[], now: number) => { const c = [...vs]; c[c.length - 1] = now; return c; };
+        return <MultiLine series={[
+          { label: "배포", color: BLUE, values: wave(1, 6, 3) },
+          { label: "알림", color: HP.warn, values: pin(wave(4, 4, 3), nowAlerts) },
+          { label: "임계", color: HP.crit, values: pin(wave(7, Math.min(crit.length, 4), 1.6), crit.length) },
+        ]} />;
+      }
       case "W5": return <Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} />;
       case "W6": return <RankList onPick={onOpenPod} rows={watch} />;
       case "W7": return (

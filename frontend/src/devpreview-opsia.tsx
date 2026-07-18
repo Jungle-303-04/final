@@ -576,8 +576,9 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster }: {
   meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; onAddCluster?: () => void;
 }) {
   const pods = useMemo(() => genPods(), []);
-  const [tick, setTick] = useState(0);
-  useEffect(() => { const iv = setInterval(() => setTick((t) => t + 1), 1500); return () => clearInterval(iv); }, []);
+  // 벽시계 기반 tick — 홈 카드와 지도 카드가 같은 순간 같은 숫자를 말하게 한다(두 화면 숫자 불일치 = 버그)
+  const [tick, setTick] = useState(() => Math.floor(Date.now() / 1500));
+  useEffect(() => { const iv = setInterval(() => setTick(Math.floor(Date.now() / 1500)), 1500); return () => clearInterval(iv); }, []);
   const none = useMemo(() => new Set<string>(), []);
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14 }}>
@@ -616,8 +617,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   initialCluster?: string;
 } = {}) {
   const pods = useMemo(() => genPods(), []);
-  const [tick, setTick] = useState(0);
-  useEffect(() => { const iv = setInterval(() => setTick((t) => t + 1), 1500); return () => clearInterval(iv); }, []);
+  // 벽시계 기반 tick — HomeClusterSection과 동일 위상(같은 순간 같은 숫자)
+  const [tick, setTick] = useState(() => Math.floor(Date.now() / 1500));
+  useEffect(() => { const iv = setInterval(() => setTick(Math.floor(Date.now() / 1500)), 1500); return () => clearInterval(iv); }, []);
   const live = (p: Pod) => (p.status !== "Running" ? 0 : Math.round(Math.sin((tick + p.cpu + p.id.length * 3) * 1.1) * 4 + Math.sin((tick + p.mem) * 0.37) * 2));
 
   const [view, setView] = useState<View>(initialCluster ? { level: "nodes", cluster: initialCluster } : { level: "clusters" });

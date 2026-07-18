@@ -119,7 +119,7 @@ export function MiniBars({ values, labels, currentIndex, tone = BLUE }: {
 
 // ── Donut — 도넛 + 값 범례 (P-14) ──
 const DONUT_COLORS = [BLUE, HP.ok, HP.warn, "#8250DF", "#0FA3B1", "#9AA0AA"];
-export function Donut({ items, onPick }: { items: { label: string; value: number }[]; onPick?: (label: string) => void }) {
+export function Donut({ items, onPick }: { items: { label: string; value: number; pick?: boolean }[]; onPick?: (label: string) => void }) {
   const total = items.reduce((s, x) => s + x.value, 0) || 1;
   let acc = 0;
   const R = 34, C = 2 * Math.PI * R;
@@ -135,15 +135,18 @@ export function Donut({ items, onPick }: { items: { label: string; value: number
         })}
       </svg>
       <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, flex: 1 }}>
-        {items.map((it, i) => (
-          <button key={it.label} onClick={onPick ? () => onPick(it.label) : undefined} disabled={!onPick} className={onPick ? "rrow" : undefined}
-            style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: UI.ink2, border: "none", background: "transparent", padding: "1px 4px", borderRadius: 6, cursor: onPick ? "pointer" : "default", textAlign: "left", minWidth: 0 }}>
+        {items.map((it, i) => {
+          const pickable = !!onPick && it.pick !== false;
+          return (
+          <button key={it.label} onClick={pickable ? () => onPick!(it.label) : undefined} disabled={!pickable} className={pickable ? "rrow" : undefined}
+            style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: UI.ink2, border: "none", background: "transparent", padding: "1px 4px", borderRadius: 6, cursor: pickable ? "pointer" : "default", textAlign: "left", minWidth: 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: 999, background: DONUT_COLORS[i % DONUT_COLORS.length], flexShrink: 0 }} />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
             <b style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{it.value}</b>
             <span style={{ fontFamily: MONO, fontSize: 11, color: UI.ink3, width: 34, textAlign: "right", flexShrink: 0 }}>{Math.round((it.value / total) * 100)}%</span>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
