@@ -714,7 +714,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 )}
 
                 {view.level === "nodes" && (
-                  /* 노드: 3칸 균등 그리드 + 파드 10개당 1칸 병합(2칸·3칸) — minmax(0)·dense로 리사이즈에도 안 무너진다 */
+                  /* 노드: 4칸 그리드 + 파드 10개당 1칸 병합 — 20개 노드 두 장이 한 줄에 맞물린다 */
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "dense", gap: 12 }}>
                     {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
                       <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}`, minWidth: 0, maxWidth: "100%", overflow: "hidden" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
