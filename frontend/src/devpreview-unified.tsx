@@ -1223,6 +1223,9 @@ function App() {
   const alerts = useMemo(() => podInventory().filter((p) => p.bad), []);
   const nodeAlerts = useMemo(() => nodeInventory().filter((n) => n.state !== "Ready"), []);
   const repoAlerts = useMemo(() => repoInventory().filter((r) => r.sync === "OutOfSync"), []);
+  // 세션 알림 — 위저드 연결·AI 규칙 생성 등 실제 사용자 행동의 결과
+  const [notes, setNotes] = useState<{ id: number; icon: "rule" | "connect"; title: string; body: string }[]>([]);
+  const noteSeq = useRef(0);
   const alertTotal = alerts.length + nodeAlerts.length + repoAlerts.length + notes.length;
   const [toasts, setToasts] = useState<{ id: number; title: string; sub: string; tone: "ok" | "crit" }[]>([]);
   const toastSeq = useRef(0);
@@ -1231,9 +1234,7 @@ function App() {
     setToasts((cur) => [...cur, { id, ...t }]);
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
   };
-  // 세션 알림 — 위저드·AI에서 실제로 일어난 일 (버스 수신)
-  const [notes, setNotes] = useState<{ id: number; icon: "rule" | "connect"; title: string; body: string }[]>([]);
-  const noteSeq = useRef(0);
+  // 버스 수신 → 토스트 + 세션 알림 (선언은 위쪽, 여기서는 구독만)
   useEffect(() => onAction((a: DemoAction) => {
     setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
