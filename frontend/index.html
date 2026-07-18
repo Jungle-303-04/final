@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <script>
       (() => {
         let storedTheme = null;
-        let locale = navigator.language?.toLowerCase().startsWith("ko") ? "ko" : "en";
+        let locale = "ko";
         try {
           storedTheme = window.localStorage.getItem("opsia-theme");
           const storedLocale = window.localStorage.getItem("opsia.locale");

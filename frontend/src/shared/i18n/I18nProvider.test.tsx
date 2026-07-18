@@ -17,6 +17,19 @@ afterEach(() => {
 });
 
 describe("I18nProvider", () => {
+  it("defaults to Korean when no explicit locale was persisted", () => {
+    const controller: { current: I18nController | null } = { current: null };
+    render(
+      <I18nProvider storage={window.localStorage} navigatorLanguage="en-US">
+        <Consumer capture={(value) => { controller.current = value; }} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("다시 시도")).toBeTruthy();
+    expect(controller.current?.locale).toBe("ko");
+    expect(document.documentElement.lang).toBe("ko");
+  });
+
   it("uses navigator Korean when no explicit locale was persisted", () => {
     const controller: { current: I18nController | null } = { current: null };
     render(

@@ -1,7 +1,7 @@
 import type { SupportedLocale } from "./types";
 
 export const PRODUCT_LOCALE_STORAGE_KEY = "opsia.locale";
-export const DEFAULT_LOCALE: SupportedLocale = "en";
+export const DEFAULT_LOCALE: SupportedLocale = "ko";
 export const SUPPORTED_LOCALES = ["en", "ko"] as const satisfies readonly SupportedLocale[];
 
 export interface LocaleStorage {

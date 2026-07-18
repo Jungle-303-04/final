@@ -9,7 +9,8 @@ describe("product document bootstrap", () => {
   it("owns product metadata, locale, theme, and favicon before React mounts", async () => {
     const documentSource = await readFile(resolve(frontendRoot, "index.html"), "utf8");
 
-    expect(documentSource).toContain('<html lang="en">');
+    expect(documentSource).toContain('<html lang="ko">');
+    expect(documentSource).toContain('let locale = "ko"');
     expect(documentSource).toContain('<title>Opsia</title>');
     expect(documentSource).toContain(
       'content="Provider-neutral Kubernetes operations and GitOps control plane."',

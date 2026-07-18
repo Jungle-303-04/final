@@ -43,9 +43,9 @@ describe("i18n catalogs", () => {
 });
 
 describe("locale resolution", () => {
-  it("defaults to English and detects Korean navigator languages", () => {
-    expect(detectNavigatorLocale(undefined)).toBe("en");
-    expect(detectNavigatorLocale("en-US")).toBe("en");
+  it("defaults to Korean regardless of an unpersisted navigator language", () => {
+    expect(detectNavigatorLocale(undefined)).toBe("ko");
+    expect(detectNavigatorLocale("en-US")).toBe("ko");
     expect(detectNavigatorLocale("ko")).toBe("ko");
     expect(detectNavigatorLocale("ko-KR")).toBe("ko");
     expect(detectNavigatorLocale("KO_kr")).toBe("ko");

@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 import { I18nProvider, useI18n } from "../i18n";
+import { PRODUCT_LOCALE_STORAGE_KEY, type LocaleStorage } from "../i18n/locale";
 import { ProductStateScreen } from "./ProductStateScreen";
 
 afterEach(cleanup);
@@ -179,7 +180,7 @@ describe("ProductStateScreen", () => {
   });
 
   it("gives a missing item its own quiet state", () => {
-    renderWithLocale(<ProductStateScreen kind="not-found" />, "en-US");
+    renderWithLocale(<ProductStateScreen kind="not-found" />, "en");
 
     expect(screen.getByRole("heading", { name: "We couldn't find that item" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -193,7 +194,7 @@ describe("ProductStateScreen", () => {
         issue={{ code: "network" }}
         retry={{ pending: false, onRetry: vi.fn() }}
       />,
-      "en-US",
+      "en",
     );
 
     expect(screen.getByRole("heading", { name: "Unable to reach the control plane" }))
@@ -204,7 +205,7 @@ describe("ProductStateScreen", () => {
 
   it("updates loading and unknown-error copy immediately when locale changes", async () => {
     renderBase(
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
+      <I18nProvider navigatorLanguage="en-US" storage={localeStorage("en")}>
         <LocaleSwitchFixture>
           <ProductStateScreen
             issue={{ code: "unknown" }}
@@ -246,17 +247,27 @@ describe("ProductStateScreen", () => {
 });
 
 function render(element: ReactElement) {
-  return renderWithLocale(element, "ko-KR");
+  return renderWithLocale(element, "ko");
 }
 
-function renderWithLocale(element: ReactElement, navigatorLanguage: string) {
+function renderWithLocale(element: ReactElement, locale: "en" | "ko") {
   return renderBase(element, {
     wrapper: ({ children }) => (
-      <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
+      <I18nProvider
+        navigatorLanguage={locale === "ko" ? "ko-KR" : "en-US"}
+        storage={localeStorage(locale)}
+      >
         {children}
       </I18nProvider>
     ),
   });
+}
+
+function localeStorage(locale: "en" | "ko"): LocaleStorage {
+  return {
+    getItem: (key) => key === PRODUCT_LOCALE_STORAGE_KEY ? locale : null,
+    setItem: () => undefined,
+  };
 }
 
 function LocaleSwitchFixture({ children }: { children: ReactNode }) {
