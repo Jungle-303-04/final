@@ -4,8 +4,9 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
+import domains.manifest_editor.router as manifest_editor_router
 from domains.gitops.repository_discovery import RepositoryDiscoveryService
 from domains.manifest_editor.router import (
     apply_resource_manifest_now,
@@ -402,10 +403,27 @@ def test_approval_records_exact_authority_before_requesting_safe_pr() -> None:
     assert approval["details"]["patch_sha256"] == safe_pr_patch_sha256(request.patches)
 
 
-def test_deploy_endpoint_validates_and_routes_git_authority_in_one_request() -> None:
+def test_deploy_endpoint_validates_and_routes_git_authority_in_one_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     desired = SOURCE.replace("replicas: 2", "replicas: 3")
     db = ManifestApprovalDb()
     events = ManifestApprovalEvents()
+    background_tasks = BackgroundTasks()
+    prepared = []
+
+    class Delivery:
+        async def prepare(self, request: object) -> None:
+            prepared.append(request)
+
+        async def execute(self, _request: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        manifest_editor_router,
+        "build_yaml_delivery_orchestrator",
+        lambda **_kwargs: Delivery(),
+    )
 
     response = asyncio.run(
         deploy_resource_manifest_edit(
@@ -428,12 +446,14 @@ def test_deploy_endpoint_validates_and_routes_git_authority_in_one_request() -> 
             events,
             ManifestOperationEvents(),
             RepositoryDiscoveryService(PinnedManifestClient(SOURCE)),
+            background_tasks,
         )
     )
 
     assert response.pathway == "git"
-    assert response.current_stage == "pull_request"
-    assert response.command_id is None
+    assert response.current_stage == "commit"
+    assert response.command_id == response.operation_id == response.event_id
+    assert response.workflow_run_id is not None
     assert response.preview.desired_sha256 == manifest_sha256(desired)
     assert [stage.stage for stage in response.stages] == [
         "validation",
@@ -445,9 +465,13 @@ def test_deploy_endpoint_validates_and_routes_git_authority_in_one_request() -> 
         "done",
     ]
     assert response.stages[0].status == "completed"
-    assert response.stages[2].status == "accepted"
+    assert response.stages[1].status == "accepted"
+    assert response.stages[2].status == "pending"
     assert response.stages[-1].status == "pending"
     assert db.approvals[0]["reason"] == "manifest update requested from resource detail"
+    assert len(prepared) == 1
+    assert prepared[0].operation_id == response.operation_id
+    assert len(background_tasks.tasks) == 1
 
 
 def test_deploy_endpoint_routes_unbound_live_source_to_outbound_agent(

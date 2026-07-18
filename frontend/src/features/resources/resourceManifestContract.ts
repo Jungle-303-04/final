@@ -63,6 +63,7 @@ export interface ResourceManifestDeployment {
   accepted: boolean;
   pathway: "git" | "agent";
   operationId: string;
+  workflowRunId: string | null;
   correlationId: string;
   currentStage: Exclude<ResourceManifestDeploymentStage["stage"], "validation">;
   preview: ResourceManifestPreview;

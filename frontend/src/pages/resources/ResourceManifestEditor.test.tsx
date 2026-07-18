@@ -209,7 +209,8 @@ function deployment(pathway: "git" | "agent", baseLength = 40) {
   return {
     accepted: true,
     pathway,
-    operationId: pathway === "git" ? "workflow-1" : "cmd-manifest-1",
+    operationId: pathway === "git" ? "event-yaml-1" : "cmd-manifest-1",
+    workflowRunId: pathway === "git" ? "workflow-1" : null,
     correlationId: "correlation-manifest-1",
     currentStage: pathway === "git" ? "pull_request" as const : "rollout" as const,
     preview,
@@ -222,7 +223,7 @@ function deployment(pathway: "git" | "agent", baseLength = 40) {
       { stage: "rollout" as const, status: pathway === "agent" ? "accepted" as const : "pending" as const, evidence: {}, reasonCode: null },
       { stage: "done" as const, status: "pending" as const, evidence: {}, reasonCode: null },
     ],
-    commandId: pathway === "agent" ? "cmd-manifest-1" : null,
+    commandId: pathway === "git" ? "event-yaml-1" : "cmd-manifest-1",
     eventId: "event-manifest-1",
     approvalId: pathway === "git" ? "approval-1" : null,
     pendingReasonCodes: [],

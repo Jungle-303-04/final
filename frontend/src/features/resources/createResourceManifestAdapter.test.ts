@@ -59,9 +59,10 @@ describe("resource manifest adapter", () => {
     const deployResourceManifestEdit = vi.fn().mockResolvedValue({
       accepted: true,
       pathway: "git",
-      operation_id: "workflow-1",
+      operation_id: "event-yaml-1",
+      workflow_run_id: "workflow-1",
       correlation_id: "correlation-1",
-      current_stage: "pull_request",
+      current_stage: "commit",
       preview: await previewResourceManifestEdit(),
       stages: [{
         stage: "validation",
@@ -69,10 +70,10 @@ describe("resource manifest adapter", () => {
         evidence: { desired_sha256: `sha256:${"c".repeat(64)}` },
         reason_code: null,
       }],
-      command_id: null,
+      command_id: "event-yaml-1",
       event_id: "event-1",
       approval_id: "approval-1",
-      pending_reason_codes: ["safe_pr_worker_pending"],
+      pending_reason_codes: [],
     });
     previewResourceManifestEdit.mockClear();
     const getResourceManifestCreateCapability = vi.fn().mockResolvedValue({
@@ -129,8 +130,9 @@ describe("resource manifest adapter", () => {
     await expect(port.saveAndDeploy("resource-1", { ...input, reason: "" }))
       .resolves.toMatchObject({
         pathway: "git",
-        operationId: "workflow-1",
-        currentStage: "pull_request",
+        operationId: "event-yaml-1",
+        workflowRunId: "workflow-1",
+        currentStage: "commit",
         stages: [{
           stage: "validation",
           status: "completed",

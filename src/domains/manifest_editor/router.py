@@ -12,7 +12,7 @@ from dataclasses import asdict
 from typing import Annotated, Any
 
 import yaml
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 
 from domains.command.events import CommandRequestedBody
 from domains.command.router import (
@@ -51,6 +51,7 @@ from domains.manifest_editor.validation import (
     validate_manifest_edit,
     validate_manifest_source,
 )
+from domains.manifest_editor.yaml_delivery import build_yaml_delivery_orchestrator
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.config.constants import Command, Sandbox
@@ -85,6 +86,7 @@ from packages.contracts.identity import (
 )
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.contracts.parity import CommandReceipt, ResourceRef
+from packages.contracts.yaml_delivery import YamlDeliveryRequest
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.engine import unit_of_work_or_null
 
@@ -240,6 +242,7 @@ async def deploy_resource_manifest_edit(
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
     fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
+    background_tasks: BackgroundTasks = None,
 ) -> ResourceManifestDeployResponse:
     """Validate, diff, select the authority-owned path, and submit one operation."""
 
@@ -273,6 +276,8 @@ async def deploy_resource_manifest_edit(
     )
     audit_reason = payload.reason.strip() or "manifest update requested from resource detail"
     if payload.application_id is not None:
+        context = resource_context(db, current, resource_id, write=True)
+        source = exact_source(db, current, context, payload.application_id)
         approval = await approve_resource_manifest_edit(
             resource_id,
             ResourceManifestApproveRequest(
@@ -288,22 +293,74 @@ async def deploy_resource_manifest_edit(
             events=events,
             fallback_service=fallback_service,
         )
+        operation_id = approval.event_id
+        delivery_request = YamlDeliveryRequest(
+            operation_id=operation_id,
+            workflow_run_id=approval.workflow_run_id,
+            workspace_id=context["workspace_id"],
+            application_id=str(source["application_id"]),
+            binding_id=str(source["binding_id"]),
+            environment=str(source["environment"]),
+            cluster_id=context["cluster_id"],
+            repository_id=str(source["repository_id"]),
+            repo_ref=str(source["repo_ref"]),
+            base_branch=str(source["branch"]),
+            manifest_path=str(source["manifest_path"]),
+            change_ref=approval.approval_id,
+            source_revision=preview.base_sha,
+            desired_sha256=preview.desired_sha256,
+        )
+        publish = getattr(operation_events, "publish", None)
+        if not callable(publish):
+            raise HTTPException(status_code=503, detail="operation event stream unavailable")
+        await publish(
+            command_id=operation_id,
+            workspace_id=context["workspace_id"],
+            kind="progress",
+            payload={
+                "cluster_id": context["cluster_id"],
+                "operation_id": operation_id,
+                "workflow_run_id": approval.workflow_run_id,
+                "stage": "validation",
+                "status": "accepted",
+                "evidence": {
+                    "base_sha": preview.base_sha,
+                    "source_sha256": preview.source_sha256,
+                    "desired_sha256": preview.desired_sha256,
+                },
+            },
+        )
+        delivery = build_yaml_delivery_orchestrator(
+            db=db,
+            current=current,
+            events=events,
+            operation_events=operation_events,
+        )
+        await delivery.prepare(delivery_request)
+        if background_tasks is None:
+            raise HTTPException(status_code=503, detail="YAML delivery runner unavailable")
+        background_tasks.add_task(delivery.execute, delivery_request)
         return ResourceManifestDeployResponse(
             accepted=approval.accepted,
             pathway="git",
-            operation_id=approval.workflow_run_id,
+            operation_id=operation_id,
+            workflow_run_id=approval.workflow_run_id,
             correlation_id=approval.correlation_id,
-            current_stage="pull_request",
+            current_stage="commit",
             preview=preview,
             approval_id=approval.approval_id,
             event_id=approval.event_id,
-            pending_reason_codes=["safe_pr_worker_pending"],
+            command_id=operation_id,
             stages=[
                 validation_stage,
-                ResourceManifestDeploymentStage(stage="commit", status="pending"),
+                ResourceManifestDeploymentStage(
+                    stage="commit",
+                    status="accepted",
+                    evidence={"workflow_run_id": approval.workflow_run_id},
+                ),
                 ResourceManifestDeploymentStage(
                     stage="pull_request",
-                    status="accepted",
+                    status="pending",
                     evidence={"approval_id": approval.approval_id},
                 ),
                 ResourceManifestDeploymentStage(stage="merge", status="pending"),
@@ -335,6 +392,7 @@ async def deploy_resource_manifest_edit(
         accepted=receipt.accepted,
         pathway="agent",
         operation_id=receipt.command_id,
+        workflow_run_id=None,
         correlation_id=receipt.correlation_id,
         current_stage="rollout",
         preview=preview,

@@ -46,6 +46,7 @@ export function createResourceManifestAdapter(
           accepted: value.accepted,
           pathway: value.pathway,
           operationId: value.operation_id,
+          workflowRunId: value.workflow_run_id,
           correlationId: value.correlation_id,
           currentStage: value.current_stage,
           preview: toPreview(value.preview),

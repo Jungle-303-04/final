@@ -60,6 +60,7 @@ export const resourceManifestDeploySchema = z.strictObject({
   accepted: z.boolean(),
   pathway: z.enum(["git", "agent"]),
   operation_id: z.string().min(1),
+  workflow_run_id: z.string().min(1).nullable(),
   correlation_id: z.string().min(1),
   current_stage: z.enum(["commit", "pull_request", "merge", "sync", "rollout", "done"]),
   preview: resourceManifestPreviewSchema,

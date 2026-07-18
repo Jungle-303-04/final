@@ -163,9 +163,10 @@ describe("resource manifest API", () => {
     const deployment = {
       accepted: true,
       pathway: "git",
-      operation_id: "workflow-1",
+      operation_id: "event-yaml-1",
+      workflow_run_id: "workflow-1",
       correlation_id: "correlation-1",
-      current_stage: "pull_request",
+      current_stage: "commit",
       preview,
       stages: [{
         stage: "validation",
@@ -173,10 +174,10 @@ describe("resource manifest API", () => {
         evidence: { desired_sha256: preview.desired_sha256 },
         reason_code: null,
       }],
-      command_id: null,
+      command_id: "event-yaml-1",
       event_id: "event-1",
       approval_id: "approval-1",
-      pending_reason_codes: ["safe_pr_worker_pending"],
+      pending_reason_codes: [],
     } as const;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify(deployment), { status: 202 }),

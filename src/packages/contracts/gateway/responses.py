@@ -1143,6 +1143,7 @@ class ResourceManifestDeployResponse(StrictModel):
     accepted: bool
     pathway: Literal["git", "agent"]
     operation_id: str
+    workflow_run_id: str | None = None
     correlation_id: str
     current_stage: Literal["commit", "pull_request", "merge", "sync", "rollout", "done"]
     preview: ResourceManifestPreviewResponse

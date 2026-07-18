@@ -171,21 +171,12 @@ class YamlDeliveryOrchestrator:
         self.monotonic = monotonic
 
     async def execute(self, request: YamlDeliveryRequest) -> YamlDeliveryResult:
-        existing = await self.ledger.get_workflow_run(request.workflow_run_id)
-        if existing is None:
-            started = await self._start(request)
-            if not started:
-                existing = await self.ledger.get_workflow_run(request.workflow_run_id)
-                if existing is None:
-                    raise YamlDeliveryPortError(
-                        YamlDeliveryFailureCode.LEDGER_CONFLICT,
-                        "workflow start was rejected without a durable run",
-                    )
-        if existing is not None:
-            self._require_owned_run(existing, request)
-            terminal = await self._terminal_result(existing, request)
-            if terminal is not None:
-                return terminal
+        prepared = await self.prepare(request)
+        if prepared.status in {
+            YamlDeliveryOutcomeStatus.COMPLETED,
+            YamlDeliveryOutcomeStatus.FAILED,
+        }:
+            return prepared
 
         stage = YamlDeliveryStage.VALIDATION
         try:
@@ -238,6 +229,21 @@ class YamlDeliveryOrchestrator:
                 YamlDeliveryFailureCode.PROVIDER_ERROR,
                 "delivery provider operation failed",
             )
+
+    async def prepare(self, request: YamlDeliveryRequest) -> YamlDeliveryResult:
+        """Create the durable run before the asynchronous Safe PR worker can reply."""
+
+        existing = await self.ledger.get_workflow_run(request.workflow_run_id)
+        if existing is None:
+            await self._start(request)
+            existing = await self.ledger.get_workflow_run(request.workflow_run_id)
+            if existing is None:
+                raise YamlDeliveryPortError(
+                    YamlDeliveryFailureCode.LEDGER_CONFLICT,
+                    "workflow start was rejected without a durable run",
+                )
+        self._require_owned_run(existing, request)
+        return await self.get_result(request)
 
     async def get_result(self, request: YamlDeliveryRequest) -> YamlDeliveryResult:
         run = await self.ledger.get_workflow_run(request.workflow_run_id)

@@ -61,6 +61,7 @@ export interface ResourceManifestDeployEndpoint {
   accepted: boolean;
   pathway: "git" | "agent";
   operation_id: string;
+  workflow_run_id: string | null;
   correlation_id: string;
   current_stage: "commit" | "pull_request" | "merge" | "sync" | "rollout" | "done";
   preview: ResourceManifestPreviewEndpoint;

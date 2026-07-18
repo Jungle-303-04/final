@@ -113,7 +113,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
       if (nextController.signal.aborted) return;
       setPreview(result.preview);
       setDeployment(result);
-      if (result.commandId) operationStore?.start(result.commandId);
+      operationStore?.start(result.operationId);
       setPhase("ready");
     } catch (error) {
       if (nextController.signal.aborted) return;
@@ -479,6 +479,29 @@ function observedStages(
   if (!deployment.commandId || !operation || operation.commandId !== deployment.commandId) {
     return deployment.stages;
   }
+  if (deployment.pathway === "git") {
+    const eventStage = normalizedGitDeliveryStage(operation.event?.payload.stage);
+    const eventStatus = operation.event?.payload.status;
+    if (!eventStage) return deployment.stages;
+    const currentIndex = GIT_DELIVERY_STAGES.indexOf(eventStage);
+    return deployment.stages.map((stage) => {
+      const stageIndex = GIT_DELIVERY_STAGES.indexOf(stage.stage);
+      if (stageIndex < currentIndex && stage.status !== "unavailable") {
+        return { ...stage, status: "completed" };
+      }
+      if (stage.stage !== eventStage) return stage;
+      const evidence = operation.event?.payload.evidence;
+      const observedStatus = gitDeliveryStageStatus(operation.status, eventStatus);
+      return {
+        ...stage,
+        status: stage.status === "completed" && observedStatus === "accepted"
+          ? "completed"
+          : observedStatus,
+        evidence: { ...stage.evidence, ...stringEvidence(evidence) },
+        reasonCode: operation.failure,
+      };
+    });
+  }
   const completed = operation.status === "completed";
   const failed = operation.status === "failed"
     || operation.status === "cancelled"
@@ -509,11 +532,52 @@ function observedCurrentStage(
   deployment: ResourceManifestDeployment,
   operation: OperationStatusSnapshot | null,
 ): ResourceManifestDeployment["currentStage"] {
+  const eventStage = normalizedGitDeliveryStage(operation?.event?.payload.stage);
+  if (deployment.pathway === "git" && eventStage && eventStage !== "validation") {
+    return eventStage;
+  }
   if (deployment.commandId && operation?.commandId === deployment.commandId
     && operation.status === "completed") {
     return "done";
   }
   return deployment.currentStage;
+}
+
+const GIT_DELIVERY_STAGES = [
+  "validation",
+  "commit",
+  "pull_request",
+  "merge",
+  "sync",
+  "rollout",
+  "done",
+] as const;
+
+function normalizedGitDeliveryStage(
+  value: unknown,
+): ResourceManifestDeployment["stages"][number]["stage"] | null {
+  const stage = value === "pr" ? "pull_request" : value;
+  return typeof stage === "string" && GIT_DELIVERY_STAGES.some((item) => item === stage)
+    ? stage as ResourceManifestDeployment["stages"][number]["stage"]
+    : null;
+}
+
+function gitDeliveryStageStatus(
+  operationStatus: OperationStatusSnapshot["status"],
+  eventStatus: unknown,
+): ResourceManifestDeployment["stages"][number]["status"] {
+  if (operationStatus === "failed" || eventStatus === "failed") return "failed";
+  if (operationStatus === "completed" || eventStatus === "succeeded") return "completed";
+  if (eventStatus === "review_required") return "pending";
+  return "accepted";
+}
+
+function stringEvidence(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    typeof item === "string" ? item : JSON.stringify(item),
+  ]));
 }
 
 function stageLabel(
