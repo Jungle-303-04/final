@@ -5,7 +5,7 @@
 import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
-import { Box, ChevronRight, ChevronLeft, X, Layers3, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network } from "lucide-react";
+import { Box, ChevronRight, ChevronLeft, X, Layers3, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -184,26 +184,53 @@ function Gauge({ label, v }: { label: string; v: number }) {
   );
 }
 
-// ── 스파크라인 ─────────────────────────────
+// ── 스파크라인 — Catmull-Rom 스플라인으로 부드럽게 + 그라데이션 면 ─────────────────────────────
+// (이전엔 직선 세그먼트라 각져 보였음)
+function smoothPath(pts: { x: number; y: number }[]) {
+  if (pts.length < 2) return "";
+  let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
 function Spark({ id, base, tick, h = 22, color = HP.ok }: { id: string; base: number; tick: number; h?: number; color?: string }) {
   const hsh = id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
-  const W = 100;
-  const pts = Array.from({ length: 25 }, (_, i) => {
-    const x = tick - 24 + i;
-    return Math.max(4, Math.min(96, base + 9 * Math.sin(x * 0.55 + hsh) + 5 * Math.sin(x * 0.21 + hsh * 1.7)));
+  const W = 100, N = 36, PAD = 2.5;
+  const gid = `sg-${id.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const vals = Array.from({ length: N }, (_, i) => {
+    const x = tick - (N - 1) + i;
+    return Math.max(3, Math.min(97, base + 8 * Math.sin(x * 0.42 + hsh) + 4.5 * Math.sin(x * 0.19 + hsh * 1.7) + 2 * Math.sin(x * 0.83 + hsh * 0.4)));
   });
-  const line = pts.map((v, i) => `${i === 0 ? "M" : "L"} ${((i / 24) * W).toFixed(1)} ${(h - (v / 100) * h).toFixed(1)}`).join(" ");
+  const pts = vals.map((v, i) => ({ x: (i / (N - 1)) * W, y: PAD + (1 - v / 100) * (h - PAD * 2) }));
+  const line = smoothPath(pts);
+  const last = pts[pts.length - 1];
   return (
-    <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: "block" }}>
-      <path d={`${line} L ${W} ${h} L 0 ${h} Z`} fill={color} opacity={0.07} />
-      <path d={line} fill="none" stroke={color} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.01} />
+        </linearGradient>
+      </defs>
+      <path d={`${line} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={last.x} cy={last.y} r={1.8} fill={color} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
 // ── 파드 표 행: 상태칩 · 이름 · 부하 · 재시작 · 나이 → 클릭 시 상세 ─────────────────────────────
-const PODCOLS = "16px minmax(0,1fr) 92px 92px 54px 46px 12px";
-const ageOf = (p: Pod) => { const h = p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0) % 220; return h < 24 ? `${h + 1}h` : `${Math.floor(h / 24)}d`; };
+const PODCOLS = "16px minmax(0,1.4fr) 64px 74px 96px 96px 92px 92px 50px 44px 66px";
+const hashOf = (p: Pod) => p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
+const ageOf = (p: Pod) => { const h = hashOf(p) % 220; return h < 24 ? `${h + 1}h` : `${Math.floor(h / 24)}d`; };
+const readyOf = (p: Pod) => (p.status === "Running" ? "1/1" : p.status === "Pending" ? "0/1" : "0/1");
+const qosOf = (p: Pod) => (["Guaranteed", "Burstable", "BestEffort"] as const)[hashOf(p) % 3];
+const imageOf = (p: Pod) => `v1.${hashOf(p) % 9}.${hashOf(p) % 5}`;
 
 function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; dim: boolean; lit: boolean; onClick: () => void; onTip: (x: number, y: number, pods: Pod[] | null) => void }) {
   const c = healthColor(p);
@@ -228,11 +255,26 @@ function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; d
         <span style={{ fontSize: 12, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
         {p.status !== "Running" && <span style={{ fontSize: 9.5, fontWeight: 600, color: isCrit(p) ? HP.crit : UI.ink3, flexShrink: 0 }}>{stLabel}</span>}
       </span>
+      {/* Ready 컨테이너 */}
+      <span style={{ fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: p.status === "Running" ? UI.ink2 : HP.crit, fontWeight: p.status === "Running" ? 500 : 700 }}>{readyOf(p)}</span>
+      {/* 이미지 태그 */}
+      <span style={{ fontSize: 10.5, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{imageOf(p)}</span>
+      {/* QoS 클래스 */}
+      <span style={{ fontSize: 9.5, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", justifySelf: "start", whiteSpace: "nowrap" }}>{qosOf(p)}</span>
       <MiniBar v={cpuV} />
       <MiniBar v={memV} />
       <span style={{ fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: p.restarts > 0 ? HP.crit : UI.ink3, fontWeight: p.restarts > 0 ? 700 : 500 }}>{p.restarts}</span>
       <span style={{ fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: UI.ink3 }}>{ageOf(p)}</span>
-      <ChevronRight size={12} style={{ color: "#C6CAD1" }} />
+      {/* 행 액션 — 호버 시 등장 */}
+      <span className="pacts" style={{ display: "flex", alignItems: "center", gap: 2, justifySelf: "end" }}>
+        {([["로그", ScrollText], ["이벤트", Activity], ["재시작", RotateCw]] as const).map(([label, I]) => (
+          <span key={label} role="button" title={label} onClick={(e) => e.stopPropagation()}
+            style={{ display: "grid", placeItems: "center", width: 20, height: 20, borderRadius: 6, color: UI.ink3 }} className="pact">
+            <I size={12} />
+          </span>
+        ))}
+        <ChevronRight size={12} style={{ color: "#C6CAD1", marginLeft: 2 }} />
+      </span>
     </motion.button>
   );
 }
@@ -349,7 +391,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
 
           {/* 표 헤더 */}
           <div style={{ display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
-            <span>상태</span><span>파드</span><span>CPU</span><span>MEM</span><span style={{ textAlign: "right" }}>재시작</span><span style={{ textAlign: "right" }}>나이</span><span />
+            <span>상태</span><span>파드</span><span>READY</span><span>이미지</span><span>QOS</span><span>CPU</span><span>MEM</span><span style={{ textAlign: "right" }}>재시작</span><span style={{ textAlign: "right" }}>나이</span><span />
           </div>
 
           {(() => {
@@ -664,6 +706,9 @@ function App() {
         .op .tile.crit, .op .stchip.crit { animation: critp 1.3s ease-in-out infinite; }
         .op .podrow { transition: background .15s ease; }
         .op .podrow:hover { background: rgba(17,19,24,0.035) !important; }
+        .op .pacts { opacity: 0; transition: opacity .15s ease; }
+        .op .podrow:hover .pacts { opacity: 1; }
+        .op .pact:hover { background: rgba(17,19,24,0.07); color: ${UI.ink} !important; }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.12) saturate(1.15); } }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
