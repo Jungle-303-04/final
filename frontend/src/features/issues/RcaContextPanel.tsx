@@ -5,7 +5,6 @@ import { Link, useLocation } from "react-router-dom";
 import { parseProductFilterUrl, serializeProductFilterUrl } from "../filters/filterUrl";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
-import { Surface } from "../../shared/ui/Surface";
 import { buttonVariants } from "../../shared/ui/primitives/button";
 import type {
   RcaContextPort,
@@ -80,10 +79,9 @@ export function RcaContextPanel({
 
   const { record } = currentFrame.result;
   return (
-    <Surface
+    <section
       aria-labelledby={`rca-context-title-${record.issue.id}`}
-      as="section"
-      className={cn("grid min-w-0 gap-3 p-4", className)}
+      className={cn("grid min-w-0 gap-3 border-y py-4", className)}
       data-slot="rca-context"
     >
       <header className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -110,7 +108,7 @@ export function RcaContextPanel({
       <Link className={cn(buttonVariants({ size: "sm", variant: "outline" }), "w-fit")} to={issuesHref}>
         {t("issues.context.open")}<ExternalLink aria-hidden="true" />
       </Link>
-    </Surface>
+    </section>
   );
 }
 

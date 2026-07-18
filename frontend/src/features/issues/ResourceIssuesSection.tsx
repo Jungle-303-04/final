@@ -23,7 +23,7 @@ export function ResourceIssuesSection({ frame }: { frame: ResourceIssuesFrame })
   }
   if (frame.phase === "failed") {
     return (
-      <section className="rounded-xl border border-status-warning/30 bg-status-warning/5 p-4" role="status">
+      <section className="border-l-2 border-status-warning bg-status-warning/5 py-3 pl-3 pr-2" role="status">
         <h3 className="font-medium">{t("resources.detail.issues.title")}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           {frame.failure.code === "forbidden"
@@ -38,7 +38,7 @@ export function ResourceIssuesSection({ frame }: { frame: ResourceIssuesFrame })
   return (
     <section
       aria-labelledby="resource-issues-title"
-      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 shadow-xs"
+      className="grid min-w-0 gap-3 border-y py-4"
       data-slot="resource-issues"
     >
       <header className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -54,7 +54,7 @@ export function ResourceIssuesSection({ frame }: { frame: ResourceIssuesFrame })
           {t("resources.detail.issues.bounded", { count: frame.data.limit })}
         </p>
       ) : null}
-      <div className="grid gap-2">
+      <div className="divide-y border-y">
         {issues.map((issue) => {
           const tone = issueSeverityTone(issue.severity) ?? issueStatusTone(issue.status);
           const title = issueTitle(issue);
@@ -63,7 +63,7 @@ export function ResourceIssuesSection({ frame }: { frame: ResourceIssuesFrame })
             ? t(statusMessage)
             : humanizeFilterValue(issue.status);
           return (
-            <details className="group min-w-0 overflow-hidden rounded-lg border" key={issue.id}>
+            <details className="group min-w-0 overflow-hidden" key={issue.id}>
               <summary className="flex min-w-0 cursor-pointer list-none items-start gap-3 p-3 marker:content-none">
                 <TriangleAlert aria-hidden="true" className={cn(
                   "mt-0.5 size-4 shrink-0 text-muted-foreground",

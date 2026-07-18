@@ -2,7 +2,7 @@ import { RefreshCw } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
+import { Surface } from "../../shared/ui/Surface";
 import { IssuesListPanel } from "./IssuesListPanel";
 import { IssuesPanels } from "./IssuesPanels";
 import {
@@ -331,11 +331,12 @@ export function IssuesSurface({
   }, [clusterId, refreshController]);
 
   return (
-    <div
-      className="flex min-h-96 min-w-0 gap-4"
+    <Surface
+      as="div"
+      className="flex min-h-96 min-w-0 overflow-hidden"
       data-detail-layout={selected === null ? "closed" : detailFull ? "full" : "peek"}
     >
-      <Card
+      <section
         aria-label={copy.listLabel}
         className={selected === null
           ? "min-w-0 flex-1"
@@ -344,9 +345,9 @@ export function IssuesSurface({
             : "hidden min-w-0 flex-1 lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"}
         role="region"
       >
-        <CardHeader className="flex flex-row items-center gap-3 border-b">
+        <header className="flex min-h-16 flex-row items-center gap-3 border-b px-5 py-4">
           <div className="min-w-0 flex-1">
-            <CardTitle>{copy.listLabel}</CardTitle>
+            <h2 className="font-semibold leading-none">{copy.listLabel}</h2>
             {lastRefreshedAt !== null ? (
               <time
                 className="mt-0.5 block truncate text-[11px] tabular-nums text-muted-foreground"
@@ -365,8 +366,8 @@ export function IssuesSurface({
           >
             <RefreshCw aria-hidden="true" className={cn(list.loading && "motion-safe:animate-spin")} />
           </Button>
-        </CardHeader>
-        <CardContent className="lg:min-h-96">
+        </header>
+        <div className="px-5 lg:min-h-96">
           <IssuesListPanel
             copy={copy}
             detailRegionId={detailRegionId}
@@ -374,11 +375,11 @@ export function IssuesSurface({
             onSelect={selectIssue}
             selected={selected}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </section>
       {selected === null ? null : (
         <div className={cn(
-          "min-w-0 w-full basis-full shrink-0 animate-in fade-in-0 slide-in-from-right-4 transition-[flex-basis] duration-500 ease-out motion-reduce:animate-none motion-reduce:transition-none",
+          "min-w-0 w-full basis-full shrink-0 border-l animate-in fade-in-0 slide-in-from-right-4 transition-[flex-basis] duration-500 ease-out motion-reduce:animate-none motion-reduce:transition-none",
           detailFull ? "lg:basis-full" : "lg:basis-[42rem]",
         )}
         >
@@ -397,7 +398,7 @@ export function IssuesSurface({
           />
         </div>
       )}
-    </div>
+    </Surface>
   );
 }
 

@@ -19,12 +19,6 @@ import { Button } from "../../shared/ui/primitives/button";
 import { Progress } from "../../shared/ui/primitives/progress";
 import { Spinner } from "../../shared/ui/primitives/spinner";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../shared/ui/primitives/card";
-import {
   Tabs,
   TabsContent,
   TabsList,
@@ -114,8 +108,8 @@ export function IssuesPanels({
       role="region"
       tabIndex={-1}
     >
-      <Card className="min-w-0 lg:max-h-[calc(100vh-10rem)]">
-        <CardHeader className="sticky top-0 z-20 flex flex-row items-start gap-3 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+      <div className="min-w-0 lg:max-h-[calc(100vh-10rem)]">
+        <header className="sticky top-0 z-20 flex min-h-16 flex-row items-start gap-3 border-b bg-card/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
           <div className="flex shrink-0 items-center gap-1">
             <Button
               aria-label={copy.detailClose}
@@ -130,9 +124,9 @@ export function IssuesPanels({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <CardTitle className="min-w-0 break-words">
+              <h2 className="min-w-0 break-words font-semibold leading-none">
                 {issueTitle(selected)}
-              </CardTitle>
+              </h2>
               <IssueStatusMark label={copy.statusLabel(selected.status)} tone={issueStatusTone(selected.status)} />
               {confidence !== null ? (
                 <Badge variant="outline">
@@ -165,8 +159,8 @@ export function IssuesPanels({
               {full ? <ChevronsRight aria-hidden="true" /> : <ChevronsLeft aria-hidden="true" />}
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="min-w-0 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
+        </header>
+        <div className="min-w-0 px-5 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
           <Tabs
             onValueChange={(value) => {
               if (value !== null) setActiveTab(value);
@@ -229,8 +223,8 @@ export function IssuesPanels({
               />
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -256,51 +250,49 @@ function IssueOverview({
   const summary = selected.situationSummary?.trim()
     || issueSituationSummary(selected, copy, resolved);
   return (
-    <Card className="gap-0 border-foreground/15 py-0 shadow-sm">
-      <CardContent className="grid min-w-0 gap-4 p-4">
-        <section className="grid min-w-0 gap-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{copy.situationSummary}</h2>
-          <p className="break-words text-base font-medium leading-relaxed text-foreground">{summary}</p>
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-            <Badge variant={resolved ? "secondary" : "outline"}>
-              {resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status)}
+    <section className="grid min-w-0 gap-4 border-b pb-6" data-slot="issue-overview">
+      <section className="grid min-w-0 gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{copy.situationSummary}</h3>
+        <p className="break-words text-base font-medium leading-relaxed text-foreground">{summary}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+          <Badge variant={resolved ? "secondary" : "outline"}>
+            {resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status)}
+          </Badge>
+          {confidence !== null ? (
+            <Badge variant="outline">{copy.confidence} {confidence}</Badge>
+          ) : null}
+          {supportingCount !== null ? (
+            <Badge
+              className="cursor-pointer hover:bg-muted"
+              onClick={onJumpToEvidenceSummary}
+              render={<button type="button" />}
+              variant="outline"
+            >
+              {copy.supportingEvidence} {supportingCount}
             </Badge>
-            {confidence !== null ? (
-              <Badge variant="outline">{copy.confidence} {confidence}</Badge>
-            ) : null}
-            {supportingCount !== null ? (
-              <Badge
-                className="cursor-pointer hover:bg-muted"
-                onClick={onJumpToEvidenceSummary}
-                render={<button type="button" />}
-                variant="outline"
-              >
-                {copy.supportingEvidence} {supportingCount}
-              </Badge>
-            ) : null}
-          </div>
+          ) : null}
+        </div>
+      </section>
+      {missingCount > 0 ? (
+        <section className="grid min-w-0 gap-2 border-l-2 border-status-warning bg-status-warning/10 py-2 pl-3 pr-2">
+          <h4 className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+            <ShieldAlert aria-hidden="true" className="size-4 text-status-warning" />
+            {copy.missingEvidence}
+          </h4>
+          <ul className="grid gap-1.5 text-xs text-muted-foreground">
+            {missingEvidence.map((item, index) => (
+              <li className="break-words" key={`${item}:${index}`}>• {humanizeFilterValue(item)}</li>
+            ))}
+          </ul>
         </section>
-        {missingCount > 0 ? (
-          <section className="grid min-w-0 gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
-            <h3 className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-              <ShieldAlert aria-hidden="true" className="size-4 text-status-warning" />
-              {copy.missingEvidence}
-            </h3>
-            <ul className="grid gap-1.5 text-xs text-muted-foreground">
-              {missingEvidence.map((item, index) => (
-                <li className="break-words" key={`${item}:${index}`}>• {humanizeFilterValue(item)}</li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        {detail?.rootCause ? (
-          <section className="grid min-w-0 gap-1 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3">
-            <h3 className="text-xs font-medium text-status-warning">{copy.rootCause}</h3>
-            <p className="break-words text-sm">{copy.causeLabel(detail.rootCause)}</p>
-          </section>
-        ) : null}
-      </CardContent>
-    </Card>
+      ) : null}
+      {detail?.rootCause ? (
+        <section className="grid min-w-0 gap-1 border-l-2 border-status-warning py-2 pl-3 pr-2">
+          <h4 className="text-xs font-medium text-status-warning">{copy.rootCause}</h4>
+          <p className="break-words text-sm">{copy.causeLabel(detail.rootCause)}</p>
+        </section>
+      ) : null}
+    </section>
   );
 }
 
@@ -323,14 +315,14 @@ function EvidencePanel({
   state: SectionState<IssueEvidencePage>;
 }) {
   return (
-    <SectionCard title={copy.evidenceLabel}>
+    <IssueSection title={copy.evidenceLabel}>
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.evidenceUnavailable}>
         {(page) => page.items.length === 0 ? (
           <IssueEmpty text={copy.sectionEmpty} />
         ) : (
-          <ul className="grid gap-3">
+          <ul className="divide-y">
             {page.items.map((record) => (
-              <li className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3" key={record.id}>
+              <li className="grid min-w-0 gap-3 py-4 first:pt-0 last:pb-0" key={record.id}>
                 <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <p className="truncate font-medium" title={record.summary}>
                     {copy.evidenceRecordLabel(record.summary)}
@@ -352,9 +344,9 @@ function EvidencePanel({
                     </time>
                   ) : null}
                 </div>
-                <ul className="grid gap-2 text-sm text-muted-foreground">
+                <ul className="divide-y border-t text-sm text-muted-foreground">
                   {record.sources.map((source, index) => (
-                    <li className="grid min-w-0 gap-1 rounded-lg border bg-card p-2.5" key={`${source.source}:${index}`}>
+                    <li className="grid min-w-0 gap-1 py-2.5" key={`${source.source}:${index}`}>
                       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
                         <Badge className="max-w-44 truncate" title={source.source} variant="secondary">
                           {copy.evidenceSourceLabel(source.source)}
@@ -386,7 +378,7 @@ function EvidencePanel({
           </ul>
         )}
       </IssueSectionFrame>
-    </SectionCard>
+    </IssueSection>
   );
 }
 
@@ -400,7 +392,7 @@ function ReportsPanel({
   state: SectionState<IssueRcaReportPage>;
 }) {
   return (
-    <SectionCard title={copy.reportsLabel}>
+    <IssueSection title={copy.reportsLabel}>
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.reportsUnavailable}>
         {(page) => page.items.length === 0 ? (
           <IssueEmpty text={copy.reportsEmpty} />
@@ -463,7 +455,7 @@ function ReportsPanel({
           </ul>
         )}
       </IssueSectionFrame>
-    </SectionCard>
+    </IssueSection>
   );
 }
 
@@ -810,7 +802,7 @@ function ReportNarrative({
   narrative: IssueRcaNarrative;
 }) {
   return (
-    <article className="grid min-w-0 gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+    <article className="grid min-w-0 gap-4 border-y border-primary/20 py-4">
       <header className="flex items-center gap-2 text-sm font-semibold">
         <BrainCircuit aria-hidden="true" className="size-4 text-primary" />
         <h4>{copy.narrativeLabel}</h4>
@@ -823,7 +815,7 @@ function ReportNarrative({
         <NarrativeText label={copy.narrativeImpact} value={narrative.impact} />
         <NarrativeText label={copy.narrativeReasoning} value={narrative.reasoning} />
       </div>
-      <section className="grid gap-1 rounded-lg border border-status-healthy/30 bg-card p-3">
+      <section className="grid gap-1 border-l-2 border-status-healthy py-2 pl-3">
         <h5 className="text-xs font-medium text-status-healthy">
           {copy.narrativeRecommendedAction}
         </h5>
@@ -860,7 +852,7 @@ function NarrativeText({ label, value }: { label: string; value: string }) {
 
 function NarrativeList({ items, label }: { items: readonly string[]; label: string }) {
   return (
-    <section className="grid min-w-0 gap-1.5 rounded-lg border bg-card p-3">
+    <section className="grid min-w-0 gap-1.5 border-t pt-3">
       <h5 className="text-xs font-medium text-muted-foreground">{label}</h5>
       <ul className="grid gap-1.5 text-xs leading-relaxed">
         {items.map((item, index) => (
@@ -912,7 +904,7 @@ function RecoveryPanel({
     selectionPending: selectionPendingId !== null,
   });
   return (
-    <SectionCard contentClassName="gap-5" title={copy.recoveryLabel}>
+    <IssueSection contentClassName="gap-5" title={copy.recoveryLabel}>
       <RecoveryProgress
         copy={copy}
         progress={recoveryProgress}
@@ -1053,7 +1045,7 @@ function RecoveryPanel({
           );
         }}
       </IssueSectionFrame>
-    </SectionCard>
+    </IssueSection>
   );
 }
 
@@ -1210,17 +1202,17 @@ function RecoveryProgress({
       ? "[&_div[data-slot=progress-indicator]]:bg-status-warning"
       : "[&_div[data-slot=progress-indicator]]:bg-primary";
   const activeMarkerClass = progressTone === "failed"
-    ? "border-destructive bg-destructive text-destructive-foreground shadow-sm"
+    ? "border-destructive bg-destructive text-destructive-foreground"
     : progressTone === "approval"
-      ? "border-status-warning bg-status-warning text-foreground shadow-sm"
-      : "border-primary bg-primary text-primary-foreground shadow-sm";
+      ? "border-status-warning bg-status-warning text-foreground"
+      : "border-primary bg-primary text-primary-foreground";
   const markerAlignedProgress = progress.phase === "completed"
     ? 100
     : Math.min(100, Math.max(0, ((progress.activeStep + 0.5) / steps.length) * 100));
   return (
     <section
       aria-live="polite"
-      className="grid min-w-0 gap-4 rounded-xl border border-foreground/15 bg-card p-4 shadow-sm"
+      className="grid min-w-0 gap-4 border-y py-4"
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="min-w-0 flex-1">
@@ -1278,7 +1270,7 @@ function RecoveryProgress({
   );
 }
 
-function SectionCard({
+function IssueSection({
   children,
   contentClassName,
   title,
@@ -1288,9 +1280,9 @@ function SectionCard({
   title: string;
 }) {
   return (
-    <Card className="gap-0 py-0">
-      <CardHeader className="border-b bg-muted/45 p-4"><CardTitle>{title}</CardTitle></CardHeader>
-      <CardContent className={cn("grid gap-3 p-4", contentClassName)}>{children}</CardContent>
-    </Card>
+    <section className="grid min-w-0 gap-4 border-t pt-6" data-slot="issue-section">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <div className={cn("grid gap-3", contentClassName)}>{children}</div>
+    </section>
   );
 }

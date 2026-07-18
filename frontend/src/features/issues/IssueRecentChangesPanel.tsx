@@ -1,11 +1,5 @@
 import { ArrowLeft, ArrowRight, CircleAlert, ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../shared/ui/primitives/card";
 import type { IssueRecentChanges } from "./issuesContract";
 import type { IssuesSurfaceCopy, SectionState } from "./issuesSurfaceContract";
 
@@ -20,16 +14,13 @@ export function IssueRecentChangesPanel({
   if (!hasChanges && state.failure === null) return null;
 
   return (
-    <Card
+    <section
       aria-label={copy.recentChangesLabel}
-      className="gap-0 py-0"
+      className="grid min-w-0 gap-4 border-t pt-6"
       data-testid="issue-recent-changes"
-      role="region"
     >
-      <CardHeader className="border-b bg-muted/45 p-4">
-        <CardTitle>{copy.recentChangesLabel}</CardTitle>
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-3 p-4">
+      <h3 className="text-sm font-semibold">{copy.recentChangesLabel}</h3>
+      <div className="grid min-w-0 gap-3">
         {state.failure ? (
           <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 text-sm text-destructive">
             <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -58,7 +49,7 @@ export function IssueRecentChangesPanel({
                   </time>
                 </div>
                 {change.imageBefore !== null || change.imageAfter !== null ? (
-                  <dl className="grid min-w-0 gap-2 rounded-md bg-muted/35 p-3">
+                  <dl className="grid min-w-0 gap-2 border-l-2 border-muted-foreground/30 pl-3">
                     <RecentImageFact
                       icon={<ArrowLeft aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />}
                       label={copy.recentChangesImageBeforeLabel}
@@ -113,8 +104,8 @@ export function IssueRecentChangesPanel({
             ))}
           </ul>
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
