@@ -126,8 +126,8 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
     <div className="tp" style={{ minHeight: embedded ? undefined : "100vh", padding: embedded ? 0 : "44px 24px", display: "flex", justifyContent: "center" }}>
       <div style={{ width: embedded ? "100%" : 992, maxWidth: "100%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
-          <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>
-          <div style={{ fontSize: 13, color: UI.ink3 }}>prod-eks · shop · 호출 흐름 — 드래그 재배치 · 더블클릭 = 맵에서 보기</div>
+          {!embedded && <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
+          <div style={{ fontSize: 13, color: UI.ink3 }}>prod-eks · shop · 호출 흐름 — 드래그 재배치 · 선·노드 클릭 = 상세</div>
           {/* 뷰 내비게이션 — 셸에 통합되면 셸 내비가 대신한다 */}
           {!embedded && (
           <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>

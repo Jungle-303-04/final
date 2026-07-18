@@ -380,7 +380,7 @@ function Hi({ text, q }: { text: string; q: string }) {
   return <>{text.slice(0, i)}<span style={{ background: "#FFF1B8", borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
 }
 
-function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; rows: Row[]; q: string; inScope: boolean; dense: boolean; onOpen: (r: Row) => void }) {
+function ResourceTable({ kind, rows, q, inScope, dense, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; inScope: boolean; dense: boolean; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
   const spec = SPEC[kind.id];
   if (!spec) return null;
   const filtered = rows;
@@ -400,7 +400,10 @@ function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; 
       </div>
       {filtered.length === 0 ? (
         <div style={{ padding: "40px 18px", textAlign: "center", fontSize: 13, color: UI.ink3 }}>
-          {q ? "검색 결과가 없습니다" : inScope ? `이 범위에는 ${kind.label} 리소스가 없습니다` : `${kind.label} 리소스가 없습니다`}
+          <span>{q ? `"${q}" 검색 결과가 없습니다` : `${filterDesc} ${kind.label} 리소스가 없습니다`}</span>
+          {onClearFilter && (q || filterDesc) ? (
+            <button onClick={onClearFilter} style={{ display: "block", margin: "10px auto 0", border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600, color: BLUE, cursor: "pointer" }}>필터 해제</button>
+          ) : null}
         </div>
       ) : filtered.map((row, i) => (
         <motion.div key={`${kind.id}-${String(row.name)}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 10) * 0.022 }}
@@ -669,7 +672,7 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, for
   const doRestart = () => {
     const t = new Date(); const ts = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
     setRestartedAt(ts);
-    onToast?.({ title: `${name} 재시작 요청됨`, sub: "kubectl rollout restart — 파드가 순차 교체됩니다", tone: "ok" });
+    onToast?.({ title: `${name} 재시작 요청됨`, sub: isPod ? "kubectl delete pod — 소유 워크로드가 새 파드를 만듭니다" : "kubectl rollout restart — 파드가 순차 교체됩니다", tone: "ok" });
   };
   const doDiff = () => {
     if (yamlSaved && yamlSaved !== yaml) { setDiffMode(true); setTab("yaml"); }
@@ -939,7 +942,8 @@ status:
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
                   <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3 }}>{name}.yaml</span>
                   {yamlEditing && dirty && <Badge text="수정됨" tone="blue" />}
-                  {diffMode && <Badge text="비교 — 서버 원본 대비" tone="purple" />}
+                  {diffMode && <><Badge text="비교 — 서버 원본 ↔ 적용본" tone="purple" />
+                    <span style={{ fontSize: 10.5, fontFamily: MONO }}><span className="y-del" style={{ padding: "1px 5px", borderRadius: 4 }}>− 원본</span> <span className="y-add" style={{ padding: "1px 5px", borderRadius: 4 }}>+ 적용본</span></span></>}
                   <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     {diffMode ? (
                       <button onClick={() => setDiffMode(false)}
@@ -1405,7 +1409,10 @@ function App() {
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
-                  <ResourceTable kind={kind} rows={shownRows} q={q} inScope={inScope} dense={dense} onOpen={(r) => setDetail({ kind, row: r })} />
+                  <ResourceTable kind={kind} rows={shownRows} q={q} inScope={inScope} dense={dense}
+                    filterDesc={[inScope ? `${scopeLabel}` : "", ns !== "모든 네임스페이스" ? `${ns} 네임스페이스` : ""].filter(Boolean).join(" · ")}
+                    onClearFilter={() => { setQ(""); setNs("모든 네임스페이스"); }}
+                    onOpen={(r) => setDetail({ kind, row: r })} />
                 </motion.div>
               </div>
             )} />
