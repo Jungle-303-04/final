@@ -22,6 +22,86 @@ export function toProviderResourceDetail(
   const raw = record(value);
   const type = requiredString(raw.type);
   const conditions = conditionList(raw.conditions);
+  if (type === "core-workload") return {
+    type,
+    conditions,
+    kind: requiredString(raw.kind),
+    owner: namedReference(raw.owner),
+    replicas: replicas(raw.replicas),
+    unavailable: optionalInteger(raw.unavailable),
+    strategyType: optionalString(raw.strategy_type),
+    maxSurge: optionalString(raw.max_surge),
+    maxUnavailable: optionalString(raw.max_unavailable),
+    minReadySeconds: optionalInteger(raw.min_ready_seconds),
+    revisionHistoryCount: optionalInteger(raw.revision_history_count),
+    serviceAccountName: optionalString(raw.service_account_name),
+    selector: keyValues(raw.selector),
+    initContainers: containerProjections(raw.init_containers),
+    containers: containerProjections(raw.containers),
+  };
+  if (type === "core-pod") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    nodeName: optionalString(raw.node_name),
+    podIp: optionalString(raw.pod_ip),
+    hostIp: optionalString(raw.host_ip),
+    serviceAccountName: optionalString(raw.service_account_name),
+    owner: namedReference(raw.owner),
+    initContainers: containerProjections(raw.init_containers),
+    containers: containerProjections(raw.containers),
+    ephemeralContainerNames: stringList(raw.ephemeral_container_names),
+  };
+  if (type === "core-service") return {
+    type,
+    conditions,
+    serviceType: optionalString(raw.service_type),
+    clusterIp: optionalString(raw.cluster_ip),
+    externalName: optionalString(raw.external_name),
+    externalIps: stringList(raw.external_ips),
+    loadBalancerAddresses: stringList(raw.load_balancer_addresses),
+    externalTrafficPolicy: optionalString(raw.external_traffic_policy),
+    internalTrafficPolicy: optionalString(raw.internal_traffic_policy),
+    ipFamilies: stringList(raw.ip_families),
+    ports: stringList(raw.ports),
+    selector: keyValues(raw.selector),
+  };
+  if (type === "core-ingress") return {
+    type,
+    conditions,
+    ingressClassName: optionalString(raw.ingress_class_name),
+    addresses: stringList(raw.addresses),
+    routes: records(raw.routes).map((item) => ({
+      host: optionalString(item.host),
+      path: requiredString(item.path),
+      pathType: optionalString(item.path_type),
+      backendService: requiredString(item.backend_service),
+      backendPort: optionalString(item.backend_port),
+    })),
+    tls: records(raw.tls).map((item) => ({
+      secretName: optionalString(item.secret_name),
+      hosts: stringList(item.hosts),
+    })),
+  };
+  if (type === "argo-application") return {
+    type,
+    conditions,
+    syncStatus: optionalString(raw.sync_status),
+    healthStatus: optionalString(raw.health_status),
+    operationPhase: optionalString(raw.operation_phase),
+    repositoryUrl: optionalString(raw.repository_url),
+    sourcePath: optionalString(raw.source_path),
+    targetRevision: optionalString(raw.target_revision),
+    chart: optionalString(raw.chart),
+    destinationServer: optionalString(raw.destination_server),
+    destinationNamespace: optionalString(raw.destination_namespace),
+    automated: requiredBoolean(raw.automated),
+    selfHeal: requiredBoolean(raw.self_heal),
+    prune: requiredBoolean(raw.prune),
+    retryEnabled: requiredBoolean(raw.retry_enabled),
+    managedResourceCount: requiredInteger(raw.managed_resource_count),
+    revisionHistory: stringList(raw.revision_history),
+  };
   if (type === "aws-machine") return {
     type,
     conditions,
@@ -747,6 +827,24 @@ function conditionList(value: unknown): ProviderCondition[] {
       lastTransitionTime: optionalString(item.last_transition_time),
     };
   });
+}
+
+function containerProjections(value: unknown) {
+  return records(value).map((item) => ({
+    name: requiredString(item.name),
+    image: optionalString(item.image),
+    state: optionalString(item.state),
+    stateReason: optionalString(item.state_reason),
+    ready: optionalBoolean(item.ready),
+    restartCount: requiredInteger(item.restart_count),
+    ports: records(item.ports).map((port) => ({
+      name: optionalString(port.name),
+      containerPort: requiredInteger(port.container_port),
+      protocol: requiredString(port.protocol),
+    })),
+    requests: keyValues(item.requests),
+    limits: keyValues(item.limits),
+  }));
 }
 
 function scaling(value: unknown): ProviderScaling {

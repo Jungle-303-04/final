@@ -159,6 +159,95 @@ interface ProviderDetailBaseEndpoint {
   conditions: ProviderConditionEndpoint[];
 }
 
+export interface ProviderContainerProjectionEndpoint {
+  name: string;
+  image: string | null;
+  state: string | null;
+  state_reason: string | null;
+  ready: boolean | null;
+  restart_count: number;
+  ports: Array<{ name: string | null; container_port: number; protocol: string }>;
+  requests: ProviderKeyValueEndpoint[];
+  limits: ProviderKeyValueEndpoint[];
+}
+
+export interface CoreWorkloadProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-workload";
+  kind: string;
+  owner: ProviderNamedReferenceEndpoint | null;
+  replicas: ProviderReplicasEndpoint;
+  unavailable: number | null;
+  strategy_type: string | null;
+  max_surge: string | null;
+  max_unavailable: string | null;
+  min_ready_seconds: number | null;
+  revision_history_count: number | null;
+  service_account_name: string | null;
+  selector: ProviderKeyValueEndpoint[];
+  init_containers: ProviderContainerProjectionEndpoint[];
+  containers: ProviderContainerProjectionEndpoint[];
+}
+
+export interface CorePodProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-pod";
+  phase: string | null;
+  node_name: string | null;
+  pod_ip: string | null;
+  host_ip: string | null;
+  service_account_name: string | null;
+  owner: ProviderNamedReferenceEndpoint | null;
+  init_containers: ProviderContainerProjectionEndpoint[];
+  containers: ProviderContainerProjectionEndpoint[];
+  ephemeral_container_names: string[];
+}
+
+export interface CoreServiceProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-service";
+  service_type: string | null;
+  cluster_ip: string | null;
+  external_name: string | null;
+  external_ips: string[];
+  load_balancer_addresses: string[];
+  external_traffic_policy: string | null;
+  internal_traffic_policy: string | null;
+  ip_families: string[];
+  ports: string[];
+  selector: ProviderKeyValueEndpoint[];
+}
+
+export interface CoreIngressProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-ingress";
+  ingress_class_name: string | null;
+  addresses: string[];
+  routes: Array<{
+    host: string | null;
+    path: string;
+    path_type: string | null;
+    backend_service: string;
+    backend_port: string | null;
+  }>;
+  tls: Array<{ secret_name: string | null; hosts: string[] }>;
+}
+
+export interface ArgoApplicationProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "argo-application";
+  sync_status: string | null;
+  health_status: string | null;
+  operation_phase: string | null;
+  repository_url: string | null;
+  source_path: string | null;
+  target_revision: string | null;
+  chart: string | null;
+  destination_server: string | null;
+  destination_namespace: string | null;
+  automated: boolean;
+  self_heal: boolean;
+  prune: boolean;
+  retry_enabled: boolean;
+  managed_resource_count: number;
+  revision_history: string[];
+}
+
 export interface AwsMachineProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
   type: "aws-machine";
   instance_type: string | null;
@@ -851,6 +940,11 @@ export interface TlsRouteProviderDetailEndpoint extends ProviderDetailBaseEndpoi
 }
 
 export type ProviderResourceDetailEndpoint =
+  | CoreWorkloadProviderDetailEndpoint
+  | CorePodProviderDetailEndpoint
+  | CoreServiceProviderDetailEndpoint
+  | CoreIngressProviderDetailEndpoint
+  | ArgoApplicationProviderDetailEndpoint
   | AwsMachineProviderDetailEndpoint
   | AwsManagedClusterProviderDetailEndpoint
   | AwsManagedControlPlaneProviderDetailEndpoint

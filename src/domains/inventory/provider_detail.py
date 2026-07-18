@@ -8,6 +8,7 @@ from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit
 
 from packages.contracts.inventory_provider import (
+    ArgoApplicationProviderDetail,
     AwsAddon,
     AwsMachineProviderDetail,
     AwsManagedClusterProviderDetail,
@@ -31,6 +32,12 @@ from packages.contracts.inventory_provider import (
     CertificateRequestProviderDetail,
     ClusterComplianceReportProviderDetail,
     ComplianceControlDetail,
+    CoreIngressProviderDetail,
+    CoreIngressRoute,
+    CoreIngressTls,
+    CorePodProviderDetail,
+    CoreServiceProviderDetail,
+    CoreWorkloadProviderDetail,
     CronWorkflowProviderDetail,
     CrossplaneCompositeProviderDetail,
     CrossplaneManagedResourceProviderDetail,
@@ -71,6 +78,8 @@ from packages.contracts.inventory_provider import (
     PrometheusRuleProviderDetail,
     ProviderAddress,
     ProviderCondition,
+    ProviderContainerPort,
+    ProviderContainerProjection,
     ProviderKeyValue,
     ProviderNamedReference,
     ProviderReference,
@@ -103,6 +112,8 @@ EXTERNAL_SECRETS_GROUP = "external-secrets.io"
 SEALED_SECRETS_GROUP = "sealedsecrets.bitnami.com"
 GATEWAY_GROUP = "gateway.networking.k8s.io"
 BATCH_GROUP = "batch"
+APPS_GROUP = "apps"
+NETWORKING_GROUP = "networking.k8s.io"
 KARPENTER_GROUP = "karpenter.sh"
 KARPENTER_AWS_GROUP = "karpenter.k8s.aws"
 KEDA_GROUP = "keda.sh"
@@ -2081,7 +2092,213 @@ def _bounded_score(value: object) -> float | None:
     return score if isfinite(score) and 0 <= score <= 10 else None
 
 
+def _core_workload(raw: Mapping[str, Any]) -> CoreWorkloadProviderDetail:
+    template = _mapping(raw.get("pod_template"))
+    template_spec = _mapping(template.get("spec"))
+    owner_name = _text(raw.get("owner_name"))
+    owner_kind = _text(raw.get("owner_kind"))
+    return CoreWorkloadProviderDetail(
+        kind=_text(raw.get("kind")) or "Workload",
+        owner=ProviderNamedReference(kind=owner_kind, name=owner_name)
+        if owner_name is not None
+        else None,
+        replicas=ProviderReplicas(
+            desired=_int(raw.get("desired_replicas")),
+            ready=_int(raw.get("ready_replicas")),
+            available=_int(raw.get("available_replicas")),
+            up_to_date=_int(raw.get("updated_replicas")),
+        ),
+        unavailable=_int(raw.get("unavailable_replicas")),
+        strategy_type=_text(raw.get("strategy_type")),
+        max_surge=_text(raw.get("max_surge")),
+        max_unavailable=_text(raw.get("max_unavailable")),
+        min_ready_seconds=_int(raw.get("min_ready_seconds")),
+        revision_history_count=_int(raw.get("revision_history_count")),
+        service_account_name=_text(template_spec.get("serviceAccountName")),
+        selector=_key_values_at(raw, "selector", "matchLabels"),
+        init_containers=_container_projections(template_spec.get("initContainers")),
+        containers=_container_projections(template_spec.get("containers")),
+        conditions=_condition_items(_mapping_items(raw.get("conditions"))),
+    )
+
+
+def _core_pod(raw: Mapping[str, Any]) -> CorePodProviderDetail:
+    owner_name = _text(raw.get("owner_name"))
+    owner_kind = _text(raw.get("owner_kind"))
+    return CorePodProviderDetail(
+        phase=_text(raw.get("phase")),
+        node_name=_text(raw.get("node_name")),
+        pod_ip=_text(raw.get("pod_ip")),
+        host_ip=_text(raw.get("host_ip")),
+        service_account_name=_text(raw.get("service_account_name")),
+        owner=ProviderNamedReference(kind=owner_kind, name=owner_name)
+        if owner_name is not None
+        else None,
+        init_containers=_container_projections(raw.get("init_containers")),
+        containers=_container_projections(raw.get("containers")),
+        ephemeral_container_names=[
+            name
+            for item in _mapping_items(raw.get("ephemeral_containers"))
+            if (name := _text(item.get("name"))) is not None
+        ][:MAX_COLLECTION_ITEMS],
+        conditions=_condition_items(_mapping_items(raw.get("conditions"))),
+    )
+
+
+def _core_service(raw: Mapping[str, Any]) -> CoreServiceProviderDetail:
+    return CoreServiceProviderDetail(
+        service_type=_text(raw.get("type")),
+        cluster_ip=_text(raw.get("cluster_ip")),
+        external_name=_text(raw.get("external_name")),
+        external_ips=_text_items(raw.get("external_ips")),
+        load_balancer_addresses=_text_items(raw.get("external_hosts")),
+        external_traffic_policy=_text(raw.get("external_traffic_policy")),
+        internal_traffic_policy=_text(raw.get("internal_traffic_policy")),
+        ip_families=_text_items(raw.get("ip_families")),
+        ports=[_service_port_text(item) for item in _mapping_items(raw.get("ports"))][
+            :MAX_COLLECTION_ITEMS
+        ],
+        selector=_key_values_at(raw, "selector"),
+        conditions=[],
+    )
+
+
+def _service_port_text(item: Mapping[str, Any]) -> str:
+    name = _text(item.get("name"))
+    port = _int(item.get("port"))
+    target = _text(item.get("targetPort")) or (
+        str(target_number) if (target_number := _int(item.get("targetPort"))) is not None else None
+    )
+    protocol = _text(item.get("protocol")) or "TCP"
+    identity = f"{name}: " if name is not None else ""
+    route = str(port) if port is not None else "?"
+    return f"{identity}{route} → {target or route}/{protocol}"
+
+
+def _core_ingress(raw: Mapping[str, Any]) -> CoreIngressProviderDetail:
+    status_ingress = _mapping_items_at(raw, "status", "loadBalancer", "ingress")
+    addresses = [
+        value
+        for item in status_ingress
+        if (value := _text(item.get("hostname")) or _text(item.get("ip"))) is not None
+    ]
+    routes: list[CoreIngressRoute] = []
+    for rule in _mapping_items_at(raw, "spec", "rules"):
+        host = _text(rule.get("host"))
+        for path in _mapping_items_at(rule, "http", "paths"):
+            if route := _ingress_route(path, host):
+                routes.append(route)
+    default_backend = _mapping_at(raw, "spec", "defaultBackend")
+    if default_backend and (
+        route := _ingress_route({"path": "/", "backend": default_backend}, None)
+    ):
+        routes.insert(0, route)
+    tls = [
+        CoreIngressTls(
+            secret_name=_text(item.get("secretName")),
+            hosts=_text_items(item.get("hosts")),
+        )
+        for item in _mapping_items_at(raw, "spec", "tls")
+    ][:MAX_COLLECTION_ITEMS]
+    return CoreIngressProviderDetail(
+        ingress_class_name=_text_at(raw, "spec", "ingressClassName"),
+        addresses=addresses[:MAX_COLLECTION_ITEMS],
+        routes=routes[:MAX_COLLECTION_ITEMS],
+        tls=tls,
+        conditions=_conditions(raw),
+    )
+
+
+def _ingress_route(path: Mapping[str, Any], host: str | None) -> CoreIngressRoute | None:
+    service = _mapping_at(path, "backend", "service")
+    name = _text(service.get("name"))
+    if name is None:
+        return None
+    port = _mapping(service.get("port"))
+    port_value = _text(port.get("name"))
+    if port_value is None and (number := _int(port.get("number"))) is not None:
+        port_value = str(number)
+    return CoreIngressRoute(
+        host=host,
+        path=_text(path.get("path")) or "/",
+        path_type=_text(path.get("pathType")),
+        backend_service=name,
+        backend_port=port_value,
+    )
+
+
+def _argo_application(raw: Mapping[str, Any]) -> ArgoApplicationProviderDetail:
+    source = _mapping_at(raw, "spec", "source")
+    automated = _mapping_at(raw, "spec", "syncPolicy", "automated")
+    return ArgoApplicationProviderDetail(
+        sync_status=_text_at(raw, "status", "sync", "status"),
+        health_status=_text_at(raw, "status", "health", "status"),
+        operation_phase=_text_at(raw, "status", "operationState", "phase"),
+        repository_url=_text(source.get("repoURL")),
+        source_path=_text(source.get("path")),
+        target_revision=_text(source.get("targetRevision")),
+        chart=_text(source.get("chart")),
+        destination_server=_text_at(raw, "spec", "destination", "server"),
+        destination_namespace=_text_at(raw, "spec", "destination", "namespace"),
+        automated=bool(automated),
+        self_heal=_bool(automated.get("selfHeal")) is True,
+        prune=_bool(automated.get("prune")) is True,
+        retry_enabled=bool(_mapping_at(raw, "spec", "syncPolicy", "retry")),
+        managed_resource_count=len(_mapping_items_at(raw, "status", "resources")),
+        revision_history=[
+            revision
+            for item in _mapping_items_at(raw, "status", "history")
+            if (revision := _text(item.get("revision"))) is not None
+        ][:MAX_COLLECTION_ITEMS],
+        conditions=_conditions(raw),
+    )
+
+
+def _container_projections(value: object) -> list[ProviderContainerProjection]:
+    result: list[ProviderContainerProjection] = []
+    for item in _mapping_items(value):
+        name = _text(item.get("name"))
+        if name is None:
+            continue
+        ports = [
+            ProviderContainerPort(
+                name=_text(port.get("name")),
+                container_port=container_port,
+                protocol=_text(port.get("protocol")) or "TCP",
+            )
+            for port in _mapping_items(item.get("ports"))
+            if (
+                container_port := _int(port.get("container_port"))
+                or _int(port.get("containerPort"))
+            )
+            is not None
+        ]
+        resources = _mapping(item.get("resources"))
+        result.append(
+            ProviderContainerProjection(
+                name=name,
+                image=_text(item.get("image")),
+                state=_text(item.get("state")),
+                state_reason=_text(item.get("state_reason")),
+                ready=_bool(item.get("ready")),
+                restart_count=_int(item.get("restart_count")) or 0,
+                ports=ports[:MAX_COLLECTION_ITEMS],
+                requests=_key_values_at(resources, "requests"),
+                limits=_key_values_at(resources, "limits"),
+            )
+        )
+    return result[:MAX_COLLECTION_ITEMS]
+
+
 PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
+    (APPS_GROUP, "Deployment"): _core_workload,
+    (APPS_GROUP, "DaemonSet"): _core_workload,
+    (APPS_GROUP, "StatefulSet"): _core_workload,
+    (APPS_GROUP, "ReplicaSet"): _core_workload,
+    ("", "Pod"): _core_pod,
+    ("", "Service"): _core_service,
+    (NETWORKING_GROUP, "Ingress"): _core_ingress,
+    (ARGO_GROUP, "Application"): _argo_application,
     (INFRASTRUCTURE_GROUP, "AWSMachine"): _aws_machine,
     (INFRASTRUCTURE_GROUP, "AWSManagedCluster"): _aws_managed_cluster,
     (CONTROL_PLANE_GROUP, "AWSManagedControlPlane"): _aws_managed_control_plane,

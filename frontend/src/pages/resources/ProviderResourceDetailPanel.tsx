@@ -8,6 +8,7 @@ import { Collapse, CollapseChevron } from "../../shared/ui/primitives/collapse";
 import { Input } from "../../shared/ui/primitives/input";
 import { Progress } from "../../shared/ui/primitives/progress";
 import type {
+  ProviderContainerProjection,
   ProviderCondition,
   ProviderResourceDetail,
 } from "../../features/resources/providerResourceContract";
@@ -65,6 +66,12 @@ export function ProviderResourceDetailPanel({
           <DefinitionGrid entries={section.rows.map(([label, value]) => [t(label), value])} />
         </section>
       ))}
+      {detail.type === "core-workload" || detail.type === "core-pod" ? (
+        <>
+          <ContainerProjectionPanel containers={detail.initContainers} title={t("resources.detail.provider.initContainers")} />
+          <ContainerProjectionPanel containers={detail.containers} title={t("resources.detail.provider.containers")} />
+        </>
+      ) : null}
       {detail.type === "persistent-volume-claim" ? (
         <PvcObservedUsagePanel frame={metricHistory} resourceId={resourceId} />
       ) : null}
@@ -94,6 +101,45 @@ export function ProviderResourceDetailPanel({
         />
       ) : null}
       {detail.conditions.length > 0 ? <ProviderConditions conditions={detail.conditions} /> : null}
+    </section>
+  );
+}
+
+function ContainerProjectionPanel({
+  containers,
+  title,
+}: {
+  containers: ProviderContainerProjection[];
+  title: string;
+}) {
+  const { formatNumber, t } = useI18n();
+  if (containers.length === 0) return null;
+  return (
+    <section className="grid gap-2">
+      <h4 className="text-sm font-medium">{title}</h4>
+      <ul className="grid gap-2">
+        {containers.map((container) => (
+          <li className="grid gap-2 rounded-lg border bg-background/65 p-3" key={container.name}>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-sm font-medium" title={container.name}>{container.name}</span>
+              <StatusMark
+                label={container.stateReason ?? container.state ?? t("common.value.unavailable")}
+                tone={container.ready === true ? "healthy" : container.ready === false ? "critical" : "unknown"}
+              />
+            </div>
+            <DefinitionGrid entries={[
+              ...(container.image ? [[t("resources.detail.provider.image"), container.image] as [string, string]] : []),
+              [t("resources.detail.provider.restarts"), formatNumber(container.restartCount)],
+              ...(container.ports.length ? [[
+                t("resources.detail.provider.ports"),
+                container.ports.map((port) => `${port.name ? `${port.name}:` : ""}${port.containerPort}/${port.protocol}`).join(" · "),
+              ] as [string, string]] : []),
+              ...(container.requests.length ? [[t("resources.detail.provider.requests"), formatKeyValues(container.requests)!] as [string, string]] : []),
+              ...(container.limits.length ? [[t("resources.detail.provider.limits"), formatKeyValues(container.limits)!] as [string, string]] : []),
+            ]} />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -685,6 +731,83 @@ function providerSections(
   detail: ProviderResourceDetail,
   t: TranslationFunction,
 ): ProviderSection[] {
+  if (detail.type === "core-workload") return [
+    section("workload-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.kind", detail.kind],
+      ["resources.detail.provider.owner", namedReferenceLabel(detail.owner)],
+      ["resources.detail.provider.desired", number(detail.replicas.desired)],
+      ["resources.detail.provider.ready", number(detail.replicas.ready)],
+      ["resources.detail.provider.available", number(detail.replicas.available)],
+      ["resources.detail.provider.upToDate", number(detail.replicas.upToDate)],
+      ["resources.detail.provider.unavailable", number(detail.unavailable)],
+    ]),
+    section("workload-strategy", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.strategy", detail.strategyType],
+      ["resources.detail.provider.maxSurge", detail.maxSurge],
+      ["resources.detail.provider.maxUnavailable", detail.maxUnavailable],
+      ["resources.detail.provider.minReadySeconds", number(detail.minReadySeconds)],
+      ["resources.detail.provider.revisionHistory", number(detail.revisionHistoryCount)],
+      ["resources.detail.provider.serviceAccount", detail.serviceAccountName],
+      ["resources.detail.provider.selector", formatKeyValues(detail.selector)],
+    ]),
+  ];
+  if (detail.type === "core-pod") return [
+    section("pod-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.node", detail.nodeName],
+      ["resources.detail.provider.podIp", detail.podIp],
+      ["resources.detail.provider.hostIp", detail.hostIp],
+      ["resources.detail.provider.serviceAccount", detail.serviceAccountName],
+      ["resources.detail.provider.owner", namedReferenceLabel(detail.owner)],
+      ["resources.detail.provider.ephemeralContainers", join(detail.ephemeralContainerNames)],
+    ]),
+  ];
+  if (detail.type === "core-service") return [
+    section("service-network", "resources.detail.provider.network", [
+      ["resources.detail.provider.serviceType", detail.serviceType],
+      ["resources.detail.provider.clusterIp", detail.clusterIp],
+      ["resources.detail.provider.externalName", detail.externalName],
+      ["resources.detail.provider.externalIps", join(detail.externalIps)],
+      ["resources.detail.provider.addresses", join(detail.loadBalancerAddresses)],
+      ["resources.detail.provider.ipFamilies", join(detail.ipFamilies)],
+      ["resources.detail.provider.externalTrafficPolicy", detail.externalTrafficPolicy],
+      ["resources.detail.provider.internalTrafficPolicy", detail.internalTrafficPolicy],
+      ["resources.detail.provider.ports", join(detail.ports)],
+      ["resources.detail.provider.selector", formatKeyValues(detail.selector)],
+    ]),
+  ];
+  if (detail.type === "core-ingress") return [
+    section("ingress-network", "resources.detail.provider.network", [
+      ["resources.detail.provider.ingressClass", detail.ingressClassName],
+      ["resources.detail.provider.addresses", join(detail.addresses)],
+      ["resources.detail.provider.routes", join(detail.routes.map((route) => (
+        `${route.host ?? "*"}${route.path} → ${route.backendService}${route.backendPort ? `:${route.backendPort}` : ""}${route.pathType ? ` (${route.pathType})` : ""}`
+      )))],
+      ["resources.detail.provider.tls", join(detail.tls.map((tls) => (
+        `${join(tls.hosts) ?? "*"} → ${tls.secretName ?? t("common.value.unavailable")}`
+      )))],
+    ]),
+  ];
+  if (detail.type === "argo-application") return [
+    section("argo-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.syncStatus", detail.syncStatus],
+      ["resources.detail.provider.health", detail.healthStatus],
+      ["resources.detail.provider.operation", detail.operationPhase],
+      ["resources.detail.provider.managedResources", number(detail.managedResourceCount)],
+    ]),
+    section("argo-source", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.repository", detail.repositoryUrl],
+      ["resources.detail.provider.sourcePath", detail.sourcePath],
+      ["resources.detail.provider.targetRevision", detail.targetRevision],
+      ["resources.detail.provider.chart", detail.chart],
+      ["resources.detail.provider.destination", join([detail.destinationServer, detail.destinationNamespace])],
+      ["resources.detail.provider.automated", yesNo(detail.automated, t)],
+      ["resources.detail.provider.selfHeal", yesNo(detail.selfHeal, t)],
+      ["resources.detail.provider.prune", yesNo(detail.prune, t)],
+      ["resources.detail.provider.retry", yesNo(detail.retryEnabled, t)],
+      ["resources.detail.provider.revisionHistory", join(detail.revisionHistory)],
+    ]),
+  ];
   if (detail.type === "aws-machine") return [
     section("instance", "resources.detail.provider.overview", [
       ["resources.detail.provider.instanceType", detail.instanceType],

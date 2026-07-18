@@ -1592,3 +1592,155 @@ def test_provider_detail_bounds_collections_and_omits_invalid_condition_rows() -
     assert detail is not None
     assert len(detail.addresses) == MAX_COLLECTION_ITEMS
     assert [condition.type for condition in detail.conditions] == ["Ready"]
+
+
+@pytest.mark.parametrize(
+    ("api_version", "kind", "raw", "detail_type"),
+    [
+        (
+            "apps/v1",
+            "DaemonSet",
+            {
+                "kind": "DaemonSet",
+                "desired_replicas": 4,
+                "ready_replicas": 3,
+                "available_replicas": 3,
+                "updated_replicas": 4,
+                "unavailable_replicas": 1,
+                "strategy_type": "RollingUpdate",
+                "max_unavailable": "1",
+                "selector": {"matchLabels": {"k8s-app": "aws-node"}},
+                "pod_template": {
+                    "spec": {
+                        "serviceAccountName": "aws-node",
+                        "containers": [
+                            {
+                                "name": "aws-node",
+                                "image": "example.invalid/aws-node:v1",
+                                "ports": [{"containerPort": 61678, "protocol": "TCP"}],
+                                "resources": {"requests": {"cpu": "25m"}},
+                            }
+                        ],
+                    }
+                },
+                "conditions": [{"type": "Available", "status": "True"}],
+            },
+            "core-workload",
+        ),
+        (
+            "v1",
+            "Pod",
+            {
+                "phase": "Running",
+                "node_name": "worker-a",
+                "service_account_name": "checkout",
+                "containers": [
+                    {
+                        "name": "api",
+                        "image": "example.invalid/api:v1",
+                        "state": "running",
+                        "restart_count": 2,
+                        "resources": {"limits": {"memory": "256Mi"}},
+                    }
+                ],
+            },
+            "core-pod",
+        ),
+        (
+            "v1",
+            "Service",
+            {
+                "type": "LoadBalancer",
+                "cluster_ip": "10.0.0.10",
+                "external_hosts": ["lb.example.test"],
+                "ports": [{"name": "https", "port": 443, "targetPort": 8443}],
+                "selector": {"app": "checkout"},
+            },
+            "core-service",
+        ),
+        (
+            "networking.k8s.io/v1",
+            "Ingress",
+            {
+                "spec": {
+                    "ingressClassName": "nginx",
+                    "rules": [
+                        {
+                            "host": "shop.example.test",
+                            "http": {
+                                "paths": [
+                                    {
+                                        "path": "/api",
+                                        "pathType": "Prefix",
+                                        "backend": {
+                                            "service": {"name": "checkout", "port": {"number": 80}}
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                    "tls": [{"secretName": "shop-tls", "hosts": ["shop.example.test"]}],
+                },
+                "status": {"loadBalancer": {"ingress": [{"ip": "203.0.113.10"}]}},
+            },
+            "core-ingress",
+        ),
+        (
+            "argoproj.io/v1alpha1",
+            "Application",
+            {
+                "spec": {
+                    "source": {
+                        "repoURL": "https://example.test/repo.git",
+                        "path": "deploy",
+                        "targetRevision": "main",
+                    },
+                    "destination": {
+                        "server": "https://kubernetes.default.svc",
+                        "namespace": "shop",
+                    },
+                    "syncPolicy": {"automated": {"prune": True, "selfHeal": True}},
+                },
+                "status": {
+                    "sync": {"status": "Synced"},
+                    "health": {"status": "Healthy"},
+                    "resources": [{"kind": "Deployment"}],
+                },
+            },
+            "argo-application",
+        ),
+    ],
+)
+def test_core_resource_projection_matrix(
+    api_version: str,
+    kind: str,
+    raw: dict[str, Any],
+    detail_type: str,
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    assert detail.type == detail_type
+
+
+def test_secret_values_never_enter_core_pod_projection() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Pod",
+            {
+                "phase": "Running",
+                "containers": [
+                    {
+                        "name": "api",
+                        "image": "example.invalid/api:v1",
+                        "env": [{"name": "TOKEN", "value": "must-not-leak"}],
+                    }
+                ],
+            },
+            api_version="v1",
+        )
+    )
+
+    assert detail is not None
+    assert "must-not-leak" not in detail.model_dump_json()

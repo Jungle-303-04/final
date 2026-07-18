@@ -160,7 +160,91 @@ interface ProviderDetailBase {
   conditions: ProviderCondition[];
 }
 
+export interface ProviderContainerProjection {
+  name: string;
+  image: string | null;
+  state: string | null;
+  stateReason: string | null;
+  ready: boolean | null;
+  restartCount: number;
+  ports: Array<{ name: string | null; containerPort: number; protocol: string }>;
+  requests: ProviderKeyValue[];
+  limits: ProviderKeyValue[];
+}
+
 export type ProviderResourceDetail =
+  | (ProviderDetailBase & {
+      type: "core-workload";
+      kind: string;
+      owner: ProviderNamedReference | null;
+      replicas: ProviderReplicas;
+      unavailable: number | null;
+      strategyType: string | null;
+      maxSurge: string | null;
+      maxUnavailable: string | null;
+      minReadySeconds: number | null;
+      revisionHistoryCount: number | null;
+      serviceAccountName: string | null;
+      selector: ProviderKeyValue[];
+      initContainers: ProviderContainerProjection[];
+      containers: ProviderContainerProjection[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-pod";
+      phase: string | null;
+      nodeName: string | null;
+      podIp: string | null;
+      hostIp: string | null;
+      serviceAccountName: string | null;
+      owner: ProviderNamedReference | null;
+      initContainers: ProviderContainerProjection[];
+      containers: ProviderContainerProjection[];
+      ephemeralContainerNames: string[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-service";
+      serviceType: string | null;
+      clusterIp: string | null;
+      externalName: string | null;
+      externalIps: string[];
+      loadBalancerAddresses: string[];
+      externalTrafficPolicy: string | null;
+      internalTrafficPolicy: string | null;
+      ipFamilies: string[];
+      ports: string[];
+      selector: ProviderKeyValue[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-ingress";
+      ingressClassName: string | null;
+      addresses: string[];
+      routes: Array<{
+        host: string | null;
+        path: string;
+        pathType: string | null;
+        backendService: string;
+        backendPort: string | null;
+      }>;
+      tls: Array<{ secretName: string | null; hosts: string[] }>;
+    })
+  | (ProviderDetailBase & {
+      type: "argo-application";
+      syncStatus: string | null;
+      healthStatus: string | null;
+      operationPhase: string | null;
+      repositoryUrl: string | null;
+      sourcePath: string | null;
+      targetRevision: string | null;
+      chart: string | null;
+      destinationServer: string | null;
+      destinationNamespace: string | null;
+      automated: boolean;
+      selfHeal: boolean;
+      prune: boolean;
+      retryEnabled: boolean;
+      managedResourceCount: number;
+      revisionHistory: string[];
+    })
   | (ProviderDetailBase & {
       type: "aws-machine";
       instanceType: string | null;

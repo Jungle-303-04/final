@@ -6,6 +6,7 @@ import {
   encodeResourceTarget,
   encodeResourceDetail,
   encodeResourceSelection,
+  resolveResourceType,
 } from "./resourcesUrlState";
 
 describe("Resources URL identity", () => {
@@ -102,5 +103,25 @@ describe("Resources URL identity", () => {
         },
       });
     expect(decodeResourceTarget(null, "pod", "Pod", "shop/api-0")).toBeNull();
+  });
+
+  it("maps kind-specific legacy paths onto canonical inventory families", () => {
+    expect(resolveResourceType("daemonset")).toEqual({ kind: "valid", value: "workload" });
+    expect(resolveResourceType("Deployment")).toEqual({ kind: "valid", value: "workload" });
+    expect(resolveResourceType("ingress")).toEqual({ kind: "valid", value: "custom_resource" });
+    expect(resolveResourceType("node")).toEqual({ kind: "valid", value: "node" });
+  });
+
+  it("keeps the legacy underscore token as cluster scope instead of a displayed namespace", () => {
+    expect(decodeResourceTarget("cluster-a", "node", "Node", "_/worker-a"))
+      .toEqual({
+        clusterId: "cluster-a",
+        identity: {
+          resourceType: "node",
+          kind: "Node",
+          namespace: null,
+          name: "worker-a",
+        },
+      });
   });
 });

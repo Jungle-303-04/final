@@ -11,6 +11,53 @@ import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDat
 afterEach(cleanup);
 
 describe("ProviderResourceDetailPanel", () => {
+  it("renders DaemonSet status, strategy, pod template, and service account as typed sections", () => {
+    renderPanel({
+      type: "core-workload",
+      kind: "DaemonSet",
+      owner: null,
+      replicas: { desired: 4, ready: 3, available: 3, upToDate: 4 },
+      unavailable: 1,
+      strategyType: "RollingUpdate",
+      maxSurge: "0",
+      maxUnavailable: "1",
+      minReadySeconds: 10,
+      revisionHistoryCount: 3,
+      serviceAccountName: "aws-node",
+      selector: [{ key: "k8s-app", value: "aws-node" }],
+      initContainers: [{
+        name: "install-cni",
+        image: "example.invalid/cni:v1",
+        state: "terminated",
+        stateReason: "Completed",
+        ready: true,
+        restartCount: 0,
+        ports: [],
+        requests: [],
+        limits: [],
+      }],
+      containers: [{
+        name: "aws-node",
+        image: "example.invalid/aws-node:v1",
+        state: "running",
+        stateReason: null,
+        ready: true,
+        restartCount: 1,
+        ports: [{ name: "metrics", containerPort: 61678, protocol: "TCP" }],
+        requests: [{ key: "cpu", value: "25m" }],
+        limits: [{ key: "memory", value: "256Mi" }],
+      }],
+      conditions: [],
+    });
+
+    expect(screen.getByText("DaemonSet")).toBeTruthy();
+    expect(screen.getByText("RollingUpdate")).toBeTruthy();
+    expect(screen.getAllByText("aws-node").length).toBeGreaterThan(0);
+    expect(screen.getByText("metrics:61678/TCP")).toBeTruthy();
+    expect(screen.getByText("cpu=25m")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Init containers" })).toBeTruthy();
+  });
+
   it("renders observed PVC usage with Prometheus provenance and freshness", () => {
     renderPanel(pvcDetail(), pvcMetricFrame({
       completeness: "exact",

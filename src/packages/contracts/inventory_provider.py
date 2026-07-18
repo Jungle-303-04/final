@@ -56,6 +56,113 @@ class ProviderReplicas(StrictModel):
     up_to_date: int | None = None
 
 
+class ProviderContainerPort(StrictModel):
+    name: str | None = None
+    container_port: int
+    protocol: str
+
+
+class ProviderContainerProjection(StrictModel):
+    name: str
+    image: str | None = None
+    state: str | None = None
+    state_reason: str | None = None
+    ready: bool | None = None
+    restart_count: int = 0
+    ports: list[ProviderContainerPort] = Field(default_factory=list)
+    requests: list[ProviderKeyValue] = Field(default_factory=list)
+    limits: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class CoreWorkloadProviderDetail(StrictModel):
+    type: Literal["core-workload"] = "core-workload"
+    kind: str
+    owner: ProviderNamedReference | None = None
+    replicas: ProviderReplicas
+    unavailable: int | None = None
+    strategy_type: str | None = None
+    max_surge: str | None = None
+    max_unavailable: str | None = None
+    min_ready_seconds: int | None = None
+    revision_history_count: int | None = None
+    service_account_name: str | None = None
+    selector: list[ProviderKeyValue] = Field(default_factory=list)
+    init_containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CorePodProviderDetail(StrictModel):
+    type: Literal["core-pod"] = "core-pod"
+    phase: str | None = None
+    node_name: str | None = None
+    pod_ip: str | None = None
+    host_ip: str | None = None
+    service_account_name: str | None = None
+    owner: ProviderNamedReference | None = None
+    init_containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    ephemeral_container_names: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreServiceProviderDetail(StrictModel):
+    type: Literal["core-service"] = "core-service"
+    service_type: str | None = None
+    cluster_ip: str | None = None
+    external_name: str | None = None
+    external_ips: list[str] = Field(default_factory=list)
+    load_balancer_addresses: list[str] = Field(default_factory=list)
+    external_traffic_policy: str | None = None
+    internal_traffic_policy: str | None = None
+    ip_families: list[str] = Field(default_factory=list)
+    ports: list[str] = Field(default_factory=list)
+    selector: list[ProviderKeyValue] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreIngressRoute(StrictModel):
+    host: str | None = None
+    path: str
+    path_type: str | None = None
+    backend_service: str
+    backend_port: str | None = None
+
+
+class CoreIngressTls(StrictModel):
+    secret_name: str | None = None
+    hosts: list[str] = Field(default_factory=list)
+
+
+class CoreIngressProviderDetail(StrictModel):
+    type: Literal["core-ingress"] = "core-ingress"
+    ingress_class_name: str | None = None
+    addresses: list[str] = Field(default_factory=list)
+    routes: list[CoreIngressRoute] = Field(default_factory=list)
+    tls: list[CoreIngressTls] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class ArgoApplicationProviderDetail(StrictModel):
+    type: Literal["argo-application"] = "argo-application"
+    sync_status: str | None = None
+    health_status: str | None = None
+    operation_phase: str | None = None
+    repository_url: str | None = None
+    source_path: str | None = None
+    target_revision: str | None = None
+    chart: str | None = None
+    destination_server: str | None = None
+    destination_namespace: str | None = None
+    automated: bool
+    self_heal: bool
+    prune: bool
+    retry_enabled: bool
+    managed_resource_count: int
+    revision_history: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 class CapiUnhealthyCondition(StrictModel):
     type: str
     status: str | None = None
@@ -942,7 +1049,12 @@ class TlsRouteProviderDetail(StrictModel):
 
 
 ResourceProviderDetail = Annotated[
-    AwsMachineProviderDetail
+    CoreWorkloadProviderDetail
+    | CorePodProviderDetail
+    | CoreServiceProviderDetail
+    | CoreIngressProviderDetail
+    | ArgoApplicationProviderDetail
+    | AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
     | AwsManagedControlPlaneProviderDetail
     | AwsManagedMachinePoolProviderDetail
