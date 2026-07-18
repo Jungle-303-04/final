@@ -15,7 +15,7 @@ import { OpsiaMap, podInventory, nodeInventory, repoInventory } from "./devprevi
 import { AiPanel } from "./devpreview-ai";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
-import { UI, BLUE, HP, MONO, SOFT, EASE_DRAW } from "./devpreview/theme";
+import { UI, BLUE, HP, MONO, SOFT, EASE_DRAW, PRESENT_SCALE } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -1216,7 +1216,7 @@ function App() {
   };
 
   return (
-    <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch" }}>
+    <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
       {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
         surface={surface} onSurface={setSurface} />
