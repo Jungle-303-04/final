@@ -9,6 +9,7 @@ import {
 } from "../../features/timeline/timelineContract";
 import { createRafStreamCoalescer } from "../../shared/streaming/rafStreamCoalescer";
 import { timelineEvidenceKey } from "../../features/timeline/timelineEvidenceIdentity";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { applyTimelineFrames, normalizeTimelineSnapshot } from "./timelineFrameReducer";
 
 export type TimelineDataFrame =
@@ -90,20 +91,24 @@ export function useTimelineDataFrame(
   }, [evidenceKey]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    const streamController = new AbortController();
     let active = true;
+    const sharedRequest = acquireSharedRequest(
+      port,
+      `timeline:snapshot:${requestKey}`,
+      (signal) => port.readTimeline(queryRef.current, signal),
+    );
     void open();
     return () => {
       active = false;
-      controller.abort();
+      sharedRequest.release();
+      streamController.abort();
     };
 
     async function open() {
       let snapshot: TimelineSnapshot;
       try {
-        snapshot = normalizeTimelineSnapshot(
-          await port.readTimeline(queryRef.current, controller.signal),
-        );
+        snapshot = normalizeTimelineSnapshot(await sharedRequest.promise);
       } catch (error) {
         if (!active || isAbortError(error)) return;
         const failure = toTimelineFailure(error);
@@ -155,11 +160,11 @@ export function useTimelineDataFrame(
           hiddenTab: snapshot.policy.hiddenTab,
           maxFramesPerSecond: snapshot.policy.maxFramesPerSecond,
         },
-        signal: controller.signal,
+        signal: streamController.signal,
       });
       try {
         for await (const streamFrame of port.subscribeTimeline(snapshot.session, {
-          signal: controller.signal,
+          signal: streamController.signal,
           onLifecycle: (lifecycle) => {
             if (!active) return;
             setRecord((current) => current.requestKey === requestKey && current.frame.phase === "ready"

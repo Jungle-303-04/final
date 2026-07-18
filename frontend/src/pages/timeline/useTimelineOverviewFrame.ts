@@ -6,6 +6,7 @@ import {
   type TimelinePort,
   type TimelineQuery,
 } from "../../features/timeline/timelineContract";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 
 export type TimelineOverviewFrame =
   { phase: "loading" } | { phase: "ready"; overview: TimelineOverview } | { phase: "failed"; failure: TimelineFailure };
@@ -41,27 +42,29 @@ export function useTimelineOverviewFrame(port: TimelinePort, query: TimelineQuer
   }, [query]);
 
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
-    void readOverview();
-    return () => {
-      active = false;
-      controller.abort();
-    };
-
-    async function readOverview() {
-      try {
-        const overview = await port.readTimelineOverview(queryRef.current, controller.signal);
+    const sharedRequest = acquireSharedRequest(
+      port,
+      `timeline:overview:${requestKey}`,
+      (signal) => port.readTimelineOverview(queryRef.current, signal),
+    );
+    void sharedRequest.promise.then(
+      (overview) => {
         if (!active) return;
         setRecord({ requestKey, frame: { phase: "ready", overview } });
-      } catch (error) {
+      },
+      (error: unknown) => {
         if (!active || isAbortError(error)) return;
         setRecord({
           requestKey,
           frame: { phase: "failed", failure: toTimelineFailure(error) },
         });
-      }
-    }
+      },
+    );
+    return () => {
+      active = false;
+      sharedRequest.release();
+    };
   }, [port, requestKey]);
 
   const retry = useCallback(() => setRevision((value) => value + 1), []);
