@@ -26,7 +26,6 @@ from domains.timeline.repository import (
     TimelineLedgerRepository,
     TimelineLedgerSnapshot,
     TimelineReplayResult,
-    TimelineSnapshotLimitExceeded,
     _event_values,
     _timeline_events_statement,
     replay_result,
@@ -601,9 +600,10 @@ def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates()
     assert "timeline_events.occurred_at >= '1970-01-01 00:00:01+00:00'" in sql
     assert "timeline_events.occurred_at < '1970-01-01 00:00:02+00:00'" in sql
     assert "timeline_events.occurred_at <=" not in sql
+    assert "order by timeline_events.sequence desc" in sql
 
 
-def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_limit() -> None:
+def test_snapshot_excludes_expired_rows_and_returns_newest_bounded_suffix() -> None:
     class Repository:
         def __init__(self, records: tuple[TimelineLedgerRecord, ...]) -> None:
             self.records = records
@@ -655,10 +655,12 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
             TimelineLedgerRecord(10, _resource_event("inventory:10", "event-10")),
         )
     )
-    with pytest.raises(TimelineSnapshotLimitExceeded, match="limit exceeded"):
-        TimelineLedgerRepository.snapshot_timeline_events(
-            overflow,
-            scope,
-            predicate=predicate,
-            limit=1,
-        )
+    bounded = TimelineLedgerRepository.snapshot_timeline_events(
+        overflow,
+        scope,
+        predicate=predicate,
+        limit=1,
+    )
+    assert bounded.truncated is True
+    assert [record.sequence for record in bounded.records] == [10]
+    assert [event.event_id for event in bounded.events] == ["event-10"]

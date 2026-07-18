@@ -1199,6 +1199,8 @@ function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): T
     events: [event()],
     coverage: [],
     ...overrides,
+    truncated: overrides.truncated ?? false,
+    eventLimit: overrides.eventLimit ?? null,
     pinSetRevision: overrides.pinSetRevision ?? null,
   };
 }

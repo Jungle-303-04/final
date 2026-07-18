@@ -19,7 +19,6 @@ from domains.timeline.repository import (
     TimelineLedgerRecord,
     TimelineLedgerSnapshot,
     TimelineReplayResult,
-    TimelineSnapshotLimitExceeded,
 )
 from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope, ResourceRef
@@ -81,7 +80,12 @@ class TimelineSnapshotDb:
     ) -> TimelineLedgerSnapshot:
         self.snapshot_calls.append({"read_scope": read_scope, **kwargs})
         if self.overflow:
-            raise TimelineSnapshotLimitExceeded(int(kwargs["limit"]))
+            return TimelineLedgerSnapshot(
+                records=(TimelineLedgerRecord(sequence=8, event=_event()),),
+                high_water_sequence=8,
+                retained_from_sequence=1,
+                truncated=True,
+            )
         return TimelineLedgerSnapshot(
             records=(TimelineLedgerRecord(sequence=7, event=_event()),),
             high_water_sequence=7,
@@ -290,13 +294,30 @@ def test_timeline_snapshot_fails_closed_for_unknown_cluster_and_missing_cursor_c
     assert unavailable.status_code == 503
 
 
-def test_timeline_snapshot_reports_server_limit_without_a_partial_success() -> None:
+def test_timeline_snapshot_returns_newest_bounded_events_with_explicit_limit() -> None:
     response = _client(TimelineSnapshotDb(overflow=True)).post(
-        "/timeline/snapshots", json={"query": _query().model_dump(mode="json")}
+        "/timeline/snapshots",
+        headers={"x-timeline-snapshot-contract": "bounded-v1"},
+        json={"query": _query().model_dump(mode="json")},
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "timeline snapshot exceeds the server event limit"
+    assert response.status_code == 200
+    frame = TimelineStreamFrame.model_validate_json(response.text.splitlines()[0])
+    assert frame.truncated is True
+    assert frame.event_limit == frame.policy.max_batch_events
+    assert [event.event_id for event in frame.events] == ["inventory-event-7"]
+
+
+def test_timeline_snapshot_keeps_legacy_strict_clients_forward_compatible() -> None:
+    response = _client(TimelineSnapshotDb(overflow=True)).post(
+        "/timeline/snapshots",
+        json={"query": _query().model_dump(mode="json")},
+    )
+
+    assert response.status_code == 200
+    first_frame = response.text.splitlines()[0]
+    assert '"truncated"' not in first_frame
+    assert '"event_limit"' not in first_frame
 
 
 def test_timeline_coverage_read_signals_the_db_stream_when_the_client_disconnects() -> None:

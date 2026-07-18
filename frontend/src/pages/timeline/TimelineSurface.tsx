@@ -410,6 +410,13 @@ function TimelineReadyData({
             <TimelineRetryableFailure onRetry={onRetry} t={t} />
           )
         ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
+        {snapshot.truncated ? (
+          <p aria-live="polite" className="text-sm text-muted-foreground" role="status">
+            {t("timeline.truncated", {
+              count: formatNumber(snapshot.events.length),
+            })}
+          </p>
+        ) : null}
         <TimelineCoverageNotice coverage={lensCoverage} formatDate={formatDate} t={t} />
         {lensEvents.length === 0 ? (
           <TimelineEmptyState

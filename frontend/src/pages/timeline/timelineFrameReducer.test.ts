@@ -116,6 +116,8 @@ function snapshot(
     policy,
     events,
     coverage,
+    truncated: false,
+    eventLimit: null,
     pinSetRevision: null,
   };
 }

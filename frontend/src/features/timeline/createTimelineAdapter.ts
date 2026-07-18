@@ -293,6 +293,8 @@ function toTimelineSnapshot(
     policy,
     events: endpoint.snapshot.events.map(toEvent),
     coverage: endpoint.snapshot.coverage.map(toCoverage),
+    truncated: endpoint.snapshot.truncated ?? false,
+    eventLimit: endpoint.snapshot.event_limit ?? null,
     pinSetRevision: endpoint.snapshot.pin_set_revision,
   };
 }

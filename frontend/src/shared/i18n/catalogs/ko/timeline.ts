@@ -62,6 +62,7 @@ export const timelineKo = {
   "timeline.empty.unavailable": "타임라인 사실이 반환되지 않았고 하나 이상의 과거 소스를 사용할 수 없습니다.",
   "timeline.count.one": "선택한 범위에서 이벤트 {count}개를 사용할 수 있습니다.",
   "timeline.count.other": "선택한 범위에서 이벤트 {count}개를 사용할 수 있습니다.",
+  "timeline.truncated": "이벤트가 많아 최신 {count}개를 표시합니다. 이전 이벤트는 시간 범위를 좁혀 확인하고 전체 분포는 위 개요에서 확인하세요.",
   "timeline.list.label": "타임라인 이벤트",
   "timeline.swimlane.label": "타임라인 스윔레인",
   "timeline.swimlane.axis": "타임라인 위치 축",

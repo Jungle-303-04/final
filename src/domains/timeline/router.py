@@ -30,7 +30,6 @@ from domains.timeline.fanout import TimelineFanoutClosed, TimelineFanoutOverflow
 from domains.timeline.repository import (
     TimelineOverviewAggregate,
     TimelinePinRevisionConflict,
-    TimelineSnapshotLimitExceeded,
 )
 from domains.timeline.service import (
     TimelineReadResolution,
@@ -70,9 +69,10 @@ from packages.contracts.timeline import (
 from packages.runtime.dependencies import get_db, get_timeline_fanout
 
 TIMELINE_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
+TIMELINE_SNAPSHOT_CONTRACT_HEADER = "x-timeline-snapshot-contract"
+TIMELINE_BOUNDED_SNAPSHOT_CONTRACT = "bounded-v1"
 CURSOR_UNAVAILABLE_DETAIL = "timeline cursor is unavailable"
 LEDGER_UNAVAILABLE_DETAIL = "timeline ledger is unavailable"
-SNAPSHOT_LIMIT_DETAIL = "timeline snapshot exceeds the server event limit"
 REPLAY_CURSOR_INVALID_DETAIL = "timeline replay cursor is invalid"
 REPLAY_CURSOR_REQUIRED_DETAIL = "timeline replay cursor is required"
 REPLAY_CURSOR_CONFLICT_DETAIL = "timeline replay cursor conflicts with Last-Event-ID"
@@ -255,15 +255,12 @@ async def read_timeline_snapshot(
         raise HTTPException(status_code=503, detail=LEDGER_UNAVAILABLE_DETAIL)
     if not callable(coverage_reader):
         raise HTTPException(status_code=503, detail=COVERAGE_UNAVAILABLE_DETAIL)
-    try:
-        snapshot = await asyncio.to_thread(
-            snapshot_reader,
-            resolution.read_scope,
-            predicate=resolution.evidence_predicate,
-            limit=resolution.policy.max_batch_events,
-        )
-    except TimelineSnapshotLimitExceeded as exc:
-        raise HTTPException(status_code=422, detail=SNAPSHOT_LIMIT_DETAIL) from exc
+    snapshot = await asyncio.to_thread(
+        snapshot_reader,
+        resolution.read_scope,
+        predicate=resolution.evidence_predicate,
+        limit=resolution.policy.max_batch_events,
+    )
     try:
         coverage = await _read_timeline_coverage(
             coverage_reader,
@@ -290,11 +287,19 @@ async def read_timeline_snapshot(
                 if resolution.evidence_predicate.matches_snapshot(record.event)
             ),
             coverage=coverage,
+            truncated=snapshot.truncated,
+            event_limit=(resolution.policy.max_batch_events if snapshot.truncated else None),
         ),
         TimelineStreamFrame(kind="end", cursor=cursor),
     )
     return Response(
-        content=encode_ndjson(frames),
+        content=encode_ndjson(
+            frames,
+            include_snapshot_bounds=(
+                request.headers.get(TIMELINE_SNAPSHOT_CONTRACT_HEADER)
+                == TIMELINE_BOUNDED_SNAPSHOT_CONTRACT
+            ),
+        ),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store"},
     )
