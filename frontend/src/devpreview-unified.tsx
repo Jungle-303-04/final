@@ -5,10 +5,11 @@ import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Server, FileCog, Network, Braces, Globe, ShoppingCart, CreditCard, Search, KeyRound,
+  Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
 } from "lucide-react";
+import { OpsiaMap } from "./devpreview-opsia";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -19,10 +20,21 @@ const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 const SOFT = { type: "spring", bounce: 0.12, visualDuration: 0.32 } as const;
 
 // ── 목 데이터 ─────────────────────────────
-const NSS = ["argocd", "kube-system", "target", "caretta", "sandbox", "argocd-demo-waves", "argocd-demo-jsonnet", "shop", "platform"];
 function rng(seed: number) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 const pick = <T,>(r: () => number, a: T[]) => a[Math.floor(r() * a.length)];
 const age = (r: () => number) => { const d = Math.floor(r() * 14) + 1; return d > 1 ? `${d}d` : `${Math.floor(r() * 23) + 1}h`; };
+// 이름 → 네임스페이스 결정 매핑 (임의 배정으로 인한 논리 모순 방지)
+function nsFor(name: string): string {
+  const n = name.toLowerCase();
+  if (n.startsWith("argocd")) return "argocd";
+  if (["coredns", "ebs-csi", "aws-node", "kube-proxy", "cluster-agent", "metrics-server"].some((s) => n.includes(s))) return "kube-system";
+  if (n.includes("caretta")) return "caretta";
+  if (n.includes("jsonnet")) return "argocd-demo-jsonnet";
+  if (n.includes("guestbook")) return "argocd-demo-waves";
+  if (n.startsWith("shop") || ["checkout", "payments", "search"].some((s) => n.startsWith(s))) return "shop";
+  if (["auth", "gateway", "worker", "notifier", "media", "redis", "backend"].some((s) => n.startsWith(s))) return "platform";
+  return "sandbox";
+}
 // 이미지를 이름 기반으로 결정 — 리소스 이름과 이미지가 어긋나는 논리 모순 방지
 const imgFor = (name: string) => {
   const n = name.toLowerCase();
@@ -54,7 +66,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       { k: "avail", label: "AVAILABLE", w: "90px", cell: { t: "num" } }, { k: "img", label: "IMAGES", w: "minmax(140px,1fr)", cell: { t: "mono" } }, { k: "age", label: "AGE", w: "60px", cell: { t: "text" } }],
     rows: (r) => ["argocd-applicationset-controller", "argocd-dex-server", "argocd-notifications-controller", "argocd-redis", "argocd-repo-server", "argocd-server",
       "caretta-grafana", "cluster-agent", "coredns", "ebs-csi-controller", "jsonnet-guestbook-ui", "learning-guestbook-ui", "shop-api", "shop-web", "checkout", "payments", "search", "auth", "gateway", "worker", "notifier", "media"]
-      .map((name) => ({ name, ns: name.startsWith("argocd") ? "argocd" : name.startsWith("shop") || ["checkout", "payments", "search"].includes(name) ? "shop" : ["auth", "gateway", "worker", "notifier"].includes(name) ? "platform" : pick(r, NSS), ready: r() < 0.9 ? "1/1" : "2/2", utd: 1, avail: 1, img: imgFor(name), age: age(r) })),
+      .map((name) => ({ name, ns: nsFor(name), ready: r() < 0.9 ? "1/1" : "2/2", utd: 1, avail: 1, img: imgFor(name), age: age(r) })),
   },
   DaemonSet: {
     cols: [{ k: "name", label: "NAME", w: "minmax(180px,1.6fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "150px", cell: { t: "ns" } },
@@ -81,7 +93,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       const svc = pick(r, ["argocd-server", "argocd-redis", "aws-node", "backend", "caretta-grafana", "shop-api", "checkout", "payments", "search", "auth", "gateway", "coredns"]);
       const bad = r() < 0.08;
       const nm = `${svc}-${Math.floor(r() * 9000) + 1000}${["-vhk2w", "-cghhs", "-j6lzb", "-k4kw5", "-xtksb"][i % 5]}`;
-      return { name: nm, ns: svc.startsWith("argocd") ? "argocd" : ["aws-node", "coredns"].includes(svc) ? "kube-system" : pick(r, NSS), img: imgFor(svc),
+      return { name: nm, ns: nsFor(svc), img: imgFor(svc),
         ctr: 1 + Math.floor(r() * 3), status: bad ? "CrashLoopBackOff" : "Running",
         cpu: { used: `${Math.floor(r() * 9)}m`, lim: "50m", pct: Math.floor(r() * 60) + 5 }, mem: { used: `${Math.floor(r() * 90) + 5}Mi`, lim: "300Mi", pct: Math.floor(r() * 70) + 5 }, age: age(r), bad };
     }),
@@ -92,7 +104,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       { k: "st", label: "STATUS", w: "76px", cell: { t: "badge", tone: "blue" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
     rows: (r) => ["argocd-applicationset-controller-69bddf5587", "argocd-dex-server-779bbb6b9d", "argocd-notifications-controller-7494d5f69f", "argocd-redis-74d7d69cc8",
       "argocd-repo-server-674d585b64", "argocd-server-bb74d4fbb", "backend", "caretta-grafana-5dcb88d5dc", "cluster-agent-57bbdcbd6d", "coredns-5f7cf6bc58", "ebs-csi-controller-8667755b8d"]
-      .map((name) => ({ name, ns: pick(r, NSS), ready: "1/1", owner: name.includes("backend") ? "–" : `Deployment/${name.split("-").slice(0, 3).join("-")}`, st: "Active", age: age(r) })),
+      .map((name) => ({ name, ns: nsFor(name), ready: "1/1", owner: name.includes("backend") ? "–" : `Deployment/${name.split("-").slice(0, 3).join("-")}`, st: "Active", age: age(r) })),
   },
   Job: {
     cols: [{ k: "name", label: "NAME", w: "minmax(220px,2fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "170px", cell: { t: "ns" } },
@@ -115,7 +127,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       { k: "ep", label: "ENDPOINTS", w: "92px", cell: { t: "badge", tone: "green" } }, { k: "ports", label: "PORTS", w: "120px", cell: { t: "mono" } }, { k: "ext", label: "EXTERNAL", w: "76px", cell: { t: "text" } }],
     rows: (r) => ["argocd-applicationset-controller", "argocd-dex-server", "argocd-metrics", "argocd-notifications-controller", "argocd-redis", "argocd-repo-server",
       "argocd-server", "argocd-server-metrics", "backend", "caretta-grafana", "caretta-vm", "shop-api", "checkout", "payments", "search", "auth", "gateway"]
-      .map((name) => ({ name, ns: pick(r, NSS), type: "ClusterIP", sel: pick(r, ["app.kubernetes.io/nam…", "tier=backend", "app=server, app.kubern…"]),
+      .map((name) => ({ name, ns: nsFor(name), type: "ClusterIP", sel: pick(r, ["app.kubernetes.io/nam…", "tier=backend", "app=server, app.kubern…"]),
         ep: "Active", ports: pick(r, ["8082", "9001", "6379", "8081, 8084", "80:8080, 443:8080", "80:3000", "8428:http"]), ext: "–" })),
   },
   Ingress: {
@@ -210,7 +222,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
     cols: [{ k: "name", label: "NAME", w: "minmax(180px,1.5fr)", cell: { t: "text" } }, { k: "ns", label: "NAMESPACE", w: "120px", cell: { t: "ns" } },
       { k: "type", label: "TYPE", w: "84px", cell: { t: "badge", tone: "green" } }, { k: "reason", label: "REASON", w: "120px", cell: { t: "text" } },
       { k: "msg", label: "MESSAGE", w: "minmax(200px,1.6fr)", cell: { t: "text" } }, { k: "obj", label: "OBJECT", w: "minmax(140px,1fr)", cell: { t: "mono" } }, { k: "cnt", label: "COUNT", w: "64px", cell: { t: "num" } }],
-    rows: (r) => [["Started", "Started container node-collector", "Pod/optional-node-col…"], ["Scheduled", "Successfully assigned target/opti…", "Pod/optional-node-col…"],
+    rows: () => [["Started", "Started container node-collector", "Pod/optional-node-col…"], ["Scheduled", "Successfully assigned target/opti…", "Pod/optional-node-col…"],
       ["Pulled", 'Container image "183548421506…', "Pod/optional-node-col…"], ["Created", "Created container: node-collector", "Pod/optional-node-col…"],
       ["SuccessfulCreate", "Created pod: optional-node-coll…", "DaemonSet/optional-n…"], ["Killing", "Stopping container node-collect…", "Pod/optional-node-col…"],
       ["SuccessfulDelete", "Deleted pod: optional-node-coll…", "DaemonSet/optional-n…"], ["BackOff", "Back-off restarting failed container", "Pod/payments-4f2…"]]
@@ -259,7 +271,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
 // ── 종류 인덱스 (레퍼런스 구조 그대로) ─────────────────────────────
 type KindView = "physical" | "relation" | "table";
 type Kind = { id: string; label: string; icon: typeof Rocket; group: string; view: KindView; count: number };
-// 그룹·종류·개수는 실제 Radar 인스턴스(cluster-1)에서 확인한 값 그대로
+// 그룹·종류·개수는 실제 기준 인스턴스(cluster-1)에서 확인한 값 그대로
 const GROUPS = ["워크로드", "네트워킹", "구성", "스토리지", "접근 제어", "클러스터", "ARGO", "AWS VPC CNI", "API 등록"] as const;
 const KINDS: Kind[] = [
   { id: "CronJob", label: "CronJob", icon: Timer, group: "워크로드", view: "table", count: 1 },
@@ -367,7 +379,7 @@ function ResourceTable({ kind, q, onOpen }: { kind: Kind; q: string; onOpen: (r:
 }
 
 // ── 상세 오버레이 (최상위 레이어) ─────────────────────────────
-// 탭 구성은 Radar 상세 드로어 기준: 개요 · YAML · 관련 리소스 · 이벤트 · 로그 · 권한(RBAC)
+// 탭 구성은 리소스 상세 드로어 기준: 개요 · YAML · 관련 리소스 · 이벤트 · 로그 · 권한(RBAC)
 const DETAIL_TABS = [
   { id: "overview", label: "개요" }, { id: "yaml", label: "YAML" }, { id: "related", label: "관련 리소스" },
   { id: "events", label: "이벤트" }, { id: "logs", label: "로그" }, { id: "rbac", label: "권한" },
@@ -381,7 +393,7 @@ const TABS_FOR = (kindId: string): DetailTab[] => {
   return ["overview", "yaml", "related", "events"];
 };
 
-// 섹션 래퍼 — 접기 가능한 헤딩 (Radar 드로어 구조)
+// 섹션 래퍼 — 접기 가능한 리소스 상세 드로어 구조
 function Sec({ title, icon: I, right, children, defaultOpen = true }: { title: string; icon?: typeof Rocket; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -413,6 +425,7 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
 function DetailOverlay({ kind, row, onClose }: { kind: Kind; row: Row; onClose: () => void }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
+  const [full, setFull] = useState(false); // 전체 화면 (원본 레퍼런스의 ⤢)
   const name = String(row.name ?? "");
   const ns = String(row.ns ?? "–");
   const bad = !!row.bad;
@@ -443,7 +456,7 @@ status:
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
         onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(17,19,24,0.28)", backdropFilter: "blur(3px)", zIndex: 70 }} />
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
-        style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 560, maxWidth: "92vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)" }}>
+        style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: full ? "100vw" : 560, maxWidth: "100vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: "width .28s cubic-bezier(.32,.72,0,1)" }}>
         {/* 헤더 */}
         <div style={{ padding: "16px 20px 0", borderBottom: `1px solid ${UI.line}` }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -460,6 +473,7 @@ status:
                   <I size={11} />{l as string}
                 </button>
               ))}
+              <button title={full ? "패널로 축소" : "전체 화면"} onClick={() => setFull(!full)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
               <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 12, lineHeight: 1 }}>✕</button>
             </div>
           </div>
@@ -479,6 +493,7 @@ status:
 
         {/* 본문 */}
         <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 28px" }}>
+        <div style={{ maxWidth: full ? 880 : "none", margin: full ? "0 auto" : 0 }}>
           {tab === "overview" && (
             <div>
               {/* 운영 이슈 */}
@@ -486,8 +501,8 @@ status:
                 <Sec title="운영 이슈 (1)" icon={Activity}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, border: "1px solid #F5CFCC", background: "#FFF7F6", borderRadius: 10, padding: "10px 12px" }}>
                     <Badge text="critical" tone="red" />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>워크로드 저하</span>
-                    <span style={{ fontSize: 11, color: UI.ink2 }}>1개 사용 불가</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>워크로드 성능 저하</span>
+                    <span style={{ fontSize: 11, color: UI.ink2 }}>인스턴스 1개 사용 불가</span>
                   </div>
                 </Sec>
               )}
@@ -495,11 +510,11 @@ status:
               {/* 상태 */}
               <Sec title="상태" icon={Activity}>
                 {isWorkload
-                  ? ([["원하는 수", "2"], ["현재", "2"], ["준비", bad ? "1" : "2"], ["최신", "2"], ["사용 가능", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono />)
-                  : ([["단계", bad ? "CrashLoopBackOff" : "Running"], ["노드", "ip-192-168-47-62.ap-northeast-2.compute.internal"], ["파드 IP", "192.168.60.243"], ["호스트 IP", "192.168.47.62"], ["QoS 클래스", "BestEffort"], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "단계" ? (bad ? "#C43028" : "#1F9D4D") : undefined} />)}
+                  ? ([["목표 복제본", "2"], ["현재 복제본", "2"], ["준비됨", bad ? "1" : "2"], ["최신 상태", "2"], ["가용", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono />)
+                  : ([["Phase", bad ? "CrashLoopBackOff" : "Running"], ["노드", "ip-192-168-47-62.ap-northeast-2.compute.internal"], ["파드 IP", "192.168.60.243"], ["호스트 IP", "192.168.47.62"], ["QoS 클래스", "BestEffort"], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : "#1F9D4D") : undefined} />)}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>
-                  {isWorkload && <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />스케일</button>}
+                  {isWorkload && <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 조정</button>}
                 </div>
               </Sec>
 
@@ -526,7 +541,7 @@ status:
 
               {/* 환경 변수 (파드 전용) */}
               {isPod && (
-                <Sec title="환경 변수 · 12개" defaultOpen={false}>
+                <Sec title="환경 변수 (12)" defaultOpen={false}>
                   <div style={{ fontSize: 10.5, fontFamily: MONO, lineHeight: 1.9, color: UI.ink2 }}>
                     {["NAMESPACE = field:metadata.namespace", "LOG_LEVEL = configmap:argocd-cmd-params-cm", "LOG_FORMAT = configmap:argocd-cmd-params-cm", "REPO_SERVER = configmap:argocd-cmd-params-cm", "K8S_CLIENT_QPS = configmap:argocd-cmd-params-cm"].map((e) => {
                       const [k, v] = e.split(" = ");
@@ -561,7 +576,7 @@ status:
                     {grp ? <><span style={{ fontSize: 10.5, color: UI.ink3, margin: "0 5px" }}>in</span><Chip text={grp as string} tone="gray" /></> : null}
                   </div>
                 ))}
-                <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 4 }}>+1개 규칙 더 — 전체 출처는 ServiceAccount에서 확인</div>
+                <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 4 }}>규칙 1개 더 있음 · 전체 목록은 ServiceAccount에서 확인</div>
                 <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>전체 권한 보기 →</button>
               </Sec>
               )}
@@ -569,7 +584,7 @@ status:
               {/* 앱 정보 (워크로드·파드) */}
               {wp && (
               <Sec title="앱 정보" icon={Folder}>
-                <KV k="앱 이름" v={base} mono /><KV k="컴포넌트" v={comp} mono /><KV k="소속" v={ns} mono />
+                <KV k="앱 이름" v={base} mono /><KV k="컴포넌트" v={comp} mono /><KV k="네임스페이스" v={ns} mono />
               </Sec>
               )}
 
@@ -630,7 +645,7 @@ status:
                       <div style={{ fontSize: 11, color: UI.ink2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m as string}</div>
                     </div>
                   ))}
-                <button style={{ border: "none", background: "transparent", color: UI.ink3, fontSize: 11, cursor: "pointer", padding: "4px 0 0" }}>변경 50건 더 보기</button>
+                <button style={{ border: "none", background: "transparent", color: UI.ink3, fontSize: 11, cursor: "pointer", padding: "4px 0 0" }}>이벤트 50건 더 보기</button>
               </Sec>
 
               {/* 레이블 / 어노테이션 / 메타데이터 */}
@@ -644,12 +659,12 @@ status:
                 <KV k="UID" v="16057e00-404f-460b-afa4-13bb495f3c14" mono />
                 <KV k="Resource Version" v="3476048" mono />
                 <KV k="Generation" v="1" mono />
-                <KV k="생성" v={String(row.age ?? "4d")} mono />
+                <KV k="생성 시점" v={`${String(row.age ?? "4d")} 전`} mono />
               </Sec>
 
               {/* 감사 결과 (워크로드·파드) */}
               {wp && (
-              <Sec title="감사 결과" icon={ShieldCheck} right={<span style={{ display: "flex", gap: 8, fontSize: 10.5, fontWeight: 700 }}>{bad && <span style={{ color: "#C43028" }}>1 critical</span>}<span style={{ color: "#B25A00" }}>7 warning</span></span>}>
+              <Sec title="점검 결과" icon={ShieldCheck} right={<span style={{ display: "flex", gap: 8, fontSize: 10.5, fontWeight: 700 }}>{bad && <span style={{ color: "#C43028" }}>1 critical</span>}<span style={{ color: "#B25A00" }}>7 warning</span></span>}>
                 {[["ServiceAccount 토큰이 자동 마운트됨", "Security"], ["컨테이너에 readiness probe 없음", "Reliability"], ["컨테이너에 liveness probe 없음", "Reliability"],
                   ["컨테이너에 CPU request 없음", "Efficiency"], ["컨테이너에 memory request 없음", "Efficiency"], ["컨테이너에 CPU limit 없음", "Efficiency"], ["복제본이 1개뿐임", "Reliability"]]
                   .map(([t, cat]) => (
@@ -731,6 +746,7 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
             </div>
           )}
         </div>
+        </div>
       </motion.aside>
     </>
   );
@@ -767,7 +783,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
       <div>
         <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
         {pinned.length === 0
-          ? <div style={{ fontSize: 10.5, color: UI.ink3, padding: "0 9px 4px", lineHeight: 1.5 }}>고정된 리소스가 없습니다. 종류 위의 핀을 눌러 고정하세요.</div>
+          ? <div style={{ fontSize: 10.5, color: UI.ink3, padding: "0 9px 4px", lineHeight: 1.5 }}>자주 보는 종류를 핀으로 고정하면 여기에 표시됩니다</div>
           : KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
       </div>
       {GROUPS.map((g) => {
@@ -784,7 +800,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
         );
       })}
       <button onClick={() => setShowEmpty(!showEmpty)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: 11, cursor: "pointer", padding: "9px", borderTop: `1px solid ${UI.line2}` }}>
-        <Eye size={12} />{showEmpty ? "빈 종류 숨기기" : `빈 종류 ${emptyCount}개 보기`}
+        <Eye size={12} />{showEmpty ? "비어 있는 종류 숨기기" : `비어 있는 종류 ${emptyCount}개 표시`}
       </button>
     </nav>
   );
@@ -799,6 +815,8 @@ function App() {
   const [q, setQ] = useState("");
   const [ns, setNs] = useState("모든 네임스페이스");
   const [detail, setDetail] = useState<Row | null>(null);
+  const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
+  const scopeLabel = scope.level === "clusters" ? "전체 클러스터" : scope.level === "nodes" ? `클러스터 ${scope.cluster}` : `노드 ${scope.node}`;
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   useEffect(() => {
@@ -831,21 +849,26 @@ function App() {
       <div style={{ display: "flex", gap: 16, padding: "16px 18px 40px", alignItems: "flex-start" }}>
         <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={filter} setFilter={setFilter} />
 
-        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <kind.icon size={15} style={{ color: BLUE }} />
-            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
-            <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{kind.count}</span>
-            {kind.view !== "table" && (
-              <span style={{ fontSize: 10, fontWeight: 600, color: BLUE, background: "rgba(10,132,255,0.08)", border: "1px solid #CFE1FB", borderRadius: 5, padding: "1.5px 7px" }}>
-                {kind.view === "physical" ? "물리 관점 지원" : "관계 관점 지원"}
-              </span>
-            )}
+        <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* ── 드릴 맵: 클러스터 → 노드 → 파드 (스코프 탐색의 주 무대) ── */}
+          <OpsiaMap embedded onScopeChange={setScope} />
+
+          {/* ── 스코프 연동 리소스 표 — 파드뷰에선 맵이 파드 표를 이미 보여주므로 숨김(중복 제거) ── */}
+          {scope.level !== "pods" && (
+          <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <kind.icon size={15} style={{ color: BLUE }} />
+              <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
+              <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{kind.count}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: UI.ink2, background: "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
+              <span style={{ marginLeft: "auto", fontSize: 10.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
+            </div>
+            {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
+            <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
+              <ResourceTable kind={kind} q={q} onOpen={setDetail} />
+            </motion.div>
           </div>
-          {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
-          <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
-            <ResourceTable kind={kind} q={q} onOpen={setDetail} />
-          </motion.div>
+          )}
         </main>
       </div>
 

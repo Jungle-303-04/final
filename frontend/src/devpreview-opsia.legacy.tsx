@@ -1,3 +1,4 @@
+// ⚠ 보관용 원본 — 병합 전 통합 맵 스냅샷 (참조 안 됨, 복원 시 이 파일을 devpreview-opsia.tsx로 복사)
 /* eslint-disable react-hooks/exhaustive-deps */
 // ⚠ 데모 · Opsia 통합 맵 v4 — 프로덕션 그레이드 재설계.
 // 원칙: 뉴트럴 표면 + 헤어라인, 색은 데이터에만, 모노 숫자, 4pt 그리드, 절제된 물리 모션.
@@ -484,16 +485,13 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
 }
 
 // ── 앱 ─────────────────────────────
-// embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boolean; onScopeChange?: (v: View) => void } = {}) {
+function App() {
   const pods = useMemo(() => genPods(), []);
   const [tick, setTick] = useState(0);
   useEffect(() => { const iv = setInterval(() => setTick((t) => t + 1), 1500); return () => clearInterval(iv); }, []);
   const live = (p: Pod) => (p.status !== "Running" ? 0 : Math.round(Math.sin((tick + p.cpu + p.id.length * 3) * 1.1) * 4 + Math.sin((tick + p.mem) * 0.37) * 2));
 
   const [view, setView] = useState<View>({ level: "clusters" });
-  useEffect(() => { onScopeChange?.(view); }, [view]);
   const [dir, setDir] = useState(1);
   const [mode, setMode] = useState<"push" | "hero">("push");
   // 노드 ↔ 파드 = 같은 대상에 더 가까이(히어로 확장) · 그 외 = 레벨 이동(푸시 슬라이드)
@@ -532,8 +530,7 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
 
   return (
     <div className="op">
-      <div style={{ width: embedded ? "100%" : 1220, maxWidth: "100%", margin: "0 auto", padding: embedded ? 0 : "32px 24px 48px" }}>
-        {!embedded && (
+      <div style={{ width: 1220, maxWidth: "100%", margin: "0 auto", padding: "32px 24px 48px" }}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
@@ -554,7 +551,6 @@ export function OpsiaMap({ embedded = false, onScopeChange }: { embedded?: boole
             ))}
           </div>
         </header>
-        )}
 
         {/* 장애 스트립 — 호버: 에러만 미리보기 / 클릭: 에러 필터 고정 */}
         {crit > 0 && (
@@ -824,7 +820,4 @@ function PodDetail({ pod, setLens, setPin, clearPod, openNode }: { pod: Pod; set
   );
 }
 
-// 단독 페이지(devpreview-opsia.html)에서만 마운트 — 셸에 임베드될 땐 컴포넌트로만 사용
-if (window.location.pathname.includes("devpreview-opsia")) {
-  ReactDOM.createRoot(document.getElementById("root")!).render(<OpsiaMap />);
-}
+ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
