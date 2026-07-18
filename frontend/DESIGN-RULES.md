@@ -1,8 +1,10 @@
 # Opsia UI 디자인 규칙 v1
 
+> 상위 문서: `OPSIA-MASTER-SPEC.md` (기능·IA·이벤트·머지 결정은 전부 그쪽). 이 문서는 Master Spec 4장이 위임한 **시각·모션 세부 규칙만** 담는다. 충돌 시 Master Spec 우선.
+
 기준: **Vercel Geist**(의미 토큰·정보 우선·차분한 표면) + **shadcn/Tremor 차트 문법** + **Vercel AI SDK 채팅 패턴**을
 **Apple HIG 감각**(컬러는 데이터에만·헤어라인·스프링 모션)으로 디벨롭한 팀 규칙.
-토큰 구현: `src/devpreview/theme.ts` — **모든 색·타이포·모션·라운드는 이 파일에서만 가져온다. 컴포넌트 안 하드코딩 금지.**
+토큰 구현: 데모=`src/devpreview/theme.ts` / 제품=`src/styles/tokens.css`(+`motion/tokens.css`) — **각 세계에서 자기 토큰 파일만 가져온다. 컴포넌트 안 하드코딩 금지. 데모 hex를 제품에 복사 금지(매핑은 Master Spec 4.1).**
 
 ## 1. 컬러
 - 표면 3층: `bg`(페이지) / `card`(표면) / 헤어라인 `line·line2`. 구분은 그림자보다 헤어라인 먼저.
@@ -33,7 +35,7 @@
 - 오버레이는 상단바·사이드바를 덮지 않는다(top=실측 헤더 높이, left=내비 폭). 폭은 드래그 리사이즈 허용.
 - 그리드는 `minmax(0,1fr)` + 아이템 `minWidth:0` — 리사이즈에 절대 무너지지 않게.
 - **표는 가로 스크롤 금지**: 고정폭 컬럼은 `minmax(48px, w)`로 감싸 축소 허용.
-- **zoom 컨테이너 좌표계**: `PRESENT_SCALE` 안의 fixed `top/width`와 모든 `vh`는 CSS 픽셀 실측으로 계산한다
+- **zoom 컨테이너 좌표계** *(데모 전용 — 제품 반입 금지, Master Spec 4.5)*: `PRESENT_SCALE` 안의 fixed `top/width`와 모든 `vh`는 CSS 픽셀 실측으로 계산한다
   (헤더 = `offsetHeight`, 뷰포트 폭 = `documentElement.clientWidth / SCALE` + ResizeObserver, vh는 `calc(100vh / SCALE)`).
   `calc(100vw…)`·`getBoundingClientRect` 시각 픽셀을 fixed에 그대로 쓰면 스케일만큼 어긋난다.
 
@@ -42,10 +44,9 @@
 - 인터랙션: hover 크로스헤어 + 값 칩, 현재점 펄스. 전환 시 pathLength 드로잉.
 - 상태 반영: 임계 리소스는 선·면 톤이 `HP.crit`.
 
-## 7. 카피
-- 서비스 톤 자연 한국어, 설명용 안내 문구 금지(빈 상태는 섹션 자체를 숨김).
+## 7. 카피 (표기법만 — 카피 정책·빈 상태 정책은 Master Spec 0장·5장)
+- 서비스 톤 자연 한국어, 설명용 안내 문구 금지.
 - 기술 고유명사(Pod, OOMKilled, kubectl)는 원문 유지. 문장부호로 끝내지 않는다.
 
-## 8. 데이터 정합 (최상위 규칙)
-- 화면의 모든 숫자는 단일 인벤토리(`podInventory/nodeInventory/repoInventory`)에서 파생.
-- 같은 개념은 같은 아이콘·같은 색 (Service=Plug, 상태색=HP). 두 화면이 다른 숫자를 말하면 버그다.
+## 8. 데이터 정합
+- Master Spec 1.2 원칙 2("단일 데이터 세계")를 따른다 — 이 문서에서는 재정의하지 않는다.
