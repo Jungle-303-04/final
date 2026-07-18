@@ -535,7 +535,7 @@ Scheduling profile 응답 예시:
 ```json
 {
   "accepted": true,
-  "cluster_id": "cluster-1",
+  "cluster_id": "game-server",
   "scheduling": {
     "profiles": [
       {

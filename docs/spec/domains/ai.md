@@ -216,8 +216,8 @@ HTTP 라우터의 목록/조회/메시지 추가/삭제 경로는 repository 호
 {
   "screen": "resources",
   "filters": {
-    "clusters": ["cluster-1"],
-    "namespaces": ["cluster-1/shop"],
+    "clusters": ["game-server"],
+    "namespaces": ["game-server/shop"],
     "applications": [],
     "labels": [],
     "resource_types": ["pod"],

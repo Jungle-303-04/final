@@ -84,7 +84,7 @@ cluster 실행은 허용하지 않는다.
 열린 dead letter가 없으면 재처리 요청도 `Skipped`로 남으며, metrics token이 배포에 없으면
 metrics 요청의 `503`은 명시적인 미설정 상태로 통과한다.
 
-기본 Runner는 실제 `cluster-1` 대신 실행마다 `bruno-<시각>-<pid>` 형식의 격리
+기본 Runner는 실제 `game-server` 대신 실행마다 `bruno-<시각>-<pid>` 형식의 격리
 cluster를 등록해 성공 경로를 검증하고 종료 trap에서 해제한다. CLI Runner는 Bruno의
 client certificate config가 필요하며 기본 경로는 `~/.kubeheal/bruno-client-cert-config.json`이다.
 Bruno 앱 전체 실행은 `cluster_purge: false`로 빠른 soft unregister를 사용하고, CLI Runner만
@@ -113,7 +113,7 @@ bash scripts/run-bruno-aws.sh
 4. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 5. `metrics_token`과 `alertmanager_token`은 해당 외부 입구 인증을 별도로 검증할 때만 넣는다.
 6. `service_image`는 target manifest 발급 시 쓸 agent 이미지다.
-7. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `cluster-1`/`cluster-2` 드릴다운이 필요하면 같은 `aws-test`에서 실행 변수만 명시적으로 덮어쓴다.
+7. `cluster_id`/`cluster_id_2`의 저장 기본값은 `api-verification-target`이고 CLI Runner는 고유 ID로 덮어쓴다. 실제 `game-server`/`demo-server` 드릴다운이 필요하면 같은 `aws-test`에서 실행 변수만 명시적으로 덮어쓴다.
 8. `rca_test_token`은 오른쪽 위 `aws-test` 환경 편집 화면의 Secret 칸에만 저장한다. collection과 환경 파일에는 실제 값이나 placeholder를 기록하지 않는다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
@@ -785,9 +785,9 @@ Bruno 기본 body는 `enabled: false`라서 테스트 생성만 하고 실제 �
 레포 등록부터 배포 반영까지의 실제 흐름은 아래 순서로 본다.
 
 1. `11-clusters/01-list-clusters` → 등록된 클러스터를 확인한다. 비어 있으면 `02-target-admin/01`로 매니페스트를 받아 대상 클러스터에 apply부터 한다.
-2. `11-clusters/03-connection-status` → `cluster-1` agent가 online인지 본다. online이면 `04-inventory-summary`와 `11-usage-series`로 팟/워크로드 실데이터와 usage 시계열이 오는지 확인한다.
+2. `11-clusters/03-connection-status` → `game-server` agent가 online인지 본다. online이면 `04-inventory-summary`와 `11-usage-series`로 팟/워크로드 실데이터와 usage 시계열이 오는지 확인한다.
 3. `10-applications/02-create-application` → 데모 레포를 등록(`application_id` 자동 저장)한다.
-4. `10-applications/05-create-deployment` → `cluster-1` sandbox에 배포를 묶는다.
+4. `10-applications/05-create-deployment` → `game-server` sandbox에 배포를 묶는다.
 5. GitHub 웹훅(`GITHUB_WEBHOOK_SECRET`)을 설정한 뒤 레포에 push하거나, `06-gitops-approval/01-github-webhook`으로 push 이벤트를 모사한다.
 6. `10-applications/06-list-runs` → run이 생겼는지 본다. 승인 대기면 `06-gitops-approval/02-grant-approval`로 승인한다.
 7. `11-clusters/09-scale-deployment` / `10-restart-deployment` → sandbox 워크로드에 직접 액션을 보내고, 다시 `04-inventory-*`로 반영을 확인한다.

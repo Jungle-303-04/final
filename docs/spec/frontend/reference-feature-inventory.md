@@ -39,7 +39,7 @@ next_gate: reference-ui-delta-rebaseline-check --require-classified
 | 비교 실행 도구 | `1.8.1` | 로컬 CLI `--version` |
 | source rebaseline target | upstream HEAD, commit `cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc` | `references/provenance/source.json`과 동결 source ledger |
 | source license | Apache-2.0 | 동일 checkout의 `LICENSE` 직접 확인 |
-| 실행 context | `cluster-1`, `mgmt`; 관찰 시작 current=`mgmt` | `GET /api/contexts`, process argument |
+| 실행 context | `game-server`, `mgmt`; 관찰 시작 current=`mgmt` | `GET /api/contexts`, process argument |
 | 인증 | local no-auth (`authEnabled=false`, `authMode=none`) | `GET /api/auth/me` |
 | 제한 flag | exec, Helm write, local terminal 비활성 | process argument와 `GET /api/capabilities` |
 | timeline | SQLite persistent storage | process argument |

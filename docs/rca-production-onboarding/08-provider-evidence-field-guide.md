@@ -314,9 +314,9 @@ Service 뒤에 endpoint가 있는지 확인하는 가장 중요한 bucket이다.
 
 ```json
 {
-  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "evidence_key": "default:game-server:cluster-snapshot:2026-07-11T07:25:00+00:00",
   "workspace_id": "default",
-  "cluster_id": "cluster-1",
+  "cluster_id": "game-server",
   "source": "kubernetes",
   "payload": {
     "kubernetes": {}
@@ -661,9 +661,9 @@ replica 수, scrape 성공 여부처럼 시간에 따라 변하는 숫자를 보
 
 ```json
 {
-  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "evidence_key": "default:game-server:cluster-snapshot:2026-07-11T07:25:00+00:00",
   "workspace_id": "default",
-  "cluster_id": "cluster-1",
+  "cluster_id": "game-server",
   "source": "metrics",
   "payload": {
     "metrics": {}
@@ -865,9 +865,9 @@ Kubernetes Event가 "컨테이너가 재시작된다"고 말해준다면, log li
 
 ```json
 {
-  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "evidence_key": "default:game-server:cluster-snapshot:2026-07-11T07:25:00+00:00",
   "workspace_id": "default",
-  "cluster_id": "cluster-1",
+  "cluster_id": "game-server",
   "source": "logs",
   "payload": {
     "logs": []
@@ -1072,9 +1072,9 @@ upstream latency, management gateway 호출 실패 같은 흐름형 문제를 �
 
 ```json
 {
-  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "evidence_key": "default:game-server:cluster-snapshot:2026-07-11T07:25:00+00:00",
   "workspace_id": "default",
-  "cluster_id": "cluster-1",
+  "cluster_id": "game-server",
   "source": "traces",
   "payload": {
     "traces": {}
@@ -1247,9 +1247,9 @@ Metadata bucket은 `MetadataProvider`가 만든다.
 
 ```json
 {
-  "evidence_key": "default:cluster-1:cluster-snapshot:2026-07-11T07:25:00+00:00",
+  "evidence_key": "default:game-server:cluster-snapshot:2026-07-11T07:25:00+00:00",
   "workspace_id": "default",
-  "cluster_id": "cluster-1",
+  "cluster_id": "game-server",
   "source": "metadata",
   "payload": {
     "metadata": {}

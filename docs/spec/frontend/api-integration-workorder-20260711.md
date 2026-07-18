@@ -322,7 +322,7 @@ API test 전용 fixture만 사용한다. `features/**`를 API test가 import하�
 | D7 | receipt를 최종 결과로 바꾸지 않고 status literal·nullable field를 축소하지 않음 |
 | D8 | 목록 limit·cursor·offset이 backend default와 bounds를 그대로 반영 |
 
-GET 함수는 cluster-1 또는 세션에 보이는 실제 ID로 curl 실검증이 필수다. 응답 전문 대신 key 목록,
+GET 함수는 game-server 또는 세션에 보이는 실제 ID로 curl 실검증이 필수다. 응답 전문 대신 key 목록,
 개수, redacted ID, HTTP status만 progress에 기록한다.
 
 mutation은 실제 상태를 바꿀 수 있으므로 다음 규칙을 따른다.

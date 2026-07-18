@@ -1,6 +1,6 @@
 # 외부 GitOps controller + 기준 원본 학습용 실습 환경
 
-이 문서는 `cluster-1` EKS 클러스터에 연결해 둔 외부 GitOps controller 학습 앱과 기준 원본 Timeline/Live Traffic을 다시 실행하고 살펴보기 위한 안내서다.
+이 문서는 `game-server` EKS 클러스터에 연결해 둔 외부 GitOps controller 학습 앱과 기준 원본 Timeline/Live Traffic을 다시 실행하고 살펴보기 위한 안내서다.
 
 ## 현재 구성
 
@@ -26,13 +26,13 @@
 외부 GitOps controller 서버는 클러스터 외부에 노출하지 않고 로컬 포트 포워딩으로만 연다.
 
 ```bash
-kubectl --context cluster-1 -n argocd port-forward service/argocd-server 18080:80
+kubectl --context game-server -n argocd port-forward service/argocd-server 18080:80
 ```
 
 브라우저에서 <http://127.0.0.1:18080>을 열고 사용자 이름 `admin`으로 로그인한다. 초기 비밀번호는 다음 명령으로 확인한다.
 
 ```bash
-kubectl --context cluster-1 -n argocd get secret argocd-initial-admin-secret \
+kubectl --context game-server -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 --decode; echo
 ```
 
@@ -121,10 +121,10 @@ prometheus.io/path: /metrics
 외부 GitOps controller 설치와 학습 앱 적용:
 
 ```bash
-kubectl --context cluster-1 create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl --context cluster-1 apply -n argocd --server-side --force-conflicts \
+kubectl --context game-server create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl --context game-server apply -n argocd --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-kubectl --context cluster-1 apply -f deploy/oss/argocd-learning-lab.yaml
+kubectl --context game-server apply -f deploy/oss/argocd-learning-lab.yaml
 ```
 
 traffic flow collector 설치:
@@ -136,7 +136,7 @@ helm upgrade --install caretta groundcover/caretta \
   --version 0.0.16 \
   --namespace caretta \
   --create-namespace \
-  --kube-context cluster-1 \
+  --kube-context game-server \
   --values deploy/oss/caretta-values.yaml \
   --rollback-on-failure \
   --wait \
@@ -146,12 +146,12 @@ helm upgrade --install caretta groundcover/caretta \
 ## 상태 확인
 
 ```bash
-kubectl --context cluster-1 -n argocd get applications.argoproj.io \
+kubectl --context game-server -n argocd get applications.argoproj.io \
   -o custom-columns='NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,PHASE:.status.operationState.phase'
 
-kubectl --context cluster-1 -n caretta get pods -o wide
+kubectl --context game-server -n caretta get pods -o wide
 
-helm --kube-context cluster-1 -n caretta status caretta
+helm --kube-context game-server -n caretta status caretta
 
 curl -s http://127.0.0.1:9280/api/traffic/flows | \
   jq '{source, flow_count:(.flows | length), aggregated_count:(.aggregated | length)}'
@@ -162,18 +162,18 @@ curl -s http://127.0.0.1:9280/api/traffic/flows | \
 학습 앱만 제거하려면 다음을 실행한다.
 
 ```bash
-kubectl --context cluster-1 delete -f deploy/oss/argocd-learning-lab.yaml
+kubectl --context game-server delete -f deploy/oss/argocd-learning-lab.yaml
 ```
 
 traffic flow collector를 제거하려면 다음을 실행한다.
 
 ```bash
-helm --kube-context cluster-1 -n caretta uninstall caretta
-kubectl --context cluster-1 delete namespace caretta
+helm --kube-context game-server -n caretta uninstall caretta
+kubectl --context game-server delete namespace caretta
 ```
 
 외부 GitOps controller 자체까지 제거하는 아래 명령은 해당 controller와 네임스페이스의 모든 설정을 삭제한다.
 
 ```bash
-kubectl --context cluster-1 delete namespace argocd
+kubectl --context game-server delete namespace argocd
 ```

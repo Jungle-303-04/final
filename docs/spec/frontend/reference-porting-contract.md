@@ -147,7 +147,7 @@ HTTP 200이어도 JSON parse 또는 Zod 검증이 실패하면 성공으로 처�
 ## 5. 클러스터 식별과 선택
 
 - 선택 가능한 cluster ID와 표시 이름의 유일한 권위는 `GET /api/clusters`의 현재 세션 응답이다.
-- `cluster-1`, `kubernetes-ops` 같은 관측 이름은 예시일 뿐 TypeScript union, fallback, 기본 성공값으로
+- `game-server`, `management-server` 같은 관측 이름은 예시일 뿐 TypeScript union, fallback, 기본 성공값으로
   하드코딩하지 않는다.
 - 선택 cluster는 URL `?cluster=`에 보존한다.
 - URL의 ID가 현재 사용자에게 보이지 않으면 첫 cluster로 자동 교정하지 않고 명시적 접근 불가 상태를

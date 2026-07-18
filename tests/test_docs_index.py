@@ -59,6 +59,7 @@ def test_retired_point_in_time_operations_docs_are_removed() -> None:
     retired_paths = [
         "docs/codex-work-order-20260712.md",
         "docs/continuation-execution-plan-2026-07-07.md",
+        "docs/current-service-state.md",
         "docs/production-push-2026-07-07.md",
         "docs/remediation-plan-2026-07-11.md",
         "docs/security-review-20260710.md",
@@ -74,6 +75,25 @@ def test_retired_point_in_time_operations_docs_are_removed() -> None:
     )
 
     assert remaining == []
+
+
+def test_docs_use_canonical_eks_cluster_names() -> None:
+    allowed_legacy_paths = {
+        "docs/infra/aws-cluster-legacy-mapping.md",
+    }
+    offenders: list[str] = []
+
+    for path in DOCS_DIR.rglob("*"):
+        if not path.is_file() or path.suffix not in {".bru", ".json", ".md"}:
+            continue
+        relative = path.relative_to(ROOT_DIR).as_posix()
+        if relative in allowed_legacy_paths or relative.startswith("docs/migration/"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "cluster-1" in text or "cluster-2" in text:
+            offenders.append(relative)
+
+    assert offenders == []
 
 
 def test_docs_do_not_reference_removed_local_kind_recovery_logs() -> None:

@@ -97,7 +97,7 @@ base_url: https://k8s.woonyong.org/api/
 auto_login: false
 auth_email: replace-with-auth-email
 auth_password: replace-with-auth-password
-cluster_id: cluster-1
+cluster_id: game-server
 ```
 
 Bruno는 자격증명을 저장하지 않는 공용 `aws-test` 환경만 사용한다. 인증 자체를 검증할 때 필요한 계정은 팀 Secret 동기화 절차로 로컬 `.env.local-test`에만 받고 Bruno 파일에는 기록하지 않는다.

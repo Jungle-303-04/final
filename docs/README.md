@@ -169,7 +169,6 @@ repo root의 `HANDOVER.md`를 본다.
 - [backend-f-workqueue](backend-f-workqueue.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [demo-01-digital-twin-agent-town](demo-01-digital-twin-agent-town.md)
-- [current-service-state](current-service-state.md)
 - [security-baseline](security-baseline.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)

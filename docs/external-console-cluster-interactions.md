@@ -5,7 +5,7 @@
 ## 현재 전제
 
 - 로컬에는 외부 콘솔 CLI, `kubectl`, `helm`이 설치되어 있다.
-- kubeconfig에는 `cluster-1`, `cluster-2`, `kubernetes-ops` 같은 EKS context가 이미 존재한다.
+- kubeconfig에는 `game-server`, `demo-server`, `management-server` 같은 EKS context가 이미 존재한다.
 - 현재 AWS 세션은 만료될 수 있다. `kubectl`이 `Your session has expired`를 출력하면 먼저 `aws login`으로 재인증한다.
 - 현재 외부 콘솔 CLI 설정은 예전 tenant URL을 볼 수 있다. `lookup ... no such host`가 나오면 새 Console URL/token으로 다시 로그인해야 한다.
 
@@ -23,8 +23,8 @@ cp config/env/external-console.env.example .env.external-console
 EXTERNAL_CONSOLE_CLI=
 EXTERNAL_CONSOLE_URL=
 EXTERNAL_CONSOLE_TOKEN=
-EXTERNAL_CLUSTER_HANDLES="cluster-1 cluster-2"
-CLUSTER_CONTEXTS="cluster-1 cluster-2"
+EXTERNAL_CLUSTER_HANDLES="game-server demo-server"
+CLUSTER_CONTEXTS="game-server demo-server"
 
 # 기존 management/target 스크립트까지 연결할 때만 지정
 MGMT_CONTEXT=

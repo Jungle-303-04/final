@@ -131,7 +131,7 @@ stale/partial/RBAC, LOD, 보안, 검증처럼 뷰와 무관한 장기 규칙이 
 - P1 최종 보강 커밋: `69ae6e1ccd30ea9d60bd9fb9d42d4d0e1da8b912`
 - 문서 위생·API 병렬 조율 커밋: `8bc45894f8516b144d12cf16999b4cd8263ed94c`
 - 원격 브랜치: `origin/woonyong/ui-layer-lab`
-- 실행 인스턴스 `http://127.0.0.1:9280`의 `mgmt`, `cluster-1` context를 browser에서
+- 실행 인스턴스 `http://127.0.0.1:9280`의 `mgmt`, `game-server` context를 browser에서
   관찰하고 동일 버전 source tag `v1.8.1`, commit
   `3ff2b1095151c690bf536e8e6ca685c2703fcd70`과 대조했다.
 - primary/contextual route, 전역 shell, URL/deep-link, drawer/detail, keyboard, filter,
@@ -1267,7 +1267,7 @@ API 완성: listClusters (257581398)
   “표시 N개 · 전체 수 미확인”으로 표기하고, catalog의 `incidentCount`와 표시 warning 수를 분리한다.
   CPU·memory 100% 초과 값은 실제 text로 보존하고 progress geometry만 100으로 clamp한다.
 - 실제 API 브라우저 검증은 `http://127.0.0.1:5180/product`에서 수행했다. 인증된
-  `kubernetes-ops` 응답으로 Pod 52, Node 2, cluster incident 2가 표시됐고, 실제 Node 선택과
+  `management-server` 응답으로 Pod 52, Node 2, cluster incident 2가 표시됐고, 실제 Node 선택과
   Pod summary request, URL drill-down, Node focus return을 확인했다. synthetic fallback은 없다.
 - 실제 응답에서 cluster 총 Pod는 52인데 두 Node의 `podsRunning`은 각각 0으로 관측됐다. 프론트는
   값을 발명하거나 cluster 총수로 역산하지 않는다. 이 불일치는 backend 관측 데이터 품질 항목으로

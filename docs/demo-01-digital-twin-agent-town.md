@@ -1046,8 +1046,8 @@ latency와 tick lag가 내려갑니다."
 터미널에서 직접 실행한다.
 
 ```bash
-kubectl --context cluster-1 -n sandbox scale deploy/district-sim-main-hall --replicas=3
-kubectl --context cluster-1 -n sandbox scale deploy/agent-queue-worker --replicas=4
+kubectl --context game-server -n sandbox scale deploy/district-sim-main-hall --replicas=3
+kubectl --context game-server -n sandbox scale deploy/agent-queue-worker --replicas=4
 ```
 
 설명:
