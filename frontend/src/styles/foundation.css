@@ -3,6 +3,26 @@
     box-sizing: border-box;
     border-color: var(--border);
     outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 42%, transparent) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--muted-foreground) 42%, transparent);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 999px;
   }
 
   html {
@@ -40,6 +60,10 @@
 }
 
 @media (forced-colors: active) {
+  * {
+    scrollbar-color: ButtonText Canvas;
+  }
+
   :focus-visible {
     outline: 2px solid CanvasText;
     outline-offset: 2px;

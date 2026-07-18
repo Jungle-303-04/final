@@ -92,7 +92,7 @@ export function ScrollArea({
       ) : null}
       {normalizedOrientation === "both" ? (
         <ScrollAreaPrimitive.Corner
-          className="bg-muted forced-colors:border forced-colors:border-current forced-colors:bg-[Canvas]"
+          className="bg-transparent forced-colors:border forced-colors:border-current forced-colors:bg-[Canvas]"
           data-slot="scroll-area-corner"
         />
       ) : null}
@@ -108,7 +108,7 @@ function ProductScrollBar({
   return (
     <ScrollAreaPrimitive.Scrollbar
       className={cn(
-        "hidden touch-none select-none bg-muted p-px transition-colors motion-reduce:transition-none forced-colors:border forced-colors:border-current forced-colors:bg-[Canvas]",
+        "hidden touch-none select-none bg-transparent p-px transition-colors motion-reduce:transition-none forced-colors:border forced-colors:border-current forced-colors:bg-[Canvas]",
         orientation === "vertical"
           ? "h-full w-2.5 border-l border-l-transparent data-[has-overflow-y]:flex"
           : "h-2.5 flex-col border-t border-t-transparent data-[has-overflow-x]:flex",
