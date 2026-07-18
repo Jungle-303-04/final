@@ -69,6 +69,7 @@ K8S_STATEFULSETS_KEY = "statefulsets"
 K8S_DAEMONSETS_KEY = "daemonsets"
 K8S_JOBS_KEY = "jobs"
 K8S_CRONJOBS_KEY = "cronjobs"
+K8S_INGRESSES_KEY = "ingresses"
 K8S_API_RESOURCE_DISCOVERY_KEY = "api_resource_discovery"
 K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY = "dynamic_resource_collections"
 K8S_CUSTOM_RESOURCES_KEY = "custom_resources"
@@ -81,6 +82,7 @@ MAX_KUBERNETES_NODES = 100
 MAX_KUBERNETES_WORKLOADS = 500
 MAX_KUBERNETES_SERVICES = 300
 MAX_KUBERNETES_ENDPOINTS = 300
+MAX_KUBERNETES_INGRESSES = 300
 MAX_KUBERNETES_RESOURCE_QUOTAS = 200
 MAX_KUBERNETES_CUSTOM_RESOURCES = 1_000
 KUBERNETES_ACCESS_PAGE_SIZE = 500
@@ -94,6 +96,7 @@ KUBERNETES_LIST_LIMITS = {
     K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: MAX_KUBERNETES_WORKLOADS,
     K8S_RESOURCE_SERVICES: MAX_KUBERNETES_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY: MAX_KUBERNETES_ENDPOINTS,
+    K8S_INGRESSES_KEY: MAX_KUBERNETES_INGRESSES,
     K8S_RESOURCE_RESOURCE_QUOTAS: MAX_KUBERNETES_RESOURCE_QUOTAS,
     K8S_CUSTOM_RESOURCES_KEY: MAX_KUBERNETES_CUSTOM_RESOURCES,
 }
@@ -104,6 +107,7 @@ KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY,
     K8S_RESOURCE_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY,
+    K8S_INGRESSES_KEY,
     K8S_RESOURCE_RESOURCE_QUOTAS,
     K8S_CUSTOM_RESOURCES_KEY,
 }
@@ -366,6 +370,14 @@ class KubernetesSnapshotProvider:
                     headers,
                     f"/apis/discovery.k8s.io/v1/namespaces/{namespace}/{K8S_RESOURCE_ENDPOINT_SLICES}",
                     allow_not_found=True,
+                ),
+                K8S_INGRESSES_KEY: await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    f"/apis/networking.k8s.io/v1/namespaces/{namespace}/{K8S_INGRESSES_KEY}",
+                    allow_not_found=True,
+                    label_selector=telemetry_query.label_selector,
                 ),
                 K8S_RESOURCE_RESOURCE_QUOTAS: await self.get_json(
                     client,
@@ -1104,6 +1116,7 @@ class KubernetesSnapshotProvider:
         raw_services = scoped_items(
             payload.get(K8S_RESOURCE_SERVICES), telemetry_query.label_selector
         )
+        raw_ingresses = scoped_items(payload.get(K8S_INGRESSES_KEY), telemetry_query.label_selector)
         raw_resource_quotas = scoped_items(
             payload.get(K8S_RESOURCE_RESOURCE_QUOTAS), telemetry_query.label_selector
         )
@@ -1164,6 +1177,7 @@ class KubernetesSnapshotProvider:
             *revision_summaries("ControllerRevision", raw_controller_revisions),
         ]
         snapshot[K8S_RESOURCE_SERVICES] = [service_summary(item) for item in raw_services]
+        snapshot[K8S_INGRESSES_KEY] = [ingress_summary(item) for item in raw_ingresses]
         snapshot[K8S_RESOURCE_RESOURCE_QUOTAS] = [
             resource_quota_summary(item) for item in raw_resource_quotas
         ]
@@ -1193,6 +1207,7 @@ class KubernetesSnapshotProvider:
                     ),
                     K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
                     K8S_SNAPSHOT_ENDPOINTS_KEY: len(snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY]),
+                    K8S_INGRESSES_KEY: len(snapshot[K8S_INGRESSES_KEY]),
                     K8S_RESOURCE_RESOURCE_QUOTAS: len(snapshot[K8S_RESOURCE_RESOURCE_QUOTAS]),
                 },
             }
@@ -1455,6 +1470,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
         K8S_SNAPSHOT_NODES_KEY: [],
         K8S_RESOURCE_SERVICES: [],
         K8S_SNAPSHOT_ENDPOINTS_KEY: [],
+        K8S_INGRESSES_KEY: [],
         K8S_RESOURCE_RESOURCE_QUOTAS: [],
         K8S_CUSTOM_RESOURCES_KEY: [],
         K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY: [],
@@ -1490,6 +1506,7 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
         K8S_SNAPSHOT_EVENTS_KEY,
         K8S_RESOURCE_SERVICES,
         K8S_SNAPSHOT_ENDPOINTS_KEY,
+        K8S_INGRESSES_KEY,
         K8S_RESOURCE_RESOURCE_QUOTAS,
         K8S_CUSTOM_RESOURCES_KEY,
     ):
@@ -2783,6 +2800,53 @@ def service_summary(item: JsonObject) -> JsonObject:
         "load_balancer": {"ingress": ingress},
         "external_hosts": external_hosts,
         "external_url": f"http://{external_hosts[0]}" if external_hosts else None,
+    }
+
+
+def ingress_summary(item: JsonObject) -> JsonObject:
+    """Build bounded routing evidence without annotations or TLS secret data."""
+
+    ingress_spec = spec(item)
+    ingress_status = status(item)
+    load_balancer = ingress_status.get("loadBalancer", {})
+    addresses = load_balancer.get("ingress", []) if isinstance(load_balancer, dict) else []
+    external_hosts = sorted(
+        {
+            str(entry.get("hostname") or entry.get("ip"))
+            for entry in addresses
+            if isinstance(entry, dict) and (entry.get("hostname") or entry.get("ip"))
+        }
+    )
+    rules = ingress_spec.get("rules") if isinstance(ingress_spec.get("rules"), list) else []
+    hosts = sorted(
+        {str(rule.get("host")) for rule in rules if isinstance(rule, dict) and rule.get("host")}
+    )
+    backend_names: set[str] = set()
+    for rule in rules:
+        http = rule.get("http") if isinstance(rule, dict) else None
+        paths = http.get("paths") if isinstance(http, dict) else None
+        for path in paths if isinstance(paths, list) else []:
+            backend = path.get("backend") if isinstance(path, dict) else None
+            service = backend.get("service") if isinstance(backend, dict) else None
+            if isinstance(service, dict) and service.get("name"):
+                backend_names.add(str(service["name"]))
+    default_backend = ingress_spec.get("defaultBackend")
+    default_service = default_backend.get("service") if isinstance(default_backend, dict) else None
+    if isinstance(default_service, dict) and default_service.get("name"):
+        backend_names.add(str(default_service["name"]))
+    meta = metadata(item)
+    return {
+        "uid": meta.get("uid"),
+        "resource_version": meta.get("resourceVersion"),
+        "namespace": meta.get("namespace"),
+        "name": meta.get("name"),
+        **bounded_label_summary(item),
+        "ingress_class_name": ingress_spec.get("ingressClassName"),
+        "hosts": hosts,
+        "backend_service_names": sorted(backend_names),
+        "external_hosts": external_hosts,
+        "address_count": len(external_hosts),
+        "tls_enabled": bool(ingress_spec.get("tls")),
     }
 
 
