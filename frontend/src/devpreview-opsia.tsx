@@ -456,7 +456,7 @@ function DualSpark({ id, a, b, h = 56 }: { id: string; a: number; b: number; h?:
   }, []);
   const [hover, setHover] = useState<number | null>(null); // 0..1 가로 비율
   const series = (base: number, ph: number) => Array.from({ length: N }, (_, i) => {
-    const x = clock * 0.9 - (N - 1) + i;
+    const x = clock * 2.2 - (N - 1) + i;
     return base + 5.5 * Math.sin(x * 0.22 + hsh + ph) + 2.5 * Math.sin(x * 0.09 + hsh * 1.7 + ph) + 1.2 * Math.sin(x * 0.47 + ph);
   });
   const va = series(a, 0), vb = series(b, 2.3);
@@ -563,20 +563,20 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
         {chot > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 6, padding: "2px 7px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{chot}⚠</span>}
       </div>
 
-      {/* CPU·MEM 통합 차트 — 범례 숫자가 곧 현재값 (게이지 중복 제거, 정보 손실 없음) */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink3 }}>
-          <span style={{ width: 7, height: 7, borderRadius: 999, background: BLUE }} />CPU <b style={{ fontSize: 15, fontWeight: 700, color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{avgC}%</b>
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink3 }}>
-          <span style={{ width: 7, height: 7, borderRadius: 999, background: "#8250DF" }} />MEM <b style={{ fontSize: 15, fontWeight: 700, color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{avgM}%</b>
-        </span>
+      {/* 4스탯 그리드 — 라벨 위·값 아래 (색점 = 아래 차트의 시리즈) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+        {([["CPU", `${avgC}%`, BLUE], ["MEM", `${avgM}%`, "#8250DF"], ["NET", `${net}KB/s`, null], ["DISK", `${disk}%`, null]] as const).map(([lb, v, dot]) => (
+          <span key={lb} style={{ minWidth: 0 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
+              {dot && <span style={{ width: 6, height: 6, borderRadius: 999, background: dot }} />}{lb}
+            </span>
+            <span style={{ display: "block", fontSize: 16.5, fontWeight: 700, color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums", marginTop: 2, letterSpacing: "-0.02em" }}>{v}</span>
+          </span>
+        ))}
       </div>
-      <DualSpark id={cl.id} a={avgC} b={avgM} h={50} />
-      {/* 차트 밖 지표 — 색점 없음(차트 시리즈 아님) */}
-      <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: UI.ink3, marginTop: -4 }}>
-        <span>NET <b style={{ fontWeight: 700, color: UI.ink2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{net}KB/s</b></span>
-        <span>DISK <b style={{ fontWeight: 700, color: UI.ink2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{disk}%</b></span>
+      {/* 차트 — 카드 가장자리까지 풀블리드 */}
+      <div style={{ margin: "0 -18px", marginTop: 2 }}>
+        <DualSpark id={cl.id} a={avgC} b={avgM} h={54} />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
