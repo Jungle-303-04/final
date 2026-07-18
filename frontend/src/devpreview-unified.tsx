@@ -460,6 +460,58 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
   );
 }
 
+
+// ── 관련 리소스 미니 그래프 — 중심 리소스에서 관련 항목으로 뻗는 관계도 (클릭 = 해당 상세) ──
+function RelGraph({ center, centerIcon: CI, items, onOpenRef }: {
+  center: string; centerIcon: typeof Rocket;
+  items: { label: string; pfx: string; name: string; tone: keyof typeof TINT_G; kindId?: string }[];
+  onOpenRef?: (kindId: string, name: string) => void;
+}) {
+  const ROW = 46, GAPX = 46, CW = 148;
+  const H = Math.max(items.length * ROW, 92);
+  const cy = H / 2;
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 0 }}>
+      {/* 중심 노드 */}
+      <div style={{ width: CW, flexShrink: 0, display: "flex", alignItems: "center", gap: 8, background: "rgba(10,132,255,0.07)", border: "1px solid rgba(10,132,255,0.28)", borderRadius: 11, padding: "10px 11px" }}>
+        <CI size={14} style={{ color: BLUE, flexShrink: 0 }} />
+        <span style={{ minWidth: 0, fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{center}</span>
+      </div>
+      {/* 연결선 */}
+      <svg width={GAPX} height={H} style={{ flexShrink: 0, display: "block" }}>
+        {items.map((it, i) => {
+          const y = i * ROW + ROW / 2;
+          const c = TINT_G[it.tone]?.fg ?? UI.ink3;
+          return <path key={i} d={`M 0 ${cy} C ${GAPX * 0.55} ${cy}, ${GAPX * 0.45} ${y}, ${GAPX} ${y}`} fill="none" stroke={c} strokeOpacity={0.45} strokeWidth={1.4} />;
+        })}
+        <circle cx={1.5} cy={cy} r={2.5} fill={BLUE} />
+      </svg>
+      {/* 관련 노드 스택 */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+        {items.map((it, i) => {
+          const t = TINT_G[it.tone] ?? TINT_G.gray;
+          const clickable = !!(it.kindId && onOpenRef);
+          return (
+            <motion.button key={`${it.label}-${it.name}`} whileHover={clickable ? { x: 2 } : undefined} whileTap={clickable ? { scale: 0.985 } : undefined}
+              onClick={clickable ? () => onOpenRef!(it.kindId!, it.name) : undefined} disabled={!clickable}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", height: ROW - 6,
+                background: t.bg, border: `1px solid ${t.bd}`, borderRadius: 10, padding: "0 11px", cursor: clickable ? "pointer" : "default" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: t.fg, letterSpacing: "0.02em", flexShrink: 0 }}>{it.label}</span>
+              <span style={{ minWidth: 0, flex: 1, fontSize: 11.5, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.pfx}{it.name}</span>
+              {clickable && <ChevronDown size={11} style={{ color: t.fg, transform: "rotate(-90deg)", flexShrink: 0 }} />}
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+const TINT_G = {
+  green: { fg: "#1F9D4D", bg: "#EDFAF1", bd: "#C9EAD4" }, blue: { fg: "#0A6CFF", bg: "#EDF4FF", bd: "#CFE1FB" },
+  lime: { fg: "#4D7C0F", bg: "#F3FAE7", bd: "#DDF0BB" }, amber: { fg: "#B25A00", bg: "#FFF8EF", bd: "#F3D8B7" },
+  purple: { fg: "#8250DF", bg: "#F6F1FE", bd: "#E3D5FA" }, gray: { fg: "#5F6570", bg: "#F4F5F7", bd: "#E4E6EA" },
+} as const;
+
 const TOPBAR_H = 57; // 상단 크롬 높이 — 오버레이는 이 아래부터 시작한다
 
 // ── 메트릭 차트 — 그리드·축·호버 크로스헤어·현재점 펄스를 갖춘 고급 뷰 ──
@@ -808,24 +860,16 @@ status:
 
               {/* 관련 리소스 */}
               <Sec title="관련 리소스" icon={Copy}>
-                {[
-                  // StatefulSet 파드의 소유자는 sts 직접, Deployment 계열은 rs → deploy 체인
-                  ...(isSts ? [["소유자", "sts/", base, "green"]] : [["소유자", "rs/", `${base}-69bddf5587`, "green"], ["디플로이먼트", "deploy/", base, "green"]]),
-                  ["서비스", "svc/", base, "blue"],
-                  ["파드", "pod/", `${base}-7494d5f69f-8kp4w`, "lime"],
-                  // 연결된 구성: 인벤토리가 알려주면 그것을, 아니면 관례 이름
-                  ...((Array.isArray(row.cfgs) && row.cfgs.length ? row.cfgs : ["argocd-cmd-params-cm"]).map((c) => ["구성", "cm/", String(c), "amber"])),
-                  ["네트워크 정책", "networkpolicy/", `${base}-network-policy`, "purple"]]
-                  .map(([label, pfx, n, tone]) => (
-                    <div key={`${label}-${n}`} style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 11, color: UI.ink3, marginBottom: 4 }}>{label as string}</div>
-                      {/* 클릭 = 해당 리소스 상세로 이동 */}
-                      <span onClick={REF_KIND[pfx as string] && onOpenRef ? () => onOpenRef(REF_KIND[pfx as string], String(n)) : undefined}
-                        style={{ cursor: REF_KIND[pfx as string] && onOpenRef ? "pointer" : "default" }}>
-                        <Chip text={`${pfx as string} ${n as string}`} tone={tone as "green"} />
-                      </span>
-                    </div>
-                  ))}
+                <RelGraph center={name} centerIcon={kind.icon} onOpenRef={onOpenRef}
+                  items={[
+                    ...(isSts ? [{ label: "소유자", pfx: "sts/", name: base, tone: "green" as const, kindId: "StatefulSet" }]
+                              : [{ label: "소유자", pfx: "rs/", name: `${base}-69bddf5587`, tone: "green" as const, kindId: "ReplicaSet" },
+                                 { label: "배포", pfx: "deploy/", name: base, tone: "green" as const, kindId: "Deployment" }]),
+                    { label: "서비스", pfx: "svc/", name: base, tone: "blue" as const, kindId: "Service" },
+                    { label: "파드", pfx: "pod/", name: `${base}-7494d5f69f-8kp4w`, tone: "lime" as const, kindId: "Pod" },
+                    ...((Array.isArray(row.cfgs) && row.cfgs.length ? row.cfgs : ["argocd-cmd-params-cm"]).map((c) => ({ label: "구성", pfx: "cm/", name: String(c), tone: "amber" as const, kindId: "ConfigMap" }))),
+                    { label: "정책", pfx: "netpol/", name: `${base}-network-policy`, tone: "purple" as const, kindId: "NetworkPolicy" },
+                  ]} />
               </Sec>
 
               {/* 최근 이벤트 */}
@@ -1223,7 +1267,7 @@ function App() {
 
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
-      <header ref={headerRef} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+      <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 66, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />prod-eks<ChevronDown size={12} style={{ color: UI.ink3 }} />
         </span>
