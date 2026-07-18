@@ -905,6 +905,7 @@ def test_rollback_restores_captured_deployment_template_before_digest(
 
     commands = [command for command, _payload in calls]
     patch_index = next(index for index, command in enumerate(commands) if "patch" in command)
+    assert "--patch-file=/dev/stdin" in commands[patch_index]
     image_index = next(
         index for index, command in enumerate(commands) if command[5:7] == ("set", "image")
     )
@@ -943,6 +944,7 @@ def test_restore_deployment_states_attempts_every_workload_after_failure(
     attempted: list[str] = []
 
     def fake_run(command: tuple[str, ...], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert "--patch-file=/dev/stdin" in command
         attempted.append(command[6])
         if command[6] == "deployment/api-gateway":
             raise subprocess.CalledProcessError(1, command)

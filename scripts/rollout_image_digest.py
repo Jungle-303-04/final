@@ -226,7 +226,7 @@ def apply_existing_deployment_specs(
                 "patch",
                 resource,
                 "--type=json",
-                "--patch-file=-",
+                "--patch-file=/dev/stdin",
             ),
             check=True,
             input=json.dumps(patch, separators=(",", ":")),

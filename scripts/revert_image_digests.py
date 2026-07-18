@@ -274,7 +274,7 @@ def restore_deployment_states(plan: RollbackPlan, *, context: str) -> None:
                     "patch",
                     state.resource,
                     "--type=json",
-                    "--patch-file=-",
+                    "--patch-file=/dev/stdin",
                 ),
                 check=True,
                 input=json.dumps(deployment_state_patch(state), separators=(",", ":")),
