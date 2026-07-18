@@ -833,9 +833,6 @@ SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}" \
 SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}" \
 bash "${ROOT_DIR}/scripts/register-target.sh"
 
-echo "==> applying local Radar showcase resources"
-kubectl --context "kind-${TARGET_CLUSTER}" apply -f "${ROOT_DIR}/deploy/kind/radar-showcase.yaml"
-
 # target 텔레메트리 스택(Prometheus/Loki/Tempo/OTel) 설치 — evidence provider 실데이터 소스.
 # helm 미설치·오프라인 환경은 INSTALL_TELEMETRY=0 으로 건너뛴 뒤 나중에 수동 실행한다.
 INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-1}"

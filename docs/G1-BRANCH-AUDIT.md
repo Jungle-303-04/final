@@ -21,7 +21,7 @@
 | `codex/deploy-gate-simplify-20260719` | `82e7aa10d` | #623 merged | 삭제. PR #623 merge commit `fba57b25e`로 dev에 병합됐다. |
 | `codex/frontAlarm` | `45de68145` | - | 미채택 후 삭제. 별도 `ActivityNotificationsProvider`, 알림 미리보기와 개발 테스트 이벤트는 D4의 벨+sonner 단일 표면 및 실 SSE 발화 계약과 충돌한다. |
 | `codex/gitOpsNode` | `106a1859c` | - | 미채택 후 삭제. 별도 `DeploymentBlueprint*` 편집기와 preview entry를 추가한다. dev의 `WorkflowGraph`·`PlanEditor`·`PlanWizard`가 D10 오너이므로 두 번째 워크플로 구현을 채택하지 않는다. |
-| `codex/radar-opsia-parity-integration-20260718` | `855ff3fd0` | - | 가치 통합 후 삭제. dev가 import하지만 누락한 서버 단일 리소스 분류는 `b3e61d534`→`ef4015c7f`, 추가 종류 정합은 `855ff3fd0`→`281bbcfae`로 선별 cherry-pick했다. 나머지 이전 Radar/UI 묶음은 후속 평면 서피스 PR #609~#614와 Master D1~D21이 대체한다. |
+| 리소스 패리티 통합 브랜치 | `855ff3fd0` | - | 가치 통합 후 삭제. dev가 import하지만 누락한 서버 단일 리소스 분류는 `b3e61d534`→`ef4015c7f`, 추가 종류 정합은 `855ff3fd0`→`281bbcfae`로 선별 cherry-pick했다. 나머지 이전 패리티/UI 묶음은 후속 평면 서피스 PR #609~#614와 Master D1~D21이 대체한다. |
 | `feat/minmings111/cluster-infra-map-ui` | `023d70c2e` | #606 open | 미채택 후 삭제. PR이 conflict이고 네 gate가 실패/취소 상태다. 신규 `ResourcesInfraMap*` 계보는 D12의 `ResourcesPhysicalTopologyScene` 단일 오너와 “병렬 맵 금지”에 정면 충돌한다. |
 | `feat/minmings111/internal-site-mcp` | `7e97c6a5e` | #604 merged | 미채택 잔여 보존 후 삭제. PR #604의 검토 범위는 dev에 병합됐다. 병합 뒤 추가된 `42faee42c`는 별도 PR·게이트 없이 AI 런타임 1,481줄을 바꾸는 G1/프론트 목표 밖 묶음이므로 이번 본선화에는 넣지 않는다. |
 | `ux/rca-incident-card` | `a1165761a` | #605 closed | 미채택 후 삭제. 닫힌 PR의 카드 중심 대안이며 dev의 `4f65140ac` 및 PR #614 인시던트/RCA 평면 구조가 후속 구현이다. D19의 단일 인시던트 표면을 우선한다. |
