@@ -79,6 +79,30 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Classify gate scope
+        id: gate-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          scope="FULL"
+          if [[ -n "${BASE_SHA}" && ! "${BASE_SHA}" =~ ^0+$ ]]; then
+            if git fetch --no-tags --depth=1 origin "${BASE_SHA}"; then
+              scope="$(scripts/classify-dev-gate-scope.sh "${BASE_SHA}" HEAD)"
+            else
+              echo "Base fetch failed; retaining FULL gate scope." >&2
+            fi
+          fi
+          case "${scope}" in
+            FULL|BACKEND|FRONTEND) ;;
+            *)
+              echo "Unknown gate scope ${scope}; retaining FULL gate scope." >&2
+              scope="FULL"
+              ;;
+          esac
+          echo "scope=${scope}" >>"${GITHUB_OUTPUT}"
+          echo "Dev Gate scope: ${scope}"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -97,6 +121,7 @@ jobs:
           node-version: "22"
 
       - name: Set up Helm
+        if: ${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}
         uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.2.2
@@ -105,9 +130,15 @@ jobs:
         run: uv sync --frozen
 
       - name: Verify commit message gate rules
+        if: ${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}
         run: uv run pytest -q tests/test_commit_msg_gate.py
 
+      - name: Run contract and manifest gate
+        if: ${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}
+        run: make gate-contract-manifest
+
       - name: Run backend and manifest gate
+        if: ${{ steps.gate-scope.outputs.scope != 'FRONTEND' }}
         run: make gate-backend
 
   frontend:
@@ -120,14 +151,50 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Classify gate scope
+        id: gate-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          scope="FULL"
+          if [[ -n "${BASE_SHA}" && ! "${BASE_SHA}" =~ ^0+$ ]]; then
+            if git fetch --no-tags --depth=1 origin "${BASE_SHA}"; then
+              scope="$(scripts/classify-dev-gate-scope.sh "${BASE_SHA}" HEAD)"
+            else
+              echo "Base fetch failed; retaining FULL gate scope." >&2
+            fi
+          fi
+          case "${scope}" in
+            FULL|BACKEND|FRONTEND) ;;
+            *)
+              echo "Unknown gate scope ${scope}; retaining FULL gate scope." >&2
+              scope="FULL"
+              ;;
+          esac
+          echo "scope=${scope}" >>"${GITHUB_OUTPUT}"
+          echo "Dev Gate scope: ${scope}"
+
       - name: Set up Node.js
+        if: ${{ steps.gate-scope.outputs.scope != 'BACKEND' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Record frontend full-gate skip
+        if: ${{ steps.gate-scope.outputs.scope == 'BACKEND' }}
+        run: echo "Backend-only change; contract and manifest coverage remains in the backend gate."
+
+      - name: Run changed frontend gate
+        if: ${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: GATE_BASE="${BASE_SHA}" make gate-frontend-changed
+
       - name: Run frontend gate
+        if: ${{ steps.gate-scope.outputs.scope == 'FULL' }}
         run: make gate-frontend
 
   gate:
