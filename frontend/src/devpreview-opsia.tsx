@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
-import { UI, BLUE, HP, MONO, SOFT, SPRING, PAGE } from "./devpreview/theme";
+import { UI, BLUE, HP, MONO, SOFT, SPRING, PAGE, PRESENT_SCALE } from "./devpreview/theme";
 import { EksIcon, RedisIcon, GithubIcon } from "./devpreview/brandIcons";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -724,7 +724,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             {belowContent && <div style={{ marginTop: 18 }}>{belowContent}</div>}
           </div>
 
-          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} />
+          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} />
         </div>
       </div>
 
@@ -783,8 +783,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 }
 
 // ── 우측 패널 ─────────────────────────────
-function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab }: {
-  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode;
+function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled }: {
+  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean;
 }) {
   const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? (kindsTab ? "res" : "svc"));
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
@@ -807,7 +807,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
 
   return (
     /* 라운드 모서리 침범 방지: 바깥은 clip, 스크롤·거터는 안쪽 컨테이너 담당 (스크롤바 유무와 무관하게 폭 고정) */
-    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: 24, maxHeight: "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - 110px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
       <AnimatePresence mode="wait">
         {focusPod ? (

@@ -389,7 +389,7 @@ function ResourceTable({ kind, rows, q, inScope, dense, filterDesc = "", onClear
   const rowPad = dense ? "5px 16px" : "9px 16px";
   return (
     /* 긴 표는 카드 안에서 세로 스크롤(헤더 고정) */
-    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: "min(64vh, 680px)", scrollbarGutter: "stable" }}>
+    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
     <div>
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD", position: "sticky", top: 0, zIndex: 2 }}>
         {spec.cols.map((c) => (
@@ -1146,7 +1146,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
   return (
     <motion.nav initial={false} animate={{ width: collapsed ? 60 : 208 }} transition={SOFT}
       style={{ flexShrink: 0, background: UI.card, borderRight: `1px solid ${UI.line}`, display: "flex", flexDirection: "column",
-        padding: "14px 10px 12px", position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}>
+        padding: "14px 10px 12px", position: "sticky", top: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflow: "hidden" }}>
       {/* 브랜드 — Opsia 워드마크 */}
       <div style={{ display: "flex", alignItems: "center", gap: 9, padding: collapsed ? "0 0 16px" : "0 4px 16px", justifyContent: collapsed ? "center" : "flex-start" }}>
         <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, #5AC8FA)`, display: "grid", placeItems: "center", flexShrink: 0 }}>
@@ -1329,7 +1329,7 @@ function App() {
             {bellOpen && (
               <motion.div key="bell" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -5, scale: 0.98 }} transition={SOFT}
                 style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: "rgba(246,247,250,0.86)", backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
-                  border: "1px solid rgba(17,19,24,0.08)", borderRadius: 18, boxShadow: "0 28px 70px -24px rgba(17,19,24,0.38)", padding: 10, maxHeight: "min(70vh, 560px)", overflowY: "auto", scrollbarGutter: "stable" }}>
+                  border: "1px solid rgba(17,19,24,0.08)", borderRadius: 18, boxShadow: "0 28px 70px -24px rgba(17,19,24,0.38)", padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
                   <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
                   <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
@@ -1382,7 +1382,7 @@ function App() {
 
       {surface === "connect" ? (
         /* 연결 설정 — 셸 안에서 위저드 서피스로 전환 (별도 페이지 아님) */
-        <div style={{ position: "relative", minHeight: "calc(100vh - 57px)", background: UI.bg }}>
+        <div style={{ position: "relative", minHeight: `calc(100vh / ${PRESENT_SCALE} - 57px)`, background: UI.bg }}>
           <ConnectWizard embedded />
         </div>
       ) : surface === "topology" ? (
