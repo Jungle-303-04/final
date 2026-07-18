@@ -4,7 +4,11 @@ import type {
   ResourceList,
 } from "./resourcesContract";
 import { createResourcesAdapter } from "./createResourcesAdapter";
-import { endpoints } from "./createResourcesAdapter.testSupport";
+import {
+  API_RESOURCES,
+  endpoints,
+  INVENTORY_SUMMARY,
+} from "./createResourcesAdapter.testSupport";
 
 describe("canonical Resources catalog and list mapping", () => {
   it("maps namespace-scoped observed counts and agent visibility evidence", async () => {
@@ -71,6 +75,28 @@ describe("canonical Resources catalog and list mapping", () => {
       ["shop"],
       undefined,
     );
+  });
+
+  it("keeps server-projected zero-count resource types selectable", async () => {
+    const dependencies = endpoints({
+      getInventorySummary: async () => ({
+        ...INVENTORY_SUMMARY,
+        counts: [
+          { resource_type: "deployment", health: "healthy", count: 2 },
+          { resource_type: "ingress", health: "unknown", count: 0 },
+          { resource_type: "job", health: "unknown", count: 0 },
+        ],
+      }),
+      getKubernetesApiResources: async () => API_RESOURCES,
+    });
+
+    const catalog = await createResourcesAdapter(dependencies).loadCatalog("cluster-1");
+
+    expect(catalog.items).toEqual([
+      expect.objectContaining({ resourceType: "deployment", count: 2 }),
+      expect.objectContaining({ resourceType: "ingress", count: 0 }),
+      expect.objectContaining({ resourceType: "job", count: 0 }),
+    ]);
   });
 
   it("maps UID and fallback identities, safe metadata, Pod facts, and limit state", async () => {
