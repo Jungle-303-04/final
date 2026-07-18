@@ -373,6 +373,7 @@ iam:
   withOIDC: true
 managedNodeGroups:
   - name: ${cluster_name}-nodes
+    privateNetworking: true
     instanceTypes:
 YAML
   for node_type in "${node_types[@]}"; do

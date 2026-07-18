@@ -286,6 +286,7 @@ def test_aws_cluster_endpoints_are_bounded_and_control_plane_logs_are_enabled() 
     assert "validate_eks_endpoint_policy" in script
     assert "autoModeConfig:" in script
     assert "enabled: false" in script
+    assert "privateNetworking: true" in script
     assert "privateAccess: true" in script
     assert "publicAccessCIDRs:" in script
     assert "enableTypes:" in script
