@@ -2624,6 +2624,7 @@ class ClusterSummary(StrictModel):
     status: str
     settings: JsonMap = Field(default_factory=dict)
     connection_status: str
+    observation_mode: Literal["agent", "simulation"] = "agent"
     provider: str | None = None
     connection_stage: str | None = None
     last_agent_id: str | None = None

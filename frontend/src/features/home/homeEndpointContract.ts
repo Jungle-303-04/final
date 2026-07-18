@@ -9,6 +9,7 @@ export interface HomeEndpointClusterSummary {
   status: string;
   settings: Record<string, unknown>;
   connection_status: string;
+  observation_mode?: "agent" | "simulation";
   connection_stage?: HomeConnectionStage;
   last_agent_id: string | null;
   last_agent_seen_at: string | null;

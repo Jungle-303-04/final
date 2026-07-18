@@ -106,9 +106,18 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{t("clusters.list.shown", { count: formatNumber(clusters.length) })}</span>
-        <span aria-hidden="true">·</span>
-        <span>{t("clusters.list.totalUnknown")}</span>
+        {scope.collection.data.completeness === "exact" ? (
+          <span>{t("clusters.list.exact", {
+            shown: formatNumber(clusters.length),
+            total: formatNumber(scope.collection.data.clusters.length),
+          })}</span>
+        ) : (
+          <span title={t("clusters.list.totalUnknownReason")}>
+            {t("clusters.list.shown", { count: formatNumber(clusters.length) })}
+            {" · "}
+            {t("clusters.list.totalUnknown")}
+          </span>
+        )}
       </div>
 
       {clusters.length === 0 ? (
@@ -118,7 +127,7 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
       ) : (
         <section
           aria-label={t("clusters.list.aria")}
-          className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3"
+          className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-4"
         >
           {clusters.map((cluster, index) => (
             <ClusterCard
@@ -126,6 +135,7 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
               href={clusterResourcesHref(filter.state, cluster.id)}
               index={index}
               key={cluster.id}
+              onRefresh={scope.refresh}
               disconnectPhase={disconnectCluster?.id === cluster.id ? disconnectPhase : undefined}
               onDisconnect={canOfferClusterDisconnect(session?.roles, cluster)
                 ? () => {

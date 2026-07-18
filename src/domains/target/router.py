@@ -955,6 +955,11 @@ def cluster_summary(
         status=status,
         settings=cluster.get("settings") or {},
         connection_status=connection_status,
+        observation_mode=(
+            "simulation"
+            if (cluster.get("settings") or {}).get("observation_mode") == "simulation"
+            else "agent"
+        ),
         provider=resolved_cluster_provider(cluster, latest_snapshot),
         connection_stage=cluster_connection_stage(cluster, latest_agent, latest_snapshot),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,

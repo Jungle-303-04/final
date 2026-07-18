@@ -52,7 +52,7 @@ import {
 export function toClusterChoices(wire: HomeEndpointClusterList): HomeClusterChoices {
   const clusters = wire.clusters.map(toClusterChoice);
   assertUnique(clusters.map(({ id }) => id));
-  return { completeness: "unknown", clusters };
+  return { completeness: "exact", clusters };
 }
 
 function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
@@ -77,6 +77,7 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
     connectionStage: wire.connection_stage ?? null,
     registrationState: registrationState(canonicalIdentity(wire.status)),
     connectionState: connectionState(canonicalIdentity(wire.connection_status)),
+    observationMode: wire.observation_mode ?? "agent",
     lastObservedAt: canonicalTimestamp(wire.last_seen_at ?? wire.last_agent_seen_at),
     nodeCount,
     podCount,

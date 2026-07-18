@@ -33,7 +33,7 @@ describe("canonical Home adapter mapping", () => {
 
     await expect(createHomeAdapter(dependencies).listClusterChoices(controller.signal))
       .resolves.toEqual({
-        completeness: "unknown",
+        completeness: "exact",
         clusters: [
           {
             id: "cluster-1",
@@ -44,6 +44,7 @@ describe("canonical Home adapter mapping", () => {
             connectionStage: null,
             registrationState: "active",
             connectionState: "online",
+            observationMode: "agent",
             lastObservedAt: "2026-07-12T10:00:00.000Z",
             nodeCount: 2,
             podCount: 18,
@@ -64,6 +65,7 @@ describe("canonical Home adapter mapping", () => {
             connectionStage: null,
             registrationState: "pending",
             connectionState: "pending",
+            observationMode: "agent",
             lastObservedAt: null,
             nodeCount: 0,
             podCount: 0,

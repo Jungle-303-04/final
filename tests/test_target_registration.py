@@ -1733,6 +1733,7 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert len(response.clusters) == 1
     assert response.clusters[0].cluster_id == "cluster-1"
     assert response.clusters[0].connection_status == "online"
+    assert response.clusters[0].observation_mode == "agent"
     assert response.clusters[0].provider == "eks"
     assert response.clusters[0].connection_stage == "ready"
     assert response.clusters[0].last_agent_id == "agent-1"
@@ -1747,6 +1748,20 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].app_count is None
     assert response.clusters[0].last_seen_at == db.agent["last_seen_at"]
     assert db.bulk_count_calls == 1
+
+
+def test_cluster_summary_marks_explicit_demo_observation_as_simulation() -> None:
+    registration = StubPendingClusterDb(
+        (datetime.now(UTC) + timedelta(minutes=20)).isoformat(),
+        status=ClusterRegistrationStatus.INSTALL_APPLIED.value,
+    ).get_cluster_registration("default", "cluster-1")
+    assert registration is not None
+    registration["settings"] = {
+        **(registration.get("settings") or {}),
+        "observation_mode": "simulation",
+    }
+
+    assert cluster_summary(registration, None).observation_mode == "simulation"
 
 
 def test_cluster_detail_reuses_complete_agent_inventory_counts() -> None:

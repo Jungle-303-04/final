@@ -54,11 +54,10 @@ describe("ClusterCard", () => {
       openIncidentCount: null,
     });
 
-    expect(screen.queryByText(/Servers/)).toBeNull();
-    expect(screen.queryByText(/Pods/)).toBeNull();
-    expect(screen.queryByText(/Apps/)).toBeNull();
-    expect(screen.queryByText(/Incidents/)).toBeNull();
-    expect(screen.queryByText("Healthy")).toBeNull();
+    expect(screen.getByText("Servers —")).toBeTruthy();
+    expect(screen.getByText("Pods —")).toBeTruthy();
+    expect(screen.getByText("Apps —")).toBeTruthy();
+    expect(screen.getByText("Incidents —")).toBeTruthy();
   });
 
   it("does not label a pending registration healthy before it connects", () => {
@@ -70,7 +69,21 @@ describe("ClusterCard", () => {
     });
 
     expect(screen.getByText("Waiting for connection")).toBeTruthy();
-    expect(screen.queryByText("Healthy")).toBeNull();
+    expect(screen.getByText("Waiting for the outbound agent's first heartbeat.")).toBeTruthy();
+  });
+
+  it("keeps disconnected content readable and labels synthetic evidence", () => {
+    const { container } = renderCard({
+      ...cluster,
+      connectionState: "pending",
+      observationMode: "simulation",
+      lastObservedAt: null,
+    });
+
+    const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).not.toContain("saturate-0");
+    expect(screen.getByText("Demo simulation")).toBeTruthy();
+    expect(screen.getByText("Synthetic read-only evidence; cluster actions are unavailable.")).toBeTruthy();
   });
 
   it("links the whole card to the canonical Resources URL", () => {

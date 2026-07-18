@@ -22,7 +22,7 @@ export type HomeConnectionStage =
   | "ready"
   | "expired"
   | "error";
-export type HomeCollectionCompleteness = "unknown";
+export type HomeCollectionCompleteness = "exact" | "unknown";
 export type HomeIdentityStability = "ephemeral";
 
 export interface HomeClusterChoice {
@@ -34,6 +34,7 @@ export interface HomeClusterChoice {
   connectionStage: HomeConnectionStage | null;
   registrationState: HomeRegistrationState;
   connectionState: HomeConnectionState;
+  observationMode?: "agent" | "simulation";
   lastObservedAt: string | null;
   nodeCount: number | null;
   podCount: number | null;
