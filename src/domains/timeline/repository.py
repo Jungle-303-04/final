@@ -92,14 +92,6 @@ class TimelinePinRevisionConflict(ValueError):
         super().__init__(f"timeline pins revision conflict (current={revision})")
 
 
-class TimelineSnapshotLimitExceeded(ValueError):
-    """A snapshot cannot be represented safely within the negotiated event limit."""
-
-    def __init__(self, limit: int) -> None:
-        self.limit = limit
-        super().__init__(f"timeline snapshot limit exceeded ({limit}); narrow the window")
-
-
 @dataclass(frozen=True)
 class TimelineLedgerReadScope:
     """An already-authorized read boundary; HTTP authorization is intentionally external.
@@ -171,6 +163,7 @@ class TimelineLedgerSnapshot:
     records: tuple[TimelineLedgerRecord, ...]
     high_water_sequence: int
     retained_from_sequence: int
+    truncated: bool = False
 
     @property
     def events(self) -> tuple[TimelineEvent, ...]:
@@ -497,12 +490,18 @@ class TimelineLedgerRepository(DatabaseConnection):
                 limit=limit + 1,
                 replay_order=False,
             )
-        if len(records) > limit:
-            raise TimelineSnapshotLimitExceeded(limit)
+        truncated = len(records) > limit
+        if truncated:
+            # Snapshot reads fetch the newest ingestion positions first and
+            # are restored to replay order by ``_read_records``. Drop only the
+            # oldest overflow sentinel so a late-arriving historical event is
+            # never hidden behind the snapshot high-water cursor.
+            records = records[1:]
         return TimelineLedgerSnapshot(
             records=records,
             high_water_sequence=cursor_state[0],
             retained_from_sequence=cursor_state[1],
+            truncated=truncated,
         )
 
     def replay_timeline_events(
@@ -710,7 +709,8 @@ class TimelineLedgerRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings()
-            return tuple(_record_from_row(row) for row in rows)
+            records = tuple(_record_from_row(row) for row in rows)
+            return records if replay_order else tuple(reversed(records))
 
     def _overview_rows(self, statement: Any) -> tuple[Any, ...]:
         with self.connection() as conn:
@@ -833,11 +833,7 @@ def _timeline_events_statement(
         ledger.c.sequence <= through_sequence,
         timeline_evidence_sql_predicate(ledger, predicate, phase=phase),
     ]
-    order_by = (
-        (ledger.c.sequence.asc(),)
-        if replay_order
-        else (ledger.c.occurred_at.asc(), ledger.c.sequence.asc())
-    )
+    order_by = (ledger.c.sequence.asc(),) if replay_order else (ledger.c.sequence.desc(),)
     return select(ledger).where(and_(*conditions)).order_by(*order_by).limit(limit)
 
 

@@ -30,6 +30,7 @@ export const TIMELINE_OVERVIEW_PATH: ApiPath = "/api/timeline/overview";
 
 const NDJSON_MEDIA_TYPE = "application/x-ndjson";
 const SSE_MEDIA_TYPE = "text/event-stream";
+const BOUNDED_SNAPSHOT_CONTRACT = "bounded-v1";
 
 export interface TimelineSnapshotEndpoint {
   readonly snapshot: Extract<TimelineEndpointStreamFrame, { kind: "snapshot" }>;
@@ -118,7 +119,10 @@ export async function getTimelineSnapshot(
   const request = timelineSnapshotRequestSchema.parse(input);
   const response = await apiStreamRequest(TIMELINE_SNAPSHOTS_PATH, NDJSON_MEDIA_TYPE, {
     body: JSON.stringify(request),
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-timeline-snapshot-contract": BOUNDED_SNAPSHOT_CONTRACT,
+    },
     method: "POST",
     signal,
   });

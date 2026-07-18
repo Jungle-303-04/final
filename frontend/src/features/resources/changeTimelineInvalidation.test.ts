@@ -170,6 +170,8 @@ function timelineSnapshot(query: TimelineQuery): TimelineSnapshot {
     },
     events: [],
     coverage: [],
+    truncated: false,
+    eventLimit: null,
     pinSetRevision: null,
   };
 }

@@ -454,7 +454,17 @@ const snapshotFrameSchema = z.strictObject({
   capabilities: timelineCapabilityDescriptorSchema,
   events: z.array(timelineEventSchema).default([]),
   coverage: z.array(timelineCoverageSchema).default([]),
+  truncated: z.boolean().default(false),
+  event_limit: z.number().int().positive().nullable().default(null),
   pin_set_revision: nonNegativeInteger.nullable(),
+}).superRefine((frame, context) => {
+  if (frame.truncated !== (frame.event_limit !== null)) {
+    context.addIssue({
+      code: "custom",
+      message: "timeline snapshot truncation requires its negotiated event limit",
+      path: ["event_limit"],
+    });
+  }
 });
 
 const eventFrameSchema = z.strictObject({

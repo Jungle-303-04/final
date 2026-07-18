@@ -610,6 +610,8 @@ class TimelineStreamFrame(StrictModel):
     event: TimelineEvent | None = None
     events: tuple[TimelineEvent, ...] = ()
     coverage: tuple[TimelineCoverage, ...] = ()
+    truncated: bool = False
+    event_limit: int | None = Field(default=None, ge=1)
     reason: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
@@ -623,8 +625,10 @@ class TimelineStreamFrame(StrictModel):
                 raise ValueError("snapshot frame requires capabilities")
             if self.event is not None or self.reason is not None:
                 raise ValueError(
-                    "snapshot frame may only carry scopes, policy, capabilities, events, and coverage"
+                    "snapshot frame may only carry scopes, policy, capabilities, events, coverage, and bounds"
                 )
+            if self.truncated != (self.event_limit is not None):
+                raise ValueError("snapshot frame truncation requires its negotiated event limit")
             return self
         if self.kind == "event":
             if self.event is None:
@@ -635,6 +639,8 @@ class TimelineStreamFrame(StrictModel):
                 or self.capabilities is not None
                 or self.events
                 or self.coverage
+                or self.truncated
+                or self.event_limit is not None
                 or self.reason is not None
                 or self.pin_set_revision is not None
             ):
@@ -648,6 +654,8 @@ class TimelineStreamFrame(StrictModel):
                 or self.capabilities is not None
                 or self.event is not None
                 or self.events
+                or self.truncated
+                or self.event_limit is not None
                 or self.reason is not None
                 or self.pin_set_revision is not None
             ):
@@ -662,6 +670,8 @@ class TimelineStreamFrame(StrictModel):
                 or self.event is not None
                 or self.events
                 or self.coverage
+                or self.truncated
+                or self.event_limit is not None
                 or self.pin_set_revision is not None
             ):
                 raise ValueError("resync frame requires reason only")
@@ -673,6 +683,8 @@ class TimelineStreamFrame(StrictModel):
             or self.event is not None
             or self.events
             or self.coverage
+            or self.truncated
+            or self.event_limit is not None
             or self.pin_set_revision is not None
         ):
             raise ValueError("terminal frame must not carry timeline records")

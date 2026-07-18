@@ -1,8 +1,8 @@
 """Canonical NDJSON/SSE encoding for timeline replay frames.
 
-Keeping protocol validation at the server boundary prevents an adapter from
-accidentally ending a truncated historical window with a successful response.
-Both transports therefore expose the exact same ordered records.
+Keeping protocol validation at the server boundary makes a bounded historical
+window explicit while preserving the exact ordered records shared by both
+transports.
 """
 
 from __future__ import annotations
@@ -17,9 +17,15 @@ class TimelineStreamProtocolError(ValueError):
     """Raised before an invalid replay can be written to a client."""
 
 
-def encode_ndjson(frames: Iterable[TimelineStreamFrame]) -> str:
+def encode_ndjson(
+    frames: Iterable[TimelineStreamFrame],
+    *,
+    include_snapshot_bounds: bool = False,
+) -> str:
     """Return one strict frame per line, including its required terminal record."""
-    return "\n".join(_encoded_frames(frames)) + "\n"
+    return (
+        "\n".join(_encoded_frames(frames, include_snapshot_bounds=include_snapshot_bounds)) + "\n"
+    )
 
 
 def encode_sse(frames: Iterable[TimelineStreamFrame]) -> str:
@@ -41,11 +47,22 @@ def encode_sse_frame(frame: TimelineStreamFrame) -> str:
     return f"id: {frame.cursor.token}\nevent: {frame.kind}\ndata: {_encode(frame)}\n\n"
 
 
-def _encoded_frames(frames: Iterable[TimelineStreamFrame]) -> tuple[str, ...]:
-    return tuple(_encode(frame) for frame in _validated(frames))
+def _encoded_frames(
+    frames: Iterable[TimelineStreamFrame],
+    *,
+    include_snapshot_bounds: bool = False,
+) -> tuple[str, ...]:
+    return tuple(
+        _encode(frame, include_snapshot_bounds=include_snapshot_bounds)
+        for frame in _validated(frames)
+    )
 
 
-def _encode(frame: TimelineStreamFrame) -> str:
+def _encode(
+    frame: TimelineStreamFrame,
+    *,
+    include_snapshot_bounds: bool = False,
+) -> str:
     payload: dict[str, object] = {
         "kind": frame.kind,
         "cursor": frame.cursor.model_dump(mode="json"),
@@ -61,6 +78,11 @@ def _encode(frame: TimelineStreamFrame) -> str:
             events=[_event_payload(event) for event in frame.events],
             coverage=[item.model_dump(mode="json") for item in frame.coverage],
         )
+        if include_snapshot_bounds:
+            payload.update(
+                truncated=frame.truncated,
+                event_limit=frame.event_limit,
+            )
     elif frame.kind == "event":
         if frame.event is None:
             raise TimelineStreamProtocolError("timeline event contract is incomplete")

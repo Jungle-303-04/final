@@ -62,6 +62,7 @@ export const timelineEn = {
   "timeline.empty.unavailable": "No timeline facts were returned, and one or more historical sources are unavailable.",
   "timeline.count.one": "{count} event is available for the selected scope.",
   "timeline.count.other": "{count} events are available for the selected scope.",
+  "timeline.truncated": "High activity detected. Showing the latest {count} events. Narrow the time range for earlier events; the overview retains the full distribution.",
   "timeline.list.label": "Timeline events",
   "timeline.swimlane.label": "Timeline swimlane",
   "timeline.swimlane.axis": "Timeline position axis",

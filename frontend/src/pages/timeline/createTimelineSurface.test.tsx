@@ -366,6 +366,8 @@ function snapshot(query: TimelineQuery): TimelineSnapshot {
     policy,
     events: [],
     coverage: [],
+    truncated: false,
+    eventLimit: null,
     pinSetRevision: null,
   };
 }

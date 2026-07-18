@@ -233,6 +233,8 @@ export interface TimelineEndpointSnapshot {
     capabilities: TimelineEndpointCapabilityDescriptor;
     events: readonly TimelineEndpointEvent[];
     coverage: readonly TimelineEndpointCoverage[];
+    truncated?: boolean;
+    event_limit?: number | null;
     pin_set_revision: number | null;
   };
   end: { kind: "end"; cursor: TimelineEndpointCursor; pin_set_revision: null };
