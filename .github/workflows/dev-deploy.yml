@@ -885,8 +885,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
-          npm --prefix frontend run smoke:routes
+          forward_log="$(mktemp)"
+          forward_pid=""
+          cleanup_browser_forward() {
+            if [[ -n "${forward_pid}" ]] && kill -0 "${forward_pid}" 2>/dev/null; then
+              kill "${forward_pid}" 2>/dev/null || true
+              wait "${forward_pid}" 2>/dev/null || true
+            fi
+            rm -f -- "${forward_log}"
+          }
+          trap cleanup_browser_forward EXIT
+
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" port-forward \
+            --address 127.0.0.1 service/console-dev :80 \
+            >"${forward_log}" 2>&1 &
+          forward_pid="$!"
+          console_port=""
+          for attempt in $(seq 1 60); do
+            console_port="$(
+              sed -nE \
+                's/^Forwarding from 127[.]0[.]0[.]1:([0-9]+) -> [0-9]+$/\1/p' \
+                "${forward_log}" | head -n 1
+            )"
+            if [[ "${console_port}" =~ ^[1-9][0-9]*$ ]]; then
+              break
+            fi
+            if ! kill -0 "${forward_pid}" 2>/dev/null; then
+              cat "${forward_log}" >&2
+              exit 1
+            fi
+            sleep 0.5
+          done
+          if ! [[ "${console_port}" =~ ^[1-9][0-9]*$ ]]; then
+            cat "${forward_log}" >&2
+            echo "console port-forward did not become ready after ${attempt} attempts" >&2
+            exit 1
+          fi
+
+          BASE_URL="http://127.0.0.1:${console_port}" \
+            npm --prefix frontend run smoke:routes
 
       - name: Capture service crash diagnostics
         if: failure() && steps.browser_smoke.outcome == 'failure' && env.DEPLOYMENT_SCOPE == 'FULL'

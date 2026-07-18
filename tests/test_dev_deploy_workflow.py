@@ -272,8 +272,11 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert steps["Restore authenticated browser cache"]["uses"] == "actions/cache@v4"
     handoff = "${{ runner.temp }}/browser-auth-cookie.jar"
     assert smoke["env"] == {"AUTH_COOKIE_JAR": handoff}
-    assert "port-forward" not in smoke["run"]
-    assert '[[ "${BASE_URL}" =~ ^https://' in smoke["run"]
+    assert "service/console-dev :80" in smoke["run"]
+    assert "--address 127.0.0.1" in smoke["run"]
+    assert 'BASE_URL="http://127.0.0.1:${console_port}"' in smoke["run"]
+    assert " -> [0-9]+$" in smoke["run"]
+    assert "console port-forward did not become ready after" in smoke["run"]
     assert "npm --prefix frontend run smoke:routes" in smoke["run"]
     assert post_smoke["env"]["AUTH_COOKIE_JAR_OUT"] == handoff
     assert cleanup["if"] == "always()"
@@ -309,6 +312,9 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
         "Run authenticated browser route smoke"
     )
     assert names.index("Run post-deploy console smoke") < names.index(
+        "Run authenticated browser route smoke"
+    )
+    assert names.index("Verify already released public SHA") < names.index(
         "Run authenticated browser route smoke"
     )
     assert names.index("Run authenticated browser route smoke") < names.index(
