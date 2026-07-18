@@ -301,6 +301,7 @@ class TransactionalStubPurgeDb(StubUnregisterDb):
 class StubClusterDb:
     def __init__(self) -> None:
         self.access_filter: set[str] | None = None
+        self.bulk_count_calls = 0
         self.agent = {
             "workspace_id": "default",
             "cluster_id": "cluster-1",
@@ -375,6 +376,15 @@ class StubClusterDb:
             {"resource_type": "node", "health": "healthy", "count": 2},
             {"resource_type": "pod", "health": "healthy", "count": 9},
         ]
+
+    def inventory_resource_counts_by_cluster(
+        self,
+        _workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, list[dict[str, object]]]:
+        assert cluster_ids == {"cluster-1"}
+        self.bulk_count_calls += 1
+        return {"cluster-1": self.inventory_resource_counts("default", "cluster-1")}
 
     def latest_inventory_snapshots(
         self,
@@ -1655,6 +1665,7 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].open_incidents == 3
     assert response.clusters[0].app_count is None
     assert response.clusters[0].last_seen_at == db.agent["last_seen_at"]
+    assert db.bulk_count_calls == 1
 
 
 def test_cluster_detail_reuses_complete_agent_inventory_counts() -> None:

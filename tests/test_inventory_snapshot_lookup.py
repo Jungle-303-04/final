@@ -13,7 +13,10 @@ from sqlalchemy.schema import CreateIndex
 
 from alembic import command
 from domains.inventory.models import ClusterInventorySnapshotRecord
-from domains.inventory.repository import _latest_inventory_snapshots_statement
+from domains.inventory.repository import (
+    _inventory_resource_counts_by_cluster_statement,
+    _latest_inventory_snapshots_statement,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260718_0100"
@@ -68,6 +71,29 @@ def test_latest_snapshot_lookup_retains_live_inventory_boundary() -> None:
     assert "live_inventory" in sql
     assert "workspace-private" in sql
     assert "cluster-private" in sql
+
+
+def test_cluster_resource_counts_use_one_grouped_live_query() -> None:
+    statement = _inventory_resource_counts_by_cluster_statement(
+        "workspace-a",
+        {"cluster-b", "cluster-a"},
+    )
+    sql = " ".join(
+        str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        .casefold()
+        .split()
+    )
+
+    assert "cluster_id in ('cluster-a', 'cluster-b')" in sql
+    assert "workspace_id = 'workspace-a'" in sql
+    assert "deleted_at is null" in sql
+    assert "group by cluster_inventory_resources.cluster_id" in sql
+    assert sql.count("from cluster_inventory_resources") == 1
 
 
 def test_live_snapshot_index_metadata_matches_lookup_order_and_predicate() -> None:

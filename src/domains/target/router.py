@@ -1019,13 +1019,19 @@ def enrich_cluster_inventory_counts(
     workspace_id: str,
     summary: ClusterSummary,
     latest_snapshot: dict[str, Any] | None,
+    resource_counts: list[dict[str, Any]] | None = None,
 ) -> None:
     if not complete_inventory_snapshot(latest_snapshot):
         return
     count_reader = getattr(db, "inventory_resource_counts", None)
     if not callable(count_reader):
         return
-    counts = inventory_counts(count_reader(workspace_id, summary.cluster_id))
+    rows = (
+        count_reader(workspace_id, summary.cluster_id)
+        if resource_counts is None
+        else resource_counts
+    )
+    counts = inventory_counts(rows)
     summary.node_count = counts.get("node", 0)
     summary.server_count = summary.node_count
     summary.pod_count = counts.get("pod", 0)
@@ -1492,31 +1498,34 @@ async def list_clusters(
     db: Any = Depends(get_db),
 ) -> ClusterListResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    accessible_cluster_ids = db.accessible_resource_ids(
+    accessible_cluster_ids = await asyncio.to_thread(
+        db.accessible_resource_ids,
         current.user_id,
         workspace_id,
         AccessResourceType.CLUSTER.value,
         Permission.CLUSTER_READ.value,
     )
-    clusters = db.list_cluster_registrations(
+    clusters = await asyncio.to_thread(
+        db.list_cluster_registrations,
         workspace_id,
         cluster_ids=accessible_cluster_ids,
         limit=limit,
     )
-    latest_agents = db.latest_cluster_agent_statuses(
-        workspace_id,
-        {cluster["cluster_id"] for cluster in clusters},
-    )
     cluster_ids = {cluster["cluster_id"] for cluster in clusters}
     snapshot_getter = getattr(db, "latest_inventory_snapshots", None)
-    latest_snapshots = (
-        snapshot_getter(workspace_id, cluster_ids) if callable(snapshot_getter) else {}
-    )
     has_open_incident_counts = hasattr(db, "count_open_rca_incidents")
-    open_incident_counts = (
-        db.count_open_rca_incidents(workspace_id, {cluster["cluster_id"] for cluster in clusters})
+    bulk_count_reader = getattr(db, "inventory_resource_counts_by_cluster", None)
+    latest_agents, latest_snapshots, open_incident_counts, resource_counts = await asyncio.gather(
+        asyncio.to_thread(db.latest_cluster_agent_statuses, workspace_id, cluster_ids),
+        asyncio.to_thread(snapshot_getter, workspace_id, cluster_ids)
+        if callable(snapshot_getter)
+        else asyncio.sleep(0, result={}),
+        asyncio.to_thread(db.count_open_rca_incidents, workspace_id, cluster_ids)
         if has_open_incident_counts
-        else {}
+        else asyncio.sleep(0, result={}),
+        asyncio.to_thread(bulk_count_reader, workspace_id, cluster_ids)
+        if callable(bulk_count_reader)
+        else asyncio.sleep(0, result=None),
     )
     summaries = [
         cluster_summary(
@@ -1531,12 +1540,21 @@ async def list_clusters(
         )
     ]
     for summary in summaries:
-        enrich_cluster_inventory_counts(
-            db,
-            workspace_id,
-            summary,
-            latest_snapshots.get(summary.cluster_id),
-        )
+        if resource_counts is None:
+            enrich_cluster_inventory_counts(
+                db,
+                workspace_id,
+                summary,
+                latest_snapshots.get(summary.cluster_id),
+            )
+        else:
+            enrich_cluster_inventory_counts(
+                db,
+                workspace_id,
+                summary,
+                latest_snapshots.get(summary.cluster_id),
+                resource_counts.get(summary.cluster_id, []),
+            )
         if has_open_incident_counts:
             summary.incident_count = int(open_incident_counts.get(summary.cluster_id, 0))
             summary.open_incidents = summary.incident_count

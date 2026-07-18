@@ -149,6 +149,28 @@ def _latest_inventory_snapshots_statement(
     return select(latest).select_from(requested.join(latest, true()))
 
 
+def _inventory_resource_counts_by_cluster_statement(
+    workspace_id: str,
+    cluster_ids: set[str],
+) -> Any:
+    table = ClusterInventoryResourceRecord.__table__
+    return (
+        select(
+            table.c.cluster_id,
+            table.c.resource_type,
+            table.c.health,
+            func.count().label("count"),
+        )
+        .where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id.in_(sorted(cluster_ids)),
+            table.c.deleted_at.is_(None),
+        )
+        .group_by(table.c.cluster_id, table.c.resource_type, table.c.health)
+        .order_by(table.c.cluster_id, table.c.resource_type, table.c.health)
+    )
+
+
 def parse_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -2110,6 +2132,28 @@ class InventoryRepository(DatabaseConnection):
             }
             for row in rows
         ]
+
+    def inventory_resource_counts_by_cluster(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, list[JsonObject]]:
+        """Return exact live resource counts for every requested cluster in one query."""
+
+        if not cluster_ids:
+            return {}
+        statement = _inventory_resource_counts_by_cluster_statement(workspace_id, cluster_ids)
+        counts: dict[str, list[JsonObject]] = {cluster_id: [] for cluster_id in cluster_ids}
+        with self.connection() as conn:
+            for row in conn.execute(statement).mappings():
+                counts[str(row["cluster_id"])].append(
+                    {
+                        "resource_type": row["resource_type"],
+                        "health": row["health"],
+                        "count": int(row["count"]),
+                    }
+                )
+        return counts
 
     def serialize_inventory_snapshot(self, row: JsonObject) -> JsonObject:
         item = dict(row)
