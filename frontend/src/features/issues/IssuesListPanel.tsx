@@ -147,7 +147,7 @@ export function IssuesListPanel({
           {copy.listEmpty}
         </p>
       ) : (
-      <ul className="grid gap-2" role="list">
+      <ul className="divide-y" role="list">
         {filteredIssues.map((issue) => (
           <IssueQueueRow
             copy={copy}
@@ -285,8 +285,9 @@ function IssueQueueRow({
         aria-current={selected ? "true" : undefined}
         aria-label={title}
         className={cn(
-          "@container group/issue relative h-auto w-full min-w-0 animate-in cursor-pointer fade-in-0 items-stretch justify-start overflow-hidden whitespace-normal rounded-xl border border-border/80 bg-card p-0 text-left shadow-xs transition-[transform,border-color,box-shadow,background-color,opacity] duration-150 ease-out hover:-translate-y-px hover:border-foreground/20 hover:bg-card hover:shadow-sm motion-reduce:animate-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-          selected && "border-foreground/15 bg-muted/35 shadow-md ring-1 ring-foreground/10",
+          "@container group/issue relative h-auto w-full min-w-0 animate-in cursor-pointer fade-in-0 items-stretch justify-start overflow-hidden whitespace-normal rounded-none border-0 bg-transparent p-0 text-left transition-[background-color,opacity] duration-150 ease-out hover:bg-muted/25 motion-reduce:animate-none motion-reduce:transition-none",
+          "before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-full before:bg-transparent",
+          selected && "bg-muted/35 before:bg-foreground",
           resolved && !selected && "opacity-65 hover:opacity-100",
         )}
         onClick={() => onSelect(issue)}
@@ -405,8 +406,8 @@ function IssueQueueRow({
                   "h-7 cursor-pointer rounded-md border-transparent px-2.5",
                   "h-8 px-3 text-sm",
                   resolved
-                    ? "border-foreground bg-white text-foreground dark:border-foreground dark:bg-background"
-                    : "bg-black text-white dark:bg-white dark:text-black",
+                    ? "border-foreground bg-background text-foreground"
+                    : "bg-foreground text-background",
                 )}
                 variant="secondary"
               >
@@ -496,7 +497,6 @@ function RecoveryMiniProgress({
               filled ? "scale-100 opacity-100" : "scale-90 opacity-45",
             )}
             key={index}
-            style={filled ? { transitionDelay: `${index * 120}ms` } : undefined}
           />
         );
       })}
@@ -506,10 +506,10 @@ function RecoveryMiniProgress({
 
 function IssueSeverityMeter({ tone }: { tone: ReturnType<typeof issueStatusTone> }) {
   const activeClassName = cn(
-    tone === "healthy" && "bg-status-healthy shadow-sm",
-    tone === "warning" && "bg-status-warning shadow-sm",
-    tone === "critical" && "bg-destructive shadow-sm",
-    tone === "unknown" && "bg-muted-foreground/50 shadow-sm",
+    tone === "healthy" && "bg-status-healthy",
+    tone === "warning" && "bg-status-warning",
+    tone === "critical" && "bg-destructive",
+    tone === "unknown" && "bg-muted-foreground/50",
   );
   return (
     <span

@@ -94,6 +94,27 @@ describe("IssuesSurface", () => {
     expect(screen.queryByText("warning")).toBeNull();
   });
 
+  it("keeps the incident workspace on one surface without nested cards", async () => {
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={issuesPort()}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    await screen.findByRole("tab", { name: /^Incident detail/u });
+    await screen.findByText("Increase the memory limit after approval");
+
+    const workspace = document.querySelector<HTMLElement>("[data-detail-layout]");
+    expect(workspace).not.toBeNull();
+    expect(workspace?.getAttribute("data-slot")).toBe("surface");
+    expect(workspace?.querySelectorAll('[data-slot="card"]')).toHaveLength(0);
+    expect(workspace?.querySelectorAll('[data-slot="surface"]')).toHaveLength(0);
+  });
+
   it("shows exact matched counts and incomplete visibility without discarding the last result", async () => {
     const baseline = issuesPort();
     const initial = await baseline.listIssues("cluster-1");
