@@ -144,8 +144,13 @@ function CostObservedContent({
       timeRange={timeRange}
       view={view}
     />
-    {view === "overview" && data.frame.phase === "ready" ? (
-      <CostNodesPanel clusterIds={clusterIds} namespaces={namespaces} port={port} />
+    {view === "overview" ? (
+      <CostNodesPanel
+        clusterIds={clusterIds}
+        namespaces={namespaces}
+        port={port}
+        visible={data.frame.phase === "ready"}
+      />
     ) : null}
   </>;
 }

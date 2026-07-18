@@ -143,6 +143,17 @@ describe("CostPage", () => {
     expect(await screen.findByLabelText("Node cost evidence")).toBeTruthy();
     expect(document.querySelector('[data-product-state="loading"]')).toBeNull();
   });
+
+  it("loads overview and node evidence concurrently", async () => {
+    const port = costPort();
+    port.getOverview = vi.fn().mockReturnValue(new Promise(() => undefined));
+
+    renderCostPage(port);
+
+    await waitFor(() => expect(port.getOverview).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(port.getNodes).toHaveBeenCalledTimes(1));
+    expect(screen.queryByLabelText("Node cost evidence")).toBeNull();
+  });
 });
 
 function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType<typeof vi.fn> } {

@@ -23,14 +23,17 @@ export function CostNodesPanel({
   clusterIds,
   namespaces,
   port,
+  visible = true,
 }: {
   clusterIds: readonly string[];
   namespaces: readonly string[];
   port: CostPort;
+  visible?: boolean;
 }) {
   const { t } = useI18n();
   const state = useCostNodes(port, { clusterIds, namespaces });
   const frame = state.frame;
+  if (!visible) return null;
   if (frame.phase === "idle" || frame.phase === "loading") {
     return (
       <Card aria-label={t("cost.nodes.title")} aria-busy="true">
