@@ -63,7 +63,7 @@ src/packages
   runtime                FastAPI/worker/async service 실행 객체
   ai                     LLM provider 클라이언트 (OpenAI/Anthropic/Gemini)
   security               시크릿 vault (SOPS/age, AWS)
-src/samples  smoke 테스트용 샘플 manifest (Bruno webhook·smoke script 가 참조)
+src/samples  명시적으로 실행하는 격리 테스트 fixture
 deploy       management/target Kubernetes manifest
 docs/api     Bruno API 수동 테스트 collection
 frontend     운영 콘솔 React/Vite 앱과 nginx same-origin proxy 설정
@@ -86,8 +86,8 @@ make smoke
 자세한 기준은 [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)를 본다.
 API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/README.md)를 열고 Bruno collection을 사용한다.
 
-실제 target 없이 격리된 workspace에 UI 확인용 데이터를 넣으려면
-[descriptor 기반 demo workspace](docs/demo-workspace.md)를 사용한다.
+운영 및 dev 배포는 합성 workspace나 리소스를 자동 생성하지 않는다. UI와 API는 실제
+outbound cluster agent가 수집한 데이터만 표시한다.
 
 ## 로컬 캐시 정리
 

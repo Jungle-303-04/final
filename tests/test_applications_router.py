@@ -15,7 +15,6 @@ from domains.applications.router import (
     upsert_application_deployment,
 )
 from domains.gitops.repository import derive_repository_id
-from packages.contracts.demo_seed import DEMO_SEED_MARKER_KEY
 from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
     ApplicationUpsertRequest,
@@ -509,46 +508,6 @@ def test_create_application_rejects_explicit_repository_id_before_writes() -> No
     assert exc.value.status_code == 422
     assert db.registered_repositories == []
     assert db.upserted_applications == []
-
-
-@pytest.mark.parametrize(
-    "operation",
-    ["upsert", "connect-metadata", "connect-deploy", "connect-access"],
-)
-def test_application_public_requests_reject_internal_seed_provenance(operation: str) -> None:
-    marker = {
-        "descriptor_id": "opsia-ui-demo.v1",
-        "schema_version": 1,
-        "digest": "a" * 64,
-    }
-
-    with pytest.raises(ValueError, match="reserved for internal seed writes"):
-        if operation == "upsert":
-            ApplicationUpsertRequest(
-                name="checkout-api",
-                metadata={DEMO_SEED_MARKER_KEY: marker},
-            )
-        elif operation == "connect-metadata":
-            ApplicationConnectRequest(
-                name="checkout-api",
-                repo_ref="org/checkout",
-                cluster_id="cluster-1",
-                metadata={DEMO_SEED_MARKER_KEY: marker},
-            )
-        elif operation == "connect-deploy":
-            ApplicationConnectRequest(
-                name="checkout-api",
-                repo_ref="org/checkout",
-                cluster_id="cluster-1",
-                deploy_policy={DEMO_SEED_MARKER_KEY: marker},
-            )
-        else:
-            ApplicationConnectRequest(
-                name="checkout-api",
-                repo_ref="org/checkout",
-                cluster_id="cluster-1",
-                access_policy={DEMO_SEED_MARKER_KEY: marker},
-            )
 
 
 def test_connect_application_registers_repo_watch_binding_atomically() -> None:

@@ -7,10 +7,6 @@ from typing import Annotated, Any, Literal
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
-from packages.contracts.demo_seed import (
-    DEMO_SEED_MARKER_KEY,
-    DEMO_SEED_MARKER_RESERVED_MESSAGE,
-)
 from packages.contracts.evidence_policy import EvidenceProfile
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.gitops import (
@@ -650,12 +646,6 @@ class ApplicationUpsertRequest(StrictModel):
     environment: str = DEFAULT_ENVIRONMENT
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    @model_validator(mode="after")
-    def reject_internal_seed_provenance(self) -> ApplicationUpsertRequest:
-        if DEMO_SEED_MARKER_KEY in self.metadata:
-            raise ValueError(DEMO_SEED_MARKER_RESERVED_MESSAGE)
-        return self
-
 
 class ApplicationConnectRequest(StrictModel):
     name: str = Field(min_length=1, max_length=120)
@@ -670,15 +660,6 @@ class ApplicationConnectRequest(StrictModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     deploy_policy: dict[str, Any] = Field(default_factory=dict)
     access_policy: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def reject_internal_seed_provenance(self) -> ApplicationConnectRequest:
-        if any(
-            DEMO_SEED_MARKER_KEY in value
-            for value in (self.metadata, self.deploy_policy, self.access_policy)
-        ):
-            raise ValueError(DEMO_SEED_MARKER_RESERVED_MESSAGE)
-        return self
 
 
 class RepositoryProbeRequest(StrictModel):

@@ -12,7 +12,6 @@ from conftest import ROOT, load_file
 from fastapi import HTTPException, Request
 from starlette.datastructures import Headers
 
-from controller.demo_workspace import DEFAULT_DESCRIPTOR, load_descriptor
 from packages.storage.sessions import MemorySessionStore, RateLimitExceeded, RedisSessionStoreConfig
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -116,19 +115,12 @@ def test_trusted_proxy_service_admin_lists_all_and_rotates_to_scoped_session() -
     assert users.workspace_calls == [("operator-dev", True), ("operator-dev", True)]
 
 
-def test_deployed_demo_workspace_proxy_switch_keeps_http_and_realtime_tenant(
+def test_workspace_proxy_switch_keeps_http_and_realtime_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     auth = load_auth_module()
-    descriptor = load_descriptor(DEFAULT_DESCRIPTOR, owner_user_id="operator-dev")
-    demo_workspace_id = descriptor.workspace.workspace_id
+    workspace_id = "workspace-b"
     users = StubUserStore({})
-    users.register_target_cluster(
-        {
-            "workspace_id": demo_workspace_id,
-            "name": descriptor.cluster.name,
-        }
-    )
     sessions = StubSessionStore(auth)
     proxy = auth.AuthSession(
         "mtls-dev-console",
@@ -140,7 +132,7 @@ def test_deployed_demo_workspace_proxy_switch_keeps_http_and_realtime_tenant(
     service = auth.PasswordAuthService(users, sessions)
 
     catalog = service.list_authorized_workspaces(proxy)
-    switched = asyncio.run(service.switch_workspace(proxy, demo_workspace_id))
+    switched = asyncio.run(service.switch_workspace(proxy, workspace_id))
 
     proxy_secret = "p" * 64
     monkeypatch.setenv("TRUSTED_PROXY_AUTH_SECRET", proxy_secret)
@@ -165,12 +157,12 @@ def test_deployed_demo_workspace_proxy_switch_keeps_http_and_realtime_tenant(
         realtime.authenticated_browser_session(websocket, sessions.get_session)
     )
 
-    assert demo_workspace_id in {item["workspace_id"] for item in catalog}
+    assert workspace_id in {item["workspace_id"] for item in catalog}
     assert switched.auth_mode == "trusted_proxy"
     assert http_session is switched
     assert realtime_session is switched
     assert http_session.workspace_id == realtime.session_workspace_id(realtime_session)
-    assert http_session.workspace_id == demo_workspace_id
+    assert http_session.workspace_id == workspace_id
 
 
 def test_valid_cookie_session_precedes_trusted_proxy_workspace(

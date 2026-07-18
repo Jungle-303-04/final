@@ -18,7 +18,6 @@ import {
   orderRoutesForTraversal,
   parseNetscapeSessionCookie,
   verifyWorkspaceSwitcherPlacement,
-  verifyWorkspaceRoundTrip,
   withRouteSmokeDiagnostics,
 } from "./post-deploy-route-smoke.mjs";
 
@@ -55,7 +54,7 @@ function createNetworkHarness(startedAt = 1_000) {
 }
 
 describe("post-deploy route smoke helpers", () => {
-  it("verifies the workspace in the product header and rejects a sidebar duplicate", async () => {
+  it("verifies the active workspace in the product header and rejects a sidebar duplicate", async () => {
     const calls = [];
     const page = {
       locator(selector) {
@@ -75,13 +74,13 @@ describe("post-deploy route smoke helpers", () => {
       },
     };
 
-    await verifyWorkspaceSwitcherPlacement(page, "workspace-demo", 1_234);
+    await verifyWorkspaceSwitcherPlacement(page, "workspace-live", 1_234);
 
     expect(calls).toEqual([
       {
         options: { exact: true },
         selector: 'header[data-slot="product-header"] [data-slot="product-header-workspace"]',
-        text: "workspace-demo",
+        text: "workspace-live",
       },
       {
         options: { state: "visible", timeout: 1_234 },
@@ -91,12 +90,12 @@ describe("post-deploy route smoke helpers", () => {
       {
         options: { exact: true },
         selector: 'aside[data-slot="sidebar"]',
-        text: "workspace-demo",
+        text: "workspace-live",
       },
     ]);
   });
 
-  it("fails when the workspace switcher remains duplicated in the sidebar", async () => {
+  it("fails when the active workspace remains duplicated in the sidebar", async () => {
     const page = {
       locator(selector) {
         return {
@@ -113,7 +112,7 @@ describe("post-deploy route smoke helpers", () => {
     };
 
     await expect(
-      verifyWorkspaceSwitcherPlacement(page, "workspace-demo", 1_234),
+      verifyWorkspaceSwitcherPlacement(page, "workspace-live", 1_234),
     ).rejects.toThrow("workspace switcher must not remain in the product sidebar");
   });
 
@@ -531,86 +530,6 @@ describe("post-deploy route smoke helpers", () => {
       observer.dispose();
       harness.restore();
     }
-  });
-
-  it("switches to the seeded workspace and restores the original session and surface", async () => {
-    const calls = [];
-    const result = await verifyWorkspaceRoundTrip({
-      demoWorkspaceId: "workspace-demo",
-      async loadCatalog() {
-        calls.push("catalog");
-        return {
-          current_workspace_id: "workspace-original",
-          items: [
-            { workspace_id: "workspace-original" },
-            { workspace_id: "workspace-demo" },
-          ],
-        };
-      },
-      async loadSession() {
-        const workspaceId = calls.includes("restore-surface")
-          ? "unexpected"
-          : calls.includes("switch:workspace-original")
-            ? "workspace-original"
-            : "workspace-demo";
-        calls.push(`session:${workspaceId}`);
-        return { workspace_id: workspaceId };
-      },
-      async switchWorkspace(workspaceId) {
-        calls.push(`switch:${workspaceId}`);
-        return { workspace_id: workspaceId };
-      },
-      async verifyDemoSurface(workspaceId) {
-        calls.push(`demo-surface:${workspaceId}`);
-      },
-      async verifyRestoredSurface(workspaceId) {
-        calls.push(`restore-surface:${workspaceId}`);
-        return { pathname: "/home" };
-      },
-    });
-
-    expect(calls).toEqual([
-      "catalog",
-      "switch:workspace-demo",
-      "session:workspace-demo",
-      "demo-surface:workspace-demo",
-      "switch:workspace-original",
-      "session:workspace-original",
-      "restore-surface:workspace-original",
-    ]);
-    expect(result).toEqual({
-      originalWorkspaceId: "workspace-original",
-      restoredSurface: { pathname: "/home" },
-    });
-  });
-
-  it("restores the original workspace in finally when demo surface verification fails", async () => {
-    const switched = [];
-    let sessionWorkspaceId = "workspace-original";
-
-    await expect(verifyWorkspaceRoundTrip({
-      demoWorkspaceId: "workspace-demo",
-      loadCatalog: async () => ({
-        current_workspace_id: "workspace-original",
-        items: [
-          { workspace_id: "workspace-original" },
-          { workspace_id: "workspace-demo" },
-        ],
-      }),
-      loadSession: async () => ({ workspace_id: sessionWorkspaceId }),
-      async switchWorkspace(workspaceId) {
-        switched.push(workspaceId);
-        sessionWorkspaceId = workspaceId;
-        return { workspace_id: workspaceId };
-      },
-      verifyDemoSurface: async () => {
-        throw new Error("demo surface failed");
-      },
-      verifyRestoredSurface: async () => ({ pathname: "/home" }),
-    })).rejects.toThrow("demo surface failed");
-
-    expect(switched).toEqual(["workspace-demo", "workspace-original"]);
-    expect(sessionWorkspaceId).toBe("workspace-original");
   });
 
   it("accepts one HttpOnly root handoff and leaves transport security to the public browser origin", () => {

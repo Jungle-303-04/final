@@ -15,7 +15,6 @@ const NETWORK_SAMPLE_INTERVAL_MS = 100;
 const ROUTE_STABLE_SAMPLE_COUNT = 3;
 const SLOW_API_LIMIT = 5;
 const DIAGNOSTIC_ITEM_LIMIT = 50;
-const DEMO_WORKSPACE_ROUTE = "/home";
 const LONG_LIVED_API_MEDIA_TYPES = new Set([
   "application/x-ndjson",
   "text/event-stream",
@@ -272,11 +271,6 @@ async function runWithDiagnostics(diagnostics) {
   const baseUrl = requiredEnvironment("BASE_URL");
   const email = requiredEnvironment("AUTH_EMAIL");
   const password = requiredEnvironment("AUTH_PASSWORD", { trim: false });
-  const demoWorkspaceId = optionalEnvironment("DEMO_WORKSPACE_ID");
-  const requireDemoWorkspaceSmoke = process.env.REQUIRE_DEMO_WORKSPACE_SMOKE === "1";
-  if (requireDemoWorkspaceSmoke && demoWorkspaceId === null) {
-    throw new Error("missing required environment variable: DEMO_WORKSPACE_ID");
-  }
   diagnostics.failingRoute = new URL(baseUrl).pathname;
   const browser = await chromium.launch({
     headless: true,
@@ -314,34 +308,13 @@ async function runWithDiagnostics(diagnostics) {
 
   try {
     await authenticate(page, baseUrl, email, password);
-    let initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
-    if (demoWorkspaceId !== null) {
-      const verifySurface = (workspaceId) => verifyWorkspaceSurface({
-        baseUrl,
-        diagnostics,
-        page,
-        routeNetwork,
-        workspaceId,
-      });
-      const workspaceResult = await verifyWorkspaceRoundTrip({
-        demoWorkspaceId,
-        loadCatalog: () => requestBrowserJson(page, baseUrl, "/api/auth/workspaces"),
-        loadSession: () => requestBrowserJson(page, baseUrl, "/api/auth/session"),
-        switchWorkspace: (workspaceId) => requestBrowserJson(
-          page,
-          baseUrl,
-          "/api/auth/workspaces/switch",
-          {
-            data: { workspace_id: workspaceId },
-            method: "POST",
-          },
-        ),
-        verifyDemoSurface: verifySurface,
-        verifyRestoredSurface: verifySurface,
-      });
-      initial = workspaceResult.restoredSurface;
-      process.stdout.write("authenticated workspace switch smoke passed\n");
-    }
+    const initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
+    const session = await requestBrowserJson(page, baseUrl, "/api/auth/session");
+    assert.ok(
+      typeof session.workspace_id === "string" && session.workspace_id.trim().length > 0,
+      "authenticated session workspace_id must be a non-empty string",
+    );
+    await verifyWorkspaceSwitcherPlacement(page, session.workspace_id);
     const routes = await collectReleasedRoutes(page);
     const traversal = orderRoutesForTraversal(routes, new URL(page.url()).pathname);
 
@@ -419,132 +392,29 @@ async function runWithDiagnostics(diagnostics) {
   }
 }
 
-export async function verifyWorkspaceRoundTrip({
-  demoWorkspaceId,
-  loadCatalog,
-  loadSession,
-  switchWorkspace,
-  verifyDemoSurface,
-  verifyRestoredSurface,
-}) {
-  const catalog = await loadCatalog();
-  assertWorkspaceCatalog(catalog);
-  const originalWorkspaceId = catalog.current_workspace_id;
-  assert.notEqual(
-    demoWorkspaceId,
-    originalWorkspaceId,
-    "demo workspace must differ from the original authenticated workspace",
-  );
-  assert.ok(
-    catalog.items.some(({ workspace_id: workspaceId }) => workspaceId === demoWorkspaceId),
-    "demo workspace was not present in the authenticated workspace catalog",
-  );
-
-  let restoreRequired = false;
-  let restoredSurface;
-  try {
-    restoreRequired = true;
-    assertWorkspaceSession(
-      await switchWorkspace(demoWorkspaceId),
-      demoWorkspaceId,
-      "workspace switch response",
-    );
-    assertWorkspaceSession(
-      await loadSession(),
-      demoWorkspaceId,
-      "workspace switch session",
-    );
-    await verifyDemoSurface(demoWorkspaceId);
-  } finally {
-    if (restoreRequired) {
-      assertWorkspaceSession(
-        await switchWorkspace(originalWorkspaceId),
-        originalWorkspaceId,
-        "workspace restore response",
-      );
-      assertWorkspaceSession(
-        await loadSession(),
-        originalWorkspaceId,
-        "workspace restore session",
-      );
-      restoredSurface = await verifyRestoredSurface(originalWorkspaceId);
-    }
-  }
-
-  return { originalWorkspaceId, restoredSurface };
+async function waitForObservedRouteSurface(
+  page,
+  routeNetwork,
+  networkPhase,
+  previous,
+  expectedPathname,
+  timeoutMs = ROUTE_SETTLE_TIMEOUT_MS,
+) {
+  await waitForRouteSurface(page, previous, expectedPathname, timeoutMs);
+  await routeNetwork.waitForSettled(networkPhase, timeoutMs);
+  return waitForRouteSurface(page, previous, expectedPathname, timeoutMs);
 }
 
-function assertWorkspaceCatalog(value) {
-  assert.ok(value && typeof value === "object", "workspace catalog must be an object");
-  assert.ok(
-    typeof value.current_workspace_id === "string"
-      && value.current_workspace_id.trim().length > 0,
-    "workspace catalog current_workspace_id must be a non-empty string",
-  );
-  assert.ok(Array.isArray(value.items), "workspace catalog items must be an array");
-  for (const item of value.items) {
-    assert.ok(
-      item
-        && typeof item === "object"
-        && typeof item.workspace_id === "string"
-        && item.workspace_id.trim().length > 0,
-      "workspace catalog item workspace_id must be a non-empty string",
-    );
-  }
-}
-
-function assertWorkspaceSession(value, expectedWorkspaceId, label) {
-  assert.ok(value && typeof value === "object", `${label} must be an object`);
-  assert.equal(value.workspace_id, expectedWorkspaceId, `${label} workspace mismatch`);
-}
-
-async function requestBrowserJson(page, baseUrl, pathname, options = {}) {
-  const method = options.method ?? "GET";
-  const response = await page.request.fetch(new URL(pathname, baseUrl).href, {
-    data: options.data,
+async function requestBrowserJson(page, baseUrl, pathname) {
+  const response = await page.request.get(new URL(pathname, baseUrl).href, {
     failOnStatusCode: false,
-    headers: method === "GET"
-      ? undefined
-      : {
-          "content-type": "application/json",
-          "x-service-csrf": "same-origin",
-        },
-    method,
   });
-  assert.ok(
-    response.ok(),
-    `${method} ${pathname} failed with status ${response.status()}`,
-  );
+  assert.ok(response.ok(), `GET ${pathname} failed with status ${response.status()}`);
   try {
     return await response.json();
   } catch {
-    throw new Error(`${method} ${pathname} returned invalid JSON`);
+    throw new Error(`GET ${pathname} returned invalid JSON`);
   }
-}
-
-async function verifyWorkspaceSurface({
-  baseUrl,
-  diagnostics,
-  page,
-  routeNetwork,
-  workspaceId,
-}) {
-  diagnostics.failingRoute = DEMO_WORKSPACE_ROUTE;
-  const networkPhase = routeNetwork.beginPhase(DEMO_WORKSPACE_ROUTE);
-  await page.goto(new URL(DEMO_WORKSPACE_ROUTE, baseUrl).href, {
-    waitUntil: "domcontentloaded",
-  });
-  const surface = await waitForObservedRouteSurface(
-    page,
-    routeNetwork,
-    networkPhase,
-    null,
-    DEMO_WORKSPACE_ROUTE,
-    AUTH_BOOTSTRAP_TIMEOUT_MS,
-  );
-  await verifyWorkspaceSwitcherPlacement(page, workspaceId);
-  assertDiagnostics(diagnostics);
-  return surface;
 }
 
 export async function verifyWorkspaceSwitcherPlacement(
@@ -565,19 +435,6 @@ export async function verifyWorkspaceSwitcherPlacement(
     0,
     "workspace switcher must not remain in the product sidebar",
   );
-}
-
-async function waitForObservedRouteSurface(
-  page,
-  routeNetwork,
-  networkPhase,
-  previous,
-  expectedPathname,
-  timeoutMs = ROUTE_SETTLE_TIMEOUT_MS,
-) {
-  await waitForRouteSurface(page, previous, expectedPathname, timeoutMs);
-  await routeNetwork.waitForSettled(networkPhase, timeoutMs);
-  return waitForRouteSurface(page, previous, expectedPathname, timeoutMs);
 }
 
 export function createRouteNetworkObserver(page, baseUrl) {
@@ -966,11 +823,6 @@ function requiredEnvironment(name, { trim = true } = {}) {
     throw new Error(`missing required environment variable: ${name}`);
   }
   return value;
-}
-
-function optionalEnvironment(name) {
-  const value = process.env[name]?.trim();
-  return value ? value : null;
 }
 
 function safeUrl(rawUrl) {
