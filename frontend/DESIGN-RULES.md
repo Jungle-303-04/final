@@ -33,6 +33,9 @@
 - 오버레이는 상단바·사이드바를 덮지 않는다(top=실측 헤더 높이, left=내비 폭). 폭은 드래그 리사이즈 허용.
 - 그리드는 `minmax(0,1fr)` + 아이템 `minWidth:0` — 리사이즈에 절대 무너지지 않게.
 - **표는 가로 스크롤 금지**: 고정폭 컬럼은 `minmax(48px, w)`로 감싸 축소 허용.
+- **zoom 컨테이너 좌표계**: `PRESENT_SCALE` 안의 fixed `top/width`와 모든 `vh`는 CSS 픽셀 실측으로 계산한다
+  (헤더 = `offsetHeight`, 뷰포트 폭 = `documentElement.clientWidth / SCALE` + ResizeObserver, vh는 `calc(100vh / SCALE)`).
+  `calc(100vw…)`·`getBoundingClientRect` 시각 픽셀을 fixed에 그대로 쓰면 스케일만큼 어긋난다.
 
 ## 6. 차트 (Tremor/shadcn 문법)
 - 구성: 점선 그리드(25/50/75) + 좌축 값 라벨 + 하단 시간 라벨 + 그라데이션 면 + 1.8px 선.
