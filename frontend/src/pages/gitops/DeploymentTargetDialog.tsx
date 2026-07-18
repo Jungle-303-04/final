@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, GitBranch, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
   ReleaseApplication,
@@ -16,10 +16,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../shared/ui/primitives/dialog";
-import { Input } from "../../shared/ui/primitives/input";
 import { Spinner } from "../../shared/ui/primitives/spinner";
-import { FormField, NativeSelect } from "./WorkflowFormControls";
-import { DeploymentTargetPreview } from "./DeploymentTargetPreview";
+import {
+  DeployTargetStep,
+  DeploymentTargetSteps,
+  ManifestTargetStep,
+  RepositoryTargetStep,
+  type DeploymentTargetStep,
+} from "./DeploymentTargetDialogSteps";
+import { isGitRepositoryReference } from "./gitRepositoryPresentation";
 
 const INITIAL_TARGET: ReleaseTargetInput = {
   name: "",
@@ -43,6 +48,7 @@ export function DeploymentTargetDialog({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<DeploymentTargetStep>(1);
   const [input, setInput] = useState<ReleaseTargetInput>(INITIAL_TARGET);
   const [failed, setFailed] = useState(false);
   const connectedClusters = useMemo(
@@ -53,35 +59,35 @@ export function DeploymentTargetDialog({
     ? input.clusterId
     : connectedClusters[0]?.id || "";
   const selectedCluster = connectedClusters.find((cluster) => cluster.id === clusterId) ?? null;
-  const complete = [
-    input.name,
-    input.repository,
-    input.branch,
-    input.manifestPath,
-    clusterId,
-    input.namespace,
-    input.environment,
-  ].every((value) => value.trim() !== "");
+  const valid = {
+    1: isGitRepositoryReference(input.repository),
+    2: input.name.trim() !== "" && input.branch.trim() !== "" && input.manifestPath.trim() !== "",
+    3: clusterId !== "" && input.namespace.trim() !== "" && input.environment.trim() !== "",
+  } satisfies Record<DeploymentTargetStep, boolean>;
 
   const update = (field: keyof ReleaseTargetInput, value: string) => {
     setInput((current) => ({ ...current, [field]: value }));
     setFailed(false);
   };
+  const reset = () => {
+    setStep(1);
+    setInput(INITIAL_TARGET);
+    setFailed(false);
+  };
   const changeOpen = (nextOpen: boolean) => {
     if (pending) return;
     setOpen(nextOpen);
-    setFailed(false);
-    if (!nextOpen) setInput(INITIAL_TARGET);
+    if (!nextOpen) reset();
   };
   const submit = async () => {
-    if (!complete || pending) return;
+    if (!valid[1] || !valid[2] || !valid[3] || pending) return;
     const created = await onCreate({ ...input, clusterId });
     if (!created) {
       setFailed(true);
       return;
     }
     setOpen(false);
-    setInput(INITIAL_TARGET);
+    reset();
   };
 
   return (
@@ -90,88 +96,69 @@ export function DeploymentTargetDialog({
         <Plus aria-hidden="true" />
         {t("workflows.target.new")}
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-5xl" closeLabel={t("common.action.close")} showCloseButton={!pending}>
-        <DialogHeader>
-          <DialogTitle>{t("workflows.target.title")}</DialogTitle>
-          <DialogDescription className="sr-only">{t("workflows.target.description")}</DialogDescription>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-hidden p-0 sm:max-w-2xl"
+        closeLabel={t("common.action.close")}
+        showCloseButton={!pending}
+      >
+        <DialogHeader className="gap-3 border-b px-6 pb-5 pt-6 sm:px-8 sm:pt-7">
+          <div className="flex items-center gap-3 pr-8">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-data-accent text-data-accent-foreground">
+              <GitBranch aria-hidden="true" className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle>{t("workflows.target.title")}</DialogTitle>
+              <DialogDescription className="mt-1 leading-relaxed">{t("workflows.target.description")}</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        {failed ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs" role="alert">
-            {t("workflows.target.createError")}
-          </div>
-        ) : null}
+        <DeploymentTargetSteps activeStep={step} />
 
-        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start">
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-            <FormField label={t("workflows.target.name")}>
-              <Input autoFocus onChange={(event) => update("name", event.target.value)} value={input.name} />
-            </FormField>
-            <FormField label={t("workflows.target.repository")}>
-              <Input
-                autoCapitalize="none"
-                onChange={(event) => update("repository", event.target.value)}
-                placeholder={t("workflows.target.repositoryPlaceholder")}
-                spellCheck={false}
-                value={input.repository}
-              />
-            </FormField>
-            <FormField label={t("workflows.target.branch")}>
-              <Input autoCapitalize="none" onChange={(event) => update("branch", event.target.value)} spellCheck={false} value={input.branch} />
-            </FormField>
-            <FormField label={t("workflows.target.manifestPath")}>
-              <Input autoCapitalize="none" onChange={(event) => update("manifestPath", event.target.value)} spellCheck={false} value={input.manifestPath} />
-            </FormField>
-            <FormField
-              error={!connectedClusters.length ? t("workflows.target.connectClusterFirst") : undefined}
-              label={t("workflows.target.cluster")}
-            >
-              <NativeSelect
-                disabled={!connectedClusters.length}
-                onChange={(value) => update("clusterId", value)}
-                value={clusterId}
-              >
-                {connectedClusters.length ? connectedClusters.map((cluster) => (
-                  <option key={cluster.id} value={cluster.id}>
-                    {cluster.name} · {cluster.environment}
-                  </option>
-                )) : <option value="">{t("workflows.target.noClusters")}</option>}
-              </NativeSelect>
-            </FormField>
-            <FormField label={t("workflows.target.namespace")}>
-              <Input autoCapitalize="none" onChange={(event) => update("namespace", event.target.value)} spellCheck={false} value={input.namespace} />
-            </FormField>
-            <FormField label={t("workflows.target.environment")}>
-              <NativeSelect onChange={(value) => update("environment", value)} value={input.environment}>
-                <option value="development">{t("workflows.option.environment.development")}</option>
-                <option value="staging">{t("workflows.option.environment.staging")}</option>
-                <option value="production">{t("workflows.option.environment.production")}</option>
-              </NativeSelect>
-            </FormField>
-            <FormField label={t("workflows.target.token")}>
-              <Input
-                autoComplete="new-password"
-                onChange={(event) => update("token", event.target.value)}
-                spellCheck={false}
-                type="password"
-                value={input.token || ""}
-              />
-            </FormField>
-          </div>
-          <DeploymentTargetPreview
-            cluster={selectedCluster}
-            input={{ ...input, clusterId }}
-          />
+        <div className="min-h-0 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
+          {failed ? (
+            <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm" role="alert">
+              {t("workflows.target.createError")}
+            </div>
+          ) : null}
+          {step === 1 ? <RepositoryTargetStep input={input} update={update} /> : null}
+          {step === 2 ? <ManifestTargetStep input={input} update={update} /> : null}
+          {step === 3 ? (
+            <DeployTargetStep
+              clusterId={clusterId}
+              connectedClusters={connectedClusters}
+              input={input}
+              selectedCluster={selectedCluster}
+              update={update}
+            />
+          ) : null}
         </div>
 
-        <DialogFooter>
-          <Button aria-busy={pending} disabled={!complete || pending} onClick={() => void submit()}>
-            {pending ? <Spinner decorative /> : <Plus aria-hidden="true" />}
-            {pending ? t("workflows.target.creating") : t("workflows.target.create")}
-          </Button>
-          <Button disabled={pending} onClick={() => changeOpen(false)} variant="outline">
+        <DialogFooter className="border-t px-6 py-4 sm:px-8">
+          <Button disabled={pending} onClick={() => changeOpen(false)} variant="ghost">
             {t("common.action.cancel")}
           </Button>
+          <div className="flex flex-1 justify-end gap-2">
+            {step > 1 ? (
+              <Button disabled={pending} onClick={() => setStep((step - 1) as DeploymentTargetStep)} variant="outline">
+                <ChevronLeft aria-hidden="true" />
+                {t("workflows.target.back")}
+              </Button>
+            ) : null}
+            {step < 3 ? (
+              valid[step] ? (
+                <Button disabled={pending} onClick={() => setStep((step + 1) as DeploymentTargetStep)}>
+                  {t("workflows.target.next")}
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+              ) : null
+            ) : (
+              <Button aria-busy={pending} disabled={!valid[3] || pending} onClick={() => void submit()}>
+                {pending ? <Spinner decorative /> : <Plus aria-hidden="true" />}
+                {pending ? t("workflows.target.creating") : t("workflows.target.create")}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

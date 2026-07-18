@@ -175,21 +175,27 @@ describe("GitOpsPage workspace navigation", () => {
     expect(screen.queryByRole("combobox", { name: "Application" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "New deployment target" }));
-    expect(await screen.findByRole("dialog", { name: "New deployment target" })).toBeTruthy();
-    const preview = screen.getByRole("complementary", { name: "Deployment target preview" });
-    expect(within(preview).getAllByText("Not set").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("dialog", { name: "Connect Git repository" })).toBeTruthy();
+    expect(screen.queryByLabelText("Target name")).toBeNull();
+    await user.type(screen.getByLabelText("Git repository"), "https://github.com/team/inventory-api.git");
+    const token = screen.getByLabelText("GitHub token (optional)") as HTMLInputElement;
+    await user.type(token, "production-secret-value");
+    expect(token.type).toBe("password");
+    expect(screen.getByText("GitHub detected")).toBeTruthy();
+    expect(screen.getByRole("dialog").textContent).not.toContain("production-secret-value");
+    await user.click(screen.getByRole("button", { name: "Next" }));
     await user.type(screen.getByLabelText("Target name"), "Inventory API");
-    await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
-    await user.type(screen.getByLabelText("GitHub token (optional)"), "production-secret-value");
-    expect(within(preview).getByText("Inventory API")).toBeTruthy();
-    expect(within(preview).getByText("team/inventory-api")).toBeTruthy();
-    expect(within(preview).getByText("Ready to register")).toBeTruthy();
-    expect(preview.textContent).not.toContain("production-secret-value");
+    expect((screen.getByLabelText("Branch") as HTMLInputElement).value).toBe("main");
+    expect((screen.getByLabelText("Manifest path") as HTMLInputElement).value).toBe("deploy.yaml");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getAllByText("Production cluster").length).toBeGreaterThan(0);
+    expect(screen.getByRole("dialog").textContent).not.toContain("production-secret-value");
     await user.click(screen.getByRole("button", { name: "Register target" }));
 
     await waitFor(() => expect(port.connectApplication).toHaveBeenCalledWith({
       name: "Inventory API",
-      repository: "team/inventory-api",
+      repository: "https://github.com/team/inventory-api.git",
       branch: "main",
       manifestPath: "deploy.yaml",
       clusterId: "production-cluster",
@@ -197,7 +203,7 @@ describe("GitOpsPage workspace navigation", () => {
       environment: "development",
       token: "production-secret-value",
     }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New deployment target" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Connect Git repository" })).toBeNull());
     expect((screen.getByRole("checkbox", { name: /Inventory API/ }) as HTMLInputElement).checked).toBe(true);
   });
 
@@ -211,8 +217,10 @@ describe("GitOpsPage workspace navigation", () => {
     await user.type(screen.getByLabelText("Plan name"), "Target registration plan");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(screen.getByRole("button", { name: "New deployment target" }));
-    await user.type(screen.getByLabelText("Target name"), "Inventory API");
     await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByLabelText("Target name"), "Inventory API");
+    await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Register target" }));
 
     const register = screen.getByRole("button", { name: "Registering target" });

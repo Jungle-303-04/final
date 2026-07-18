@@ -1,10 +1,16 @@
-import { Check, Clipboard, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Clipboard,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import type { ClusterConnectStage } from "../../features/clusters/clustersContract";
 import type { I18nController } from "../../shared/i18n";
+import { cn } from "../../shared/lib/cn";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { Spinner } from "../../shared/ui/primitives/spinner";
-import type { ConnectPhase } from "./ClusterConnectDialog";
+import type { ConnectPhase } from "./useClusterConnectDialogController";
 
 export function ConnectionCommandStep({
   copyState,
@@ -16,6 +22,7 @@ export function ConnectionCommandStep({
   onCopy,
   onReissue,
   phase,
+  providerLabel,
   t,
 }: {
   copyState: "idle" | "copied" | "failed";
@@ -27,11 +34,12 @@ export function ConnectionCommandStep({
   onCopy: () => void;
   onReissue: () => void;
   phase: ConnectPhase;
+  providerLabel: string;
   t: I18nController["t"];
 }) {
   if (phase === "reissuing") {
     return (
-      <div className="flex min-h-36 items-center justify-center rounded-xl border bg-card" role="status">
+      <div className="flex min-h-40 items-center justify-center rounded-xl border bg-muted/25" role="status">
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" decorative />
           {t("clusters.connect.reissue.pending")}
@@ -63,42 +71,62 @@ export function ConnectionCommandStep({
     <div className="grid gap-4">
       <div className="grid gap-1">
         <h3 className="font-semibold">{t("clusters.connect.command.title")}</h3>
-        <p className="text-sm text-muted-foreground">{t("clusters.connect.command.description")}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          {t("clusters.connect.command.description")}
+        </p>
       </div>
+
       <div
-        className="flex min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-xl border bg-muted p-2"
+        className="min-w-0 max-w-full overflow-hidden rounded-xl border bg-muted/35"
         data-command-surface="true"
       >
+        <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5">
+          <span className="min-w-0 truncate text-xs font-semibold text-muted-foreground">
+            {t("clusters.connect.command.agentLabel", { provider: providerLabel })}
+          </span>
+          <Button
+            aria-label={t(copyState === "copied" ? "clusters.connect.action.copied" : "clusters.connect.action.copy")}
+            className="shrink-0 bg-background shadow-xs"
+            onClick={onCopy}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {copyState === "copied" ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
+            <span>{t(copyState === "copied" ? "clusters.connect.action.copied" : "clusters.connect.action.copy")}</span>
+          </Button>
+        </div>
         <div
           aria-label={t("clusters.connect.command.title")}
-          className="min-w-0 flex-1 overflow-hidden rounded-lg bg-background/70"
+          className="min-w-0 overflow-hidden"
           data-command-block="true"
           role="region"
           tabIndex={0}
         >
-          <pre className="select-text whitespace-pre-wrap break-all px-3 py-2.5 text-xs leading-5 [overflow-wrap:anywhere]"><code>{installCommand}</code></pre>
+          <pre className="select-text whitespace-pre-wrap break-all px-4 py-3 font-mono text-xs leading-5 [overflow-wrap:anywhere]"><code>{installCommand}</code></pre>
         </div>
-        <Button
-          aria-label={t(copyState === "copied" ? "clusters.connect.action.copied" : "clusters.connect.action.copy")}
-          className="shrink-0 bg-background shadow-xs"
-          onClick={onCopy}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          {copyState === "copied" ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
-          <span className="hidden sm:inline">
-            {t(copyState === "copied" ? "clusters.connect.action.copied" : "clusters.connect.action.copy")}
-          </span>
-        </Button>
       </div>
+
+      <div className="flex items-start gap-3 rounded-xl border bg-card px-4 py-3">
+        <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-healthy" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t("clusters.connect.security.outbound")}
+        </p>
+      </div>
+
       <ConnectionProgress elapsedSeconds={elapsedSeconds} stage={connectionStage} t={t} />
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground" role="status">
-          <Spinner className="size-4" decorative />
+
+      <div className="flex min-w-0 items-center gap-3 rounded-xl border bg-muted/25 px-4 py-3" role="status">
+        <span className="relative flex size-8 shrink-0 items-center justify-center" aria-hidden="true">
+          <span className="absolute inline-flex size-7 animate-ping rounded-full bg-status-healthy/20 motion-reduce:animate-none" />
+          <span className="relative inline-flex size-2.5 rounded-full bg-status-healthy" />
+        </span>
+        <span className="min-w-0 flex-1 text-sm font-medium">
           {t(phase === "finishing" ? "clusters.connect.progress.finalizing" : "clusters.connect.waiting")}
         </span>
+        <Spinner className="size-4 shrink-0 text-data-accent" decorative />
       </div>
+
       <p aria-live="polite" className="sr-only">
         {copyState === "copied" ? t("clusters.connect.action.copied") : ""}
       </p>
@@ -147,21 +175,27 @@ function ConnectionProgress({
           const active = index === currentIndex && effectiveStage !== "ready";
           return (
             <li
-              className="motion-live-preview grid min-w-0 justify-items-center gap-1 rounded-lg py-1 text-center"
-              data-complete={complete}
+              className={cn(
+                "motion-live-preview grid min-w-0 justify-items-center gap-1.5 rounded-lg border bg-muted/20 px-1.5 py-2 text-center",
+                active && "border-data-accent/35 bg-data-accent/5",
+              )}
+              data-complete={complete || undefined}
               key={value}
             >
-              <span className={complete
-                ? "grid size-6 place-items-center rounded-full bg-status-healthy text-white transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
-                : active
-                  ? "grid size-6 place-items-center rounded-full bg-primary/15 text-primary transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
-                  : "grid size-6 place-items-center rounded-full bg-muted text-muted-foreground transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
-              }>
-                {complete ? <Check aria-hidden="true" className="size-3.5" /> : active
-                  ? <Spinner className="size-3.5" decorative />
-                  : <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}
+              <span
+                className={cn(
+                  "grid size-5 place-items-center rounded-full bg-muted text-muted-foreground",
+                  complete && "bg-status-healthy/15 text-status-healthy",
+                  active && "bg-data-accent/10 text-data-accent",
+                )}
+              >
+                {complete
+                  ? <Check aria-hidden="true" className="size-3" strokeWidth={3} />
+                  : active
+                    ? <Spinner className="size-3" decorative />
+                    : <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}
               </span>
-              <span className="w-full truncate text-[11px] text-muted-foreground" title={t(labelKey)}>
+              <span className="w-full truncate text-[0.6875rem] text-muted-foreground" title={t(labelKey)}>
                 {t(labelKey)}
               </span>
             </li>

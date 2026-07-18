@@ -4,7 +4,10 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AiAssistantPort } from "../features/ai-assistant/aiAssistantContract";
+import type {
+  AiAssistantAnswer,
+  AiAssistantPort,
+} from "../features/ai-assistant/aiAssistantContract";
 import {
   installMatchMedia,
   renderShell,
@@ -44,22 +47,25 @@ describe("ProductShell AI panel", () => {
     expect(panel.getAttribute("aria-hidden")).toBe("false");
     expect(panel.hasAttribute("inert")).toBe(false);
     expect(panel.getAttribute("data-open")).toBe("true");
-    expect(panel.getAttribute("data-width")).toBe("420");
-    expect(inner?.getAttribute("data-inner-width")).toBe("420");
+    expect(panel.getAttribute("data-width")).toBe("460");
+    expect(inner?.getAttribute("data-inner-width")).toBe("460");
     expect(panel.previousElementSibling?.id).toBe("product-main");
     expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Opsia AI 닫기" })).toHaveLength(1);
     expect(await screen.findByRole("button", { name: "이 파드는 왜 재시작하나요?" }))
       .toBeTruthy();
     expect(screen.queryByRole("button", { name: "재시작 원인" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "이 파드는 왜 재시작하나요?" }));
+    expect((screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" }) as HTMLTextAreaElement).value)
+      .toBe("이 파드는 왜 재시작하나요?");
     expect(panel.textContent).toContain("home");
     expect(panel.textContent).toContain("cluster-1");
 
     fireEvent.keyDown(screen.getByRole("separator", { name: "AI 패널 너비 조절" }), {
       key: "ArrowLeft",
     });
-    expect(panel.getAttribute("data-width")).toBe("440");
-    expect(inner?.getAttribute("data-inner-width")).toBe("440");
+    expect(panel.getAttribute("data-width")).toBe("480");
+    expect(inner?.getAttribute("data-inner-width")).toBe("480");
   });
 
   it("never renders an answer without evidence and links a supported answer", async () => {
@@ -112,6 +118,40 @@ describe("ProductShell AI panel", () => {
 
     expect(await screen.findByText(answer)).toBeTruthy();
     expect(screen.queryByText("그 답을 뒷받침할 근거 데이터가 없습니다.")).toBeNull();
+  });
+
+  it("shows real analysis progress and toggles the completed result without losing evidence", async () => {
+    const user = userEvent.setup();
+    let resolveAnswer: (answer: AiAssistantAnswer) => void = () => undefined;
+    const ask = vi.fn(() => new Promise<AiAssistantAnswer>((resolve) => {
+      resolveAnswer = resolve;
+    }));
+    renderShell({ aiAssistantPort: assistantPort({ ask }) });
+    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
+    await user.type(input, "근거를 분석해줘");
+    await user.click(screen.getByRole("button", { name: "질문" }));
+
+    const progress = await screen.findByRole("status", { name: "분석 진행" });
+    expect(progress.textContent).toContain("현재 화면 맥락 확인");
+    expect(progress.textContent).toContain("관련 근거 검증");
+    expect(progress.textContent).toContain("근거 기반 답변 구성");
+
+    resolveAnswer({
+      answer: "이벤트 근거로 원인을 확인했습니다.",
+      evidence: [{ type: "event", id: "event-2", label: "Restart event", link: "/issues/event-2" }],
+      action: null,
+    });
+    const result = await screen.findByText("이벤트 근거로 원인을 확인했습니다.");
+    const card = result.closest('[data-slot="ai-result-card"]');
+    expect(card).toBeTruthy();
+    const collapse = screen.getByRole("button", { name: "답변 접기" });
+    await user.click(collapse);
+    expect(card?.getAttribute("data-collapsed")).toBe("true");
+    expect(screen.getByRole("button", { name: "답변 펼치기" }).getAttribute("aria-expanded")).toBe("false");
+    await user.click(screen.getByRole("button", { name: "답변 펼치기" }));
+    expect(card?.hasAttribute("data-collapsed")).toBe(false);
+    expect(screen.getByRole("link", { name: /Restart event/u })).toBeTruthy();
   });
 
   it("updates AI conversation and pending-action labels immediately with locale", async () => {

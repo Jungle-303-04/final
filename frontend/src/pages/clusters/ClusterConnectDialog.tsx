@@ -1,24 +1,15 @@
-import { Check } from "lucide-react";
 import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-} from "react";
+  Check,
+  ChevronRight,
+  Server,
+  ShieldCheck,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
-import {
-  ClustersPortFailure,
-  type ClusterConnectProvider,
-  type ClusterConnectReceipt,
-  type ClusterConnectStage,
-  type ClustersPort,
-} from "../../features/clusters/clustersContract";
+import type { ClustersPort } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import { useI18n, type MessageKey } from "../../shared/i18n";
-import { ProviderLogo, type ProviderLogoKind } from "../../shared/brand/ProviderLogo";
+import { useI18n } from "../../shared/i18n";
 import { Button, buttonVariants } from "../../shared/ui/primitives/button";
-import { cn } from "@/shared/lib/cn";
 import {
   Dialog,
   DialogContent,
@@ -30,30 +21,13 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Spinner } from "../../shared/ui/primitives/spinner";
 import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
+import {
+  ClusterConnectProviderGrid,
+  ClusterConnectSteps,
+  clusterConnectProviders,
+} from "./ClusterConnectDialogViews";
 import { clusterResourcesHref } from "./clusterNavigation";
-
-const providers: readonly {
-  id: ClusterConnectProvider;
-  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
-  labelKey: MessageKey;
-}[] = [
-  { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
-  { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
-  { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
-];
-
-type WizardStep = 1 | 2 | 3;
-export type ConnectPhase =
-  | "idle"
-  | "submitting"
-  | "waiting"
-  | "reissuing"
-  | "finishing"
-  | "connected"
-  | "expired"
-  | "failed";
-
-const STEP_MOTION = "motion-wizard-stage";
+import { useClusterConnectDialogController } from "./useClusterConnectDialogController";
 
 export function ClusterConnectDialog({
   existingNames,
@@ -71,319 +45,168 @@ export function ClusterConnectDialog({
   const { reportUnauthorized } = useAuthSessionGate();
   const filter = useUnifiedFilter();
   const { formatDate, t } = useI18n();
-  const [step, setStep] = useState<WizardStep>(1);
-  const [name, setName] = useState("");
-  const [provider, setProvider] = useState<ClusterConnectProvider>("aws");
-  const [phase, setPhase] = useState<ConnectPhase>("idle");
-  const [receipt, setReceipt] = useState<ClusterConnectReceipt | null>(null);
-  const [connectionStage, setConnectionStage] = useState<ClusterConnectStage>("awaiting_install");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const [serverNameConflict, setServerNameConflict] = useState(false);
-  const connectAbort = useRef<AbortController | null>(null);
-  const waitingStartedAt = useRef<number | null>(null);
-  const nextPollAfterSeconds = useRef<number | null>(null);
-  const normalizedName = normalizeDisplayName(name);
-  const duplicateName = normalizedName.length > 0 && existingNames.some(
-    (existingName) => normalizeDisplayName(existingName) === normalizedName,
-  );
-  const nameConflict = duplicateName || serverNameConflict;
-
-  useEffect(() => {
-    if (!open || step !== 2 || !receipt || (phase !== "waiting" && phase !== "finishing")) return;
-    const controller = new AbortController();
-    let active = true;
-    let timeout: number | undefined;
-    const poll = async () => {
-      nextPollAfterSeconds.current = null;
-      try {
-        const connection = await port.loadConnection(receipt.clusterId, controller.signal);
-        if (!active) return;
-        nextPollAfterSeconds.current = connection.refreshAfterSeconds;
-        setConnectionStage(connection.stage);
-        if (connection.status === "connected") {
-          if (phase === "finishing") {
-            setPhase("connected");
-            setStep(3);
-            onConnected();
-            return;
-          }
-          setPhase("finishing");
-        } else if (connection.status === "expired") {
-          setPhase("expired");
-        } else if (connection.stage === "error") {
-          setPhase("failed");
-        } else if (phase === "finishing") {
-          setPhase("waiting");
-        }
-      } catch (error) {
-        if (!active || isAbortError(error)) return;
-        nextPollAfterSeconds.current = null;
-        if (error instanceof ClustersPortFailure && error.code === "unauthorized") {
-          reportUnauthorized();
-          return;
-        }
-        setPhase("failed");
-      } finally {
-        const refreshAfterSeconds = nextPollAfterSeconds.current;
-        if (active && phase === "waiting" && refreshAfterSeconds !== null) {
-          timeout = window.setTimeout(
-            () => void poll(),
-            refreshAfterSeconds * 1_000,
-          );
-        }
-      }
-    };
-    if (phase === "waiting") {
-      void poll();
-    } else {
-      const refreshAfterSeconds = nextPollAfterSeconds.current;
-      if (refreshAfterSeconds !== null) {
-        timeout = window.setTimeout(
-          () => void poll(),
-          refreshAfterSeconds * 1_000,
-        );
-      }
-    }
-    return () => {
-      active = false;
-      controller.abort();
-      if (timeout !== undefined) window.clearTimeout(timeout);
-    };
-  }, [onConnected, open, phase, port, receipt, reportUnauthorized, step]);
-
-  useEffect(() => {
-    if (!open || step !== 2 || phase !== "waiting") return;
-    waitingStartedAt.current ??= Date.now();
-    const updateElapsed = () => {
-      const startedAt = waitingStartedAt.current;
-      if (startedAt === null) return;
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
-    };
-    updateElapsed();
-    const interval = window.setInterval(updateElapsed, 1_000);
-    return () => window.clearInterval(interval);
-  }, [open, phase, step]);
-
-  const changeOpen = (nextOpen: boolean) => {
-    if (!nextOpen && (phase === "submitting" || phase === "reissuing")) return;
-    if (!nextOpen) {
-      connectAbort.current?.abort();
-      connectAbort.current = null;
-      if (step === 3) reset();
-    }
-    onOpenChange(nextOpen);
-  };
-  const reset = () => {
-    setStep(1);
-    setName("");
-    setProvider("aws");
-    setPhase("idle");
-    setReceipt(null);
-    setConnectionStage("awaiting_install");
-    setElapsedSeconds(0);
-    waitingStartedAt.current = null;
-    nextPollAfterSeconds.current = null;
-    setCopyState("idle");
-    setServerNameConflict(false);
-  };
-  const register = async () => {
-    if (!name.trim() || nameConflict || phase === "submitting") return;
-    const controller = new AbortController();
-    connectAbort.current = controller;
-    setElapsedSeconds(0);
-    setServerNameConflict(false);
-    setPhase("submitting");
-    try {
-      const nextReceipt = await port.connect({ name: name.trim(), provider }, controller.signal);
-      setReceipt(nextReceipt);
-      setConnectionStage("awaiting_install");
-      waitingStartedAt.current = Date.now();
-      nextPollAfterSeconds.current = null;
-      setPhase("waiting");
-      setStep(2);
-    } catch (error) {
-      if (isAbortError(error)) return;
-      if (error instanceof ClustersPortFailure && error.code === "unauthorized") {
-        reportUnauthorized();
-        return;
-      }
-      if (error instanceof ClustersPortFailure && error.code === "conflict") {
-        setServerNameConflict(true);
-        setPhase("idle");
-        setStep(1);
-        return;
-      }
-      setPhase("failed");
-      setStep(2);
-    } finally {
-      if (connectAbort.current === controller) connectAbort.current = null;
-    }
-  };
-  const reissue = async () => {
-    if (!receipt || phase === "reissuing") return;
-    const controller = new AbortController();
-    connectAbort.current?.abort();
-    connectAbort.current = controller;
-    setPhase("reissuing");
-    setCopyState("idle");
-    try {
-      const nextReceipt = await port.reissue(receipt.clusterId, controller.signal);
-      if (controller.signal.aborted) return;
-      setReceipt(nextReceipt);
-      setConnectionStage("awaiting_install");
-      setElapsedSeconds(0);
-      waitingStartedAt.current = Date.now();
-      nextPollAfterSeconds.current = null;
-      setPhase("waiting");
-    } catch (error) {
-      if (isAbortError(error)) return;
-      if (error instanceof ClustersPortFailure && error.code === "unauthorized") {
-        reportUnauthorized();
-        return;
-      }
-      setPhase("failed");
-    } finally {
-      if (connectAbort.current === controller) connectAbort.current = null;
-    }
-  };
-  const copyCommand = async () => {
-    if (!receipt) return;
-    // Clipboard writes do not need a loading state. Acknowledge the click immediately,
-    // then surface the uncommon permission failure if the browser rejects the write.
-    setCopyState("copied");
-    try {
-      await navigator.clipboard.writeText(receipt.installCommand);
-    } catch {
-      setCopyState("failed");
-    }
-  };
+  const {
+    changeName,
+    changeOpen,
+    connectionStage,
+    copyCommand,
+    copyState,
+    elapsedSeconds,
+    name,
+    nameConflict,
+    phase,
+    provider,
+    receipt,
+    register,
+    reissue,
+    setProvider,
+    step,
+  } = useClusterConnectDialogController({
+    existingNames,
+    onConnected,
+    onOpenChange,
+    open,
+    port,
+    reportUnauthorized,
+  });
+  const selectedProvider = clusterConnectProviders.find((candidate) => candidate.id === provider)
+    ?? clusterConnectProviders[0];
 
   return (
     <Dialog onOpenChange={changeOpen} open={open}>
       <DialogContent
-        className="sm:max-w-2xl"
+        className="overflow-hidden p-0 sm:max-w-2xl"
         closeLabel={t("common.action.close")}
         showCloseButton={phase !== "submitting" && phase !== "reissuing"}
       >
-        <DialogHeader>
-          <p className="text-xs font-medium text-muted-foreground">
-            {t("clusters.connect.step", { current: step, total: 3 })}
-          </p>
-          <DialogTitle>{t("clusters.connect.title")}</DialogTitle>
-          <DialogDescription>{t("clusters.connect.description")}</DialogDescription>
+        <DialogHeader className="gap-3 border-b px-6 pb-5 pt-6 sm:px-8 sm:pt-7">
+          <div className="flex items-center gap-3 pr-8">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-data-accent text-data-accent-foreground">
+              <Server aria-hidden="true" className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle>{t("clusters.connect.title")}</DialogTitle>
+              <DialogDescription className="mt-1 leading-relaxed">
+                {t("clusters.connect.description")}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        {step === 1 ? (
-          <div className={cn("grid gap-5", STEP_MOTION)}>
-            <label className="grid gap-2 text-sm font-medium">
-              {t("clusters.connect.name.label")}
-              <Input
-                aria-describedby={nameConflict ? "cluster-connect-name-error" : undefined}
-                aria-invalid={nameConflict || undefined}
-                autoFocus
-                onChange={(event) => {
-                  setName(event.currentTarget.value);
-                  setServerNameConflict(false);
-                }}
-                placeholder={t("clusters.connect.name.placeholder")}
-                value={name}
-              />
-              {nameConflict ? (
-                <span className="text-xs text-destructive" id="cluster-connect-name-error" role="alert">
-                  {t("clusters.connect.name.conflict")}
-                </span>
-              ) : null}
-            </label>
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 text-sm font-medium">{t("clusters.connect.provider.label")}</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {providers.map(({ id, logo, labelKey }) => (
-                  <button
-                    aria-pressed={provider === id}
-                    className={cn(
-                      "grid min-h-24 place-items-center gap-2 rounded-xl border bg-card p-3 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
-                      provider === id && "border-ring bg-muted",
-                    )}
-                    key={id}
-                    onClick={() => setProvider(id)}
-                    type="button"
-                  >
-                    <ConnectProviderLogo logo={logo} />
-                    <span>{t(labelKey)}</span>
-                  </button>
-                ))}
+        <ClusterConnectSteps activeStep={step} />
+
+        <div className="px-6 pb-6 pt-5 sm:px-8 sm:pb-8">
+          {step === 1 ? (
+            <div className="motion-wizard-stage grid gap-5">
+              <div className="flex items-start gap-3 rounded-xl border bg-muted/35 px-4 py-3">
+                <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-healthy" />
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("clusters.connect.security.outbound")}
+                </p>
               </div>
-            </fieldset>
-            <DialogFooter className="mt-1">
-              <Button
-                aria-busy={phase === "submitting"}
-                disabled={!name.trim() || nameConflict || phase === "submitting"}
-                onClick={() => void register()}
-              >
-                {phase === "submitting" ? <Spinner decorative /> : null}
-                {t("clusters.connect.action.register")}
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : null}
 
-        {step === 2 ? (
-          <div className={STEP_MOTION}>
-            <ConnectionCommandStep
-              copyState={copyState}
-              connectionStage={connectionStage}
-              elapsedSeconds={elapsedSeconds}
-              expiresAt={receipt?.expiresAt ?? null}
-              formatDate={formatDate}
-              installCommand={receipt?.installCommand ?? null}
-              onCopy={() => void copyCommand()}
-              onReissue={() => void reissue()}
-              phase={phase}
-              t={t}
-            />
-          </div>
-        ) : null}
+              <fieldset className="grid gap-2.5">
+                <div className="grid gap-0.5">
+                  <legend className="text-sm font-semibold">{t("clusters.connect.provider.label")}</legend>
+                  <p className="text-xs text-muted-foreground">{t("clusters.connect.provider.description")}</p>
+                </div>
+                <ClusterConnectProviderGrid onChange={setProvider} provider={provider} t={t} />
+              </fieldset>
 
-        {step === 3 && receipt ? (
-          <div className={cn("grid justify-items-center gap-4 py-6 text-center", STEP_MOTION)}>
-            <span className="grid size-12 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
-              <Check aria-hidden="true" className="size-6" />
-            </span>
-            <div className="grid gap-1">
-              <h3 className="text-lg font-semibold">{t("clusters.connect.connected.title")}</h3>
-              <p className="text-sm text-muted-foreground">{t("clusters.connect.connected.description")}</p>
+              <label className="grid gap-2 text-sm font-semibold">
+                {t("clusters.connect.name.label")}
+                <Input
+                  aria-label={t("clusters.connect.name.label")}
+                  aria-describedby={nameConflict ? "cluster-connect-name-error" : "cluster-connect-name-hint"}
+                  aria-invalid={nameConflict || undefined}
+                  autoFocus
+                  className="h-11 rounded-xl bg-muted/35 px-3.5 font-mono"
+                  onChange={(event) => changeName(event.currentTarget.value)}
+                  placeholder={t("clusters.connect.name.placeholder")}
+                  value={name}
+                />
+                {nameConflict ? (
+                  <span className="text-xs text-destructive" id="cluster-connect-name-error" role="alert">
+                    {t("clusters.connect.name.conflict")}
+                  </span>
+                ) : (
+                  <span className="text-xs font-normal text-muted-foreground" id="cluster-connect-name-hint">
+                    {t("clusters.connect.name.hint")}
+                  </span>
+                )}
+              </label>
+
+              <DialogFooter className="mt-1">
+                <Button
+                  aria-busy={phase === "submitting"}
+                  className="h-11 w-full rounded-xl bg-data-accent text-data-accent-foreground hover:bg-data-accent/90"
+                  disabled={!name.trim() || nameConflict || phase === "submitting"}
+                  onClick={() => void register()}
+                >
+                  {phase === "submitting" ? <Spinner decorative /> : null}
+                  {t("clusters.connect.action.register")}
+                  {phase !== "submitting" ? <ChevronRight aria-hidden="true" /> : null}
+                </Button>
+              </DialogFooter>
             </div>
-            <Link
-              className={buttonVariants()}
-              to={clusterResourcesHref(filter.state, receipt.clusterId)}
-            >
-              {t("clusters.connect.action.view")}
-            </Link>
-          </div>
-        ) : null}
+          ) : null}
+
+          {step === 2 ? (
+            <div className="motion-wizard-stage">
+              <ConnectionCommandStep
+                copyState={copyState}
+                connectionStage={connectionStage}
+                elapsedSeconds={elapsedSeconds}
+                expiresAt={receipt?.expiresAt ?? null}
+                formatDate={formatDate}
+                installCommand={receipt?.installCommand ?? null}
+                onCopy={() => void copyCommand()}
+                onReissue={() => void reissue()}
+                phase={phase}
+                providerLabel={t(selectedProvider.labelKey)}
+                t={t}
+              />
+            </div>
+          ) : null}
+
+          {step === 3 && receipt ? (
+            <div className="motion-wizard-stage grid justify-items-center gap-5 py-2 text-center">
+              <span className="grid size-16 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
+                <Check aria-hidden="true" className="size-8" strokeWidth={3} />
+              </span>
+              <div className="grid gap-1.5">
+                <h3 className="text-xl font-semibold tracking-tight">{t("clusters.connect.connected.title")}</h3>
+                <p className="text-sm text-muted-foreground">{t("clusters.connect.connected.description")}</p>
+                <p className="font-mono text-xs text-foreground/75">{receipt.clusterId}</p>
+              </div>
+              <div className="grid w-full grid-cols-2 overflow-hidden rounded-xl border bg-muted/25 text-left">
+                <div className="border-r px-4 py-3">
+                  <p className="text-[0.6875rem] text-muted-foreground">{t("clusters.connect.connected.agent")}</p>
+                  <p className="mt-1 text-sm font-semibold text-status-healthy">{t("common.state.connected")}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-[0.6875rem] text-muted-foreground">{t("clusters.connect.connected.collecting")}</p>
+                  <p className="mt-1 inline-flex items-center gap-2 text-sm font-semibold">
+                    <span className="relative flex size-2" aria-hidden="true">
+                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-status-healthy/50 motion-reduce:animate-none" />
+                      <span className="relative inline-flex size-2 rounded-full bg-status-healthy" />
+                    </span>
+                    {t("clusters.connect.connected.realtime")}
+                  </p>
+                </div>
+              </div>
+              <Link
+                className={buttonVariants({
+                  className: "h-11 w-full rounded-xl bg-data-accent text-data-accent-foreground hover:bg-data-accent/90",
+                })}
+                to={clusterResourcesHref(filter.state, receipt.clusterId)}
+              >
+                {t("clusters.connect.action.view")}
+              </Link>
+            </div>
+          ) : null}
+        </div>
       </DialogContent>
     </Dialog>
   );
-}
-
-function normalizeDisplayName(value: string): string {
-  return value.trim().toLocaleLowerCase();
-}
-
-function ConnectProviderLogo({
-  logo,
-}: {
-  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
-}) {
-  if (typeof logo === "string") {
-    return <ProviderLogo className="size-6" provider={logo} />;
-  }
-  const ProviderIcon = logo;
-  return <ProviderIcon className="size-6" />;
-}
-
-function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error &&
-    error.name === "AbortError";
 }
