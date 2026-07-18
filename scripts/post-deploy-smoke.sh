@@ -160,21 +160,33 @@ uv run python "${SCRIPT_DIR}/verify_dev_auth_bypass.py" live \
 verify_plan_images() {
   local plan="$1"
   local expected_image="$2"
-  local namespace
-  local resource
-  local container
-  local current_image
+  local live_deployments
 
-  while IFS=$'\t' read -r namespace resource container; do
-    current_image="$(
-      kubectl --context "${MGMT_CONTEXT}" -n "${namespace}" get "${resource}" -o json \
-        | jq -r --arg container "${container}" \
-          '.spec.template.spec.containers[] | select(.name == $container) | .image'
-    )"
-    test "${current_image}" = "${expected_image}"
-  done < <(jq -r \
-    '(.targets[]?, .bootstrap_targets[]?) | [.namespace, .resource, .container] | @tsv' \
-    "${plan}")
+  live_deployments="$(
+    kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" get deployments -o json
+  )"
+  jq -e \
+    --arg expected_image "${expected_image}" \
+    --arg management_namespace "${MGMT_NS}" \
+    --slurpfile plan "${plan}" \
+    '
+      . as $live
+      | ($plan[0] | [(.targets[]?, .bootstrap_targets[]?)]) as $targets
+      | all(
+          $targets[];
+          . as $target
+          | any(
+              $live.items[];
+              $target.namespace == $management_namespace
+              and .metadata.namespace == $target.namespace
+              and ("deployment/" + .metadata.name) == $target.resource
+              and any(
+                .spec.template.spec.containers[];
+                .name == $target.container and .image == $expected_image
+              )
+            )
+        )
+    ' <<<"${live_deployments}" >/dev/null
 }
 
 echo "==> post-deploy immutable images"

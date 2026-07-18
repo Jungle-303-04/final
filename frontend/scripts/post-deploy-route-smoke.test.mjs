@@ -278,7 +278,7 @@ describe("post-deploy route smoke helpers", () => {
       "/alerts",
       "https://example.test/api/alert-events?limit=200",
       "https://example.test",
-    )).toBe("background-common");
+    )).toBe("critical");
     expect(classifyRouteApiRequest(
       "/cost",
       "https://agent.example.test/api/cost/nodes",
