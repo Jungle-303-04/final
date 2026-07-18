@@ -293,6 +293,8 @@ export type ResourcesMessageKey =
   | "resources.detail.metricsPartial"
   | "resources.detail.metricsRetryExhausted"
   | "resources.detail.metricsRetrying"
+  | "resources.detail.metricsRequest"
+  | "resources.detail.metricsLimit"
   | "resources.detail.yamlUnavailable"
   | "resources.detail.metricsUnavailable"
   | "resources.detail.context"

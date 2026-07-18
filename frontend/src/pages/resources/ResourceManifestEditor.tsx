@@ -175,10 +175,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
             <SheetDescription>{t("resources.manifest.description")}</SheetDescription>
           </SheetHeader>
 
-          <div
-            className="min-h-0 overflow-y-auto pr-1 [scrollbar-color:transparent_transparent]"
-            style={{ scrollbarGutter: "stable" }}
-          >
+          <div className="min-h-0 overflow-y-auto pr-1 [scrollbar-color:transparent_transparent] [scrollbar-gutter:stable]">
             {phase === "loading" ? (
               <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status">
                 <Spinner className="size-4" decorative />

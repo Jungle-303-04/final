@@ -1,6 +1,7 @@
 import type { MessageKey, TranslationFunction } from "../../shared/i18n";
 import { useI18n } from "../../shared/i18n";
 import { desktopBridge } from "../../desktop/desktopBridge";
+import { cn } from "../../shared/lib/cn";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -445,10 +446,12 @@ function WorkflowExecutionPanel({ detail }: { detail: WorkflowDetail }) {
       <ol className="grid gap-2">
         {detail.executionNodes.map((node) => (
           <li
-            className="grid min-w-0 gap-1 rounded-lg border bg-background/65 px-3 py-2.5"
+            className={cn(
+              "grid min-w-0 gap-1 rounded-lg border bg-background/65 px-3 py-2.5",
+              workflowNodeDepthClass(node.depth),
+            )}
             data-workflow-node={node.id}
             key={node.id}
-            style={{ marginInlineStart: `${Math.min(node.depth, 6) * 0.75}rem` }}
           >
             <div className="flex min-w-0 items-center justify-between gap-3">
               <span className="min-w-0 truncate text-sm font-medium" title={node.label}>
@@ -472,6 +475,19 @@ function WorkflowExecutionPanel({ detail }: { detail: WorkflowDetail }) {
       </ol>
     </section>
   );
+}
+
+function workflowNodeDepthClass(depth: number): string {
+  const depthClasses = [
+    "",
+    "[margin-inline-start:0.75rem]",
+    "[margin-inline-start:1.5rem]",
+    "[margin-inline-start:2.25rem]",
+    "[margin-inline-start:3rem]",
+    "[margin-inline-start:3.75rem]",
+    "[margin-inline-start:4.5rem]",
+  ] as const;
+  return depthClasses[Math.max(0, Math.min(Math.trunc(depth), depthClasses.length - 1))];
 }
 
 function ComplianceControlsPanel({ detail }: { detail: ComplianceDetail }) {

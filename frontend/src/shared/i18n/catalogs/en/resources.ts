@@ -295,6 +295,8 @@ export const resourcesEn = {
   "resources.detail.metricsPartial": "Showing measurements for part of this range",
   "resources.detail.metricsRetryExhausted": "The metric source is still unavailable. Normal refresh cadence has resumed.",
   "resources.detail.metricsRetrying": "Metric source retry {attempt} of {limit}",
+  "resources.detail.metricsRequest": "Request",
+  "resources.detail.metricsLimit": "Limit",
   "resources.detail.yamlUnavailable": "The original YAML is not available for this resource yet.",
   "resources.detail.metricsUnavailable": "Timestamped detail metrics are not available for this resource.",
   "resources.detail.context": "Read-only filter context",

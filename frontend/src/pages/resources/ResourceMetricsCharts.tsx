@@ -480,17 +480,17 @@ function ResourceMetricChart({
             <Badge variant={saturation.ratio >= 0.9 ? "destructive" : "outline"}>
               {t("resources.detail.metricsSaturation", {
                 percent: formatPercent(saturation.ratio),
-                boundary: saturation.boundary,
+                boundary: metricBoundaryLabel(saturation.boundary, t),
               })}
             </Badge>
           )}
           {references === undefined ? null : (
             <div className="flex flex-wrap gap-2 text-[0.6875rem] text-muted-foreground">
               {references.request === null ? null : (
-                <span>{`request ${formatValue(references.request)}`}</span>
+                <span>{t("resources.detail.metricsRequest")} {formatValue(references.request)}</span>
               )}
               {references.limit === null ? null : (
-                <span>{`limit ${formatValue(references.limit)}`}</span>
+                <span>{t("resources.detail.metricsLimit")} {formatValue(references.limit)}</span>
               )}
             </div>
           )}
@@ -645,6 +645,13 @@ function metricSaturation(
     return { ratio: current / references.request, boundary: "request" };
   }
   return null;
+}
+
+function metricBoundaryLabel(
+  boundary: "limit" | "request",
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  return t(boundary === "limit" ? "resources.detail.metricsLimit" : "resources.detail.metricsRequest");
 }
 
 function formatPercent(ratio: number): string {
