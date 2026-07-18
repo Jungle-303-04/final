@@ -7,6 +7,9 @@
   --motion-layout: 320ms;
   --motion-camera: 420ms;
   --motion-value: 500ms;
+  --motion-collapse: 300ms;
+  --motion-fade: 150ms;
+  --motion-thinking: 1100ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.2, 0.5, 1);
@@ -88,6 +91,43 @@
   }
 }
 
+@keyframes motion-ai-turn-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes motion-ai-user-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes motion-ai-thinking-dot {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-0.25rem);
+  }
+}
+
 @keyframes motion-topology-overlay-enter {
   from {
     opacity: 0;
@@ -165,6 +205,71 @@
 
 .motion-wizard-stage {
   animation: motion-wizard-stage-enter var(--motion-layout) var(--ease-spring) backwards;
+}
+
+.motion-selection-check {
+  opacity: 0;
+  transform: scale(0);
+  transition:
+    opacity var(--motion-quick) var(--ease-out),
+    transform var(--motion-layout) var(--ease-spring);
+}
+
+[aria-pressed="true"] .motion-selection-check,
+[aria-checked="true"] .motion-selection-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.motion-ai-turn-enter {
+  animation: motion-ai-turn-enter var(--motion-layout) var(--ease-spring) backwards;
+}
+
+.motion-ai-user-enter {
+  animation: motion-ai-user-enter var(--motion-layout) var(--ease-spring) backwards;
+}
+
+.motion-ai-thinking-dot {
+  animation: motion-ai-thinking-dot var(--motion-thinking) var(--ease-spring) infinite;
+}
+
+.motion-ai-thinking-dot[data-delay="1"] {
+  animation-delay: calc(var(--motion-thinking) * 0.14);
+}
+
+.motion-ai-thinking-dot[data-delay="2"] {
+  animation-delay: calc(var(--motion-thinking) * 0.28);
+}
+
+.motion-ai-result-summary,
+.motion-ai-result-content {
+  display: grid;
+  transition:
+    grid-template-rows var(--motion-collapse) var(--ease-in-out),
+    opacity var(--motion-fade) var(--ease-out);
+}
+
+.motion-ai-result-summary {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.motion-ai-result-content {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition-delay: var(--motion-fade);
+}
+
+[data-collapsed="true"] > .motion-ai-result-summary {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition-delay: var(--motion-fade);
+}
+
+[data-collapsed="true"] > .motion-ai-result-content {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition-delay: 0ms;
 }
 
 .motion-topology-overlay {
@@ -313,6 +418,12 @@
   }
 
   .motion-wizard-stage,
+  .motion-selection-check,
+  .motion-ai-turn-enter,
+  .motion-ai-user-enter,
+  .motion-ai-thinking-dot,
+  .motion-ai-result-summary,
+  .motion-ai-result-content,
   .motion-topology-overlay,
   .motion-diagnose-entry,
   .motion-diagnose-verdict,
