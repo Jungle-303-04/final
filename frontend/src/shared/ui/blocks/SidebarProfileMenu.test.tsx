@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedAuthState } from "../../../features/auth/authContract";
 import { I18nProvider } from "../../i18n";
 import { ProfileMenu } from "./SidebarProfileMenu";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("ProfileMenu auth semantics", () => {
   it("prevents a false sign-out claim when trusted proxy identity will be re-injected", () => {
