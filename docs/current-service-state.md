@@ -1,21 +1,38 @@
 # 현재 서비스 상태
 
-마지막 실측: 2026-07-11 06:26:25 KST
+마지막 배포 실측: 2026-07-19 08:09:32 KST
 
-이 문서는 `dev` 최종 소스와 같은 이미지로 배포한 뒤 측정한 라이브 기준선이다. 비밀값 원문과
-사용자 개인정보는 기록하지 않는다.
+이 문서는 `dev` 게이트와 Dev Deploy가 같은 소스 SHA를 사용하고, 배포한 불변 이미지와
+post-deploy/실브라우저 스모크가 일치하는지 기록한 라이브 기준선이다. 비밀값 원문과 사용자
+개인정보는 기록하지 않는다.
 
 ## 소스와 배포
 
 - 권위 브랜치/worktree: `dev` / `SW_AI_W17-21-final-dev`
-- 배포 소스 commit: `4d7da88ecfaff75cf75549f14d0f412567c019af`
+- 게이트: Dev Gate run `29663702072`, source
+  `fba57b25ef837cc3fa329511ebdd7782b5e25425`, full gate 성공
+- 배포: Dev Deploy run `29663864101`, `FULL`, 10분 45초 완주 성공
+- 배포 소스 commit/source ConfigMap 기록:
+  `fba57b25ef837cc3fa329511ebdd7782b5e25425`
 - backend image:
-  `kubernetes-ops-service@sha256:4618d644df3f82e2eaf9d79548ac0ccc05bb6e189ac92a186248148cf667cbc2`
-- management: Deployment 43개, replica 46/46 Ready, StatefulSet 3개, replica 3/3 Ready
-- backend service image Deployment: 38개 전부 위 digest와 일치
-- cluster-1 target Agent: 1/1 Ready, 같은 digest, restart 0
-- console/agent API health: 모두 HTTP 200 `status=ok`
-- 최근 10분 핵심 Agent/gateway/relay/workflow 로그: warning·error 0
+  `kubernetes-ops-service@sha256:7831bd68948d4432fa693c860da93428f443f8e8a905ee20475f1560b039a88a`
+- backend service image: repository-matched Deployment container 39개 전부 위 digest로 rollout/검증
+- console image:
+  `kubernetes-ops-console@sha256:bb939faa83d891a11563d07be82faa37c2934eb268a2a1378f32ff51e7121ce7`
+- console: `console-dev` 1개가 위 digest로 rollout/검증, console source ConfigMap도 같은 SHA 기록
+- post-deploy smoke: gateway health, 로그인·클러스터·리소스, 운영 서피스 read, Alembic head,
+  auth bypass 0, 불변 이미지, public edge 수렴 통과
+- post-deploy bundle: `index-D0whfJ2c.js`, migration head `20260719_0500`
+- 인증 실브라우저 route smoke: 제품 13개 route의 SPA/direct 요청과 핵심 API 성공
+- 공개 재실측: console `/api/healthz` 200 `status=ok`, `/api/readyz` 200 `status=ready`,
+  agent API `/api/healthz` 200 `status=ok`
+- 후속 `dev` 문서 commit은 게이트 실패로 배포되지 않았으므로 라이브 source/digest는 위 값이
+  최신이다. Dev Deploy 실행 중 항목은 0개다.
+
+## 2026-07-11 운영 데이터 기준선
+
+아래 운영 데이터·Catalog·RCA 수치는 2026-07-11 기준선이며 이번 G0에서는 재측정하지 않았다.
+다음 데이터 상태 검증 전까지 2026-07-19 배포 증거와 혼동하지 않는다.
 
 ## 운영 데이터
 
@@ -56,7 +73,7 @@
   Secret/PVC 잔여: 0
 - 현재 `ready` 시나리오는 이 라이브 완주가 증명된 `image.wrong-tag` 한 개다.
 
-## 최종 검증
+## 2026-07-11 최종 검증 기준선
 
 - pytest: `1504 passed, 3 skipped`
 - Ruff check/format: 459 files 통과
