@@ -38,20 +38,25 @@
 | 기간 컨텍스트 | 오늘/7일/30일 | URL(6.3) | 셀렉터 1개 — 전 시계열 위젯 공통 | — | 위젯별 개별 토글 금지 |
 | `Edit layout` | 편집 모드 | `preferences` 저장 | ghost 버튼, 편집 중=위젯 흔들림 없이 핸들 표시 | 배치 변경 SPRING(layout) | dnd-kit 드래그, 위젯 추가(카탈로그 시트)/제거 |
 
-### 2.2 위젯 카탈로그 (W1~W8 — 이 목록 밖 위젯 금지, 전부 `WidgetFrame` 사용)
+### 2.2 클러스터 섹션 (보드 밖 고정 — D21 2층, 위젯 아님)
 
-| ID | 위젯 | 값·지표 | 데이터 소스 | 본문 시각(D21 부품) | 딥링크(`>`) |
+| 요소 | 값·지표 | 데이터 소스 | 표현 | 모션 | 인터랙션 |
 |---|---|---|---|---|---|
-| W1 | 클러스터 카드 그리드 (제거 불가) | D1 카드 사양 전체 — 상태 필·이름·버전·카운트 줄·CPU/MEM `MiniBar` | `clusterStats` 어댑터(`cluster-summary`+`cluster-detail`) | `ClusterCard`×N + `+ 연결` 점선 카드. 카드 등장 스태거 SOFT, hover `ELEV.hover`, 클릭=지도 드릴 PAGE, `⋯`=연결 해제 | (자체가 표면) |
-| W2 | 인시던트 레일 | 상위 3건: 심각도·제목·대상·경과 MONO | `issues`+`rca` (폴링) | `RankList`(색점=심각도 상태색), 행 스태거 SOFT, open 행=`--status-critical` TINT 배경(카드형 행 패턴 P-01) | `/issues` |
-| W3 | 동기화 비율 | Synced/OutOfSync 비율 · 저장소 수 · 최근 동기화 시각 | `gitops-overview` | `RatioBar`(`--status-healthy`/`--status-warning`) + 범례(%+증감), 요약 1줄 | `/deploy` 저장소 탭 |
-| W4 | 활동 추이 | 기간 내 배포 수·알림 수·임계 리소스 수 시계열 | `timeline` 집계 + `alert-events` (기간 컨텍스트 적용) | D13 멀티라인(범례 색점, hover=크로스헤어+어노테이션 카드), 드로잉 EASE_DRAW | `/timeline` |
-| W5 | 네임스페이스 파드 분포 | ns별 파드 수 상위 5+기타 | `inventory-summary` | `Donut` + 값 범례(색점·ns·수·%) | `/resources` 목록(ns 필터) |
-| W6 | 임계 상위 리소스 | 임계·주의 리소스 상위 5: kind 아이콘·이름·사유(OOMKilled 등) | `inventory`(health 필터) | `RankList`, 사유 `text-caption` MONO | 각 행=D3 시트, `>`=`/resources` 목록 crit 필터 |
-| W7 | 비용 요약 | 기간 총액·증감(증가=`--status-warning` TINT)·월별 분포 | `cost-overview` | `KpiCard`(값 `text-title1` MONO+증감+요약 1줄) + `MiniBars`(현재 구간 강조) | `/cost` |
-| W8 | 최근 변경 | 타임라인 최신 5건 | `timeline` | 타임라인 **미니 뷰 임베드**(§12 문법 — 신규 피드 구현 금지) | `/timeline` |
+| 클러스터 카드 그리드 | D1 카드 사양 전체 — 상태 필·이름·버전·카운트 줄·CPU/MEM `MiniBar` | `clusterStats` 어댑터(`cluster-summary`+`cluster-detail`) | `ClusterCard`×N + `+ 연결` 점선 카드(hover `--primary` 틴트) | 등장 스태거 SOFT, hover `ELEV.hover`, MiniBar 폭 SPRING | 클릭=지도 드릴 PAGE, `⋯`=연결 해제, `+`=연결 모달 cluster |
 
-빈 상태(클러스터 0): 보드 대신 `+ 클러스터 연결` 카드+1문장(해소 액션 1개 규칙). 각 위젯의 소스 실패 시 위젯 단위 오류 상태(재시도 버튼) — 보드 전체를 죽이지 않는다.
+### 2.3 위젯 카탈로그 (W2~W8 — 이 목록 밖 위젯 금지, 전부 `WidgetFrame`, 12컬럼 스팬 명기)
+
+| ID | 위젯 | 스팬 | 값·지표 | 데이터 소스 | 본문 시각(D13 부품) | 딥링크(`>`) |
+|---|---|---|---|---|---|---|
+| W2 | 인시던트 레일 | 4 | 상위 3건: 심각도·제목·대상·경과 MONO | **인시던트 표와 동일 어댑터**(`issues`+`rca`) — 두 번째 파생 금지 | `RankList`(색점=심각도 상태색), open 행=`--status-critical` TINT(P-01) | `/issues` |
+| W3 | 동기화 비율 | 4 | Synced/OutOfSync 비율 · 저장소 수 · 최근 동기화 시각 | `gitops-overview` | `RatioBar` + 범례(%+증감), 요약 1줄 | `/deploy` 저장소 탭 |
+| W4 | 활동 추이 | 8 | 기간 내 배포·알림·임계 시계열 | 집계 API(7.2b 전제 — 클라이언트 30일 집계 금지) | D13 멀티라인(크로스헤어+어노테이션 카드), EASE_DRAW | `/timeline` |
+| W5 | ns 파드 분포 | 4 | ns별 파드 수 상위 5+기타 | `inventory-summary`(ns 분해 — 7.2b 확인) | `Donut` + 값 범례 | `/resources` 목록(ns 필터) |
+| W6 | 임계 상위 리소스 | 4 | 상위 5: kind 아이콘·이름·사유 | `inventory`(health 필터) | `RankList`, 사유 `text-caption` MONO | 행=D3 시트, `>`=목록 crit 필터 |
+| W7 | 비용 요약 | 4 | 기간 총액·증감(증가=`--status-warning` TINT)·월별 분포 | `cost-overview` | `KpiCard` + `MiniBars`(현재 강조) | `/cost` |
+| W8 | 최근 변경 | 8 | 타임라인 최신 5건 | `timeline` | §12 세로 리스트 문법(P-21)의 **미니 뷰 임베드** — 신규 피드 금지 | `/timeline` |
+
+빈 상태(클러스터 0): 섹션·보드 대신 `+ 클러스터 연결` 카드+1문장(해소 액션 1개 규칙). 위젯 소스 실패=위젯 단위 오류(재시도) — 보드 전체를 죽이지 않는다.
 
 ---
 
@@ -65,7 +70,7 @@
 | 개요 스트립 (D2) | 계정 · 버전 · ns n / CPU used/total cores · MEM used/total Gi · NET MB/s · DISK % / ARN / 자동갱신 | `clusterStats` 어댑터(카드와 동일 함수) + `cluster-detail` | 1행 라벨 `text-caption`·값 `text-bodyStrong` MONO, ARN=MONO `--caption-foreground` 말줄임, 종류 링크 6종=`--primary` `text-label` | 스트립 등장 SOFT(드릴 직후) | 종류 링크 클릭=목록 관점 전환+해당 kind 필터(스코프 유지) |
 | 노드 타일 | 이름·인스턴스 타입·Ready 여부·파드 슬롯(스팟 cap/10 스팬) | `physical-topology`(폴링) | 4칸 그리드 `minmax(0,1fr)`, 타일=`--card`+RADIUS.card, NotReady=`--status-warning` TINT 테두리, 파드 점=상태색 원 | 타일 스태거 SOFT, 드릴 PAGE | 클릭=파드 단계, hover=액션 필(absolute, 겹침 금지) |
 | 파드 단계 | 파드 칩: 이름·상태색 | `physical-topology`+`inventory` | 칩 그리드, 임계=`--status-critical` 채움+흰 글자, 렌즈 필터 시 `파드 N/전체 · 필터 적용됨` 캡션 | 렌즈 전환 SPRING(레이아웃) | 파드 클릭=D3 시트, 렌즈=우패널 hover/pin |
-| 우측 패널 (D16) | 탭 4: 리소스 종류(카운트)/서비스/설정(ConfigMap·Secret)/배포(저장소) | `inventory-summary`·`application-catalog`·`gitops-overview` | 탭 인디케이터 SOFT, 행: 아이콘(서비스=고유색 글리프, Secret=`--caption-foreground`, OutOfSync=`--status-warning` 경고점)+`text-body`+`text-caption` 서브 | 행 스태거 SOFT | hover=렌즈, 클릭=pin, 종류 클릭=목록 관점, `+ 저장소 연결`=연결 모달 repo |
+| 우측 패널 (D16) | 탭 4: 리소스 종류(카운트) · 서비스 · 구성(ConfigMap·Secret) · 저장소 — 탭명은 D16 확정(서피스명과 중복 금지) | `inventory-summary`·`application-catalog`·`gitops-overview` | 탭 인디케이터 SOFT, 행: 아이콘(서비스=고유색 글리프, Secret=`--caption-foreground`, OutOfSync=`--status-warning` 경고점)+`text-body`+`text-caption` 서브 | 행 스태거 SOFT | hover=렌즈, 클릭=pin, 종류 클릭=목록 관점, `+ 저장소 연결`=연결 모달 repo |
 
 ## 4. 리소스 — 목록 관점 (D5 표)
 
@@ -176,7 +181,7 @@
 | # | 요소 (출처) | 판정 | 매치 위치 / 공용 부품 | 근거·비고 |
 |---|---|---|---|---|
 | P-01 | 카드형 행 + 상태 틴트 배경 (R1) | 채택 | D5 표: 임계 행 `--status-critical` TINT bg, 인시던트 open 행. W2 | 스캔 중 위험 행이 먼저 읽힘 |
-| P-02 | 세그먼트 틱 게이지 (R1 CPU, R4 바) | 채택 | `widgets/TickGauge` — 위젯 KPI 전용(역할 분담 D21) | 연속 바(MiniBar)와 사용처 분리 |
+| P-02 | 세그먼트 틱 게이지 (R1 CPU, R4 바) | 각색 | `MiniBar`로 흡수 — 틱 시각은 도입하지 않음(D21: 게이지 3종 제한) | 실사용처 없는 부품을 만들지 않는다 |
 | P-03 | 상태 필 Active/Paused/Inactive (R1) | 흡수 | 기존 `StatusPill` — 라벨은 상태 어휘 | 두 번째 필 금지 |
 | P-04 | 국기 아이콘 위치 표기 (R1·R11) | 각색 | 리전 코드 텍스트(`ap-northeast-2`) MONO — 개요 스트립·카드 캡션 | 국기=국가≠리전 오해, 이모지 렌더 편차 |
 | P-05 | NO 순번 컬럼 (R1) | 제외 | — | 이름이 식별자, 정보량 0 |
