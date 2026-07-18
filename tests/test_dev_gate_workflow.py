@@ -137,22 +137,35 @@ def test_gate_keeps_commit_audit_bounded_but_classifies_from_last_deployment() -
     }
 
 
-def test_gate_runs_independent_backend_and_frontend_checks_in_parallel() -> None:
+def test_push_reuses_the_successful_pull_request_gate_before_deployment() -> None:
+    steps = proof_steps_by_name()
+    resolver = steps["Resolve gate scope"]
+
+    assert resolver["id"] == "gate-scope"
+    assert resolver["env"] == {
+        "BASE_SHA": "${{ github.event.before || github.event.pull_request.base.sha || '' }}",
+        "GH_TOKEN": "${{ github.token }}",
+        "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+    }
+    assert '[[ "${GITHUB_EVENT_NAME}" == "push" ]]' in resolver["run"]
+    assert (
+        'scope="$(scripts/verify-merged-pr-gate.sh "${BASE_SHA}" "${HEAD_SHA}")"'
+        in (resolver["run"])
+    )
+    assert "scripts/classify-dev-gate-scope.sh" in resolver["run"]
+    assert "REUSE|FULL|BACKEND|FRONTEND|SMOKE" in resolver["run"]
+
+
+def test_pull_request_runs_backend_and_frontend_after_scope_resolution() -> None:
     jobs = workflow_document()["jobs"]
 
     assert set(jobs) == {"source-proof", "backend", "frontend", "gate"}
-    assert all("needs" not in jobs[job_id] for job_id in ("source-proof", "backend", "frontend"))
-    backend_scope = next(
-        step for step in jobs["backend"]["steps"] if step.get("name") == "Classify gate scope"
+    assert "needs" not in jobs["source-proof"]
+    assert jobs["backend"]["needs"] == "source-proof"
+    assert jobs["frontend"]["needs"] == "source-proof"
+    assert jobs["source-proof"]["outputs"]["gate_scope"] == (
+        "${{ steps.gate-scope.outputs.scope }}"
     )
-    frontend_scope = next(
-        step for step in jobs["frontend"]["steps"] if step.get("name") == "Classify gate scope"
-    )
-    assert backend_scope == frontend_scope
-    assert backend_scope["id"] == "gate-scope"
-    assert "scripts/classify-dev-gate-scope.sh" in backend_scope["run"]
-    assert "Base fetch failed; retaining FULL gate scope." in backend_scope["run"]
-    assert "Unknown gate scope ${scope}; retaining FULL gate scope." in backend_scope["run"]
 
     backend_full = next(
         step
@@ -161,7 +174,7 @@ def test_gate_runs_independent_backend_and_frontend_checks_in_parallel() -> None
     )
     assert backend_full == {
         "name": "Run backend and manifest gate",
-        "if": "${{ steps.gate-scope.outputs.scope == 'FULL' || steps.gate-scope.outputs.scope == 'BACKEND' }}",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'FULL' || needs.source-proof.outputs.gate_scope == 'BACKEND' }}",
         "run": "make gate-backend",
     }
     frontend_full = next(
@@ -169,7 +182,7 @@ def test_gate_runs_independent_backend_and_frontend_checks_in_parallel() -> None
     )
     assert frontend_full == {
         "name": "Run frontend gate",
-        "if": "${{ steps.gate-scope.outputs.scope == 'FULL' }}",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'FULL' }}",
         "run": "make gate-frontend",
     }
 
@@ -182,13 +195,13 @@ def test_frontend_scope_keeps_cross_boundary_contract_and_manifest_gate() -> Non
 
     assert minimum == {
         "name": "Run contract and manifest gate",
-        "if": "${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}",
         "run": "make gate-contract-manifest",
     }
     helm = next(step for step in backend["steps"] if step.get("name") == "Set up Helm")
     assert helm["if"] == (
-        "${{ steps.gate-scope.outputs.scope == 'FULL' "
-        "|| steps.gate-scope.outputs.scope == 'BACKEND' }}"
+        "${{ needs.source-proof.outputs.gate_scope == 'FULL' "
+        "|| needs.source-proof.outputs.gate_scope == 'BACKEND' }}"
     )
 
 
@@ -198,10 +211,13 @@ def test_backend_scope_skips_only_the_redundant_frontend_full_gate() -> None:
         step for step in frontend["steps"] if step.get("name") == "Record frontend full-gate skip"
     )
 
-    assert skipped["if"] == "${{ steps.gate-scope.outputs.scope == 'BACKEND' }}"
+    assert skipped["if"] == "${{ needs.source-proof.outputs.gate_scope == 'BACKEND' }}"
     assert "contract and manifest coverage" in skipped["run"]
     setup_node = next(step for step in frontend["steps"] if step.get("name") == "Set up Node.js")
-    assert setup_node["if"] == "${{ steps.gate-scope.outputs.scope != 'BACKEND' }}"
+    assert setup_node["if"] == (
+        "${{ needs.source-proof.outputs.gate_scope != 'BACKEND' "
+        "&& needs.source-proof.outputs.gate_scope != 'REUSE' }}"
+    )
     assert setup_node["with"]["cache"] == "npm"
     assert setup_node["with"]["cache-dependency-path"] == "frontend/package-lock.json"
 
@@ -214,7 +230,7 @@ def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() 
 
     assert changed == {
         "name": "Run changed frontend gate",
-        "if": "${{ steps.gate-scope.outputs.scope == 'FRONTEND' }}",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}",
         "env": {
             "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
         },
@@ -237,19 +253,16 @@ def test_smoke_scope_runs_only_bounded_deployment_gates() -> None:
 
     assert backend == {
         "name": "Run deployment smoke backend gate",
-        "if": "${{ steps.gate-scope.outputs.scope == 'SMOKE' }}",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'SMOKE' }}",
         "run": "make gate-deploy-smoke-backend",
     }
     assert frontend == {
         "name": "Run deployment smoke frontend gate",
-        "if": "${{ steps.gate-scope.outputs.scope == 'SMOKE' }}",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'SMOKE' }}",
         "run": "make gate-deploy-smoke-frontend",
     }
-    for job_id in ("backend", "frontend"):
-        classifier = next(
-            step for step in jobs[job_id]["steps"] if step.get("name") == "Classify gate scope"
-        )
-        assert "FULL|BACKEND|FRONTEND|SMOKE" in classifier["run"]
+    resolver = proof_steps_by_name()["Resolve gate scope"]
+    assert "REUSE|FULL|BACKEND|FRONTEND|SMOKE" in resolver["run"]
 
 
 def test_full_gate_status_fails_closed_over_every_parallel_job() -> None:

@@ -138,7 +138,7 @@ gate-backend: product-brand-boundary-check reference-ledger-check reference-feat
 	bash scripts/manifest-check.sh
 
 gate-contract-manifest: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 교차 계약·manifest 최소 gate
-	uv run pytest -q tests/test_dev_gate_contract.py tests/test_dev_gate_workflow.py tests/test_commit_msg_gate.py
+	uv run pytest -q tests/test_dev_gate_contract.py tests/test_dev_gate_workflow.py tests/test_merged_pr_gate_reuse.py tests/test_commit_msg_gate.py
 	bash scripts/manifest-check.sh
 
 gate-deploy-smoke-backend: ## 배포 스모크 셸·회귀 테스트 전용 gate
