@@ -1,7 +1,7 @@
 // ── 홈 위젯 보드 부품 (D21 · Surface Spec §2) — 데모 구현.
 // WidgetFrame 하나 + 시각 부품(KpiCard/RatioBar/MiniBars/Donut/RankList)만 존재한다.
 // 위젯별 자체 시각 신설 금지 — 제품 이식 시 shared/ui/charts/로 재구현되는 사양 원본.
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { motion } from "motion/react";
 import { Info, ChevronRight, ChevronDown } from "lucide-react";
 import { UI, BLUE, HP, MONO, SOFT } from "./theme";
@@ -121,15 +121,21 @@ export function MiniBars({ values, labels, currentIndex, tone = BLUE }: {
 const DONUT_COLORS = [BLUE, HP.ok, HP.warn, "#8250DF", "#0FA3B1", "#9AA0AA"];
 export function Donut({ items, onPick }: { items: { label: string; value: number; pick?: boolean }[]; onPick?: (label: string) => void }) {
   const total = items.reduce((s, x) => s + x.value, 0) || 1;
-  let acc = 0;
   const R = 34, C = 2 * Math.PI * R;
+  const segments = items.map((it, i) => {
+    const frac = it.value / total;
+    const start = items.slice(0, i).reduce((s, x) => s + x.value / total, 0);
+    return {
+      it,
+      i,
+      dash: `${Math.max(frac * C - 2.5, 0)} ${C}`,
+      off: -start * C,
+    };
+  });
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
       <svg width={88} height={88} viewBox="0 0 88 88" style={{ flexShrink: 0, transform: "rotate(-90deg)" }}>
-        {items.map((it, i) => {
-          const frac = it.value / total;
-          const dash = `${Math.max(frac * C - 2.5, 0)} ${C}`;
-          const off = -acc * C; acc += frac;
+        {segments.map(({ it, i, dash, off }) => {
           return <motion.circle key={it.label} cx={44} cy={44} r={R} fill="none" strokeWidth={11} strokeLinecap="round"
             stroke={DONUT_COLORS[i % DONUT_COLORS.length]} initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: dash }} transition={{ duration: 0.8, ease: "easeInOut", delay: i * 0.08 }} strokeDashoffset={off} />;
         })}

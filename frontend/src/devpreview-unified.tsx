@@ -8,7 +8,7 @@ import {
   Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
-  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Box,
+  Home, ListTree, AlertTriangle, Clock, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Box,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
@@ -1199,7 +1199,6 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
   const repos = useMemo(() => repoInventory(), []);
   const crit = pods.filter((p) => p.bad);
   const outSync = repos.filter((r) => r.sync === "OutOfSync");
-  const ready = nodes.filter((n) => n.state === "Ready");
   const clusters = Object.keys(clusterMeta);
 
   const [period, setPeriod] = useState<"오늘" | "7일" | "30일">("오늘");
@@ -1504,13 +1503,13 @@ function App() {
         <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
           <Building2 size={14} style={{ color: UI.ink3 }} />jungle-303
         </span>
-        {/* 현재 스코프 표시 — 리소스 서피스에서만 (홈·연결엔 스코프 개념이 없다) */}
-        {surface === "resources" && (
+        {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
+        {surface === "resources" && resView !== "flow" && (
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
         </span>
         )}
-        {surface === "resources" && (
+        {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
           <button onClick={() => setNsOpen(!nsOpen)}
             style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? "rgba(10,132,255,0.45)" : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
@@ -1655,9 +1654,9 @@ function App() {
                 </button>
               ))}
             </span>
-            {/* 관점 간 스코프 연속 — 지도에서 드릴한 범위가 목록·흐름에도 그대로 */}
-            {resView !== "map" && inScope && (
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: BLUE, background: "rgba(10,132,255,0.08)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
+            {/* 스코프 표시는 한 곳씩만: 지도=브레드크럼, 목록=표 제목줄. 흐름은 서비스 수준이라 클러스터 스코프가 적용되지 않는다 */}
+            {resView === "flow" && (
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>서비스 호출 관점 — 전체 클러스터</span>
             )}
           </div>
 
