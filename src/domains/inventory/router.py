@@ -485,10 +485,21 @@ async def get_inventory_summary(
     )
     if evidence.completeness == "observed":
         counts = include_discoverable_zero_counts(counts, snapshot=snapshot)
+    namespace_reader = getattr(db, "inventory_namespace_resource_counts", None)
+    namespace_counts = (
+        namespace_reader(
+            workspace_id,
+            cluster_id,
+            namespaces=namespace_scope,
+        )
+        if callable(namespace_reader)
+        else []
+    )
     return InventorySummaryResponse(
         cluster_id=cluster_id,
         latest_snapshot=snapshot,
         counts=counts,
+        namespaces=namespace_counts,
         counts_evidence=evidence,
     )
 

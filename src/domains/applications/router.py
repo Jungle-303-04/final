@@ -64,6 +64,7 @@ from packages.contracts.gateway.responses import (
     ApplicationProductListResponse,
     ApplicationResponse,
     DeploymentBindingResponse,
+    RepositoryConnectionStatusResponse,
     WorkflowRunListResponse,
 )
 from packages.contracts.gitops import DEFAULT_REPO_BRANCH, PUBLIC_GITHUB_CREDENTIAL_REF
@@ -759,6 +760,53 @@ def _application_problem_sort(card: Mapping[str, Any]) -> tuple[int, int, int, s
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+@router.get(
+    gateway_routes.REPOSITORY_CONNECTION_STATUS_PATH,
+    response_model=RepositoryConnectionStatusResponse,
+)
+async def get_repository_connection_status(
+    repo_ref: Annotated[str, Query(min_length=1, max_length=240)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RepositoryConnectionStatusResponse:
+    """Return persisted registration progress so the wizard never advances on a timer."""
+
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        normalized_repo_ref = normalize_github_repo_ref(repo_ref)
+    except RepositoryDiscoveryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    repository = db.get_repository_by_ref(workspace_id, normalized_repo_ref)
+    if repository is None:
+        return RepositoryConnectionStatusResponse(
+            repo_ref=normalized_repo_ref,
+            repository_status="unregistered",
+            connection_stage="awaiting_validation",
+            terminal=False,
+            refresh_after_seconds=1,
+        )
+    require_repository_manage_if_registered(
+        db,
+        current,
+        workspace_id,
+        normalized_repo_ref,
+    )
+    repository_status = str(repository.get("status") or "unknown")
+    connection_stage = "ready" if repository_status == "active" else "error"
+    if repository_status not in {"active", "invalid_credential", "disabled"}:
+        repository_status = "unknown"
+    return RepositoryConnectionStatusResponse(
+        repo_ref=normalized_repo_ref,
+        repository_id=str(repository.get("repository_id") or ""),
+        repository_status=repository_status,
+        connection_stage=connection_stage,
+        terminal=True,
+        refresh_after_seconds=None,
+    )
 
 
 @router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationProductListResponse)

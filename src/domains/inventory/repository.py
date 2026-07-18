@@ -2387,6 +2387,65 @@ class InventoryRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return project_inventory_product_counts(rows)
 
+    def inventory_namespace_resource_counts(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        namespaces: tuple[str, ...] = (),
+    ) -> list[JsonObject]:
+        """Return exact namespaced product counts without a browser-side regroup."""
+
+        table = ClusterInventoryResourceRecord.__table__
+        predicates = [
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.namespace.is_not(None),
+            table.c.deleted_at.is_(None),
+        ]
+        if namespaces:
+            predicates.append(table.c.namespace.in_(namespaces))
+        statement = (
+            select(
+                table.c.namespace,
+                table.c.resource_type,
+                table.c.kind,
+                table.c.health,
+                func.count().label("count"),
+            )
+            .where(*predicates)
+            .group_by(
+                table.c.namespace,
+                table.c.resource_type,
+                table.c.kind,
+                table.c.health,
+            )
+            .order_by(
+                table.c.namespace,
+                table.c.resource_type,
+                table.c.kind,
+                table.c.health,
+            )
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+
+        by_namespace: dict[str, list[JsonObject]] = {}
+        for row in rows:
+            namespace = str(row["namespace"])
+            by_namespace.setdefault(namespace, []).append(dict(row))
+        result = []
+        for namespace, namespace_rows in sorted(by_namespace.items()):
+            counts = project_inventory_product_counts(namespace_rows)
+            result.append(
+                {
+                    "namespace": namespace,
+                    "total": sum(int(item["count"]) for item in counts),
+                    "counts": counts,
+                }
+            )
+        return result
+
     def inventory_resource_counts_by_cluster(
         self,
         workspace_id: str,

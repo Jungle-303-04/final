@@ -457,6 +457,40 @@ class ChangeTimelineResponse(StrictModel):
         return self
 
 
+class ActivityOverviewBucket(StrictModel):
+    from_ms: int = Field(ge=0)
+    to_ms: int = Field(gt=0)
+    deployments: int = Field(ge=0)
+    alerts: int = Field(ge=0)
+    critical: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.from_ms >= self.to_ms:
+            raise ValueError("activity overview bucket must have positive width")
+        return self
+
+
+class ActivityOverviewResponse(StrictModel):
+    from_ms: int = Field(ge=0)
+    to_ms: int = Field(gt=0)
+    bucket_ms: int = Field(ge=1)
+    buckets: list[ActivityOverviewBucket] = Field(min_length=1, max_length=366)
+
+    @model_validator(mode="after")
+    def validate_buckets(self) -> Self:
+        if self.from_ms >= self.to_ms:
+            raise ValueError("activity overview window must have positive width")
+        if self.buckets[0].from_ms != self.from_ms or self.buckets[-1].to_ms != self.to_ms:
+            raise ValueError("activity overview buckets must cover the requested window")
+        if any(
+            previous.to_ms != current.from_ms
+            for previous, current in zip(self.buckets, self.buckets[1:], strict=False)
+        ):
+            raise ValueError("activity overview buckets must be contiguous")
+        return self
+
+
 class AuditTimelineItem(StrictModel):
     event_id: str = Field(min_length=1)
     subject: str
@@ -2147,10 +2181,29 @@ class InventoryResourceCountsEvidence(StrictModel):
         return self
 
 
+class InventoryResourceCount(StrictModel):
+    resource_type: str = Field(min_length=1, max_length=120)
+    health: str = Field(min_length=1, max_length=80)
+    count: int = Field(ge=0)
+
+
+class InventoryNamespaceSummary(StrictModel):
+    namespace: str = Field(min_length=1, max_length=253)
+    total: int = Field(ge=0)
+    counts: list[InventoryResourceCount] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_total(self) -> Self:
+        if self.total != sum(item.count for item in self.counts):
+            raise ValueError("inventory namespace total must equal its resource counts")
+        return self
+
+
 class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None
     counts: list[JsonMap] = Field(default_factory=list)
+    namespaces: list[InventoryNamespaceSummary] = Field(default_factory=list)
     counts_evidence: InventoryResourceCountsEvidence
 
 
@@ -2658,13 +2711,71 @@ class ClusterResponse(StrictModel):
 class ClusterConnectionStatusResponse(StrictModel):
     cluster_id: str
     connection_status: str
-    connection_stage: str | None = None
+    connection_stage: (
+        Literal[
+            "awaiting_install",
+            "agent_connected",
+            "snapshot_received",
+            "ready",
+            "expired",
+            "error",
+        ]
+        | None
+    ) = None
     refresh_after_seconds: float | None = Field(default=None, ge=0.25, le=30)
     last_agent_id: str | None = None
     last_seen_at: str | None = None
     agents: list[ClusterAgentStatus] = Field(default_factory=list)
     connect_timeout_seconds: int | None = None
     connect_expires_at: str | None = None
+
+    @model_validator(mode="after")
+    def validate_polling_semantics(self) -> Self:
+        terminal = self.connection_stage in {"ready", "expired", "error"}
+        if terminal and self.refresh_after_seconds is not None:
+            raise ValueError("terminal cluster connection stages cannot request polling")
+        if (
+            self.connection_stage is not None
+            and not terminal
+            and self.refresh_after_seconds is None
+        ):
+            raise ValueError("non-terminal cluster connection stages require server polling")
+        return self
+
+
+class RepositoryConnectionStatusResponse(StrictModel):
+    repo_ref: str = Field(min_length=1, max_length=240)
+    repository_id: str | None = Field(default=None, min_length=1, max_length=160)
+    repository_status: Literal[
+        "unregistered",
+        "active",
+        "invalid_credential",
+        "disabled",
+        "unknown",
+    ]
+    connection_stage: Literal["awaiting_validation", "ready", "error"]
+    terminal: bool
+    refresh_after_seconds: float | None = Field(default=None, ge=0.25, le=30)
+
+    @model_validator(mode="after")
+    def validate_registration_semantics(self) -> Self:
+        expected = {
+            "unregistered": ("awaiting_validation", False, False),
+            "active": ("ready", True, True),
+            "invalid_credential": ("error", True, True),
+            "disabled": ("error", True, True),
+            "unknown": ("error", True, True),
+        }[self.repository_status]
+        actual = (
+            self.connection_stage,
+            self.terminal,
+            self.refresh_after_seconds is None,
+        )
+        if actual != expected:
+            raise ValueError("repository connection stage must match persisted status")
+        if (self.repository_status == "unregistered") != (self.repository_id is None):
+            raise ValueError("only an unregistered repository can omit repository_id")
+        return self
 
 
 class ClusterConnectResponse(StrictModel):

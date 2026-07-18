@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.websockets import WebSocketDisconnect
 from settings import Settings
 
+from domains.activity.router import router as activity_router
 from domains.ai.router import router as ai_router
 from domains.alert.router import router as alert_router
 from domains.application_filter.router import router as application_filter_router
@@ -434,6 +435,7 @@ class ApiGateway:
         app.state.context_mcp_engine_factory = request_context_mcp_engine
         self._register_frontend_proxy(app)
         self._register_health_routes(app)
+        app.include_router(activity_router)  # 홈 W4 기간별 서버 집계(세션·source RBAC)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         app.include_router(parity_router)  # 생성형 원본 기능 mapping catalog(세션 범위)
         app.include_router(alert_router)  # 알림 채널 라우팅 룰(admin)

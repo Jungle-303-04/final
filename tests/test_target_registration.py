@@ -2000,7 +2000,7 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
     assert response.cluster_id == "cluster-1"
     assert response.connection_status == "online"
     assert response.connection_stage == "ready"
-    assert response.refresh_after_seconds == 0.5
+    assert response.refresh_after_seconds is None
     assert response.last_agent_id == "agent-1"
     assert response.agents[0].capabilities == ["inventory", "commands"]
 

@@ -1651,7 +1651,7 @@ async def get_cluster_connection_status(
 def connection_refresh_after_seconds(connection_stage: str | None) -> float | None:
     """Return the server-owned connect polling policy for the current stage."""
 
-    if connection_stage in {"expired", "error"}:
+    if connection_stage in {"ready", "expired", "error"}:
         return None
     return 0.5
 
