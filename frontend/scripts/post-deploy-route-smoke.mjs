@@ -57,6 +57,7 @@ export const ROUTE_CRITICAL_API_CONTRACTS = Object.freeze({
   ]),
   "/clusters": Object.freeze(["/api/clusters"]),
   "/alerts": Object.freeze([
+    "/api/alert-events",
     "/api/alert-rules",
     "/api/alert-channels",
   ]),
