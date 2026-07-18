@@ -8,7 +8,6 @@ from sqlalchemy import BigInteger, Index, Integer, Text, and_, func, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
-from domains.inventory.kubernetes_events import EVENT_CAPTURE_SUMMARY_KEY
 from packages.storage.base import (
     Base,
     created_at_column,
@@ -30,7 +29,7 @@ def timeline_coverage_snapshot_clause(table: Any) -> Any:
     """Partial-index boundary shared by the retained Timeline coverage query."""
     return and_(
         table.c.status != "ignored_stale",
-        table.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY].is_not(None),
+        table.c.event_capture.is_not(None),
     )
 
 
@@ -50,6 +49,7 @@ class ClusterInventorySnapshotRecord(Base):
     event_capture_observed_at: Mapped[Any | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
+    event_capture: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     resource_count: Mapped[int] = mapped_column(Integer, nullable=False)
     summary: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
@@ -65,7 +65,7 @@ Index(
 )
 
 Index(
-    "ix_inventory_snapshots_timeline_capture_observed",
+    "ix_inventory_snapshots_timeline_capture_projection",
     ClusterInventorySnapshotRecord.workspace_id,
     ClusterInventorySnapshotRecord.cluster_id,
     ClusterInventorySnapshotRecord.event_capture_observed_at,
@@ -75,6 +75,10 @@ Index(
     postgresql_where=and_(
         timeline_coverage_snapshot_clause(ClusterInventorySnapshotRecord.__table__),
         ClusterInventorySnapshotRecord.event_capture_observed_at.is_not(None),
+    ),
+    postgresql_include=(
+        ClusterInventorySnapshotRecord.status,
+        ClusterInventorySnapshotRecord.event_capture,
     ),
 )
 

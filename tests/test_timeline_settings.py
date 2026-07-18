@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
 
 from domains.timeline.settings import (
+    TIMELINE_COVERAGE_CACHE_SECONDS_ENV,
+    TIMELINE_COVERAGE_REFRESH_SECONDS_ENV,
     TIMELINE_LIVE_SESSION_MAX_AGE_MS_ENV,
     TIMELINE_MAX_BATCH_EVENTS_ENV,
     TIMELINE_MAX_FRAMES_PER_SECOND_ENV,
@@ -14,6 +17,8 @@ from domains.timeline.settings import (
     TIMELINE_REPLAY_POLL_SECONDS_ENV,
     TIMELINE_RETENTION_SECONDS_ENV,
     timeline_capability_descriptor,
+    timeline_coverage_cache_seconds,
+    timeline_coverage_refresh_seconds,
     timeline_max_window_ms,
     timeline_query_bounds,
     timeline_realtime_policy,
@@ -29,6 +34,8 @@ def test_timeline_realtime_policy_is_server_owned_and_bounded(
     monkeypatch.setenv(TIMELINE_RETENTION_SECONDS_ENV, "3600")
     monkeypatch.setenv(TIMELINE_MAX_WINDOW_SECONDS_ENV, "7200")
     monkeypatch.setenv(TIMELINE_REPLAY_POLL_SECONDS_ENV, "0.25")
+    monkeypatch.setenv(TIMELINE_COVERAGE_CACHE_SECONDS_ENV, "1.5")
+    monkeypatch.setenv(TIMELINE_COVERAGE_REFRESH_SECONDS_ENV, "12")
     monkeypatch.setenv(TIMELINE_RECONNECT_MIN_DELAY_MS_ENV, "250")
     monkeypatch.setenv(TIMELINE_RECONNECT_MAX_DELAY_MS_ENV, "2000")
     monkeypatch.setenv(TIMELINE_LIVE_SESSION_MAX_AGE_MS_ENV, "30000")
@@ -110,6 +117,8 @@ def test_timeline_realtime_policy_is_server_owned_and_bounded(
         "subject_kinds": ("resource", "application"),
     }
     assert timeline_replay_poll_seconds() == 0.25
+    assert timeline_coverage_cache_seconds() == 1.5
+    assert timeline_coverage_refresh_seconds() == 12
 
 
 def test_timeline_realtime_policy_rejects_invalid_server_configuration(
@@ -138,3 +147,22 @@ def test_timeline_live_session_policy_rejects_an_unbounded_server_configuration(
 
     with pytest.raises(ValueError, match=TIMELINE_LIVE_SESSION_MAX_AGE_MS_ENV):
         timeline_realtime_policy()
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "reader"),
+    (
+        (TIMELINE_COVERAGE_CACHE_SECONDS_ENV, "0", timeline_coverage_cache_seconds),
+        (TIMELINE_COVERAGE_REFRESH_SECONDS_ENV, "301", timeline_coverage_refresh_seconds),
+    ),
+)
+def test_timeline_coverage_read_policy_rejects_unbounded_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    value: str,
+    reader: Callable[[], float],
+) -> None:
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError, match=name):
+        reader()

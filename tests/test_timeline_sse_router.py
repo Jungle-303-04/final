@@ -16,7 +16,11 @@ from domains.timeline.repository import (
     TimelineLedgerRecord,
     TimelineReplayResult,
 )
-from domains.timeline.router import _resume_cursor, _timeline_sse_body
+from domains.timeline.router import (
+    _read_timeline_coverage,
+    _resume_cursor,
+    _timeline_sse_body,
+)
 from domains.timeline.service import TimelineReadResolution
 from domains.timeline.settings import timeline_capability_descriptor
 from packages.contracts.parity import ClusterScope, ResourceRef
@@ -84,6 +88,17 @@ class TimeoutThenClosedSubscription(ClosedSubscription):
         if not self._timed_out:
             self._timed_out = True
             raise TimeoutError
+        raise TimelineFanoutClosed("closed")
+
+
+class WakeThenClosedSubscription(ClosedSubscription):
+    def __init__(self) -> None:
+        self._woke = False
+
+    async def next(self) -> None:
+        if not self._woke:
+            self._woke = True
+            return
         raise TimelineFanoutClosed("closed")
 
 
@@ -317,7 +332,13 @@ def test_live_sse_allows_new_events_past_snapshot_upper_bound_but_frozen_does_no
     assert [frame.kind for frame in _frames(frozen_chunks)] == ["error"]
 
 
-def test_sse_coalesces_durable_coverage_additions_without_changing_event_cursor() -> None:
+def test_sse_coalesces_durable_coverage_additions_without_changing_event_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "domains.timeline.router.timeline_coverage_refresh_seconds",
+        lambda: 0.0,
+    )
     coverage = TimelineCoverage(
         scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
         source="kubernetes_event",
@@ -331,9 +352,11 @@ def test_sse_coalesces_durable_coverage_additions_without_changing_event_cursor(
     chunks = asyncio.run(
         _collect(
             _timeline_sse_body(
-                replay_reader=ReplayReader([_available(high_water_sequence=4)]),
+                replay_reader=ReplayReader(
+                    [_available(high_water_sequence=4), _available(high_water_sequence=4)]
+                ),
                 coverage_reader=reader,
-                subscription=ClosedSubscription(),
+                subscription=WakeThenClosedSubscription(),
                 resolution=resolution,
                 cursor_codec=codec,
                 after_sequence=4,
@@ -346,34 +369,29 @@ def test_sse_coalesces_durable_coverage_additions_without_changing_event_cursor(
     assert frames[0].coverage == (coverage,)
     assert codec.decode(frames[0].cursor, binding=resolution.cursor_binding) == 4
     assert all("sequence" not in chunk for chunk in chunks)
-    assert reader.calls == [
-        {"window": resolution.query.window},
-        {"window": resolution.query.window},
+    assert [call["window"] for call in reader.calls] == [
+        resolution.query.window,
+        resolution.query.window,
     ]
+    assert all(callable(call["cancelled"]) for call in reader.calls)
 
 
-def test_sse_repairs_coverage_only_changes_on_the_server_owned_replay_poll(
+def test_sse_does_not_rescan_coverage_on_each_server_owned_replay_poll(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    coverage = TimelineCoverage(
-        scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
-        source="kubernetes_event",
-        from_ms=1_200,
-        to_ms=1_400,
-        reason="collection_gap",
-    )
     polls: list[float] = []
     monkeypatch.setattr(
         "domains.timeline.router.timeline_replay_poll_seconds",
         lambda: polls.append(0.1) or 0.1,
     )
+    coverage_reader = CoverageReader([(), ()])
     chunks = asyncio.run(
         _collect(
             _timeline_sse_body(
                 replay_reader=ReplayReader(
                     [_available(high_water_sequence=4), _available(high_water_sequence=4)]
                 ),
-                coverage_reader=CoverageReader([(), (), (coverage,)]),
+                coverage_reader=coverage_reader,
                 subscription=TimeoutThenClosedSubscription(),
                 resolution=_resolution(event_access=True),
                 cursor_codec=_cursor_codec(),
@@ -382,9 +400,93 @@ def test_sse_repairs_coverage_only_changes_on_the_server_owned_replay_poll(
         )
     )
 
-    assert [frame.kind for frame in _frames(chunks)] == ["coverage", "error"]
+    assert [frame.kind for frame in _frames(chunks)] == ["error"]
     assert polls == [0.1, 0.1]
+    assert len(coverage_reader.calls) == 1
     assert ": keep-alive\n\n" in chunks
+
+
+def test_concurrent_timeline_surfaces_share_one_coverage_projection_read() -> None:
+    class SlowCoverageReader:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(
+            self,
+            _scope: object,
+            **_kwargs: object,
+        ) -> tuple[TimelineCoverage, ...]:
+            import time
+
+            self.calls += 1
+            time.sleep(0.02)
+            return ()
+
+    reader = SlowCoverageReader()
+    resolution = _resolution(event_access=True)
+
+    async def run() -> None:
+        first, second = await asyncio.gather(
+            _read_timeline_coverage(reader, resolution),
+            _read_timeline_coverage(reader, resolution),
+        )
+        cached = await _read_timeline_coverage(reader, resolution)
+        assert first == second == cached == ()
+
+    asyncio.run(run())
+
+    assert reader.calls == 1
+
+
+def test_one_disconnected_surface_does_not_cancel_a_shared_coverage_read() -> None:
+    from threading import Event
+
+    started = Event()
+    release = Event()
+    observed_cancellation: list[bool] = []
+
+    class SharedCoverageReader:
+        def __call__(
+            self,
+            _scope: object,
+            *,
+            cancelled: object,
+            **_kwargs: object,
+        ) -> tuple[TimelineCoverage, ...]:
+            assert callable(cancelled)
+            started.set()
+            release.wait(1)
+            observed_cancellation.append(cancelled())
+            return ()
+
+    class DisconnectAfterStart:
+        async def is_disconnected(self) -> bool:
+            return started.is_set()
+
+    class Connected:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    reader = SharedCoverageReader()
+    resolution = _resolution(event_access=True)
+
+    async def run() -> None:
+        disconnected = asyncio.create_task(
+            _read_timeline_coverage(reader, resolution, request=DisconnectAfterStart())
+        )
+        connected = asyncio.create_task(
+            _read_timeline_coverage(reader, resolution, request=Connected())
+        )
+        assert await asyncio.to_thread(started.wait, 1)
+        await asyncio.sleep(0.06)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await disconnected
+        assert await connected == ()
+
+    asyncio.run(run())
+
+    assert observed_cancellation == [False]
 
 
 def test_sse_requires_one_consistent_opaque_resume_cursor() -> None:
