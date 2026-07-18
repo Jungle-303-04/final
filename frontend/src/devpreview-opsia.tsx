@@ -33,7 +33,8 @@ const EksIcon = ({ size = 16, style }: { size?: number; style?: React.CSSPropert
 // ── 디자인 토큰 ─────────────────────────────
 const UI = { bg: "#FAFAFC", card: "#FFFFFF", line: "#E9EAEE", line2: "#F1F2F5", ink: "#111318", ink2: "#5F6570", ink3: "#9AA0AA" } as const;
 const BLUE = "#0A84FF"; // 선택/하이라이트 전용
-const HP = { ok: "#2EBD5B", warn: "#FF9F0A", crit: "#FF453A", pending: "#D9DCE1", ghost: "#F3F4F6" } as const;
+// 상태 팔레트 — 플릿 뷰에서 검증된 톤(애플 시스템 컬러 계열)
+const HP = { ok: "#30D158", warn: "#FFB340", crit: "#FF5F55", pending: "#D9DCE1", ghost: "#F3F4F6" } as const;
 const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 const SPRING = { type: "spring", bounce: 0.16, visualDuration: 0.5 } as const;
 const SOFT = { type: "spring", bounce: 0.12, visualDuration: 0.32 } as const;
@@ -129,8 +130,8 @@ type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { leve
 function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: boolean; dim: boolean; lit: boolean; live: number; onClick: () => void; onTip: (x: number, y: number, pods: Pod[] | null) => void }) {
   const cpuV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.cpu + live));
   const c = healthColor(p);
-  // 강도 램프: 뉴트럴(차분) → 상태색(포화). 저부하는 거의 회색, 고부하만 색이 선다.
-  const mix = p.status === "Pending" ? 0 : isCrit(p) ? 100 : Math.round(10 + (cpuV / 100) * 78);
+  // 강도 램프: 뉴트럴 → 상태색. 플릿 뷰와 같은 구간(22~88%)으로 저부하도 또렷하게.
+  const mix = p.status === "Pending" ? 0 : isCrit(p) ? 100 : Math.round(22 + (cpuV / 100) * 66);
   const bg = p.status === "Pending" ? "#EDEFF3" : `color-mix(in srgb, ${c} ${mix}%, #EFF1F4)`;
   return (
     <motion.button layout data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -139,9 +140,9 @@ function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: bool
       onMouseEnter={(e) => onTip(e.clientX, e.clientY, [p])} onMouseMove={(e) => onTip(e.clientX, e.clientY, [p])} onMouseLeave={() => onTip(0, 0, null)}
       className={isCrit(p) ? "tile crit" : "tile"}
       style={{
-        aspectRatio: "1", border: "none", borderRadius: big ? 11 : 6.5, cursor: "pointer", position: "relative", overflow: "hidden",
+        aspectRatio: "1", border: "none", borderRadius: big ? 5 : 3, cursor: "pointer", position: "relative", overflow: "hidden",
         background: bg, transition: "background 1.2s ease",
-        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : p.status === "Pending" ? "inset 0 0 0 1px rgba(17,19,24,0.07)" : `inset 0 0 0 1px color-mix(in srgb, ${c} ${Math.min(mix + 14, 100)}%, rgba(17,19,24,0.06))`,
+        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 2.5px ${BLUE}` : p.status === "Pending" ? "inset 0 0 0 1px rgba(17,19,24,0.07)" : "none",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0,
       }}>
       {/* 이름은 그룹 헤더가 전담 — 타일 안엔 텍스트를 넣지 않아 대비 문제를 없앤다.
@@ -386,7 +387,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
         <motion.div layout style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4 }}>
           {np.map((p) => <PodTile key={p.id} p={p} big={false} dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
           {Array.from({ length: node.cap - np.length }).map((_, i) => (
-            <div key={`g${i}`} style={{ aspectRatio: "1", borderRadius: 6.5, border: "1px dashed #E2E4E9", boxSizing: "border-box" }} />
+            <div key={`g${i}`} style={{ aspectRatio: "1", borderRadius: 3, background: "rgba(17,19,24,0.045)" }} />
           ))}
         </motion.div>
       )}

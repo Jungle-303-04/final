@@ -2,9 +2,9 @@
 // 관점 = 물리(어디 깔렸나) · 관계(누굴 부르나). 선택(포커스 서비스)은 관점 전환에도 유지.
 // 구성(ConfigMap/Secret)은 관점이 아니라 양쪽 공통 렌즈(오버레이). v4 디자인 언어.
 import ReactDOM from "react-dom/client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Box, Server, Layers3, FileCog, Network, Braces, Globe, ShoppingCart, CreditCard, Search, KeyRound, X, ChevronRight } from "lucide-react";
+import { Server, FileCog, Network, Braces, Globe, ShoppingCart, CreditCard, Search, KeyRound } from "lucide-react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -165,8 +165,8 @@ function App() {
   const [view, setView] = useState<"physical" | "relation">("physical");
   const [focus, setFocus] = useState<string | null>(null);
   const [cfgLens, setCfgLens] = useState(false);
-  const dir = useRef(1);
-  const setV = (v: "physical" | "relation") => { dir.current = v === "relation" ? 1 : -1; setView(v); };
+  const [direction, setDirection] = useState(1);
+  const setV = (v: "physical" | "relation") => { setDirection(v === "relation" ? 1 : -1); setView(v); };
 
   const pick = (id: string) => setFocus((cur) => (cur === id ? null : id));
   const meta = focus ? SVC[focus] : null;
@@ -219,9 +219,9 @@ function App() {
 
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
           <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
-            <AnimatePresence mode="popLayout" initial={false} custom={dir.current}>
-              <motion.div key={view} custom={dir.current}
-                initial={{ opacity: 0, x: 40 * dir.current, filter: "blur(6px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -36 * dir.current, filter: "blur(6px)" }} transition={PAGE}>
+            <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+              <motion.div key={view} custom={direction}
+                initial={{ opacity: 0, x: 40 * direction, filter: "blur(6px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -36 * direction, filter: "blur(6px)" }} transition={PAGE}>
                 {view === "physical"
                   ? <PhysicalView focus={focus} tick={tick} onPickSvc={pick} />
                   : <RelationView focus={focus} onPickSvc={pick} />}
