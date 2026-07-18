@@ -8,7 +8,7 @@ import {
   Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
-  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
+  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Box,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
@@ -17,6 +17,7 @@ import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
+import { GithubIcon } from "./devpreview/brandIcons";
 import { UI, BLUE, HP, MONO, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -1279,20 +1280,38 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
   const hiddenDefs = W_DEFS.filter((w) => board.hidden.includes(w.id));
   return (
     <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
-      {/* ── 고정 헤더: 상태 요약 줄 + 기간 컨텍스트 + Edit layout + 주 액션 1개 ── */}
+      {/* ── 고정 헤더: 상태 요약 줄(지도 요약 줄과 같은 칩 문법·같은 표기 — 두 화면이 다른 형식으로 말하지 않는다) ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 12.5, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>
-          <span>클러스터 <b style={{ fontFamily: MONO, color: UI.ink }}>{clusters.length}</b></span>
-          <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{ready.length}/{nodes.length}</b></span>
-          <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{pods.length}</b></span>
-          <span>OutOfSync <b style={{ fontFamily: MONO, color: outSync.length ? "#B25A00" : UI.ink }}>{outSync.length}</b></span>
-          {crit.length > 0 && (
-            <button onClick={() => onDrillCluster(crit[0].cluster)} className="rrow"
-              style={{ display: "flex", alignItems: "center", gap: 5, border: "1px solid rgba(255,95,85,0.35)", background: "rgba(255,95,85,0.07)", color: "#C43028", borderRadius: 999, padding: "3px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-              <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.crit }} />임계 {crit.length}
-            </button>
-          )}
-        </span>
+        {(() => {
+          const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
+          const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
+          const prov = nodes.filter((n) => n.state === "Provisioning").length;
+          const cord = nodes.filter((n) => n.state === "Cordoned").length;
+          const pending = pods.filter((p) => p.status === "Pending").length;
+          return (
+            <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b></span>
+              <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{nodes.length}</b>
+                {prov > 0 && <span style={{ color: "#0A6CFF" }}>· 예약 {prov}</span>}
+                {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
+              </span>
+              <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{pods.length}</b>
+                {pending > 0 && <span style={{ color: "#0A6CFF" }}>· 대기 {pending}</span>}
+              </span>
+              {outSync.map((r) => (
+                <span key={r.repo} style={{ ...seg, borderColor: "#F3D8B7", background: "#FFF8EF", color: "#B25A00" }}>
+                  <GithubIcon size={11} />OutOfSync · {r.repo.split("/")[1]}
+                </span>
+              ))}
+              {crit.length > 0 && (
+                <button onClick={() => onDrillCluster(crit[0].cluster)} title="지도에서 장애 위치 보기"
+                  style={{ ...seg, borderColor: "#F0B8B4", background: "#FFF7F6", color: HP.crit, fontWeight: 700, cursor: "pointer" }}>
+                  <Activity size={12} />장애 {crit.length}
+                </button>
+              )}
+            </span>
+          );
+        })()}
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
             {(["오늘", "7일", "30일"] as const).map((p) => (
@@ -1485,10 +1504,13 @@ function App() {
         <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
           <Building2 size={14} style={{ color: UI.ink3 }} />jungle-303
         </span>
-        {/* 현재 스코프 표시 — 맵 드릴과 항상 일치 (컨트롤이 아니라 사실) */}
+        {/* 현재 스코프 표시 — 리소스 서피스에서만 (홈·연결엔 스코프 개념이 없다) */}
+        {surface === "resources" && (
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
         </span>
+        )}
+        {surface === "resources" && (
         <span style={{ position: "relative" }}>
           <button onClick={() => setNsOpen(!nsOpen)}
             style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? "rgba(10,132,255,0.45)" : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
@@ -1508,10 +1530,14 @@ function App() {
             )}
           </AnimatePresence>
         </span>
-        <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />
+        )}
+        {surface === "resources" && <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />}
         <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: "#FBFBFD", borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
-          <input ref={searchRef} value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
+          {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
+          <input ref={searchRef} value={q}
+            onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface === "home") { setSurface("resources"); setResView("list"); } }}
+            placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: UI.ink2 }}>

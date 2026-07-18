@@ -187,9 +187,10 @@ export function MultiLine({ series, height = 92 }: {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
         {[0.25, 0.5, 0.75].map((f) => <line key={f} x1={0} x2={W} y1={H * f} y2={H * f} stroke={UI.line2} strokeWidth={0.4} strokeDasharray="1.5 2.5" />)}
-        {series.map((s) => (
+        {/* preserveAspectRatio=none + non-scaling-stroke에서는 pathLength 대시가 왜곡된다 — 페이드 등장으로 대체 */}
+        {series.map((s, i) => (
           <motion.path key={s.label} d={path(s.values)} fill="none" stroke={s.color} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"
-            initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease: [0.4, 0, 0.2, 1] }} vectorEffect="non-scaling-stroke" />
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ ...SOFT, delay: i * 0.12 }} vectorEffect="non-scaling-stroke" />
         ))}
       </svg>
       <div style={{ display: "flex", gap: 13, flexWrap: "wrap" }}>
