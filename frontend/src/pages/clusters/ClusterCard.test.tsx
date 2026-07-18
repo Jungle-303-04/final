@@ -41,6 +41,15 @@ describe("ClusterCard", () => {
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
+    const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).not.toContain("hover:-translate");
+    expect(card?.className).not.toContain("hover:shadow");
+    const serverMetric = screen.getByText("Servers 8").parentElement;
+    expect(serverMetric?.className).not.toContain("rounded");
+    expect(serverMetric?.className).not.toContain("bg-muted");
+    expect(serverMetric?.parentElement?.className).toContain("grid-cols-1");
+    expect(serverMetric?.parentElement?.className).toContain("min-[26rem]:grid-cols-2");
+    expect(serverMetric?.parentElement?.className).toContain("sm:grid-cols-4");
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {

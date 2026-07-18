@@ -12,10 +12,13 @@ import { createEmptyProductDetailQuery } from "../../features/filters/filterCont
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomeInsights } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
-import { Surface } from "../../shared/ui/Surface";
+import { Surface, SurfaceSection } from "../../shared/ui/Surface";
 import { buttonVariants } from "../../shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
-import { CertificateExpiryCard, HelmSummaryCard } from "./HomeInsightsBand";
+import {
+  CertificateExpirySection,
+  HelmSummarySection,
+  HomeInsightSection,
+} from "./HomeInsightsBand";
 import {
   HomeRefreshFailure,
   HomeSectionFailure,
@@ -32,14 +35,14 @@ export function HomeSourceBands({ state }: { state: HomePageState }) {
         labelKey="home.section.explore"
         onRefresh={state.refresh}
       >
-        {(insights) => <ExploreCards insights={insights} />}
+        {(insights) => <ExploreSections insights={insights} />}
       </InsightsBand>
       <InsightsBand
         insights={state.insights}
         labelKey="home.section.posture"
         onRefresh={state.refresh}
       >
-        {(insights) => <PostureCards insights={insights} />}
+        {(insights) => <PostureSections insights={insights} />}
       </InsightsBand>
     </>
   );
@@ -58,10 +61,10 @@ function LiveObservationBand({ state }: { state: HomePageState }) {
       className="grid min-w-0 overflow-hidden"
     >
       <BandHeader id="home-live-observation-title" title={t("home.section.liveObservation")} />
-      <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-2">
+      <SurfaceSection className={HOME_SECTION_GRID_CLASS_NAME}>
         <TopologyPreview onRetry={state.refresh} state={state.insights} />
         <TimelinePreview onRetry={state.refresh} state={state.overview} />
-      </div>
+      </SurfaceSection>
     </Surface>
   );
 }
@@ -92,7 +95,7 @@ function TopologyPreview({
   detail.resourceTopologyView = "relations";
   const href = filter.navigationHref(routeDefinitionForSurface("resources").path, detail);
   return (
-    <EvidenceCard
+    <EvidenceSection
       href={href}
       icon={<Network aria-hidden="true" />}
       linkLabel={t("home.source.openTopology")}
@@ -108,7 +111,7 @@ function TopologyPreview({
           })}
         </p>
       )}
-    </EvidenceCard>
+    </EvidenceSection>
   );
 }
 
@@ -135,7 +138,7 @@ function TimelinePreview({
   }
   const href = filter.navigationHref(routeDefinitionForSurface("timeline").path);
   return (
-    <EvidenceCard
+    <EvidenceSection
       href={href}
       icon={<Activity aria-hidden="true" />}
       linkLabel={t("home.source.openTimeline")}
@@ -144,9 +147,9 @@ function TimelinePreview({
       {state.data.warnings.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("home.source.timelineEmpty")}</p>
       ) : (
-        <ul className="grid min-w-0 gap-2">
+        <ul className="min-w-0 divide-y border-y">
           {state.data.warnings.slice(0, 6).map((warning) => (
-            <li className="min-w-0 rounded-lg border px-3 py-2" key={warning.id}>
+            <li className="min-w-0 py-3" key={warning.id}>
               <span className="block truncate text-sm font-medium">
                 {warning.reason ?? warning.name}
               </span>
@@ -157,7 +160,7 @@ function TimelinePreview({
           ))}
         </ul>
       )}
-    </EvidenceCard>
+    </EvidenceSection>
   );
 }
 
@@ -194,37 +197,37 @@ function InsightsBand({
             label={label}
             onRetry={onRefresh}
           />
-          <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-2">
+          <SurfaceSection className={HOME_SECTION_GRID_CLASS_NAME}>
             {children(insights.data)}
-          </div>
+          </SurfaceSection>
         </>
       )}
     </Surface>
   );
 }
 
-function ExploreCards({ insights }: { insights: HomeInsights }) {
+function ExploreSections({ insights }: { insights: HomeInsights }) {
   return (
     <>
       {insights.helm.coverage.availability === "unavailable" ? null : (
-        <HelmSummaryCard insights={insights} />
+        <HelmSummarySection insights={insights} />
       )}
       {insights.explore.traffic.coverage.availability === "unavailable" ? null : (
-        <ProviderCard kind="traffic" />
+        <ProviderSection kind="traffic" />
       )}
       {insights.explore.cost.coverage.availability === "unavailable" ? null : (
-        <ProviderCard kind="cost" />
+        <ProviderSection kind="cost" />
       )}
     </>
   );
 }
 
-function ProviderCard({ kind }: { kind: "traffic" | "cost" }) {
+function ProviderSection({ kind }: { kind: "traffic" | "cost" }) {
   const filter = useUnifiedFilter();
   const { t } = useI18n();
   const href = filter.navigationHref(routeDefinitionForSurface(kind).path);
   return (
-    <EvidenceCard
+    <EvidenceSection
       href={href}
       icon={<Activity aria-hidden="true" />}
       linkLabel={t(kind === "traffic" ? "home.source.openTraffic" : "home.source.openCost")}
@@ -233,29 +236,29 @@ function ProviderCard({ kind }: { kind: "traffic" | "cost" }) {
   );
 }
 
-function PostureCards({ insights }: { insights: HomeInsights }) {
+function PostureSections({ insights }: { insights: HomeInsights }) {
   return (
     <>
-      <CertificateExpiryCard insights={insights} />
+      <CertificateExpirySection insights={insights} />
       {insights.posture.gitops.coverage.availability === "unavailable" ? null : (
-        <GitOpsCard insights={insights} />
+        <GitOpsSection insights={insights} />
       )}
       {insights.posture.audit.coverage.availability === "unavailable" ? null : (
-        <AuditCard insights={insights} />
+        <AuditSection insights={insights} />
       )}
       {insights.posture.networkPolicy.coverage.availability === "unavailable" ? null : (
-        <NetworkPolicyCard insights={insights} />
+        <NetworkPolicySection insights={insights} />
       )}
     </>
   );
 }
 
-function GitOpsCard({ insights }: { insights: HomeInsights }) {
+function GitOpsSection({ insights }: { insights: HomeInsights }) {
   const filter = useUnifiedFilter();
   const { formatNumber, t } = useI18n();
   const summary = insights.posture.gitops;
   return (
-    <EvidenceCard
+    <EvidenceSection
       href={filter.navigationHref(routeDefinitionForSurface("gitops").path)}
       icon={<GitBranch aria-hidden="true" />}
       linkLabel={t("home.source.openGitOps")}
@@ -265,22 +268,22 @@ function GitOpsCard({ insights }: { insights: HomeInsights }) {
         label={t("home.source.controllers")}
         value={formatNumber(summary.controllerCount ?? 0)}
       />
-    </EvidenceCard>
+    </EvidenceSection>
   );
 }
 
-function AuditCard({ insights }: { insights: HomeInsights }) {
+function AuditSection({ insights }: { insights: HomeInsights }) {
   const filter = useUnifiedFilter();
   const { formatNumber, t } = useI18n();
   const summary = insights.posture.audit;
   return (
-    <EvidenceCard
+    <EvidenceSection
       href={filter.navigationHref(routeDefinitionForSurface("checks").path)}
       icon={<BadgeCheck aria-hidden="true" />}
       linkLabel={t("home.source.openChecks")}
       title={t("home.source.audit")}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 [&>*:nth-child(even)]:border-l [&>*:nth-child(even)]:pl-4 [&>*:nth-child(odd)]:pr-4">
         <EvidenceMetric
           label={t("home.source.checks")}
           value={formatNumber(summary.totalCheckCount ?? 0)}
@@ -290,35 +293,30 @@ function AuditCard({ insights }: { insights: HomeInsights }) {
           value={formatNumber(summary.totalFindingCount ?? 0)}
         />
       </div>
-    </EvidenceCard>
+    </EvidenceSection>
   );
 }
 
-function NetworkPolicyCard({ insights }: { insights: HomeInsights }) {
+function NetworkPolicySection({ insights }: { insights: HomeInsights }) {
   const { formatNumber, t } = useI18n();
   const summary = insights.posture.networkPolicy;
   return (
-    <Card className="min-w-0">
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck aria-hidden="true" className="size-4 shrink-0" />
-          <span className="truncate">{t("home.source.networkPolicy")}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <EvidenceMetric
-          label={t("home.source.coveredWorkloads")}
-          value={t("home.source.coverageValue", {
-            covered: formatNumber(summary.coveredWorkloads ?? 0),
-            total: formatNumber(summary.totalWorkloads ?? 0),
-          })}
-        />
-      </CardContent>
-    </Card>
+    <HomeInsightSection
+      icon={<ShieldCheck aria-hidden="true" />}
+      title={t("home.source.networkPolicy")}
+    >
+      <EvidenceMetric
+        label={t("home.source.coveredWorkloads")}
+        value={t("home.source.coverageValue", {
+          covered: formatNumber(summary.coveredWorkloads ?? 0),
+          total: formatNumber(summary.totalWorkloads ?? 0),
+        })}
+      />
+    </HomeInsightSection>
   );
 }
 
-function EvidenceCard({
+function EvidenceSection({
   children,
   href,
   icon,
@@ -332,31 +330,31 @@ function EvidenceCard({
   title: string;
 }) {
   return (
-    <Card className="min-w-0">
-      <CardHeader className="border-b">
-        <CardTitle className="flex min-w-0 items-center gap-2">
-          <span className="size-4 shrink-0 [&>svg]:size-4">{icon}</span>
-          <span className="truncate">{title}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-4">
-        {children}
-        <a className={buttonVariants({ variant: "outline" })} href={href}>
-          {linkLabel}<ExternalLink aria-hidden="true" />
-        </a>
-      </CardContent>
-    </Card>
+    <HomeInsightSection icon={icon} title={title}>
+      {children}
+      <a className={buttonVariants({ variant: "outline" })} href={href}>
+        {linkLabel}<ExternalLink aria-hidden="true" />
+      </a>
+    </HomeInsightSection>
   );
 }
 
 function EvidenceMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-w-0 gap-1 rounded-lg bg-muted/50 p-3">
+    <div className="grid min-w-0 gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <strong className="truncate text-xl font-semibold">{value}</strong>
+      <strong className="truncate text-xl font-semibold tabular-nums" title={value}>{value}</strong>
     </div>
   );
 }
+
+const HOME_SECTION_GRID_CLASS_NAME = [
+  "grid min-w-0",
+  "[&>*]:p-4 [&>*+*]:border-t",
+  "lg:grid-cols-2 lg:[&>*+*]:border-t-0",
+  "lg:[&>*:nth-child(even)]:border-l",
+  "lg:[&>*:nth-child(n+3)]:border-t",
+].join(" ");
 
 function UnavailableEvidence() {
   const { t } = useI18n();

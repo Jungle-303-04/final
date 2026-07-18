@@ -97,6 +97,7 @@ describe("HomePage", () => {
 
     const live = await screen.findByRole("region", { name: "라이브 관측" });
     expect(await within(live).findByText("리소스 관계")).toBeTruthy();
+    expect(live.querySelector("[data-slot='card']")).toBeNull();
     expect(within(live).getByText("12 리소스 · 9 관계")).toBeTruthy();
     expect(within(live).getByRole("link", { name: "리소스 관계 열기" }).getAttribute("href"))
       .toBe("/resources?clusters=cluster-1&applications=checkout&view=relations");
@@ -106,11 +107,13 @@ describe("HomePage", () => {
 
     const explore = screen.getByRole("region", { name: "탐색" });
     expect(within(explore).getByText("Helm 릴리스")).toBeTruthy();
+    expect(explore.querySelector("[data-slot='card']")).toBeNull();
     expect(within(explore).queryByText("트래픽")).toBeNull();
     expect(within(explore).queryByText("비용")).toBeNull();
 
     const posture = screen.getByRole("region", { name: "보안 및 운영 상태" });
     expect(within(posture).getByText("인증서 만료")).toBeTruthy();
+    expect(posture.querySelector("[data-slot='card']")).toBeNull();
     expect(within(posture).getByText("GitOps 컨트롤러")).toBeTruthy();
     expect(within(posture).getByText("감사 결과")).toBeTruthy();
     expect(within(posture).queryByText("NetworkPolicy 적용률")).toBeNull();
@@ -167,9 +170,9 @@ describe("HomePage", () => {
     }));
 
     const title = await screen.findByText("인증서 만료");
-    const card = title.closest("[data-slot='card']");
-    expect(card?.textContent).toContain("표시할 수 없습니다");
-    expect(card?.textContent).not.toMatch(/TLS Secret\s*0/u);
+    const section = title.closest("[data-slot='home-insight-section']");
+    expect(section?.textContent).toContain("표시할 수 없습니다");
+    expect(section?.textContent).not.toMatch(/TLS Secret\s*0/u);
   });
 
   it("keeps an internal Node hostname on one identifiable label while preserving its full identity", async () => {
