@@ -8,7 +8,7 @@ import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
 import { UI, BLUE, HP, MONO, SOFT, SPRING, PAGE, PRESENT_SCALE } from "./devpreview/theme";
-import { EksIcon, RedisIcon, GithubIcon } from "./devpreview/brandIcons";
+import { AwsIcon, RedisIcon, GithubIcon } from "./devpreview/brandIcons";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -533,40 +533,69 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
   const avgC = pct(act.reduce((s, p) => s + p.cpu, 0) / (act.length || 1) + drift);
   const avgM = pct(act.reduce((s, p) => s + p.mem, 0) / (act.length || 1) + drift * 0.8);
   const chot = cp.filter(isCrit).length;
-  const net = Math.round(cp.length * 11 + drift * 14 + (hsh % 30));         // KB/s — 파드 수 비례
-  const disk = 38 + (hsh % 21);                                             // 스토리지 사용률 — 클러스터별 고정
   const nodes = NODES.filter((n) => n.cluster === cl.id);
+  const ready = nodes.filter((n) => n.state === "Ready");
   const rel = cp.filter((p) => related.has(p.id)).length;
   const nOk = cp.filter((p) => p.status === "Running" && health(p) < 75).length;
   const nWarn = cp.filter((p) => p.status === "Running" && health(p) >= 75 && !isCrit(p)).length;
   const nPend = cp.filter((p) => p.status === "Pending").length;
   const total = cp.length || 1;
   const segs: [number, string][] = [[nOk, HP.ok], [nWarn, HP.warn], [chot, HP.crit], [nPend, HP.pending]];
+  const net = Math.round(cp.length * 11 + drift * 14 + (hsh % 30));
+  const disk = 38 + (hsh % 21);
+  // 실 노드 스펙에서 파생 — m5.xlarge = 4 vCPU/16GiB, m5.2xlarge = 8 vCPU/32GiB
+  const cores = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 8 : n.instance.includes("xlarge") ? 4 : 2), 0);
+  const memGi = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 32 : n.instance.includes("xlarge") ? 16 : 8), 0);
+  const usedCores = (avgC / 100) * cores, reqCores = Math.min(cores, usedCores * 1.4);
+  const usedMem = (avgM / 100) * memGi, reqMem = Math.min(memGi, usedMem * 1.18);
+  const ver = cl.env === "prod" ? "v1.31.4-eks-473bce4" : "v1.32.0-eks-19f6a2d";
+  const Bar = ({ label, used, cap, unit }: { label: string; used: number; cap: number; unit: string }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ width: 52, fontSize: 11, color: UI.ink3, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexShrink: 0, width: 108 }}>{used.toFixed(1)} / {cap} {unit}</span>
+      <span style={{ flex: 1, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
+        <motion.span initial={false} animate={{ width: `${Math.round((used / cap) * 100)}%` }} transition={{ duration: 1.2, ease: "easeInOut" }}
+          style={{ display: "block", height: "100%", borderRadius: 999, background: used / cap >= 0.9 ? HP.crit : used / cap >= 0.75 ? HP.warn : HP.ok }} />
+      </span>
+      <span style={{ width: 34, textAlign: "right", fontSize: 11, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{Math.round((used / cap) * 100)}%</span>
+    </div>
+  );
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
       style={{
-        display: "flex", flexDirection: "column", gap: 14, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
+        display: "flex", flexDirection: "column", gap: 13, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, boxShadow: "none", boxSizing: "border-box",
       }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,153,0,0.1)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <EksIcon size={15} style={{ color: "#FF9900" }} />
+      {/* 헤더 — AWS 로고 배지 (EKS = AWS 서비스) */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg, #FF9900, #F76F00)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <AwsIcon size={17} style={{ color: "#fff" }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ fontSize: 15.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
+            <span style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
             {cl.env === "prod" && <span style={{ fontSize: 10.5, fontWeight: 600, color: "#B25A00", border: "1px solid #F3D8B7", background: "#FFF8EF", borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
           </span>
-          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.platform} · {cl.region}</span>
+          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2 }}>Amazon EKS · {cl.region}</span>
         </span>
         {chot > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 6, padding: "2px 7px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{chot}⚠</span>}
       </div>
 
-      {/* 4스탯 그리드 — 라벨 위·값 아래 (색점 = 아래 차트의 시리즈) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+      {/* 아이덴티티 — 계정·버전·ARN·자동 갱신 */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: 11, color: UI.ink2 }}>
+        <span>183548421506 · Kubernetes {ver}</span>
+        <span style={{ color: UI.ink3, fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>arn:aws:eks:{cl.region}:183548421506:cluster/{cl.id}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "inherit", fontSize: 11, color: UI.ink3, marginTop: 1 }}>
+          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신 · 방금 전
+          <RotateCw size={10} style={{ marginLeft: 1 }} />
+        </span>
+      </div>
+
+      {/* 4스탯 그리드 — 색점 = 아래 차트 시리즈 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, paddingTop: 2, borderTop: `1px solid ${UI.line2}` }}>
         {([["CPU", `${avgC}%`, BLUE], ["MEM", `${avgM}%`, "#8250DF"], ["NET", `${net}KB/s`, null], ["DISK", `${disk}%`, null]] as const).map(([lb, v, dot]) => (
-          <span key={lb} style={{ minWidth: 0 }}>
+          <span key={lb} style={{ minWidth: 0, paddingTop: 8 }}>
             <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
               {dot && <span style={{ width: 6, height: 6, borderRadius: 999, background: dot }} />}{lb}
             </span>
@@ -574,9 +603,17 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
           </span>
         ))}
       </div>
-      {/* 차트 — 카드 가장자리까지 풀블리드 */}
-      <div style={{ margin: "0 -18px", marginTop: 2 }}>
+      <div style={{ margin: "0 -18px", marginTop: -2 }}>
         <DualSpark id={cl.id} a={avgC} b={avgM} h={54} />
+      </div>
+
+      {/* 리소스 사용률 — Used/Requested (실 노드 스펙 파생) */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3 }}>리소스 사용률</span>
+        <Bar label="CPU 사용" used={usedCores} cap={cores} unit="cores" />
+        <Bar label="CPU 요청" used={reqCores} cap={cores} unit="cores" />
+        <Bar label="MEM 사용" used={usedMem} cap={memGi} unit="GiB" />
+        <Bar label="MEM 요청" used={reqMem} cap={memGi} unit="GiB" />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
@@ -790,7 +827,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 
                 {view.level === "clusters" && (
                   /* 클러스터: 가로 최대 2개 · 카드 폭을 제한해 정사각에 가깝게 */
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14, alignItems: "stretch" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14, alignItems: "stretch" }}>
                     {CLUSTERS.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
                         <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
