@@ -503,6 +503,16 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = fal
   const [yamlDraft, setYamlDraft] = useState<string | null>(null);
   const [yamlSaved, setYamlSaved] = useState<string | null>(null);
   const [diffMode, setDiffMode] = useState(false);      // 비교 — 마지막 적용본 vs 서버 원본
+  // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
+  const [dw, setDw] = useState(560);
+  const [dwDragging, setDwDragging] = useState(false);
+  const onEdgeDown = (e: React.PointerEvent) => {
+    if (full) return;
+    e.preventDefault(); setDwDragging(true);
+    const move = (ev: PointerEvent) => setDw(Math.min(window.innerWidth - leftInset - 60, Math.max(460, window.innerWidth - ev.clientX)));
+    const up = () => { setDwDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
   const [restartedAt, setRestartedAt] = useState<string | null>(null); // 재시작 요청 흔적 → 이벤트로 남는다
   const doRestart = () => {
     const t = new Date(); const ts = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
@@ -543,8 +553,13 @@ status:
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
         style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0,
           /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
-          width: full ? `calc(100vw - ${leftInset}px)` : 560, maxWidth: `calc(100vw - ${leftInset}px)`,
-          background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
+          width: full ? `calc(100vw - ${leftInset}px)` : dw, maxWidth: `calc(100vw - ${leftInset}px)`,
+          background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: dwDragging ? "none" : "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
+        {/* 좌측 가장자리 리사이즈 핸들 */}
+        {!full && (
+          <div onPointerDown={onEdgeDown} title="드래그해서 폭 조절"
+            style={{ position: "absolute", left: -2, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 5, background: dwDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
+        )}
         {/* 헤더 */}
         <div style={{ padding: "16px 20px 0", borderBottom: `1px solid ${UI.line}` }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -934,12 +949,12 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
   };
   return (
     <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+      {pinned.length > 0 && (
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
-        {pinned.length === 0
-          ? <div style={{ fontSize: 11.5, color: UI.ink3, padding: "0 9px 4px", lineHeight: 1.5 }}>자주 보는 종류를 핀으로 고정하면 여기에 표시됩니다</div>
-          : KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
+        {KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
       </div>
+      )}
       {GROUPS.map((g) => {
         const list = KINDS.filter((k) => k.group === g && (showEmpty || k.count > 0) && match(k));
         if (!list.length) return null;
@@ -1145,47 +1160,51 @@ function App() {
           )}
           <AnimatePresence>
             {bellOpen && (
-              <motion.div key="bell" initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.99 }} transition={SOFT}
-                style={{ position: "absolute", top: 38, right: 0, width: 330, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", overflow: "hidden" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 14px", borderBottom: `1px solid ${UI.line2}` }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>알림</span>
-                  <span style={{ fontSize: 11.5, color: UI.ink3 }}>위험 {alerts.length} · 경고 {repoAlerts.length} · 정보 {nodeAlerts.length}</span>
+              {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
+              <motion.div key="bell" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -5, scale: 0.98 }} transition={SOFT}
+                style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: "rgba(246,247,250,0.86)", backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
+                  border: "1px solid rgba(17,19,24,0.08)", borderRadius: 18, boxShadow: "0 28px 70px -24px rgba(17,19,24,0.38)", padding: 10, maxHeight: "min(70vh, 560px)", overflowY: "auto" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
                 </div>
-                {alerts.map((p) => (
-                  <button key={p.name} className="rrow" onClick={() => openAlert(p)}
-                    style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${UI.line2}` }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: HP.crit, marginTop: 4, flexShrink: 0 }} />
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{p.name}</span>
-                      <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2 }}>{p.status} · 재시작 {p.restarts}회 · {p.node}</span>
-                    </span>
-                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{p.cluster}</span>
-                  </button>
-                ))}
-                {/* 경고 — OutOfSync 저장소 */}
-                {repoAlerts.map((r) => (
-                  <div key={r.repo} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: `1px solid ${UI.line2}` }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: HP.warn, marginTop: 4, flexShrink: 0 }} />
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{r.repo}</span>
-                      <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2 }}>OutOfSync · {r.tool} · 리비전 {r.rev}</span>
-                    </span>
-                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>GitOps</span>
-                  </div>
-                ))}
-                {/* 정보 — 아직 준비되지 않은 노드 */}
-                {nodeAlerts.map((n) => (
-                  <button key={n.id} className="rrow" onClick={() => { setBellOpen(false); openRef("Node", n.id); }}
-                    style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${UI.line2}` }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: n.state === "Provisioning" ? "#0A84FF" : UI.ink3, marginTop: 4, flexShrink: 0 }} />
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{n.id}</span>
-                      <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2 }}>{n.state === "Provisioning" ? "예약됨 — 노드 준비 중" : "차단됨 — 스케줄링 제외"} · {n.instance}</span>
-                    </span>
-                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{n.cluster}</span>
-                  </button>
-                ))}
-                <div style={{ padding: "9px 14px", fontSize: 11.5, color: UI.ink3 }}>알림을 누르면 해당 리소스 상세가 열립니다</div>
+                {(() => {
+                  const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => (
+                    <button className="acard" onClick={onClick} disabled={!onClick}
+                      style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", background: "rgba(255,255,255,0.85)",
+                        border: "1px solid rgba(17,19,24,0.05)", borderRadius: 14, padding: "10px 12px", marginBottom: 6, cursor: onClick ? "pointer" : "default",
+                        boxShadow: "0 1px 2px rgba(17,19,24,0.05)" }}>
+                      <span style={{ width: 28, height: 28, borderRadius: 8, background: tint, display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1 }}>
+                        <I size={14} color="#fff" strokeWidth={2.2} />
+                      </span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+                          <span style={{ fontSize: 10.5, color: UI.ink3, flexShrink: 0 }}>{time}</span>
+                        </span>
+                        <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2, lineHeight: 1.45 }}>{body}</span>
+                        {right && <span style={{ display: "block", fontSize: 10.5, fontFamily: MONO, color: UI.ink3, marginTop: 3 }}>{right}</span>}
+                      </span>
+                    </button>
+                  );
+                  return (
+                    <>
+                      {alerts.map((p) => (
+                        <Card key={p.name} icon={Activity} tint={HP.crit} title={p.name} time={`${2 + (p.cpu % 9)}분 전`}
+                          body={`${p.status} · 재시작 ${p.restarts}회 · ${p.node}`} right={p.cluster} onClick={() => openAlert(p)} />
+                      ))}
+                      {repoAlerts.map((r) => (
+                        <Card key={r.repo} icon={GitBranch} tint={HP.warn} title={r.repo} time="12분 전"
+                          body={`OutOfSync · ${r.tool} · 리비전 ${r.rev}`} right="GitOps" />
+                      ))}
+                      {nodeAlerts.map((n) => (
+                        <Card key={n.id} icon={Server} tint={n.state === "Provisioning" ? BLUE : "#8E8E93"} title={n.id} time="34분 전"
+                          body={`${n.state === "Provisioning" ? "예약됨 — 노드 준비 중" : "차단됨 — 스케줄링 제외"} · ${n.instance}`} right={n.cluster}
+                          onClick={() => { setBellOpen(false); openRef("Node", n.id); }} />
+                      ))}
+                    </>
+                  );
+                })()}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1221,9 +1240,8 @@ function App() {
                   <span style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
                   <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
                   <span style={{ fontSize: 11.5, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? "rgba(10,132,255,0.08)" : "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 11.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
                   {/* 밀도 토글 — 많은 행을 한 화면에 */}
-                  <span style={{ display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
                     {([["기본", false], ["촘촘", true]] as const).map(([l, v]) => (
                       <button key={l} onClick={() => setDense(v)}
                         style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",

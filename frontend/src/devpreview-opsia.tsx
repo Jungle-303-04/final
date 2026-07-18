@@ -339,8 +339,11 @@ function MetricCell({ label, value, unit, tone, sub, spark, bar }: {
 }
 
 // ── 노드 위젯 ─────────────────────────────
-function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, onPod, onTip, onCritEnter, onCritLeave, onCritClick }: {
-  node: (typeof NODES)[number]; pods: Pod[]; expanded: boolean; dimFn: (p: Pod) => boolean; litFn: (p: Pod) => boolean; live: (p: Pod) => number;
+function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, onOpen, onPod, onTip, onCritEnter, onCritLeave, onCritClick }: {
+  node: (typeof NODES)[number]; pods: Pod[]; expanded: boolean; dimFn: (p: Pod) => boolean; litFn: (p: Pod) => boolean;
+  /** 파드뷰 전용: 렌즈 선택 시 일치하지 않는 파드를 표에서 숨긴다 (노드뷰는 딤 처리 유지) */
+  hideFn?: (p: Pod) => boolean;
+  live: (p: Pod) => number;
   tick: number; onOpen: () => void; onPod: (p: Pod) => void; onTip: (x: number, y: number, pods: Pod[] | null) => void;
   onCritEnter: () => void; onCritLeave: () => void; onCritClick: () => void;
 }) {
@@ -402,8 +405,12 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
       )}
       {expanded ? (
         // 파드뷰 = 표. 상태 · 이름 · 워크로드 · 부하 · 재시작 · 나이 → 클릭하면 상세.
+        // 렌즈 선택 중엔 일치하는 파드만 남긴다 — 노드 지표(위)는 전체 기준 유지.
+        (() => { const vis = hideFn ? np.filter((p) => !hideFn(p)) : np; return (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>파드 {np.length}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>
+            파드 {vis.length}{vis.length !== np.length && <span style={{ fontWeight: 600, color: UI.ink3 }}> / {np.length} · 필터 적용됨</span>}
+          </span>
 
           {/* 표 헤더 */}
           <div style={{ display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
@@ -412,9 +419,10 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
 
           {(() => {
             const bySvc = new Map<string, Pod[]>();
-            np.forEach((p) => { const arr = bySvc.get(p.svc) ?? []; arr.push(p); bySvc.set(p.svc, arr); });
+            vis.forEach((p) => { const arr = bySvc.get(p.svc) ?? []; arr.push(p); bySvc.set(p.svc, arr); });
             const gRank = (list: Pod[]) => (list.some(isCrit) ? 0 : list.every((p) => p.status === "Pending") ? 2 : 1);
             const groups = [...bySvc.entries()].sort((a, b) => gRank(a[1]) - gRank(b[1]) || a[0].localeCompare(b[0]));
+            if (!groups.length) return <div style={{ fontSize: 12, color: UI.ink3, padding: "14px 10px" }}>이 노드에는 필터와 일치하는 파드가 없습니다</div>;
             return groups.map(([svc, list]) => {
               const meta = SVC[svc];
               const worst = list.some(isCrit) ? HP.crit : list.some((p) => p.status === "Running" && health(p) >= 75) ? HP.warn : HP.ok;
@@ -439,6 +447,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
             <div style={{ fontSize: 11, color: UI.ink3, padding: "8px 10px 0", borderTop: `1px solid ${UI.line2}` }}>남은 슬롯 {node.cap - np.length}</div>
           )}
         </div>
+        ); })()
       ) : (
         <motion.div layout style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4 }}>
           {np.map((p) => <PodTile key={p.id} p={p} big={false} dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
@@ -699,7 +708,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 initial="initial" animate="animate" exit="exit" transition={PAGE}>
 
                 {view.level === "clusters" && (
-                  <div style={{ display: "grid", gridTemplateColumns: embedded ? "repeat(auto-fit, minmax(230px, 1fr))" : "repeat(3, 1fr)", gap: 12, alignItems: "stretch" }}>
+                  /* 클러스터: 가로 최대 2개 · 정사각 느낌 */
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, alignItems: "stretch" }}>
                     {CLUSTERS.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
                         <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
@@ -709,10 +719,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 )}
 
                 {view.level === "nodes" && (
-                  /* 임베드: 좁은 폭에서도 노드 카드가 자연스럽게 래핑 (200% 확대 대응) */
-                  <div style={{ display: "grid", gridTemplateColumns: embedded ? "repeat(auto-fit, minmax(240px, 1fr))" : "repeat(5, 1fr)", gap: 12 }}>
+                  /* 노드: 가로 최대 3개 — 파드 10개당 한 칸, 10개 초과 시 확장 */
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                     {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
-                      <motion.div key={node.id} style={{ gridColumn: embedded ? undefined : `span ${spanOf(node.cap)}` }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
+                      <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}` }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
                         <NodeWidget node={node} pods={pods} expanded={false} dimFn={dimFn} litFn={litFn} live={live} tick={tick}
                           onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.id }, 1)} onPod={selectPod} onTip={onTip}
                           onCritEnter={() => setLens({ kind: "crit", id: "all" })} onCritLeave={() => setLens(null)} onCritClick={() => setPin(pin?.kind === "crit" ? null : { kind: "crit", id: "all" })} />
@@ -723,7 +733,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 
                 {view.level === "pods" && (() => {
                   const node = NODES.find((n) => n.id === view.node)!;
-                  return <NodeWidget node={node} pods={pods} expanded dimFn={dimFn} litFn={litFn} live={live} tick={tick} onOpen={() => {}} onPod={selectPod} onTip={onTip}
+                  {/* 파드뷰: 렌즈 선택 시 일치 파드만 표시(실제 필터) — 노드뷰의 딤 처리와 역할 분리 */}
+                  return <NodeWidget node={node} pods={pods} expanded dimFn={dimFn} litFn={litFn} hideFn={effLens ? dimFn : undefined} live={live} tick={tick} onOpen={() => {}} onPod={selectPod} onTip={onTip}
                     onCritEnter={() => setLens({ kind: "crit", id: "all" })} onCritLeave={() => setLens(null)} onCritClick={() => setPin(pin?.kind === "crit" ? null : { kind: "crit", id: "all" })} />;
                 })()}
               </motion.div>
