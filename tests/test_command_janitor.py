@@ -6,6 +6,7 @@ from typing import Any
 from conftest import load_service
 
 from packages.events.context import current_event_workspace
+from packages.storage.retention import RetentionSweepResult
 
 
 class StubDb:
@@ -90,7 +91,33 @@ def test_command_janitor_emits_completion_for_expired_commands(monkeypatch) -> N
 def test_command_janitor_retention_failure_does_not_stop_loop() -> None:
     janitor = load_service("command/command-janitor")
 
-    assert asyncio.run(janitor.sweep_database_retention(FailingRetentionDb())) == 0
+    assert asyncio.run(janitor.sweep_database_retention(FailingRetentionDb())) is None
+
+
+def test_command_janitor_returns_structured_retention_metrics(monkeypatch) -> None:
+    janitor = load_service("command/command-janitor")
+    expected = RetentionSweepResult(
+        outbox_sent=1,
+        events=2,
+        demo_deleted=(("timeline_events", 3),),
+    )
+
+    async def sweep(_db: object) -> RetentionSweepResult:
+        return expected
+
+    monkeypatch.setattr(janitor, "sweep_storage_retention", sweep)
+
+    result = asyncio.run(janitor.sweep_database_retention(object()))
+
+    assert result == expected
+    assert result is not None
+    assert result.metrics() == {
+        "outbox_sent": 1,
+        "events": 2,
+        "audit_log": 0,
+        "demo_timeline_events": 3,
+        "total": 6,
+    }
 
 
 def test_command_janitor_command_lock_failure_does_not_stop_loop() -> None:

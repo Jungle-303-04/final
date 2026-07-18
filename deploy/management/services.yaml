@@ -393,6 +393,21 @@ spec:
                 name: management-runtime-config
             - secretRef:
                 name: management-runtime-secret
+          env:
+            # management dev/demo 데이터만 24시간 보존한다. command-janitor의
+            # 명시적 환경·enable·scope 3중 게이트가 운영 오적용을 차단한다.
+            - name: APP_ENV
+              value: "demo"
+            - name: DEMO_DATA_RETENTION_ENABLED
+              value: "true"
+            - name: DEMO_DATA_RETENTION_HOURS
+              value: "24"
+            - name: DEMO_DATA_RETENTION_DELETE_LIMIT
+              value: "500"
+            - name: DEMO_DATA_RETENTION_SCOPES
+              value: "observations,events,incidents,rca,evidence,timeline,commands,projections"
+            - name: DB_RETENTION_SWEEP_INTERVAL_SECONDS
+              value: "300"
 ---
 apiVersion: apps/v1
 kind: Deployment

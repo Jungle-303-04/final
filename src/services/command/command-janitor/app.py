@@ -16,7 +16,7 @@ from packages.runtime.async_db import AsyncDb
 from packages.runtime.service import AsyncService
 from packages.runtime.worker import HEARTBEAT_PATH
 from packages.storage.database import Database, wait_for_database
-from packages.storage.retention import sweep_storage_retention
+from packages.storage.retention import RetentionSweepResult, sweep_storage_retention
 
 COMMAND_JANITOR = "command-janitor"
 SWEEP_INTERVAL_SECONDS_ENV = "COMMAND_JANITOR_INTERVAL_SECONDS"
@@ -53,13 +53,13 @@ async def emit_expired_command_completions(
     return len(expired)
 
 
-async def sweep_database_retention(db: Any) -> int:
+async def sweep_database_retention(db: Any) -> RetentionSweepResult | None:
     try:
         result = await sweep_storage_retention(db)
     except Exception:
         LOGGER.exception("database_retention_sweep_failed")
-        return 0
-    return result.total
+        return None
+    return result
 
 
 async def run(event_bus: EventConsumerBus | None = None) -> None:
@@ -87,12 +87,12 @@ async def run(event_bus: EventConsumerBus | None = None) -> None:
                 LOGGER.warning("expired_commands_swept", extra={"context": {"count": count}})
             loop_time = loop.time()
             if loop_time >= next_retention_sweep:
-                retention_count = await sweep_database_retention(async_db)
+                retention_result = await sweep_database_retention(async_db)
                 next_retention_sweep = loop_time + retention_interval
-                if retention_count:
+                if retention_result is not None and retention_result.total:
                     LOGGER.warning(
                         "database_retention_swept",
-                        extra={"context": {"count": retention_count}},
+                        extra={"context": retention_result.metrics()},
                     )
             try:
                 await asyncio.wait_for(stopping.wait(), timeout=interval)
