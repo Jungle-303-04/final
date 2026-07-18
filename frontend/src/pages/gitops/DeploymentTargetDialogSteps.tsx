@@ -1,4 +1,4 @@
-import { Check, GitBranch, LockKeyhole, Server } from "lucide-react";
+import { Check, Folder, GitBranch, LockKeyhole, Search, Server } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReleaseCluster, ReleaseTargetInput } from "../../features/gitops/gitOpsContract";
 import { useI18n, type MessageKey } from "../../shared/i18n";
@@ -6,7 +6,6 @@ import { cn } from "../../shared/lib/cn";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Input } from "../../shared/ui/primitives/input";
 import { FormField, NativeSelect } from "./WorkflowFormControls";
-import { DeploymentTargetPreview } from "./DeploymentTargetPreview";
 import {
   detectGitRepositoryProvider,
   gitProviderLabelKey,
@@ -58,56 +57,48 @@ export function RepositoryTargetStep({ input, update }: TargetStepProps) {
   const provider = detectGitRepositoryProvider(input.repository);
   return (
     <section className="motion-wizard-stage grid gap-5">
-      <StepIntroduction icon={GitBranch} text={t("workflows.target.repositoryDescription")} />
-      <FormField label={t("workflows.target.name")}>
-        <Input
-          aria-label={t("workflows.target.name")}
-          autoFocus
-          className="h-11 rounded-xl bg-muted/35 px-3.5"
-          onChange={(event) => update("name", event.currentTarget.value)}
-          value={input.name}
-        />
-      </FormField>
+      <p className="text-sm leading-relaxed text-muted-foreground">{t("workflows.target.repositoryDescription")}</p>
       <div className="grid gap-1.5">
-        <div className="flex items-center justify-between gap-3">
-          <label className="text-xs font-medium text-muted-foreground" htmlFor="target-repository">
-            {t("workflows.target.repository")}
-          </label>
-          {input.repository.trim() ? (
-            <Badge aria-live="polite" className="shrink-0" role="status" variant="outline">
-              {t("workflows.target.providerDetected", { provider: t(gitProviderLabelKey(provider)) })}
-            </Badge>
-          ) : null}
+        <label className="sr-only" htmlFor="target-repository">{t("workflows.target.repository")}</label>
+        <div className="relative">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-invalid={input.repository.trim() !== "" && !repositoryValid ? true : undefined}
+            autoCapitalize="none"
+            autoFocus
+            className="h-13 rounded-xl bg-card pl-11 pr-4 font-mono"
+            id="target-repository"
+            onChange={(event) => update("repository", event.currentTarget.value)}
+            placeholder={t("workflows.target.repositoryPlaceholder")}
+            spellCheck={false}
+            value={input.repository}
+          />
         </div>
-        <Input
-          aria-invalid={input.repository.trim() !== "" && !repositoryValid ? true : undefined}
-          autoCapitalize="none"
-          className="h-11 rounded-xl bg-muted/35 px-3.5 font-mono"
-          id="target-repository"
-          onChange={(event) => update("repository", event.currentTarget.value)}
-          placeholder={t("workflows.target.repositoryPlaceholder")}
-          spellCheck={false}
-          value={input.repository}
-        />
         {input.repository.trim() && !repositoryValid ? (
           <span className="text-xs text-destructive" role="alert">{t("workflows.target.repositoryInvalid")}</span>
         ) : null}
       </div>
-      <FormField label={t("workflows.target.token")}>
-        <Input
-          aria-label={t("workflows.target.token")}
-          autoComplete="new-password"
-          className="h-11 rounded-xl bg-muted/35 px-3.5 font-mono"
-          onChange={(event) => update("token", event.currentTarget.value)}
-          spellCheck={false}
-          type="password"
-          value={input.token || ""}
-        />
-      </FormField>
-      <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-        <LockKeyhole aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-healthy" />
-        {t("workflows.target.tokenDescription")}
-      </p>
+      {repositoryValid ? (
+        <div className="motion-wizard-stage grid gap-4">
+          <div className="flex min-w-0 items-center gap-4 rounded-2xl bg-muted/40 px-4 py-4">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-card text-muted-foreground shadow-xs"><Folder aria-hidden="true" className="size-5" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="truncate text-sm">{input.repository}</strong>
+                <Badge aria-live="polite" role="status" variant="outline">{t("workflows.target.providerDetected", { provider: t(gitProviderLabelKey(provider)) })}</Badge>
+              </div>
+              <p className="mt-1 flex items-center gap-1.5 font-mono text-xs text-muted-foreground"><GitBranch aria-hidden="true" className="size-3.5" />{input.branch}</p>
+            </div>
+            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-status-healthy/15 text-status-healthy"><Check aria-hidden="true" className="size-3.5" strokeWidth={3} /></span>
+          </div>
+          <div className="motion-wizard-stage grid gap-2.5">
+            <FormField label={t("workflows.target.token")}>
+              <Input aria-label={t("workflows.target.token")} autoComplete="new-password" className="h-13 rounded-xl bg-card px-4 font-mono" onChange={(event) => update("token", event.currentTarget.value)} spellCheck={false} type="password" value={input.token || ""} />
+            </FormField>
+            <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><LockKeyhole aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-healthy" />{t("workflows.target.tokenDescription")}</p>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -117,6 +108,9 @@ export function ManifestTargetStep({ input, update }: TargetStepProps) {
   return (
     <section className="motion-wizard-stage grid gap-5">
       <StepIntroduction icon={GitBranch} text={t("workflows.target.manifestDescription")} />
+      <FormField label={t("workflows.target.name")}>
+        <Input aria-label={t("workflows.target.name")} autoFocus className="h-11 rounded-xl bg-muted/35 px-3.5" onChange={(event) => update("name", event.currentTarget.value)} value={input.name} />
+      </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label={t("workflows.target.branch")}>
           <Input aria-label={t("workflows.target.branch")} autoCapitalize="none" autoFocus className="h-11 rounded-xl bg-muted/35 px-3.5 font-mono" onChange={(event) => update("branch", event.currentTarget.value)} spellCheck={false} value={input.branch} />
@@ -143,7 +137,7 @@ export function DeployTargetStep({
 }) {
   const { t } = useTargetI18n();
   return (
-    <section className="motion-wizard-stage grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.85fr)] lg:items-start">
+    <section className="motion-wizard-stage grid gap-5">
       <div className="grid gap-5">
         <StepIntroduction icon={Server} text={t("workflows.target.deployDescription")} />
         <FormField error={!connectedClusters.length ? t("workflows.target.connectClusterFirst") : undefined} label={t("workflows.target.cluster")}>
@@ -169,7 +163,11 @@ export function DeployTargetStep({
           {t("workflows.target.summary.sync")}
         </p>
       </div>
-      <DeploymentTargetPreview cluster={selectedCluster} input={{ ...input, clusterId }} />
+      <div className="grid gap-2 rounded-xl border bg-muted/25 p-4 text-xs">
+        <span className="font-medium text-muted-foreground">{t("workflows.target.summary.destination")}</span>
+        <strong>{selectedCluster?.name || t("workflows.value.notSet")}</strong>
+        <span className="font-mono text-muted-foreground">{input.namespace} · {input.environment}</span>
+      </div>
     </section>
   );
 }

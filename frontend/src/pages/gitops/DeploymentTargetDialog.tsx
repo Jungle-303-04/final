@@ -60,8 +60,8 @@ export function DeploymentTargetDialog({
     : connectedClusters[0]?.id || "";
   const selectedCluster = connectedClusters.find((cluster) => cluster.id === clusterId) ?? null;
   const valid = {
-    1: input.name.trim() !== "" && isGitRepositoryReference(input.repository),
-    2: input.branch.trim() !== "" && input.manifestPath.trim() !== "",
+    1: isGitRepositoryReference(input.repository),
+    2: input.name.trim() !== "" && input.branch.trim() !== "" && input.manifestPath.trim() !== "",
     3: clusterId !== "" && input.namespace.trim() !== "" && input.environment.trim() !== "",
   } satisfies Record<DeploymentTargetStep, boolean>;
 
@@ -97,7 +97,7 @@ export function DeploymentTargetDialog({
         {t("workflows.target.new")}
       </DialogTrigger>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] overflow-hidden p-0 sm:max-w-3xl"
+        className="max-h-[calc(100dvh-2rem)] overflow-hidden p-0 sm:max-w-2xl"
         closeLabel={t("common.action.close")}
         showCloseButton={!pending}
       >
@@ -146,10 +146,12 @@ export function DeploymentTargetDialog({
               </Button>
             ) : null}
             {step < 3 ? (
-              <Button disabled={!valid[step] || pending} onClick={() => setStep((step + 1) as DeploymentTargetStep)}>
-                {t("workflows.target.next")}
-                <ChevronRight aria-hidden="true" />
-              </Button>
+              valid[step] ? (
+                <Button disabled={pending} onClick={() => setStep((step + 1) as DeploymentTargetStep)}>
+                  {t("workflows.target.next")}
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+              ) : null
             ) : (
               <Button aria-busy={pending} disabled={!valid[3] || pending} onClick={() => void submit()}>
                 {pending ? <Spinner decorative /> : <Plus aria-hidden="true" />}
