@@ -4,7 +4,7 @@
 import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Server, FileCog, Network, Braces, Globe, ShoppingCart, CreditCard, Search, KeyRound } from "lucide-react";
+import { Server, FileCog, Network, Braces, Globe, ShoppingCart, CreditCard, Search, KeyRound, Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal, HardDrive, Cpu, Folder, Activity, UserCog, Eye } from "lucide-react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -158,6 +158,112 @@ function RelationView({ focus, onPickSvc }: { focus: string | null; onPickSvc: (
   );
 }
 
+// ── 리소스 종류 인덱스 (좌측 서브사이드바) ─────────────────────────────
+// 병합 규칙: 종류마다 "자연스러운 관점"이 있다 → 고르면 본문 관점이 자동으로 맞춰진다.
+type KindView = "physical" | "relation" | "lens" | "table";
+type Kind = { id: string; label: string; icon: SvcIconT; group: string; view: KindView; count: number };
+const KIND_GROUPS = ["워크로드", "네트워킹", "구성", "스토리지", "클러스터"] as const;
+const KINDS: Kind[] = (() => {
+  const byKind = (k: string) => SERVICES.filter((s) => s.kind === k);
+  const podsOf = (k: string) => PODS.filter((p) => byKind(k).some((s) => s.id === p.svc)).length;
+  return [
+    { id: "Deployment", label: "Deployment", icon: Rocket, group: "워크로드", view: "physical", count: byKind("Deployment").length },
+    { id: "StatefulSet", label: "StatefulSet", icon: Database, group: "워크로드", view: "physical", count: byKind("StatefulSet").length },
+    { id: "Pod", label: "Pod", icon: Boxes, group: "워크로드", view: "physical", count: PODS.length },
+    { id: "ReplicaSet", label: "ReplicaSet", icon: Copy, group: "워크로드", view: "physical", count: byKind("Deployment").length },
+    { id: "DaemonSet", label: "DaemonSet", icon: LayoutGrid, group: "워크로드", view: "physical", count: 0 },
+    { id: "Job", label: "Job", icon: Play, group: "워크로드", view: "table", count: 0 },
+    { id: "CronJob", label: "CronJob", icon: Timer, group: "워크로드", view: "table", count: 0 },
+    { id: "Service", label: "Service", icon: Plug, group: "네트워킹", view: "relation", count: SERVICES.length - 1 },
+    { id: "Ingress", label: "Ingress", icon: DoorOpen, group: "네트워킹", view: "relation", count: byKind("Ingress").length },
+    { id: "NetworkPolicy", label: "NetworkPolicy", icon: ShieldCheck, group: "네트워킹", view: "relation", count: 0 },
+    { id: "ConfigMap", label: "ConfigMap", icon: FileCog, group: "구성", view: "lens", count: Object.values(CFG_KIND).filter((v) => v === "ConfigMap").length },
+    { id: "Secret", label: "Secret", icon: KeyRound, group: "구성", view: "lens", count: Object.values(CFG_KIND).filter((v) => v === "Secret").length },
+    { id: "HPA", label: "HorizontalPodAutoscaler", icon: MoveDiagonal, group: "구성", view: "lens", count: 0 },
+    { id: "PVC", label: "PersistentVolumeClaim", icon: HardDrive, group: "스토리지", view: "table", count: 0 },
+    { id: "Node", label: "Node", icon: Cpu, group: "클러스터", view: "physical", count: NODES.length },
+    { id: "Namespace", label: "Namespace", icon: Folder, group: "클러스터", view: "table", count: [...new Set(SERVICES.map((s) => s.ns))].length },
+    { id: "Event", label: "Event", icon: Activity, group: "클러스터", view: "table", count: PODS.filter((p) => p.crit || p.pending).length },
+    { id: "ServiceAccount", label: "ServiceAccount", icon: UserCog, group: "클러스터", view: "table", count: 0 },
+  ].map((k) => ({ ...k, count: k.id === "Pod" ? PODS.length : k.count || podsOf(k.id) || k.count })) as Kind[];
+})();
+
+function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin }: {
+  sel: string | null; onPick: (k: Kind) => void; showEmpty: boolean; setShowEmpty: (v: boolean) => void;
+  pinned: string[]; togglePin: (id: string) => void;
+}) {
+  const emptyCount = KINDS.filter((k) => k.count === 0).length;
+  const Row = ({ k }: { k: Kind }) => {
+    const on = sel === k.id;
+    return (
+      <button onClick={() => onPick(k)} className="krow"
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", cursor: "pointer",
+          background: on ? "rgba(10,132,255,0.09)" : "transparent", borderRadius: 8, padding: "6px 8px" }}>
+        <k.icon size={13} style={{ color: on ? BLUE : UI.ink3, flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
+        <span role="button" onClick={(e) => { e.stopPropagation(); togglePin(k.id); }} className="kpin"
+          style={{ fontSize: 9, color: pinned.includes(k.id) ? BLUE : UI.ink3, opacity: pinned.includes(k.id) ? 1 : 0 }}>📌</span>
+        <span style={{ fontSize: 10, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? "rgba(10,132,255,0.12)" : "rgba(17,19,24,0.05)", borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count}</span>
+      </button>
+    );
+  };
+  return (
+    <nav style={{ width: 208, flexShrink: 0, borderRight: `1px solid ${UI.line}`, paddingRight: 12, display: "flex", flexDirection: "column", gap: 14, position: "sticky", top: 24, maxHeight: "calc(100vh - 60px)", overflowY: "auto" }}>
+      {pinned.length > 0 && (
+        <div>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 8px 5px" }}>즐겨찾기</div>
+          {KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
+        </div>
+      )}
+      {KIND_GROUPS.map((g) => {
+        const list = KINDS.filter((k) => k.group === g && (showEmpty || k.count > 0));
+        if (!list.length) return null;
+        return (
+          <div key={g}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 8px 5px" }}>{g}</div>
+            {list.map((k) => <Row key={k.id} k={k} />)}
+          </div>
+        );
+      })}
+      <button onClick={() => setShowEmpty(!showEmpty)}
+        style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: 10.5, cursor: "pointer", padding: "8px", borderTop: `1px solid ${UI.line2}` }}>
+        <Eye size={12} />{showEmpty ? "빈 종류 숨기기" : `빈 종류 ${emptyCount}개 보기`}
+      </button>
+    </nav>
+  );
+}
+
+// ── 종류별 목록 (시각화 대상이 아닌 종류도 정보를 잃지 않게) ─────────────────────────────
+function KindTable({ k }: { k: Kind }) {
+  const rows: { name: string; meta: string; state?: string; bad?: boolean }[] =
+    k.id === "Namespace" ? [...new Set(SERVICES.map((s) => s.ns))].map((ns) => ({
+      name: ns, meta: `워크로드 ${SERVICES.filter((s) => s.ns === ns).length} · 파드 ${PODS.filter((p) => SVC[p.svc].ns === ns).length}`, state: "Active",
+    }))
+    : k.id === "Event" ? PODS.filter((p) => p.crit || p.pending).map((p) => ({
+      name: `${p.svc}`, meta: `${p.node} · ${p.crit ? "OOMKilled — 컨테이너 메모리 한도 초과" : "Scheduled — 파드 생성 중"}`,
+      state: p.crit ? "Warning" : "Normal", bad: p.crit,
+    }))
+    : [];
+  return (
+    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, overflow: "hidden" }}>
+      {rows.length === 0 ? (
+        <div style={{ padding: "34px 18px", textAlign: "center", fontSize: 12, color: UI.ink3 }}>
+          이 클러스터에 {k.label} 리소스가 없습니다
+        </div>
+      ) : (
+        rows.map((r, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderTop: i ? `1px solid ${UI.line2}` : "none" }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: MONO, color: UI.ink, minWidth: 120 }}>{r.name}</span>
+            <span style={{ fontSize: 11, color: UI.ink3, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.meta}</span>
+            {r.state && <span style={{ fontSize: 10, fontWeight: 600, color: r.bad ? HP.crit : UI.ink2, border: `1px solid ${r.bad ? "#F0B8B4" : UI.line}`, borderRadius: 5, padding: "1px 7px", flexShrink: 0 }}>{r.state}</span>}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ── 통합 셸 ─────────────────────────────
 function App() {
   const [tick, setTick] = useState(0);
@@ -167,6 +273,19 @@ function App() {
   const [cfgLens, setCfgLens] = useState(false);
   const [direction, setDirection] = useState(1);
   const setV = (v: "physical" | "relation") => { setDirection(v === "relation" ? 1 : -1); setView(v); };
+  // 좌측 종류 인덱스
+  const [kind, setKind] = useState<string | null>(null);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [pinned, setPinned] = useState<string[]>([]);
+  const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const selKind = KINDS.find((k) => k.id === kind) ?? null;
+  // 종류 선택 → 그 종류의 자연스러운 관점으로 자동 전환 (렌즈형은 관점 유지 + 렌즈 ON)
+  const pickKind = (k: Kind) => {
+    setKind((cur) => (cur === k.id ? null : k.id));
+    if (k.view === "physical") setV("physical");
+    else if (k.view === "relation") setV("relation");
+    else if (k.view === "lens") setCfgLens(true);
+  };
 
   const pick = (id: string) => setFocus((cur) => (cur === id ? null : id));
   const meta = focus ? SVC[focus] : null;
@@ -218,15 +337,34 @@ function App() {
         </div>
 
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+          {/* 좌측: 리소스 종류 인덱스 (레퍼런스의 서브사이드바를 우리 관점 체계로 흡수) */}
+          <KindIndex sel={kind} onPick={pickKind} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} />
+
           <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
-            <AnimatePresence mode="popLayout" initial={false} custom={direction}>
-              <motion.div key={view} custom={direction}
-                initial={{ opacity: 0, x: 40 * direction, filter: "blur(6px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -36 * direction, filter: "blur(6px)" }} transition={PAGE}>
-                {view === "physical"
-                  ? <PhysicalView focus={focus} tick={tick} onPickSvc={pick} />
-                  : <RelationView focus={focus} onPickSvc={pick} />}
-              </motion.div>
-            </AnimatePresence>
+            {/* 종류를 골랐을 때: 무엇을 어떤 관점으로 보고 있는지 명시 (정보 누락 방지) */}
+            {selKind && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 11, color: UI.ink2 }}>
+                <selKind.icon size={13} style={{ color: BLUE }} />
+                <b style={{ fontWeight: 600, color: UI.ink }}>{selKind.label}</b>
+                <span style={{ fontFamily: MONO, color: UI.ink3 }}>{selKind.count}</span>
+                <span style={{ color: UI.ink3 }}>
+                  · {selKind.view === "physical" ? "물리 관점" : selKind.view === "relation" ? "관계 관점" : selKind.view === "lens" ? "렌즈로 강조" : "목록"}
+                </span>
+                <button onClick={() => setKind(null)} style={{ marginLeft: 2, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, borderRadius: 999, width: 18, height: 18, cursor: "pointer", fontSize: 9, lineHeight: 1 }}>✕</button>
+              </div>
+            )}
+            {selKind?.view === "table" ? (
+              <KindTable k={selKind} />
+            ) : (
+              <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+                <motion.div key={view} custom={direction}
+                  initial={{ opacity: 0, x: 40 * direction, filter: "blur(6px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -36 * direction, filter: "blur(6px)" }} transition={PAGE}>
+                  {view === "physical"
+                    ? <PhysicalView focus={focus} tick={tick} onPickSvc={pick} />
+                    : <RelationView focus={focus} onPickSvc={pick} />}
+                </motion.div>
+              </AnimatePresence>
+            )}
           </div>
 
           {/* 구성 렌즈 오버레이 패널 — 양쪽 관점 공통 */}
@@ -271,6 +409,9 @@ function App() {
         .uni .uflow { animation: uf linear infinite; }
         @keyframes uf { to { stroke-dashoffset: -28; } }
         .uni svg text { user-select: none; }
+        .uni .krow { transition: background .14s ease; }
+        .uni .krow:hover { background: rgba(17,19,24,0.045); }
+        .uni .krow:hover .kpin { opacity: .55 !important; }
         @media (prefers-reduced-motion: reduce) { .uni .utile.crit, .uni .uflow { animation: none !important; } }
       `}</style>
     </div>

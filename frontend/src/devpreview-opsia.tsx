@@ -145,10 +145,9 @@ function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: bool
         boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 2.5px ${BLUE}` : p.status === "Pending" ? "inset 0 0 0 1px rgba(17,19,24,0.07)" : "none",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0,
       }}>
-      {/* 이름은 그룹 헤더가 전담 — 타일 안엔 텍스트를 넣지 않아 대비 문제를 없앤다.
-          예외: 대기(미할당)는 상태 자체가 정보라 점선 링으로 표기. */}
+      {/* 이름은 그룹 헤더가 전담. 예외: 대기(생성 중)는 스피너로 진행 중임을 표기 */}
       {p.status === "Pending" && (
-        <span style={{ width: big ? 14 : 8, height: big ? 14 : 8, borderRadius: 999, border: `1.5px dashed ${UI.ink3}`, opacity: 0.65 }} />
+        <span className="podspin" style={{ width: big ? 13 : 8, height: big ? 13 : 8, borderRadius: 999, border: `1.5px solid rgba(17,19,24,0.14)`, borderTopColor: UI.ink3, boxSizing: "border-box" }} />
       )}
     </motion.button>
   );
@@ -225,7 +224,8 @@ function Spark({ id, base, tick, h = 22, color = HP.ok }: { id: string; base: nu
 }
 
 // ── 파드 표 행: 상태칩 · 이름 · 부하 · 재시작 · 나이 → 클릭 시 상세 ─────────────────────────────
-const PODCOLS = "16px minmax(0,1.4fr) 64px 74px 96px 96px 92px 92px 50px 44px 66px";
+// 이름 칸에 최소 폭을 보장해야 짜부라지지 않는다 (이미지 태그는 툴팁으로 이동)
+const PODCOLS = "14px minmax(148px,1.6fr) 46px 82px 78px 78px 42px 38px 60px";
 const hashOf = (p: Pod) => p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
 const ageOf = (p: Pod) => { const h = hashOf(p) % 220; return h < 24 ? `${h + 1}h` : `${Math.floor(h / 24)}d`; };
 const readyOf = (p: Pod) => (p.status === "Running" ? "1/1" : p.status === "Pending" ? "0/1" : "0/1");
@@ -244,12 +244,14 @@ function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; d
       className="podrow"
       style={{
         display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, width: "100%", textAlign: "left",
-        border: "none", background: lit ? "rgba(10,132,255,0.06)" : "transparent", borderRadius: 9, padding: "8px 10px", cursor: "pointer",
-        borderLeft: lit ? `2px solid ${BLUE}` : "2px solid transparent",
+        border: "none", background: lit ? "rgba(17,19,24,0.04)" : "transparent", borderRadius: 9, padding: "8px 10px", cursor: "pointer",
       }}>
       {/* 상태 사각형 */}
-      <span title={stLabel} className={isCrit(p) ? "stchip crit" : "stchip"}
-        style={{ width: 12, height: 12, borderRadius: 4, background: p.status === "Pending" ? "transparent" : c, border: p.status === "Pending" ? `1.5px dashed ${UI.ink3}` : "none", boxSizing: "border-box" }} />
+      {p.status === "Pending" ? (
+        <span title="생성 중" className="podspin" style={{ width: 12, height: 12, borderRadius: 999, border: "1.5px solid rgba(17,19,24,0.14)", borderTopColor: UI.ink3, boxSizing: "border-box" }} />
+      ) : (
+        <span title={stLabel} className={isCrit(p) ? "stchip crit" : "stchip"} style={{ width: 12, height: 12, borderRadius: 4, background: c }} />
+      )}
       {/* 이름 + 상태 라벨 */}
       <span style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
@@ -257,8 +259,6 @@ function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; d
       </span>
       {/* Ready 컨테이너 */}
       <span style={{ fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: p.status === "Running" ? UI.ink2 : HP.crit, fontWeight: p.status === "Running" ? 500 : 700 }}>{readyOf(p)}</span>
-      {/* 이미지 태그 */}
-      <span style={{ fontSize: 10.5, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{imageOf(p)}</span>
       {/* QoS 클래스 */}
       <span style={{ fontSize: 9.5, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", justifySelf: "start", whiteSpace: "nowrap" }}>{qosOf(p)}</span>
       <MiniBar v={cpuV} />
@@ -297,17 +297,17 @@ function MetricCell({ label, value, unit, tone, sub, spark, bar }: {
   spark?: { id: string; base: number; tick: number }; bar?: number;
 }) {
   return (
-    <div style={{ background: UI.card, padding: "11px 13px 9px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+    <div style={{ padding: "0 18px", borderLeft: `1px solid ${UI.line2}`, display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
       <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, textTransform: "uppercase" }}>{label}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-        <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><Num v={value} /></span>
+        <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><Num v={value} /></span>
         <span style={{ fontSize: 10, fontWeight: 600, color: UI.ink3 }}>{unit}</span>
-        {sub && <span style={{ marginLeft: "auto", fontSize: 9.5, color: UI.ink3, fontFamily: MONO, whiteSpace: "nowrap" }}>{sub}</span>}
+        {sub && <span style={{ marginLeft: "auto", fontSize: 9.5, color: UI.ink3, fontFamily: MONO, whiteSpace: "nowrap", alignSelf: "center" }}>{sub}</span>}
       </div>
-      <div style={{ height: 20 }}>
-        {spark && <Spark id={spark.id} base={spark.base} tick={spark.tick} h={20} color={tone} />}
+      <div style={{ height: 22 }}>
+        {spark && <Spark id={spark.id} base={spark.base} tick={spark.tick} h={22} color={tone} />}
         {bar !== undefined && (
-          <div style={{ marginTop: 7, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
+          <div style={{ marginTop: 9, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
             <motion.div animate={{ width: `${Math.min(100, bar * 100)}%` }} transition={{ duration: 1.2, ease: "easeInOut" }} style={{ height: "100%", borderRadius: 999, background: tone }} />
           </div>
         )}
@@ -366,8 +366,8 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
         </span>
       </div>
       {expanded ? (
-        // 노드 메트릭 — 지표마다 값 + 추이를 한 칸에 (CPU 중복 제거)
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: UI.line, border: `1px solid ${UI.line}`, borderRadius: 12, overflow: "hidden" }}>
+        // 노드 메트릭 — 카드 없이 플랫, 헤어라인 구분만
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: `1px solid ${UI.line}`, paddingBottom: 14 }}>
           <MetricCell label="CPU" value={avgC} unit="%" tone={avgC >= 90 ? HP.crit : avgC >= 75 ? HP.warn : HP.ok} spark={{ id: `${node.id}-c`, base: avgC, tick }} />
           <MetricCell label="MEM" value={avgM} unit="%" tone={avgM >= 90 ? HP.crit : avgM >= 75 ? HP.warn : HP.ok} spark={{ id: `${node.id}-m`, base: avgM, tick }} />
           <MetricCell label="파드 밀도" value={Math.round((np.length / node.cap) * 100)} unit="%" tone={BLUE} sub={`${np.length} / ${node.cap} 슬롯`} bar={np.length / node.cap} />
@@ -381,17 +381,11 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
       {expanded ? (
         // 파드뷰 = 표. 상태 · 이름 · 워크로드 · 부하 · 재시작 · 나이 → 클릭하면 상세.
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>파드 {np.length}</span>
-            <span style={{ fontSize: 10.5, color: UI.ink3, lineHeight: 1.5 }}>
-              워크로드(Deployment·StatefulSet)별로 묶었습니다 — 워크로드가 곧 스케일링 단위라 같은 이미지·설정의 복제본이 한 줄에 모입니다.
-              순서는 <b style={{ color: UI.ink2, fontWeight: 600 }}>임계 → 부하 높은 순 → 대기(미할당)</b>.
-            </span>
-          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>파드 {np.length}</span>
 
           {/* 표 헤더 */}
           <div style={{ display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
-            <span>상태</span><span>파드</span><span>READY</span><span>이미지</span><span>QOS</span><span>CPU</span><span>MEM</span><span style={{ textAlign: "right" }}>재시작</span><span style={{ textAlign: "right" }}>나이</span><span />
+            <span>상태</span><span>파드</span><span>READY</span><span>QOS</span><span>CPU</span><span>MEM</span><span style={{ textAlign: "right" }}>재시작</span><span style={{ textAlign: "right" }}>나이</span><span />
           </div>
 
           {(() => {
@@ -420,9 +414,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
           })()}
 
           {node.cap - np.length > 0 && (
-            <div style={{ fontSize: 10, color: UI.ink3, display: "flex", alignItems: "center", gap: 7, padding: "8px 10px 0", borderTop: `1px solid ${UI.line2}` }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, border: "1px dashed #D8DBE1", boxSizing: "border-box" }} />남은 슬롯 {node.cap - np.length} · 스케줄 가능
-            </div>
+            <div style={{ fontSize: 10, color: UI.ink3, padding: "8px 10px 0", borderTop: `1px solid ${UI.line2}` }}>남은 슬롯 {node.cap - np.length}</div>
           )}
         </div>
       ) : (
@@ -448,47 +440,45 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
   const chot = cp.filter(isCrit).length;
   const nodes = NODES.filter((n) => n.cluster === cl.id);
   const rel = cp.filter((p) => related.has(p.id)).length;
+  const nOk = cp.filter((p) => p.status === "Running" && health(p) < 75).length;
+  const nWarn = cp.filter((p) => p.status === "Running" && health(p) >= 75 && !isCrit(p)).length;
+  const nPend = cp.filter((p) => p.status === "Pending").length;
+  const total = cp.length || 1;
+  const segs: [number, string][] = [[nOk, HP.ok], [nWarn, HP.warn], [chot, HP.crit], [nPend, HP.pending]];
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
       style={{
-        display: "grid", gridTemplateColumns: "270px 1fr 140px 96px 56px", alignItems: "center", columnGap: 24,
-        width: "100%", textAlign: "left", cursor: "pointer",
-        background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: "20px 24px", boxShadow: "none",
+        display: "flex", flexDirection: "column", gap: 14, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
+        background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, boxShadow: "none", boxSizing: "border-box",
       }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* 배포 플랫폼 로고 */}
-          <EksIcon size={17} style={{ color: "#FF9900", flexShrink: 0 }} />
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO }}>{cl.id}</span>
-          {/* env 뱃지: 실서비스(prod)만 강조 — dev는 기본이라 뱃지 생략 */}
-          {cl.env === "prod" && <span title="실서비스 트래픽이 흐르는 클러스터" style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", color: "#B25A00", border: "1px solid #F3D8B7", background: "#FFF8EF", borderRadius: 6, padding: "1.5px 7px" }}>prod</span>}
-          {chot > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 6, padding: "1.5px 7px", fontVariantNumeric: "tabular-nums" }}>임계 {chot}</span>}
-        </div>
-        <div style={{ fontSize: 11, color: UI.ink3, marginTop: 4, marginLeft: 25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.platform} · {cl.region} · 노드 {nodes.length} · 파드 {cp.length}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,153,0,0.1)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <EksIcon size={15} style={{ color: "#FF9900" }} />
+        </span>
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
+            {cl.env === "prod" && <span style={{ fontSize: 9.5, fontWeight: 600, color: "#B25A00", border: "1px solid #F3D8B7", background: "#FFF8EF", borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
+          </span>
+          <span style={{ display: "block", fontSize: 10.5, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.platform} · {cl.region}</span>
+        </span>
+        {chot > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 6, padding: "2px 7px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{chot}⚠</span>}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, maxWidth: 300 }}>
+
+      <Spark id={cl.id} base={avgC} tick={tick} h={34} color={avgC >= 75 ? HP.warn : HP.ok} />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <Gauge label="CPU" v={avgC} /><Gauge label="MEM" v={avgM} />
       </div>
-      <div style={{ borderLeft: `1px solid ${UI.line2}`, paddingLeft: 20 }}><Spark id={cl.id} base={avgC} tick={tick} h={28} color={avgC >= 75 ? HP.warn : HP.ok} /></div>
-      {/* 파드 상태 분포 (정상/경고/임계/대기 비율) */}
-      {(() => {
-        const nOk = cp.filter((p) => p.status === "Running" && health(p) < 75).length;
-        const nWarn = cp.filter((p) => p.status === "Running" && health(p) >= 75 && !isCrit(p)).length;
-        const nPend = cp.filter((p) => p.status === "Pending").length;
-        const total = cp.length || 1;
-        const segs: [number, string][] = [[nOk, HP.ok], [nWarn, HP.warn], [chot, HP.crit], [nPend, HP.pending]];
-        return (
-          <div title={`정상 ${nOk} · 경고 ${nWarn} · 임계 ${chot} · 대기 ${nPend}`} style={{ width: 96 }}>
-            <div style={{ display: "flex", height: 6, borderRadius: 999, overflow: "hidden", gap: 1 }}>
-              {segs.filter(([n]) => n > 0).map(([n, c], i) => <span key={i} style={{ flex: n / total, background: c }} />)}
-            </div>
-            <div style={{ fontSize: 9, color: UI.ink3, marginTop: 5, letterSpacing: "0.03em" }}>파드 상태 분포</div>
-          </div>
-        );
-      })()}
-      {/* 항상 자리를 차지 — 나타나고 사라질 때 레이아웃이 밀리지 않는다 */}
-      <span style={{ fontSize: 10.5, fontWeight: 700, color: BLUE, fontFamily: MONO, textAlign: "right", opacity: rel > 0 ? 1 : 0, transition: "opacity .2s ease" }}>{rel} 관련</span>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
+        <span title={`정상 ${nOk} · 경고 ${nWarn} · 임계 ${chot} · 대기 ${nPend}`} style={{ display: "flex", height: 5, borderRadius: 999, overflow: "hidden", gap: 1, flex: 1 }}>
+          {segs.filter(([n]) => n > 0).map(([n, c], i) => <span key={i} style={{ flex: n / total, background: c }} />)}
+        </span>
+        <span style={{ fontSize: 10, color: UI.ink3, fontFamily: MONO, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>노드 {nodes.length} · 파드 {cp.length}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: BLUE, fontFamily: MONO, opacity: rel > 0 ? 1 : 0, transition: "opacity .2s ease", flexShrink: 0 }}>{rel}</span>
+      </div>
     </motion.button>
   );
 }
@@ -633,9 +623,9 @@ function App() {
                 initial="initial" animate="animate" exit="exit" transition={PAGE}>
 
                 {view.level === "clusters" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, alignItems: "stretch" }}>
                     {CLUSTERS.map((cl, i) => (
-                      <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }}>
+                      <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
                         <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
                       </motion.div>
                     ))}
@@ -687,7 +677,7 @@ function App() {
                   <span style={{ width: 7, height: 7, borderRadius: 999, background: healthColor(p), flexShrink: 0 }} />
                   <span style={{ fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{p.name}</span>
                 </div>
-                <div style={{ fontSize: 10, color: UI.ink3, marginTop: 2, marginLeft: 13 }}>{p.svc} · {p.status}{p.restarts > 0 ? ` · 재시작 ${p.restarts}` : ""}</div>
+                <div style={{ fontSize: 10, color: UI.ink3, marginTop: 2, marginLeft: 13 }}>{p.svc} · {p.status}{p.restarts > 0 ? ` · 재시작 ${p.restarts}` : ""} · {imageOf(p)} · {qosOf(p)}</div>
                 {tip.list.length === 1 && (
                   <div style={{ display: "flex", gap: 10, marginTop: 5, marginLeft: 13, fontSize: 10, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                     <span style={{ color: UI.ink2 }}>CPU <b style={{ color: UI.ink }}>{p.cpu}%</b></span>
@@ -709,11 +699,13 @@ function App() {
         .op .pacts { opacity: 0; transition: opacity .15s ease; }
         .op .podrow:hover .pacts { opacity: 1; }
         .op .pact:hover { background: rgba(17,19,24,0.07); color: ${UI.ink} !important; }
+        .op .podspin { animation: podspin 0.9s linear infinite; }
+        @keyframes podspin { to { transform: rotate(360deg); } }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.12) saturate(1.15); } }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
         .op ::-webkit-scrollbar { width: 8px; } .op ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }
-        @media (prefers-reduced-motion: reduce) { .tile.crit, .pulsedot { animation: none !important; } }
+        @media (prefers-reduced-motion: reduce) { .tile.crit, .pulsedot, .podspin { animation: none !important; } }
       `}</style>
     </div>
   );
@@ -751,10 +743,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
           </motion.div>
         ) : (
           <motion.div key="lens" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={SOFT} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ padding: "2px 2px 0" }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>연결 보기</div>
-              <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 2 }}>올리면 관련 파드가 밝게 표시 · 클릭 = 고정</div>
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>연결 보기</div>
             <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.04)", borderRadius: 10, padding: 3 }}>
               {([["svc", "서비스", Layers3], ["cfg", "설정", FileCog], ["git", "배포", GithubIcon]] as const).map(([id, label, I]) => {
                 const on = tab === id;

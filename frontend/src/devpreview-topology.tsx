@@ -2,7 +2,7 @@
 // 분업: 맵 = 물리 · 토폴로지 = 호출 · 렌즈 = 의존 · 상세 = 전체 스펙. 설정 의존성은 통합 맵 렌즈가 주인.
 // 드래그 재배치 + 방향 화살표 + 선 호버 = 수치 + 선 클릭 = 오류 상세 고정.
 import ReactDOM from "react-dom/client";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
 import "./styles/tokens.css";
@@ -90,119 +90,12 @@ const edgeMetrics = (e: TEdge) => {
   return { err, p99, st };
 };
 
-// ── 흐름(Sankey 리본) 뷰 ─────────────────────────────
-// 레이어별 세로 스택 + 링크 두께 = rps. 장애 경로는 색이 바뀌고 흐름이 빨라진다. 노드 클릭 = 파드 상세.
-const FW = 940, FH = 470, FNW = 132, FPAD = 12;
-function ribbon(x1: number, y1: number, x2: number, y2: number, w1: number, w2: number) {
-  const mx = (x1 + x2) / 2;
-  return `M ${x1} ${y1 - w1 / 2} C ${mx} ${y1 - w1 / 2}, ${mx} ${y2 - w2 / 2}, ${x2} ${y2 - w2 / 2}`
-    + ` L ${x2} ${y2 + w2 / 2} C ${mx} ${y2 + w2 / 2}, ${mx} ${y1 + w1 / 2}, ${x1} ${y1 + w1 / 2} Z`;
-}
-
-function FlowView({ focus, pinEdge, setSel, setPinEdge, setEtip, ekey }: {
-  focus: string | null; pinEdge: TEdge | null; setSel: (v: string | null) => void; setPinEdge: (e: TEdge | null) => void;
-  setEtip: (v: { x: number; y: number; e: TEdge } | null) => void; ekey: (e: TEdge) => string;
-}) {
-  const layout = useMemo(() => {
-    const byLayer = new Map<number, Svc[]>();
-    SERVICES.forEach((s) => { const a = byLayer.get(s.layer) ?? []; a.push(s); byLayer.set(s.layer, a); });
-    const flowOf = (id: string) => Math.max(
-      EDGES.filter((e) => e.to === id).reduce((t, e) => t + e.rps, 0),
-      EDGES.filter((e) => e.from === id).reduce((t, e) => t + e.rps, 0), 120);
-    const layers = [...byLayer.keys()].sort((a, b) => a - b);
-    const pos = new Map<string, { x: number; y: number; h: number }>();
-    const colW = (FW - FNW) / (layers.length - 1 || 1);
-    layers.forEach((L, li) => {
-      const list = byLayer.get(L)!;
-      const total = list.reduce((s, x) => s + flowOf(x.id), 0);
-      const avail = FH - FPAD * (list.length + 1);
-      let y = FPAD;
-      list.forEach((s) => {
-        const h = Math.max(34, (flowOf(s.id) / total) * avail);
-        pos.set(s.id, { x: li * colW, y, h });
-        y += h + FPAD;
-      });
-    });
-    return { pos, flowOf };
-  }, []);
-
-  const links = useMemo(() => {
-    const outAcc = new Map<string, number>(), inAcc = new Map<string, number>();
-    const scale = (id: string) => { const p = layout.pos.get(id)!; return p.h / Math.max(layout.flowOf(id), 1); };
-    return EDGES.map((e) => {
-      const a = layout.pos.get(e.from)!, b = layout.pos.get(e.to)!;
-      const w1 = Math.max(3, e.rps * scale(e.from) * 0.92), w2 = Math.max(3, e.rps * scale(e.to) * 0.92);
-      const o1 = outAcc.get(e.from) ?? 0, o2 = inAcc.get(e.to) ?? 0;
-      outAcc.set(e.from, o1 + w1); inAcc.set(e.to, o2 + w2);
-      return { e, x1: a.x + FNW, y1: a.y + o1 + w1 / 2, x2: b.x, y2: b.y + o2 + w2 / 2, w1, w2 };
-    });
-  }, [layout]);
-
-  return (
-    <svg viewBox={`0 0 ${FW} ${FH}`} width="100%" style={{ display: "block" }} onMouseLeave={() => { setSel(null); setEtip(null); }}>
-      <defs>
-        {EDGES.map((e) => {
-          const st = SVC(e.to).status;
-          const c = st === "crit" ? ST.crit : st === "warn" ? ST.warn : BLUE;
-          return (
-            <linearGradient key={ekey(e)} id={`rb-${ekey(e)}`} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={SVC(e.from).status === "crit" ? ST.crit : "#8FBEF0"} stopOpacity={0.42} />
-              <stop offset="100%" stopColor={c} stopOpacity={st === "ok" ? 0.46 : 0.72} />
-            </linearGradient>
-          );
-        })}
-      </defs>
-
-      {links.map(({ e, x1, y1, x2, y2, w1, w2 }) => {
-        const pinned = pinEdge && ekey(pinEdge) === ekey(e);
-        const on = pinEdge ? !!pinned : !focus || focus === e.from || focus === e.to;
-        const dur = Math.max(0.7, 2.4 - e.rps / 700);
-        return (
-          <g key={ekey(e)} style={{ opacity: on ? 1 : 0.07, transition: "opacity .2s", cursor: "pointer" }}
-            onClick={() => setPinEdge(pinned ? null : e)}
-            onMouseEnter={(ev) => { setEtip({ x: ev.clientX, y: ev.clientY, e }); setSel(null); }}
-            onMouseMove={(ev) => setEtip({ x: ev.clientX, y: ev.clientY, e })}
-            onMouseLeave={() => setEtip(null)}>
-            <path d={ribbon(x1, y1, x2, y2, w1, w2)} fill={`url(#rb-${ekey(e)})`} />
-            <path d={`M ${x1} ${y1} C ${(x1 + x2) / 2} ${y1}, ${(x1 + x2) / 2} ${y2}, ${x2} ${y2}`} fill="none"
-              stroke="#fff" strokeOpacity={0.6} strokeWidth={Math.max(1.4, Math.min(w1, w2) * 0.2)} strokeLinecap="round"
-              strokeDasharray="2 22" className="rflow" style={{ animationDuration: `${dur}s` }} />
-          </g>
-        );
-      })}
-
-      {SERVICES.map((s) => {
-        const p = layout.pos.get(s.id)!;
-        const on = focus === s.id;
-        const rps = EDGES.filter((e) => e.from === s.id).reduce((t, e) => t + e.rps, 0) || EDGES.filter((e) => e.to === s.id).reduce((t, e) => t + e.rps, 0);
-        const c = ST[s.status];
-        const related = !focus || focus === s.id || EDGES.some((e) => (e.from === focus && e.to === s.id) || (e.to === focus && e.from === s.id));
-        return (
-          <g key={s.id} onMouseEnter={() => setSel(s.id)} onClick={() => { window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
-            style={{ cursor: "pointer", opacity: related ? 1 : 0.22, transition: "opacity .2s" }}>
-            <clipPath id={`fc-${s.id}`}><rect x={p.x} y={p.y} width={FNW} height={p.h} rx={9} /></clipPath>
-            <rect x={p.x} y={p.y} width={FNW} height={p.h} rx={9} fill={UI.card} stroke={on ? BLUE : UI.line} strokeWidth={on ? 1.5 : 1}
-              style={{ filter: on ? "drop-shadow(0 8px 18px rgba(10,132,255,0.18))" : "drop-shadow(0 1px 2px rgba(17,19,24,0.06))" }} />
-            <rect x={p.x} y={p.y} width={3.5} height={p.h} fill={c} clipPath={`url(#fc-${s.id})`} />
-            <g clipPath={`url(#fc-${s.id})`}>
-              <text x={p.x + 14} y={p.y + 19} fontSize="11" fontWeight="600" fill={UI.ink} fontFamily={MONO} letterSpacing="-0.01em">{s.id}</text>
-              <text x={p.x + 14} y={p.y + 33} fontSize="8.5" fill={UI.ink3}>{s.kind} · ×{s.replicas}</text>
-              {p.h > 56 && <text x={p.x + 14} y={p.y + p.h - 11} fontSize="9" fill={s.status === "ok" ? UI.ink3 : c} fontFamily={MONO} fontWeight={s.status === "ok" ? 400 : 700}>{rps.toLocaleString()} rps</text>}
-            </g>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
 function App() {
   const [pos, setPos] = useState(INIT);
   const [sel, setSel] = useState<string | null>(() => readDevpreviewTopologyFocus(SERVICES.map((s) => s.id)));
   const [etip, setEtip] = useState<{ x: number; y: number; e: TEdge } | null>(null);
   const [pinEdge, setPinEdge] = useState<TEdge | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"graph" | "flow">("flow");
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
 
@@ -236,18 +129,7 @@ function App() {
       <div style={{ width: 992, maxWidth: "100%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
           <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>
-          <div style={{ fontSize: 12, color: UI.ink3 }}>prod-eks · shop · {mode === "flow" ? "리본 두께 = 트래픽량 · 클릭 = 파드 상세" : "드래그 재배치 · 더블클릭 = 맵에서 보기"}</div>
-          <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.05)", borderRadius: 9, padding: 3, marginLeft: 4 }}>
-            {([["graph", "그래프"], ["flow", "흐름"]] as const).map(([id, l]) => {
-              const on = mode === id;
-              return (
-                <button key={id} onClick={() => setMode(id)} style={{ position: "relative", padding: "5px 14px", borderRadius: 7, border: "none", background: "transparent", cursor: "pointer" }}>
-                  {on && <motion.span layoutId="tmode" transition={{ type: "spring", bounce: 0.14, visualDuration: 0.28 }} style={{ position: "absolute", inset: 0, borderRadius: 7, background: "#fff", boxShadow: "0 1px 3px rgba(17,19,24,0.12)" }} />}
-                  <span style={{ position: "relative", fontSize: 11.5, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>{l}</span>
-                </button>
-              );
-            })}
-          </div>
+          <div style={{ fontSize: 12, color: UI.ink3 }}>prod-eks · shop · 호출 흐름 — 드래그 재배치 · 더블클릭 = 맵에서 보기</div>
           {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
           <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
             {([["맵", "devpreview-opsia.html", false], ["토폴로지", "devpreview-topology.html", true], ["연결", "devpreview-connect.html", false], ["AI", "devpreview-ai.html", false]] as const).map(([l, href, act]) => (
@@ -300,9 +182,6 @@ function App() {
             );
           })()}
 
-          {mode === "flow" ? (
-            <FlowView focus={sel} pinEdge={pinEdge} setSel={setSel} setPinEdge={setPinEdge} setEtip={setEtip} ekey={ekey} />
-          ) : (
           <svg ref={svgRef} viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display: "block", touchAction: "none" }}
             onPointerMove={onMove} onPointerUp={endDrag} onPointerLeave={() => { if (!dragRef.current) { setSel(null); setEtip(null); } }}>
             <defs>
@@ -363,7 +242,6 @@ function App() {
               );
             })}
           </svg>
-          )}
 
           {/* 레전드 */}
           <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11, color: UI.ink2, alignItems: "center" }}>
@@ -408,8 +286,6 @@ function App() {
         .tp { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .tp .flow { animation: flowmove linear infinite; }
         @keyframes flowmove { to { stroke-dashoffset: -28; } }
-        .tp .rflow { animation: rflowmove linear infinite; }
-        @keyframes rflowmove { to { stroke-dashoffset: -48; } }
         .tp svg text { user-select: none; }
         @media (prefers-reduced-motion: reduce) { .tp .flow { animation: none !important; } }
       `}</style>
