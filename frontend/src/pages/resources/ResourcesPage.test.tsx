@@ -207,6 +207,26 @@ describe("ResourcesPage scope and collection semantics", () => {
     ).toBeNull();
   });
 
+  it("keeps a section 429 inside the resource surface", async () => {
+    const reportUnauthorized = vi.fn();
+    const port = resourcesPort({
+      loadCatalog: vi
+        .fn()
+        .mockRejectedValue(new ResourcesPortFailure("rate-limited", 23)),
+    });
+    renderResources(
+      port,
+      "/resources?clusters=cluster-1&resources.types=pod",
+      resourcesClusterPort(),
+      reportUnauthorized,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "요청 한도에 도달했습니다" }),
+    ).toBeTruthy();
+    expect(reportUnauthorized).not.toHaveBeenCalled();
+  });
+
   it("renders a first-class cluster-read 403 and removes cached resource content", async () => {
     const port = resourcesPort({
       loadCatalog: vi

@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import Literal
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from passwords import normalize_email
 from settings import Settings
 
 from packages.contracts.interfaces import SessionStore
 from packages.storage.sessions import RateLimitExceeded
+
+AuthenticatedRequestClass = Literal["read", "mutation"]
+READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 @dataclass(frozen=True)
@@ -48,14 +52,83 @@ class AuthRateLimiter:
                 policy.strike_ttl_seconds,
             )
         except RateLimitExceeded as exc:
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "code": "rate_limited",
-                    "detail": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
-                    "retry_after": exc.retry_after_seconds,
-                },
-            ) from None
+            raise _rate_limited_http_exception(exc) from None
+
+
+@dataclass(frozen=True)
+class AuthenticatedRequestRateLimitPolicy:
+    request_class: AuthenticatedRequestClass
+    session_limit: int
+    user_limit: int | None
+    window_seconds: int
+
+
+class AuthenticatedRequestRateLimiter:
+    def __init__(self, sessions: SessionStore) -> None:
+        self.sessions = sessions
+
+    async def check(self, request: Request, *, token: str, user_id: str) -> None:
+        policy = authenticated_request_rate_limit_policy(str(request.scope.get("method", "GET")))
+        session_key = _session_request_key(policy.request_class, token)
+        try:
+            await self.sessions.check_rate_limit(
+                session_key,
+                policy.session_limit,
+                policy.window_seconds,
+            )
+            if policy.user_limit is not None:
+                await self.sessions.check_rate_limit(
+                    _user_request_key(policy.request_class, user_id),
+                    policy.user_limit,
+                    policy.window_seconds,
+                )
+        except RateLimitExceeded as exc:
+            raise _rate_limited_http_exception(exc, policy.request_class) from None
+
+
+def authenticated_request_rate_limit_policy(
+    method: str,
+) -> AuthenticatedRequestRateLimitPolicy:
+    if method.upper() in READ_ONLY_METHODS:
+        return AuthenticatedRequestRateLimitPolicy(
+            request_class="read",
+            session_limit=Settings.AUTHENTICATED_READ_RATE_LIMIT,
+            user_limit=None,
+            window_seconds=Settings.AUTHENTICATED_READ_RATE_WINDOW_SECONDS,
+        )
+    return AuthenticatedRequestRateLimitPolicy(
+        request_class="mutation",
+        session_limit=Settings.AUTHENTICATED_MUTATION_SESSION_RATE_LIMIT,
+        user_limit=Settings.AUTHENTICATED_MUTATION_USER_RATE_LIMIT,
+        window_seconds=Settings.AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS,
+    )
+
+
+def _session_request_key(request_class: AuthenticatedRequestClass, token: str) -> str:
+    return f"authenticated:{request_class}:session:{stable_rate_key(token)}"
+
+
+def _user_request_key(request_class: AuthenticatedRequestClass, user_id: str) -> str:
+    return f"authenticated:{request_class}:user:{stable_rate_key(user_id)}"
+
+
+def _rate_limited_http_exception(
+    exc: RateLimitExceeded,
+    request_class: AuthenticatedRequestClass | None = None,
+) -> HTTPException:
+    retry_after = exc.retry_after_seconds or 1
+    detail: dict[str, str | int] = {
+        "code": "rate_limited",
+        "detail": Settings.RATE_LIMIT_EXCEEDED_MESSAGE,
+        "retry_after": retry_after,
+    }
+    if request_class is not None:
+        detail["request_class"] = request_class
+    return HTTPException(
+        status_code=429,
+        detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 def signup_rate_limit_policy() -> AuthRateLimitPolicy:

@@ -9,6 +9,7 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
+from math import ceil
 from typing import Literal, Protocol, TypeVar, runtime_checkable
 
 from redis.asyncio import Redis as AsyncRedis
@@ -214,9 +215,10 @@ class MemorySessionStore:
         events = self.rate_events[key]
         while events and events[0] <= now - window:
             events.popleft()
+        if len(events) >= threshold:
+            retry_after = max(1, ceil(events[0] + window - now))
+            raise RateLimitExceeded(retry_after)
         events.append(now)
-        if len(events) > threshold:
-            raise RateLimitExceeded
 
     async def check_escalating_rate_limit(
         self,
@@ -475,7 +477,8 @@ class RedisSessionStore:
             if count == 1:
                 await client.expire(redis_key, window)
             if count > threshold:
-                raise RateLimitExceeded
+                retry_after = await client.ttl(redis_key)
+                raise RateLimitExceeded(max(1, retry_after))
 
         await self._with_client(check)
 

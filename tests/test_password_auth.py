@@ -13,6 +13,7 @@ from fastapi import HTTPException, Request
 from starlette.datastructures import Headers
 
 from controller.demo_workspace import DEFAULT_DESCRIPTOR, load_descriptor
+from packages.storage.sessions import MemorySessionStore, RateLimitExceeded, RedisSessionStoreConfig
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 AUTH_PATH = ROOT_DIR / "src" / "services" / "gateway" / "api-gateway" / "auth.py"
@@ -351,6 +352,7 @@ class StubSessionStore:
         self.email_tokens: dict[str, dict[str, str]] = {}
         self.rate_checks: list[tuple[Any, ...]] = []
         self.block_rate_limit = False
+        self.block_retry_after_seconds: int | None = None
 
     async def create_session(
         self,
@@ -389,7 +391,7 @@ class StubSessionStore:
     ) -> None:
         self.rate_checks.append(("plain", key, limit, window_seconds))
         if self.block_rate_limit:
-            raise self.auth_module.RateLimitExceeded
+            raise RateLimitExceeded(self.block_retry_after_seconds)
 
     async def check_escalating_rate_limit(
         self,
@@ -403,7 +405,7 @@ class StubSessionStore:
             ("escalating", key, limit, window_seconds, lock_steps_seconds, strike_ttl_seconds)
         )
         if self.block_rate_limit:
-            raise self.auth_module.RateLimitExceeded(lock_steps_seconds[0])
+            raise RateLimitExceeded(lock_steps_seconds[0])
 
     async def create_email_verification_token(self, user_id: str, email: str) -> str:
         token = f"email-token-{len(self.email_tokens) + 1}"
@@ -438,6 +440,130 @@ def test_session_auth_requires_real_session_by_default(monkeypatch) -> None:
 
         assert exc.value.status_code == 401
         assert exc.value.detail == auth.Settings.AUTHENTICATION_REQUIRED_MESSAGE
+
+    asyncio.run(run())
+
+
+def test_authenticated_request_policies_separate_read_and_mutation_budgets() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        sessions = StubSessionStore(auth)
+        current = auth.AuthSession("session-a", "user-a", ["user"], "default")
+        sessions.sessions[current.token] = current
+        service = auth.SessionAuthService(sessions)
+
+        await service.require_session(
+            Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "headers": [(b"x-session-token", current.token.encode())],
+                }
+            )
+        )
+        await service.require_session(
+            Request(
+                {
+                    "type": "http",
+                    "method": "POST",
+                    "headers": [(b"x-session-token", current.token.encode())],
+                }
+            )
+        )
+
+        read_check, mutation_session_check, mutation_user_check = sessions.rate_checks
+        assert read_check[0] == "plain"
+        assert read_check[2:] == (
+            auth.Settings.AUTHENTICATED_READ_RATE_LIMIT,
+            auth.Settings.AUTHENTICATED_READ_RATE_WINDOW_SECONDS,
+        )
+        assert mutation_session_check[2:] == (
+            auth.Settings.AUTHENTICATED_MUTATION_SESSION_RATE_LIMIT,
+            auth.Settings.AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS,
+        )
+        assert mutation_user_check[2:] == (
+            auth.Settings.AUTHENTICATED_MUTATION_USER_RATE_LIMIT,
+            auth.Settings.AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS,
+        )
+        assert ":read:session:" in read_check[1]
+        assert ":mutation:session:" in mutation_session_check[1]
+        assert ":mutation:user:" in mutation_user_check[1]
+        assert "session-a" not in read_check[1]
+        assert "user-a" not in mutation_user_check[1]
+
+    asyncio.run(run())
+
+
+def test_authenticated_read_burst_isolated_between_same_user_sessions() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        store = MemorySessionStore(
+            RedisSessionStoreConfig(
+                url="redis://localhost:6379/0",
+                ttl_seconds=60,
+                key_prefix="session",
+                token_bytes=32,
+                default_roles=("user",),
+                default_workspace_id="default",
+                rate_limit_key_prefix="rate",
+                rate_limit=1,
+                rate_limit_window_seconds=60,
+                email_verification_key_prefix="email_verify",
+                email_verification_ttl_seconds=3600,
+                email_verification_token_bytes=32,
+            )
+        )
+        await store.connect()
+        first = await store.create_session("shared-user", ["user"], "default")
+        second = await store.create_session("shared-user", ["user"], "default")
+        service = auth.SessionAuthService(store)
+
+        # Cold resource shell plus ten detail views stays inside the configured
+        # read burst budget, and a deployment-smoke session has an independent key.
+        requests_per_session = 220
+        for session in (first, second):
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "headers": [(b"x-session-token", session.token.encode())],
+                }
+            )
+            for _ in range(requests_per_session):
+                assert await service.require_session(request) is session
+
+        read_event_counts = sorted(
+            len(events) for key, events in store.rate_events.items() if ":read:session:" in key
+        )
+        assert read_event_counts == [requests_per_session, requests_per_session]
+
+    asyncio.run(run())
+
+
+def test_authenticated_rate_limit_includes_retry_after_header() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        sessions = StubSessionStore(auth)
+        current = auth.AuthSession("session-a", "user-a", ["user"], "default")
+        sessions.sessions[current.token] = current
+        sessions.block_rate_limit = True
+        sessions.block_retry_after_seconds = 23
+
+        with pytest.raises(HTTPException) as exc_info:
+            await auth.SessionAuthService(sessions).require_session(
+                Request(
+                    {
+                        "type": "http",
+                        "method": "GET",
+                        "headers": [(b"x-session-token", current.token.encode())],
+                    }
+                )
+            )
+
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.headers == {"Retry-After": "23"}
+        assert exc_info.value.detail["retry_after"] == 23
+        assert exc_info.value.detail["request_class"] == "read"
 
     asyncio.run(run())
 
@@ -630,6 +756,7 @@ def test_password_signup_rate_limit_blocks_before_user_lookup() -> None:
                 "local@example.com", "local-password", "local-password", "127.0.0.1"
             )
         assert exc.value.status_code == 429
+        assert exc.value.headers == {"Retry-After": "900"}
         assert users.users == {}
 
     asyncio.run(run())

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 from passwords import default_display_name, hash_password, normalize_email, verify_password
 from rate_limits import (
+    AuthenticatedRequestRateLimiter,
     AuthRateLimiter,
     check_email_rate_limit_policy,
     login_rate_limit_policy,
@@ -19,7 +20,7 @@ from packages.config.constants import Auth
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
 from packages.security.trusted_proxy import TRUSTED_PROXY_SESSION_TOKEN, trusted_proxy_identity
-from packages.storage.sessions import AuthSession, RateLimitExceeded
+from packages.storage.sessions import AuthSession
 
 
 @dataclass(frozen=True)
@@ -59,17 +60,17 @@ def extract_session_tokens(request: Request) -> tuple[str, ...]:
 class SessionAuthService:
     def __init__(self, sessions: SessionStore) -> None:
         self.sessions = sessions
+        self.rate_limiter = AuthenticatedRequestRateLimiter(sessions)
 
     async def require_session(self, request: Request) -> AuthSession:
         for token in extract_session_tokens(request):
             session = await self.sessions.get_session(token)
             if session is not None:
-                try:
-                    await self.sessions.check_rate_limit(session.user_id)
-                except RateLimitExceeded:
-                    raise HTTPException(
-                        status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE
-                    ) from None
+                await self.rate_limiter.check(
+                    request,
+                    token=session.token,
+                    user_id=session.user_id,
+                )
                 return session
         proxy_identity = trusted_proxy_identity(request.headers)
         if proxy_identity is not None:

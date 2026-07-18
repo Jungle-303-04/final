@@ -250,7 +250,9 @@ status: synced
 | Redis 키 | 값 | TTL |
 |---|---|---|
 | `session:<token>` | JSON `{user_id, roles, workspace_id}` | `SESSION_TTL_SECONDS`(기본 86400) |
-| `rate:<user_id>` | 카운터(INCR) | `RATE_LIMIT_WINDOW_SECONDS`(기본 60) |
+| `rate:authenticated:read:session:<token_sha256>` | 인증 후 GET/HEAD/OPTIONS 카운터 | `AUTHENTICATED_READ_RATE_WINDOW_SECONDS`(기본 60) |
+| `rate:authenticated:mutation:session:<token_sha256>` | 인증 후 변경 요청의 세션 카운터 | `AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS`(기본 60) |
+| `rate:authenticated:mutation:user:<user_id_sha256>` | 인증 후 변경 요청의 사용자 합산 카운터 | `AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS`(기본 60) |
 | `rate:count:auth:<scope>:{email,client}:<sha256>` | 시도 카운터 | `AUTH_ABUSE_RATE_WINDOW_SECONDS`(기본 900) |
 | `rate:strike:auth:...` | 스트라이크 카운터 | `AUTH_ABUSE_STRIKE_TTL_SECONDS`(기본 86400) |
 | `rate:lock:auth:...` | 잠금 표식(값=스트라이크 수) | 1·2·3차 잠금 초 |
@@ -340,6 +342,11 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 | `EMAIL_VERIFICATION_TTL_SECONDS` | int | `3600` | 인증 토큰 TTL |
 | `DEFAULT_RATE_LIMIT` | int | `120` | 세션 공통 레이트리밋 횟수 |
 | `RATE_LIMIT_WINDOW_SECONDS` | int | `60` | 세션 공통 레이트리밋 윈도 |
+| `AUTHENTICATED_READ_RATE_LIMIT` | int | `600` | 세션별 읽기 요청 허용량. 초기 셨·자원 상세 병렬 조회 burst를 수용 |
+| `AUTHENTICATED_READ_RATE_WINDOW_SECONDS` | int | `60` | 세션별 읽기 요청 윈도 |
+| `AUTHENTICATED_MUTATION_SESSION_RATE_LIMIT` | int | `30` | 세션별 변경 요청 허용량 |
+| `AUTHENTICATED_MUTATION_USER_RATE_LIMIT` | int | `60` | 여러 세션을 합산한 사용자별 변경 요청 허용량 |
+| `AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS` | int | `60` | 세션·사용자 변경 요청 윈도 |
 | `METRICS_TOKEN` | str | `""` | 설정 시 `/metrics` Bearer 강제 |
 | `SESSION_TOKEN_BYTES` / `EMAIL_VERIFICATION_TOKEN_BYTES` (상수) | int | `32` | 토큰 엔트로피 |
 | `SESSION_KEY_PREFIX` / `RATE_LIMIT_KEY_PREFIX` / `EMAIL_VERIFICATION_KEY_PREFIX` (상수) | str | `session` / `rate` / `email_verify` | Redis 키 프리픽스 |

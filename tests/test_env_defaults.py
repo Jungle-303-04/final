@@ -41,6 +41,11 @@ def test_gateway_settings_env_defaults_remain_unchanged() -> None:
     config = settings.Settings
     assert config.DEFAULT_RATE_LIMIT == 120
     assert config.RATE_LIMIT_WINDOW_SECONDS == 60
+    assert config.AUTHENTICATED_READ_RATE_LIMIT == 600
+    assert config.AUTHENTICATED_READ_RATE_WINDOW_SECONDS == 60
+    assert config.AUTHENTICATED_MUTATION_SESSION_RATE_LIMIT == 30
+    assert config.AUTHENTICATED_MUTATION_USER_RATE_LIMIT == 60
+    assert config.AUTHENTICATED_MUTATION_RATE_WINDOW_SECONDS == 60
     assert config.SIGNUP_EMAIL_RATE_LIMIT == 3
     assert config.SIGNUP_IP_RATE_LIMIT == 20
     assert config.EMAIL_VERIFICATION_TTL_SECONDS == 60 * 60

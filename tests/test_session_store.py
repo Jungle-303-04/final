@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+import packages.storage.sessions as sessions_module
 from packages.storage.sessions import (
     MemorySessionStore,
     RateLimitExceeded,
@@ -34,6 +35,23 @@ class StubRedisClient:
     async def expire(self, key: str, ttl_seconds: int) -> bool:
         self.expire_calls.append((key, ttl_seconds))
         return key in self.values
+
+
+class StubRateRedisClient:
+    def __init__(self) -> None:
+        self.counts: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
+
+    async def incr(self, key: str) -> int:
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    async def expire(self, key: str, ttl_seconds: int) -> bool:
+        self.ttls[key] = ttl_seconds
+        return True
+
+    async def ttl(self, key: str) -> int:
+        return self.ttls.get(key, -1)
 
 
 def session_config() -> RedisSessionStoreConfig:
@@ -81,6 +99,43 @@ def test_memory_session_store_supports_oss_single_controller_contract() -> None:
         await store.delete_session(session.token)
         assert await store.get_session(session.token) is None
         await store.close()
+
+    asyncio.run(run())
+
+
+def test_memory_rate_limit_reports_remaining_window_and_expires(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 100.0
+    monkeypatch.setattr(sessions_module.time, "monotonic", lambda: now)
+    store = MemorySessionStore(session_config())
+
+    async def run() -> None:
+        nonlocal now
+        await store.connect()
+        await store.check_rate_limit("read-session", limit=1, window_seconds=60)
+        now = 115.2
+        with pytest.raises(RateLimitExceeded) as exc_info:
+            await store.check_rate_limit("read-session", limit=1, window_seconds=60)
+        assert exc_info.value.retry_after_seconds == 45
+
+        now = 160.0
+        await store.check_rate_limit("read-session", limit=1, window_seconds=60)
+
+    asyncio.run(run())
+
+
+def test_redis_rate_limit_reports_counter_ttl() -> None:
+    store = RedisSessionStore(session_config())
+    redis = StubRateRedisClient()
+    store.client = redis  # type: ignore[assignment]
+
+    async def run() -> None:
+        await store.check_rate_limit("read-session", limit=1, window_seconds=60)
+        redis.ttls["rate:read-session"] = 37
+        with pytest.raises(RateLimitExceeded) as exc_info:
+            await store.check_rate_limit("read-session", limit=1, window_seconds=60)
+        assert exc_info.value.retry_after_seconds == 37
 
     asyncio.run(run())
 
