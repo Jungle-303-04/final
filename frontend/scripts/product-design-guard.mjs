@@ -11,6 +11,10 @@ import {
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import {
+  legacyMaxFileLineBaseline,
+  legacyViolationCountBaseline,
+} from './product-design-guard-baseline.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRoot = resolve(projectRoot, 'src')
@@ -22,6 +26,9 @@ const tokenFile = resolve(productRoot, 'styles', 'tokens.css')
 const protectedBrandAssets = new Set([
   resolve(productRoot, 'shared', 'brand', 'azure.svg'),
 ])
+const protectedBrandRoots = [
+  resolve(productRoot, 'shared', 'ui', 'brand'),
+]
 const motionRoot = resolve(productRoot, 'motion')
 const motionTokenFile = resolve(motionRoot, 'tokens.css')
 
@@ -63,6 +70,85 @@ const rawColorPatterns = [
   { label: 'hsl/hsla', pattern: /\bhsla?\s*\(/giu },
   { label: 'oklch', pattern: /\boklch\s*\(/giu },
 ]
+
+const motionClassLiteralPattern =
+  /\bduration-(?:\[[^\]\r\n]*(?:\d+(?:\.\d+)?m?s|\d*\.\d+s)[^\]\r\n]*\]|\d+)\b|(?<![-(])\bease-(?:linear|in|out|in-out)\b/giu
+const motionDeclarationPattern =
+  /\b(?:transition|animation)(?:-duration|-timing-function)?\s*:\s*([^;{}]+);/giu
+const motionValueLiteralPattern =
+  /(?:\d+(?:\.\d+)?m?s|\d*\.\d+s|cubic-bezier\([^)]*\)|(?<![-(])\b(?:linear|ease|ease-in|ease-out|ease-in-out)\b)/giu
+
+// This is the exact pre-D17 debt on the branch at the start of P1. The guard
+// permits only these file/literal counts, so moving or adding a literal fails
+// while the owning surface track can reduce the baseline incrementally.
+const legacyMotionLiteralBaseline = Object.freeze({
+  'app/AiAlertRuleActionCard.tsx': { 'duration-200': 1 },
+  'features/issues/IssuesListPanel.tsx': {
+    'duration-150': 1,
+    'duration-1000': 1,
+    'ease-out': 2,
+  },
+  'features/issues/IssuesPanels.tsx': {
+    'duration-150': 4,
+    'duration-200': 1,
+    'ease-out': 3,
+  },
+  'features/issues/IssuesSurface.tsx': {
+    'duration-300': 2,
+    'duration-500': 1,
+    'ease-out': 3,
+  },
+  'pages/home/HomeClusterHealth.tsx': { 'duration-500': 1 },
+  'pages/resources/ResourcesCatalogParts.tsx': {
+    'duration-200': 2,
+    'ease-out': 2,
+  },
+  'pages/resources/ResourcesPage.tsx': {
+    'duration-300': 3,
+    'ease-out': 3,
+  },
+  'shared/ui/SearchPillInput.tsx': {
+    'duration-150': 2,
+    'ease-out': 1,
+  },
+  'shared/ui/primitives/collapse.tsx': {
+    'duration-200': 2,
+    'ease-out': 1,
+  },
+  'shared/ui/primitives/dialog.tsx': {
+    'duration-0': 2,
+    'duration-100': 2,
+  },
+  'shared/ui/primitives/item.tsx': { 'duration-100': 1 },
+  'shared/ui/primitives/motion-primitives.test.tsx': { 'duration-0': 1 },
+  'shared/ui/primitives/popover.tsx': {
+    'duration-0': 1,
+    'duration-100': 1,
+  },
+  'shared/ui/primitives/primitives.accessibility.test.tsx': { 'duration-0': 2 },
+  'shared/ui/primitives/progress.tsx': {
+    'duration-300': 1,
+    'ease-out': 1,
+  },
+  'shared/ui/primitives/select.tsx': {
+    'duration-0': 1,
+    'duration-100': 4,
+  },
+  'shared/ui/primitives/sheet.tsx': {
+    'duration-0': 1,
+    'duration-150': 1,
+    'duration-200': 1,
+    'ease-in': 1,
+  },
+  'shared/ui/primitives/sidebar-menu.tsx': { 'duration-100': 1 },
+  'shared/ui/primitives/sidebar.test.tsx': { 'duration-0': 1 },
+  'shared/ui/primitives/sidebar.tsx': {
+    'duration-0': 1,
+    'duration-200': 1,
+  },
+  'shared/ui/primitives/tabs.tsx': { 'duration-100': 1 },
+  'shared/ui/primitives/tooltip.tsx': { 'duration-0': 1 },
+})
 
 const restrictedNetworkApis = new Set([
   'EventSource',
@@ -176,6 +262,7 @@ const structuralJsxAttributes = new Set([
   'status',
   'tabIndex',
   'target',
+  'textAnchor',
   'to',
   'tone',
   'type',
@@ -184,6 +271,7 @@ const structuralJsxAttributes = new Set([
 ])
 
 const violations = []
+const consumedLegacyViolations = new Map()
 
 function isWithin(candidate, directory) {
   const pathFromDirectory = relative(directory, candidate)
@@ -201,9 +289,17 @@ function projectPath(filePath) {
 
 function addViolation(filePath, sourceFile, position, rule, message) {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(position)
+  const file = projectPath(filePath)
+  const allowance = legacyViolationCountBaseline[file]?.[rule] ?? 0
+  const baselineKey = `${file}\0${rule}`
+  const consumed = consumedLegacyViolations.get(baselineKey) ?? 0
+  if (consumed < allowance) {
+    consumedLegacyViolations.set(baselineKey, consumed + 1)
+    return
+  }
   violations.push({
     column: character + 1,
-    file: projectPath(filePath),
+    file,
     line: line + 1,
     message,
     rule,
@@ -967,7 +1063,11 @@ function inspectCssImports(filePath, source) {
 }
 
 function inspectRawColors(filePath, source) {
-  if (filePath === tokenFile || protectedBrandAssets.has(filePath)) {
+  if (
+    filePath === tokenFile ||
+    protectedBrandAssets.has(filePath) ||
+    protectedBrandRoots.some((directory) => isWithin(filePath, directory))
+  ) {
     return
   }
 
@@ -981,6 +1081,58 @@ function inspectRawColors(filePath, source) {
         `Raw ${label} colors are allowed only in src/styles/tokens.css.`,
       )
     }
+  }
+}
+
+export function scanMotionLiterals(filePath, source) {
+  if (isWithin(filePath, motionRoot)) {
+    return []
+  }
+
+  const matches = []
+
+  for (const match of source.matchAll(motionClassLiteralPattern)) {
+    matches.push({
+      kind: 'utility',
+      literal: match[0],
+      position: match.index,
+    })
+  }
+
+  for (const declaration of source.matchAll(motionDeclarationPattern)) {
+    const value = declaration[1]
+    const valueOffset = declaration.index + declaration[0].indexOf(value)
+    for (const match of value.matchAll(motionValueLiteralPattern)) {
+      matches.push({
+        kind: 'declaration',
+        literal: match[0],
+        position: valueOffset + match.index,
+      })
+    }
+  }
+
+  return matches.sort((left, right) => left.position - right.position)
+}
+
+function inspectMotionLiterals(filePath, source) {
+  const normalizedPath = relative(sourceRoot, filePath).split(sep).join('/')
+  const allowedCounts = legacyMotionLiteralBaseline[normalizedPath] ?? {}
+  const seenCounts = new Map()
+
+  for (const match of scanMotionLiterals(filePath, source)) {
+    const seen = (seenCounts.get(match.literal) ?? 0) + 1
+    seenCounts.set(match.literal, seen)
+    if (seen <= (allowedCounts[match.literal] ?? 0)) {
+      continue
+    }
+
+    addTextViolation(
+      filePath,
+      source,
+      match.position,
+      'motion-literal',
+      `Use a src/motion token instead of the ${match.kind} literal ${match.literal}.`,
+    )
   }
 }
 
@@ -1047,10 +1199,15 @@ function inspectFileLength(filePath, source, extension) {
   }
 
   const totalLines = lineCount(source)
-  if (totalLines > 300 && !isPureTypeScriptBarrel(filePath, source, extension)) {
+  const file = projectPath(filePath)
+  const baseline = legacyMaxFileLineBaseline[file] ?? 300
+  if (
+    totalLines > Math.max(300, baseline) &&
+    !isPureTypeScriptBarrel(filePath, source, extension)
+  ) {
     violations.push({
       column: 1,
-      file: projectPath(filePath),
+      file,
       line: 301,
       message: `TypeScript files must not exceed 300 lines (found ${totalLines}).`,
       rule: 'max-file-lines',
@@ -1079,6 +1236,7 @@ async function run() {
     inspectFileLength(filePath, source, extension)
     inspectRawColors(filePath, source)
     inspectImportant(filePath, source)
+    inspectMotionLiterals(filePath, source)
 
     if (scriptExtensions.has(extension)) {
       inspectScript(filePath, source, extension)

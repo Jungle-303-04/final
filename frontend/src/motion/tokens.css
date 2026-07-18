@@ -8,13 +8,25 @@
   --motion-camera: 420ms;
   --motion-value: 500ms;
   --motion-pulse: 1200ms;
+  --motion-breathe: 1600ms;
+  --motion-diagnose-cycle: 2400ms;
+  --motion-soft: var(--motion-quick);
+  --motion-spring: var(--motion-layout);
+  --motion-page: var(--motion-camera);
+  --motion-draw: var(--motion-value);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.2, 0.5, 1);
   --ease-pop: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --ease-soft: var(--ease-out);
+  --ease-page: var(--ease-spring);
+  --ease-draw: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-linear: linear;
   --stagger-node: 70ms;
   --stagger-pod: 32ms;
   --stagger-row: 18ms;
+  --stagger-list: 45ms;
+  --stagger-list-cap: 360ms;
   --stagger-max: 520ms;
 }
 
@@ -172,6 +184,12 @@
   }
 }
 
+@keyframes motion-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 @keyframes motion-topology-overlay-enter {
   from {
     opacity: 0;
@@ -231,11 +249,11 @@
 }
 
 .motion-ghost-breathe {
-  animation: motion-ghost-breathe 1.6s var(--ease-in-out) infinite;
+  animation: motion-ghost-breathe var(--motion-breathe) var(--ease-in-out) infinite;
 }
 
 .motion-rail-flow {
-  animation: motion-rail-flow 1.2s linear infinite;
+  animation: motion-rail-flow var(--motion-pulse) var(--ease-linear) infinite;
   stroke-dasharray: 3 3;
 }
 
@@ -328,6 +346,10 @@
   animation: motion-live-dot var(--motion-pulse) var(--ease-in-out) infinite;
 }
 
+.motion-connect-stage-active {
+  animation: motion-spin var(--motion-pulse) var(--ease-linear) infinite;
+}
+
 .motion-topology-overlay {
   animation: motion-topology-overlay-enter var(--motion-quick) var(--ease-out) backwards;
 }
@@ -348,7 +370,9 @@
   );
   background-clip: text;
   background-size: 200% 100%;
-  animation: motion-diagnose-thinking 2.4s linear infinite;
+  animation:
+    motion-diagnose-thinking var(--motion-diagnose-cycle) var(--ease-linear)
+    infinite;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -356,7 +380,8 @@
 .motion-diagnose-verdict {
   animation:
     motion-diagnose-entry var(--motion-layout) var(--ease-out) backwards,
-    motion-diagnose-verdict 2.4s var(--ease-out) 120ms both;
+    motion-diagnose-verdict var(--motion-diagnose-cycle) var(--ease-out)
+    var(--motion-instant) both;
 }
 
 .motion-live-preview {
@@ -486,6 +511,7 @@
   .motion-assistant-loading,
   .motion-assistant-typing,
   .motion-live-dot,
+  .motion-connect-stage-active,
   .motion-topology-overlay,
   .motion-diagnose-entry,
   .motion-diagnose-verdict,

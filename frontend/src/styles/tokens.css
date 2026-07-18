@@ -27,8 +27,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-caption-foreground: var(--caption-foreground);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -39,6 +41,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-status-healthy: var(--status-healthy);
   --color-status-warning: var(--status-warning);
+  --color-status-critical: var(--status-critical);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-status-stale: var(--status-stale);
@@ -50,10 +53,31 @@
   --color-chart-5: var(--chart-5);
   --color-code: var(--code-background);
   --color-code-foreground: var(--code-foreground);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+  --text-caption: var(--type-caption);
+  --text-caption--line-height: var(--type-caption-line);
+  --text-label: var(--type-label);
+  --text-label--line-height: var(--type-label-line);
+  --text-body: var(--type-body);
+  --text-body--line-height: var(--type-body-line);
+  --text-body-strong: var(--type-body-strong);
+  --text-body-strong--line-height: var(--type-body-strong-line);
+  --text-title-3: var(--type-title-3);
+  --text-title-3--line-height: var(--type-title-3-line);
+  --text-title-2: var(--type-title-2);
+  --text-title-2--line-height: var(--type-title-2-line);
+  --text-title-1: var(--type-title-1);
+  --text-title-1--line-height: var(--type-title-1-line);
+  --radius-tile: var(--product-radius-tile);
+  --radius-sm: var(--product-radius-sm);
+  --radius-md: var(--product-radius-md);
+  --radius-lg: var(--product-radius-lg);
+  --radius-card: var(--product-radius-card);
+  --radius-panel: var(--product-radius-panel);
+  --radius-sheet: var(--product-radius-sheet);
+  --radius-xl: var(--product-radius-xl);
+  --shadow-product-hover: var(--elevation-hover);
+  --shadow-product-pop: var(--elevation-pop);
+  --shadow-product-overlay: var(--elevation-overlay);
 }
 
 :root {
@@ -77,6 +101,28 @@
   --product-connection-wizard-width: 36.25rem;
   --product-operation-toast-width: 22.5rem;
   --product-choice-indicator-size: 1.25rem;
+  --type-caption: 0.6875rem;
+  --type-caption-line: 1rem;
+  --type-label: 0.75rem;
+  --type-label-line: 1rem;
+  --type-body: 0.8125rem;
+  --type-body-line: 1.25rem;
+  --type-body-strong: 0.875rem;
+  --type-body-strong-line: 1.25rem;
+  --type-title-3: 0.96875rem;
+  --type-title-3-line: 1.375rem;
+  --type-title-2: 1.0625rem;
+  --type-title-2-line: 1.5rem;
+  --type-title-1: 1.3125rem;
+  --type-title-1-line: 1.75rem;
+  --product-radius-tile: 0.1875rem;
+  --product-radius-sm: 0.375rem;
+  --product-radius-md: 0.5rem;
+  --product-radius-lg: 0.625rem;
+  --product-radius-card: 0.875rem;
+  --product-radius-panel: 1rem;
+  --product-radius-sheet: 1.125rem;
+  --product-radius-xl: 1.25rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -93,8 +139,10 @@
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
+  --border-subtle: oklch(0.955 0.003 250);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  --caption-foreground: oklch(0.62 0.015 250);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -106,6 +154,7 @@
   --sidebar-ring: oklch(0.708 0 0);
   --status-healthy: oklch(0.64 0.185 152);
   --status-warning: oklch(0.70 0.175 66);
+  --status-critical: oklch(0.60 0.225 26);
   --warning: var(--status-warning);
   --warning-foreground: oklch(0.47 0.14 55);
   --status-stale: oklch(0.58 0.19 292);
@@ -125,6 +174,12 @@
   --product-surface-warning: color-mix(in oklch, var(--status-warning) 10%, var(--card));
   --product-surface-danger: color-mix(in oklch, var(--destructive) 9%, var(--card));
   --product-ambient-primary: color-mix(in oklch, var(--primary) 12%, transparent);
+  --elevation-hover:
+    0 0.375rem 1rem color-mix(in oklch, var(--foreground) 8%, transparent);
+  --elevation-pop:
+    0 0.75rem 2rem color-mix(in oklch, var(--foreground) 12%, transparent);
+  --elevation-overlay:
+    0 1.25rem 3rem color-mix(in oklch, var(--foreground) 18%, transparent);
 }
 
 @media (min-width: 80rem) {
@@ -135,6 +190,28 @@
 
 .dark {
   color-scheme: dark;
+  --type-caption: 0.6875rem;
+  --type-caption-line: 1rem;
+  --type-label: 0.75rem;
+  --type-label-line: 1rem;
+  --type-body: 0.8125rem;
+  --type-body-line: 1.25rem;
+  --type-body-strong: 0.875rem;
+  --type-body-strong-line: 1.25rem;
+  --type-title-3: 0.96875rem;
+  --type-title-3-line: 1.375rem;
+  --type-title-2: 1.0625rem;
+  --type-title-2-line: 1.5rem;
+  --type-title-1: 1.3125rem;
+  --type-title-1-line: 1.75rem;
+  --product-radius-tile: 0.1875rem;
+  --product-radius-sm: 0.375rem;
+  --product-radius-md: 0.5rem;
+  --product-radius-lg: 0.625rem;
+  --product-radius-card: 0.875rem;
+  --product-radius-panel: 1rem;
+  --product-radius-sheet: 1.125rem;
+  --product-radius-xl: 1.25rem;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -151,8 +228,10 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
+  --border-subtle: oklch(1 0 0 / 6%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --caption-foreground: oklch(0.64 0.015 250);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.922 0 0);
@@ -163,6 +242,7 @@
   --sidebar-ring: oklch(0.556 0 0);
   --status-healthy: oklch(0.76 0.185 152);
   --status-warning: oklch(0.82 0.17 70);
+  --status-critical: oklch(0.74 0.19 24);
   --warning: var(--status-warning);
   --warning-foreground: oklch(0.82 0.17 70);
   --status-stale: oklch(0.72 0.185 292);
@@ -174,4 +254,10 @@
   --chart-5: oklch(0.72 0.18 30);
   --code-background: oklch(0.115 0.012 255);
   --code-foreground: oklch(0.94 0.01 255);
+  --elevation-hover:
+    0 0.375rem 1rem color-mix(in oklch, var(--background) 48%, transparent);
+  --elevation-pop:
+    0 0.75rem 2rem color-mix(in oklch, var(--background) 62%, transparent);
+  --elevation-overlay:
+    0 1.25rem 3rem color-mix(in oklch, var(--background) 76%, transparent);
 }

@@ -1,5 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import {
+  EASE_DRAW,
+  LIST_STAGGER,
+  MOTION_SPRING,
+  listStaggerDelay,
+} from "../transitions";
 import { MOTION_DURATION_MS, STAGGER_MS } from "../useStagger";
 
 const tokens = readFileSync(new URL("../tokens.css", import.meta.url), "utf8");
@@ -30,6 +36,25 @@ describe("motion CSS contract", () => {
     expect(tokens).toContain("@media (prefers-reduced-motion: reduce)");
     expect(tokens).toContain(`animation-delay: 0ms ${priority}`);
     expect(tokens).toContain(`transition-duration: 1ms ${priority}`);
+  });
+
+  it("publishes the D17 soft, spring, page, and draw presets", () => {
+    expect(tokens).toContain("--motion-soft: var(--motion-quick)");
+    expect(tokens).toContain("--motion-spring: var(--motion-layout)");
+    expect(tokens).toContain("--motion-page: var(--motion-camera)");
+    expect(tokens).toContain("--motion-draw: var(--motion-value)");
+    expect(tokens).toContain("--ease-draw: cubic-bezier");
+    expect(MOTION_SPRING.soft.type).toBe("spring");
+    expect(MOTION_SPRING.spring.type).toBe("spring");
+    expect(MOTION_SPRING.page.type).toBe("spring");
+    expect(EASE_DRAW).toHaveLength(4);
+  });
+
+  it("caps list staggering at eight items and removes it for reduced motion", () => {
+    expect(LIST_STAGGER.maxItems).toBe(8);
+    expect(listStaggerDelay(3)).toBeCloseTo(LIST_STAGGER.seconds * 3);
+    expect(listStaggerDelay(20)).toBeCloseTo(LIST_STAGGER.seconds * 8);
+    expect(listStaggerDelay(3, true)).toBe(0);
   });
 
   it("animates wizard stages without animating layout dimensions", () => {

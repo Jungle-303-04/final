@@ -34,3 +34,9 @@ export {
   staggerDelay,
   useStagger,
 } from "./useStagger";
+export {
+  EASE_DRAW,
+  LIST_STAGGER,
+  MOTION_SPRING,
+  listStaggerDelay,
+} from "./transitions";
