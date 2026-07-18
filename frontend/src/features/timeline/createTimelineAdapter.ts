@@ -390,7 +390,7 @@ function assertMatchingCapabilityDescriptors(
   if (
     preflight.selectedSourceMode !== snapshot.selectedSourceMode
     || preflight.maxRetainedRangeMs !== snapshot.maxRetainedRangeMs
-    || !strictValueEqual(preflight.queryBounds, snapshot.queryBounds)
+    || !areCompatibleQueryBounds(preflight.queryBounds, snapshot.queryBounds)
     || preflight.namespaceFilterPolicy !== snapshot.namespaceFilterPolicy
     || preflight.availableSourceModes.length !== snapshot.availableSourceModes.length
     || preflight.availableSourceModes.some((mode, index) => mode !== snapshot.availableSourceModes[index])
@@ -398,6 +398,20 @@ function assertMatchingCapabilityDescriptors(
   ) {
     throw new TimelineFailure("invalid-response", "Timeline snapshot capabilities disagreed with bootstrap.");
   }
+}
+
+function areCompatibleQueryBounds(
+  preflight: TimelineCapabilities["queryBounds"],
+  snapshot: TimelineCapabilities["queryBounds"],
+): boolean {
+  const preflightRetentionMs = preflight.serverNowMs - preflight.earliestQueryableMs;
+  const snapshotRetentionMs = snapshot.serverNowMs - snapshot.earliestQueryableMs;
+
+  return preflight.maxWindowMs === snapshot.maxWindowMs
+    && snapshot.serverNowMs >= preflight.serverNowMs
+    && snapshot.earliestQueryableMs >= preflight.earliestQueryableMs
+    && snapshot.earliestQueryableMs <= snapshot.serverNowMs
+    && snapshotRetentionMs === preflightRetentionMs;
 }
 
 function assertControlSelection(

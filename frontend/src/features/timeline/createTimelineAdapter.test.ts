@@ -128,6 +128,51 @@ describe("Timeline adapter", () => {
     });
   });
 
+  it("accepts query bounds that advance between capability and snapshot reads", async () => {
+    const advanced = capabilities();
+    advanced.query_bounds = {
+      ...advanced.query_bounds,
+      server_now_ms: advanced.query_bounds.server_now_ms + 250,
+      earliest_queryable_ms: advanced.query_bounds.earliest_queryable_ms + 250,
+    };
+    const adapter = adapterFor({
+      getTimelineCapabilities: async () => capabilities(),
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], advanced),
+      subscribeTimelineEvents: async function* () {},
+    });
+
+    await expect(adapter.readTimeline(timelineQuery())).resolves.toMatchObject({
+      session: { cursor: { token: "opaque.snapshot" } },
+    });
+  });
+
+  it("fails closed when snapshot query bounds regress or change retention", async () => {
+    const regressed = capabilities();
+    regressed.query_bounds = {
+      ...regressed.query_bounds,
+      server_now_ms: regressed.query_bounds.server_now_ms - 1,
+      earliest_queryable_ms: regressed.query_bounds.earliest_queryable_ms - 1,
+    };
+    const changedRetention = capabilities();
+    changedRetention.query_bounds = {
+      ...changedRetention.query_bounds,
+      server_now_ms: changedRetention.query_bounds.server_now_ms + 250,
+      earliest_queryable_ms: changedRetention.query_bounds.earliest_queryable_ms + 249,
+    };
+
+    for (const descriptor of [regressed, changedRetention]) {
+      const adapter = adapterFor({
+        getTimelineCapabilities: async () => capabilities(),
+        getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], descriptor),
+        subscribeTimelineEvents: async function* () {},
+      });
+
+      await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
+        code: "invalid-response",
+      });
+    }
+  });
+
   it("fails closed when a snapshot control catalog differs from preflight", async () => {
     const preflight = capabilities();
     const adapter = adapterFor({
