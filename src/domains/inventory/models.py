@@ -47,6 +47,9 @@ class ClusterInventorySnapshotRecord(Base):
     source: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
     collected_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    event_capture_observed_at: Mapped[Any | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     resource_count: Mapped[int] = mapped_column(Integer, nullable=False)
     summary: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
@@ -62,13 +65,17 @@ Index(
 )
 
 Index(
-    "ix_inventory_snapshots_timeline_coverage",
+    "ix_inventory_snapshots_timeline_capture_observed",
     ClusterInventorySnapshotRecord.workspace_id,
     ClusterInventorySnapshotRecord.cluster_id,
+    ClusterInventorySnapshotRecord.event_capture_observed_at,
     ClusterInventorySnapshotRecord.collected_at,
     ClusterInventorySnapshotRecord.created_at,
     ClusterInventorySnapshotRecord.snapshot_id,
-    postgresql_where=timeline_coverage_snapshot_clause(ClusterInventorySnapshotRecord.__table__),
+    postgresql_where=and_(
+        timeline_coverage_snapshot_clause(ClusterInventorySnapshotRecord.__table__),
+        ClusterInventorySnapshotRecord.event_capture_observed_at.is_not(None),
+    ),
 )
 
 

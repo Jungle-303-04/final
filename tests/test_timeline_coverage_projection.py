@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -42,10 +42,11 @@ def _read_scope(*, event_access: bool = True) -> TimelineLedgerReadScope:
 
 def _snapshot(
     *,
-    observed_at: datetime,
+    observed_at: datetime | str,
     complete: bool,
     gap: str | None = None,
     proof: bool = True,
+    truncated: object = False,
 ) -> dict[str, object]:
     coverage: dict[str, object] = {
         "scope": "all_namespaces",
@@ -63,10 +64,14 @@ def _snapshot(
             "summary": {
                 "kubernetes_event_capture": {
                     "complete": complete,
-                    "truncated": False,
+                    "truncated": truncated,
                     "reason": "complete" if complete else gap or "network_error",
                     "freshness": {
-                        "observed_at": observed_at.isoformat(),
+                        "observed_at": (
+                            observed_at.isoformat()
+                            if isinstance(observed_at, datetime)
+                            else observed_at
+                        ),
                         "max_age_seconds": 120,
                     },
                     "coverage": coverage,
@@ -210,6 +215,156 @@ def test_ordered_coverage_projection_fails_closed_at_the_response_interval_bound
         )
 
 
+def test_bounded_pre_window_baseline_preserves_large_history_projection() -> None:
+    """One opening gap plus window rows is equivalent to the complete history scan."""
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def at(minute: int) -> datetime:
+        return base + timedelta(minutes=minute)
+
+    # Ten thousand closed historical observations establish that response work
+    # must not grow with cluster lifetime.  The final repeated pre-window gap
+    # must retain its first observed bound, not the latest repeated report.
+    old_history = tuple(
+        _snapshot(
+            observed_at=at(index),
+            complete=index % 2 == 1,
+            gap=None if index % 2 == 1 else "timeout",
+        )
+        for index in range(10_000)
+    )
+    opening_gap = _snapshot(observed_at=at(10_010), complete=False, gap="timeout")
+    repeated_gaps = tuple(
+        _snapshot(observed_at=at(minute), complete=False, gap="timeout")
+        for minute in range(10_011, 10_021)
+    )
+    window_rows = (
+        _snapshot(observed_at=at(10_040), complete=True),
+        _snapshot(observed_at=at(10_050), complete=False, gap="rbac_denied"),
+        _snapshot(observed_at=at(10_055), complete=True),
+    )
+    window = TimelineWindow(
+        from_ms=int(at(10_030).timestamp() * 1_000),
+        to_ms=int(at(10_060).timestamp() * 1_000),
+    )
+
+    complete_scan = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=window,
+        snapshots=(*old_history, opening_gap, *repeated_gaps, *window_rows),
+        snapshots_ordered=True,
+    )
+    bounded_scan_rows = (opening_gap, *window_rows)
+    bounded_scan = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=window,
+        snapshots=bounded_scan_rows,
+        snapshots_ordered=True,
+    )
+
+    assert bounded_scan == complete_scan
+    assert len(old_history) + 1 + len(repeated_gaps) + len(window_rows) == 10_014
+    assert len(bounded_scan_rows) == 4
+    assert bounded_scan[0].from_ms == int(at(10_010).timestamp() * 1_000)
+
+
+def test_bounded_projection_skips_malformed_observation_before_valid_gap() -> None:
+    """A malformed candidate must not hide the next valid lateral gap row."""
+    malformed = _snapshot(observed_at="not-a-timestamp", complete=False, gap="timeout")
+    valid_gap = _snapshot(observed_at=_timestamp(10), complete=False, gap="timeout")
+    recovery = _snapshot(observed_at=_timestamp(20), complete=True)
+
+    complete_scan = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=_window(),
+        snapshots=(malformed, valid_gap, recovery),
+        snapshots_ordered=True,
+    )
+    bounded_scan = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=_window(),
+        snapshots=(valid_gap, recovery),
+        snapshots_ordered=True,
+    )
+
+    assert bounded_scan == complete_scan
+    assert [(item.from_ms, item.to_ms) for item in bounded_scan] == [
+        (
+            int(_timestamp(10).timestamp() * 1_000),
+            int(_timestamp(20).timestamp() * 1_000),
+        )
+    ]
+
+
+def test_gap_requires_boolean_truncated_but_accepts_either_boolean_value() -> None:
+    """The SQL gap predicate mirrors the projector's capture decoder exactly."""
+    false_gap = _snapshot(
+        observed_at=_timestamp(10), complete=False, gap="timeout", truncated=False
+    )
+    true_gap = _snapshot(observed_at=_timestamp(30), complete=False, gap="timeout", truncated=True)
+    invalid_gap = _snapshot(
+        observed_at=_timestamp(40), complete=False, gap="timeout", truncated="false"
+    )
+
+    false_coverage = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=_window(),
+        snapshots=(false_gap, _snapshot(observed_at=_timestamp(20), complete=True)),
+    )
+    true_coverage = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=_window(),
+        snapshots=(true_gap, _snapshot(observed_at=_timestamp(50), complete=True)),
+    )
+    invalid_coverage = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=_window(),
+        snapshots=(invalid_gap, _snapshot(observed_at=_timestamp(50), complete=True)),
+    )
+
+    assert len(false_coverage) == 1
+    assert len(true_coverage) == 1
+    assert invalid_coverage == ()
+
+
+def test_capture_time_window_preserves_mismatched_collection_boundary() -> None:
+    """Semantic observation time, not DB arrival time, selects boundary rows."""
+    gap = _snapshot(observed_at=_timestamp(10), complete=False, gap="timeout")
+    recovery = _snapshot(observed_at=_timestamp(20), complete=True)
+    window = _window(from_second=15, to_second=25)
+
+    # The recovery arrived before the response window by collected_at, while its
+    # capture evidence was observed inside it.  A collected_at-bounded query
+    # discarded both rows; the derived observation-time index selects the gap
+    # baseline plus recovery exactly like the complete semantic projection.
+    collected_at = {
+        id(gap): _timestamp(5),
+        id(recovery): _timestamp(6),
+    }
+    assert all(value < _timestamp(15) for value in collected_at.values())
+    collected_time_bounded = tuple(
+        snapshot
+        for snapshot in (gap, recovery)
+        if _timestamp(15) <= collected_at[id(snapshot)] < _timestamp(25)
+    )
+    complete_scan = project_kubernetes_event_capture_coverage(
+        _read_scope(), window=window, snapshots=(gap, recovery), snapshots_ordered=True
+    )
+    old_bounded_scan = project_kubernetes_event_capture_coverage(
+        _read_scope(),
+        window=window,
+        snapshots=collected_time_bounded,
+        snapshots_ordered=True,
+    )
+    capture_time_bounded = project_kubernetes_event_capture_coverage(
+        _read_scope(), window=window, snapshots=(gap, recovery), snapshots_ordered=True
+    )
+
+    assert old_bounded_scan == ()
+    assert capture_time_bounded == complete_scan
+    assert len(capture_time_bounded) == 1
+
+
 def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
     def capture(row: Mapping[str, object]) -> object:
         summary = row["summary"]
@@ -280,7 +435,7 @@ def test_repository_reads_only_authorized_snapshot_coverage_evidence() -> None:
     assert "cluster_inventory_snapshots.status != 'ignored_stale'" in sql
     assert "kubernetes_event_capture" in sql
     assert "is not null" in sql
-    assert "cluster_inventory_snapshots.collected_at <" in sql
+    assert "cluster_inventory_snapshots.event_capture_observed_at <" in sql
     assert "cluster_inventory_snapshots.summary as summary" not in sql
     assert "raw" not in sql
     assert connection.execution_options_kwargs == {

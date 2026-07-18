@@ -10,7 +10,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import Text, and_, column, func, or_, select, true, update, values
+from sqlalchemy import (
+    Text,
+    and_,
+    column,
+    func,
+    or_,
+    select,
+    true,
+    tuple_,
+    union_all,
+    update,
+    values,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.inventory.change_correlation import correlate_inventory_timeline_events
@@ -651,27 +663,181 @@ def _timeline_coverage_statement(
     cluster_ids: Iterable[str],
     window: TimelineWindow,
 ) -> Any:
-    """Build the ordered coverage proof scan backed by its partial index."""
+    """Build a bounded ordered coverage proof scan backed by its partial index.
+
+    Coverage before the requested window matters only when a gap was still open
+    at ``window.from``.  Reading every older snapshot to reconstruct that single
+    state made a short Timeline request proportional to the cluster lifetime.
+    Two ordered lateral index probes now retain at most one opening gap per
+    cluster: the first gap after its latest proven recovery.  The main scan then
+    reads only rows observed inside the requested window.
+
+    The selected opening row keeps the original observed failure bound.  Using
+    merely the latest pre-window row would silently move that bound forward when
+    a collector reported the same gap more than once.
+    """
+    canonical_cluster_ids = tuple(sorted(set(cluster_ids)))
     snapshots = ClusterInventorySnapshotRecord.__table__
     event_capture = snapshots.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
-    return (
+    capture_observed_at = snapshots.c.event_capture_observed_at
+    requested = (
+        values(column("cluster_id", Text), name="requested_timeline_coverage_clusters")
+        .data([(cluster_id,) for cluster_id in canonical_cluster_ids])
+        .alias("requested_timeline_coverage_clusters")
+    )
+    window_from = datetime.fromtimestamp(window.from_ms / 1_000, tz=UTC)
+    window_to = datetime.fromtimestamp(window.to_ms / 1_000, tz=UTC)
+
+    latest_recovery = (
+        select(
+            capture_observed_at,
+            snapshots.c.collected_at,
+            snapshots.c.created_at,
+            snapshots.c.snapshot_id,
+        )
+        .where(
+            snapshots.c.workspace_id == workspace_id,
+            snapshots.c.cluster_id == requested.c.cluster_id,
+            timeline_coverage_snapshot_clause(snapshots),
+            capture_observed_at < window_from,
+            _timeline_capture_recovery_clause(event_capture),
+        )
+        .order_by(
+            capture_observed_at.desc(),
+            snapshots.c.collected_at.desc(),
+            snapshots.c.created_at.desc(),
+            snapshots.c.snapshot_id.desc(),
+        )
+        .limit(1)
+        .lateral("latest_timeline_coverage_recovery")
+    )
+    after_latest_recovery = or_(
+        latest_recovery.c.snapshot_id.is_(None),
+        tuple_(
+            capture_observed_at,
+            snapshots.c.collected_at,
+            snapshots.c.created_at,
+            snapshots.c.snapshot_id,
+        )
+        > tuple_(
+            latest_recovery.c.event_capture_observed_at,
+            latest_recovery.c.collected_at,
+            latest_recovery.c.created_at,
+            latest_recovery.c.snapshot_id,
+        ),
+    )
+    opening_gap = (
         select(
             snapshots.c.cluster_id,
             snapshots.c.status,
             event_capture.label("event_capture"),
+            capture_observed_at,
+            snapshots.c.collected_at,
+            snapshots.c.created_at,
+            snapshots.c.snapshot_id,
         )
         .where(
             snapshots.c.workspace_id == workspace_id,
-            snapshots.c.cluster_id.in_(tuple(sorted(set(cluster_ids)))),
+            snapshots.c.cluster_id == requested.c.cluster_id,
             timeline_coverage_snapshot_clause(snapshots),
-            snapshots.c.collected_at < datetime.fromtimestamp(window.to_ms / 1_000, tz=UTC),
+            capture_observed_at < window_from,
+            _timeline_capture_gap_clause(event_capture),
+            after_latest_recovery,
         )
         .order_by(
-            snapshots.c.cluster_id.asc(),
+            capture_observed_at.asc(),
             snapshots.c.collected_at.asc(),
             snapshots.c.created_at.asc(),
             snapshots.c.snapshot_id.asc(),
         )
+        .limit(1)
+        .lateral("opening_timeline_coverage_gap")
+    )
+    baseline = select(
+        opening_gap.c.cluster_id,
+        opening_gap.c.status,
+        opening_gap.c.event_capture,
+        opening_gap.c.event_capture_observed_at,
+        opening_gap.c.collected_at,
+        opening_gap.c.created_at,
+        opening_gap.c.snapshot_id,
+    ).select_from(requested.outerjoin(latest_recovery, true()).join(opening_gap, true()))
+    window_rows = select(
+        snapshots.c.cluster_id,
+        snapshots.c.status,
+        event_capture.label("event_capture"),
+        capture_observed_at,
+        snapshots.c.collected_at,
+        snapshots.c.created_at,
+        snapshots.c.snapshot_id,
+    ).where(
+        snapshots.c.workspace_id == workspace_id,
+        snapshots.c.cluster_id.in_(canonical_cluster_ids),
+        timeline_coverage_snapshot_clause(snapshots),
+        capture_observed_at >= window_from,
+        capture_observed_at < window_to,
+    )
+    bounded_rows = union_all(baseline, window_rows).subquery("bounded_timeline_coverage_rows")
+    return select(
+        bounded_rows.c.cluster_id,
+        bounded_rows.c.status,
+        bounded_rows.c.event_capture,
+    ).order_by(
+        bounded_rows.c.cluster_id.asc(),
+        bounded_rows.c.event_capture_observed_at.asc(),
+        bounded_rows.c.collected_at.asc(),
+        bounded_rows.c.created_at.asc(),
+        bounded_rows.c.snapshot_id.asc(),
+    )
+
+
+def _timeline_capture_gap_clause(event_capture: Any) -> Any:
+    """Match the explicit gap evidence accepted by the pure projector."""
+    coverage = event_capture["coverage"]
+    gap = func.btrim(coverage["gap"].astext)
+    reason = func.btrim(event_capture["reason"].astext)
+    observed_at = func.btrim(event_capture["freshness"]["observed_at"].astext)
+    return and_(
+        func.jsonb_typeof(event_capture["complete"]) == "boolean",
+        event_capture["complete"].astext == "false",
+        func.jsonb_typeof(event_capture["truncated"]) == "boolean",
+        observed_at.is_not(None),
+        observed_at != "",
+        gap.is_not(None),
+        gap != "",
+        reason == gap,
+        coverage["scope"].astext == "all_namespaces",
+        coverage["pagination"].astext == "continue",
+    )
+
+
+def _timeline_capture_recovery_clause(event_capture: Any) -> Any:
+    """Match a complete global capture that can close a coverage gap.
+
+    Numeric regular expressions deliberately avoid casts: malformed JSON must
+    fail closed instead of aborting the whole Timeline request.
+    """
+    coverage = event_capture["coverage"]
+    freshness = event_capture["freshness"]
+    observed_at = func.btrim(freshness["observed_at"].astext)
+    return and_(
+        func.jsonb_typeof(event_capture["complete"]) == "boolean",
+        event_capture["complete"].astext == "true",
+        func.jsonb_typeof(event_capture["truncated"]) == "boolean",
+        event_capture["truncated"].astext == "false",
+        func.btrim(event_capture["reason"].astext) == EVENT_CAPTURE_REASON_COMPLETE,
+        observed_at.is_not(None),
+        observed_at != "",
+        freshness["max_age_seconds"].astext.op("~")(r"^[1-9][0-9]*$"),
+        coverage["scope"].astext == "all_namespaces",
+        coverage["pagination"].astext == "continue",
+        or_(coverage["gap"].astext.is_(None), coverage["gap"].astext == ""),
+        coverage["page_count"].astext.op("~")(r"^[1-9][0-9]*$"),
+        and_(
+            func.jsonb_typeof(coverage["event_count"]) == "number",
+            coverage["event_count"].astext.op("~")(r"^(0|[1-9][0-9]*)$"),
+        ),
+        func.btrim(coverage["resource_version"].astext) != "",
     )
 
 
@@ -860,6 +1026,7 @@ class InventoryRepository(DatabaseConnection):
                         source=str(payload.get("source") or "cluster-agent"),
                         status="ignored_stale",
                         collected_at=observed_at,
+                        event_capture_observed_at=current_event_batch.capture.observed_at,
                         resource_count=len(normalized),
                         summary=summary,
                     )
@@ -924,6 +1091,7 @@ class InventoryRepository(DatabaseConnection):
                     source=str(payload.get("source") or "cluster-agent"),
                     status=str(payload.get("status") or "accepted"),
                     collected_at=observed_at,
+                    event_capture_observed_at=current_event_batch.capture.observed_at,
                     resource_count=len(normalized),
                     summary=summary,
                 )
