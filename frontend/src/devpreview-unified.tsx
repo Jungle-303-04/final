@@ -635,7 +635,7 @@ function hlYaml(src: string): string {
 }
 const YAML_FONT = { fontSize: 12.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
 
-function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number }) {
+function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H, viewportW = 1280 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number; viewportW?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
@@ -662,7 +662,7 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, for
   const onEdgeDown = (e: React.PointerEvent) => {
     if (full) return;
     e.preventDefault(); setDwDragging(true);
-    const move = (ev: PointerEvent) => { const cssW = window.innerWidth / PRESENT_SCALE; setDw(Math.min(cssW - leftInset - 60, Math.max(460, cssW - ev.clientX / PRESENT_SCALE))); };
+    const move = (ev: PointerEvent) => { const cssW = window.innerWidth / PRESENT_SCALE; setDw(Math.min(cssW - leftInset - 40, Math.max(460, cssW - ev.clientX / PRESENT_SCALE))); };
     const up = () => { setDwDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
@@ -706,7 +706,7 @@ status:
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
         style={{ position: "fixed", top: topInset, right: 0, bottom: 0,
           /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
-          width: full ? `calc(100vw - ${leftInset}px)` : dw, maxWidth: `calc(100vw - ${leftInset}px)`,
+          width: full ? viewportW - leftInset : dw, maxWidth: viewportW - leftInset,
           background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: dwDragging ? "none" : "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
         {/* 좌측 가장자리 리사이즈 핸들 */}
         {!full && (
@@ -1216,6 +1216,12 @@ function App() {
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
+  // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
+  const [vwCss, setVwCss] = useState(() => window.innerWidth / PRESENT_SCALE);
+  useEffect(() => {
+    const on = () => setVwCss(window.innerWidth / PRESENT_SCALE);
+    window.addEventListener("resize", on); return () => window.removeEventListener("resize", on);
+  }, []);
   // 반응형 — 좁은 화면(200% 확대 등)에서 내비를 자동으로 아이콘만 남긴다
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1100px)");
@@ -1451,7 +1457,7 @@ function App() {
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setKindId("Pod"); setQ(b); }} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setKindId("Pod"); setQ(b); }} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
