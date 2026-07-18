@@ -3,7 +3,7 @@
 import ReactDOM from "react-dom/client";
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
-  FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
+  FileText, GitBranch, Play, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import "./styles/tokens.css";

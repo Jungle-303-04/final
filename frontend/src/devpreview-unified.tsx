@@ -1246,7 +1246,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       { id: "c4", time: "1시간 전", tone: "ok" as const, title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
       { id: "c5", time: "2시간 전", tone: "ok" as const, title: "Jungle-303-04/final main 배포 · 정상" },
     ].filter(Boolean) as { id: string; time: string; tone: "ok" | "warn" | "crit"; title: string; ref?: { kind: string; name: string } }[];
-  }, [crit, outSync]);
+  }, [crit, outSync, pods]);
 
   const body = (id: string) => {
     switch (id) {
@@ -1467,6 +1467,13 @@ function App() {
     setToasts((cur) => [...cur, { id, ...t }]);
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
   };
+  // 관련 리소스 이동 — 같은 종류 표에 실데이터가 있으면 그 행으로 연다
+  const openRef = (kid: string, name: string) => {
+    const k = KINDS.find((x) => x.id === kid); if (!k) return;
+    const rows = SPEC[kid] ? SPEC[kid].rows(rng(kid.length * 977 + 13)) : [];
+    const found = rows.find((r) => String(r.name) === name || String(r.name).startsWith(name));
+    setDetail({ kind: k, row: found ?? { name, ns: nsFor(name) } });
+  };
   // 버스 수신 → 토스트 + 세션 알림 (선언은 위쪽, 여기서는 구독만)
   useEffect(() => onAction((a: DemoAction) => {
     // 내비게이션 액션 — AI 근거/링크가 셸의 실제 표면을 연다
@@ -1479,13 +1486,6 @@ function App() {
   const openAlert = (p: (typeof alerts)[number]) => {
     setBellOpen(false);
     openFromMap("Pod", { ...p, age: `${3 + (p.cpu % 9)}d` });
-  };
-  // 관련 리소스 이동 — 같은 종류 표에 실데이터가 있으면 그 행으로 연다
-  const openRef = (kid: string, name: string) => {
-    const k = KINDS.find((x) => x.id === kid); if (!k) return;
-    const rows = SPEC[kid] ? SPEC[kid].rows(rng(kid.length * 977 + 13)) : [];
-    const found = rows.find((r) => String(r.name) === name || String(r.name).startsWith(name));
-    setDetail({ kind: k, row: found ?? { name, ns: nsFor(name) } });
   };
 
   useEffect(() => {

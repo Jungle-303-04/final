@@ -5,7 +5,7 @@
 import ReactDOM from "react-dom/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
-import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
+import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
 import { UI, BLUE, HP, MONO, SOFT, SPRING, PAGE, PRESENT_SCALE } from "./devpreview/theme";
 import { AwsIcon, RedisIcon, GithubIcon } from "./devpreview/brandIcons";
