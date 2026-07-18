@@ -485,14 +485,11 @@ function MetricChart({ name, bad }: { name: string; bad: boolean }) {
   const top = Math.max(...pts) * 1.12;
   const X = (i: number) => PL + (i / (pts.length - 1)) * (W - PL - PR);
   const Y = (v: number) => PT + (1 - v / top) * (H - PT - PB);
-  const d = useMemo(() => {
-    let s = `M ${X(0)} ${Y(pts[0])}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-      s += ` C ${X(i) + (X(i + 1) - X(i)) / 3} ${Y(p1 + (p2 - p0) / 6)}, ${X(i + 1) - (X(i + 1) - X(i)) / 3} ${Y(p2 - (p3 - p1) / 6)}, ${X(i + 1)} ${Y(p2)}`;
-    }
-    return s;
-  }, [pts]);
+  let d = `M ${X(0)} ${Y(pts[0])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    d += ` C ${X(i) + (X(i + 1) - X(i)) / 3} ${Y(p1 + (p2 - p0) / 6)}, ${X(i + 1) - (X(i + 1) - X(i)) / 3} ${Y(p2 - (p3 - p1) / 6)}, ${X(i + 1)} ${Y(p2)}`;
+  }
   const tone = bad ? HP.crit : BLUE;
   const fmt = (v: number) => `${Math.round(v)}${m.unit}`;
   const cur = pts[pts.length - 1], avg = pts.reduce((s, v) => s + v, 0) / pts.length, mx = Math.max(...pts);
