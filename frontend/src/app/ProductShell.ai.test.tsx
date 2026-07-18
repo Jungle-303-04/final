@@ -47,8 +47,8 @@ describe("ProductShell AI panel", () => {
     expect(panel.getAttribute("aria-hidden")).toBe("false");
     expect(panel.hasAttribute("inert")).toBe(false);
     expect(panel.getAttribute("data-open")).toBe("true");
-    expect(panel.getAttribute("data-width")).toBe("420");
-    expect(inner?.getAttribute("data-inner-width")).toBe("420");
+    expect(panel.getAttribute("data-width")).toBe("460");
+    expect(inner?.getAttribute("data-inner-width")).toBe("460");
     expect(panel.previousElementSibling?.id).toBe("product-main");
     expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Opsia AI 닫기" })).toHaveLength(1);
@@ -64,8 +64,8 @@ describe("ProductShell AI panel", () => {
     fireEvent.keyDown(screen.getByRole("separator", { name: "AI 패널 너비 조절" }), {
       key: "ArrowLeft",
     });
-    expect(panel.getAttribute("data-width")).toBe("440");
-    expect(inner?.getAttribute("data-inner-width")).toBe("440");
+    expect(panel.getAttribute("data-width")).toBe("480");
+    expect(inner?.getAttribute("data-inner-width")).toBe("480");
   });
 
   it("never renders an answer without evidence and links a supported answer", async () => {

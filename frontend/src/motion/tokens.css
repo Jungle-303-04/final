@@ -331,7 +331,7 @@
 }
 
 .motion-ai-panel {
-  --ai-width: 420px;
+  --ai-width: 460px;
   width: 0;
   transition: width var(--motion-ai) var(--ease-spring);
 }
@@ -358,11 +358,11 @@
 .motion-ai-panel[data-width="640"] { --ai-width: 640px; }
 
 .motion-ai-panel[data-open="true"] {
-  width: var(--ai-width, 420px);
+  width: var(--ai-width, 460px);
 }
 
 .motion-ai-panel > [data-slot="ai-assistant-inner"] {
-  width: var(--ai-width, 420px);
+  width: var(--ai-width, 460px);
 }
 
 .motion-bottom-dock {

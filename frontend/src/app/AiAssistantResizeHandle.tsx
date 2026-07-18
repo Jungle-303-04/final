@@ -9,7 +9,7 @@ import { useI18n } from "../shared/i18n";
 
 export const AI_ASSISTANT_PANEL_MIN_WIDTH = 360;
 export const AI_ASSISTANT_PANEL_MAX_WIDTH = 640;
-export const AI_ASSISTANT_PANEL_DEFAULT_WIDTH = 420;
+export const AI_ASSISTANT_PANEL_DEFAULT_WIDTH = 460;
 
 export function AiAssistantResizeHandle({
   hostRef,
