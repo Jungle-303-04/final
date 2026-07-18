@@ -247,7 +247,7 @@ export const ko = {
   "state.offline.title": "컨트롤 플레인에 연결할 수 없습니다",
   "state.release.body": "필요한 서비스를 확인하고 있습니다. 잠시만 기다려 주세요.",
   "state.release.title": "서비스 연결을 확인하고 있습니다",
-  "status.tone.critical": "위험",
+  "status.tone.critical": "임계",
   "status.tone.healthy": "정상",
   "status.tone.stale": "오래된 데이터",
   "status.tone.unknown": "알 수 없음",
