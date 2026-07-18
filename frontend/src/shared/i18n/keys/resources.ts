@@ -297,6 +297,8 @@ export type ResourcesMessageKey =
   | "resources.detail.metricsUnavailable"
   | "resources.detail.context"
   | "resources.detail.contextAll"
+  | "resources.detail.managementReadOnly"
+  | "resources.detail.managementReadOnlyDescription"
   | "resources.detail.action.restart"
   | "resources.detail.action.scale"
   | "resources.detail.action.restartTitle"

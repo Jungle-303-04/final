@@ -299,6 +299,8 @@ export const resourcesKo = {
   "resources.detail.metricsUnavailable": "이 리소스의 시각별 상세 메트릭을 사용할 수 없습니다.",
   "resources.detail.context": "읽기 전용 필터 맥락",
   "resources.detail.contextAll": "전체 리소스",
+  "resources.detail.managementReadOnly": "관리 클러스터 · 읽기 전용",
+  "resources.detail.managementReadOnlyDescription": "관리 클러스터 보호 정책에 따라 상태 조회와 로그 확인만 허용됩니다. 변경 명령은 실행할 수 없습니다.",
   "resources.detail.action.restart": "재시작",
   "resources.detail.action.scale": "스케일",
   "resources.detail.action.restartTitle": "Deployment 재시작",

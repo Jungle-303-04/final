@@ -25,6 +25,6 @@ export function refreshAfterClusterDisconnect(
   scope.refresh();
 }
 
-function isManagementCluster(cluster: HomeClusterChoice): boolean {
+export function isManagementCluster(cluster: HomeClusterChoice): boolean {
   return cluster.environment.trim().toLocaleLowerCase() === "management";
 }

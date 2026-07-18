@@ -46,11 +46,13 @@ export interface ResourceManifestEditorHandle {
 
 export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
   detail: ResourceDetail;
+  disabledReason?: string | null;
   port: ResourceManifestPort;
   onInvalidate?: () => void;
   onUnauthorized?: () => void;
 }>(function ResourceManifestEditor({
   detail,
+  disabledReason = null,
   port,
   onInvalidate,
   onUnauthorized,
@@ -134,6 +136,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
   }
 
   const openEditor = () => {
+    if (disabledReason !== null) return;
     setOpen(true);
     setReason("");
     void load();
@@ -152,8 +155,10 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
   return (
     <>
       <Button
+        disabled={disabledReason !== null}
         onClick={openEditor}
         size="sm"
+        title={disabledReason ?? undefined}
         type="button"
         variant="outline"
       >
