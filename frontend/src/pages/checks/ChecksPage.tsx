@@ -20,10 +20,10 @@ import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filter
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { Surface, SurfaceSection } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useChecksDetail, useChecksOverview } from "./useChecksData";
 import { ChecksSettingsDialog } from "./ChecksSettingsDialog";
 
@@ -103,7 +103,7 @@ function ChecksOverviewContent({
   if (frame.phase === "failed") return <ChecksFailureScreen failure={frame.failure} onRefresh={onRefresh} />;
   const overview = frame.data;
   return (
-    <section aria-labelledby="checks-overview-title" className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 gap-4">
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="sr-only" id="checks-overview-title">{copy.title}</h2>
         <p className="min-w-0 break-words text-sm text-muted-foreground">{overview.scopeCoverage.observedAt ?? copy.notObserved}</p>
@@ -121,23 +121,25 @@ function ChecksOverviewContent({
           }}
         />
       </div>
-      {overview.resultSet.availability === "unavailable" ? (
-        <UnavailableCard
-          icon={<CircleAlert aria-hidden="true" />}
-          reasons={overview.resultSet.reasonCodes}
-          title={copy.resultStatus}
-        >
-          {copy.resultUnavailable}
-        </UnavailableCard>
-      ) : <FindingsCard resultSet={overview.resultSet} />}
-      {overview.catalog.availability === "unavailable" ? (
-        <UnavailableCard reasons={overview.catalog.reasonCodes} title={copy.catalogStatus}>
-          {copy.catalogUnavailable}
-        </UnavailableCard>
-      ) : <CatalogCard catalog={overview.catalog} />}
-      <VisibilityCard visibility={overview.visibility} />
-      <ScopeCard coverage={overview.scopeCoverage} />
-    </section>
+      <Surface aria-labelledby="checks-overview-title" className="min-w-0">
+        {overview.resultSet.availability === "unavailable" ? (
+          <UnavailableSection
+            icon={<CircleAlert aria-hidden="true" />}
+            reasons={overview.resultSet.reasonCodes}
+            title={copy.resultStatus}
+          >
+            {copy.resultUnavailable}
+          </UnavailableSection>
+        ) : <FindingsSection resultSet={overview.resultSet} />}
+        {overview.catalog.availability === "unavailable" ? (
+          <UnavailableSection reasons={overview.catalog.reasonCodes} title={copy.catalogStatus}>
+            {copy.catalogUnavailable}
+          </UnavailableSection>
+        ) : <CatalogSection catalog={overview.catalog} />}
+        <VisibilitySection visibility={overview.visibility} />
+        <ScopeSection coverage={overview.scopeCoverage} />
+      </Surface>
+    </div>
   );
 }
 
@@ -157,69 +159,63 @@ function ChecksDetailPanel({
     return <ProductStateScreen kind="loading" placement="content" />;
   }
   if (data.frame.phase === "failed") return <ChecksFailureScreen failure={data.frame.failure} onRefresh={data.refresh} />;
-  return <ChecksDetailCard response={data.frame.data} />;
+  return <ChecksDetailSection response={data.frame.data} />;
 }
 
-function ChecksDetailCard({ response }: { response: ChecksDetailResponse }) {
+function ChecksDetailSection({ response }: { response: ChecksDetailResponse }) {
   const copy = useChecksCopy();
   if (response.detail.availability === "unavailable") {
     return (
-      <Card aria-label={copy.detailStatus}>
-        <CardHeader className="min-w-0 border-b">
-          <CardTitle className="truncate" title={response.detail.requestedCheckId}>{copy.detailStatus}: {response.detail.requestedCheckId}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid min-w-0 gap-2">
-          <p className="text-sm text-muted-foreground">{copy.detailUnavailable}</p>
-          <AvailabilityReasons reasons={response.detail.reasonCodes} />
-        </CardContent>
-      </Card>
+      <section aria-label={copy.detailStatus} className="grid min-w-0 gap-2 border-y py-4">
+        <h2 className="truncate text-base font-semibold" title={response.detail.requestedCheckId}>
+          {copy.detailStatus}: {response.detail.requestedCheckId}
+        </h2>
+        <p className="text-sm text-muted-foreground">{copy.detailUnavailable}</p>
+        <AvailabilityReasons reasons={response.detail.reasonCodes} />
+      </section>
     );
   }
   return (
-    <Card aria-label={copy.detailStatus}>
-      <CardHeader className="min-w-0 border-b">
-        <CardTitle className="break-words" title={response.detail.requestedCheckId}>{response.detail.title}</CardTitle>
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
-        <div className="flex min-w-0 flex-wrap gap-2">
-          <Badge variant="outline">{response.detail.category}</Badge>
-          <Badge variant={response.detail.effectiveSeverity === "danger" ? "destructive" : "secondary"}>
-            {response.detail.effectiveSeverity}
-          </Badge>
-        </div>
-        <p className="break-words text-sm">{response.detail.message}</p>
-        <p className="break-words text-sm text-muted-foreground">{response.detail.remediation}</p>
-        <FindingsList findings={response.detail.findings} />
-        <AvailabilityReasons reasons={response.detail.reasonCodes} />
-      </CardContent>
-    </Card>
+    <section aria-label={copy.detailStatus} className="grid min-w-0 gap-3 border-y py-4">
+      <h2 className="break-words text-base font-semibold" title={response.detail.requestedCheckId}>
+        {response.detail.title}
+      </h2>
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <Badge variant="outline">{response.detail.category}</Badge>
+        <Badge variant={response.detail.effectiveSeverity === "danger" ? "destructive" : "secondary"}>
+          {response.detail.effectiveSeverity}
+        </Badge>
+      </div>
+      <p className="break-words text-sm">{response.detail.message}</p>
+      <p className="break-words text-sm text-muted-foreground">{response.detail.remediation}</p>
+      <FindingsList findings={response.detail.findings} />
+      <AvailabilityReasons reasons={response.detail.reasonCodes} />
+    </section>
   );
 }
 
-function FindingsCard({ resultSet }: { resultSet: Extract<ChecksOverview["resultSet"], { availability: "available" | "partial" }> }) {
+function FindingsSection({ resultSet }: { resultSet: Extract<ChecksOverview["resultSet"], { availability: "available" | "partial" }> }) {
   const copy = useChecksCopy();
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <CardTitle>{copy.resultStatus}</CardTitle>
+    <SurfaceSection className="grid min-w-0 gap-3 p-4">
+      <div className="grid min-w-0 gap-1">
+        <h3 className="text-base font-semibold">{copy.resultStatus}</h3>
         <p className="text-sm text-muted-foreground">{copy.findingCount}: {resultSet.totalFindingCount}</p>
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
-        {resultSet.checks.length === 0
-          ? <p className="text-sm text-muted-foreground">{copy.noFindings}</p>
-          : <FindingsList findings={resultSet.checks} />}
-        <AvailabilityReasons reasons={resultSet.reasonCodes} />
-      </CardContent>
-    </Card>
+      </div>
+      {resultSet.checks.length === 0
+        ? <p className="text-sm text-muted-foreground">{copy.noFindings}</p>
+        : <FindingsList findings={resultSet.checks} />}
+      <AvailabilityReasons reasons={resultSet.reasonCodes} />
+    </SurfaceSection>
   );
 }
 
 function FindingsList({ findings }: { findings: readonly ChecksFinding[] }) {
   const copy = useChecksCopy();
   return (
-    <ul className="grid min-w-0 gap-2" aria-label={copy.resultStatus}>
+    <ul className="min-w-0 divide-y" aria-label={copy.resultStatus}>
       {findings.map((finding) => (
-        <li className="grid min-w-0 gap-2 rounded-lg border p-3" key={`${finding.clusterId}:${finding.findingId}`}>
+        <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0" key={`${finding.clusterId}:${finding.findingId}`}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge variant={finding.severity === "danger" ? "destructive" : "secondary"}>{finding.severity}</Badge>
             <Link
@@ -242,69 +238,65 @@ function FindingsList({ findings }: { findings: readonly ChecksFinding[] }) {
   );
 }
 
-function CatalogCard({ catalog }: { catalog: Extract<ChecksOverview["catalog"], { availability: "available" | "partial" }> }) {
+function CatalogSection({ catalog }: { catalog: Extract<ChecksOverview["catalog"], { availability: "available" | "partial" }> }) {
   const copy = useChecksCopy();
   return (
-    <Card>
-      <CardHeader className="border-b"><CardTitle>{copy.catalogStatus}</CardTitle></CardHeader>
-      <CardContent className="grid min-w-0 gap-2">
-        <ul className="grid min-w-0 gap-2" aria-label={copy.catalogStatus}>
-          {catalog.entries.map((entry) => (
-            <li className="grid min-w-0 gap-1 rounded-lg border p-3" key={entry.checkId}>
-              <p className="break-words text-sm font-medium">{entry.title}</p>
-              <p className="break-words text-xs text-muted-foreground">{entry.description}</p>
-            </li>
-          ))}
-        </ul>
-        <AvailabilityReasons reasons={catalog.reasonCodes} />
-      </CardContent>
-    </Card>
+    <SurfaceSection className="grid min-w-0 gap-3 p-4">
+      <h3 className="text-base font-semibold">{copy.catalogStatus}</h3>
+      <ul className="min-w-0 divide-y" aria-label={copy.catalogStatus}>
+        {catalog.entries.map((entry) => (
+          <li className="grid min-w-0 gap-1 py-3 first:pt-0 last:pb-0" key={entry.checkId}>
+            <p className="break-words text-sm font-medium">{entry.title}</p>
+            <p className="break-words text-xs text-muted-foreground">{entry.description}</p>
+          </li>
+        ))}
+      </ul>
+      <AvailabilityReasons reasons={catalog.reasonCodes} />
+    </SurfaceSection>
   );
 }
 
-function VisibilityCard({ visibility }: { visibility: ChecksOverview["visibility"] }) {
+function VisibilitySection({ visibility }: { visibility: ChecksOverview["visibility"] }) {
   const copy = useChecksCopy();
   if (visibility.availability === "unavailable") {
     return (
-      <UnavailableCard reasons={visibility.reasonCodes} title={copy.visibilityStatus}>
+      <UnavailableSection reasons={visibility.reasonCodes} title={copy.visibilityStatus}>
         {copy.visibilityUnavailable}
-      </UnavailableCard>
+      </UnavailableSection>
     );
   }
   return (
-    <Card>
-      <CardHeader className="border-b"><CardTitle>{copy.visibilityStatus}</CardTitle></CardHeader>
-      <CardContent className="grid min-w-0 gap-2">
-        <ul className="grid min-w-0 gap-2" aria-label={copy.visibilityStatus}>
-          {visibility.clusters.map((cluster) => (
-            <li className="grid min-w-0 gap-2 rounded-lg border p-3" key={cluster.clusterId}>
-              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0 break-words text-sm font-medium">{cluster.clusterId}</span>
-                <Badge variant={cluster.state === "ok" ? "secondary" : "outline"}>{cluster.state}</Badge>
-              </div>
+    <SurfaceSection className="grid min-w-0 gap-3 p-4">
+      <h3 className="text-base font-semibold">{copy.visibilityStatus}</h3>
+      <ul className="min-w-0 divide-y" aria-label={copy.visibilityStatus}>
+        {visibility.clusters.map((cluster) => (
+          <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0" key={cluster.clusterId}>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 break-words text-sm font-medium">{cluster.clusterId}</span>
+              <Badge variant={cluster.state === "ok" ? "secondary" : "outline"}>{cluster.state}</Badge>
+            </div>
+            <p className="break-words text-xs text-muted-foreground">
+              {copy.observedNamespaces}: {cluster.namespaceScope.length === 0 ? copy.noNamespaces : cluster.namespaceScope.join(", ")}
+            </p>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              {Object.entries(cluster.core).map(([kind, access]) => (
+                <Badge key={kind} variant={access === "allowed" ? "secondary" : "outline"}>{kind}: {access}</Badge>
+              ))}
+            </div>
+            {cluster.missingOptionalKinds.length === 0 ? null : (
               <p className="break-words text-xs text-muted-foreground">
-                {copy.observedNamespaces}: {cluster.namespaceScope.length === 0 ? copy.noNamespaces : cluster.namespaceScope.join(", ")}
+                {copy.missingOptionalKinds}: {cluster.missingOptionalKinds.join(", ")}
               </p>
-              <div className="flex min-w-0 flex-wrap gap-2">
-                {Object.entries(cluster.core).map(([kind, access]) => (
-                  <Badge key={kind} variant={access === "allowed" ? "secondary" : "outline"}>{kind}: {access}</Badge>
-                ))}
-              </div>
-              {cluster.missingOptionalKinds.length === 0 ? null : (
-                <p className="break-words text-xs text-muted-foreground">
-                  {copy.missingOptionalKinds}: {cluster.missingOptionalKinds.join(", ")}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-        <AvailabilityReasons reasons={visibility.reasonCodes} />
-      </CardContent>
-    </Card>
+            )}
+          </li>
+        ))}
+      </ul>
+      <AvailabilityReasons reasons={visibility.reasonCodes} />
+    </SurfaceSection>
   );
 }
 
-function UnavailableCard({
+function UnavailableSection({
   children,
   icon,
   reasons,
@@ -316,34 +308,34 @@ function UnavailableCard({
   title: string;
 }) {
   return (
-    <Alert>
-      {icon}
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription>
-        <p>{children}</p>
-        <AvailabilityReasons reasons={reasons} />
-      </AlertDescription>
-    </Alert>
+    <SurfaceSection className="p-4">
+      <Alert>
+        {icon}
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription>
+          <p>{children}</p>
+          <AvailabilityReasons reasons={reasons} />
+        </AlertDescription>
+      </Alert>
+    </SurfaceSection>
   );
 }
 
-function ScopeCard({ coverage }: { coverage: ChecksScopeCoverage }) {
+function ScopeSection({ coverage }: { coverage: ChecksScopeCoverage }) {
   const copy = useChecksCopy();
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <CardTitle>{copy.scope}</CardTitle>
+    <SurfaceSection className="grid min-w-0 gap-3 p-4">
+      <div className="grid min-w-0 gap-1">
+        <h3 className="text-base font-semibold">{copy.scope}</h3>
         {coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground">{copy.scopeUnavailable}</p>}
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
-        {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{copy.notObserved}</p> : (
-          <ul className="grid min-w-0 gap-2" aria-label={copy.scope}>
-            {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
-          </ul>
-        )}
-        <AvailabilityReasons reasons={coverage.reasonCodes} />
-      </CardContent>
-    </Card>
+      </div>
+      {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{copy.notObserved}</p> : (
+        <ul className="min-w-0 divide-y" aria-label={copy.scope}>
+          {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
+        </ul>
+      )}
+      <AvailabilityReasons reasons={coverage.reasonCodes} />
+    </SurfaceSection>
   );
 }
 
@@ -351,7 +343,7 @@ function ScopeRow({ scope }: { scope: ChecksClusterScope }) {
   const copy = useChecksCopy();
   const namespaces = scope.namespaces.length === 0 ? copy.noNamespaces : scope.namespaces.join(", ");
   return (
-    <li className="grid min-w-0 gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <p className="truncate font-medium" title={scope.clusterId}>{scope.clusterId}</p>
         <p className="mt-0.5 break-words text-xs text-muted-foreground">{namespaces}</p>

@@ -95,6 +95,18 @@ describe("ChecksPage", () => {
     expect(screen.queryByText(CHECKS_RESULT_INTERNAL_REASON)).toBeNull();
   });
 
+  it("keeps the overview in one flat surface without nested cards", async () => {
+    const port = checksPort();
+    port.getOverview.mockResolvedValueOnce(observedOverview());
+
+    const view = render(<MemoryRouter><ChecksPage port={port} /></MemoryRouter>);
+
+    await screen.findByText("Container limits are not observed.");
+    expect(view.container.querySelectorAll("[data-slot=surface]")).toHaveLength(1);
+    expect(view.container.querySelector("[data-slot=surface] [data-slot=surface]")).toBeNull();
+    expect(view.container.querySelector("[data-slot=card]")).toBeNull();
+  });
+
   it("resolves a direct check detail URL as unavailable without rendering fabricated finding details", async () => {
     filterState.value = {
       detail: { detail: "check:workload-limits" },
