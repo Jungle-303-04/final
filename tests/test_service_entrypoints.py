@@ -177,12 +177,14 @@ def test_api_gateway_is_prometheus_scrape_annotated() -> None:
     assert 'prometheus.io/port: "8000"' in services
 
 
-def test_local_up_and_smoke_use_runnable_sample_manifest_defaults() -> None:
+def test_local_up_requires_explicit_manifest_while_smoke_fixture_remains_test_only() -> None:
     up_script = read_project_file("scripts/up.sh")
     smoke_script = read_project_file("scripts/smoke.sh")
     sample_manifest = read_project_file("src/samples/smoke/deploy.yaml")
 
-    assert 'MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in up_script
+    assert 'MANIFEST_PATH="${MANIFEST_PATH:-}"' in up_script
+    assert "packages.storage.initialization" in up_script
+    assert "db.init()" not in up_script
     assert 'GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED:-1}"' in up_script
     assert 'GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-0}"' in up_script
     assert 'EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-30}"' in up_script

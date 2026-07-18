@@ -98,3 +98,8 @@ def test_aws_deploy_does_not_wire_migration_job_before_baseline_is_proven() -> N
 
     assert "management-database-migration" not in script
     assert "packages.storage.migration" not in script
+    assert "packages.storage.initialization" in script
+    assert "BASELINE_TARGET_DATABASE_URL" in script
+    assert "BASELINE_CONFIRM_SOURCE_COMMIT" in script
+    assert "BASELINE_CONFIRM_EMPTY_TARGET" in script
+    assert "db.init()" not in script

@@ -22,6 +22,7 @@ from packages.storage.baseline import (
     decide_bootstrap,
     load_baseline_sql,
 )
+from packages.storage.initialization import InitializationPath, decide_initialization
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,6 +51,31 @@ def test_bootstrap_only_accepts_an_empty_target_database(
     table_names: list[str], expected: BaselineDecision
 ) -> None:
     assert decide_bootstrap(table_names) is expected
+
+
+@pytest.mark.parametrize(
+    ("table_names", "expected"),
+    [
+        ([], InitializationPath.BASELINE),
+        (["alembic_version"], InitializationPath.MIGRATION),
+        (["workspaces"], InitializationPath.MIGRATION),
+    ],
+)
+def test_initialization_routes_only_empty_databases_to_the_baseline(
+    table_names: list[str],
+    expected: InitializationPath,
+) -> None:
+    assert decide_initialization(table_names) is expected
+
+
+def test_initialization_never_uses_create_all_or_alembic_stamp() -> None:
+    source = (ROOT / "src/packages/storage/initialization.py").read_text(encoding="utf-8")
+
+    assert "run_bootstrap()" in source
+    assert "run_upgrade()" in source
+    assert "verify_schema()" in source
+    assert "create_all" not in source
+    assert "command.stamp" not in source
 
 
 def test_baseline_runner_never_uses_alembic_stamp() -> None:

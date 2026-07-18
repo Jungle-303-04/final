@@ -29,13 +29,13 @@ NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY:-}"
-RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
+RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-0}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
-TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
+TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-0}"
 API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
+MANIFEST_PATH="${MANIFEST_PATH:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE:-auto}"
@@ -576,6 +576,17 @@ kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status depl
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/nats --timeout=300s
 
 echo "==> bootstrapping management database schema and local admin"
+MIGRATION_EXPECTED_HEAD="$(
+  PYTHONPATH="${ROOT_DIR}/src" uv run alembic heads | awk '{print $1}'
+)"
+BASELINE_SOURCE_COMMIT="$(
+  PYTHONPATH="${ROOT_DIR}/src" uv run python -c \
+    'from packages.storage.baseline import BASELINE_SOURCE_COMMIT; print(BASELINE_SOURCE_COMMIT)'
+)"
+BASELINE_EMPTY_CONFIRMATION="$(
+  PYTHONPATH="${ROOT_DIR}/src" uv run python -c \
+    'from packages.storage.baseline import BASELINE_EMPTY_TARGET_CONFIRMATION; print(BASELINE_EMPTY_TARGET_CONFIRMATION)'
+)"
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management delete job/management-schema-bootstrap --ignore-not-found --wait=true
 cat <<EOF | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 apiVersion: batch/v1
@@ -611,32 +622,28 @@ spec:
             limits:
               cpu: "1"
               memory: 512Mi
-          command:
-            - python
-            - -c
+          command: ["sh", "-ec"]
+          args:
             - |
-              import os
-              import sys
-              import uuid
-
-              sys.path.insert(0, "/app/src/services/gateway/api-gateway")
-
-              from packages.storage.database import Database
-              from passwords import default_display_name, hash_password, normalize_email
-
-              db = Database()
-              db.init()
-              email = normalize_email(os.environ["AUTH_EMAIL"])
-              user_id = "user-" + str(
-                  uuid.uuid5(uuid.NAMESPACE_URL, f"{os.environ['PROJECT_SLUG']}:{email}")
-              )
-              db.upsert_admin_account(
-                  user_id=user_id,
-                  email=email,
-                  password_hash=hash_password(os.environ["AUTH_PASSWORD"]),
-                  display_name=default_display_name(email),
-              )
+              python -m packages.storage.initialization
+              python -m controller.bootstrap_admin
           env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: management-runtime-secret
+                  key: COMMAND_NOTIFY_DATABASE_URL
+            - name: BASELINE_TARGET_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: management-runtime-secret
+                  key: COMMAND_NOTIFY_DATABASE_URL
+            - name: MIGRATION_EXPECTED_HEAD
+              value: "${MIGRATION_EXPECTED_HEAD}"
+            - name: BASELINE_CONFIRM_SOURCE_COMMIT
+              value: "${BASELINE_SOURCE_COMMIT}"
+            - name: BASELINE_CONFIRM_EMPTY_TARGET
+              value: "${BASELINE_EMPTY_CONFIRMATION}"
             - name: PROJECT_SLUG
               value: "${PROJECT_SLUG}"
           envFrom:
@@ -712,7 +719,7 @@ BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}" \
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
 TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
 TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
-TARGET_ENVIRONMENT="test" \
+TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-development}" \
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
 IMAGE_NAME="${IMAGE_NAME}" \
 INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}" \
