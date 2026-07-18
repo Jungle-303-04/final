@@ -343,6 +343,8 @@ metadata:
     DisplayName: "${display_name}"
     Project: "${PROJECT_SLUG}"
     Role: "${role}"
+autoModeConfig:
+  enabled: false
 vpc:
 YAML
   if [[ -n "${shared_vpc_config}" ]]; then

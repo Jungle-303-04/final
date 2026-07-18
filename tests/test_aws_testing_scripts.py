@@ -284,6 +284,8 @@ def test_aws_cluster_endpoints_are_bounded_and_control_plane_logs_are_enabled() 
     assert "EKS_PUBLIC_ACCESS_CIDRS is required when CREATE_CLUSTERS=1" in script
     assert "world-open EKS public endpoint CIDR is forbidden" in script
     assert "validate_eks_endpoint_policy" in script
+    assert "autoModeConfig:" in script
+    assert "enabled: false" in script
     assert "privateAccess: true" in script
     assert "publicAccessCIDRs:" in script
     assert "enableTypes:" in script
