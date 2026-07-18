@@ -1188,7 +1188,8 @@ function App() {
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
   const [surface, setSurface] = useState<Surface>("resources"); // 셸 내 서피스 전환 (리소스·토폴로지·연결 설정)
-  const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상
+  const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
+  const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
   const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
@@ -1265,6 +1266,7 @@ function App() {
   useEffect(() => onAction((a: DemoAction) => {
     setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
+    if (a.kind === "connect") window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
   }), []);
   const openAlert = (p: (typeof alerts)[number]) => {
     setBellOpen(false);
@@ -1400,8 +1402,8 @@ function App() {
           {/* ── 드릴 맵 + 스코프 연동 표 — 종류 탐색은 우측 '탐색' 패널의 리소스 탭으로 통합.
                 파드뷰에선 맵이 파드 표를 이미 보여주므로 숨김(중복 제거) ── */}
           <OpsiaMap embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
-            onAddCluster={() => { setConnectView("cluster"); setSurface("connect"); }}
-            onAddRepo={() => { setConnectView("repo"); setSurface("connect"); }}
+            onAddCluster={() => setConnectModal("cluster")}
+            onAddRepo={() => setConnectModal("repo")}
             stickyTop={topH + 12}
             kindsTab={<KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />}
             belowContent={scope.level !== "pods" && (
@@ -1459,6 +1461,27 @@ function App() {
               boxShadow: "0 10px 26px -8px rgba(10,132,255,0.55), 0 2px 8px rgba(17,19,24,0.12)" }}>
             <Sparkles size={20} />
           </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* 환경 연결 — 문맥 모달 (서피스 전환 없이 그 자리에서) */}
+      <AnimatePresence>
+        {connectModal && (
+          <>
+            <motion.div key="cmb" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
+              onClick={() => setConnectModal(null)}
+              style={{ position: "fixed", top: topH, right: 0, bottom: 0, left: navCollapsed ? 60 : 208, background: "rgba(17,19,24,0.18)", zIndex: 68 }} />
+            <motion.div key="cmw" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.99 }} transition={SOFT}
+              style={{ position: "fixed", top: `calc(${topH}px + 5vh / ${PRESENT_SCALE})`, left: `calc(50% + ${(navCollapsed ? 60 : 208) / 2}px)`, transform: "translateX(-50%)",
+                width: 680, maxWidth: `calc(${"100%"} - ${(navCollapsed ? 60 : 208) + 48}px)`, height: `calc(78vh / ${PRESENT_SCALE})`, zIndex: 69,
+                background: "#EEF0F4", borderRadius: 18, boxShadow: "0 40px 90px -30px rgba(17,19,24,0.45)", overflow: "hidden" }}>
+              <button onClick={() => setConnectModal(null)}
+                style={{ position: "absolute", top: 12, right: 12, zIndex: 5, width: 28, height: 28, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.08)", color: UI.ink2, cursor: "pointer", fontSize: 13 }}>✕</button>
+              <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                <ConnectWizard key={connectModal} embedded initialView={connectModal} />
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

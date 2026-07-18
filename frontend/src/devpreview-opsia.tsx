@@ -533,6 +533,8 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
   const avgC = pct(act.reduce((s, p) => s + p.cpu, 0) / (act.length || 1) + drift);
   const avgM = pct(act.reduce((s, p) => s + p.mem, 0) / (act.length || 1) + drift * 0.8);
   const chot = cp.filter(isCrit).length;
+  const net = Math.round(cp.length * 11 + drift * 14 + (hsh % 30));         // KB/s — 파드 수 비례
+  const disk = 38 + (hsh % 21);                                             // 스토리지 사용률 — 클러스터별 고정
   const nodes = NODES.filter((n) => n.cluster === cl.id);
   const rel = cp.filter((p) => related.has(p.id)).length;
   const nOk = cp.filter((p) => p.status === "Running" && health(p) < 75).length;
@@ -571,6 +573,11 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
         </span>
       </div>
       <DualSpark id={cl.id} a={avgC} b={avgM} h={50} />
+      {/* 차트 밖 지표 — 색점 없음(차트 시리즈 아님) */}
+      <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: UI.ink3, marginTop: -4 }}>
+        <span>NET <b style={{ fontWeight: 700, color: UI.ink2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{net}KB/s</b></span>
+        <span>DISK <b style={{ fontWeight: 700, color: UI.ink2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{disk}%</b></span>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
         <span title={`정상 ${nOk} · 경고 ${nWarn} · 임계 ${chot} · 대기 ${nPend}`} style={{ display: "flex", height: 5, borderRadius: 999, overflow: "hidden", gap: 1, flex: 1 }}>
