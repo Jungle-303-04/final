@@ -287,6 +287,8 @@ export const resourcesKo = {
   "resources.detail.metricsContainersPartial": "일부 관측",
   "resources.detail.metricsContainersUnavailable": "컨테이너 측정값을 확인할 수 없습니다.",
   "resources.detail.metricsContainerValue": "{cpu} · {memory}",
+  "resources.detail.metricsRequest": "요청 {value}",
+  "resources.detail.metricsLimit": "한도 {value}",
   "resources.detail.metricsPeak": "최고",
   "resources.detail.metricsPartial": "일부 구간의 측정값만 표시 중",
   "resources.detail.metricsRetryExhausted": "메트릭 소스를 계속 사용할 수 없어 일반 갱신 주기로 전환했습니다.",

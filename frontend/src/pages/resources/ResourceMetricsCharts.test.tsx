@@ -301,8 +301,8 @@ describe("resource detail metrics", () => {
     );
 
     expect(screen.getByText("90% of limit")).toBeTruthy();
-    expect(screen.getAllByText("request 200m").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("limit 500m").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Request 200m").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Limit 500m").length).toBeGreaterThan(0);
   });
 
   it("renders the exact current Node observation time and measurement window", () => {

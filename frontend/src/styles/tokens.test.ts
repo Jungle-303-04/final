@@ -43,15 +43,27 @@ describe("product theme token contract", () => {
     },
   );
 
-  it("maps the warning foreground through one semantic theme alias", () => {
+  it("maps warning, chart, and code colors through semantic theme aliases", () => {
     const themeTokens = declarations(block("@theme inline"));
     const lightTokens = declarations(block(":root"));
     const darkTokens = declarations(block(".dark"));
 
     expect(themeTokens.get("--color-warning-foreground")).toBe("var(--warning-foreground)");
-    expect(lightTokens.get("--warning-foreground")).toMatch(/^#[\dA-F]{6}$/);
-    expect(darkTokens.get("--warning-foreground")).toMatch(/^#[\dA-F]{6}$/);
+    expect(lightTokens.get("--warning-foreground")).toMatch(/^oklch\(/);
+    expect(darkTokens.get("--warning-foreground")).toMatch(/^oklch\(/);
     expect(lightTokens.get("--warning-foreground")).not.toBe(darkTokens.get("--warning-foreground"));
+
+    for (const token of ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5"]) {
+      expect(themeTokens.get(`--color-${token.slice(2)}`)).toBe(`var(${token})`);
+      expect(lightTokens.get(token)).toMatch(/^oklch\(/);
+      expect(darkTokens.get(token)).toMatch(/^oklch\(/);
+      expect(lightTokens.get(token)).not.toBe(darkTokens.get(token));
+    }
+
+    expect(themeTokens.get("--color-code")).toBe("var(--code-background)");
+    expect(themeTokens.get("--color-code-foreground")).toBe("var(--code-foreground)");
+    expect(lightTokens.get("--code-background")).toMatch(/^oklch\(/);
+    expect(lightTokens.get("--code-foreground")).toMatch(/^oklch\(/);
   });
 
   it("derives product frame clearance from the shared floating-action geometry", () => {

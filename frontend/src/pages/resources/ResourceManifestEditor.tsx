@@ -260,7 +260,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
                       aria-label={t("resources.manifest.yaml")}
                       autoCapitalize="off"
                       autoCorrect="off"
-                      className="min-h-[24rem] w-full resize-y rounded-lg border border-input bg-[#0d1117] p-4 font-mono text-xs leading-5 text-[#e6edf3] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="min-h-[24rem] w-full resize-y rounded-lg border border-input bg-code p-4 font-mono text-xs leading-5 text-code-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       disabled={busy || receipt !== null || applyReceipt !== null}
                       id="resource-manifest-yaml"
                       onChange={(event) => {

@@ -257,7 +257,7 @@ function ContainerMetricsHistory({
   if (series.length === 0) {
     return completeness === "unavailable" ? (
       <section
-        className="grid min-w-0 gap-2 rounded-xl border bg-card p-4 shadow-xs"
+        className="grid min-w-0 gap-2 border-t pt-4"
         data-slot="resource-container-metric-history"
       >
         <h3 className="truncate text-sm font-medium">
@@ -271,7 +271,7 @@ function ContainerMetricsHistory({
   }
   return (
     <section
-      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 shadow-xs"
+      className="grid min-w-0 gap-3 border-t pt-4"
       data-slot="resource-container-metric-history"
     >
       <header className="flex min-w-0 items-center justify-between gap-3">
@@ -284,9 +284,9 @@ function ContainerMetricsHistory({
           </Badge>
         )}
       </header>
-      <div className="grid min-w-0 gap-3">
+      <div className="grid min-w-0 divide-y border-y">
         {series.map((container) => (
-          <article className="grid min-w-0 gap-3 rounded-lg border p-3" key={container.name}>
+          <article className="grid min-w-0 gap-3 py-3" key={container.name}>
             <h4 className="truncate text-sm font-medium" title={container.name}>
               {container.name}
             </h4>
@@ -400,7 +400,7 @@ function ContainerMetrics({
   }
   const unavailable = t("common.value.unavailable");
   return (
-    <section className="grid min-w-0 gap-2 rounded-xl border bg-card p-4 shadow-xs">
+    <section className="grid min-w-0 gap-3 border-t pt-4">
       <header className="flex min-w-0 items-center justify-between gap-3">
         <h3 className="truncate text-sm font-medium">
           {t("resources.detail.metricsContainers")}
@@ -411,10 +411,10 @@ function ContainerMetrics({
           </Badge>
         )}
       </header>
-      <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
+      <ul className="grid min-w-0 border-y sm:grid-cols-2 sm:[&>li:nth-child(even)]:border-l">
         {containers.map((container) => (
           <li
-            className="flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2"
+            className="flex min-w-0 items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0 sm:nth-last-[-n+2]:border-b-0"
             key={container.name}
           >
             <span className="truncate text-sm font-medium" title={container.name}>
@@ -466,7 +466,7 @@ function ResourceMetricChart({
   const saturation = metricSaturation(stats.current, references);
 
   return (
-    <section className="min-w-0 rounded-xl border bg-card p-4 shadow-xs" data-slot="resource-metric-card">
+    <section className="min-w-0 border-t pt-4" data-slot="resource-metric-section">
       <header className="mb-4 flex items-start justify-between gap-4">
         <div className="grid gap-1">
           <h3 className="flex items-center gap-2 text-sm font-medium">
@@ -487,10 +487,18 @@ function ResourceMetricChart({
           {references === undefined ? null : (
             <div className="flex flex-wrap gap-2 text-[0.6875rem] text-muted-foreground">
               {references.request === null ? null : (
-                <span>{`request ${formatValue(references.request)}`}</span>
+                <span>
+                  {t("resources.detail.metricsRequest", {
+                    value: formatValue(references.request),
+                  })}
+                </span>
               )}
               {references.limit === null ? null : (
-                <span>{`limit ${formatValue(references.limit)}`}</span>
+                <span>
+                  {t("resources.detail.metricsLimit", {
+                    value: formatValue(references.limit),
+                  })}
+                </span>
               )}
             </div>
           )}
@@ -588,7 +596,7 @@ function ResourceMetricsChartsLoading({ wide }: { wide: boolean }) {
       data-slot="resource-metrics-loading"
     >
       {["cpu", "memory"].map((metric) => (
-        <div className="grid h-72 gap-4 rounded-xl border p-4" key={metric}>
+        <div className="grid h-72 gap-4 border-t pt-4" key={metric}>
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-56 w-full" />
         </div>
@@ -600,7 +608,7 @@ function ResourceMetricsChartsLoading({ wide }: { wide: boolean }) {
 function ResourceMetricsUnavailable({ retry }: { retry: ResourceMetricsUnavailableRetry | null }) {
   const { t } = useI18n();
   return (
-    <div className="grid min-h-48 place-items-center rounded-xl border border-dashed p-6 text-center">
+    <div className="grid min-h-48 place-items-center border-y py-6 text-center">
       <div className="grid justify-items-center gap-2 text-sm text-muted-foreground">
         <Activity aria-hidden="true" className="size-6" />
         <p>{t("resources.detail.metricsUnavailable")}</p>

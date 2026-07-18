@@ -11,7 +11,7 @@ export function ResourceFactsPanel({ facts }: { facts: ResourceFacts }) {
   const entries = factsEntries(facts, t, formatNumber);
   if (entries.length === 0) return null;
   return (
-    <section aria-labelledby="resource-facts-title" className="grid gap-3 rounded-xl border bg-card p-4 shadow-xs">
+    <section aria-labelledby="resource-facts-title" className="grid gap-3 border-t pt-4">
       <h3 className="font-heading font-medium" id="resource-facts-title">
         {t("resources.detail.facts")}
       </h3>
@@ -22,9 +22,12 @@ export function ResourceFactsPanel({ facts }: { facts: ResourceFacts }) {
 
 export function DefinitionGrid({ entries }: { entries: Array<[string, string]> }) {
   return (
-    <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-2">
+    <dl className="grid min-w-0 border-y text-sm sm:grid-cols-2 sm:[&>div:nth-child(odd)]:border-r">
       {entries.map(([label, value]) => (
-        <div className="min-w-0 rounded-lg border bg-background/65 px-3 py-2.5" key={label}>
+        <div
+          className="min-w-0 border-b px-3 py-2.5 last:border-b-0 sm:nth-last-[-n+2]:border-b-0"
+          key={label}
+        >
           <dt className="text-xs text-muted-foreground">{label}</dt>
           <dd className="min-w-0" data-slot="resource-definition-value">
             <OverflowIdentity className="font-medium" value={value} />

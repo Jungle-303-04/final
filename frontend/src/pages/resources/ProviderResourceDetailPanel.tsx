@@ -51,14 +51,18 @@ export function ProviderResourceDetailPanel({
   return (
     <section
       aria-labelledby="resource-provider-detail-title"
-      className="grid gap-4 rounded-xl border bg-card p-4 shadow-xs"
+      className="grid min-w-0 border-t pt-4"
       data-provider-detail={detail.type}
     >
-      <h3 className="font-heading font-medium" id="resource-provider-detail-title">
+      <h3 className="pb-4 font-heading font-medium" id="resource-provider-detail-title">
         {t("resources.detail.provider.title")}
       </h3>
       {sections.map((section) => (
-        <section aria-labelledby={`provider-section-${section.id}`} className="grid gap-2" key={section.id}>
+        <section
+          aria-labelledby={`provider-section-${section.id}`}
+          className="grid gap-2 border-t py-4 last:pb-0"
+          key={section.id}
+        >
           <h4 className="text-sm font-medium" id={`provider-section-${section.id}`}>
             {t(section.label)}
           </h4>
