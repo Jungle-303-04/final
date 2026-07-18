@@ -1219,8 +1219,11 @@ function App() {
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
   const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
   useEffect(() => {
+    // 스크롤바 등장/소멸로 clientWidth가 바뀌는 경우까지 관찰 (window resize 이벤트로는 못 잡는다)
     const on = () => setVwCss(document.documentElement.clientWidth / PRESENT_SCALE);
-    window.addEventListener("resize", on); return () => window.removeEventListener("resize", on);
+    const ro = new ResizeObserver(on); ro.observe(document.documentElement);
+    window.addEventListener("resize", on);
+    return () => { ro.disconnect(); window.removeEventListener("resize", on); };
   }, []);
   // 반응형 — 좁은 화면(200% 확대 등)에서 내비를 자동으로 아이콘만 남긴다
   useEffect(() => {
