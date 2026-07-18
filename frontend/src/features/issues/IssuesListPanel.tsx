@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { serializeRouteSearch } from "../filters/routeSearchAdapter";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button, buttonVariants } from "../../shared/ui/primitives/button";
 import {
@@ -699,20 +700,20 @@ function copyIssueLinkLabel(value: ReactNode): string | undefined {
 
 function namespaceHref(issue: IssueSummary): string | null {
   if (!issue.clusterId || !issue.namespace) return null;
-  const params = new URLSearchParams();
-  params.set("clusters", issue.clusterId);
-  params.set("namespaces", `${issue.clusterId}/${issue.namespace}`);
-  return `/resources?${params.toString()}`;
+  return `/resources${serializeRouteSearch([
+    ["clusters", issue.clusterId],
+    ["namespaces", `${issue.clusterId}/${issue.namespace}`],
+  ])}`;
 }
 
 function resourceHref(issue: IssueSummary): string | null {
   if (!issue.clusterId || !issue.resourceKind || !issue.resourceName) return namespaceHref(issue);
-  const params = new URLSearchParams();
   const namespace = issue.namespace?.trim() || "~";
-  params.set("clusters", issue.clusterId);
-  params.set("resources.types", issue.resourceKind.toLowerCase());
-  params.set("detail", `${issue.resourceKind}/${namespace}/${issue.resourceName}`);
-  return `/resources?${params.toString()}`;
+  return `/resources${serializeRouteSearch([
+    ["clusters", issue.clusterId],
+    ["resources.types", issue.resourceKind.toLowerCase()],
+    ["detail", `${issue.resourceKind}/${namespace}/${issue.resourceName}`],
+  ])}`;
 }
 
 function crashLoopSymptomText(title: string): string {

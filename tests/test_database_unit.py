@@ -3019,6 +3019,8 @@ def test_rca_report_save_writes_projection_columns() -> None:
         "rca_detail": {
             "confidence": 0.91,
             "reason": "필요한 근거가 모두 수집되었습니다.",
+            "evidence_summary": "로그 3건과 메트릭 2건을 확인했습니다.",
+            "evidence_bundle_summary": "수집된 근거 5건",
             "selected_candidate_id": "image-pull-backoff",
             "supporting_evidence": ["kubernetes"],
             "missing_evidence": [],
@@ -3039,6 +3041,8 @@ def test_rca_report_save_writes_projection_columns() -> None:
     assert compiled.params["confidence"] == 0.91
     assert compiled.params["supporting_evidence"] == ["kubernetes"]
     assert compiled.params["candidates"][0]["candidate_id"] == "image-pull-backoff"
+    assert "evidence_summary" not in compiled.params
+    assert "evidence_bundle_summary" not in compiled.params
 
 
 def test_rca_report_dedup_reads_projection_without_payload() -> None:

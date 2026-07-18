@@ -52,6 +52,10 @@ def _rca_report_summary_columns() -> tuple[Any, ...]:
         table.c.evidence_ref,
         table.c.supporting_evidence,
         table.c.missing_evidence,
+        table.c.payload["rca_detail"]["evidence_summary"].astext.label("evidence_summary"),
+        table.c.payload["rca_detail"]["evidence_bundle_summary"].astext.label(
+            "evidence_bundle_summary"
+        ),
         table.c.resource_kind,
         table.c.resource_name,
         table.c.namespace,
@@ -457,10 +461,13 @@ class RcaRepository(DatabaseConnection):
     ) -> None:
         table = RcaReport.__table__
         projection = rca_report_projection(body)
-        # Narrative fields remain in the existing JSON payload.  All other
-        # projection keys map to dedicated summary columns.
+        # Narrative and additive evidence summaries remain in the existing
+        # JSON payload. The latter are exposed by ``rca_report_summary`` but
+        # intentionally have no dedicated storage columns.
         projection.pop(RCA_NARRATIVE_PAYLOAD_KEY, None)
         projection.pop(RCA_NARRATIVE_STATUS_KEY, None)
+        projection.pop("evidence_summary", None)
+        projection.pop("evidence_bundle_summary", None)
         statement = pg_insert(table).values(
             workspace_id=workspace_id,
             correlation_id=correlation_id,
