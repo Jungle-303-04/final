@@ -17,6 +17,7 @@ import {
   normalizeSurfaceText,
   orderRoutesForTraversal,
   parseNetscapeSessionCookie,
+  verifyWorkspaceSwitcherPlacement,
   verifyWorkspaceRoundTrip,
   withRouteSmokeDiagnostics,
 } from "./post-deploy-route-smoke.mjs";
@@ -54,6 +55,68 @@ function createNetworkHarness(startedAt = 1_000) {
 }
 
 describe("post-deploy route smoke helpers", () => {
+  it("verifies the workspace in the product header and rejects a sidebar duplicate", async () => {
+    const calls = [];
+    const page = {
+      locator(selector) {
+        return {
+          getByText(text, options) {
+            calls.push({ options, selector, text });
+            return {
+              async count() {
+                return selector.includes("sidebar") ? 0 : 1;
+              },
+              async waitFor(options) {
+                calls.push({ options, selector, wait: true });
+              },
+            };
+          },
+        };
+      },
+    };
+
+    await verifyWorkspaceSwitcherPlacement(page, "workspace-demo", 1_234);
+
+    expect(calls).toEqual([
+      {
+        options: { exact: true },
+        selector: 'header[data-slot="product-header"] [data-slot="product-header-workspace"]',
+        text: "workspace-demo",
+      },
+      {
+        options: { state: "visible", timeout: 1_234 },
+        selector: 'header[data-slot="product-header"] [data-slot="product-header-workspace"]',
+        wait: true,
+      },
+      {
+        options: { exact: true },
+        selector: 'aside[data-slot="sidebar"]',
+        text: "workspace-demo",
+      },
+    ]);
+  });
+
+  it("fails when the workspace switcher remains duplicated in the sidebar", async () => {
+    const page = {
+      locator(selector) {
+        return {
+          getByText() {
+            return {
+              async count() {
+                return selector.includes("sidebar") ? 1 : 0;
+              },
+              async waitFor() {},
+            };
+          },
+        };
+      },
+    };
+
+    await expect(
+      verifyWorkspaceSwitcherPlacement(page, "workspace-demo", 1_234),
+    ).rejects.toThrow("workspace switcher must not remain in the product sidebar");
+  });
+
   it("orders the currently rendered route last so every DOM route receives a transition", () => {
     const routes = [
       { pathname: "/alpha" },

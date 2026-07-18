@@ -6,6 +6,8 @@ import { chromium } from "playwright";
 
 const SIDEBAR_SELECTOR = 'aside[data-slot="sidebar"]';
 const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
+const WORKSPACE_HEADER_SELECTOR =
+  'header[data-slot="product-header"] [data-slot="product-header-workspace"]';
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
 const NETWORK_QUIET_WINDOW_MS = 500;
@@ -540,12 +542,29 @@ async function verifyWorkspaceSurface({
     DEMO_WORKSPACE_ROUTE,
     AUTH_BOOTSTRAP_TIMEOUT_MS,
   );
-  await page
-    .locator(SIDEBAR_SELECTOR)
-    .getByText(workspaceId, { exact: true })
-    .waitFor({ state: "visible", timeout: AUTH_BOOTSTRAP_TIMEOUT_MS });
+  await verifyWorkspaceSwitcherPlacement(page, workspaceId);
   assertDiagnostics(diagnostics);
   return surface;
+}
+
+export async function verifyWorkspaceSwitcherPlacement(
+  page,
+  workspaceId,
+  timeoutMs = AUTH_BOOTSTRAP_TIMEOUT_MS,
+) {
+  await page
+    .locator(WORKSPACE_HEADER_SELECTOR)
+    .getByText(workspaceId, { exact: true })
+    .waitFor({ state: "visible", timeout: timeoutMs });
+  const sidebarMatches = await page
+    .locator(SIDEBAR_SELECTOR)
+    .getByText(workspaceId, { exact: true })
+    .count();
+  assert.equal(
+    sidebarMatches,
+    0,
+    "workspace switcher must not remain in the product sidebar",
+  );
 }
 
 async function waitForObservedRouteSurface(
