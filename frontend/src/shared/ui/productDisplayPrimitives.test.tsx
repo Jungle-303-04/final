@@ -6,7 +6,7 @@ import type { ReactElement } from "react";
 import { I18nProvider } from "../i18n";
 import { Metric } from "./Metric";
 import { StatusMark } from "./StatusMark";
-import { Surface } from "./Surface";
+import { Surface, SurfaceSection } from "./Surface";
 
 afterEach(cleanup);
 
@@ -26,6 +26,34 @@ describe("product display primitives", () => {
       </Surface>,
     );
     expect(screen.getByTestId("layout-surface").getAttribute("role")).toBeNull();
+  });
+
+  it("keeps content surfaces flat and reserves elevation for explicit overlays", () => {
+    const { rerender } = render(
+      <Surface aria-label="평면 표면" data-testid="surface">
+        <SurfaceSection data-testid="first-section">첫 구획</SurfaceSection>
+        <SurfaceSection data-testid="second-section">둘째 구획</SurfaceSection>
+      </Surface>,
+    );
+
+    const surface = screen.getByTestId("surface");
+    expect(surface.getAttribute("data-elevation")).toBe("flat");
+    expect(surface.className).not.toContain("shadow-sm");
+    expect(surface.className).not.toContain("shadow-lg");
+    expect(surface.className).toContain("[&_[data-slot=card]]:ring-0");
+    expect(surface.className).toContain("[&_[data-slot=card]]:bg-transparent");
+    expect(screen.getByTestId("first-section").className).toContain("first:border-t-0");
+    expect(screen.getByTestId("second-section").className).not.toContain("bg-");
+    expect(screen.getByTestId("second-section").className).not.toContain("rounded");
+    expect(screen.getByTestId("second-section").className).not.toContain("shadow");
+
+    rerender(
+      <Surface aria-label="오버레이 표면" data-testid="surface" elevation="overlay">
+        떠 있는 제어
+      </Surface>,
+    );
+    expect(screen.getByTestId("surface").getAttribute("data-elevation")).toBe("overlay");
+    expect(screen.getByTestId("surface").className).toContain("shadow-lg");
   });
 
   it("fails fast when semantic surfaces have an empty accessible name", () => {

@@ -2,6 +2,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 
 type SurfaceElement = "section" | "aside" | "div";
+type SurfaceElevation = "flat" | "overlay";
 
 type SurfaceAttributes = Omit<
   ComponentPropsWithoutRef<"section">,
@@ -20,6 +21,11 @@ type SurfaceName =
 type SurfaceBase = SurfaceAttributes & {
   children: ReactNode;
   className?: string;
+  /**
+   * Content surfaces stay in the document plane by default. Elevation is
+   * reserved for real z-axis UI such as a popover, sheet, or dialog.
+   */
+  elevation?: SurfaceElevation;
 };
 
 export type SurfaceProps =
@@ -38,6 +44,7 @@ export function Surface({
   as: Element = "section",
   className,
   children,
+  elevation = "flat",
   "aria-hidden": ariaHidden,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledby,
@@ -62,12 +69,36 @@ export function Surface({
       aria-hidden={ariaHidden}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledby}
-      className={cn("rounded-xl border bg-card text-card-foreground shadow-sm", className)}
+      className={cn(
+        "rounded-xl border bg-card text-card-foreground",
+        "[&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:bg-transparent",
+        "[&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:ring-0",
+        "[&_[data-slot=card-footer]]:bg-transparent",
+        elevation === "overlay" && "shadow-lg",
+        className,
+      )}
+      data-elevation={elevation}
       data-slot="surface"
       role={role}
       {...props}
     >
       {children}
     </Element>
+  );
+}
+
+export function SurfaceSection({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 border-t first:border-t-0",
+        className,
+      )}
+      data-slot="surface-section"
+      {...props}
+    />
   );
 }
