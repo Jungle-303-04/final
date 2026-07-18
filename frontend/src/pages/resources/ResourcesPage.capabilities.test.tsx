@@ -118,6 +118,70 @@ describe("resource detail capabilities", () => {
     expect(screen.queryByRole("button", { name: "Restart" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Scale" })).toBeNull();
   });
+
+  it("keeps management-cluster mutations visible but disabled by policy", async () => {
+    const managementDetail: ResourceDetail = {
+      ...DETAIL,
+      clusterId: "kubernetes-ops",
+      resource: {
+        ...DETAIL.resource,
+        clusterId: "kubernetes-ops",
+        id: "deployment:kubernetes-ops/management/checkout-api",
+        inventoryKey: "deployment:management/checkout-api",
+        namespace: "management",
+      },
+      identity: {
+        ...DETAIL.identity,
+        namespace: "management",
+      },
+    };
+    const capabilities = resourcesCapabilitiesPort({
+      loadResourceCapabilities: vi.fn().mockResolvedValue({
+        subject: {
+          resourceId: managementDetail.resource.inventoryKey,
+          snapshotId: "snapshot-management",
+          clusterId: managementDetail.clusterId,
+          resourceType: "workload",
+          kind: "Deployment",
+          namespace: "management",
+          name: "checkout-api",
+        },
+        revision: "b".repeat(64),
+        capabilities: [{
+          capabilityId: "resource.delete",
+          label: "Delete",
+          description: "Delete this resource.",
+          execution: "command",
+          confirmationRequired: true,
+          realtime: true,
+          inputSchema: [],
+          method: "POST",
+          path: "/api/resource-actions/delete",
+          requestContext: "exact-resource",
+          resultIntent: "refresh-resource",
+        }],
+      }),
+    });
+    renderResources(
+      resourcesPort({ loadResourceDetail: vi.fn().mockResolvedValue(managementDetail) }),
+      "/resources?clusters=kubernetes-ops&resources.types=workload&detail=Deployment%2Fmanagement%2Fcheckout-api",
+      resourcesClusterPort(),
+      vi.fn(),
+      "ko",
+      resourcesFilterPort(),
+      resourcesPhysicalTopologyPort(),
+      resourcesMetricHistoryPort(),
+      capabilities,
+      resourcesActionsPort(),
+    );
+
+    expect(await screen.findByText("관리 클러스터 · 읽기 전용")).toBeTruthy();
+    const deleteAction = await screen.findByRole("button", { name: "Delete" });
+    expect(deleteAction.hasAttribute("disabled")).toBe(true);
+    expect(deleteAction.getAttribute("title")).toBe(
+      "관리 클러스터 보호 정책에 따라 상태 조회와 로그 확인만 허용됩니다. 변경 명령은 실행할 수 없습니다.",
+    );
+  });
 });
 
 function renderWithRuntime(

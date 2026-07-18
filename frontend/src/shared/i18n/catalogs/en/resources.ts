@@ -295,6 +295,8 @@ export const resourcesEn = {
   "resources.detail.metricsUnavailable": "Timestamped detail metrics are not available for this resource.",
   "resources.detail.context": "Read-only filter context",
   "resources.detail.contextAll": "All resources",
+  "resources.detail.managementReadOnly": "Management cluster · read only",
+  "resources.detail.managementReadOnlyDescription": "The management-cluster protection policy allows state and log inspection only. Mutating commands are unavailable.",
   "resources.detail.action.restart": "Restart",
   "resources.detail.action.scale": "Scale",
   "resources.detail.action.restartTitle": "Restart deployment",
