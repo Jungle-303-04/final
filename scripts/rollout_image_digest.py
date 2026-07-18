@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -91,6 +92,147 @@ def render_bootstrap_manifest(plan: RollbackPlan, *, manifest: Path, image: str)
     if len(resources) != len(set(resources)):
         raise ValueError("bootstrap manifest contains duplicate Deployments")
     return yaml.safe_dump_all(rendered, sort_keys=False)
+
+
+def existing_deployment_spec_patches(
+    plan: RollbackPlan,
+    *,
+    manifest: Path,
+    image: str,
+) -> tuple[tuple[str, str, list[dict[str, Any]]], ...]:
+    if not IMAGE_DIGEST.fullmatch(image):
+        raise ValueError("image must use an immutable sha256 digest")
+    if not plan.deployment_states:
+        return ()
+
+    states = {(state.namespace, state.resource): state for state in plan.deployment_states}
+    target_containers: dict[tuple[str, str], set[str]] = {}
+    for target in plan.targets:
+        target_containers.setdefault((target.namespace, target.resource), set()).add(
+            target.container
+        )
+
+    patches: list[tuple[str, str, list[dict[str, Any]]]] = []
+    observed: set[tuple[str, str]] = set()
+    for index, value in enumerate(yaml.safe_load_all(manifest.read_text(encoding="utf-8"))):
+        document = require_mapping(value, f"manifest document {index}")
+        if document.get("kind") != "Deployment":
+            continue
+        metadata = require_mapping(document.get("metadata"), f"manifest document {index}.metadata")
+        name = metadata.get("name")
+        if not isinstance(name, str):
+            raise ValueError(f"manifest document {index} has no deployment name")
+        namespaces = {
+            namespace for namespace, resource in states if resource == f"deployment/{name}"
+        }
+        if not namespaces:
+            continue
+        if len(namespaces) != 1:
+            raise ValueError(f"deployment namespace is ambiguous: {name}")
+        namespace = next(iter(namespaces))
+        declared_namespace = metadata.get("namespace")
+        if declared_namespace is not None and declared_namespace != namespace:
+            raise ValueError(f"deployment/{name} namespace mismatch")
+        identity = (namespace, f"deployment/{name}")
+        if identity in observed:
+            raise ValueError(f"manifest contains duplicate Deployment: {name}")
+
+        spec = require_mapping(document.get("spec"), f"deployment/{name}.spec")
+        template = copy.deepcopy(
+            require_mapping(spec.get("template"), f"deployment/{name}.template")
+        )
+        pod_spec = require_mapping(template.get("spec"), f"deployment/{name}.podSpec")
+        containers = pod_spec.get("containers")
+        if not isinstance(containers, list) or not containers:
+            raise ValueError(f"deployment/{name} must contain containers")
+        state = states[identity]
+        live_pod_spec = require_mapping(
+            state.template.get("spec"), f"deployment/{name}.livePodSpec"
+        )
+        live_containers = live_pod_spec.get("containers")
+        if not isinstance(live_containers, list) or not live_containers:
+            raise ValueError(f"deployment/{name} live containers must be a list")
+        live_images = {
+            require_mapping(container, f"deployment/{name}.liveContainer").get(
+                "name"
+            ): require_mapping(container, f"deployment/{name}.liveContainer").get("image")
+            for container in live_containers
+        }
+        canonical_names: set[str] = set()
+        for container_index, raw_container in enumerate(containers):
+            container = require_mapping(
+                raw_container,
+                f"deployment/{name}.containers[{container_index}]",
+            )
+            container_name = container.get("name")
+            if not isinstance(container_name, str) or container_name in canonical_names:
+                raise ValueError(f"deployment/{name} has invalid or duplicate container names")
+            canonical_names.add(container_name)
+            if container_name in target_containers[identity]:
+                container["image"] = image
+                continue
+            live_image = live_images.get(container_name)
+            if live_image is not None:
+                if not isinstance(live_image, str) or not IMAGE_DIGEST.fullmatch(live_image):
+                    raise ValueError(f"deployment/{name}/{container_name} live image is mutable")
+                container["image"] = live_image
+                continue
+            canonical_image = container.get("image")
+            if not isinstance(canonical_image, str) or not IMAGE_DIGEST.fullmatch(canonical_image):
+                raise ValueError(f"deployment/{name}/{container_name} new image must be immutable")
+        unexpected_live = set(live_images) - canonical_names
+        if unexpected_live:
+            raise ValueError(
+                f"deployment/{name} has live containers outside canonical manifest: "
+                f"{sorted(unexpected_live)!r}"
+            )
+        strategy = copy.deepcopy(
+            require_mapping(spec.get("strategy", state.strategy), f"deployment/{name}.strategy")
+        )
+        patches.append(
+            (
+                namespace,
+                f"deployment/{name}",
+                [
+                    {"op": "replace", "path": "/spec/strategy", "value": strategy},
+                    {"op": "replace", "path": "/spec/template", "value": template},
+                ],
+            )
+        )
+        observed.add(identity)
+
+    missing = sorted(set(states) - observed)
+    if missing:
+        raise ValueError(f"manifest is missing existing rollout deployments: {missing!r}")
+    return tuple(patches)
+
+
+def apply_existing_deployment_specs(
+    plan: RollbackPlan,
+    *,
+    context: str,
+    manifest: Path,
+    image: str,
+) -> int:
+    patches = existing_deployment_spec_patches(plan, manifest=manifest, image=image)
+    for namespace, resource, patch in patches:
+        subprocess.run(
+            (
+                "kubectl",
+                "--context",
+                context,
+                "-n",
+                namespace,
+                "patch",
+                resource,
+                "--type=json",
+                "--patch-file=-",
+            ),
+            check=True,
+            input=json.dumps(patch, separators=(",", ":")),
+            text=True,
+        )
+    return len(patches)
 
 
 def live_deployments(*, context: str, namespace: str) -> Any:
@@ -309,7 +451,12 @@ def rollout(
     image: str,
     timeout: str,
     manifest: Path | None = None,
+    reconcile_existing_specs: bool = False,
 ) -> None:
+    if reconcile_existing_specs and manifest is None:
+        raise ValueError("manifest is required when reconciling existing deployment specs")
+    if reconcile_existing_specs and plan.targets and not plan.deployment_states:
+        raise ValueError("deployment rollback states are required before spec reconciliation")
     commands = rollout_commands(plan, context=context, image=image, timeout=timeout)
     context_result = subprocess.run(commands[0], check=True, capture_output=True, text=True)
     if context_result.stdout.strip() != context:
@@ -335,6 +482,21 @@ def rollout(
         live_document=live_before,
         require_exact_digest=False,
     )
+    if reconcile_existing_specs:
+        assert manifest is not None
+        apply_existing_deployment_specs(
+            plan,
+            context=context,
+            manifest=manifest,
+            image=image,
+        )
+        live_before = live_deployments(context=context, namespace=namespace)
+        verify_repository_rollout(
+            plan,
+            image=image,
+            live_document=live_before,
+            require_exact_digest=True,
+        )
     target_count = len(targets)
     set_image_commands = commands[1 : 1 + target_count]
     rollout_status_commands = commands[1 + target_count :]
@@ -358,6 +520,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--context", required=True)
     parser.add_argument("--image", required=True)
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--reconcile-existing-specs", action="store_true")
     parser.add_argument("--timeout", default="300s")
     return parser.parse_args()
 
@@ -371,6 +534,7 @@ def main() -> int:
         image=args.image,
         timeout=args.timeout,
         manifest=args.manifest,
+        reconcile_existing_specs=args.reconcile_existing_specs,
     )
     print(f"rolled out immutable digest to {len(rollout_targets(plan))} deployment container(s)")
     return 0

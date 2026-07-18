@@ -584,6 +584,24 @@ def test_full_deploy_pins_agent_runtime_config_before_consumers_restart() -> Non
     assert {"configMapRef": {"name": "management-runtime-config"}} in gateway_env_from
 
 
+def test_full_deploy_reconciles_canonical_workload_specs_with_rollback_evidence() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    capture = steps["Capture current service digest rollback plan"]["run"]
+    service_rollout = steps["Roll out immutable service digest"]["run"]
+    console_rollout = steps["Roll out immutable console digest"]["run"]
+
+    assert "kubectl kustomize deploy/management" in capture
+    assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in capture
+    assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in service_rollout
+    assert "--reconcile-existing-specs" in service_rollout
+    assert "--manifest" not in console_rollout
+    assert "--reconcile-existing-specs" not in console_rollout
+    assert names.index("Capture current service digest rollback plan") < names.index(
+        "Roll out immutable service digest"
+    )
+
+
 def test_console_rollouts_record_the_source_sha_for_full_and_console_scopes() -> None:
     steps = steps_by_name()
     validation = steps["Validate non-secret deployment inputs"]["run"]

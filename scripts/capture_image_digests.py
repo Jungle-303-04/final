@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import subprocess
@@ -15,6 +16,7 @@ from revert_image_digests import (
     IMAGE_DIGEST,
     KUBERNETES_NAME,
     BootstrapTarget,
+    DeploymentRollbackState,
     ProtectedTarget,
     RollbackPlan,
     RollbackTarget,
@@ -246,21 +248,51 @@ def build_plan(
         raise ValueError(f"verified live image was not observed: {unused_attestations[0]}")
     if not targets and not bootstrap_targets and not protected_targets:
         raise ValueError("no managed deployment container was captured")
+    live_items = require_mapping(live_document, "live deployments").get("items")
+    if not isinstance(live_items, list):
+        raise ValueError("live deployments.items must be a list")
+    deployments_by_name: dict[str, dict[str, Any]] = {}
+    for index, raw_item in enumerate(live_items):
+        item = require_mapping(raw_item, f"live deployments.items[{index}]")
+        metadata = require_mapping(
+            item.get("metadata"), f"live deployments.items[{index}].metadata"
+        )
+        name = metadata.get("name")
+        if not isinstance(name, str) or name in deployments_by_name:
+            raise ValueError("live deployments must have unique string names")
+        deployments_by_name[name] = item
+    deployment_states: list[DeploymentRollbackState] = []
+    for resource in sorted({target.resource for target in targets}):
+        name = resource.removeprefix("deployment/")
+        deployment = deployments_by_name[name]
+        spec = require_mapping(deployment.get("spec"), f"deployment/{name}.spec")
+        template = require_mapping(spec.get("template"), f"deployment/{name}.template")
+        strategy = require_mapping(spec.get("strategy", {}), f"deployment/{name}.strategy")
+        deployment_states.append(
+            DeploymentRollbackState(
+                namespace=namespace,
+                resource=resource,
+                strategy=copy.deepcopy(strategy),
+                template=copy.deepcopy(template),
+            )
+        )
     return RollbackPlan(
         previous_release_sha=previous_release_sha,
         targets=tuple(targets),
         bootstrap_targets=tuple(bootstrap_targets),
         protected_targets=tuple(protected_targets),
+        deployment_states=tuple(deployment_states),
     )
 
 
 def write_plan(path: Path, plan: RollbackPlan) -> None:
     document = {
-        "version": 3,
+        "version": 4,
         "previous_release_sha": plan.previous_release_sha,
         "targets": [asdict(target) for target in plan.targets],
         "bootstrap_targets": [asdict(target) for target in plan.bootstrap_targets],
         "protected_targets": [asdict(target) for target in plan.protected_targets],
+        "deployment_states": [asdict(state) for state in plan.deployment_states],
     }
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):

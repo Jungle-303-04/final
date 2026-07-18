@@ -501,6 +501,11 @@ def test_capture_builds_complete_plan_from_manifest_and_live_digests(tmp_path: P
         ("deployment/api-gateway", "api-gateway", DIGEST),
         ("deployment/audit-worker", "audit-worker", DIGEST),
     ]
+    assert [state.resource for state in plan.deployment_states] == [
+        "deployment/api-gateway",
+        "deployment/audit-worker",
+    ]
+    assert plan.deployment_states[0].template["spec"]["containers"][0]["image"] == DIGEST
 
 
 def test_capture_rejects_tagged_or_missing_live_targets(tmp_path: Path) -> None:
@@ -654,7 +659,301 @@ def test_capture_checks_context_and_writes_private_plan(
     assert calls[0] == ("kubectl", "config", "get-contexts", "opsia-dev", "-o", "name")
     assert calls[1][1:5] == ("--context", "opsia-dev", "-n", "management")
     assert output.stat().st_mode & 0o777 == 0o600
-    assert revert_image_digests.load_plan(output).previous_release_sha == SHA
+    document = json.loads(output.read_text(encoding="utf-8"))
+    assert document["version"] == 4
+    plan = revert_image_digests.load_plan(output)
+    assert plan.previous_release_sha == SHA
+    assert len(plan.deployment_states) == 2
+
+
+def test_rollout_reconciles_command_janitor_retention_env_and_preserves_refs() -> None:
+    repository = "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service"
+    current = f"{repository}@sha256:" + "a" * 64
+    desired = f"{repository}@sha256:" + "c" * 64
+    live = {
+        "items": [
+            {
+                "metadata": {"name": "command-janitor"},
+                "spec": {
+                    "strategy": {"type": "Recreate"},
+                    "template": {
+                        "metadata": {"labels": {"app": "command-janitor"}},
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": "worker",
+                                    "image": current,
+                                    "envFrom": [
+                                        {"configMapRef": {"name": "management-runtime-config"}},
+                                        {"secretRef": {"name": "management-runtime-secret"}},
+                                    ],
+                                }
+                            ]
+                        },
+                    },
+                },
+            }
+        ]
+    }
+    plan = capture_image_digests.build_plan(
+        expected=(("command-janitor", "worker"),),
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+
+    patches = rollout_image_digest.existing_deployment_spec_patches(
+        plan,
+        manifest=ROOT / "deploy/management/services.yaml",
+        image=desired,
+    )
+
+    assert len(patches) == 1
+    namespace, resource, patch = patches[0]
+    assert (namespace, resource) == ("management", "deployment/command-janitor")
+    template = next(
+        operation["value"] for operation in patch if operation["path"] == "/spec/template"
+    )
+    container = template["spec"]["containers"][0]
+    assert container["image"] == desired
+    assert container["envFrom"] == [
+        {"configMapRef": {"name": "management-runtime-config"}},
+        {"secretRef": {"name": "management-runtime-secret"}},
+    ]
+    assert {item["name"]: item["value"] for item in container["env"]} == {
+        "APP_ENV": "demo",
+        "DEMO_DATA_RETENTION_ENABLED": "true",
+        "DEMO_DATA_RETENTION_HOURS": "24",
+        "DEMO_DATA_RETENTION_DELETE_LIMIT": "500",
+        "DEMO_DATA_RETENTION_SCOPES": (
+            "observations,events,incidents,rca,evidence,timeline,commands,projections"
+        ),
+        "DB_RETENTION_SWEEP_INTERVAL_SECONDS": "300",
+    }
+
+
+def test_existing_spec_patch_reconciles_service_account_volumes_and_env(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "services.yaml"
+    manifest.write_text(
+        """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: management
+spec:
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      serviceAccountName: api-gateway
+      volumes:
+        - name: runtime
+          configMap:
+            name: management-runtime-config
+      containers:
+        - name: api-gateway
+          image: registry.example/opsia/service:source
+          env:
+            - name: APP_ENV
+              value: demo
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+""",
+        encoding="utf-8",
+    )
+    live = {
+        "items": [
+            {
+                "metadata": {"name": "api-gateway"},
+                "spec": {
+                    "strategy": {"type": "RollingUpdate"},
+                    "template": {
+                        "metadata": {"labels": {"app": "api-gateway"}},
+                        "spec": {"containers": [{"name": "api-gateway", "image": DIGEST}]},
+                    },
+                },
+            }
+        ]
+    }
+    plan = capture_image_digests.build_plan(
+        expected=(("api-gateway", "api-gateway"),),
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+    desired = "registry.example/opsia/service@sha256:" + "c" * 64
+
+    _, _, patch = rollout_image_digest.existing_deployment_spec_patches(
+        plan,
+        manifest=manifest,
+        image=desired,
+    )[0]
+    template = next(
+        operation["value"] for operation in patch if operation["path"] == "/spec/template"
+    )
+
+    assert template["spec"]["serviceAccountName"] == "api-gateway"
+    assert template["spec"]["volumes"] == [
+        {"name": "runtime", "configMap": {"name": "management-runtime-config"}}
+    ]
+    assert template["spec"]["containers"][0]["env"] == [{"name": "APP_ENV", "value": "demo"}]
+    assert template["spec"]["containers"][0]["volumeMounts"] == [
+        {"name": "runtime", "mountPath": "/runtime"}
+    ]
+
+
+def test_rollout_reconciles_existing_spec_before_idempotent_digest_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = deployment_manifest(tmp_path)
+    live = {"items": [live_deployments()["items"][0]]}
+    plan = capture_image_digests.build_plan(
+        expected=(("api-gateway", "api-gateway"),),
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+    desired = "registry.example/opsia/service@sha256:" + "c" * 64
+    events: list[str] = []
+    live_calls = 0
+
+    def fake_live_deployments(*, context: str, namespace: str) -> dict[str, object]:
+        nonlocal live_calls
+        assert (context, namespace) == ("opsia-dev", "management")
+        live_calls += 1
+        events.append(f"live-{live_calls}")
+        image = DIGEST if live_calls == 1 else desired
+        return {
+            "items": [
+                {
+                    "metadata": {"name": "api-gateway"},
+                    "spec": {
+                        "template": {
+                            "spec": {"containers": [{"name": "api-gateway", "image": image}]}
+                        }
+                    },
+                }
+            ]
+        }
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1:3] == ("config", "get-contexts"):
+            return subprocess.CompletedProcess(command, 0, stdout="opsia-dev\n")
+        if command[5] == "patch":
+            events.append("patch")
+            payload = kwargs.get("input")
+            assert isinstance(payload, str)
+            assert desired in payload
+        else:
+            events.append(f"{command[5]}:{command[-2]}")
+        return subprocess.CompletedProcess(command, 0, stdout="")
+
+    monkeypatch.setattr(rollout_image_digest, "live_deployments", fake_live_deployments)
+    monkeypatch.setattr(rollout_image_digest.subprocess, "run", fake_run)
+
+    rollout_image_digest.rollout(
+        plan,
+        context="opsia-dev",
+        image=desired,
+        timeout="300s",
+        manifest=manifest,
+        reconcile_existing_specs=True,
+    )
+
+    assert events == [
+        "live-1",
+        "patch",
+        "live-2",
+        "set:deployment/api-gateway",
+        "rollout:deployment/api-gateway",
+        "live-3",
+    ]
+
+
+def test_rollback_restores_captured_deployment_template_before_digest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = capture_image_digests.build_plan(
+        expected=(("api-gateway", "api-gateway"),),
+        live_document={"items": [live_deployments()["items"][0]]},
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+    calls: list[tuple[tuple[str, ...], object]] = []
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append((tuple(command), kwargs.get("input")))
+        if command[1:3] == ("config", "get-contexts"):
+            stdout = "opsia-dev\n"
+        elif command[-4:] == ("get", "deployments", "-o", "json"):
+            stdout = exact_live_document()
+        else:
+            stdout = ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout)
+
+    monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
+
+    revert_image_digests.apply_plan(plan, context="opsia-dev", timeout="300s")
+
+    commands = [command for command, _payload in calls]
+    patch_index = next(index for index, command in enumerate(commands) if "patch" in command)
+    image_index = next(
+        index for index, command in enumerate(commands) if command[5:7] == ("set", "image")
+    )
+    assert patch_index < image_index
+    payload = calls[patch_index][1]
+    assert isinstance(payload, str)
+    operations = json.loads(payload)
+    assert {operation["path"] for operation in operations} == {
+        "/spec/strategy",
+        "/spec/template",
+    }
+
+
+def test_restore_deployment_states_attempts_every_workload_after_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    states = (
+        revert_image_digests.DeploymentRollbackState(
+            namespace="management",
+            resource="deployment/api-gateway",
+            strategy={"type": "RollingUpdate"},
+            template={"spec": {"containers": []}},
+        ),
+        revert_image_digests.DeploymentRollbackState(
+            namespace="management",
+            resource="deployment/audit-worker",
+            strategy={"type": "RollingUpdate"},
+            template={"spec": {"containers": []}},
+        ),
+    )
+    plan = revert_image_digests.RollbackPlan(
+        previous_release_sha=SHA,
+        targets=(),
+        deployment_states=states,
+    )
+    attempted: list[str] = []
+
+    def fake_run(command: tuple[str, ...], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        attempted.append(command[6])
+        if command[6] == "deployment/api-gateway":
+            raise subprocess.CalledProcessError(1, command)
+        return subprocess.CompletedProcess(command, 0, stdout="")
+
+    monkeypatch.setattr(revert_image_digests.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="deployment/api-gateway"):
+        revert_image_digests.restore_deployment_states(plan, context="opsia-dev")
+
+    assert attempted == ["deployment/api-gateway", "deployment/audit-worker"]
 
 
 def test_capture_filters_out_unmanaged_deployment_images(tmp_path: Path) -> None:

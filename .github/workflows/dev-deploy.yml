@@ -590,6 +590,7 @@ jobs:
           uv run python scripts/rollout_image_digest.py \
             --plan "${RUNNER_TEMP}/service-rollback-plan.json" \
             --manifest "${RUNNER_TEMP}/management-rendered.yaml" \
+            --reconcile-existing-specs \
             --context "${MGMT_CONTEXT}" \
             --image "${DEPLOY_IMAGE}" \
             --timeout 600s

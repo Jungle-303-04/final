@@ -45,11 +45,20 @@ class ProtectedTarget:
 
 
 @dataclass(frozen=True)
+class DeploymentRollbackState:
+    namespace: str
+    resource: str
+    strategy: dict[str, Any]
+    template: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class RollbackPlan:
     previous_release_sha: str
     targets: tuple[RollbackTarget, ...]
     bootstrap_targets: tuple[BootstrapTarget, ...] = ()
     protected_targets: tuple[ProtectedTarget, ...] = ()
+    deployment_states: tuple[DeploymentRollbackState, ...] = ()
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -137,6 +146,30 @@ def parse_protected_target(value: Any, index: int) -> ProtectedTarget:
     return target
 
 
+def parse_deployment_state(value: Any, index: int) -> DeploymentRollbackState:
+    mapping = require_mapping(value, f"deployment_states[{index}]")
+    expected = {"namespace", "resource", "strategy", "template"}
+    if set(mapping) != expected:
+        raise ValueError(f"deployment_states[{index}] must contain exactly {sorted(expected)}")
+    strategy = require_mapping(mapping.get("strategy"), f"deployment_states[{index}].strategy")
+    template = require_mapping(mapping.get("template"), f"deployment_states[{index}].template")
+    state = DeploymentRollbackState(
+        namespace=require_text(mapping, "namespace"),
+        resource=require_text(mapping, "resource"),
+        strategy=strategy,
+        template=template,
+    )
+    if not KUBERNETES_NAME.fullmatch(state.namespace):
+        raise ValueError(f"deployment_states[{index}].namespace is not a Kubernetes name")
+    if not DEPLOYMENT_RESOURCE.fullmatch(state.resource):
+        raise ValueError(f"deployment_states[{index}].resource must be deployment/<name>")
+    pod_spec = require_mapping(template.get("spec"), f"deployment_states[{index}].template.spec")
+    containers = pod_spec.get("containers")
+    if not isinstance(containers, list) or not containers:
+        raise ValueError(f"deployment_states[{index}].template.spec.containers must be a list")
+    return state
+
+
 def load_plan(path: Path) -> RollbackPlan:
     document = require_mapping(json.loads(path.read_text(encoding="utf-8")), "plan")
     version = document.get("version")
@@ -157,8 +190,17 @@ def load_plan(path: Path) -> RollbackPlan:
             "bootstrap_targets",
             "protected_targets",
         }
+    elif version == 4:
+        expected_fields = {
+            "version",
+            "previous_release_sha",
+            "targets",
+            "bootstrap_targets",
+            "protected_targets",
+            "deployment_states",
+        }
     else:
-        raise ValueError("plan version must be 1, 2, or 3")
+        raise ValueError("plan version must be 1, 2, 3, or 4")
     if set(document) != expected_fields:
         raise ValueError(f"plan must contain exactly {sorted(expected_fields)}")
 
@@ -182,6 +224,12 @@ def load_plan(path: Path) -> RollbackPlan:
     protected_targets = tuple(
         parse_protected_target(value, index) for index, value in enumerate(raw_protected_targets)
     )
+    raw_deployment_states = document.get("deployment_states", [])
+    if not isinstance(raw_deployment_states, list):
+        raise ValueError("deployment_states must be a list")
+    deployment_states = tuple(
+        parse_deployment_state(value, index) for index, value in enumerate(raw_deployment_states)
+    )
     if not targets and not bootstrap_targets and not protected_targets:
         raise ValueError("plan must contain at least one target")
     identities = [
@@ -190,12 +238,53 @@ def load_plan(path: Path) -> RollbackPlan:
     ]
     if len(identities) != len(set(identities)):
         raise ValueError("plan must not contain duplicate deployment containers")
+    state_identities = [(state.namespace, state.resource) for state in deployment_states]
+    if len(state_identities) != len(set(state_identities)):
+        raise ValueError("plan must not contain duplicate deployment states")
+    expected_state_identities = {(target.namespace, target.resource) for target in targets}
+    if version == 4 and set(state_identities) != expected_state_identities:
+        raise ValueError("deployment_states must cover every existing rollout deployment")
     return RollbackPlan(
         previous_release_sha=previous_release_sha,
         targets=targets,
         bootstrap_targets=bootstrap_targets,
         protected_targets=protected_targets,
+        deployment_states=deployment_states,
     )
+
+
+def deployment_state_patch(state: DeploymentRollbackState) -> list[dict[str, Any]]:
+    return [
+        {"op": "replace", "path": "/spec/strategy", "value": state.strategy},
+        {"op": "replace", "path": "/spec/template", "value": state.template},
+    ]
+
+
+def restore_deployment_states(plan: RollbackPlan, *, context: str) -> None:
+    failures: list[tuple[str, Exception]] = []
+    for state in plan.deployment_states:
+        try:
+            subprocess.run(
+                (
+                    "kubectl",
+                    "--context",
+                    context,
+                    "-n",
+                    state.namespace,
+                    "patch",
+                    state.resource,
+                    "--type=json",
+                    "--patch-file=-",
+                ),
+                check=True,
+                input=json.dumps(deployment_state_patch(state), separators=(",", ":")),
+                text=True,
+            )
+        except Exception as error:  # noqa: BLE001 - restore every captured workload state
+            failures.append((f"{state.namespace}/{state.resource}", error))
+    if failures:
+        details = "; ".join(f"{identity}: {error}" for identity, error in failures)
+        raise RuntimeError(f"deployment state restoration failed: {details}") from failures[0][1]
 
 
 def kubectl_commands(
@@ -402,6 +491,10 @@ def apply_plan(plan: RollbackPlan, *, context: str, timeout: str) -> None:
     set_image_commands = commands[1 : 1 + deployment_count]
     rollout_status_commands = commands[1 + deployment_count :]
     failures: list[tuple[str, Exception]] = []
+    try:
+        restore_deployment_states(plan, context=context)
+    except Exception as error:  # noqa: BLE001 - image rollback and verification must still run
+        failures.append(("restore deployment state", error))
     for command in set_image_commands:
         try:
             subprocess.run(command, check=True)
