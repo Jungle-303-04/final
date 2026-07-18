@@ -171,8 +171,102 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     assert "EXPECTED_SERVICE_IMAGE" in source
     assert "EXPECTED_CONSOLE_IMAGE" in source
     assert "@sha256:" in source
-    assert "post-deploy public edge reachability (non-blocking)" in source
-    assert "in-cluster smoke remains authoritative" in source
+    assert "post-deploy public edge convergence" in source
+    assert "wait_for_public_edge_release" in source
+    assert "non-blocking" not in source
+
+
+def _run_public_edge_wait(
+    tmp_path: Path,
+    *,
+    converge: bool,
+    discover_bundle: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    expected_bundle = "" if discover_bundle else "index-newBundle.js"
+    source_sha = "a" * 40
+    fake_curl = tmp_path / "curl"
+    fake_curl.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+output=""
+url=""
+previous=""
+for argument in "$@"; do
+  if [ "${previous}" = "--output" ]; then output="${argument}"; fi
+  case "${argument}" in https://*) url="${argument}" ;; esac
+  previous="${argument}"
+done
+test -n "${output}"
+if [[ "${url}" == */api/healthz ]]; then
+  printf '%s' '{"status":"ok","service":"api-gateway"}' >"${output}"
+elif [[ "${url}" == */assets/index-newBundle.js* ]]; then
+  printf '%s' "${SOURCE_SHA}" >"${output}"
+else
+  count=0
+  if [ -f "${EDGE_COUNT}" ]; then count="$(cat "${EDGE_COUNT}")"; fi
+  count=$((count + 1))
+  printf '%s' "${count}" >"${EDGE_COUNT}"
+  if [ "${EDGE_CONVERGE}" = "1" ] && [ "${count}" -ge 2 ]; then
+    bundle="index-newBundle.js"
+  else
+    bundle="index-oldBundle.js"
+  fi
+  printf '<script src="/assets/%s"></script>' "${bundle}" >"${output}"
+fi
+printf '200'
+""",
+        encoding="utf-8",
+    )
+    fake_curl.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "EDGE_CONVERGE": "1" if converge else "0",
+        "EDGE_COUNT": str(tmp_path / "edge-count"),
+        "PUBLIC_EDGE_MAX_ATTEMPTS": "3",
+        "PUBLIC_EDGE_RETRY_SECONDS": "0",
+        "SOURCE_SHA": source_sha,
+    }
+    return subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                f'source "{ROOT / "scripts/lib/public-edge.sh"}"; '
+                f'wait_for_public_edge_release "https://live.invalid" '
+                f'"{expected_bundle}" "{source_sha}"'
+            ),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_public_edge_wait_blocks_until_health_bundle_and_source_converge(
+    tmp_path: Path,
+) -> None:
+    result = _run_public_edge_wait(tmp_path, converge=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "public edge pending: attempt=1/3" in result.stderr
+    assert "public edge converged: attempt=2" in result.stdout
+
+
+def test_public_edge_wait_fails_after_bounded_attempts(tmp_path: Path) -> None:
+    result = _run_public_edge_wait(tmp_path, converge=False)
+
+    assert result.returncode != 0
+    assert result.stderr.count("public edge pending:") == 3
+    assert "public edge failed to converge" in result.stderr
+
+
+def test_public_edge_wait_can_discover_an_already_released_bundle(tmp_path: Path) -> None:
+    result = _run_public_edge_wait(tmp_path, converge=True, discover_bundle=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "bundle=index-newBundle.js" in result.stdout
 
 
 def _write_post_deploy_read_fakes(

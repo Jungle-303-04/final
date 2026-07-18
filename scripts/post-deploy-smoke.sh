@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/env.sh"
 source "${SCRIPT_DIR}/lib/cluster-curl.sh"
+source "${SCRIPT_DIR}/lib/public-edge.sh"
 
 BASE_URL="${BASE_URL:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-}"
@@ -15,6 +16,7 @@ EXPECTED_SERVICE_IMAGE="${EXPECTED_SERVICE_IMAGE:-}"
 EXPECTED_CONSOLE_IMAGE="${EXPECTED_CONSOLE_IMAGE:-}"
 SERVICE_ROLLBACK_PLAN="${SERVICE_ROLLBACK_PLAN:-}"
 CONSOLE_ROLLBACK_PLAN="${CONSOLE_ROLLBACK_PLAN:-}"
+SOURCE_SHA="${SOURCE_SHA:-}"
 SMOKE_CURL_IMAGE="${SMOKE_CURL_IMAGE:-curlimages/curl:8.11.1}"
 CLUSTER_CURL_POD_PREFIX="deploy-smoke-post"
 IN_CLUSTER_API_URL="http://api-gateway.${MGMT_NS}.svc.cluster.local"
@@ -29,7 +31,8 @@ for variable in \
   EXPECTED_SERVICE_IMAGE \
   EXPECTED_CONSOLE_IMAGE \
   SERVICE_ROLLBACK_PLAN \
-  CONSOLE_ROLLBACK_PLAN; do
+  CONSOLE_ROLLBACK_PLAN \
+  SOURCE_SHA; do
   require_env "${variable}"
 done
 BASE_URL="${BASE_URL%/}"
@@ -178,24 +181,8 @@ echo "==> post-deploy immutable images"
 verify_plan_images "${SERVICE_ROLLBACK_PLAN}" "${EXPECTED_SERVICE_IMAGE}"
 verify_plan_images "${CONSOLE_ROLLBACK_PLAN}" "${EXPECTED_CONSOLE_IMAGE}"
 
-echo "==> post-deploy public edge reachability (non-blocking)"
-if public_status="$(
-  curl --silent --show-error \
-    --connect-timeout 5 \
-    --max-time 15 \
-    --output /dev/null \
-    --write-out '%{http_code}' \
-    "${BASE_URL}/api/healthz"
-)"; then
-  :
-else
-  public_status="000"
-fi
-if [ "${public_status}" = "200" ]; then
-  echo "public edge health status=200"
-else
-  echo "warning: public edge health status=${public_status}; in-cluster smoke remains authoritative" >&2
-fi
+echo "==> post-deploy public edge convergence"
+wait_for_public_edge_release "${BASE_URL}" "${post_bundle}" "${SOURCE_SHA}"
 
 printf 'post-deploy smoke passed: bundle=%s head=%s\n' \
   "${post_bundle}" "${database_head}"

@@ -15,7 +15,6 @@ const NETWORK_SAMPLE_INTERVAL_MS = 100;
 const ROUTE_STABLE_SAMPLE_COUNT = 3;
 const SLOW_API_LIMIT = 5;
 const DIAGNOSTIC_ITEM_LIMIT = 50;
-const DEMO_WORKSPACE_ROUTE = "/home";
 const LONG_LIVED_API_MEDIA_TYPES = new Set([
   "application/x-ndjson",
   "text/event-stream",
@@ -272,11 +271,7 @@ async function runWithDiagnostics(diagnostics) {
   const baseUrl = requiredEnvironment("BASE_URL");
   const email = requiredEnvironment("AUTH_EMAIL");
   const password = requiredEnvironment("AUTH_PASSWORD", { trim: false });
-  const demoWorkspaceId = optionalEnvironment("DEMO_WORKSPACE_ID");
-  const requireDemoWorkspaceSmoke = process.env.REQUIRE_DEMO_WORKSPACE_SMOKE === "1";
-  if (requireDemoWorkspaceSmoke && demoWorkspaceId === null) {
-    throw new Error("missing required environment variable: DEMO_WORKSPACE_ID");
-  }
+  const releaseBudget = readRouteReleaseBudget(process.env);
   diagnostics.failingRoute = new URL(baseUrl).pathname;
   const browser = await chromium.launch({
     headless: true,
@@ -314,34 +309,13 @@ async function runWithDiagnostics(diagnostics) {
 
   try {
     await authenticate(page, baseUrl, email, password);
-    let initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
-    if (demoWorkspaceId !== null) {
-      const verifySurface = (workspaceId) => verifyWorkspaceSurface({
-        baseUrl,
-        diagnostics,
-        page,
-        routeNetwork,
-        workspaceId,
-      });
-      const workspaceResult = await verifyWorkspaceRoundTrip({
-        demoWorkspaceId,
-        loadCatalog: () => requestBrowserJson(page, baseUrl, "/api/auth/workspaces"),
-        loadSession: () => requestBrowserJson(page, baseUrl, "/api/auth/session"),
-        switchWorkspace: (workspaceId) => requestBrowserJson(
-          page,
-          baseUrl,
-          "/api/auth/workspaces/switch",
-          {
-            data: { workspace_id: workspaceId },
-            method: "POST",
-          },
-        ),
-        verifyDemoSurface: verifySurface,
-        verifyRestoredSurface: verifySurface,
-      });
-      initial = workspaceResult.restoredSurface;
-      process.stdout.write("authenticated workspace switch smoke passed\n");
-    }
+    const initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
+    const currentWorkspace = await verifyCurrentWorkspaceEvidence({
+      loadCatalog: () => requestBrowserJson(page, baseUrl, "/api/auth/workspaces"),
+      loadSession: () => requestBrowserJson(page, baseUrl, "/api/auth/session"),
+    });
+    await verifyWorkspaceSwitcherPlacement(page, currentWorkspace.name);
+    process.stdout.write("authenticated real workspace evidence passed\n");
     const routes = await collectReleasedRoutes(page);
     const traversal = orderRoutesForTraversal(routes, new URL(page.url()).pathname);
 
@@ -403,6 +377,13 @@ async function runWithDiagnostics(diagnostics) {
         `direct route title changed for ${route.pathname}`,
       );
       assertDiagnostics(diagnostics);
+      assertRouteReleaseBudget({
+        budget: releaseBudget,
+        direct: directSummary,
+        pathname: route.pathname,
+        spa: spaSummary,
+        totalDurationMs: Date.now() - routeStartedAt,
+      });
       process.stdout.write(`${formatRouteTiming({
         direct: directSummary,
         pathname: route.pathname,
@@ -419,59 +400,22 @@ async function runWithDiagnostics(diagnostics) {
   }
 }
 
-export async function verifyWorkspaceRoundTrip({
-  demoWorkspaceId,
+export async function verifyCurrentWorkspaceEvidence({
   loadCatalog,
   loadSession,
-  switchWorkspace,
-  verifyDemoSurface,
-  verifyRestoredSurface,
 }) {
   const catalog = await loadCatalog();
   assertWorkspaceCatalog(catalog);
-  const originalWorkspaceId = catalog.current_workspace_id;
-  assert.notEqual(
-    demoWorkspaceId,
-    originalWorkspaceId,
-    "demo workspace must differ from the original authenticated workspace",
+  const current = catalog.items.find(
+    ({ workspace_id: workspaceId }) => workspaceId === catalog.current_workspace_id,
   );
-  assert.ok(
-    catalog.items.some(({ workspace_id: workspaceId }) => workspaceId === demoWorkspaceId),
-    "demo workspace was not present in the authenticated workspace catalog",
+  assert.ok(current, "current workspace must exist in the authenticated catalog");
+  assertWorkspaceSession(
+    await loadSession(),
+    catalog.current_workspace_id,
+    "current workspace session",
   );
-
-  let restoreRequired = false;
-  let restoredSurface;
-  try {
-    restoreRequired = true;
-    assertWorkspaceSession(
-      await switchWorkspace(demoWorkspaceId),
-      demoWorkspaceId,
-      "workspace switch response",
-    );
-    assertWorkspaceSession(
-      await loadSession(),
-      demoWorkspaceId,
-      "workspace switch session",
-    );
-    await verifyDemoSurface(demoWorkspaceId);
-  } finally {
-    if (restoreRequired) {
-      assertWorkspaceSession(
-        await switchWorkspace(originalWorkspaceId),
-        originalWorkspaceId,
-        "workspace restore response",
-      );
-      assertWorkspaceSession(
-        await loadSession(),
-        originalWorkspaceId,
-        "workspace restore session",
-      );
-      restoredSurface = await verifyRestoredSurface(originalWorkspaceId);
-    }
-  }
-
-  return { originalWorkspaceId, restoredSurface };
+  return current;
 }
 
 function assertWorkspaceCatalog(value) {
@@ -489,6 +433,10 @@ function assertWorkspaceCatalog(value) {
         && typeof item.workspace_id === "string"
         && item.workspace_id.trim().length > 0,
       "workspace catalog item workspace_id must be a non-empty string",
+    );
+    assert.ok(
+      typeof item.name === "string" && item.name.trim().length > 0,
+      "workspace catalog item name must be a non-empty string",
     );
   }
 }
@@ -520,31 +468,6 @@ async function requestBrowserJson(page, baseUrl, pathname, options = {}) {
   } catch {
     throw new Error(`${method} ${pathname} returned invalid JSON`);
   }
-}
-
-async function verifyWorkspaceSurface({
-  baseUrl,
-  diagnostics,
-  page,
-  routeNetwork,
-  workspaceId,
-}) {
-  diagnostics.failingRoute = DEMO_WORKSPACE_ROUTE;
-  const networkPhase = routeNetwork.beginPhase(DEMO_WORKSPACE_ROUTE);
-  await page.goto(new URL(DEMO_WORKSPACE_ROUTE, baseUrl).href, {
-    waitUntil: "domcontentloaded",
-  });
-  const surface = await waitForObservedRouteSurface(
-    page,
-    routeNetwork,
-    networkPhase,
-    null,
-    DEMO_WORKSPACE_ROUTE,
-    AUTH_BOOTSTRAP_TIMEOUT_MS,
-  );
-  await verifyWorkspaceSwitcherPlacement(page, workspaceId);
-  assertDiagnostics(diagnostics);
-  return surface;
 }
 
 export async function verifyWorkspaceSwitcherPlacement(
@@ -701,12 +624,16 @@ export function createRouteNetworkObserver(page, baseUrl) {
         ...criticalRequests.map((request) => ({ ...request, inFlight: false })),
         ...pendingCriticalRequests,
       ];
+      const successfulCriticalApiRequestCount = measuredCriticalRequests.filter(
+        ({ status }) => status !== null && status >= 200 && status < 400,
+      ).length;
       return {
         backgroundApiRequestCount: measuredBackgroundRequests.length,
         backgroundInFlightRequestCount: pendingBackgroundRequests.length,
         criticalApiRequestCount: measuredCriticalRequests.length,
         criticalInFlightRequestCount: pendingCriticalRequests.length,
         durationMs,
+        successfulCriticalApiRequestCount,
         slowBackgroundApi: slowRequestSummary(measuredBackgroundRequests),
         slowCriticalApi: slowRequestSummary(measuredCriticalRequests),
       };
@@ -766,12 +693,63 @@ function slowRequestSummary(requests) {
     }));
 }
 
+export function readRouteReleaseBudget(environment) {
+  return {
+    maxPhaseMs: positiveIntegerEnvironment(
+      environment,
+      "ROUTE_SMOKE_MAX_PHASE_MS",
+      12_000,
+    ),
+    maxRouteMs: positiveIntegerEnvironment(
+      environment,
+      "ROUTE_SMOKE_MAX_ROUTE_MS",
+      24_000,
+    ),
+    minCriticalApiRequests: positiveIntegerEnvironment(
+      environment,
+      "ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS",
+      1,
+    ),
+  };
+}
+
+export function assertRouteReleaseBudget({
+  budget,
+  direct,
+  pathname,
+  spa,
+  totalDurationMs,
+}) {
+  assert.ok(
+    spa.durationMs <= budget.maxPhaseMs,
+    `route ${pathname} SPA exceeded ${budget.maxPhaseMs}ms: ${spa.durationMs}ms`,
+  );
+  assert.ok(
+    direct.durationMs <= budget.maxPhaseMs,
+    `route ${pathname} direct load exceeded ${budget.maxPhaseMs}ms: ${direct.durationMs}ms`,
+  );
+  assert.ok(
+    totalDurationMs <= budget.maxRouteMs,
+    `route ${pathname} total exceeded ${budget.maxRouteMs}ms: ${totalDurationMs}ms`,
+  );
+  const criticalEvidence = (
+    spa.successfulCriticalApiRequestCount
+    + direct.successfulCriticalApiRequestCount
+  );
+  assert.ok(
+    criticalEvidence >= budget.minCriticalApiRequests,
+    `route ${pathname} exposed ${criticalEvidence} successful critical API request(s); `
+      + `minimum is ${budget.minCriticalApiRequests}`,
+  );
+}
+
 function formatRouteTiming({ direct, pathname, spa, totalDurationMs }) {
   return `route smoke passed: ${pathname} (spa+direct) ${JSON.stringify({
     direct_background_api_requests: direct.backgroundApiRequestCount,
     direct_background_in_flight: direct.backgroundInFlightRequestCount,
     direct_critical_api_requests: direct.criticalApiRequestCount,
     direct_critical_in_flight: direct.criticalInFlightRequestCount,
+    direct_critical_api_successes: direct.successfulCriticalApiRequestCount,
     direct_ms: direct.durationMs,
     direct_slow_background_api: direct.slowBackgroundApi,
     direct_slow_critical_api: direct.slowCriticalApi,
@@ -779,6 +757,7 @@ function formatRouteTiming({ direct, pathname, spa, totalDurationMs }) {
     spa_background_in_flight: spa.backgroundInFlightRequestCount,
     spa_critical_api_requests: spa.criticalApiRequestCount,
     spa_critical_in_flight: spa.criticalInFlightRequestCount,
+    spa_critical_api_successes: spa.successfulCriticalApiRequestCount,
     spa_ms: spa.durationMs,
     spa_slow_background_api: spa.slowBackgroundApi,
     spa_slow_critical_api: spa.slowCriticalApi,
@@ -968,9 +947,13 @@ function requiredEnvironment(name, { trim = true } = {}) {
   return value;
 }
 
-function optionalEnvironment(name) {
-  const value = process.env[name]?.trim();
-  return value ? value : null;
+function positiveIntegerEnvironment(environment, name, fallback) {
+  const rawValue = environment[name]?.trim();
+  if (rawValue === undefined || rawValue.length === 0) return fallback;
+  if (!/^[1-9][0-9]*$/u.test(rawValue)) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return Number.parseInt(rawValue, 10);
 }
 
 function safeUrl(rawUrl) {

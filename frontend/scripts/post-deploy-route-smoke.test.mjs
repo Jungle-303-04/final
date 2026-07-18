@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   ROUTE_CRITICAL_API_CONTRACTS,
+  assertRouteReleaseBudget,
   classifyRouteApiRequest,
   createRouteNetworkObserver,
   createRouteSmokeDiagnostics,
@@ -17,8 +18,9 @@ import {
   normalizeSurfaceText,
   orderRoutesForTraversal,
   parseNetscapeSessionCookie,
+  readRouteReleaseBudget,
+  verifyCurrentWorkspaceEvidence,
   verifyWorkspaceSwitcherPlacement,
-  verifyWorkspaceRoundTrip,
   withRouteSmokeDiagnostics,
 } from "./post-deploy-route-smoke.mjs";
 
@@ -368,6 +370,7 @@ describe("post-deploy route smoke helpers", () => {
         criticalApiRequestCount: 1,
         criticalInFlightRequestCount: 0,
         durationMs: 950,
+        successfulCriticalApiRequestCount: 1,
         slowBackgroundApi: [],
         slowCriticalApi: [{
           durationMs: 425,
@@ -533,84 +536,95 @@ describe("post-deploy route smoke helpers", () => {
     }
   });
 
-  it("switches to the seeded workspace and restores the original session and surface", async () => {
+  it("requires the authenticated real workspace in both catalog and session", async () => {
     const calls = [];
-    const result = await verifyWorkspaceRoundTrip({
-      demoWorkspaceId: "workspace-demo",
+    const result = await verifyCurrentWorkspaceEvidence({
       async loadCatalog() {
         calls.push("catalog");
         return {
           current_workspace_id: "workspace-original",
           items: [
-            { workspace_id: "workspace-original" },
-            { workspace_id: "workspace-demo" },
+            { name: "Production", workspace_id: "workspace-original" },
+            { name: "Engineering", workspace_id: "workspace-other" },
           ],
         };
       },
       async loadSession() {
-        const workspaceId = calls.includes("restore-surface")
-          ? "unexpected"
-          : calls.includes("switch:workspace-original")
-            ? "workspace-original"
-            : "workspace-demo";
-        calls.push(`session:${workspaceId}`);
-        return { workspace_id: workspaceId };
-      },
-      async switchWorkspace(workspaceId) {
-        calls.push(`switch:${workspaceId}`);
-        return { workspace_id: workspaceId };
-      },
-      async verifyDemoSurface(workspaceId) {
-        calls.push(`demo-surface:${workspaceId}`);
-      },
-      async verifyRestoredSurface(workspaceId) {
-        calls.push(`restore-surface:${workspaceId}`);
-        return { pathname: "/home" };
+        calls.push("session");
+        return { workspace_id: "workspace-original" };
       },
     });
 
-    expect(calls).toEqual([
-      "catalog",
-      "switch:workspace-demo",
-      "session:workspace-demo",
-      "demo-surface:workspace-demo",
-      "switch:workspace-original",
-      "session:workspace-original",
-      "restore-surface:workspace-original",
-    ]);
+    expect(calls).toEqual(["catalog", "session"]);
     expect(result).toEqual({
-      originalWorkspaceId: "workspace-original",
-      restoredSurface: { pathname: "/home" },
+      name: "Production",
+      workspace_id: "workspace-original",
     });
   });
 
-  it("restores the original workspace in finally when demo surface verification fails", async () => {
-    const switched = [];
-    let sessionWorkspaceId = "workspace-original";
-
-    await expect(verifyWorkspaceRoundTrip({
-      demoWorkspaceId: "workspace-demo",
+  it("rejects a real workspace session that disagrees with the catalog", async () => {
+    await expect(verifyCurrentWorkspaceEvidence({
       loadCatalog: async () => ({
         current_workspace_id: "workspace-original",
         items: [
-          { workspace_id: "workspace-original" },
-          { workspace_id: "workspace-demo" },
+          { name: "Production", workspace_id: "workspace-original" },
         ],
       }),
-      loadSession: async () => ({ workspace_id: sessionWorkspaceId }),
-      async switchWorkspace(workspaceId) {
-        switched.push(workspaceId);
-        sessionWorkspaceId = workspaceId;
-        return { workspace_id: workspaceId };
-      },
-      verifyDemoSurface: async () => {
-        throw new Error("demo surface failed");
-      },
-      verifyRestoredSurface: async () => ({ pathname: "/home" }),
-    })).rejects.toThrow("demo surface failed");
+      loadSession: async () => ({ workspace_id: "workspace-other" }),
+    })).rejects.toThrow("current workspace session workspace mismatch");
+  });
 
-    expect(switched).toEqual(["workspace-demo", "workspace-original"]);
-    expect(sessionWorkspaceId).toBe("workspace-original");
+  it("uses configurable fail-closed route release budgets", () => {
+    expect(readRouteReleaseBudget({})).toEqual({
+      maxPhaseMs: 12_000,
+      maxRouteMs: 24_000,
+      minCriticalApiRequests: 1,
+    });
+    expect(readRouteReleaseBudget({
+      ROUTE_SMOKE_MAX_PHASE_MS: "4000",
+      ROUTE_SMOKE_MAX_ROUTE_MS: "7000",
+      ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS: "2",
+    })).toEqual({
+      maxPhaseMs: 4_000,
+      maxRouteMs: 7_000,
+      minCriticalApiRequests: 2,
+    });
+    expect(() => readRouteReleaseBudget({
+      ROUTE_SMOKE_MAX_PHASE_MS: "0",
+    })).toThrow("ROUTE_SMOKE_MAX_PHASE_MS must be a positive integer");
+  });
+
+  it("fails slow routes and routes without successful critical API evidence", () => {
+    const budget = {
+      maxPhaseMs: 4_000,
+      maxRouteMs: 7_000,
+      minCriticalApiRequests: 1,
+    };
+    const passing = {
+      durationMs: 2_000,
+      successfulCriticalApiRequestCount: 1,
+    };
+    expect(() => assertRouteReleaseBudget({
+      budget,
+      direct: passing,
+      pathname: "/resources",
+      spa: { ...passing, successfulCriticalApiRequestCount: 0 },
+      totalDurationMs: 4_000,
+    })).not.toThrow();
+    expect(() => assertRouteReleaseBudget({
+      budget,
+      direct: { ...passing, durationMs: 4_001 },
+      pathname: "/resources",
+      spa: passing,
+      totalDurationMs: 6_001,
+    })).toThrow("direct load exceeded 4000ms");
+    expect(() => assertRouteReleaseBudget({
+      budget,
+      direct: { ...passing, successfulCriticalApiRequestCount: 0 },
+      pathname: "/resources",
+      spa: { ...passing, successfulCriticalApiRequestCount: 0 },
+      totalDurationMs: 4_000,
+    })).toThrow("successful critical API request(s)");
   });
 
   it("accepts one HttpOnly root handoff and leaves transport security to the public browser origin", () => {
