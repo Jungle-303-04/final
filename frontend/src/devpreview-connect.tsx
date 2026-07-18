@@ -613,7 +613,7 @@ export function ConnectWizard({ embedded = false }: { embedded?: boolean } = {})
     setView(null); setToast(t);
     // 실제 완료 시점(진행 스테이지 종료)에 셸 알림으로 연결
     const total = t.stages.reduce((s, x) => s + x.ms, 0) + 600;
-    window.setTimeout(() => emitAction({ kind: "connect", title: t.doneTitle, body: `${t.ref} · ${t.doneSub}` }), total);
+    window.setTimeout(() => emitAction({ kind: "connect", title: t.doneTitle, body: t.doneSub.includes(t.ref) ? t.doneSub : `${t.ref} · ${t.doneSub}` }), total);
   };
 
   return (
