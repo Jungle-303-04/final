@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactM
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
+import { emitAction } from "./devpreview/bus";
 import {
   DUMMY_CONVERSATION, DUMMY_CONVERSATION_LIST, DUMMY_SUGGESTIONS,
 } from "./features/ai-assistant/aiConversationPreviewData";
@@ -209,7 +210,7 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
       </dl>
       {!created ? (
         <div className="flex items-center gap-2 pt-0.5">
-          <button type="button" disabled={state === "creating"} onClick={() => { setState("creating"); setTimeout(() => setState("created"), TIMING.actionCreateMs); }}
+          <button type="button" disabled={state === "creating"} onClick={() => { setState("creating"); setTimeout(() => { setState("created"); emitAction({ kind: "alert_rule", title: "알림 규칙 생성됨", body: `${p.name} · CPU ${p.comparator} ${p.threshold}% · ${p.forSeconds}초` }); }, TIMING.actionCreateMs); }}
             className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition-all hover:brightness-105 active:scale-[0.97] disabled:opacity-60">
             {state === "creating" ? <Spinner className="size-4" decorative /> : <BellPlus className="size-4" />}
             {state === "creating" ? "만드는 중" : "만들기"}

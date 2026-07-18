@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { OpsiaMap, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
 import { AiPanel } from "./devpreview-ai";
+import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { UI, BLUE, HP, MONO, SOFT, EASE_DRAW, PRESENT_SCALE } from "./devpreview/theme";
@@ -1222,7 +1223,7 @@ function App() {
   const alerts = useMemo(() => podInventory().filter((p) => p.bad), []);
   const nodeAlerts = useMemo(() => nodeInventory().filter((n) => n.state !== "Ready"), []);
   const repoAlerts = useMemo(() => repoInventory().filter((r) => r.sync === "OutOfSync"), []);
-  const alertTotal = alerts.length + nodeAlerts.length + repoAlerts.length;
+  const alertTotal = alerts.length + nodeAlerts.length + repoAlerts.length + notes.length;
   const [toasts, setToasts] = useState<{ id: number; title: string; sub: string; tone: "ok" | "crit" }[]>([]);
   const toastSeq = useRef(0);
   const pushToast = (t: { title: string; sub: string; tone: "ok" | "crit" }) => {
@@ -1230,6 +1231,13 @@ function App() {
     setToasts((cur) => [...cur, { id, ...t }]);
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
   };
+  // 세션 알림 — 위저드·AI에서 실제로 일어난 일 (버스 수신)
+  const [notes, setNotes] = useState<{ id: number; icon: "rule" | "connect"; title: string; body: string }[]>([]);
+  const noteSeq = useRef(0);
+  useEffect(() => onAction((a: DemoAction) => {
+    setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
+    pushToast({ title: a.title, sub: a.body, tone: "ok" });
+  }), []);
   const openAlert = (p: (typeof alerts)[number]) => {
     setBellOpen(false);
     openFromMap("Pod", { ...p, age: `${3 + (p.cpu % 9)}d` });
@@ -1307,6 +1315,9 @@ function App() {
                   );
                   return (
                     <>
+                      {notes.map((nn) => (
+                        <Card key={`note-${nn.id}`} icon={nn.icon === "rule" ? Bell : Plug} tint={nn.icon === "rule" ? BLUE : HP.ok} title={nn.title} time="방금" body={nn.body} />
+                      ))}
                       {alerts.map((p) => (
                         <Card key={p.name} icon={Activity} tint={HP.crit} title={p.name} time={`${2 + (p.cpu % 9)}분 전`}
                           body={`${p.status} · 재시작 ${p.restarts}회 · ${p.node}`} right={p.cluster} onClick={() => openAlert(p)} />

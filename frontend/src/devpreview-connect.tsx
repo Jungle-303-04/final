@@ -30,6 +30,7 @@ const IconBrandDocker = ({ size = 21, style }: BrandIconProps) => (
   </svg>
 );
 import { Spinner } from "./shared/ui/primitives/spinner";
+import { emitAction } from "./devpreview/bus";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -608,7 +609,12 @@ function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
 export function ConnectWizard({ embedded = false }: { embedded?: boolean } = {}) {
   const [view, setView] = useState<null | "repo" | "cluster">(null);
   const [toast, setToast] = useState<ToastData | null>(null);
-  const fireToast = (t: ToastData) => { setView(null); setToast(t); };
+  const fireToast = (t: ToastData) => {
+    setView(null); setToast(t);
+    // 실제 완료 시점(진행 스테이지 종료)에 셸 알림으로 연결
+    const total = t.stages.reduce((s, x) => s + x.ms, 0) + 600;
+    window.setTimeout(() => emitAction({ kind: "connect", title: t.doneTitle, body: `${t.ref} · ${t.doneSub}` }), total);
+  };
 
   return (
     <div className={`opsia-connect ${embedded ? "absolute" : "fixed"} inset-0`}>
