@@ -48,6 +48,11 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
         "type": "choice",
         "options": ["FULL", "CONSOLE"],
     }
+    assert triggers["workflow_dispatch"]["inputs"]["previous_release_sha"] == {
+        "description": "Full service SHA of the current release; required only for FULL",
+        "required": False,
+        "type": "string",
+    }
     assert deploy_job()["environment"] == "dev-deploy"
     condition = deploy_job()["if"]
     assert "workflow_run.conclusion == 'success'" in condition
@@ -115,13 +120,25 @@ def test_manual_deploy_requires_exact_gate_and_previous_release_proofs() -> None
     assert '"ahead"|"identical"' in gate_proof
     assert "/actions/workflows/dev-gate.yml/runs" in gate_proof
     assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
+    validation = steps["Validate non-secret deployment inputs"]["run"]
+    assert 'FULL) [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]' in validation
+    assert "CONSOLE) ;;" in validation
     service_capture = steps["Capture current service digest rollback plan"]["run"]
     console_capture = steps["Capture current console digest rollback plan"]["run"]
-    for capture in (service_capture, console_capture):
-        assert 'previous_sha="${PREVIOUS_RELEASE_SHA}"' in capture
-        assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in capture
-        assert capture.count("--managed-repository") == 1
-        assert "--allow-missing-live" not in capture
+    assert 'previous_sha="${PREVIOUS_RELEASE_SHA}"' in service_capture
+    assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in service_capture
+    assert service_capture.count("--managed-repository") == 1
+    assert "--allow-missing-live" not in service_capture
+    assert "opsia-console-deploy-status" in console_capture
+    assert ".data.console_sha" in console_capture
+    assert "opsia-deploy-status" not in console_capture
+    assert "PREVIOUS_RELEASE_SHA" not in console_capture
+    assert "AWS_DEV_CONSOLE_BOOTSTRAP_ENABLED=1" in console_capture
+    assert "console deploy status exists but console-dev is absent" in console_capture
+    assert "console deploy status is absent while console-dev exists" in console_capture
+    assert 'previous_sha="0000000000000000000000000000000000000000"' in console_capture
+    assert "--manifest deploy/management/console-dev.yaml" in console_capture
+    assert console_capture.count("--managed-repository") == 1
     assert job["env"]["PREVIOUS_RELEASE_SHA"] == "${{ inputs.previous_release_sha }}"
     assert "DEPLOYMENT_MODE" not in job["env"]
 
@@ -139,6 +156,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Capture current console digest rollback plan"
     )
     assert names.index("Capture current console digest rollback plan") < names.index(
+        "Reconcile canonical management services"
+    )
+    assert names.index("Reconcile canonical management services") < names.index(
         "Enforce live auth bypass zero"
     )
     assert names.index("Enforce live auth bypass zero") < names.index(
@@ -151,9 +171,6 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Synchronize fixed dev runtime identity"
     )
     assert names.index("Synchronize fixed dev runtime identity") < names.index(
-        "Seed dedicated dev demo workspace"
-    )
-    assert names.index("Seed dedicated dev demo workspace") < names.index(
         "Pin target agent image in runtime config"
     )
     assert names.index("Pin target agent image in runtime config") < names.index(
@@ -164,6 +181,8 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     )
     service_rollout = steps_by_name()["Roll out immutable service digest"]["run"]
     assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in service_rollout
+    console_rollout = steps_by_name()["Roll out immutable console digest"]["run"]
+    assert "--manifest deploy/management/console-dev.yaml" in console_rollout
     assert names.index("Roll out immutable console digest") < names.index(
         "Verify live auth bypass policy after rollout"
     )
@@ -181,7 +200,9 @@ def test_deploy_upgrades_existing_target_policy_after_smoke_and_before_release_r
     upgrade = steps["Upgrade existing target agent policies"]
     source = upgrade["run"]
 
-    assert upgrade["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert upgrade["if"] == (
+        "steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'"
+    )
     assert upgrade["env"]["DEPLOY_IMAGE"] == "${{ steps.image.outputs.image }}"
     assert "deploy/management/target-policy-upgrade-job.yaml" in source
     assert 'upgrade="${DEPLOY_IMAGE}"' in source
@@ -224,98 +245,14 @@ def test_target_policy_upgrade_job_has_bounded_non_privileged_database_authority
     }
 
 
-def test_demo_workspace_seed_job_is_explicit_bounded_and_non_privileged() -> None:
-    manifest = yaml.safe_load(
-        (ROOT / "deploy/management/demo-workspace-seed-job.yaml").read_text(encoding="utf-8")
-    )
-    pod_spec = manifest["spec"]["template"]["spec"]
-    container = pod_spec["containers"][0]
-    env = {item["name"]: item for item in container["env"]}
-    kustomization = (ROOT / "deploy/management/kustomization.yaml").read_text(encoding="utf-8")
+def test_full_deploy_has_no_demo_seed_or_demo_workspace_smoke_dependency() -> None:
+    source = WORKFLOW_PATH.read_text(encoding="utf-8")
+    names = [step["name"] for step in deploy_job()["steps"]]
 
-    assert manifest["kind"] == "Job"
-    assert manifest["metadata"]["name"] == "management-demo-workspace-seed"
-    assert manifest["spec"]["backoffLimit"] == 0
-    assert manifest["spec"]["activeDeadlineSeconds"] == 300
-    assert manifest["spec"]["ttlSecondsAfterFinished"] == 3600
-    assert pod_spec["automountServiceAccountToken"] is False
-    assert pod_spec["restartPolicy"] == "Never"
-    assert pod_spec["terminationGracePeriodSeconds"] == 10
-    assert pod_spec["securityContext"]["runAsNonRoot"] is True
-    assert pod_spec["securityContext"]["runAsUser"] == 10001
-    assert container["command"] == ["python", "-m", "controller.demo_workspace"]
-    assert container["args"] == [
-        "seed",
-        "--owner-user-id",
-        "$(DEMO_WORKSPACE_OWNER_USER_ID)",
-    ]
-    assert "reset" not in container["args"]
-    assert "@sha256:" in container["image"]
-    assert env["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
-        "name": "management-runtime-secret",
-        "key": "COMMAND_NOTIFY_DATABASE_URL",
-    }
-    assert env["OPSIA_DEMO_WORKSPACE_MUTATIONS"]["value"] == "demo-workspace-v1"
-    assert env["GITHUB_TOKEN"]["valueFrom"]["secretKeyRef"] == {
-        "name": "management-runtime-secret",
-        "key": "GITHUB_TOKEN",
-        "optional": True,
-    }
-    assert env["DEMO_WORKSPACE_OWNER_USER_ID"]["value"] == ""
-    assert container["securityContext"] == {
-        "allowPrivilegeEscalation": False,
-        "readOnlyRootFilesystem": True,
-        "capabilities": {"drop": ["ALL"]},
-    }
-    assert container["resources"] == {
-        "requests": {"cpu": "50m", "memory": "128Mi"},
-        "limits": {"cpu": "1", "memory": "512Mi"},
-    }
-    assert container["volumeMounts"] == [{"name": "render-tmp", "mountPath": "/tmp"}]
-    assert pod_spec["volumes"] == [{"name": "render-tmp", "emptyDir": {"sizeLimit": "64Mi"}}]
-    assert "demo-workspace-seed-job.yaml" not in kustomization
-
-
-def test_full_deploy_renders_seed_owner_from_fixed_admin_and_cleans_up() -> None:
-    steps = steps_by_name()
-    identity = steps["Synchronize fixed dev runtime identity"]["run"]
-    seed = steps["Seed dedicated dev demo workspace"]
-    source = seed["run"]
-
-    assert seed["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
-    assert seed["id"] == "demo_seed"
-    assert seed["env"]["DEPLOY_IMAGE"] == "${{ steps.image.outputs.image }}"
-    assert 'project_slug = os.environ["PROJECT_SLUG"].strip()' in identity
-    assert 'identifier = os.environ["AUTH_EMAIL"].strip().lower()' in identity
-    assert 'echo "DEV_ADMIN_USER_ID=${admin_id}" >>"${GITHUB_ENV}"' in identity
-    assert "deploy/management/demo-workspace-seed-job.yaml" in source
-    assert 'seed="${DEPLOY_IMAGE}"' in source
-    assert 'DEMO_WORKSPACE_OWNER_USER_ID="${DEV_ADMIN_USER_ID}"' in source
-    assert "delete job management-demo-workspace-seed" in source
-    assert "trap cleanup_demo_seed EXIT" in source
-    assert "logs job/management-demo-workspace-seed" in source
-    assert "describe job management-demo-workspace-seed" in source
-    assert "seed_json=" in source
-    assert "seed workspace_id contract is invalid" in source
-    assert "${GITHUB_OUTPUT}" in source
-    assert "workspace_id=%s" in source
-    assert "controller.demo_workspace reset" not in WORKFLOW_PATH.read_text(encoding="utf-8")
-
-
-def test_demo_workspace_seed_poll_has_complete_failed_and_timeout_semantics() -> None:
-    source = steps_by_name()["Seed dedicated dev demo workspace"]["run"]
-
-    assert "wait --for=condition=complete" not in source
-    assert "seed_deadline=$((SECONDS + 330))" in source
-    assert "sleep 2" in source
-    assert '.type == "Failed" and .status == "True"' in source
-    assert '.type == "Complete" and .status == "True"' in source
-    assert source.index('.type == "Failed"') < source.index('.type == "Complete"')
-    assert "demo workspace seed job reported Failed=True" in source
-    assert "if (( SECONDS >= seed_deadline )); then" in source
-    assert "timed out waiting 330 seconds for demo workspace seed job" in source
-    assert source.count("describe_demo_seed_failure") == 3
-    assert source.index('.type == "Complete"') < source.index("break")
+    assert "Seed dedicated dev demo workspace" not in names
+    assert "management-demo-workspace-seed" not in source
+    assert "DEMO_WORKSPACE_ID" not in source
+    assert "REQUIRE_DEMO_WORKSPACE_SMOKE" not in source
 
 
 def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording() -> None:
@@ -328,23 +265,16 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     package = yaml.safe_load((ROOT / "frontend/package.json").read_text(encoding="utf-8"))
     script = (ROOT / "frontend/scripts/post-deploy-route-smoke.mjs").read_text(encoding="utf-8")
 
-    assert install["run"] == (
-        "npm ci --prefix frontend\n"
-        "npm --prefix frontend exec -- playwright install --with-deps chromium\n"
-    )
+    assert "npm ci --prefix frontend" in install["run"]
+    assert "playwright install-deps chromium" in install["run"]
+    assert "PLAYWRIGHT_CACHE_HIT" in install["run"]
+    assert "playwright install chromium" in install["run"]
+    assert steps["Restore authenticated browser cache"]["uses"] == "actions/cache@v4"
     handoff = "${{ runner.temp }}/browser-auth-cookie.jar"
-    assert smoke["env"] == {
-        "AUTH_COOKIE_JAR": handoff,
-        "DEMO_WORKSPACE_ID": "${{ steps.demo_seed.outputs.workspace_id }}",
-        "REQUIRE_DEMO_WORKSPACE_SMOKE": ("${{ env.DEPLOYMENT_SCOPE == 'FULL' && '1' || '0' }}"),
-        "ROUTE_SMOKE_BASE_URL": "http://127.0.0.1:18080",
-    }
-    assert "port-forward service/console-dev 18080:80" in smoke["run"]
-    assert "trap cleanup_route_smoke_forward EXIT" in smoke["run"]
-    assert '"${ROUTE_SMOKE_BASE_URL}/"' in smoke["run"]
-    assert (
-        'BASE_URL="${ROUTE_SMOKE_BASE_URL}" npm --prefix frontend run smoke:routes' in smoke["run"]
-    )
+    assert smoke["env"] == {"AUTH_COOKIE_JAR": handoff}
+    assert "port-forward" not in smoke["run"]
+    assert '[[ "${BASE_URL}" =~ ^https://' in smoke["run"]
+    assert "npm --prefix frontend run smoke:routes" in smoke["run"]
     assert post_smoke["env"]["AUTH_COOKIE_JAR_OUT"] == handoff
     assert cleanup["if"] == "always()"
     assert cleanup["run"] == 'rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"'
@@ -366,9 +296,13 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert "diagnostics.apiErrors" in script
     assert "parseNetscapeSessionCookie" in script
     assert "page.context().addCookies" in script
-    assert "verifyWorkspaceRoundTrip" in script
-    assert '"/api/auth/workspaces/switch"' in script
-    assert "DEMO_WORKSPACE_ID" in script
+    assert "verifyCurrentWorkspaceEvidence" in script
+    assert '"/api/auth/workspaces/switch"' not in script
+    assert "DEMO_WORKSPACE_ID" not in script
+    assert "assertRouteReleaseBudget" in script
+    assert "ROUTE_SMOKE_MAX_PHASE_MS" in script
+    assert "ROUTE_SMOKE_MAX_ROUTE_MS" in script
+    assert "ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS" in script
     assert 'input[name="email"]' not in script
     assert 'input[name="password"]' not in script
     assert names.index("Run post-deploy smoke") < names.index(
@@ -409,7 +343,9 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     assert "frontend_bundle" in pre["run"]
     assert "scripts/post-deploy-smoke.sh" in post["run"]
     assert "steps.pre_smoke.outputs.frontend_bundle" in post["env"]["PRE_DEPLOY_FRONTEND_BUNDLE"]
-    assert rollback["if"] == "failure() && steps.console_capture.outcome == 'success'"
+    assert "failure()" in rollback["if"]
+    assert "steps.release_lease.outputs.mode == 'deploy'" in rollback["if"]
+    assert "steps.console_capture.outcome == 'success'" in rollback["if"]
     assert rollback["run"].count("revert_image_digests.py") == 2
     assert "database_cutover_config.py" not in rollback["run"]
     assert "database_writer_freeze.py" not in rollback["run"]
@@ -487,13 +423,14 @@ def test_full_deploy_keeps_migration_rollout_and_smoke() -> None:
         "Run fail-closed database migration",
         "Bootstrap fixed dev administrator",
         "Synchronize fixed dev runtime identity",
-        "Seed dedicated dev demo workspace",
         "Pin target agent image in runtime config",
         "Roll out immutable service digest",
         "Run post-deploy smoke",
         "Record successful dev SHA in cluster",
     ):
-        assert steps[name]["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+        assert steps[name]["if"] == (
+            "steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'"
+        )
     assert deploy_job()["env"]["DEPLOYMENT_SCOPE"] == (
         "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_scope || 'FULL' }}"
     )
@@ -524,8 +461,9 @@ def test_full_deploy_keeps_proxy_identity_and_cursor_contract_aligned() -> None:
     identity_source = identity_step["run"]
     secret_source = secret_step["run"]
 
-    assert identity_step["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
-    assert secret_step["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    expected_full = "steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert identity_step["if"] == expected_full
+    assert secret_step["if"] == expected_full
     assert job["env"]["PROJECT_SLUG"] == "kubernetes-ops"
     assert "uuid.uuid5" in identity_source
     assert "TRUSTED_PROXY_AUTH_USER_ID" in identity_source
@@ -564,7 +502,9 @@ def test_full_deploy_pins_agent_runtime_config_before_consumers_restart() -> Non
     )
     gateway_env_from = gateway["spec"]["template"]["spec"]["containers"][0]["envFrom"]
 
-    assert pin["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert pin["if"] == (
+        "steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'"
+    )
     assert pin["env"]["TARGET_AGENT_IMAGE"] == "${{ steps.image.outputs.image }}"
     assert "@sha256:[0-9a-f]{64}" in source
     assert '[[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]' in source
@@ -595,7 +535,7 @@ def test_full_deploy_reconciles_canonical_workload_specs_with_rollback_evidence(
     assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in capture
     assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in service_rollout
     assert "--reconcile-existing-specs" in service_rollout
-    assert "--manifest" not in console_rollout
+    assert "--manifest deploy/management/console-dev.yaml" in console_rollout
     assert "--reconcile-existing-specs" not in console_rollout
     assert names.index("Capture current service digest rollback plan") < names.index(
         "Roll out immutable service digest"
@@ -608,13 +548,17 @@ def test_console_rollouts_record_the_source_sha_for_full_and_console_scopes() ->
     smoke = steps["Run post-deploy console smoke"]
     rollback = steps["Restore previous release after failure"]["run"]
 
-    assert "FULL|CONSOLE" in validation
+    assert 'FULL) [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]' in validation
+    assert "CONSOLE) ;;" in validation
     assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then' in validation
-    assert steps["Run post-deploy console smoke"]["if"] == "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+    assert steps["Run post-deploy console smoke"]["if"] == (
+        "steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+    )
     assert smoke["run"] == "bash scripts/post-deploy-console-smoke.sh"
     assert "steps.console_image.outputs.image" in smoke["env"]["EXPECTED_CONSOLE_IMAGE"]
     assert steps["Record successful console SHA in cluster"]["if"] == (
-        "env.DEPLOYMENT_SCOPE == 'FULL' || env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+        "steps.release_lease.outputs.mode == 'deploy' && "
+        "(env.DEPLOYMENT_SCOPE == 'FULL' || env.DEPLOYMENT_SCOPE == 'CONSOLE')"
     )
     assert "opsia-console-deploy-status" in steps["Record successful console SHA in cluster"]["run"]
     assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]' in rollback
@@ -623,10 +567,9 @@ def test_console_rollouts_record_the_source_sha_for_full_and_console_scopes() ->
     assert 'test "${post_bundle}" != "${PRE_DEPLOY_FRONTEND_BUNDLE}"' in console_smoke
     assert 'grep --fixed-strings --quiet "${SOURCE_SHA}"' in console_smoke
     assert "EXPECTED_CONSOLE_IMAGE" in console_smoke
-    assert '"${BASE_URL}/?source_sha=${SOURCE_SHA}"' in console_smoke
-    assert "post-deploy public edge reachability (non-blocking)" in console_smoke
-    assert "in-cluster console smoke remains authoritative" in console_smoke
-    assert 'test "${public_edge_ready}" = "1"' not in console_smoke
+    assert "wait_for_public_edge_release" in console_smoke
+    assert "post-deploy public edge convergence" in console_smoke
+    assert "non-blocking" not in console_smoke
     assert "alembic" not in console_smoke.lower()
 
 
@@ -641,7 +584,11 @@ def test_failure_recovery_always_attempts_image_restore() -> None:
     assert "routing_restored" not in rollback
     assert "database_writer_freeze.py" not in rollback
     assert 'exit "${rollback_failed}"' in rollback
-    assert names[-1] == "Restore previous release after failure"
+    assert names[-3:] == [
+        "Restore previous release after failure",
+        "Finalize deployment lease",
+        "Restore bounded cluster access",
+    ]
     assert steps["Record successful dev SHA in cluster"]["id"] == "status"
 
 
@@ -655,15 +602,28 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         '[[ "${CONSOLE_ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]'
         in steps["Validate non-secret deployment inputs"]["run"]
     )
+    assert "docker buildx build" in steps["Build and push immutable service image"]["run"]
     assert (
-        "docker build --file src/services/Dockerfile"
+        "--cache-from type=gha,scope=opsia-service"
+        in steps["Build and push immutable service image"]["run"]
+    )
+    assert (
+        "--cache-to type=gha,mode=max,scope=opsia-service"
         in steps["Build and push immutable service image"]["run"]
     )
     assert (
         'tagged_image="${registry}/${ECR_REPOSITORY}:${SOURCE_SHA}"'
         in steps["Build and push immutable service image"]["run"]
     )
-    assert "docker build" in steps["Build and push immutable console image"]["run"]
+    assert "docker buildx build" in steps["Build and push immutable console image"]["run"]
+    assert (
+        "--cache-from type=gha,scope=opsia-console"
+        in steps["Build and push immutable console image"]["run"]
+    )
+    assert (
+        "--cache-to type=gha,mode=max,scope=opsia-console"
+        in steps["Build and push immutable console image"]["run"]
+    )
     assert "aws ecr get-login-password" in steps["Build and push immutable console image"]["run"]
     assert "docker login --username AWS" in steps["Build and push immutable console image"]["run"]
     assert "--file frontend/Dockerfile" in steps["Build and push immutable console image"]["run"]
@@ -705,15 +665,131 @@ def test_console_manifests_pin_the_observed_ecr_digest_instead_of_latest() -> No
     assert not (ROOT / "deploy/management/console.yaml").exists()
 
 
-def test_deploy_retires_legacy_console_before_repository_capture() -> None:
+def test_deploy_retires_legacy_console_only_after_release_evidence_is_recorded() -> None:
     names = [step["name"] for step in deploy_job()["steps"]]
-    retire = steps_by_name()["Retire legacy console deployment"]["run"]
+    step = steps_by_name()["Retire legacy console deployment"]
+    retire = step["run"]
 
-    assert names.index("Run pre-deploy smoke") < names.index("Retire legacy console deployment")
-    assert names.index("Retire legacy console deployment") < names.index(
-        "Capture current service digest rollback plan"
+    assert names.index("Capture current console digest rollback plan") < names.index(
+        "Retire legacy console deployment"
     )
+    assert names.index("Record successful console SHA in cluster") < names.index(
+        "Retire legacy console deployment"
+    )
+    assert step["if"] == "success() && steps.release_lease.outputs.mode == 'deploy'"
+    assert step["continue-on-error"] is True
     assert "delete deployment/console service/console --ignore-not-found --wait=true" in retire
+
+
+def test_deploy_fails_fast_on_unbounded_or_missing_cluster_access() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    grant = steps["Grant ephemeral runner cluster access"]["run"]
+    preflight = steps["Verify bounded cluster deployment access"]["run"]
+    restore = steps["Restore bounded cluster access"]
+
+    assert "https://checkip.amazonaws.com" in grant
+    assert 'runner_cidr="${runner_ip}/32"' in grant
+    assert "aws eks update-cluster-config" in grant
+    assert "aws eks describe-update" in grant
+    assert "previous_cidrs=" in grant
+    assert 'echo "modified=true" >>"${GITHUB_OUTPUT}"' in grant
+    assert "aws eks describe-cluster" in preflight
+    assert '. != "0.0.0.0/0"' in preflight
+    assert '. != "::/0"' in preflight
+    assert "index($cidr) != null" in preflight
+    assert "--request-timeout=10s get namespace" in preflight
+    assert "auth can-i get deployments" in preflight
+    assert "auth can-i patch deployments" in preflight
+    assert restore["if"] == "always() && steps.cluster_access.outputs.modified == 'true'"
+    assert "PREVIOUS_PUBLIC_ACCESS_CIDRS" in restore["run"]
+    assert "aws eks update-cluster-config" in restore["run"]
+    assert "aws eks describe-update" in restore["run"]
+    assert '. != "0.0.0.0/0"' in restore["run"]
+    assert '. != "::/0"' in restore["run"]
+    assert names.index("Grant ephemeral runner cluster access") < names.index(
+        "Verify bounded cluster deployment access"
+    )
+    assert names.index("Verify bounded cluster deployment access") < names.index(
+        "Build and push immutable service image"
+    )
+    assert names.index("Finalize deployment lease") < names.index("Restore bounded cluster access")
+
+
+def test_deploy_uses_release_status_and_atomic_expiring_lease_for_same_sha() -> None:
+    steps = steps_by_name()
+    lease = steps["Acquire idempotent deployment lease"]["run"]
+    verify = steps["Verify already released public SHA"]
+    finalize = steps["Finalize deployment lease"]
+
+    assert "opsia-console-deploy-status" in lease
+    assert "opsia-deploy-status" in lease
+    assert '[[ "${console_sha}" == "${SOURCE_SHA}" ]]' in lease
+    assert 'echo "mode=verify" >>"${GITHUB_OUTPUT}"' in lease
+    assert 'holder="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"' in lease
+    assert "opsia-deploy-lease" in lease
+    assert "resourceVersion" in lease
+    assert 'kubectl --context "${MGMT_CONTEXT}" replace --filename -' in lease
+    assert "lease_age < DEPLOY_LEASE_TTL_SECONDS" in lease
+    assert 'echo "mode=deploy" >>"${GITHUB_OUTPUT}"' in lease
+    assert steps["Build and push immutable console image"]["if"] == (
+        "steps.release_lease.outputs.mode == 'deploy'"
+    )
+    assert verify["if"] == "steps.release_lease.outputs.mode == 'verify'"
+    assert 'wait_for_public_edge_release "${BASE_URL}" "" "${SOURCE_SHA}"' in verify["run"]
+    assert "if" not in steps["Run authenticated browser route smoke"]
+    assert finalize["if"] == "always() && steps.release_lease.outputs.mode == 'deploy'"
+    assert "successful" in finalize["run"]
+    assert "failed" in finalize["run"]
+    assert "expired" in finalize["run"]
+    assert '{op:"test",path:"/data/holder",value:$holder}' in finalize["run"]
+
+
+def test_gateway_service_exposes_default_http_port_and_native_port() -> None:
+    documents = [
+        document
+        for document in yaml.safe_load_all(
+            (ROOT / "deploy/management/services.yaml").read_text(encoding="utf-8")
+        )
+        if document
+    ]
+    gateway = next(
+        document
+        for document in documents
+        if document.get("kind") == "Service"
+        and document.get("metadata", {}).get("name") == "api-gateway"
+    )
+    ports = {(port["name"], port["port"], port["targetPort"]) for port in gateway["spec"]["ports"]}
+
+    assert ports == {
+        ("http", 8000, "http"),
+        ("http-default", 80, "http"),
+    }
+
+
+def test_deploy_reconciles_exact_canonical_services_after_rollback_capture() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    reconcile = steps["Reconcile canonical management services"]["run"]
+
+    assert "scripts/select_kubernetes_resources.py" in reconcile
+    assert "--name api-gateway" in reconcile
+    assert "--name console-dev" in reconcile
+    assert 'kubectl --context "${MGMT_CONTEXT}" diff' in reconcile
+    assert "--server-side" not in reconcile
+    assert "--field-manager=opsia-dev-deploy" in reconcile
+    assert "management Service server-side diff failed" in reconcile
+    assert 'kubectl --context "${MGMT_CONTEXT}" apply' in reconcile
+    assert "get service api-gateway --output json" in reconcile
+    assert '{"port": 80, "targetPort": "http"}' in reconcile
+    assert '{"port": 8000, "targetPort": "http"}' in reconcile
+    assert "get service console-dev --output json" in reconcile
+    assert names.index("Capture current console digest rollback plan") < names.index(
+        "Reconcile canonical management services"
+    )
+    assert names.index("Reconcile canonical management services") < names.index(
+        "Run post-deploy smoke"
+    )
 
 
 def test_console_proxy_uses_runtime_dns_and_does_not_buffer_api_streams() -> None:

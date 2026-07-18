@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/env.sh"
 source "${SCRIPT_DIR}/lib/cluster-curl.sh"
+source "${SCRIPT_DIR}/lib/public-edge.sh"
 
 BASE_URL="${BASE_URL:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-}"
@@ -83,30 +84,8 @@ done < <(jq -r \
   '(.targets[]?, .bootstrap_targets[]?) | [.namespace, .resource, .container] | @tsv' \
   "${CONSOLE_ROLLBACK_PLAN}")
 
-echo "==> post-deploy public edge reachability (non-blocking)"
-public_health="000"
-public_index=""
-if public_health="$(curl --silent --show-error \
-    --connect-timeout 5 \
-    --max-time 15 \
-    --output /dev/null \
-    --write-out '%{http_code}' \
-    "${BASE_URL}/api/healthz")"; then
-  :
-fi
-if public_index="$(curl --silent --show-error \
-    --connect-timeout 5 \
-    --max-time 15 \
-    --header 'Cache-Control: no-cache' \
-    "${BASE_URL}/?source_sha=${SOURCE_SHA}")"; then
-  :
-fi
-if [[ "${public_health}" == "200" ]] && \
-  grep --fixed-strings --quiet "${post_bundle}" <<<"${public_index}"; then
-  echo "public edge converged: health=200 bundle=${post_bundle}"
-else
-  echo "warning: public edge health=${public_health}; in-cluster console smoke remains authoritative" >&2
-fi
+echo "==> post-deploy public edge convergence"
+wait_for_public_edge_release "${BASE_URL}" "${post_bundle}" "${SOURCE_SHA}"
 
 printf 'post-deploy console smoke passed: bundle=%s source_sha=%s\n' \
   "${post_bundle}" "${SOURCE_SHA}"

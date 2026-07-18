@@ -98,6 +98,9 @@ spec:
     - name: http
       port: 8000
       targetPort: http
+    - name: http-default
+      port: 80
+      targetPort: http
 ---
 apiVersion: apps/v1
 kind: Deployment
