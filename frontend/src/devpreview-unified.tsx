@@ -8,8 +8,8 @@ import {
   Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
-  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
-  Bell, Pencil, Check, Hourglass, Webhook, SignalHigh,
+  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Sparkles, PanelLeftClose, PanelLeftOpen,
+  Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
 } from "lucide-react";
 import { OpsiaMap, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
 import { AiPanel } from "./devpreview-ai";
@@ -1114,12 +1114,12 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }
   { id: "checks", label: "점검", icon: ShieldCheck },
   { id: "cost", label: "비용", icon: Coins },
 ];
-const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [
-  { id: "settings", label: "연결 설정", icon: Settings }, // 셸 내 위저드 서피스 전환 (AI는 우하단 플로팅 버튼)
-];
+// 연결은 내비 항목이 아니다(D7·D20) — 클러스터 뷰 '+ 연결' 카드와 배포 탭 '+ 저장소 연결'에서 모달로만 연다.
+// 전역 설정은 제품 전용 서피스(데모 범위 밖)라 데모 내비에 두지 않는다(가짜 목적지 금지).
+const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string }[] = [];
 
 type Surface = "resources" | "connect" | "topology";
-const SURFACE_OF: Record<string, Surface> = { resources: "resources", settings: "connect", topology: "topology" };
+const SURFACE_OF: Record<string, Surface> = { resources: "resources", topology: "topology" };
 
 function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
   collapsed: boolean; setCollapsed: (v: boolean) => void;
@@ -1182,6 +1182,7 @@ function App() {
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
+  const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -1302,6 +1303,10 @@ function App() {
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+        {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
+        <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
+          <Building2 size={14} style={{ color: UI.ink3 }} />jungle-303
+        </span>
         {/* 현재 스코프 표시 — 맵 드릴과 항상 일치 (컨트롤이 아니라 사실) */}
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
@@ -1393,6 +1398,27 @@ function App() {
                     </>
                   );
                 })()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </span>
+        {/* 계정 — 맨 오른쪽(D20). 로그아웃 = 데모 세션 초기화(실동작) */}
+        <span style={{ position: "relative" }}>
+          <button className="gnav" onClick={() => setMeOpen(!meOpen)}
+            style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: "rgba(10,132,255,0.12)", color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800 }}>우</button>
+          <AnimatePresence>
+            {meOpen && (
+              <motion.div key="me" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={SOFT}
+                style={{ position: "absolute", top: 38, right: 0, width: 224, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", padding: 6, overflow: "hidden" }}>
+                <div style={{ padding: "8px 10px 9px", borderBottom: `1px solid ${UI.line2}` }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>우녕</div>
+                  <div style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginTop: 2 }}>woonyong.dev@gmail.com</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />jungle-303 워크스페이스</div>
+                </div>
+                <button className="rrow" onClick={() => { try { sessionStorage.clear(); } catch { /* 데모 */ } window.location.reload(); }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", borderRadius: 8, padding: "8px 10px", marginTop: 3, fontSize: 12.5, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                  <LogOut size={13} style={{ color: UI.ink3 }} />로그아웃
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
