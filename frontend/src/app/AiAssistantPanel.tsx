@@ -1,5 +1,4 @@
 import {
-  ArrowUpRight,
   ListChecks,
   Send,
   Sparkles,
@@ -8,6 +7,7 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useReducer,
   useRef,
   useState,
   type FormEvent,
@@ -23,8 +23,20 @@ import {
   type AiAssistantPort,
   type AiAssistantSuggestion,
 } from "../features/ai-assistant/aiAssistantContract";
+import {
+  CompletedAssistantTurn,
+  RequestAssistantTurn,
+} from "../features/ai-assistant/ui/AiAssistantTurn";
+import { AiAssistantSuggestions } from "../features/ai-assistant/ui/AiAssistantSuggestions";
+import {
+  assistantRequestReducer,
+  INITIAL_ASSISTANT_REQUEST_STATE,
+} from "../features/ai-assistant/ui/assistantTurnState";
+import {
+  AiAssistantMotionProvider,
+  AiAssistantTurnPresence,
+} from "../motion/AiAssistantMotion";
 import { useI18n } from "../shared/i18n";
-import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
 import { Badge } from "../shared/ui/primitives/badge";
 import { Button } from "../shared/ui/primitives/button";
 import { aiAssistantContextChips } from "./aiAssistantContext";
@@ -73,12 +85,10 @@ export function AiAssistantPanel({
   const sequence = useRef(0);
   const [width, setWidth] = useState(readAiAssistantPanelWidth);
   const [message, setMessage] = useState("");
-  const [pending, setPending] = useState(false);
-  const [pendingQuestion, setPendingQuestion] = useState<{
-    contextKey: string;
-    question: string;
-  } | null>(null);
-  const [failureContextKey, setFailureContextKey] = useState<string | null>(null);
+  const [request, dispatchRequest] = useReducer(
+    assistantRequestReducer,
+    INITIAL_ASSISTANT_REQUEST_STATE,
+  );
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [suggestions, setSuggestions] = useState<ContextSuggestions>({
     contextKey: "",
@@ -89,6 +99,7 @@ export function AiAssistantPanel({
   const visibleSuggestions = suggestions.contextKey === contextKey ? suggestions.items : [];
   const chips = aiAssistantContextChips(context);
   const stopLabel = t("shell.ai.stop");
+  const pending = request.phase === "pending";
   const canCreateAlertRule = session?.roles.includes("service_admin") ?? false;
 
   useEffect(() => {
@@ -124,10 +135,8 @@ export function AiAssistantPanel({
     if (!question || pending) return;
     const controller = new AbortController();
     pendingController.current = controller;
-    setPending(true);
-    setPendingQuestion({ contextKey, question });
+    dispatchRequest({ contextKey, question, type: "submitted" });
     setMessage("");
-    setFailureContextKey(null);
     try {
       const response = await port.ask(context, question, controller.signal);
       if (controller.signal.aborted) return;
@@ -137,17 +146,17 @@ export function AiAssistantPanel({
         question,
         response,
       }]);
+      dispatchRequest({ type: "settled" });
     } catch (error) {
       if (isAbortError(error) || controller.signal.aborted) return;
       if (error instanceof AiAssistantPortFailure && error.code === "unauthorized") {
         reportUnauthorized();
       }
-      setFailureContextKey(contextKey);
+      dispatchRequest({ contextKey, question, type: "failed" });
     } finally {
       if (pendingController.current === controller) {
         pendingController.current = null;
-        setPending(false);
-        setPendingQuestion(null);
+        if (controller.signal.aborted) dispatchRequest({ type: "cancelled" });
         inputRef.current?.focus();
       }
     }
@@ -168,14 +177,15 @@ export function AiAssistantPanel({
         ref={panelRef}
       >
         <AiAssistantResizeHandle hostRef={panelRef} onWidthCommit={commitPanelWidth} width={width} />
-        <div
-          className="flex h-full min-h-0 max-w-dvw flex-col"
-          data-inner-width={width}
-          data-slot="ai-assistant-inner"
-        >
+        <AiAssistantMotionProvider>
+          <div
+            className="flex h-full min-h-0 max-w-dvw flex-col"
+            data-inner-width={width}
+            data-slot="ai-assistant-inner"
+          >
           <header className="flex items-start gap-3 border-b px-4 py-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles aria-hidden="true" className="size-4" />
+            <span className="grid size-9 shrink-0 place-items-center text-muted-foreground">
+              <Sparkles aria-hidden="true" className="size-4 text-foreground" />
             </span>
             <div className="min-w-0 flex-1">
               <h2 className="font-heading font-medium">{t("shell.ai.title")}</h2>
@@ -253,71 +263,40 @@ export function AiAssistantPanel({
                 <h3 className="text-xs font-medium text-muted-foreground" id="ai-suggestions-title">
                   {t("shell.ai.suggestions")}
                 </h3>
-                <div className="grid gap-2">
-                  {visibleSuggestions.map((suggestion) => (
-                    <Button
-                      className="h-auto justify-start whitespace-normal text-left"
-                      key={suggestion.id}
-                      onClick={() => chooseSuggestion(suggestion)}
-                      type="button"
-                      variant="outline"
-                    >
-                      {suggestion.prompt}
-                    </Button>
-                  ))}
-                </div>
+                <AiAssistantSuggestions
+                  items={visibleSuggestions}
+                  onChoose={chooseSuggestion}
+                />
               </section>
             ) : null}
 
-            <div aria-live="polite" className="mt-5 grid gap-4">
-              {visibleEntries.map((entry) => (
-                <article
-                  className="grid gap-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
-                  key={entry.id}
-                >
-                  <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
-                    {entry.question}
-                  </p>
-                  {entry.response.evidence.length === 0
-                    && !entry.response.action
-                    && entry.response.answerKind !== "capability" ? (
-                    <p className="mr-auto w-fit max-w-[90%] rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm text-muted-foreground">
-                      {t("shell.ai.noEvidence")}
-                    </p>
-                  ) : (
-                    <div className="mr-auto grid w-fit max-w-[92%] gap-3 rounded-2xl rounded-bl-sm border bg-card px-3 py-3">
-                      <p className="text-sm leading-relaxed">{entry.response.answer}</p>
-                      {entry.response.evidence.length > 0 ? (
-                        <EvidenceLinks evidence={entry.response.evidence} />
-                      ) : null}
-                      {entry.response.action && canCreateAlertRule ? (
-                        <AiAlertRuleActionCard
-                          action={entry.response.action}
-                          onCreate={port.createAlertRule}
-                        />
-                      ) : null}
-                    </div>
-                  )}
-                </article>
-              ))}
-              {pendingQuestion?.contextKey === contextKey ? (
-                <article
-                  className="grid gap-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
-                  data-slot="ai-pending-turn"
-                >
-                  <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
-                    {pendingQuestion.question}
-                  </p>
-                  <p className="mr-auto w-fit max-w-[90%] animate-pulse rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm text-muted-foreground motion-reduce:animate-none">
-                    {t("shell.ai.pending")}
-                  </p>
-                </article>
-              ) : null}
-              {failureContextKey === contextKey ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{t("shell.ai.failed")}</AlertDescription>
-                </Alert>
-              ) : null}
+            <div
+              aria-live="polite"
+              className="mt-5 divide-y"
+              data-response-transport="complete-response"
+            >
+              <AiAssistantTurnPresence>
+                {visibleEntries.map((entry) => (
+                  <CompletedAssistantTurn
+                    action={entry.response.action && canCreateAlertRule ? (
+                      <AiAlertRuleActionCard
+                        action={entry.response.action}
+                        onCreate={port.createAlertRule}
+                      />
+                    ) : null}
+                    key={entry.id}
+                    question={entry.question}
+                    response={entry.response}
+                  />
+                ))}
+                {request.phase !== "idle" && request.contextKey === contextKey ? (
+                  <RequestAssistantTurn
+                    key={`request:${request.contextKey}:${request.question}`}
+                    phase={request.phase}
+                    question={request.question}
+                  />
+                ) : null}
+              </AiAssistantTurnPresence>
               <div aria-hidden="true" ref={threadEndRef} />
             </div>
           </div>
@@ -360,7 +339,8 @@ export function AiAssistantPanel({
           </form>
             </>
           )}
-        </div>
+          </div>
+        </AiAssistantMotionProvider>
       </aside>
       {!open ? <Button
         aria-expanded={open}
@@ -389,8 +369,7 @@ export function AiAssistantPanel({
   function stopPendingRequest() {
     pendingController.current?.abort();
     pendingController.current = null;
-    setPending(false);
-    setPendingQuestion(null);
+    dispatchRequest({ type: "cancelled" });
     inputRef.current?.focus();
   }
 
@@ -426,23 +405,4 @@ function persistAiAssistantPanelWidth(width: number): void {
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error &&
     error.name === "AbortError";
-}
-
-function EvidenceLinks({ evidence }: { evidence: AiAssistantAnswer["evidence"] }) {
-  const { t } = useI18n();
-  return (
-    <div className="grid gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{t("shell.ai.evidence")}</p>
-      {evidence.map((item) => (
-        <a
-          className="flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
-          href={item.link}
-          key={`${item.type}:${item.id}`}
-        >
-          {item.label}
-          <ArrowUpRight aria-hidden="true" className="size-3.5" />
-        </a>
-      ))}
-    </div>
-  );
 }
