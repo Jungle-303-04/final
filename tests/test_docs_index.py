@@ -23,18 +23,57 @@ def test_docs_do_not_exceed_three_levels_from_repo_root() -> None:
     assert too_deep == []
 
 
-def test_all_markdown_docs_are_linked_from_docs_root() -> None:
+def test_docs_root_links_resolve_to_existing_files() -> None:
     index = (DOCS_DIR / "README.md").read_text(encoding="utf-8")
-    missing = []
+    missing: list[str] = []
 
-    for path in sorted(DOCS_DIR.rglob("*.md")):
-        rel = path.relative_to(DOCS_DIR).as_posix()
-        if rel == "README.md":
+    for target in re.findall(r"\[[^\]]+\]\(([^)]+\.md)\)", index):
+        if target.startswith(("http://", "https://")):
             continue
-        if f"({rel})" not in index:
-            missing.append(rel)
+        resolved = (DOCS_DIR / target).resolve()
+        if not resolved.is_file():
+            missing.append(target)
 
     assert missing == []
+
+
+def test_docs_root_keeps_canonical_entrypoints() -> None:
+    index = read("docs/README.md")
+    required_links = [
+        "(architecture.md)",
+        "(operations-deployment.md)",
+        "(production-readiness.md)",
+        "(security-baseline.md)",
+        "(api/README.md)",
+        "(onboarding/README.md)",
+        "(migration/README.md)",
+        "(spec/README.md)",
+    ]
+
+    missing = [link for link in required_links if link not in index]
+
+    assert missing == []
+
+
+def test_retired_point_in_time_operations_docs_are_removed() -> None:
+    retired_paths = [
+        "docs/codex-work-order-20260712.md",
+        "docs/continuation-execution-plan-2026-07-07.md",
+        "docs/production-push-2026-07-07.md",
+        "docs/remediation-plan-2026-07-11.md",
+        "docs/security-review-20260710.md",
+        "docs/team/gain-evidence-query-access-handoff-20260712.md",
+        "docs/unimplemented-review-20260711.md",
+    ]
+
+    remaining = [path for path in retired_paths if (ROOT_DIR / path).exists()]
+    remaining.extend(
+        path.relative_to(ROOT_DIR).as_posix()
+        for path in (ROOT_DIR / "docs" / "auto").glob("*")
+        if path.is_file()
+    )
+
+    assert remaining == []
 
 
 def test_docs_do_not_reference_removed_local_kind_recovery_logs() -> None:
@@ -208,7 +247,7 @@ def test_docs_root_keeps_keyword_wiki_entrypoints() -> None:
     assert missing == []
 
 
-def test_backend_coordination_docs_use_declared_states_and_keep_morning_summary() -> None:
+def test_backend_coordination_docs_use_declared_states() -> None:
     workqueue = read("docs/backend-f-workqueue.md")
     allowed_states = {
         "requested",
@@ -226,15 +265,7 @@ def test_backend_coordination_docs_use_declared_states_and_keep_morning_summary(
         if columns[1] not in allowed_states:
             invalid_states.append(f"{columns[0]}={columns[1]}")
 
-    night_log = read("docs/auto/night-log.md")
-    morning_summaries = re.findall(
-        r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2} KST — \[백엔드\] 아침 요약$",
-        night_log,
-        flags=re.MULTILINE,
-    )
-
     assert invalid_states == []
-    assert morning_summaries
 
 
 def test_backend_progress_anchor_count_matches_anchor_lines() -> None:

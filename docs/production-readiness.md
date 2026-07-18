@@ -20,7 +20,7 @@
 | Manifest | management/target manifest가 렌더되고 object 목록이 나온다 | `make manifest-check` |
 | API 수동 확인 | Bruno collection이 Gateway route를 모두 포함하고 예상 응답을 검사한다 | [Bruno API 테스트](api/README.md), `tests/test_bruno_collection.py` |
 | AWS smoke | 배포된 management/target에서 직접 smoke가 통과한다 | `make smoke` |
-| 문서 | `docs/README.md`에서 모든 문서가 연결되고 3레벨 깊이를 넘지 않는다 | `tests/test_docs_index.py` |
+| 문서 | `docs/README.md`의 canonical 진입점이 유효하고 문서가 3레벨 깊이를 넘지 않는다 | `tests/test_docs_index.py` |
 | 벤치마크 최소선 | account/RBAC/OIDC, fleet, GitOps, IaC, rollout/test, incident/AI/Safe PR, notification, DNS, shell, catalog, billing, realtime이 역할/스키마/API/event/test로 설명된다 | [프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md), `tests/test_docs_index.py` |
 | Secret | token/password/kubeconfig 원문이 event, log, response, 문서에 없다 | `docs/secrets.md`, 관련 보안 테스트 |
 | 권한 | backend가 session, role, workspace, cluster 권한을 최종 판단한다 | `tests/test_auth_security.py`, `tests/test_dashboard_router.py` |
@@ -109,5 +109,6 @@ production 완료 선언 전에는 아래 순서를 그대로 돈다.
 4. 운영 환경변수를 지정하고 `make smoke`
 5. management/target rollout과 smoke 결과를 운영 로그에서 확인
 6. `docs/README.md`의 민정/가인/찬빈 필독 목록이 현재 코드와 맞는지 확인
+7. [보안 기준](security-baseline.md)의 인증·네트워크·비밀값·명령 실행 경계를 확인
 
-이 여섯 개가 모두 통과해야 production runnable 완료라고 말한다.
+이 일곱 개가 모두 통과해야 production runnable 완료라고 말한다.

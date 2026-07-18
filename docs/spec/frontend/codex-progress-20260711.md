@@ -1761,8 +1761,8 @@ API 완성: registerTarget (8678d63b0)
 
 ## 2026-07-13 dev 흡수·PROMOTE 완료
 
-- 최신 `origin/dev@54a3c7071`을 lab에 흡수했다. 유일한 충돌은 append-only
-  `docs/auto/night-log.md`였으며 양측 기록을 보존했다. `frontend/**`와 `src/**` 삭제·수동 수정은 0건이다.
+- 최신 `origin/dev@54a3c7071`을 lab에 흡수했다. 당시 append-only 자동 작업 로그의
+  양측 기록을 보존했다. `frontend/**`와 `src/**` 삭제·수동 수정은 0건이다.
 - 통합 게이트는 113 files / 824 tests, design guard 340 files, shadcn 482 previews,
   Vite 14,538 modules 및 visual-product 38 scenarios로 PASS했다.
 - merge `a1e37d34308192a6d5c363983a370209ab4813be`를 lab에 push하고 비강제 fast-forward로

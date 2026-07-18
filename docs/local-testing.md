@@ -28,7 +28,7 @@ uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
 
 이 테스트가 보는 것:
 
-1. `docs/README.md`가 모든 문서를 링크하는지 확인한다.
+1. `docs/README.md`의 canonical 진입점과 내부 링크가 유효한지 확인한다.
 2. 문서가 3레벨 이하 구조를 지키는지 확인한다.
 3. Bruno `docs/api` collection이 import 가능한 문법을 쓰는지 확인한다.
 4. 모든 Gateway route가 Bruno request로 연결되어 있는지 확인한다.

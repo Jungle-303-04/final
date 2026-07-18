@@ -7,7 +7,7 @@
 | 파일 | 이유 |
 | --- | --- |
 | `README.md` | 실행 기준과 서비스 목록 |
-| `docs/README.md` | 모든 문서의 시작점과 역할별 필독 목록 |
+| `docs/README.md` | canonical 문서 시작점과 역할별 필독 목록 |
 | `docs/api/README.md` | Bruno API 수동 테스트 순서 |
 | `Makefile` | `make check`, `make manifest-check`, `make smoke` 진입점 |
 | `src/packages/contracts/gateway/routes.py` | Gateway HTTP route 기준 |
@@ -105,7 +105,7 @@
 | `deploy/**` | `make manifest-check`, AWS smoke 영향 |
 | `.github/workflows/**` | CI/AWS CD 실행 영향 |
 | `docs/api/**` | 실제 route와 Bruno test block 일치 여부 |
-| `docs/**` | [문서 루트](../README.md) 색인과 역할별 필독 목록 |
+| `docs/**` | [문서 루트](../README.md) canonical 진입점과 역할별 필독 목록 |
 
 ## PR 체크
 
@@ -113,4 +113,4 @@
 - 공유 계약을 바꿨으면 관련 역할 문서도 같이 고쳤다.
 - 테스트 명령과 결과를 PR에 적었다.
 - API 변경은 Bruno collection도 같이 고쳤다.
-- 새 문서는 `docs/README.md`에 링크했다.
+- 새 canonical 문서는 `docs/README.md` 또는 해당 영역 `README.md`에 링크했다.

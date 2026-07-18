@@ -35,11 +35,8 @@
 8. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
    실제 서비스 smoke 기준을 확인한다.
 
-9. [라이브 데모 런북](demo-runbook.md)을 본다.
-   클러스터 연결부터 자동 복구까지 발표 리허설 순서와 플랜B를 확인한다.
-
-10. [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)을 본다.
-   현재 밤샘 안정화 작업을 대화 맥락 없이 이어받을 때 필요한 SHA, run ID, 게이트, 다음 명령을 확인한다.
+9. [운영 배포 기준](operations-deployment.md)을 본다.
+   현재 배포 불변식과 실제 실행 증거의 정본을 확인한다.
 
 ## 민정이 먼저 볼 문서
 
@@ -68,7 +65,7 @@
 5. [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
 6. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 7. [Bruno API 테스트](api/README.md)
-8. [Raw Evidence cluster 권한 연결 인수인계](team/gain-evidence-query-access-handoff-20260712.md)
+8. [보안 기준](security-baseline.md)
 
 가인은 먼저 `cluster.evidence.received`가 RCA worker chain을 어떻게 통과하는지 본다.
 그다음 `safe_pr.requested`와 `safe_pr.created`의 경계를 분리해서 익힌다.
@@ -114,8 +111,8 @@ AWS와 운영 명령을 확인할 때는 [운영/배포](operations-deployment.m
 
 실서비스 형태의 sandbox 장애 데이터는 [실서비스 데이터 시나리오](scenarios.md)를 본다.
 
-production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)를 본다.
-2026-07-11 감사 결함의 해결 순서와 완료 조건은 [권한·Evidence·AI·명령·메트릭 개선 계획](remediation-plan-2026-07-11.md)을 본다.
+production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)와
+[보안 기준](security-baseline.md)을 본다.
 
 secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
@@ -141,7 +138,8 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `AWS`를 찾을 때는 [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
 
-`continuation` 또는 `handover`를 찾을 때는 [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)과 repo root의 `HANDOVER.md`를 본다.
+`continuation` 또는 `handover`를 찾을 때는 [운영 배포 기준](operations-deployment.md)과
+repo root의 `HANDOVER.md`를 본다.
 
 `event`를 찾을 때는 [이벤트 흐름](events.md), [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md), [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)을 본다.
 
@@ -170,14 +168,9 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [backend-f-progress](backend-f-progress.md)
 - [backend-f-workqueue](backend-f-workqueue.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
-- [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
-- [codex-work-order-20260712](codex-work-order-20260712.md)
 - [demo-01-digital-twin-agent-town](demo-01-digital-twin-agent-town.md)
-- [demo-workspace](demo-workspace.md)
-- [team/gain-evidence-query-access-handoff-20260712](team/gain-evidence-query-access-handoff-20260712.md)
 - [current-service-state](current-service-state.md)
-- [security-review-20260710](security-review-20260710.md)
-- [unimplemented-review-20260711](unimplemented-review-20260711.md)
+- [security-baseline](security-baseline.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
@@ -204,33 +197,11 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [pod-terminal](pod-terminal.md)
 - [production-readiness](production-readiness.md)
 - [release-flow-production-readiness](release-flow-production-readiness.md)
-- [remediation-plan-2026-07-11](remediation-plan-2026-07-11.md)
-- [production-push-2026-07-07](production-push-2026-07-07.md)
 - [release-flow-implementation](release-flow-implementation.md)
 - [scenarios](scenarios.md)
 - [secrets](secrets.md)
 - [spec/remediation-bundle-v1alpha1](spec/remediation-bundle-v1alpha1.md)
 - [spec/domains/yaml-delivery](spec/domains/yaml-delivery.md)
-
-자동 조율 문서는 아래에 있다.
-
-- [auto/backend-pipeline](auto/backend-pipeline.md)
-- [auto/cleanup-report](auto/cleanup-report.md)
-- [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
-- [auto/codex-directive-20260714-final](auto/codex-directive-20260714-final.md)
-- [auto/demo-readiness](auto/demo-readiness.md)
-- [auto/deploy-plan](auto/deploy-plan.md)
-- [auto/deploy-drift-audit](auto/deploy-drift-audit.md)
-- [auto/deploy-setup](auto/deploy-setup.md)
-- [auto/deploy-status](auto/deploy-status.md)
-- [auto/frontend-pipeline](auto/frontend-pipeline.md)
-- [auto/inflight](auto/inflight.md)
-- [auto/night-directives](auto/night-directives.md)
-- [auto/night-log](auto/night-log.md)
-- [auto/night-log-backend](auto/night-log-backend.md)
-- [auto/night-log-deploy](auto/night-log-deploy.md)
-- [auto/night-log-frontend](auto/night-log-frontend.md)
-- [auto/open-decisions-20260714](auto/open-decisions-20260714.md)
 
 프론트 상세 설계 문서는 아래에 있다.
 

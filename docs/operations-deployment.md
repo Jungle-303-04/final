@@ -134,6 +134,32 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | staging | 장애/복구/권한 검증 | pod kill, retry, DLQ, replay, RBAC, sandbox |
 | production | 사용자/운영 안정성 | managed DB/cache/object store, audit, backup, alert |
 
+## 운영 상태와 변경 증거
+
+운영 상태의 정본은 시점별 Markdown 로그가 아니다. 아래 증거를 조합해 현재 상태를 판정한다.
+
+- 소스 기준: 배포 브랜치의 commit SHA와 이미지 digest
+- 실행 기준: GitHub Actions 실행 결과와 배포 workload의 observed revision
+- 데이터 기준: Alembic head, 백업·복원 증거, 실제 agent heartbeat
+- 기능 기준: 인증된 route smoke, Bruno, command receipt, audit event
+
+문서에는 특정 run ID, 임시 cluster ID, live digest를 고정하지 않는다. 값은 배포 시점에
+workflow와 API에서 조회하고, 검증 결과는 해당 실행의 artifact 또는 감사 저장소에 남긴다.
+오래된 실행 로그를 새 배포의 근거로 재사용하지 않는다.
+
+개발·검증 환경도 synthetic workspace나 화면용 fixture를 운영 DB에 넣지 않는다. Kubernetes
+리소스, API discovery, RBAC, metric은 target agent의 outbound 수집 결과만 제품 데이터로
+인정한다. 테스트 fixture가 필요하면 격리된 테스트 DB나 명시적 scenario namespace에서만
+생성하고 제품 workspace와 수명주기를 분리한다.
+
+배포 순서는 다음 불변식을 지킨다.
+
+1. 변경 전 backup과 rollback 기준 digest를 고정한다.
+2. migration을 별도 job으로 실행하고 단일 Alembic head를 확인한다.
+3. event consumer와 worker를 먼저 수렴시킨 뒤 gateway를 전환한다.
+4. target agent는 inbound 연결 없이 outbound heartbeat와 command polling을 재개한다.
+5. route smoke와 실제 agent evidence가 통과한 뒤에만 배포 완료로 판정한다.
+
 ## PR 검토 기준
 
 운영 배포와 관련된 PR은 아래를 확인한다.

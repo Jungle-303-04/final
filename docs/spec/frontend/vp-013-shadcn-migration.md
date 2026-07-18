@@ -150,10 +150,10 @@ stagger. 모니터링 도구에서 값은 즉시·정직하게 바뀌어야 한�
 - migration 실행 경로 (기존 `create_all` DB의 안전한 baseline 포함)
 - `DEV_AUTH_BYPASS=0` 강제 및 렌더·live 양쪽 자동 검증
 - dev push CI: 전체 게이트 → 이미지 빌드 → ECR push → migration Job → rollout → smoke
-- `docs/auto/deploy-status.md` 자동 갱신 (배포된 dev SHA, 접속 URL)
+- GitHub deployment 실행에 배포 SHA, 이미지 digest, 접속 URL을 artifact로 보존
 
 이 전제가 착륙하기 전에는 **자동 배포 스위치를 켜지 않는다.** 첫 스키마 변경에서 DB가
-깨진다. 백엔드는 이 전제를 **P0로 즉시** 처리하고, 켜는 시점을 night-log에 보고한다.
+깨진다. 백엔드는 이 전제를 **P0로 즉시** 처리하고, 활성화 증거를 deployment 실행에 남긴다.
 
 **dev 트렁크 규율 (lane이 없어졌으므로 새로 필요):**
 - 커밋 단위는 **작고 초록**이어야 한다. dev가 곧 배포이므로 깨진 커밋 = 깨진 배포다.
@@ -209,4 +209,4 @@ stagger. 모니터링 도구에서 값은 즉시·정직하게 바뀌어야 한�
 - S5: 화면별 혼용 0, 하드코딩 0
 - 전 구간: 접근성 회귀, 모션 토큰 사용
 
-검토 결과는 `docs/auto/night-log.md`에 기록한다.
+검토 결과는 해당 commit의 CI 결과와 deployment artifact에 기록한다.

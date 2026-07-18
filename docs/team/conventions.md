@@ -101,4 +101,4 @@ PR을 merge하기 전에 `make check`와 필요한 AWS smoke 결과를 남긴다
 - 권한 필터 없이 dashboard/API 데이터를 노출한 경우
 - target write 범위가 sandbox/approval 정책 밖으로 넓어진 경우
 - secret/token/password가 코드, 문서, 로그, 테스트 레거시 데이터에 들어간 경우
-- `docs/README.md` 색인이 새 문서를 링크하지 않는 경우
+- 새 canonical 문서가 `docs/README.md` 또는 해당 영역 `README.md`에 연결되지 않은 경우

@@ -394,7 +394,8 @@ CLI Runner는 `01-dashboard-timeline`과 `05-evidence-query`가 저장한 최신
 저장된 실데이터가 없을 때 401/404를 계약상 허용하는 것은 응답 경계 회귀를 위한 것이다.
 운영 배포 승인에서는 이 실행의 종료 코드만으로 성공을 판정하지 않고, 실재 correlation과
 incident를 넣어 세 요청 모두 **실제 200**인지 별도로 확인한다. 구체적인 중단 조건과
-검증 명령은 [배포 계획](../auto/deploy-plan.md)의 RCA 읽기 API 절차를 따른다.
+검증 명령은 [운영 배포 기준](../operations-deployment.md)과
+[프로덕션 완료 기준](../production-readiness.md)을 따른다.
 
 ### 06-gitops-approval
 

@@ -35,29 +35,9 @@ governing: VP-015(골격) · VP-010~014 · reference-parity-map
 
 ### 0-3. 팀원 확인 경로
 
-**`docs/auto/deploy-status.md`를 세션이 자동 갱신한다:**
-
-```markdown
-## 지금 배포된 것
-
-배포 SHA : a3f9c2e  (2026-07-15 14:32)
-URL      : https://k8s.woonyong.org
-
-### 완료된 슬라이스
-- [x] S1  Clusters 목록          ← 클러스터 카드가 보입니다
-- [x] S2  클러스터 연결 위자드    ← ＋ 버튼 → 한 줄 명령 복사
-- [x] S3  태그형 검색            ← 검색창에 타이핑 → 타입별 제안
-- [x] S4  물리 뷰 그래프          ← BQ-074 + ELK/@xyflow + FLIP, public 배포 추적 중
-- [x] S5  표 + 스파크라인          ← BQ-030 batch + canonical smart columns, public 배포 추적 중
-
-### 이번 슬라이스에서 확인할 것
-1. https://k8s.woonyong.org/clusters 접속
-2. 검색창에 "check" 입력 → [애플리케이션] 그룹에 checkout-api가 뜨는가
-3. 선택 → 칩이 [앱: checkout-api] 로 붙는가
-4. 표가 좁혀지는가
-```
-
-**팀원은 이 파일만 보면 "지금 뭐가 되는지"와 "어떻게 확인하는지"를 안다.**
+배포 SHA, image digest, route smoke 결과는 GitHub deployment 실행과 배포 artifact에서
+확인한다. 화면 검증 절차는 해당 슬라이스의 테스트와 PR 설명에 남긴다. 시점별 Markdown
+상태판을 별도로 유지하지 않는다.
 
 ### 0-4. 실패 방지 규율
 

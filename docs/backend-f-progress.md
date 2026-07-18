@@ -425,7 +425,7 @@ Bundle route는 200을 반환한다.
 
 - 상태: 계획 착륙 완료, 실제 배포는 사람 전용 J단계 대기
 - canonical merge: `c2e2b552377ba508a535c9bd1b69c9e60fec522a`
-- 문서: `docs/auto/deploy-plan.md`
+- 현재 정본: `docs/operations-deployment.md`, `docs/production-readiness.md`
 - 적용 경계: migration-first → consumer/worker → target agent → realtime gateway →
   API gateway. backend 공용 image workload 39개를 동일 immutable digest로 수렴한다.
 - DB fail-closed: `alembic_version` 부재·불일치, 0140 partial DDL, concurrent index
