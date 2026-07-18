@@ -127,7 +127,7 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
       ) : (
         <section
           aria-label={t("clusters.list.aria")}
-          className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-4"
+          className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] items-stretch gap-4"
         >
           {clusters.map((cluster, index) => (
             <ClusterCard

@@ -2,21 +2,13 @@ import { Boxes, Ellipsis, Layers3, LoaderCircle, RefreshCw, Server, ShieldCheck,
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ClusterProviderIcon } from "../../features/cluster-scope/ClusterProviderIcon";
-import type {
-  HomeClusterChoice,
-  HomeConnectionState,
-} from "../../features/home/homeContract";
+import type { HomeClusterChoice, HomeConnectionState } from "../../features/home/homeContract";
 import { STAGGER_MS, useStagger } from "../../motion/useStagger";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Button } from "../../shared/ui/primitives/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../shared/ui/primitives/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { cn } from "@/shared/lib/cn";
 import type { DisconnectPhase } from "./ClusterDisconnectDialog";
 
@@ -90,18 +82,18 @@ export function ClusterCard({
 
   return (
     <Card
-      className="motion-node-land relative min-h-52 overflow-visible transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none"
+      className="@container/cluster motion-node-land relative min-h-52 gap-0 overflow-visible py-0 transition-[box-shadow] duration-(--motion-quick) ease-(--ease-out) hover:ring-foreground/20 motion-reduce:transition-none"
       data-cluster-id={cluster.id}
       ref={cardRef}
     >
       <Link
         aria-label={t("clusters.card.openResources", { name: cluster.name })}
-        className="flex flex-1 flex-col gap-(--card-spacing) rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex flex-1 flex-col rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() => captureRouteMorph(document)}
         to={href}
       >
         <CardHeader className={cn(
-          "grid-cols-[auto_minmax(0,1fr)] items-center gap-3",
+          "min-h-20 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 py-4",
           onDisconnect && "pr-14",
         )}>
           <ClusterProviderIcon appearance="card" provider={cluster.provider} />
@@ -111,9 +103,9 @@ export function ClusterCard({
           </div>
         </CardHeader>
 
-        <CardContent className="grid flex-1 content-between gap-4">
-          <div className="flex min-w-0 items-start justify-between gap-3 border-y bg-muted/25 px-3 py-2.5">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <CardContent className="grid flex-1 content-between px-0">
+          <div className="grid min-w-0 gap-2 border-t px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,auto)] sm:items-center">
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
               <StatusMark
                 label={t(connectionLabelKeys[cluster.connectionState])}
                 tone={connectionTones[cluster.connectionState]}
@@ -122,7 +114,7 @@ export function ClusterCard({
                 <StatusMark label={t("clusters.simulation.label")} tone="unknown" />
               ) : null}
             </div>
-            <div className="min-w-0 text-right text-xs text-muted-foreground">
+            <div className="min-w-0 text-xs text-muted-foreground sm:text-right">
               {cluster.lastObservedAt ? (
                 <p className="truncate">
                   {t("clusters.lastResponse", {
@@ -142,7 +134,7 @@ export function ClusterCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-1 border-t [&>*+*]:border-t min-[26rem]:grid-cols-2 min-[26rem]:[&>*:nth-child(2)]:border-t-0 min-[26rem]:[&>*:nth-child(even)]:border-l sm:grid-cols-4 sm:[&>*+*]:border-t-0 sm:[&>*+*]:border-l">
             <ClusterMetric
               icon={<Server />}
               label={t("clusters.metric.servers", { count: metricValue(cluster.serverCount ?? cluster.nodeCount, formatNumber) })}
@@ -219,7 +211,7 @@ export function ClusterCard({
 
       {disconnectStep !== null && onDisconnect ? (
         <button
-          className="mx-3 mb-3 flex min-w-0 items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-left text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/12 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-amber-200 motion-reduce:transition-none"
+          className="flex w-full min-w-0 items-center gap-2 border-t px-4 py-3 text-left text-xs font-medium text-warning-foreground transition-colors hover:bg-status-warning/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none"
           onClick={onDisconnect}
           type="button"
         >
@@ -229,16 +221,18 @@ export function ClusterCard({
       ) : null}
 
       {disconnectStep === null && disconnected && !simulation && onRefresh ? (
-        <Button
-          className="mx-3 mb-3 w-[calc(100%-1.5rem)] justify-center"
-          onClick={onRefresh}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <RefreshCw aria-hidden="true" />
-          {t("clusters.action.checkConnection")}
-        </Button>
+        <div className="border-t p-3">
+          <Button
+            className="w-full justify-center"
+            onClick={onRefresh}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw aria-hidden="true" />
+            {t("clusters.action.checkConnection")}
+          </Button>
+        </div>
       ) : null}
     </Card>
   );
@@ -265,11 +259,11 @@ function ClusterMetric({
 }) {
   return (
     <span
-      className={cn("inline-flex min-h-14 min-w-0 items-center gap-1.5 rounded-lg bg-muted/35 px-2.5 py-2 text-xs", className)}
-      title={unavailable ? unavailableReason : undefined}
+      className={cn("inline-flex min-h-14 min-w-0 items-center gap-1.5 px-3 py-2 text-xs", className)}
+      title={unavailable ? unavailableReason : label}
     >
-      <span aria-hidden="true" className="[&_svg]:size-3.5">{icon}</span>
-      <span className="truncate">{label}</span>
+      <span aria-hidden="true" className="shrink-0 [&_svg]:size-3.5">{icon}</span>
+      <span className="truncate whitespace-nowrap">{label}</span>
     </span>
   );
 }
