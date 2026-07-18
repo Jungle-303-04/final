@@ -517,18 +517,31 @@ def test_full_deploy_bootstraps_fixed_admin_without_persisting_plaintext_credent
 
 def test_full_deploy_keeps_proxy_identity_and_cursor_contract_aligned() -> None:
     job = deploy_job()
-    step = steps_by_name()["Synchronize fixed dev runtime identity"]
-    source = step["run"]
+    steps = steps_by_name()
+    names = [step["name"] for step in job["steps"]]
+    identity_step = steps["Synchronize fixed dev runtime identity"]
+    secret_step = steps["Ensure persistent management runtime secrets"]
+    identity_source = identity_step["run"]
+    secret_source = secret_step["run"]
 
-    assert step["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert identity_step["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert secret_step["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
     assert job["env"]["PROJECT_SLUG"] == "kubernetes-ops"
-    assert "uuid.uuid5" in source
-    assert "TRUSTED_PROXY_AUTH_USER_ID" in source
-    assert "FILTER_CURSOR_SIGNING_KEY" in source
-    assert "openssl rand -hex 32" in source
-    assert "patch configmap management-runtime-config" in source
-    assert "patch secret management-runtime-secret" in source
-    assert "echo ${cursor_value}" not in source
+    assert "uuid.uuid5" in identity_source
+    assert "TRUSTED_PROXY_AUTH_USER_ID" in identity_source
+    assert "FILTER_CURSOR_SIGNING_KEY" in secret_source
+    assert "CREDENTIAL_ENCRYPTION_KEY" in secret_source
+    assert "create secret generic management-runtime-secret" in secret_source
+    assert "ensure_runtime_secret_value CREDENTIAL_ENCRYPTION_KEY 1" in secret_source
+    assert "ensure_runtime_secret_value FILTER_CURSOR_SIGNING_KEY 32" in secret_source
+    assert "openssl rand -hex 32" in secret_source
+    assert "patch configmap management-runtime-config" in identity_source
+    assert "patch secret management-runtime-secret" in secret_source
+    assert "echo ${value}" not in secret_source
+    assert "set -x" not in secret_source
+    assert names.index("Ensure persistent management runtime secrets") < names.index(
+        "Run fail-closed database migration"
+    )
 
 
 def test_full_deploy_pins_agent_runtime_config_before_consumers_restart() -> None:

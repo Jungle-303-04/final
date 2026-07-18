@@ -13,6 +13,7 @@ import yaml
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -264,6 +265,14 @@ class StubUnregisterDb:
     ) -> bool:
         self.purged.append((workspace_id, cluster_id))
         return True
+
+
+class NeverConnectedUnregisterDb(StubUnregisterDb):
+    def latest_inventory_snapshot(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        assert (workspace_id, cluster_id) == ("default", "cluster-1")
+        return None
 
 
 class TransactionalStubPurgeDb(StubUnregisterDb):
@@ -558,10 +567,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert "PROMETHEUS_BASE_URL" not in manifest
     assert 'LOKI_BASE_URL: "http://loki-gateway.target.svc"' in manifest
     assert 'TEMPO_BASE_URL: "http://tempo.target.svc:3200"' in manifest
-    assert (
-        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "
-        '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
-    ) in manifest
+    assert 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""' in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
     assert 'NODE_CONTROL_ENABLED: "true"' in manifest
     assert "name: cluster-agent-node-control" in manifest
@@ -1028,6 +1034,76 @@ def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> No
     assert forbidden.isdisjoint(argo_rules[0]["verbs"])
 
 
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        target_install_manifest(target_request(), "agent-secret"),
+        (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text(
+            encoding="utf-8"
+        ),
+        (Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml").read_text(
+            encoding="utf-8"
+        ),
+    ],
+)
+def test_agent_read_rbac_includes_crd_discovery_without_write_access(manifest: str) -> None:
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    read_role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ClusterRole"
+        and doc.get("metadata", {}).get("name")
+        in {"cluster-agent-read", "management-cluster-agent-read"}
+    )
+    crd_rule = next(
+        rule for rule in read_role["rules"] if rule.get("apiGroups") == ["apiextensions.k8s.io"]
+    )
+
+    assert crd_rule == {
+        "apiGroups": ["apiextensions.k8s.io"],
+        "resources": ["customresourcedefinitions"],
+        "verbs": ["get", "list", "watch"],
+    }
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        target_install_manifest(target_request(), "agent-secret"),
+        (Path(__file__).resolve().parents[1] / "deploy/target/target.yaml").read_text(
+            encoding="utf-8"
+        ),
+        (Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml").read_text(
+            encoding="utf-8"
+        ),
+    ],
+)
+def test_agent_manifests_disable_otel_export_without_explicit_endpoint(manifest: str) -> None:
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc]
+    deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
+    environment = {
+        item["name"]: item.get("value")
+        for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    runtime_config = next(
+        (
+            doc.get("data", {})
+            for doc in docs
+            if doc.get("kind") == "ConfigMap"
+            and doc.get("metadata", {}).get("name") == "target-runtime-config"
+        ),
+        {},
+    )
+
+    assert (
+        environment.get(
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            runtime_config.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"),
+        )
+        == ""
+    )
+
+
 def test_static_management_agent_limits_writes_to_gitops_control() -> None:
     manifest_path = Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml"
     docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
@@ -1050,6 +1126,9 @@ def test_static_management_agent_limits_writes_to_gitops_control() -> None:
     discovery_rule = next(
         rule for rule in read_role["rules"] if "discovery.k8s.io" in rule.get("apiGroups", [])
     )
+    crd_rule = next(
+        rule for rule in read_role["rules"] if "apiextensions.k8s.io" in rule.get("apiGroups", [])
+    )
     deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
     env = {
         item["name"]: item
@@ -1068,6 +1147,11 @@ def test_static_management_agent_limits_writes_to_gitops_control() -> None:
         "statefulsets",
     }
     assert discovery_rule["resources"] == ["endpointslices"]
+    assert crd_rule == {
+        "apiGroups": ["apiextensions.k8s.io"],
+        "resources": ["customresourcedefinitions"],
+        "verbs": ["get", "list", "watch"],
+    }
     assert metrics_rule["resources"] == ["pods", "nodes"]
     assert metrics_rule["verbs"] == ["get", "list"]
 
@@ -1142,10 +1226,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert "prometheus_base_url" not in agent_state["spec"]
     assert agent_state["spec"]["loki_base_url"] == "http://loki-gateway.target.svc"
     assert agent_state["spec"]["tempo_base_url"] == "http://tempo.target.svc:3200"
-    assert (
-        agent_state["spec"]["otel_traces_endpoint"]
-        == "http://opentelemetry-collector.target.svc:4318/v1/traces"
-    )
+    assert agent_state["spec"]["otel_traces_endpoint"] == ""
     assert len(events.accepted) == 1
     assert events.accepted[0].cluster_id == "target-cluster-01"
     assert events.accepted[0].requested_by == "local-user"
@@ -1751,6 +1832,31 @@ def test_cluster_connect_rejects_duplicate_workspace_display_name_before_issuing
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "cluster_name_conflict"
     assert db.registered == []
+
+
+def test_target_register_maps_display_name_index_race_to_conflict(monkeypatch) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com/api")
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+
+    class DuplicateNameOriginalError(Exception):
+        diag = SimpleNamespace(constraint_name="ux_cluster_registrations_workspace_active_name")
+
+    class ConcurrentDuplicateDb(StubDb):
+        def register_target_cluster(self, payload: dict[str, object]) -> dict[str, object]:
+            raise IntegrityError("insert cluster registration", {}, DuplicateNameOriginalError())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            register_target(
+                target_request().model_copy(update={"name": "Production"}),
+                current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+                db=ConcurrentDuplicateDb(),
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "cluster_name_conflict"
 
 
 @pytest.mark.parametrize(
@@ -2720,6 +2826,26 @@ def test_offline_target_requires_actual_cleanup_before_registration_revocation()
     assert db.registration_status_updates == [ClusterRegistrationStatus.UNINSTALL_REQUESTED.value]
     assert len(db.queued) == 1
     assert db.unregistered == []
+
+
+def test_never_connected_target_without_snapshot_revokes_registration_immediately() -> None:
+    db = NeverConnectedUnregisterDb(cluster_role="target")
+
+    response = asyncio.run(
+        unregister_cluster(
+            "cluster-1",
+            current=SimpleNamespace(workspace_id="default", user_id="admin"),
+            db=db,
+        )
+    )
+
+    assert response.status == "disconnected"
+    assert response.stage == "registration_revoked"
+    assert response.cleanup_verified is True
+    assert response.command_id is None
+    assert db.unregistered == [("default", "cluster-1")]
+    assert db.registration_status_updates == []
+    assert db.queued == []
 
 
 class OnlineUnregisterDb(StubUnregisterDb):

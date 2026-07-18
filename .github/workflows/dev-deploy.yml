@@ -238,6 +238,44 @@ jobs:
             --alias "${MGMT_CONTEXT}"
           test "$(kubectl config current-context)" = "${MGMT_CONTEXT}"
 
+      - name: Ensure persistent management runtime secrets
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get secret management-runtime-secret >/dev/null 2>&1; then
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              create secret generic management-runtime-secret >/dev/null
+          fi
+
+          ensure_runtime_secret_value() {
+            local secret_key="$1"
+            local minimum_length="$2"
+            local encoded value patch
+            encoded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get secret management-runtime-secret \
+              --output "jsonpath={.data.${secret_key}}")"
+            value=""
+            if [[ -n "${encoded}" ]]; then
+              value="$(printf '%s' "${encoded}" | base64 --decode 2>/dev/null || true)"
+            fi
+            if (( ${#value} >= minimum_length )); then
+              return
+            fi
+            value="$(openssl rand -hex 32)"
+            encoded="$(printf '%s' "${value}" | base64 | tr -d '\n')"
+            patch="$(jq -cn \
+              --arg key "${secret_key}" \
+              --arg value "${encoded}" \
+              '{data:{($key):$value}}')"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              patch secret management-runtime-secret --type merge --patch "${patch}" \
+              >/dev/null
+          }
+          ensure_runtime_secret_value CREDENTIAL_ENCRYPTION_KEY 1
+          ensure_runtime_secret_value FILTER_CURSOR_SIGNING_KEY 32
+
       - name: Render and verify auth bypass policy
         shell: bash
         run: |
@@ -418,22 +456,6 @@ jobs:
             patch configmap management-runtime-config --type merge \
             --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\",\"CONTROL_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"POD_EXEC_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"TARGET_DEFAULT_CONTROL_NAMESPACES\":\"sandbox,color-turf\"}}"
 
-          cursor_encoded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            get secret management-runtime-secret \
-            --output jsonpath='{.data.FILTER_CURSOR_SIGNING_KEY}')"
-          cursor_value=""
-          if [[ -n "${cursor_encoded}" ]]; then
-            cursor_value="$(printf '%s' "${cursor_encoded}" | base64 --decode 2>/dev/null || true)"
-          fi
-          if (( ${#cursor_value} < 32 )); then
-            cursor_value="$(openssl rand -hex 32)"
-            cursor_encoded="$(printf '%s' "${cursor_value}" | base64 | tr -d '\n')"
-            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-              patch secret management-runtime-secret --type merge \
-              --patch "{\"data\":{\"FILTER_CURSOR_SIGNING_KEY\":\"${cursor_encoded}\"}}" \
-              >/dev/null
-          fi
-
           if [[ -n "${LLM_API_KEY}" ]]; then
             llm_provider_encoded="$(printf '%s' "${LLM_PROVIDER}" | base64 | tr -d '\n')"
             llm_model_encoded="$(printf '%s' "${LLM_MODEL}" | base64 | tr -d '\n')"
@@ -447,7 +469,7 @@ jobs:
               patch secret management-runtime-secret --type merge --patch "${llm_patch}" \
               >/dev/null
           fi
-          unset admin_id cursor_encoded cursor_value llm_provider_encoded llm_model_encoded llm_key_encoded llm_patch
+          unset admin_id llm_provider_encoded llm_model_encoded llm_key_encoded llm_patch
 
       - name: Seed dedicated dev demo workspace
         id: demo_seed

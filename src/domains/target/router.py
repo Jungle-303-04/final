@@ -1226,20 +1226,28 @@ async def register_target(
             and registration_getter(workspace_id, scoped_payload.cluster_id) is not None
         ):
             raise HTTPException(status_code=409, detail="cluster_id is already registered")
-        db.register_target_cluster(
-            {
-                "workspace_id": workspace_id,
-                "user_id": current.user_id,
-                "cluster_id": scoped_payload.cluster_id,
-                "name": scoped_payload.name,
-                "environment": scoped_payload.environment,
-                "status": ClusterRegistrationStatus.PENDING_INSTALL.value,
-                "agent_token_hash": hash_agent_token(agent_token),
-                "agent_envelope_public_key": agent_envelope_public_key,
-                "agent_envelope_private_key_encrypted": (encrypted_agent_envelope_private_key),
-                "settings": registration_settings,
-            }
-        )
+        try:
+            db.register_target_cluster(
+                {
+                    "workspace_id": workspace_id,
+                    "user_id": current.user_id,
+                    "cluster_id": scoped_payload.cluster_id,
+                    "name": scoped_payload.name,
+                    "environment": scoped_payload.environment,
+                    "status": ClusterRegistrationStatus.PENDING_INSTALL.value,
+                    "agent_token_hash": hash_agent_token(agent_token),
+                    "agent_envelope_public_key": agent_envelope_public_key,
+                    "agent_envelope_private_key_encrypted": (encrypted_agent_envelope_private_key),
+                    "settings": registration_settings,
+                }
+            )
+        except IntegrityError as exc:
+            if is_cluster_name_integrity_conflict(exc):
+                raise HTTPException(
+                    status_code=409,
+                    detail=cluster_name_conflict_detail(),
+                ) from exc
+            raise
         if db.get_cluster_policy(workspace_id, scoped_payload.cluster_id) is None:
             policy = default_agent_policy(
                 cluster_id=scoped_payload.cluster_id,
@@ -1841,6 +1849,26 @@ async def unregister_cluster(
     agents = visible_cluster_agent_statuses(
         db.list_cluster_agent_statuses(workspace_id, cluster_id)
     )
+    snapshot_getter = getattr(db, "latest_inventory_snapshot", None)
+    latest_snapshot = (
+        snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
+    )
+    if not agents and callable(snapshot_getter) and latest_snapshot is None:
+        unregister = getattr(db, "unregister_target_cluster", None)
+        if not callable(unregister):
+            raise HTTPException(
+                status_code=500,
+                detail="cluster registration cleanup is unavailable",
+            )
+        with unit_of_work_or_null(db):
+            if not unregister(workspace_id, cluster_id):
+                raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="disconnected",
+            stage="registration_revoked",
+            cleanup_verified=True,
+        )
     latest_agent = agents[0] if agents else None
     online = cluster_connection_status(latest_agent) == AGENT_STATUS_ONLINE
     status_updater = getattr(db, "update_cluster_registration_status", None)

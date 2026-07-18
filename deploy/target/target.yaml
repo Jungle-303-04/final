@@ -60,6 +60,9 @@ rules:
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
   # workload controller도 읽기 권한만 둔다.
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "controllerrevisions", "daemonsets", "statefulsets"]
@@ -437,10 +440,7 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: target-cluster-agent
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              # collector Helm chart 는 daemonset 모드에서 Service 를 "<fullname>-agent" 로
-              # 만든다(deploy/target/opentelemetry.yaml: fullnameOverride=opentelemetry-collector,
-              # mode=daemonset → Service 이름 opentelemetry-collector-agent).
-              value: http://opentelemetry-collector-agent.target.svc:4318/v1/traces
+              value: ""
           volumeMounts:
             - name: target-agent-runtime
               mountPath: /var/lib/target-agent

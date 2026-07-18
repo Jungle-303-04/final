@@ -31,7 +31,7 @@ from packages.contracts.kubernetes_discovery import (
 )
 from packages.contracts.parity import ResourceRef
 from packages.contracts.resource_files import ResourceFileResult
-from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
+from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME
 
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
@@ -45,9 +45,9 @@ DEFAULT_TARGET_ENVIRONMENT = "sandbox"
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
 DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
 DEFAULT_OTEL_SERVICE_NAME = "target-cluster-agent"
-DEFAULT_OTEL_TRACES_ENDPOINT = (
-    f"http://opentelemetry-collector.{TARGET_NAMESPACE}.svc:4318/v1/traces"
-)
+# Export is opt-in. The agent keeps its outbound management channel, but must not
+# infer a direct in-cluster collector endpoint that was not explicitly configured.
+DEFAULT_OTEL_TRACES_ENDPOINT = ""
 MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
 DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS = 3
