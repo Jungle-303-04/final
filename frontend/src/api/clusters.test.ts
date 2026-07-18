@@ -91,6 +91,26 @@ describe("clusters API", () => {
     await expect(listClusters()).resolves.toEqual({ clusters: [cluster] });
   });
 
+  it("accepts the explicit agent or simulation observation mode", async () => {
+    const cluster = { ...CLUSTER, observation_mode: "simulation" };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ clusters: [cluster] }),
+    );
+
+    await expect(listClusters()).resolves.toEqual({ clusters: [cluster] });
+  });
+
+  it("rejects an observation mode outside the canonical contract", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ clusters: [{ ...CLUSTER, observation_mode: "connected" }] }),
+    );
+
+    await expect(listClusters()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
   it("rejects a connection stage outside the canonical stage enum", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ clusters: [{ ...CLUSTER, connection_stage: "invented" }] }),

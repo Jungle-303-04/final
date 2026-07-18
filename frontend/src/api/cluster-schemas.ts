@@ -17,6 +17,7 @@ export const clusterSummarySchema = z.strictObject({
   name: z.string(),
   environment: z.string(),
   provider: clusterProviderSchema.optional(),
+  observation_mode: z.enum(["agent", "simulation"]).optional(),
   status: z.string(),
   settings: unknownRecordSchema,
   connection_status: z.string(),
