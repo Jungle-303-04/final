@@ -1066,6 +1066,32 @@ def test_agent_read_rbac_includes_crd_discovery_without_write_access(manifest: s
     }
 
 
+def test_all_agent_install_paths_grant_ingress_read_only() -> None:
+    root = Path(__file__).resolve().parents[1]
+    manifests = [
+        target_install_manifest(target_request(), "agent-secret"),
+        *[
+            (root / path).read_text(encoding="utf-8")
+            for path in (
+                "deploy/target/target.yaml",
+                "deploy/management/target-agent.yaml",
+                "deploy/oss/kubeheal-oss.yaml",
+                "charts/opsia/templates/agent-rbac.yaml",
+            )
+        ],
+    ]
+
+    for manifest in manifests:
+        assert 'apiGroups: ["networking.k8s.io"]' in manifest
+        ingress_rule = manifest.split('apiGroups: ["networking.k8s.io"]', 1)[1].split("---", 1)[0]
+        assert 'resources: ["ingresses"]' in ingress_rule
+        assert 'verbs: ["get", "list", "watch"]' in ingress_rule
+        assert all(
+            forbidden not in ingress_rule
+            for forbidden in ('"create"', '"update"', '"patch"', '"delete"')
+        )
+
+
 @pytest.mark.parametrize(
     "manifest",
     [

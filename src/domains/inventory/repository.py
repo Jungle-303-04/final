@@ -39,6 +39,7 @@ from domains.inventory.models import (
     live_inventory_snapshot_clause,
     timeline_coverage_snapshot_clause,
 )
+from domains.inventory.resource_types import project_inventory_product_counts
 from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
     sync_inventory_filter_projection,
@@ -1219,6 +1220,40 @@ class InventoryRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [self.serialize_inventory_resource(dict(row)) for row in rows]
 
+    def list_inventory_resources_by_kind(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        kind: str,
+        namespace: str | None = None,
+        include_deleted: bool = False,
+        limit: int = 200,
+    ) -> list[JsonObject]:
+        """List an exact Kubernetes kind inside one canonical resource family."""
+
+        table = ClusterInventoryResourceRecord.__table__
+        predicates = [
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.resource_type == resource_type.strip().casefold(),
+            func.lower(table.c.kind) == kind.strip().casefold(),
+        ]
+        if namespace:
+            predicates.append(table.c.namespace == namespace)
+        if not include_deleted:
+            predicates.append(table.c.deleted_at.is_(None))
+        statement = (
+            select(table)
+            .where(*predicates)
+            .order_by(table.c.namespace.nullsfirst(), table.c.name)
+            .limit(max(1, min(limit, 1000)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self.serialize_inventory_resource(dict(row)) for row in rows]
+
     def list_tls_secret_certificate_observations(
         self,
         *,
@@ -2300,6 +2335,38 @@ class InventoryRepository(DatabaseConnection):
             }
             for row in rows
         ]
+
+    def inventory_product_resource_counts(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        namespaces: tuple[str, ...] = (),
+    ) -> list[JsonObject]:
+        """Return product resource counts from one grouped database query."""
+
+        table = ClusterInventoryResourceRecord.__table__
+        predicates = [
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.deleted_at.is_(None),
+        ]
+        if namespaces:
+            predicates.append(or_(table.c.namespace.is_(None), table.c.namespace.in_(namespaces)))
+        statement = (
+            select(
+                table.c.resource_type,
+                table.c.kind,
+                table.c.health,
+                func.count().label("count"),
+            )
+            .where(*predicates)
+            .group_by(table.c.resource_type, table.c.kind, table.c.health)
+            .order_by(table.c.resource_type, table.c.kind, table.c.health)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return project_inventory_product_counts(rows)
 
     def inventory_resource_counts_by_cluster(
         self,

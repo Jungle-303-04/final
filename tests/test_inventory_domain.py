@@ -21,10 +21,16 @@ from domains.inventory.repository import (
     selector_labels,
     snapshot_resources,
 )
+from domains.inventory.resource_types import (
+    discoverable_product_resource_types,
+    include_discoverable_zero_counts,
+    project_inventory_product_counts,
+)
 from domains.inventory.router import (
     get_cluster_api_resources,
     get_inventory_resource_detail,
     get_inventory_summary,
+    list_inventory_resources,
     list_inventory_workloads,
     record_inventory_snapshot,
 )
@@ -89,6 +95,27 @@ class StubInventoryDb:
             and (include_deleted or item["deleted_at"] is None)
         ]
         return rows[:limit]
+
+    def list_inventory_resources_by_kind(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        kind: str,
+        namespace: str | None,
+        include_deleted: bool,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        rows = self.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type=resource_type,
+            namespace=namespace,
+            include_deleted=include_deleted,
+            limit=limit,
+        )
+        return [row for row in rows if str(row["kind"]).casefold() == kind.casefold()]
 
     def get_inventory_resource(
         self,
@@ -158,7 +185,7 @@ class StubInventoryDb:
     ) -> dict[str, object]:
         return {"snapshot_id": "snapshot-1", "resource_count": 1}
 
-    def inventory_resource_counts(
+    def inventory_product_resource_counts(
         self,
         _workspace_id: str,
         _cluster_id: str,
@@ -496,6 +523,54 @@ def test_inventory_workloads_route_requires_inventory_access_and_filters() -> No
     assert "raw" not in response.resources[0].model_dump()
 
 
+def test_inventory_resource_alias_lists_only_its_exact_workload_kind() -> None:
+    db = StubInventoryDb(
+        [
+            inventory_resource("workload", "Deployment", "api"),
+            inventory_resource("workload", "Job", "inventory-warmup"),
+        ]
+    )
+
+    async def run():
+        return await list_inventory_resources(
+            "cluster-1",
+            resource_type="job",
+            namespace="default",
+            limit=25,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.resource_type == "job"
+    assert [(item.resource_type, item.kind, item.name) for item in response.resources] == [
+        ("job", "Job", "inventory-warmup")
+    ]
+
+
+def test_inventory_resource_alias_detail_rejects_mismatched_kind() -> None:
+    db = StubInventoryDb([inventory_resource("workload", "Deployment", "api")])
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="job",
+            kind="Deployment",
+            namespace="default",
+            name="api",
+            related_limit=10,
+            event_limit=10,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=db,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 404
+
+
 def test_inventory_resource_detail_returns_related_resources_and_events_without_raw() -> None:
     db = StubInventoryDb(
         [
@@ -815,6 +890,68 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     assert response.counts_evidence.reason_codes == ("inventory_snapshot_evidence_unavailable",)
 
 
+def test_inventory_product_counts_project_known_kinds_without_losing_unknown_workloads() -> None:
+    assert project_inventory_product_counts(
+        [
+            {"resource_type": "workload", "kind": "Deployment", "health": "healthy", "count": 2},
+            {"resource_type": "workload", "kind": "Deployment", "health": "healthy", "count": 1},
+            {"resource_type": "workload", "kind": "Rollout", "health": "warning", "count": 3},
+            {"resource_type": "pod", "kind": "Pod", "health": "healthy", "count": 4},
+        ]
+    ) == [
+        {"resource_type": "deployment", "health": "healthy", "count": 3},
+        {"resource_type": "pod", "health": "healthy", "count": 4},
+        {"resource_type": "workload", "health": "warning", "count": 3},
+    ]
+
+
+def test_exact_snapshot_discovery_adds_server_owned_zero_count_types() -> None:
+    snapshot = {
+        "summary": {
+            "summary": {
+                "api_resource_discovery": {
+                    "observed_at": "2026-07-17T12:00:00Z",
+                    "completeness": "exact",
+                    "reason_codes": [],
+                    "resources": [
+                        {
+                            "group": "batch",
+                            "version": "v1",
+                            "api_version": "batch/v1",
+                            "name": "jobs",
+                            "singular_name": "job",
+                            "kind": "Job",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                        {
+                            "group": "networking.k8s.io",
+                            "version": "v1",
+                            "api_version": "networking.k8s.io/v1",
+                            "name": "ingresses",
+                            "singular_name": "ingress",
+                            "kind": "Ingress",
+                            "namespaced": True,
+                            "is_crd": False,
+                            "verbs": ["get", "list"],
+                        },
+                    ],
+                }
+            }
+        }
+    }
+
+    assert discoverable_product_resource_types(snapshot) == ("ingress", "job")
+    assert include_discoverable_zero_counts(
+        [{"resource_type": "job", "health": "healthy", "count": 1}],
+        snapshot=snapshot,
+    ) == [
+        {"resource_type": "ingress", "health": "unknown", "count": 0},
+        {"resource_type": "job", "health": "healthy", "count": 1},
+    ]
+
+
 def test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence() -> None:
     class EvidenceInventoryDb(StubInventoryDb):
         def latest_inventory_snapshot(
@@ -911,7 +1048,7 @@ def test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence
                 },
             }
 
-        def inventory_resource_counts(
+        def inventory_product_resource_counts(
             self,
             workspace_id: str,
             cluster_id: str,
@@ -931,7 +1068,10 @@ def test_inventory_summary_filters_counts_and_projects_agent_visibility_evidence
 
     response = asyncio.run(run())
 
-    assert response.counts == [{"resource_type": "pod", "health": "healthy", "count": 2}]
+    assert response.counts == [
+        {"resource_type": "deployment", "health": "unknown", "count": 0},
+        {"resource_type": "pod", "health": "healthy", "count": 2},
+    ]
     assert response.counts_evidence.completeness == "observed"
     assert response.counts_evidence.namespace_scope == ("shop",)
     assert response.counts_evidence.reason_codes == ()
