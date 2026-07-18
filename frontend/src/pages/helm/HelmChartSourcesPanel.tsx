@@ -90,7 +90,7 @@ function ChartSourceListBoundary({
     );
   }
   if (data.state.items.length === 0) {
-    return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.chartSourcesEmpty}</p>;
+    return <p className="border-y py-6 text-sm text-muted-foreground">{copy.chartSourcesEmpty}</p>;
   }
   return (
     <>

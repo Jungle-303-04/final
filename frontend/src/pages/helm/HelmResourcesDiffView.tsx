@@ -31,7 +31,7 @@ export function HelmResourcesDiffView({
       {diff.modified.length > 0 ? (
         <section className="grid min-w-0 gap-2">
           <h3 className="text-sm font-semibold">{copy.resourcesModified}</h3>
-          <ul className="grid min-w-0 gap-2">
+          <ul className="min-w-0 divide-y border-y">
             {diff.modified.map((resource) => (
               <HelmResourceChangeCard
                 copy={copy}
@@ -87,10 +87,10 @@ function ResourceRefSection({
   return (
     <section className="grid min-w-0 gap-2">
       <h3 className="text-sm font-semibold">{heading}</h3>
-      <ul className="grid min-w-0 gap-1 rounded-md border bg-background p-3 text-xs">
+      <ul className="min-w-0 divide-y border-y text-xs">
         {items.map((item) => (
           <li
-            className="flex min-w-0 flex-wrap items-center justify-between gap-2"
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2"
             key={`${item.apiVersion}:${item.kind}:${item.namespace}:${item.name}`}
           >
             <span className="font-mono font-medium">{item.kind}/{item.name}</span>
@@ -112,7 +112,7 @@ function HelmResourceChangeCard({
   resource: HelmRenderedResourceChange;
 }) {
   return (
-    <li className="grid min-w-0 gap-2 rounded-md border bg-background p-3 text-xs">
+    <li className="grid min-w-0 gap-2 py-3 text-xs">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <span className="font-mono font-medium">{resource.kind}/{resource.name}</span>
         <span className="text-muted-foreground">{resource.summary}</span>
