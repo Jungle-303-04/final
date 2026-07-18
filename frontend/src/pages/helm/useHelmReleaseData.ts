@@ -43,11 +43,11 @@ export function useHelmReleaseList(
   const refreshController = useServerRefreshScheduler(
     () => setRevision((current) => current + 1),
   );
+  const scopeKey = JSON.stringify([...new Set(clusterIds)].sort());
   const canonicalClusterIds = useMemo(
-    () => [...new Set(clusterIds)].sort(),
-    [clusterIds],
+    () => JSON.parse(scopeKey) as string[],
+    [scopeKey],
   );
-  const scopeKey = canonicalClusterIds.join("\u001f");
   const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseListView, HelmPortFailure>>(ASYNC_LOADING);
 
   useEffect(() => {
@@ -121,8 +121,17 @@ export function useHelmReleaseDetail(
     () => setRevision((current) => current + 1),
   );
   const identityKey = request
-    ? [request.clusterId, request.namespace, request.releaseName].join("\u001f")
+    ? JSON.stringify([request.clusterId, request.namespace, request.releaseName])
     : null;
+  const canonicalRequest = useMemo<HelmReleaseDetailRequest | null>(() => {
+    if (identityKey === null) return null;
+    const [clusterId, namespace, releaseName] = JSON.parse(identityKey) as [
+      string,
+      string,
+      string,
+    ];
+    return { clusterId, namespace, releaseName };
+  }, [identityKey]);
   const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseDetailView, HelmPortFailure>>(ASYNC_IDLE);
 
   useEffect(() => {
@@ -130,7 +139,7 @@ export function useHelmReleaseDetail(
   }, [identityKey, refreshController]);
 
   useEffect(() => {
-    if (request === null || identityKey === null) {
+    if (canonicalRequest === null || identityKey === null) {
       queueMicrotask(() => setFrame(ASYNC_IDLE));
       return;
     }
@@ -143,9 +152,9 @@ export function useHelmReleaseDetail(
       `helm-release:${identityKey}:r${revision}`,
       async (signal) => {
         const [detail, upgradeInfo, availableVersions] = await Promise.all([
-          port.getRelease(request, signal),
-          port.getReleaseUpgradeInfo(request, signal),
-          port.listReleaseVersions(request, signal),
+          port.getRelease(canonicalRequest, signal),
+          port.getReleaseUpgradeInfo(canonicalRequest, signal),
+          port.listReleaseVersions(canonicalRequest, signal),
         ]);
         return {
           ...detail,
@@ -175,7 +184,7 @@ export function useHelmReleaseDetail(
       active = false;
       sharedRequest.release();
     };
-  }, [identityKey, port, refreshController, request, revision]);
+  }, [canonicalRequest, identityKey, port, refreshController, revision]);
 
   const refreshAfterMutation = useCallback(() => {
     if (frame.phase !== "ready") return;

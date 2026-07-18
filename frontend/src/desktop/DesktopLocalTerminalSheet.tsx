@@ -109,6 +109,7 @@ export function DesktopLocalTerminalSheet() {
 
 function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
+  const translationRef = useRef(t);
   const reducedMotion = usePrefersReducedMotion();
   const host = useRef<HTMLDivElement>(null);
   const [generation, setGeneration] = useState(0);
@@ -117,6 +118,10 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
   const [failure, setFailure] = useState<TerminalFailure | null>(null);
   const shellSessions = useOptionalShellSessions();
   const registerShellSession = shellSessions?.register;
+
+  useLayoutEffect(() => {
+    translationRef.current = t;
+  }, [t]);
 
   useLayoutEffect(() => {
     const container = host.current;
@@ -186,13 +191,13 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       if (exit.exitCode === 0) {
         setFailure(null);
         setPhase("ended");
-        terminal.write(`\r\n[${t("desktop.localTerminal.ended")}]\r\n`);
+        terminal.write(`\r\n[${translationRef.current("desktop.localTerminal.ended")}]\r\n`);
         return;
       }
       const exitCode = safeExitCode(exit.exitCode);
       setFailure({ kind: "exit", exitCode });
       setPhase("failed");
-      terminal.write(`\r\n[${t("desktop.localTerminal.failed")}]\r\n`);
+      terminal.write(`\r\n[${translationRef.current("desktop.localTerminal.failed")}]\r\n`);
     };
     const scheduleOutputFlush = () => {
       if (outputFrame !== null || outputWriteInFlight) return;
@@ -336,7 +341,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       const activeSessionId = invalidateSession();
       if (activeSessionId) void desktopBridge.closeLocalTerminal(activeSessionId).catch(() => undefined);
     };
-  }, [generation, onClose, reducedMotion, registerShellSession, t]);
+  }, [generation, onClose, reducedMotion, registerShellSession]);
 
   const isFailed = phase === "failed";
   const failureMessage = failure ? terminalFailureMessage(failure, t) : null;

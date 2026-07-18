@@ -25,13 +25,14 @@ interface ProductShortcutOptions {
 /** Installs one shell listener and delegates every route action to its descriptor owner. */
 export function useProductShortcuts(options: ProductShortcutOptions) {
   const latestOptions = useRef(options);
+  const definitionsIdentity = shortcutDefinitionsIdentity(options.definitions);
 
   useEffect(() => {
     latestOptions.current = options;
   });
 
   useEffect(() => {
-    const matcher = createShortcutMatcher(options.definitions);
+    const matcher = createShortcutMatcher(latestOptions.current.definitions);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const current = latestOptions.current;
@@ -105,5 +106,17 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       matcher.dispose();
     };
-  }, [options.definitions]);
+  }, [definitionsIdentity]);
+}
+
+function shortcutDefinitionsIdentity(definitions: readonly ShortcutDefinition[]): string {
+  return JSON.stringify(definitions.map((definition) => ({
+    allowInInputs: definition.allowInInputs ?? false,
+    allowRepeat: definition.allowRepeat ?? false,
+    available: definition.available ?? true,
+    id: definition.id,
+    modifier: definition.modifier ?? null,
+    sequence: definition.sequence,
+    targetRoute: definition.targetRoute ?? null,
+  })));
 }

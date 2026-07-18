@@ -44,6 +44,11 @@ export function AlertEventsProvider({
   const [pending, setPending] = useState<Record<string, "ack" | "promote">>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const seen = useRef<Set<string> | null>(null);
+  const translationRef = useRef(t);
+
+  useEffect(() => {
+    translationRef.current = t;
+  }, [t]);
 
   useEffect(() => {
     let active = true;
@@ -61,10 +66,10 @@ export function AlertEventsProvider({
         if (seen.current !== null) {
           for (const event of response) {
             if (event.status !== "firing" || seen.current.has(event.event_id)) continue;
-            toast.warning(event.rule_name ?? t("alerts.toast.new"), {
+            toast.warning(event.rule_name ?? translationRef.current("alerts.toast.new"), {
               description: alertTarget(event),
               action: {
-                label: t("alerts.toast.view"),
+                label: translationRef.current("alerts.toast.view"),
                 onClick: () => navigate("/alerts"),
               },
             });
@@ -75,7 +80,9 @@ export function AlertEventsProvider({
         setError(null);
       } catch (cause) {
         if (!active || isAbortError(cause)) return;
-        setError(cause instanceof Error ? cause : new Error(t("alerts.list.failure")));
+        setError(cause instanceof Error
+          ? cause
+          : new Error(translationRef.current("alerts.list.failure")));
       } finally {
         if (active) setInitialLoading(false);
         inFlight = false;
@@ -94,7 +101,7 @@ export function AlertEventsProvider({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [navigate, port, refreshKey, t]);
+  }, [navigate, port, refreshKey]);
 
   const runMutation = useCallback(async (
     eventId: string,
