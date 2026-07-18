@@ -11,9 +11,10 @@ import {
   Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Moon, CircleHelp,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh,
 } from "lucide-react";
-import { OpsiaMap, podInventory, nodeInventory } from "./devpreview-opsia";
+import { OpsiaMap, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
 import { AiPanel } from "./devpreview-ai";
 import { ConnectWizard } from "./devpreview-connect";
+import { TopologyView } from "./devpreview-topology";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -345,7 +346,7 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     const c = m.pct >= 90 ? HP.crit : m.pct >= 60 ? HP.warn : HP.ok;
     return (
       <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-        <span style={{ fontSize: 10.5, fontFamily: MONO, color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
+        <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
         <span style={{ height: 3, borderRadius: 999, background: "rgba(17,19,24,0.07)", overflow: "hidden" }}>
           <span style={{ display: "block", height: "100%", width: `${m.pct}%`, background: c, borderRadius: 999 }} />
         </span>
@@ -356,21 +357,21 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     const n = v as number;
     return <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: n }).map((_, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: 999, background: bad && i === 0 ? HP.crit : i === 0 && n > 1 ? "#D6DAE1" : HP.ok }} />)}</span>;
   }
-  if (cell.t === "ready") return <span style={{ fontSize: 11, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : "#1F9D4D" }}>{String(v)}</span>;
+  if (cell.t === "ready") return <span style={{ fontSize: 12, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : "#1F9D4D" }}>{String(v)}</span>;
   if (cell.t === "status") {
     const s = String(v);
     const tone = bad || /Crash|OOM|Fail|Error|Evict/.test(s) ? "red" : /Pending|Provisioning/.test(s) ? "blue" : /Cordoned|Suspend|Terminat/.test(s) ? "gray" : "green";
     return <Badge text={s} tone={tone} />;
   }
   if (cell.t === "badge") return <Badge text={String(v)} tone={bad ? "red" : cell.tone ?? "gray"} />;
-  if (cell.t === "num") return <span style={{ fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
-  if (cell.t === "ns") return <span style={{ fontSize: 11.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
-  if (cell.t === "mono") return <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
-  return <span style={{ fontSize: 11.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  if (cell.t === "num") return <span style={{ fontSize: 12.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
+  if (cell.t === "ns") return <span style={{ fontSize: 12.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  if (cell.t === "mono") return <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  return <span style={{ fontSize: 12.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
 }
 function Badge({ text, tone }: { text: string; tone: "blue" | "green" | "gray" | "purple" | "red" }) {
   const S = { blue: ["#0A6CFF", "#EDF4FF", "#CFE1FB"], green: ["#1F9D4D", "#EDFAF1", "#C9EAD4"], gray: ["#5F6570", "#F4F5F7", "#E4E6EA"], purple: ["#8250DF", "#F6F1FE", "#E3D5FA"], red: ["#C43028", "#FFF3F2", "#F5CFCC"] }[tone];
-  return <span style={{ display: "inline-block", fontSize: 10, fontWeight: 600, color: S[0], background: S[1], border: `1px solid ${S[2]}`, borderRadius: 5, padding: "1.5px 7px", whiteSpace: "nowrap" }}>{text}</span>;
+  return <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, color: S[0], background: S[1], border: `1px solid ${S[2]}`, borderRadius: 5, padding: "1.5px 7px", whiteSpace: "nowrap" }}>{text}</span>;
 }
 
 // ── 종류별 표 ─────────────────────────────
@@ -394,13 +395,13 @@ function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; 
     <div style={{ minWidth: 640 }}>
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD", position: "sticky", top: 0, zIndex: 2 }}>
         {spec.cols.map((c) => (
-          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
+          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
             {c.label}<ChevronDown size={9} style={{ opacity: 0.5 }} />
           </span>
         ))}
       </div>
       {filtered.length === 0 ? (
-        <div style={{ padding: "40px 18px", textAlign: "center", fontSize: 12, color: UI.ink3 }}>
+        <div style={{ padding: "40px 18px", textAlign: "center", fontSize: 13, color: UI.ink3 }}>
           {q ? "검색 결과가 없습니다" : inScope ? `이 범위에는 ${kind.label} 리소스가 없습니다` : `${kind.label} 리소스가 없습니다`}
         </div>
       ) : filtered.map((row, i) => (
@@ -440,7 +441,7 @@ function Sec({ title, icon: I, right, children, defaultOpen = true }: { title: s
       <button onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", border: "none", background: "transparent", cursor: "pointer", padding: 0, marginBottom: open ? 10 : 0 }}>
         <ChevronDown size={12} style={{ color: UI.ink3, transform: open ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
         {I && <I size={12} style={{ color: UI.ink3 }} />}
-        <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>{title}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>{title}</span>
         <span style={{ marginLeft: "auto" }}>{right}</span>
       </button>
       {open && children}
@@ -449,14 +450,14 @@ function Sec({ title, icon: I, right, children, defaultOpen = true }: { title: s
 }
 const Chip = ({ text, tone = "gray" }: { text: string; tone?: "gray" | "green" | "blue" | "purple" | "amber" | "lime" }) => {
   const S = { gray: ["#5F6570", "#F4F5F7"], green: ["#1F9D4D", "#EDFAF1"], blue: ["#0A6CFF", "#EDF4FF"], purple: ["#8250DF", "#F6F1FE"], amber: ["#B25A00", "#FFF6EA"], lime: ["#4D7C0F", "#F3FAE7"] }[tone];
-  return <span style={{ display: "inline-block", fontSize: 10.5, fontFamily: MONO, color: S[0], background: S[1], borderRadius: 5, padding: "2px 7px", margin: "0 4px 4px 0", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
+  return <span style={{ display: "inline-block", fontSize: 11.5, fontFamily: MONO, color: S[0], background: S[1], borderRadius: 5, padding: "2px 7px", margin: "0 4px 4px 0", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
 };
 
 function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?: string }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", gap: 12, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-      <span style={{ fontSize: 11, color: UI.ink3 }}>{k}</span>
-      <span style={{ fontSize: 11.5, color: tone ?? UI.ink, fontFamily: mono ? MONO : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+      <span style={{ fontSize: 12, color: UI.ink3 }}>{k}</span>
+      <span style={{ fontSize: 12.5, color: tone ?? UI.ink, fontFamily: mono ? MONO : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
     </div>
   );
 }
@@ -479,9 +480,9 @@ function hlYaml(src: string): string {
     return `${ind}<span class="y-k">${key}</span><span class="y-p">${colon}</span>${v}`;
   }).join("\n");
 }
-const YAML_FONT = { fontSize: 11.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
+const YAML_FONT = { fontSize: 12.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
 
-function DetailOverlay({ kind, row, onClose, onToast, forceFull = false, rightInset = 0, leftInset = 0 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; forceFull?: boolean; rightInset?: number; leftInset?: number }) {
+function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = false, rightInset = 0, leftInset = 0 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
@@ -501,6 +502,19 @@ function DetailOverlay({ kind, row, onClose, onToast, forceFull = false, rightIn
   const [yamlEditing, setYamlEditing] = useState(false);
   const [yamlDraft, setYamlDraft] = useState<string | null>(null);
   const [yamlSaved, setYamlSaved] = useState<string | null>(null);
+  const [diffMode, setDiffMode] = useState(false);      // 비교 — 마지막 적용본 vs 서버 원본
+  const [restartedAt, setRestartedAt] = useState<string | null>(null); // 재시작 요청 흔적 → 이벤트로 남는다
+  const doRestart = () => {
+    const t = new Date(); const ts = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+    setRestartedAt(ts);
+    onToast?.({ title: `${name} 재시작 요청됨`, sub: "kubectl rollout restart — 파드가 순차 교체됩니다", tone: "ok" });
+  };
+  const doDiff = () => {
+    if (yamlSaved && yamlSaved !== yaml) { setDiffMode(true); setTab("yaml"); }
+    else onToast?.({ title: "변경 사항 없음", sub: "마지막 적용본이 서버 원본과 동일합니다", tone: "ok" });
+  };
+  // 관련 리소스 접두어 → 종류 매핑 (클릭 = 해당 리소스 상세로 이동)
+  const REF_KIND: Record<string, string> = { "rs/": "ReplicaSet", "deploy/": "Deployment", "sts/": "StatefulSet", "svc/": "Service", "pod/": "Pod", "cm/": "ConfigMap", "networkpolicy/": "NetworkPolicy" };
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
   const isPod = kind.id === "Pod";
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
@@ -538,17 +552,17 @@ status:
               <kind.icon size={15} style={{ color: BLUE }} />
             </span>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-              <div style={{ fontSize: 11, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
+              <div style={{ fontSize: 15.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+              <div style={{ fontSize: 12, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {[["비교", Copy], ["재시작", Play]].map(([l, I]) => (
-                <button key={l as string} style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
-                  <I size={11} />{l as string}
+              {([["비교", Copy, doDiff], ["재시작", Play, doRestart]] as const).map(([l, I, act]) => (
+                <button key={l} onClick={act} style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                  <I size={11} />{l}
                 </button>
               ))}
-              <button title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: 11, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
-              <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 12, lineHeight: 1 }}>✕</button>
+              <button title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: 12, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
+              <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 13, lineHeight: 1 }}>✕</button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 2, marginTop: 14 }}>
@@ -556,7 +570,7 @@ status:
               const on = tab === t;
               const label = DETAIL_TABS.find((d) => d.id === t)!.label;
               return (
-                <button key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: 12, fontWeight: on ? 700 : 500, color: on ? UI.ink : UI.ink3 }}>
+                <button key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: 13, fontWeight: on ? 700 : 500, color: on ? UI.ink : UI.ink3 }}>
                   {label}
                   {on && <motion.span layoutId="dtab" transition={SOFT} style={{ position: "absolute", left: 8, right: 8, bottom: 0, height: 2, borderRadius: 2, background: BLUE }} />}
                 </button>
@@ -575,8 +589,8 @@ status:
                 <Sec title="운영 이슈 (1)" icon={Activity}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, border: "1px solid #F5CFCC", background: "#FFF7F6", borderRadius: 10, padding: "10px 12px" }}>
                     <Badge text="critical" tone="red" />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>{isPod ? phase : "워크로드 성능 저하"}</span>
-                    <span style={{ fontSize: 11, color: UI.ink2 }}>{isPod ? `컨테이너가 반복 종료됨 · 재시작 ${String(row.restarts ?? 3)}회` : "인스턴스 1개 사용 불가"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>{isPod ? phase : "워크로드 성능 저하"}</span>
+                    <span style={{ fontSize: 12, color: UI.ink2 }}>{isPod ? `컨테이너가 반복 종료됨 · 재시작 ${String(row.restarts ?? 3)}회` : "인스턴스 1개 사용 불가"}</span>
                   </div>
                 </Sec>
               )}
@@ -587,8 +601,8 @@ status:
                   ? ([["목표 복제본", "2"], ["현재 복제본", "2"], ["준비됨", bad ? "1" : "2"], ["최신 상태", "2"], ["가용", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono />)
                   : ([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : phase === "Pending" ? "#B25A00" : "#1F9D4D") : undefined} />)}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
-                  <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>
-                  {isWorkload && <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 11.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 조정</button>}
+                  <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>
+                  {isWorkload && <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 조정</button>}
                 </div>
               </Sec>
 
@@ -604,11 +618,11 @@ status:
               <Sec title={isWorkload ? "파드 템플릿" : "컨테이너"} icon={Boxes}>
                 <div style={{ border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 10, padding: "11px 13px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{comp}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{comp}</span>
                     {isPod && <><Badge text="Ready" tone="green" /><Badge text="running" tone="gray" /></>}
                   </div>
-                  <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 4, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(row.img ?? imgFor(base))}</div>
-                  <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 3 }}>포트: metrics 9100/TCP · webhook 7000/TCP</div>
+                  <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 4, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(row.img ?? imgFor(base))}</div>
+                  <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 3 }}>포트: metrics 9100/TCP · webhook 7000/TCP</div>
                 </div>
               </Sec>
               )}
@@ -616,7 +630,7 @@ status:
               {/* 환경 변수 (파드 전용) */}
               {isPod && (
                 <Sec title="환경 변수 (12)" defaultOpen={false}>
-                  <div style={{ fontSize: 10.5, fontFamily: MONO, lineHeight: 1.9, color: UI.ink2 }}>
+                  <div style={{ fontSize: 11.5, fontFamily: MONO, lineHeight: 1.9, color: UI.ink2 }}>
                     {["NAMESPACE = field:metadata.namespace", "LOG_LEVEL = configmap:argocd-cmd-params-cm", "LOG_FORMAT = configmap:argocd-cmd-params-cm", "REPO_SERVER = configmap:argocd-cmd-params-cm", "K8S_CLIENT_QPS = configmap:argocd-cmd-params-cm"].map((e) => {
                       const [k, v] = e.split(" = ");
                       return <div key={k} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k} = <span style={{ color: BLUE, background: "#EDF4FF", borderRadius: 4, padding: "1px 5px" }}>{v}</span></div>;
@@ -630,9 +644,9 @@ status:
               <Sec title="컨디션 (2)">
                 {(isWorkload ? [["Available", "MinimumReplicasAvailable", "1d 2h"], ["Progressing", "NewReplicaSetAvailable", "4d 2h"]] : [["Ready", "컨테이너 준비 완료", "1d 2h"], ["PodScheduled", "노드에 배정됨", "1d 2h"]]).map(([n, d, t]) => (
                   <div key={n} style={{ display: "grid", gridTemplateColumns: "56px 16px 1fr", gap: 9, alignItems: "start", padding: "7px 0" }}>
-                    <span style={{ fontSize: 10, fontFamily: MONO, color: UI.ink3 }}>{t}</span>
-                    <span style={{ color: HP.ok, fontSize: 12 }}>✓</span>
-                    <span><span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: UI.ink }}>{n}</span><span style={{ display: "block", fontSize: 10.5, color: UI.ink3, marginTop: 1 }}>{d}</span></span>
+                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{t}</span>
+                    <span style={{ color: HP.ok, fontSize: 13 }}>✓</span>
+                    <span><span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: UI.ink }}>{n}</span><span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 1 }}>{d}</span></span>
                   </div>
                 ))}
               </Sec>
@@ -641,17 +655,17 @@ status:
               {/* 권한 (워크로드·파드) */}
               {wp && (
               <Sec title={`ServiceAccount 권한: ${base}-sa`} icon={ShieldCheck}>
-                <div style={{ fontSize: 10.5, color: UI.ink3, marginBottom: 9 }}>직접 바인딩 1 · 그룹 상속 4 · 고유 규칙 6</div>
+                <div style={{ fontSize: 11.5, color: UI.ink3, marginBottom: 9 }}>직접 바인딩 1 · 그룹 상속 4 · 고유 규칙 6</div>
                 {[["create", ["selfsubjectaccessreviews", "selfsubjectrulesreviews"], "authorization.k8s.io"], ["create", ["selfsubjectreviews"], "authentication.k8s.io"], ["get, list", ["pods"], ""]].map(([v, res, grp], i) => (
                   <div key={i} style={{ marginBottom: 7 }}>
                     <Chip text={v as string} tone="amber" />
-                    <span style={{ fontSize: 10.5, color: UI.ink3, margin: "0 5px" }}>on</span>
+                    <span style={{ fontSize: 11.5, color: UI.ink3, margin: "0 5px" }}>on</span>
                     {(res as string[]).map((rr) => <Chip key={rr} text={rr} tone="purple" />)}
-                    {grp ? <><span style={{ fontSize: 10.5, color: UI.ink3, margin: "0 5px" }}>in</span><Chip text={grp as string} tone="gray" /></> : null}
+                    {grp ? <><span style={{ fontSize: 11.5, color: UI.ink3, margin: "0 5px" }}>in</span><Chip text={grp as string} tone="gray" /></> : null}
                   </div>
                 ))}
-                <div style={{ fontSize: 10.5, color: UI.ink3, marginTop: 4 }}>규칙 1개 더 있음 · 전체 목록은 ServiceAccount에서 확인</div>
-                <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>전체 권한 보기 →</button>
+                <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 4 }}>규칙 1개 더 있음 · 전체 목록은 ServiceAccount에서 확인</div>
+                <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>전체 권한 보기 →</button>
               </Sec>
               )}
 
@@ -667,10 +681,10 @@ status:
               <Sec title="메트릭" icon={Activity}>
                 <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 3, marginBottom: 10 }}>
                   {["CPU", "Memory", "Net RX", "Net TX", "Disk I/O"].map((m, i) => (
-                    <span key={m} style={{ flex: 1, textAlign: "center", fontSize: 10.5, fontWeight: 600, color: i === 0 ? UI.ink : UI.ink3, background: i === 0 ? "#fff" : "transparent", borderRadius: 6, padding: "5px 0", boxShadow: i === 0 ? "0 1px 3px rgba(17,19,24,0.1)" : undefined }}>{m}</span>
+                    <span key={m} style={{ flex: 1, textAlign: "center", fontSize: 11.5, fontWeight: 600, color: i === 0 ? UI.ink : UI.ink3, background: i === 0 ? "#fff" : "transparent", borderRadius: 6, padding: "5px 0", boxShadow: i === 0 ? "0 1px 3px rgba(17,19,24,0.1)" : undefined }}>{m}</span>
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: 16, fontSize: 10.5, fontFamily: MONO, color: UI.ink3, marginBottom: 6 }}>
+                <div style={{ display: "flex", gap: 16, fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginBottom: 6 }}>
                   <span>현재 <b style={{ color: BLUE }}>0.6m</b></span><span>평균 <b style={{ color: UI.ink }}>0.6m</b></span><span>최대 <b style={{ color: UI.ink }}>0.7m</b></span>
                 </div>
                 <div style={{ border: `1px solid ${UI.line2}`, borderRadius: 10, padding: "10px 12px", background: "#FBFBFD" }}>
@@ -687,8 +701,8 @@ status:
                 <Sec title="데이터" icon={FileCog}>
                   {(kind.id === "Secret" ? [["username", "••••••••"], ["password", "••••••••"]] : [["feature.flags", "checkout=on, search=on"], ["api.base", "https://api.internal"]]).map(([k, v]) => (
                     <div key={k} style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-                      <span style={{ fontSize: 11, fontFamily: MONO, color: BLUE }}>{k}</span>
-                      <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+                      <span style={{ fontSize: 12, fontFamily: MONO, color: BLUE }}>{k}</span>
+                      <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
                     </div>
                   ))}
                 </Sec>
@@ -706,26 +720,31 @@ status:
                   ["네트워크 정책", "networkpolicy/", `${base}-network-policy`, "purple"]]
                   .map(([label, pfx, n, tone]) => (
                     <div key={`${label}-${n}`} style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 10, color: UI.ink3, marginBottom: 4 }}>{label as string}</div>
-                      <Chip text={`${pfx as string} ${n as string}`} tone={tone as "green"} />
+                      <div style={{ fontSize: 11, color: UI.ink3, marginBottom: 4 }}>{label as string}</div>
+                      {/* 클릭 = 해당 리소스 상세로 이동 */}
+                      <span onClick={REF_KIND[pfx as string] && onOpenRef ? () => onOpenRef(REF_KIND[pfx as string], String(n)) : undefined}
+                        style={{ cursor: REF_KIND[pfx as string] && onOpenRef ? "pointer" : "default" }}>
+                        <Chip text={`${pfx as string} ${n as string}`} tone={tone as "green"} />
+                      </span>
                     </div>
                   ))}
               </Sec>
 
               {/* 최근 이벤트 */}
               <Sec title="최근 이벤트 (85)" icon={Activity}>
-                {[["SuccessfulCreate", `파드 생성: ${base}-5j5td`], ["SuccessfulDelete", `파드 삭제: ${base}-87g9q`], ["SuccessfulCreate", `파드 생성: ${base}-vzbd9`],
-                  ...(bad ? [["BackOff", "실패한 컨테이너 재시작 대기 중"]] : [])]
+                {[...(restartedAt ? [["RestartTriggered", `수동 재시작 — kubectl rollout restart (${restartedAt})`]] : []),
+                  ["SuccessfulCreate", `파드 생성: ${base}-5j5td`], ["SuccessfulDelete", `파드 삭제: ${base}-87g9q`], ["SuccessfulCreate", `파드 생성: ${base}-vzbd9`],
+                  ...(bad ? [["BackOff", `실패한 컨테이너 재시작 대기 중 · 누적 ${String(row.restarts ?? 3)}회`]] : [])]
                   .map(([r, m], i) => (
                     <div key={i} style={{ borderLeft: `2px solid ${r === "BackOff" ? HP.crit : BLUE}`, background: r === "BackOff" ? "#FFF7F6" : "#F7FAFF", borderRadius: "0 8px 8px 0", padding: "9px 12px", marginBottom: 7 }}>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: r === "BackOff" ? "#C43028" : UI.ink }}>{r as string}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 10, color: UI.ink3, fontFamily: MONO }}>2026. 7. 17.</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: r === "BackOff" ? "#C43028" : UI.ink }}>{r as string}</span>
+                        <span style={{ marginLeft: "auto", fontSize: 11, color: UI.ink3, fontFamily: MONO }}>2026. 7. 17.</span>
                       </div>
-                      <div style={{ fontSize: 11, color: UI.ink2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m as string}</div>
+                      <div style={{ fontSize: 12, color: UI.ink2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m as string}</div>
                     </div>
                   ))}
-                <button style={{ border: "none", background: "transparent", color: UI.ink3, fontSize: 11, cursor: "pointer", padding: "4px 0 0" }}>이벤트 50건 더 보기</button>
+                <button style={{ border: "none", background: "transparent", color: UI.ink3, fontSize: 12, cursor: "pointer", padding: "4px 0 0" }}>이벤트 50건 더 보기</button>
               </Sec>
 
               {/* 레이블 / 어노테이션 / 메타데이터 */}
@@ -733,7 +752,7 @@ status:
                 {[`app.kubernetes.io/component=${comp}`, `app.kubernetes.io/name=${base}`, `app.kubernetes.io/part-of=${ns}`].map((l) => <Chip key={l} text={l} />)}
               </Sec>
               <Sec title="어노테이션 (1)" defaultOpen={false}>
-                <div style={{ fontSize: 11, fontFamily: MONO, color: UI.ink2 }}>deployment.kubernetes.io/revision: 1</div>
+                <div style={{ fontSize: 12, fontFamily: MONO, color: UI.ink2 }}>deployment.kubernetes.io/revision: 1</div>
               </Sec>
               <Sec title="메타데이터">
                 <KV k="UID" v="16057e00-404f-460b-afa4-13bb495f3c14" mono />
@@ -744,17 +763,17 @@ status:
 
               {/* 감사 결과 (워크로드·파드) */}
               {wp && (
-              <Sec title="점검 결과" icon={ShieldCheck} right={<span style={{ display: "flex", gap: 8, fontSize: 10.5, fontWeight: 700 }}>{bad && <span style={{ color: "#C43028" }}>1 critical</span>}<span style={{ color: "#B25A00" }}>7 warning</span></span>}>
+              <Sec title="점검 결과" icon={ShieldCheck} right={<span style={{ display: "flex", gap: 8, fontSize: 11.5, fontWeight: 700 }}>{bad && <span style={{ color: "#C43028" }}>1 critical</span>}<span style={{ color: "#B25A00" }}>7 warning</span></span>}>
                 {[["ServiceAccount 토큰이 자동 마운트됨", "Security"], ["컨테이너에 readiness probe 없음", "Reliability"], ["컨테이너에 liveness probe 없음", "Reliability"],
                   ["컨테이너에 CPU request 없음", "Efficiency"], ["컨테이너에 memory request 없음", "Efficiency"], ["컨테이너에 CPU limit 없음", "Efficiency"], ["복제본이 1개뿐임", "Reliability"]]
                   .map(([t, cat]) => (
                     <div key={t as string} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-                      <span style={{ color: "#B25A00", fontSize: 12 }}>⚠</span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t as string}</span>
+                      <span style={{ color: "#B25A00", fontSize: 13 }}>⚠</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t as string}</span>
                       <Badge text={cat as string} tone={cat === "Security" ? "purple" : cat === "Reliability" ? "blue" : "green"} />
                     </div>
                   ))}
-                <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "9px 0 0" }}>전체 결과 보기 →</button>
+                <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "9px 0 0" }}>전체 결과 보기 →</button>
               </Sec>
               )}
             </div>
@@ -767,28 +786,45 @@ status:
             return (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
-                  <span style={{ fontSize: 10.5, fontFamily: MONO, color: UI.ink3 }}>{name}.yaml</span>
+                  <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3 }}>{name}.yaml</span>
                   {yamlEditing && dirty && <Badge text="수정됨" tone="blue" />}
+                  {diffMode && <Badge text="비교 — 서버 원본 대비" tone="purple" />}
                   <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                    {!yamlEditing ? (
+                    {diffMode ? (
+                      <button onClick={() => setDiffMode(false)}
+                        style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>비교 닫기</button>
+                    ) : !yamlEditing ? (
                       <button onClick={() => { setYamlDraft(saved); setYamlEditing(true); }}
-                        style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 11, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                        style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
                         <Pencil size={11} />편집
                       </button>
                     ) : (
                       <>
                         <button onClick={() => { setYamlDraft(null); setYamlEditing(false); }}
-                          style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 11, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>취소</button>
+                          style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>취소</button>
                         <button disabled={!dirty}
                           onClick={() => { setYamlSaved(draft); setYamlDraft(null); setYamlEditing(false); onToast?.({ title: `${name} 적용 완료`, sub: "kubectl apply — 변경 사항이 클러스터에 반영되었습니다", tone: "ok" }); }}
-                          style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: dirty ? BLUE : "rgba(17,19,24,0.12)", borderRadius: 8, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: dirty ? "pointer" : "default" }}>
+                          style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: dirty ? BLUE : "rgba(17,19,24,0.12)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, color: "#fff", cursor: dirty ? "pointer" : "default" }}>
                           <Check size={11} strokeWidth={3} />적용
                         </button>
                       </>
                     )}
                   </span>
                 </div>
-                {yamlEditing ? (
+                {diffMode && yamlSaved ? (
+                  /* 라인 diff — 제거는 빨강, 추가는 초록 (서버 원본 → 적용본) */
+                  <pre style={{ ...YAML_FONT, margin: 0, color: UI.ink2, background: "#FBFBFD", border: `1px solid ${UI.line2}`, borderRadius: 10, overflowX: "auto" }}
+                    dangerouslySetInnerHTML={{ __html: (() => {
+                      const A = yaml.split("\n"), B = (yamlSaved ?? "").split("\n"); const out: string[] = [];
+                      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                      for (let i = 0; i < Math.max(A.length, B.length); i++) {
+                        const x = A[i], y = B[i];
+                        if (x === y && x !== undefined) out.push("  " + hlYaml(x));
+                        else { if (x !== undefined) out.push(`<span class="y-del">- ${esc(x)}</span>`); if (y !== undefined) out.push(`<span class="y-add">+ ${esc(y)}</span>`); }
+                      }
+                      return out.join("\n");
+                    })() }} />
+                ) : yamlEditing ? (
                   /* 하이라이트 레이어 위에 투명 텍스트 textarea — 편집 중에도 코드 에디터 색상 유지 */
                   <div style={{ position: "relative", background: "#fff", border: "1px solid rgba(10,132,255,0.4)", boxShadow: "0 0 0 3px rgba(10,132,255,0.1)", borderRadius: 10, overflow: "auto" }}>
                     <pre aria-hidden style={{ ...YAML_FONT, margin: 0, minHeight: 340, color: UI.ink, pointerEvents: "none" }}
@@ -807,13 +843,14 @@ status:
 
           {tab === "related" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {[["Service", `${name.split("-")[0]}-svc`, Plug], ["ConfigMap", "app-config", FileCog], ["Secret", "db-credentials", KeyRound], ["Node", "ip-192-168-26-122", Cpu], ["ReplicaSet", `${name}-7f9c4`, Copy]]
+              {[["Service", base, Plug], ["ConfigMap", Array.isArray(row.cfgs) && row.cfgs.length ? String(row.cfgs[0]) : "app-config", FileCog], ["Secret", "db-credentials", KeyRound], ["Node", nodeName, Cpu], ["ReplicaSet", `${base}-7f9c4`, Copy]]
                 .map(([k, n, I]) => (
-                  <button key={n as string} className="rrow" style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 10, padding: "9px 12px", cursor: "pointer" }}>
+                  <button key={n as string} className="rrow" onClick={onOpenRef ? () => onOpenRef(k as string, String(n)) : undefined}
+                    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 10, padding: "9px 12px", cursor: "pointer" }}>
                     <I size={13} style={{ color: UI.ink3 }} />
                     <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 12, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>{n as string}</span>
-                      <span style={{ display: "block", fontSize: 10, color: UI.ink3, marginTop: 1 }}>{k as string}</span>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>{n as string}</span>
+                      <span style={{ display: "block", fontSize: 11, color: UI.ink3, marginTop: 1 }}>{k as string}</span>
                     </span>
                     <ChevronDown size={12} style={{ color: "#C6CAD1", transform: "rotate(-90deg)" }} />
                   </button>
@@ -823,24 +860,25 @@ status:
 
           {tab === "events" && (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {[["Normal", "Scheduled", "Successfully assigned to ip-192-168-26-122", "2m"],
-                ["Normal", "Pulled", 'Container image "shop:v1.4.2" already present', "2m"],
-                ["Normal", "Created", "Created container: app", "2m"],
-                ["Normal", "Started", "Started container app", "2m"],
-                ...(bad ? [["Warning", "BackOff", "Back-off restarting failed container", "40s"]] : [])]
+              {[...(restartedAt ? [["Normal", "RestartTriggered", `Manual rollout restart requested (${restartedAt})`, "방금"]] : []),
+                ["Normal", "Scheduled", `Successfully assigned to ${nodeName}`, "2m"],
+                ["Normal", "Pulled", `Container image "${imgFor(base)}" already present`, "2m"],
+                ["Normal", "Created", `Created container: ${comp}`, "2m"],
+                ["Normal", "Started", `Started container ${comp}`, "2m"],
+                ...(bad ? [["Warning", "BackOff", `Back-off restarting failed container (x${String(row.restarts ?? 3)})`, "40s"]] : [])]
                 .map(([t, r, m, a], i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "72px 110px 1fr 44px", gap: 10, alignItems: "baseline", padding: "9px 0", borderBottom: `1px solid ${UI.line2}` }}>
                     <Badge text={t as string} tone={t === "Warning" ? "red" : "green"} />
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink }}>{r as string}</span>
-                    <span style={{ fontSize: 11, color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{m as string}</span>
-                    <span style={{ fontSize: 10.5, fontFamily: MONO, color: UI.ink3, textAlign: "right" }}>{a as string}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: UI.ink }}>{r as string}</span>
+                    <span style={{ fontSize: 12, color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{m as string}</span>
+                    <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3, textAlign: "right" }}>{a as string}</span>
                   </div>
                 ))}
             </div>
           )}
 
           {tab === "logs" && (
-            <pre style={{ margin: 0, fontSize: 11, lineHeight: 1.7, fontFamily: MONO, background: "#0F1219", color: "#D6DBE5", borderRadius: 10, padding: 14, overflowX: "auto" }}>
+            <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.7, fontFamily: MONO, background: "#0F1219", color: "#D6DBE5", borderRadius: 10, padding: 14, overflowX: "auto" }}>
 {`2026-07-18T15:02:11Z INFO  server listening on :8080
 2026-07-18T15:02:11Z INFO  connected to redis://redis:6379
 2026-07-18T15:03:40Z INFO  GET /v1/items 200 12ms
@@ -852,16 +890,16 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
 
           {tab === "rbac" && (
             <div>
-              <div style={{ fontSize: 11, color: UI.ink2, lineHeight: 1.6, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: UI.ink2, lineHeight: 1.6, marginBottom: 12 }}>
                 이 리소스가 사용하는 ServiceAccount가 가진 권한입니다. 이 워크로드가 만드는 모든 파드가 아래 권한을 상속합니다.
               </div>
               <KV k="ServiceAccount" v={`${name.split("-")[0]}-sa`} mono />
               <KV k="바인딩" v="RoleBinding/app-reader · ClusterRoleBinding/metrics-view" mono />
-              <div style={{ marginTop: 16, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginBottom: 8 }}>유효 권한</div>
+              <div style={{ marginTop: 16, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginBottom: 8 }}>유효 권한</div>
               {[["get, list, watch", "pods, services, configmaps"], ["create, patch", "events"], ["get", "secrets (app-config만)"]].map(([verbs, res]) => (
                 <div key={verbs} style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 10, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-                  <span style={{ fontSize: 11, fontFamily: MONO, color: BLUE }}>{verbs}</span>
-                  <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink2 }}>{res}</span>
+                  <span style={{ fontSize: 12, fontFamily: MONO, color: BLUE }}>{verbs}</span>
+                  <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink2 }}>{res}</span>
                 </div>
               ))}
             </div>
@@ -886,20 +924,20 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
       <button onClick={() => onPick(k)} className="krow"
         style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", cursor: "pointer", background: on ? "rgba(10,132,255,0.09)" : "transparent", borderRadius: 8, padding: "6px 9px" }}>
         <k.icon size={13} style={{ color: on ? BLUE : UI.ink3, flexShrink: 0 }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
         <span role="button" title="즐겨찾기" onClick={(e) => { e.stopPropagation(); togglePin(k.id); }} className="kpin" style={{ display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0 }}>
           <Pin size={10} style={{ color: pinned.includes(k.id) ? BLUE : UI.ink3 }} />
         </span>
-        <span style={{ fontSize: 10, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? "rgba(10,132,255,0.12)" : "rgba(17,19,24,0.05)", borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? "rgba(10,132,255,0.12)" : "rgba(17,19,24,0.05)", borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count}</span>
       </button>
     );
   };
   return (
     <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
       <div>
-        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
+        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
         {pinned.length === 0
-          ? <div style={{ fontSize: 10.5, color: UI.ink3, padding: "0 9px 4px", lineHeight: 1.5 }}>자주 보는 종류를 핀으로 고정하면 여기에 표시됩니다</div>
+          ? <div style={{ fontSize: 11.5, color: UI.ink3, padding: "0 9px 4px", lineHeight: 1.5 }}>자주 보는 종류를 핀으로 고정하면 여기에 표시됩니다</div>
           : KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
       </div>
       {GROUPS.map((g) => {
@@ -908,14 +946,14 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
         return (
           <div key={g}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px 5px" }}>
-              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
-              <span style={{ marginLeft: "auto", fontSize: 9.5, fontFamily: MONO, color: UI.ink3 }}>{GROUP_TOTAL(g)}</span>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
+              <span style={{ marginLeft: "auto", fontSize: 10.5, fontFamily: MONO, color: UI.ink3 }}>{GROUP_TOTAL(g)}</span>
             </div>
             {list.map((k) => <Row key={k.id} k={k} />)}
           </div>
         );
       })}
-      <button onClick={() => setShowEmpty(!showEmpty)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: 11, cursor: "pointer", padding: "9px", borderTop: `1px solid ${UI.line2}` }}>
+      <button onClick={() => setShowEmpty(!showEmpty)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: 12, cursor: "pointer", padding: "9px", borderTop: `1px solid ${UI.line2}` }}>
         <Eye size={12} />{showEmpty ? "비어 있는 종류 숨기기" : `비어 있는 종류 ${emptyCount}개 표시`}
       </button>
     </nav>
@@ -927,7 +965,7 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home; href?: string }
   { id: "home", label: "홈", icon: Home, href: "/devpreview-index.html" },
   { id: "resources", label: "리소스", icon: ListTree },
   { id: "issues", label: "이슈", icon: AlertTriangle },
-  { id: "topology", label: "토폴로지", icon: Share2, href: "/devpreview-topology.html" },
+  { id: "topology", label: "토폴로지", icon: Share2 }, // 셸 내 서피스 전환
   { id: "apps", label: "애플리케이션", icon: Boxes },
   { id: "timeline", label: "타임라인", icon: Clock },
   { id: "traffic", label: "실시간 트래픽", icon: Activity },
@@ -940,22 +978,25 @@ const NAV_BOTTOM: { id: string; label: string; icon: typeof Home; href?: string 
   { id: "settings", label: "연결 설정", icon: Settings }, // 셸 내 위저드 서피스 전환 (AI는 우하단 플로팅 버튼)
 ];
 
-function GlobalNav({ collapsed, setCollapsed, surface, onToggleSettings }: {
+type Surface = "resources" | "connect" | "topology";
+const SURFACE_OF: Record<string, Surface> = { resources: "resources", settings: "connect", topology: "topology" };
+
+function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
   collapsed: boolean; setCollapsed: (v: boolean) => void;
-  surface: "resources" | "connect"; onToggleSettings: () => void;
+  surface: Surface; onSurface: (s: Surface) => void;
 }) {
   const Item = ({ it }: { it: (typeof NAV_ITEMS)[number] }) => {
-    const isSettings = it.id === "settings";
-    const active = (it.id === "resources" && surface === "resources") || (isSettings && surface === "connect");
-    const enabled = active || !!it.href || isSettings || it.id === "resources";
+    const sid = SURFACE_OF[it.id];
+    const active = !!sid && surface === sid;
+    const enabled = active || !!it.href || !!sid;
     const body = (
       <span className={enabled ? "gnav" : undefined} title={collapsed ? it.label : undefined}
-        onClick={isSettings ? onToggleSettings : it.id === "resources" ? (surface === "connect" ? onToggleSettings : undefined) : undefined}
+        onClick={sid ? () => onSurface(sid) : undefined}
         style={{ display: "flex", alignItems: "center", gap: 11, borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start",
           background: active ? "rgba(10,132,255,0.09)" : "transparent", color: active ? BLUE : enabled ? UI.ink2 : UI.ink3,
           opacity: enabled ? 1 : 0.45, cursor: enabled ? "pointer" : "default", transition: "background .14s" }}>
         <it.icon size={16} style={{ flexShrink: 0 }} />
-        {!collapsed && <span style={{ fontSize: 12.5, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
+        {!collapsed && <span style={{ fontSize: 13.5, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
       </span>
     );
     return it.href
@@ -971,7 +1012,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onToggleSettings }: {
         <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, #5AC8FA)`, display: "grid", placeItems: "center", flexShrink: 0 }}>
           <span style={{ width: 9, height: 9, borderRadius: 999, border: "2px solid #fff" }} />
         </span>
-        {!collapsed && <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>Opsia</span>}
+        {!collapsed && <span style={{ fontSize: 16.5, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>Opsia</span>}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>{NAV_ITEMS.map((it) => <Item key={it.id} it={it} />)}</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 1, borderTop: `1px solid ${UI.line2}`, paddingTop: 8 }}>
@@ -979,7 +1020,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onToggleSettings }: {
         <button onClick={() => setCollapsed(!collapsed)} className="gnav"
           style={{ display: "flex", alignItems: "center", gap: 11, border: "none", background: "transparent", borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start", color: UI.ink3, cursor: "pointer" }}>
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          {!collapsed && <span style={{ fontSize: 12.5, fontWeight: 500 }}>접기</span>}
+          {!collapsed && <span style={{ fontSize: 13.5, fontWeight: 600 }}>접기</span>}
         </button>
       </div>
     </motion.nav>
@@ -1005,7 +1046,7 @@ function App() {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
-  const [surface, setSurface] = useState<"resources" | "connect">("resources"); // 셸 내 서피스 전환 (리소스 ↔ 연결 설정)
+  const [surface, setSurface] = useState<Surface>("resources"); // 셸 내 서피스 전환 (리소스·토폴로지·연결 설정)
   const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
@@ -1043,9 +1084,12 @@ function App() {
     const k = KINDS.find((x) => x.id === kid); if (k) setDetail({ kind: k, row: data });
   };
 
-  // 알림 — 임계 파드에서 파생 (벨 배지 수 = 맵 장애 수와 항상 일치) + 작업 토스트
+  // 알림 — 인벤토리 파생: 임계 파드(위험) + 예약 중 노드(정보) + OutOfSync 저장소(경고)
   const [bellOpen, setBellOpen] = useState(false);
   const alerts = useMemo(() => podInventory().filter((p) => p.bad), []);
+  const nodeAlerts = useMemo(() => nodeInventory().filter((n) => n.state !== "Ready"), []);
+  const repoAlerts = useMemo(() => repoInventory().filter((r) => r.sync === "OutOfSync"), []);
+  const alertTotal = alerts.length + nodeAlerts.length + repoAlerts.length;
   const [toasts, setToasts] = useState<{ id: number; title: string; sub: string; tone: "ok" | "crit" }[]>([]);
   const toastSeq = useRef(0);
   const pushToast = (t: { title: string; sub: string; tone: "ok" | "crit" }) => {
@@ -1057,30 +1101,37 @@ function App() {
     setBellOpen(false);
     openFromMap("Pod", { ...p, age: `${3 + (p.cpu % 9)}d` });
   };
+  // 관련 리소스 이동 — 같은 종류 표에 실데이터가 있으면 그 행으로 연다
+  const openRef = (kid: string, name: string) => {
+    const k = KINDS.find((x) => x.id === kid); if (!k) return;
+    const rows = SPEC[kid] ? SPEC[kid].rows(rng(kid.length * 977 + 13)) : [];
+    const found = rows.find((r) => String(r.name) === name || String(r.name).startsWith(name));
+    setDetail({ kind: k, row: found ?? { name, ns: nsFor(name) } });
+  };
 
   return (
     <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch" }}>
       {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
-        surface={surface} onToggleSettings={() => setSurface(surface === "connect" ? "resources" : "connect")} />
+        surface={surface} onSurface={setSurface} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
       <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 12, fontWeight: 600, color: UI.ink }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />prod-eks<ChevronDown size={12} style={{ color: UI.ink3 }} />
         </span>
         <button onClick={() => setNs(ns === "모든 네임스페이스" ? "argocd" : "모든 네임스페이스")}
-          style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 12, fontWeight: 600, color: UI.ink, cursor: "pointer" }}>
+          style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink, cursor: "pointer" }}>
           <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3 }} />
         </button>
         <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />
         <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: "#FBFBFD", borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
-          <input ref={searchRef} value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 12, color: UI.ink, width: "100%" }} />
-          <span style={{ fontSize: 10, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
+          <input ref={searchRef} value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
+          <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
-        <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: UI.ink2 }}>
+        <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: UI.ink2 }}>
           <span className="livedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신
         </span>
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
@@ -1089,29 +1140,52 @@ function App() {
             style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? "rgba(10,132,255,0.1)" : "rgba(17,19,24,0.045)", color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
             <Bell size={14} />
           </button>
-          {alerts.length > 0 && (
-            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: HP.crit, color: "#fff", fontSize: 9, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: "2px solid #fff", boxSizing: "content-box" }}>{alerts.length}</span>
+          {alertTotal > 0 && (
+            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alerts.length ? HP.crit : HP.warn, color: "#fff", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: "2px solid #fff", boxSizing: "content-box" }}>{alertTotal}</span>
           )}
           <AnimatePresence>
             {bellOpen && (
               <motion.div key="bell" initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.99 }} transition={SOFT}
                 style={{ position: "absolute", top: 38, right: 0, width: 330, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", overflow: "hidden" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 14px", borderBottom: `1px solid ${UI.line2}` }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>알림</span>
-                  <span style={{ fontSize: 10.5, color: UI.ink3 }}>임계 상태 {alerts.length}건</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>알림</span>
+                  <span style={{ fontSize: 11.5, color: UI.ink3 }}>위험 {alerts.length} · 경고 {repoAlerts.length} · 정보 {nodeAlerts.length}</span>
                 </div>
                 {alerts.map((p) => (
                   <button key={p.name} className="rrow" onClick={() => openAlert(p)}
                     style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${UI.line2}` }}>
                     <span style={{ width: 8, height: 8, borderRadius: 999, background: HP.crit, marginTop: 4, flexShrink: 0 }} />
                     <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{p.name}</span>
-                      <span style={{ display: "block", fontSize: 10.5, color: UI.ink2, marginTop: 2 }}>{p.status} · 재시작 {p.restarts}회 · {p.node}</span>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{p.name}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2 }}>{p.status} · 재시작 {p.restarts}회 · {p.node}</span>
                     </span>
-                    <span style={{ fontSize: 10, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{p.cluster}</span>
+                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{p.cluster}</span>
                   </button>
                 ))}
-                <div style={{ padding: "9px 14px", fontSize: 10.5, color: UI.ink3 }}>알림을 누르면 해당 리소스 상세가 열립니다</div>
+                {/* 경고 — OutOfSync 저장소 */}
+                {repoAlerts.map((r) => (
+                  <div key={r.repo} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: `1px solid ${UI.line2}` }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: HP.warn, marginTop: 4, flexShrink: 0 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{r.repo}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2 }}>OutOfSync · {r.tool} · 리비전 {r.rev}</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>GitOps</span>
+                  </div>
+                ))}
+                {/* 정보 — 아직 준비되지 않은 노드 */}
+                {nodeAlerts.map((n) => (
+                  <button key={n.id} className="rrow" onClick={() => { setBellOpen(false); openRef("Node", n.id); }}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${UI.line2}` }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: n.state === "Provisioning" ? "#0A84FF" : UI.ink3, marginTop: 4, flexShrink: 0 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{n.id}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2 }}>{n.state === "Provisioning" ? "예약됨 — 노드 준비 중" : "차단됨 — 스케줄링 제외"} · {n.instance}</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{n.cluster}</span>
+                  </button>
+                ))}
+                <div style={{ padding: "9px 14px", fontSize: 11.5, color: UI.ink3 }}>알림을 누르면 해당 리소스 상세가 열립니다</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1128,6 +1202,12 @@ function App() {
         <div style={{ position: "relative", minHeight: "calc(100vh - 57px)", background: UI.bg }}>
           <ConnectWizard embedded />
         </div>
+      ) : surface === "topology" ? (
+        /* 토폴로지 — 호출 그래프 서피스 (맵=물리 · 토폴로지=호출 분업 유지) */
+        <div style={{ padding: "16px 18px 40px", background: UI.bg }}>
+          {/* 더블클릭 = 셸 안에서 리소스 서피스로 복귀 + Service 종류 선택 (페이지 이탈 없음) */}
+          <TopologyView embedded onOpenService={() => { setSurface("resources"); setKindId("Service"); }} />
+        </div>
       ) : (
         <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 18, padding: "16px 18px 40px" }}>
           {/* ── 드릴 맵 + 스코프 연동 표 — 종류 탐색은 우측 '탐색' 패널의 리소스 탭으로 통합.
@@ -1138,15 +1218,15 @@ function App() {
               <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <kind.icon size={15} style={{ color: BLUE }} />
-                  <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
-                  <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
-                  <span style={{ fontSize: 10.5, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? "rgba(10,132,255,0.08)" : "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 10.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
+                  <span style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
+                  <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? "rgba(10,132,255,0.08)" : "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
                   {/* 밀도 토글 — 많은 행을 한 화면에 */}
                   <span style={{ display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
                     {([["기본", false], ["촘촘", true]] as const).map(([l, v]) => (
                       <button key={l} onClick={() => setDense(v)}
-                        style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 10.5, fontWeight: 600, cursor: "pointer",
+                        style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
                           background: dense === v ? "#fff" : "transparent", color: dense === v ? UI.ink : UI.ink3,
                           boxShadow: dense === v ? "0 1px 3px rgba(17,19,24,0.12)" : "none" }}>{l}</button>
                     ))}
@@ -1170,7 +1250,7 @@ function App() {
             <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
               style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : "리소스"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "topology" ? "토폴로지" : "리소스"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}
@@ -1192,7 +1272,7 @@ function App() {
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
@@ -1205,8 +1285,8 @@ function App() {
                 {t.tone === "ok" ? <Check size={14} color="#fff" strokeWidth={3} /> : <AlertTriangle size={13} color="#fff" />}
               </span>
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ display: "block", fontSize: 10.5, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
               </span>
             </motion.div>
           ))}
@@ -1228,6 +1308,8 @@ function App() {
         .uni .y-b { color: #8250DF; }
         .uni .y-p { color: #9AA0AA; }
         .uni .y-c { color: #9AA0AA; font-style: italic; }
+        .uni .y-del { color: #C43028; background: #FFF3F2; }
+        .uni .y-add { color: #1F9D4D; background: #EDFAF1; }
         .uni .livedot { animation: lv 1.6s ease-in-out infinite; }
         @keyframes lv { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
         .uni ::-webkit-scrollbar { width: 8px; } .uni ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }

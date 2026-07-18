@@ -90,7 +90,7 @@ const edgeMetrics = (e: TEdge) => {
   return { err, p99, st };
 };
 
-function App() {
+export function TopologyView({ embedded = false, onOpenService }: { embedded?: boolean; onOpenService?: (id: string) => void } = {}) {
   const [pos, setPos] = useState(INIT);
   const [sel, setSel] = useState<string | null>(() => readDevpreviewTopologyFocus(SERVICES.map((s) => s.id)));
   const [etip, setEtip] = useState<{ x: number; y: number; e: TEdge } | null>(null);
@@ -125,17 +125,19 @@ function App() {
   const endDrag = () => { dragRef.current = null; setDragId(null); };
 
   return (
-    <div className="tp" style={{ minHeight: "100vh", padding: "44px 24px", display: "flex", justifyContent: "center" }}>
-      <div style={{ width: 992, maxWidth: "100%" }}>
+    <div className="tp" style={{ minHeight: embedded ? undefined : "100vh", padding: embedded ? 0 : "44px 24px", display: "flex", justifyContent: "center" }}>
+      <div style={{ width: embedded ? "100%" : 992, maxWidth: "100%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
           <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>
-          <div style={{ fontSize: 12, color: UI.ink3 }}>prod-eks · shop · 호출 흐름 — 드래그 재배치 · 더블클릭 = 맵에서 보기</div>
-          {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
+          <div style={{ fontSize: 13, color: UI.ink3 }}>prod-eks · shop · 호출 흐름 — 드래그 재배치 · 더블클릭 = 맵에서 보기</div>
+          {/* 뷰 내비게이션 — 셸에 통합되면 셸 내비가 대신한다 */}
+          {!embedded && (
           <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
             {([["맵", "devpreview-opsia.html", false], ["토폴로지", "devpreview-topology.html", true], ["연결", "devpreview-connect.html", false], ["AI", "devpreview-ai.html", false]] as const).map(([l, href, act]) => (
-              <a key={l} href={`/${href}`} style={{ fontSize: 11.5, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? "rgba(17,19,24,0.05)" : "transparent" }}>{l}</a>
+              <a key={l} href={`/${href}`} style={{ fontSize: 12.5, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? "rgba(17,19,24,0.05)" : "transparent" }}>{l}</a>
             ))}
           </nav>
+          )}
         </div>
 
         <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, position: "relative" }}>
@@ -153,28 +155,28 @@ function App() {
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0.12, visualDuration: 0.3 }}
                 style={{ position: "absolute", top: 14, right: 14, width: 268, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(10px)", border: `1px solid ${bad ? "#F0B8B4" : UI.line}`, borderRadius: 13, padding: 14, boxShadow: "0 16px 40px -18px rgba(17,19,24,0.25)", zIndex: 5 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {pinEdge.from} <span style={{ color: UI.ink3, fontWeight: 500 }}>→</span> {pinEdge.to}
+                  <span style={{ fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {pinEdge.from} <span style={{ color: UI.ink3, fontWeight: 600 }}>→</span> {pinEdge.to}
                   </span>
-                  <button onClick={() => setPinEdge(null)} style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 10, lineHeight: 1 }}>✕</button>
+                  <button onClick={() => setPinEdge(null)} style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>✕</button>
                 </div>
-                <div style={{ display: "flex", gap: 12, marginTop: 9, fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                <div style={{ display: "flex", gap: 12, marginTop: 9, fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                   <span style={{ color: UI.ink2 }}>rps <b style={{ color: UI.ink }}>{pinEdge.rps.toLocaleString()}</b></span>
                   <span style={{ color: UI.ink2 }}>p99 <b style={{ color: m.p99 > 200 ? ST.crit : UI.ink }}>{m.p99}ms</b></span>
                   <span style={{ color: UI.ink2 }}>5xx <b style={{ color: m.err >= 1 ? ST.crit : UI.ink }}>{m.err}%</b></span>
                 </div>
                 {bad ? (
                   <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10 }}>
-                    <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", color: ST[m.st], marginBottom: 7 }}>최근 오류</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: ST[m.st], marginBottom: 7 }}>최근 오류</div>
                     {errs.map((er, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "3px 0", fontSize: 10, fontFamily: MONO }}>
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "3px 0", fontSize: 11, fontFamily: MONO }}>
                         <span style={{ color: UI.ink3, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{er.t}</span>
                         <span style={{ color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{er.msg}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={{ marginTop: 11, display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: ST.ok, fontWeight: 600 }}>
+                  <div style={{ marginTop: 11, display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: ST.ok, fontWeight: 600 }}>
                     <span style={{ width: 6, height: 6, borderRadius: 999, background: ST.ok }} />오류 없음 · 정상 흐름
                   </div>
                 )}
@@ -226,7 +228,7 @@ function App() {
               const rps = EDGES.filter((e) => e.from === s.id).reduce((t, e) => t + e.rps, 0);
               return (
                 <g key={s.id} onMouseEnter={() => { if (!dragRef.current) setSel(s.id); }} onPointerDown={startDrag(s.id)}
-                  onDoubleClick={() => { window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
+                  onDoubleClick={() => { if (onOpenService) onOpenService(s.id); else window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
                   style={{ cursor: dragId === s.id ? "grabbing" : "grab", opacity: lit ? 1 : 0.22, transition: "opacity .18s" }}>
                   <rect x={p.x} y={p.y} width={NW} height={NH} rx={12} fill={UI.card} stroke={dragId === s.id || on ? BLUE : UI.line} strokeWidth={on || dragId === s.id ? 1.5 : 1}
                     style={{ filter: dragId === s.id ? "drop-shadow(0 16px 30px rgba(10,132,255,0.22))" : on ? "drop-shadow(0 8px 18px rgba(10,132,255,0.16))" : "drop-shadow(0 1px 2px rgba(17,19,24,0.05))" }} />
@@ -244,7 +246,7 @@ function App() {
           </svg>
 
           {/* 레전드 */}
-          <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11, color: UI.ink2, alignItems: "center" }}>
+          <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: UI.ink2, alignItems: "center" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#C3CAD6" strokeWidth="3" strokeLinecap="round" /><path d="M22 0.5 L29 4 L22 7.5 Z" fill="#C3CAD6" /></svg>호출(속도 = req/s)</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: ST.ok }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.warn, marginLeft: 6 }} />경고<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.crit, marginLeft: 6 }} />임계</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: "rgba(10,132,255,0.4)" }} />파드(소유)</span>
@@ -264,16 +266,16 @@ function App() {
               background: "rgba(255,255,255,0.96)", backdropFilter: "blur(10px)", border: `1px solid ${bad ? "#F0B8B4" : UI.line}`, borderRadius: 11, padding: "10px 12px",
               boxShadow: "0 10px 30px -12px rgba(17,19,24,0.22)", minWidth: 176,
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>
-              {etip.e.from}<span style={{ color: UI.ink3, fontWeight: 500 }}>→</span>{etip.e.to}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>
+              {etip.e.from}<span style={{ color: UI.ink3, fontWeight: 600 }}>→</span>{etip.e.to}
             </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
               <span style={{ color: UI.ink2 }}>rps <b style={{ color: UI.ink }}>{etip.e.rps.toLocaleString()}</b></span>
               <span style={{ color: UI.ink2 }}>p99 <b style={{ color: m.p99 > 200 ? ST.crit : UI.ink }}>{m.p99}ms</b></span>
               <span style={{ color: UI.ink2 }}>5xx <b style={{ color: m.err >= 1 ? ST.crit : UI.ink }}>{m.err}%</b></span>
             </div>
             {bad && (
-              <div style={{ marginTop: 7, fontSize: 10, fontWeight: 600, color: ST[m.st], display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ marginTop: 7, fontSize: 11, fontWeight: 600, color: ST[m.st], display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 6, height: 6, borderRadius: 999, background: ST[m.st] }} />
                 {m.st === "crit" ? `${etip.e.to} 임계 — 오류율 상승` : `${etip.e.to} 경고 — 지연 증가`}
               </div>
@@ -293,6 +295,9 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <div style={{ minHeight: "100vh", background: "#FAFAFC" }}><App /></div>,
-);
+// 단독 페이지에서만 마운트 — 통합 셸에서는 TopologyView를 import해 서피스로 쓴다
+if (window.location.pathname.includes("devpreview-topology")) {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <div style={{ minHeight: "100vh", background: "#FAFAFC" }}><TopologyView /></div>,
+  );
+}
