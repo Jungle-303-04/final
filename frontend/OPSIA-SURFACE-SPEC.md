@@ -111,7 +111,7 @@
 | 탭 | 요소 | 데이터 소스 | 표현·모션 | 인터랙션 |
 |---|---|---|---|---|
 | 애플리케이션 | 앱 행: 이름·환경·Sync 상태·헬스·마지막 배포·저장소 | `application-catalog`+`gitops-overview`(폴링) | D5 표. Sync: Synced=`--status-healthy` StatusPill, OutOfSync=`--status-warning`, 배포 시각 상대시간 MONO | 행 클릭=앱 상세 시트(동기화 히스토리·리소스 트리·롤백 버튼=Explicit confirm) |
-| 저장소·동기화 | 저장소 행: org/repo·툴(Argo/Flux)·리비전·Sync | `gitops-overview` | GitHub 아이콘(D8)+MONO 리비전, OutOfSync 경고점 | 행 클릭=저장소 상세(동기화 표), `+ 저장소 연결`=D7 모달 |
+| 저장소·동기화 | 저장소 행: org/repo·동기화 툴·리비전·Sync | `gitops-overview` | 저장소 브랜드 아이콘(D8)+MONO 리비전, OutOfSync 경고점 | 행 클릭=저장소 상세(동기화 표), `+ 저장소 연결`=D7 모달 |
 | 저장소·동기화 | 워크플로 그래프 | `useWorkflowData`+elk | 기존 유지, 엣지·노드 색 토큰 수렴, 배치 전환 SPRING | 단계 클릭=플랜/실행 |
 | Helm 릴리스 | 릴리스 행: 이름·차트·버전·상태 | `helm` 배럴 | D5 표, 업그레이드 가능=`--primary` 배지 | 설치/업그레이드 다이얼로그(기존), diff=D15 |
 
@@ -173,9 +173,9 @@
 
 ---
 
-## 14. 레퍼런스 패턴 카탈로그 — 전수 판정표 (2026-07, 이미지 9종 + Botrix)
+## 14. 레퍼런스 패턴 카탈로그 — 전수 판정표 (2026-07, 외부 기준 저장소 11종)
 
-출처: R1 다크 서비스 표 / R2 미니멀 서버 리스트 / R3 뮤직 플레이어 / R4 카테고리·세그먼트 카드 / R5 KPI 카드 스택 / R6 Tasks&Events 타임라인 / R7 CLOBMApp / R8 DUDU 의료 모니터링 / R9 Kargul CRM / R10 YogaPlanner / R11 Botrix AI Command Center.
+출처: 외부 기준 저장소 R1~R11. 문서에는 제품명을 남기지 않고 벤치마크 최소선의 시각 패턴만 추출한다.
 **모든 요소는 아래 세 판정 중 하나를 받는다 — 판정 없는 요소는 없다.** 채택=그대로, 각색=우리 규칙으로 변형, 제외=사유와 함께 도입 금지.
 
 | # | 요소 (출처) | 판정 | 매치 위치 / 공용 부품 | 근거·비고 |
