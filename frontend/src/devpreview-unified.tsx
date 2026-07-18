@@ -99,7 +99,8 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
       { k: "ctr", label: "CONTAINERS", w: "92px", cell: { t: "dots" } }, { k: "status", label: "STATUS", w: "92px", cell: { t: "status" } },
       { k: "cpu", label: "CPU", w: "128px", cell: { t: "meter" } }, { k: "mem", label: "MEMORY", w: "128px", cell: { t: "meter" } }, { k: "age", label: "AGE", w: "56px", cell: { t: "text" } }],
     // 파드는 맵과 같은 인벤토리에서 파생 — 드릴 맵에 보이는 파드가 곧 이 표의 파드다
-    rows: () => podInventory().map((p) => ({
+    // 정렬도 맵과 동일 규칙: 임계 → 실행 중 → 대기
+    rows: () => podInventory().sort((a, b) => (a.bad ? 0 : a.status === "Pending" ? 2 : 1) - (b.bad ? 0 : b.status === "Pending" ? 2 : 1)).map((p) => ({
       name: p.name, ns: p.ns, svc: p.svc, ownerKind: p.ownerKind, cfgs: p.cfgs, qos: p.qos, node: p.node, cluster: p.cluster, restarts: p.restarts,
       img: imgFor(p.svc), ctr: 1 + (p.name.length % 3), status: p.status, bad: p.bad,
       cpu: { used: `${p.cpu * 4}m`, lim: "400m", pct: p.cpu }, mem: { used: `${p.mem * 3}Mi`, lim: "300Mi", pct: p.mem },
@@ -280,8 +281,8 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
     cols: [{ k: "name", label: "NAME", w: "minmax(200px,1.6fr)", cell: { t: "text" } }, { k: "st", label: "STATUS", w: "96px", cell: { t: "status" } },
       { k: "inst", label: "INSTANCE", w: "96px", cell: { t: "mono" } }, { k: "cpu", label: "CPU", w: "150px", cell: { t: "meter" } },
       { k: "mem", label: "MEMORY", w: "150px", cell: { t: "meter" } }, { k: "pods", label: "PODS", w: "140px", cell: { t: "meter" } }, { k: "zone", label: "ZONE", w: "76px", cell: { t: "mono" } }],
-    // 노드도 맵과 같은 인벤토리 — 맵의 노드 카드와 이 표의 행이 1:1로 일치한다
-    rows: () => nodeInventory().map((n) => ({
+    // 노드도 맵과 같은 인벤토리 — 맵의 노드 카드와 이 표의 행이 1:1, 정렬도 동일 규칙(가동→예약→차단)
+    rows: () => nodeInventory().sort((a, b) => (a.state === "Ready" ? 0 : a.state === "Provisioning" ? 1 : 2) - (b.state === "Ready" ? 0 : b.state === "Provisioning" ? 1 : 2)).map((n) => ({
       name: n.id, cluster: n.cluster, st: n.state, inst: n.instance, zone: n.zone,
       cpu: { used: `${n.cpu * 40}m`, lim: "4000m", pct: n.cpu }, mem: { used: `${(n.mem * 0.16).toFixed(1)}Gi`, lim: "16Gi", pct: n.mem },
       pods: { used: String(n.podCount), lim: String(n.cap), pct: Math.round((n.podCount / n.cap) * 100) },
@@ -373,16 +374,25 @@ function Badge({ text, tone }: { text: string; tone: "blue" | "green" | "gray" |
 }
 
 // ── 종류별 표 ─────────────────────────────
-function ResourceTable({ kind, rows, q, inScope, onOpen }: { kind: Kind; rows: Row[]; q: string; inScope: boolean; onOpen: (r: Row) => void }) {
+// 검색어 매치 하이라이트 — 무엇이 걸렸는지 눈으로 바로 보인다
+function Hi({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>;
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return <>{text}</>;
+  return <>{text.slice(0, i)}<span style={{ background: "#FFF1B8", borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
+}
+
+function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; rows: Row[]; q: string; inScope: boolean; dense: boolean; onOpen: (r: Row) => void }) {
   const spec = SPEC[kind.id];
   if (!spec) return null;
   const filtered = rows;
   const grid = spec.cols.map((c) => c.w ?? "1fr").join(" ");
+  const rowPad = dense ? "5px 16px" : "9px 16px";
   return (
-    /* 좁은 화면(200% 확대 등)에선 표가 가로 스크롤 — 컬럼이 뭉개지지 않는다 */
-    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflow: "hidden", overflowX: "auto" }}>
+    /* 긴 표는 카드 안에서 스크롤(헤더 고정) · 좁은 화면에선 가로 스크롤 — 컬럼이 뭉개지지 않는다 */
+    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflow: "auto", maxHeight: "min(64vh, 680px)" }}>
     <div style={{ minWidth: 640 }}>
-      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD" }}>
+      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD", position: "sticky", top: 0, zIndex: 2 }}>
         {spec.cols.map((c) => (
           <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
             {c.label}<ChevronDown size={9} style={{ opacity: 0.5 }} />
@@ -394,10 +404,10 @@ function ResourceTable({ kind, rows, q, inScope, onOpen }: { kind: Kind; rows: R
           {q ? "검색 결과가 없습니다" : inScope ? `이 범위에는 ${kind.label} 리소스가 없습니다` : `${kind.label} 리소스가 없습니다`}
         </div>
       ) : filtered.map((row, i) => (
-        <div key={i} className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "9px 16px", borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
+        <div key={i} className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: rowPad, borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
           {spec.cols.map((c, ci) => (
             <span key={c.k} style={{ minWidth: 0, fontWeight: ci === 0 ? 600 : 400, color: ci === 0 ? UI.ink : undefined, fontSize: ci === 0 ? 12 : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: ci === 0 ? "nowrap" : undefined }}>
-              {ci === 0 ? String(row[c.k] ?? "") : <CellView cell={c.cell} v={row[c.k]} bad={row.bad as boolean} />}
+              {ci === 0 ? <Hi text={String(row[c.k] ?? "")} q={q} /> : <CellView cell={c.cell} v={row[c.k]} bad={row.bad as boolean} />}
             </span>
           ))}
         </div>
@@ -996,6 +1006,7 @@ function App() {
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
   const [surface, setSurface] = useState<"resources" | "connect">("resources"); // 셸 내 서피스 전환 (리소스 ↔ 연결 설정)
+  const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
     const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, window.innerWidth - ev.clientX)));
@@ -1131,10 +1142,19 @@ function App() {
                   <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
                   <span style={{ fontSize: 10.5, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? "rgba(10,132,255,0.08)" : "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
                   <span style={{ marginLeft: "auto", fontSize: 10.5, color: UI.ink3 }}>행을 선택하면 상세 정보가 열립니다</span>
+                  {/* 밀도 토글 — 많은 행을 한 화면에 */}
+                  <span style={{ display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
+                    {([["기본", false], ["촘촘", true]] as const).map(([l, v]) => (
+                      <button key={l} onClick={() => setDense(v)}
+                        style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 10.5, fontWeight: 600, cursor: "pointer",
+                          background: dense === v ? "#fff" : "transparent", color: dense === v ? UI.ink : UI.ink3,
+                          boxShadow: dense === v ? "0 1px 3px rgba(17,19,24,0.12)" : "none" }}>{l}</button>
+                    ))}
+                  </span>
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
-                  <ResourceTable kind={kind} rows={shownRows} q={q} inScope={inScope} onOpen={(r) => setDetail({ kind, row: r })} />
+                  <ResourceTable kind={kind} rows={shownRows} q={q} inScope={inScope} dense={dense} onOpen={(r) => setDetail({ kind, row: r })} />
                 </motion.div>
               </div>
             )} />

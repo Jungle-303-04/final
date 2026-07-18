@@ -596,9 +596,33 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
         </header>
         )}
 
-        {/* 장애 스트립 — 호버: 에러만 미리보기 / 클릭: 에러 필터 고정 */}
+        {/* 상태 요약 줄 — 인벤토리 파생 한눈 개요 + 장애 스트립 (호버: 에러 미리보기 / 클릭: 필터 고정) */}
+        {(() => {
+          const prov = NODES.filter((n) => n.state === "Provisioning").length;
+          const cord = NODES.filter((n) => n.state === "Cordoned").length;
+          const pending = pods.filter((p) => p.status === "Pending").length;
+          const outSync = REPOS.filter((r) => REPO_META[r].sync === "OutOfSync");
+          const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
+          const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{CLUSTERS.length}</b></span>
+              <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{NODES.length}</b>
+                {prov > 0 && <span style={{ color: "#0A6CFF" }}>· 예약 {prov}</span>}
+                {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
+              </span>
+              <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{pods.length}</b>
+                {pending > 0 && <span style={{ color: "#0A6CFF" }}>· 대기 {pending}</span>}
+              </span>
+              {outSync.map((r) => (
+                <span key={r} style={{ ...seg, borderColor: "#F3D8B7", background: "#FFF8EF", color: "#B25A00", cursor: "default" }}
+                  onMouseEnter={() => setLens({ kind: "git", id: r })} onMouseLeave={() => setLens(null)}>
+                  <GithubIcon size={11} />OutOfSync · {r.split("/")[1]}
+                </span>
+              ))}
+              {crit > 0 && <span style={{ width: 1, height: 16, background: UI.line, margin: "0 2px" }} />}
         {crit > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+          <>
             <motion.button whileTap={{ scale: 0.96 }}
               onMouseEnter={() => setLens({ kind: "crit", id: "all" })} onMouseLeave={() => setLens(null)}
               onClick={() => setPin(pin?.kind === "crit" ? null : { kind: "crit", id: "all" })}
@@ -621,8 +645,11 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 <span style={{ fontWeight: 500, color: UI.ink3 }}>{p.status} · {p.node}</span>
               </motion.button>
             ))}
-          </div>
+          </>
         )}
+            </div>
+          );
+        })()}
 
         {/* 브레드크럼 */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, minHeight: 28 }}>
@@ -764,9 +791,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab }: {
   pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(kindsTab ? "res" : "svc");
-  // 셸의 종류 선택(Service·ConfigMap 등)을 따라 인스턴스 탭으로 전환
-  useEffect(() => { if (forcedTab) setTab(forcedTab); }, [forcedTab]);
+  const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? (kindsTab ? "res" : "svc"));
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
 
   const Row = ({ l, icon, label, sub, warn }: { l: Lens; icon?: React.ReactNode; label: string; sub: string; warn?: boolean }) => {
