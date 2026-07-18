@@ -229,11 +229,11 @@ function Spark({ id, base, tick, h = 22, color = HP.ok }: { id: string; base: nu
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity={0.22} />
-          <stop offset="100%" stopColor={color} stopOpacity={0.01} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.015} />
         </linearGradient>
       </defs>
       <path d={`${line} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid})`} />
-      <path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <path d={line} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       <circle cx={last.x} cy={last.y} r={1.8} fill={color} vectorEffect="non-scaling-stroke" />
     </svg>
   );
@@ -282,7 +282,7 @@ function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; d
       <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: p.restarts > 0 ? HP.crit : UI.ink3, fontWeight: p.restarts > 0 ? 700 : 500 }}>{p.restarts}</span>
       <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: UI.ink3 }}>{ageOf(p)}</span>
       {/* 행 액션 — 호버 시 등장 */}
-      <span className="pacts" style={{ display: "flex", alignItems: "center", gap: 2, justifySelf: "end" }}>
+      <span className="pacts" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, padding: "2px 4px", boxShadow: "0 6px 16px -8px rgba(17,19,24,0.25)" }}>
         {([["로그", ScrollText], ["이벤트", Activity], ["재시작", RotateCw]] as const).map(([label, I]) => (
           <span key={label} role="button" title={label} onClick={(e) => e.stopPropagation()}
             style={{ display: "grid", placeItems: "center", width: 20, height: 20, borderRadius: 6, color: UI.ink3 }} className="pact">
@@ -715,7 +715,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 
                 {view.level === "nodes" && (
                   /* 노드: 3칸 균등 그리드 + 파드 10개당 1칸 병합(2칸·3칸) — minmax(0)·dense로 리사이즈에도 안 무너진다 */
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gridAutoFlow: "dense", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "dense", gap: 12 }}>
                     {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
                       <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}`, minWidth: 0, maxWidth: "100%", overflow: "hidden" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
                         <NodeWidget node={node} pods={pods} expanded={false} dimFn={dimFn} litFn={litFn} live={live} tick={tick}
@@ -779,7 +779,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
         html, body { background: ${UI.bg}; }
         .op { min-height: 100vh; background: ${UI.bg}; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .op .tile.crit, .op .stchip.crit { animation: critp 1.3s ease-in-out infinite; }
-        .op .podrow { transition: background .15s ease; }
+        .op .podrow { position: relative; transition: background .15s ease; }
         .op .podrow:hover { background: rgba(17,19,24,0.035) !important; }
         .op .pacts { opacity: 0; transition: opacity .15s ease; }
         .op .podrow:hover .pacts { opacity: 1; }
