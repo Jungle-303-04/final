@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network, ScrollText, RotateCw } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
+import { UI, BLUE, HP, MONO, SOFT, SPRING, PAGE } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -31,14 +32,7 @@ const EksIcon = ({ size = 16, style }: { size?: number; style?: React.CSSPropert
 );
 
 // ── 디자인 토큰 ─────────────────────────────
-const UI = { bg: "#FAFAFC", card: "#FFFFFF", line: "#E9EAEE", line2: "#F1F2F5", ink: "#111318", ink2: "#5F6570", ink3: "#9AA0AA" } as const;
-const BLUE = "#0A84FF"; // 선택/하이라이트 전용
 // 상태 팔레트 — 플릿 뷰에서 검증된 톤(애플 시스템 컬러 계열)
-const HP = { ok: "#30D158", warn: "#FFB340", crit: "#FF5F55", pending: "#D9DCE1", ghost: "#F3F4F6" } as const;
-const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
-const SPRING = { type: "spring", bounce: 0.16, visualDuration: 0.5 } as const;
-const SOFT = { type: "spring", bounce: 0.12, visualDuration: 0.32 } as const;
-const PAGE = { type: "spring", bounce: 0.08, visualDuration: 0.55 } as const;
 
 // ── 도메인 ─────────────────────────────
 const CLUSTERS = [
@@ -354,6 +348,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
   const avgC = pct(act.reduce((s, p) => s + p.cpu + live(p), 0) / (act.length || 1));
   const avgM = pct(act.reduce((s, p) => s + p.mem + live(p) * 0.7, 0) / (act.length || 1));
   const hot = np.filter(isCrit).length;
+  // 칸 병합: 파드 10개당 1칸 (칸당 타일 5열×2줄) — 20개=2칸, 30개=3칸
   const span = spanOf(node.cap);
   const cols = expanded ? 10 : span * 5;
   return (
@@ -708,8 +703,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 initial="initial" animate="animate" exit="exit" transition={PAGE}>
 
                 {view.level === "clusters" && (
-                  /* 클러스터: 가로 최대 2개 · 정사각 느낌 */
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, alignItems: "stretch" }}>
+                  /* 클러스터: 가로 최대 2개 · 카드 폭을 제한해 정사각에 가깝게 */
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14, alignItems: "stretch" }}>
                     {CLUSTERS.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
                         <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
@@ -719,10 +714,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 )}
 
                 {view.level === "nodes" && (
-                  /* 노드: 가로 최대 3개 — 파드 10개당 한 칸, 10개 초과 시 확장 */
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                  /* 노드: 3칸 균등 그리드 + 파드 10개당 1칸 병합(2칸·3칸) — minmax(0)·dense로 리사이즈에도 안 무너진다 */
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gridAutoFlow: "dense", gap: 12 }}>
                     {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
-                      <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}` }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
+                      <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}`, minWidth: 0, maxWidth: "100%", overflow: "hidden" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
                         <NodeWidget node={node} pods={pods} expanded={false} dimFn={dimFn} litFn={litFn} live={live} tick={tick}
                           onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.id }, 1)} onPod={selectPod} onTip={onTip}
                           onCritEnter={() => setLens({ kind: "crit", id: "all" })} onCritLeave={() => setLens(null)} onCritClick={() => setPin(pin?.kind === "crit" ? null : { kind: "crit", id: "all" })} />
@@ -825,7 +820,9 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
   };
 
   return (
-    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 14, display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 24, maxHeight: "calc(100vh - 60px)", overflowY: "auto" }}>
+    /* 라운드 모서리 침범 방지: 바깥은 clip, 스크롤·거터는 안쪽 컨테이너 담당 (스크롤바 유무와 무관하게 폭 고정) */
+    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: 24, maxHeight: "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
       <AnimatePresence mode="wait">
         {focusPod ? (
           <motion.div key={focusPod.id} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={SOFT} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -855,6 +852,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
     </aside>
   );
 }

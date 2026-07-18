@@ -5,13 +5,10 @@ import ReactDOM from "react-dom/client";
 import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
+import { UI, BLUE, ST, MONO } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
-const UI = { bg: "#FAFAFC", card: "#FFFFFF", line: "#E9EAEE", ink: "#111318", ink2: "#5F6570", ink3: "#9AA0AA" } as const;
-const BLUE = "#0A84FF";
-const ST = { ok: "#2EBD5B", warn: "#FF9F0A", crit: "#FF453A" } as const;
-const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 
 type Status = "ok" | "warn" | "crit";
 type Svc = { id: string; name: string; kind: string; layer: number; replicas: number; status: Status };

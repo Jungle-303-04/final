@@ -15,14 +15,10 @@ import { OpsiaMap, podInventory, nodeInventory, repoInventory } from "./devprevi
 import { AiPanel } from "./devpreview-ai";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
+import { UI, BLUE, HP, MONO, SOFT, EASE_DRAW } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
-const UI = { bg: "#FAFAFC", card: "#FFFFFF", line: "#E9EAEE", line2: "#F1F2F5", ink: "#111318", ink2: "#5F6570", ink3: "#9AA0AA" } as const;
-const BLUE = "#0A84FF";
-const HP = { ok: "#30D158", warn: "#FFB340", crit: "#FF5F55", ghost: "#F3F4F6" } as const;
-const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
-const SOFT = { type: "spring", bounce: 0.12, visualDuration: 0.32 } as const;
 
 // ── 목 데이터 ─────────────────────────────
 function rng(seed: number) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -387,12 +383,13 @@ function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; 
   const spec = SPEC[kind.id];
   if (!spec) return null;
   const filtered = rows;
-  const grid = spec.cols.map((c) => c.w ?? "1fr").join(" ");
+  /* 가로 스크롤 금지 — 고정폭 컬럼을 minmax로 감싸 컨테이너에 항상 맞춘다 */
+  const grid = spec.cols.map((c) => { const w = c.w ?? "1fr"; return w.endsWith("px") ? `minmax(48px, ${w})` : w; }).join(" ");
   const rowPad = dense ? "5px 16px" : "9px 16px";
   return (
-    /* 긴 표는 카드 안에서 스크롤(헤더 고정) · 좁은 화면에선 가로 스크롤 — 컬럼이 뭉개지지 않는다 */
-    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflow: "auto", maxHeight: "min(64vh, 680px)" }}>
-    <div style={{ minWidth: 640 }}>
+    /* 긴 표는 카드 안에서 세로 스크롤(헤더 고정) */
+    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: "min(64vh, 680px)", scrollbarGutter: "stable" }}>
+    <div>
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD", position: "sticky", top: 0, zIndex: 2 }}>
         {spec.cols.map((c) => (
           <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
@@ -405,13 +402,14 @@ function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; 
           {q ? "검색 결과가 없습니다" : inScope ? `이 범위에는 ${kind.label} 리소스가 없습니다` : `${kind.label} 리소스가 없습니다`}
         </div>
       ) : filtered.map((row, i) => (
-        <div key={i} className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: rowPad, borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
+        <motion.div key={`${kind.id}-${String(row.name)}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 10) * 0.022 }}
+          className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: rowPad, borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
           {spec.cols.map((c, ci) => (
             <span key={c.k} style={{ minWidth: 0, fontWeight: ci === 0 ? 600 : 400, color: ci === 0 ? UI.ink : undefined, fontSize: ci === 0 ? 12 : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: ci === 0 ? "nowrap" : undefined }}>
               {ci === 0 ? <Hi text={String(row[c.k] ?? "")} q={q} /> : <CellView cell={c.cell} v={row[c.k]} bad={row.bad as boolean} />}
             </span>
           ))}
-        </div>
+        </motion.div>
       ))}
     </div>
     </div>
@@ -464,6 +462,107 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
 
 const TOPBAR_H = 57; // 상단 크롬 높이 — 오버레이는 이 아래부터 시작한다
 
+// ── 메트릭 차트 — 그리드·축·호버 크로스헤어·현재점 펄스를 갖춘 고급 뷰 ──
+function MetricChart({ name, bad }: { name: string; bad: boolean }) {
+  const METS = [
+    { id: "cpu", label: "CPU", unit: "m", base: 46, amp: 20 },
+    { id: "mem", label: "Memory", unit: "MiB", base: 132, amp: 38 },
+    { id: "rx", label: "Net RX", unit: "KB/s", base: 84, amp: 48 },
+    { id: "tx", label: "Net TX", unit: "KB/s", base: 41, amp: 26 },
+    { id: "io", label: "Disk I/O", unit: "IOPS", base: 12, amp: 8 },
+  ] as const;
+  const [mi, setMi] = useState(0);
+  const [hover, setHover] = useState<number | null>(null);
+  const m = METS[mi];
+  const W = 520, H = 168, PT = 12, PB = 24, PL = 44, PR = 14;
+  const seed = name.split("").reduce((s, c) => s + c.charCodeAt(0), 0) + mi * 97;
+  const pts = useMemo(() => Array.from({ length: 40 }, (_, i) => {
+    const r = Math.sin(seed + i * 1.7) * 0.5 + Math.sin(seed * 2 + i * 0.6) * 0.35 + Math.sin(i * 0.23 + seed) * 0.15;
+    let v = m.base + r * m.amp;
+    if (bad && m.id !== "io" && i > 28) v += (i - 28) * m.amp * 0.16; // 임계 리소스: 최근 급증 표현
+    return Math.max(1, v);
+  }), [seed, m, bad]);
+  const top = Math.max(...pts) * 1.12;
+  const X = (i: number) => PL + (i / (pts.length - 1)) * (W - PL - PR);
+  const Y = (v: number) => PT + (1 - v / top) * (H - PT - PB);
+  const d = useMemo(() => {
+    let s = `M ${X(0)} ${Y(pts[0])}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      s += ` C ${X(i) + (X(i + 1) - X(i)) / 3} ${Y(p1 + (p2 - p0) / 6)}, ${X(i + 1) - (X(i + 1) - X(i)) / 3} ${Y(p2 - (p3 - p1) / 6)}, ${X(i + 1)} ${Y(p2)}`;
+    }
+    return s;
+  }, [pts]);
+  const tone = bad ? HP.crit : BLUE;
+  const fmt = (v: number) => `${Math.round(v)}${m.unit}`;
+  const cur = pts[pts.length - 1], avg = pts.reduce((s, v) => s + v, 0) / pts.length, mx = Math.max(...pts);
+  const hi = hover !== null ? Math.round(((hover - PL) / (W - PL - PR)) * (pts.length - 1)) : null;
+  const hIdx = hi !== null ? Math.max(0, Math.min(pts.length - 1, hi)) : null;
+  return (
+    <div>
+      {/* 지표 선택 */}
+      <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.05)", borderRadius: 9, padding: 3, marginBottom: 12 }}>
+        {METS.map((mm, i) => (
+          <button key={mm.id} onClick={() => { setMi(i); setHover(null); }}
+            style={{ flex: 1, textAlign: "center", fontSize: 11.5, fontWeight: 600, border: "none", cursor: "pointer", color: i === mi ? UI.ink : UI.ink3,
+              background: i === mi ? "#fff" : "transparent", borderRadius: 7, padding: "5px 0", boxShadow: i === mi ? "0 1px 3px rgba(17,19,24,0.1)" : "none" }}>{mm.label}</button>
+        ))}
+      </div>
+      {/* 통계 행 */}
+      <div style={{ display: "flex", gap: 18, fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>
+        <span>현재 <b style={{ color: tone, fontSize: 14 }}>{fmt(hIdx !== null ? pts[hIdx] : cur)}</b></span>
+        <span>평균 <b style={{ color: UI.ink }}>{fmt(avg)}</b></span>
+        <span>최대 <b style={{ color: UI.ink }}>{fmt(mx)}</b></span>
+        {hIdx !== null && <span style={{ marginLeft: "auto", color: UI.ink3 }}>{Math.round((1 - hIdx / (pts.length - 1)) * 30)}분 전</span>}
+      </div>
+      <div style={{ border: `1px solid ${UI.line2}`, borderRadius: 12, background: "#FBFBFD", padding: "6px 4px 2px" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", cursor: "crosshair" }}
+          onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHover(((e.clientX - r.left) / r.width) * W); }}
+          onMouseLeave={() => setHover(null)}>
+          <defs>
+            <linearGradient id={`mg-${m.id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tone} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={tone} stopOpacity="0.015" />
+            </linearGradient>
+          </defs>
+          {/* 그리드 + Y 라벨 */}
+          {[0.25, 0.5, 0.75].map((f) => (
+            <g key={f}>
+              <line x1={PL} x2={W - PR} y1={PT + f * (H - PT - PB)} y2={PT + f * (H - PT - PB)} stroke={UI.line2} strokeDasharray="3 5" />
+              <text x={PL - 7} y={PT + f * (H - PT - PB) + 3.5} textAnchor="end" fontSize="9.5" fill={UI.ink3} fontFamily={MONO}>{fmt(top * (1 - f))}</text>
+            </g>
+          ))}
+          {/* X 라벨 */}
+          {["30분 전", "20분", "10분", "지금"].map((l, i) => (
+            <text key={l} x={PL + (i / 3) * (W - PL - PR)} y={H - 7} textAnchor={i === 0 ? "start" : i === 3 ? "end" : "middle"} fontSize="9.5" fill={UI.ink3}>{l}</text>
+          ))}
+          {/* 면 + 선 — 지표 전환 시 왼→오 드로잉 (EASE_DRAW) */}
+          <motion.path key={`a-${m.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7, ease: "easeOut", delay: 0.25 }}
+            d={`${d} L ${X(pts.length - 1)} ${H - PB} L ${X(0)} ${H - PB} Z`} fill={`url(#mg-${m.id})`} />
+          <motion.path key={`l-${m.id}`} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.85, ease: [...EASE_DRAW] }}
+            d={d} fill="none" stroke={tone} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          {/* 현재점 펄스 */}
+          <circle cx={X(pts.length - 1)} cy={Y(cur)} r={6} fill={tone} opacity={0.18}>
+            <animate attributeName="r" values="4;9;4" dur="2.2s" repeatCount="indefinite" />
+          </circle>
+          <circle cx={X(pts.length - 1)} cy={Y(cur)} r={3} fill={tone} stroke="#fff" strokeWidth={1.4} />
+          {/* 호버 크로스헤어 */}
+          {hIdx !== null && (
+            <g>
+              <line x1={X(hIdx)} x2={X(hIdx)} y1={PT} y2={H - PB} stroke={UI.ink3} strokeWidth={0.8} strokeDasharray="2 3" />
+              <circle cx={X(hIdx)} cy={Y(pts[hIdx])} r={3.5} fill="#fff" stroke={tone} strokeWidth={2} />
+              <g transform={`translate(${Math.min(W - PR - 62, Math.max(PL, X(hIdx) - 28))}, ${Math.max(2, Y(pts[hIdx]) - 26)})`}>
+                <rect width="56" height="18" rx="6" fill={UI.ink} opacity="0.92" />
+                <text x="28" y="12.5" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff" fontFamily={MONO}>{fmt(pts[hIdx])}</text>
+              </g>
+            </g>
+          )}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 // YAML 구문 하이라이트 — 코드 에디터 톤 (키·문자열·숫자·불리언·주석)
 function hlYaml(src: string): string {
   return src.split("\n").map((line) => {
@@ -482,7 +581,7 @@ function hlYaml(src: string): string {
 }
 const YAML_FONT = { fontSize: 12.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
 
-function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = false, rightInset = 0, leftInset = 0 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number }) {
+function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
@@ -549,9 +648,9 @@ status:
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        onClick={onClose} style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0, left: leftInset, background: "rgba(17,19,24,0.07)", zIndex: 70 }} />
+        onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: "rgba(17,19,24,0.07)", zIndex: 70 }} />
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
-        style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0,
+        style={{ position: "fixed", top: topInset, right: 0, bottom: 0,
           /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
           width: full ? `calc(100vw - ${leftInset}px)` : dw, maxWidth: `calc(100vw - ${leftInset}px)`,
           background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: dwDragging ? "none" : "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
@@ -694,20 +793,7 @@ status:
               {/* 메트릭 (워크로드·파드) */}
               {wp && (
               <Sec title="메트릭" icon={Activity}>
-                <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 3, marginBottom: 10 }}>
-                  {["CPU", "Memory", "Net RX", "Net TX", "Disk I/O"].map((m, i) => (
-                    <span key={m} style={{ flex: 1, textAlign: "center", fontSize: 11.5, fontWeight: 600, color: i === 0 ? UI.ink : UI.ink3, background: i === 0 ? "#fff" : "transparent", borderRadius: 6, padding: "5px 0", boxShadow: i === 0 ? "0 1px 3px rgba(17,19,24,0.1)" : undefined }}>{m}</span>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 16, fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginBottom: 6 }}>
-                  <span>현재 <b style={{ color: BLUE }}>0.6m</b></span><span>평균 <b style={{ color: UI.ink }}>0.6m</b></span><span>최대 <b style={{ color: UI.ink }}>0.7m</b></span>
-                </div>
-                <div style={{ border: `1px solid ${UI.line2}`, borderRadius: 10, padding: "10px 12px", background: "#FBFBFD" }}>
-                  <svg viewBox="0 0 300 60" width="100%" height={60} preserveAspectRatio="none" style={{ display: "block" }}>
-                    <path d="M0 42 C 30 38, 50 30, 80 34 S 130 44, 160 36 S 210 26, 240 33 S 280 40, 300 36" fill="none" stroke={BLUE} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
-                    <path d="M0 42 C 30 38, 50 30, 80 34 S 130 44, 160 36 S 210 26, 240 33 S 280 40, 300 36 L 300 60 L 0 60 Z" fill={BLUE} opacity={0.08} />
-                  </svg>
-                </div>
+                <MetricChart name={name} bad={bad} />
               </Sec>
               )}
 
@@ -1074,6 +1160,14 @@ function App() {
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const searchRef = useRef<HTMLInputElement>(null);
+  // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
+  const headerRef = useRef<HTMLElement>(null);
+  const [topH, setTopH] = useState(TOPBAR_H);
+  useEffect(() => {
+    const el = headerRef.current; if (!el) return;
+    const ro = new ResizeObserver(() => setTopH(Math.round(el.getBoundingClientRect().height)));
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === "Escape") setDetail(null);
@@ -1132,7 +1226,7 @@ function App() {
 
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
-      <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+      <header ref={headerRef} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />prod-eks<ChevronDown size={12} style={{ color: UI.ink3 }} />
         </span>
@@ -1159,11 +1253,11 @@ function App() {
             <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alerts.length ? HP.crit : HP.warn, color: "#fff", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: "2px solid #fff", boxSizing: "content-box" }}>{alertTotal}</span>
           )}
           <AnimatePresence>
+            {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
             {bellOpen && (
-              {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
               <motion.div key="bell" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -5, scale: 0.98 }} transition={SOFT}
                 style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: "rgba(246,247,250,0.86)", backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
-                  border: "1px solid rgba(17,19,24,0.08)", borderRadius: 18, boxShadow: "0 28px 70px -24px rgba(17,19,24,0.38)", padding: 10, maxHeight: "min(70vh, 560px)", overflowY: "auto" }}>
+                  border: "1px solid rgba(17,19,24,0.08)", borderRadius: 18, boxShadow: "0 28px 70px -24px rgba(17,19,24,0.38)", padding: 10, maxHeight: "min(70vh, 560px)", overflowY: "auto", scrollbarGutter: "stable" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
                   <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
                   <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
@@ -1264,7 +1358,7 @@ function App() {
       <AnimatePresence>
         {aiOpen && (
           <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-            style={{ position: "fixed", top: TOPBAR_H, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: "-28px 0 70px -32px rgba(17,19,24,0.3)" }}>
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: "-28px 0 70px -32px rgba(17,19,24,0.3)" }}>
             <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
               style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -1290,7 +1384,7 @@ function App() {
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
@@ -1319,6 +1413,8 @@ function App() {
         .uni .rrow { transition: background .12s ease; }
         .uni .rrow:hover { background: rgba(17,19,24,0.028); }
         .uni .gnav:hover { background: rgba(17,19,24,0.05) !important; }
+        .uni .acard { transition: transform .12s ease, background .12s ease; }
+        .uni .acard:not(:disabled):hover { background: #fff !important; transform: translateY(-1px); }
         /* YAML 구문 색상 — 라이트 코드 에디터 팔레트 (Badge 텍스트 톤과 동일 계열) */
         .uni .y-k { color: #0A6CFF; }
         .uni .y-s { color: #1F9D4D; }
