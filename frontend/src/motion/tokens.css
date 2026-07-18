@@ -272,6 +272,28 @@
   transition-delay: 0ms;
 }
 
+[data-slot="ai-flat-action"] > [data-action-type] {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0.75rem 0 0;
+}
+
+[data-slot="ai-flat-action"] > [data-action-type] > dl {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.75rem 0 0;
+}
+
+[data-slot="ai-flat-action"] > [data-action-type] > div:last-child {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
 .motion-topology-overlay {
   animation: motion-topology-overlay-enter var(--motion-quick) var(--ease-out) backwards;
 }

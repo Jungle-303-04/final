@@ -180,7 +180,11 @@ function AiResultCard({
               {unsupported ? t("shell.ai.noEvidence") : response.answer}
             </p>
             {response.evidence.length > 0 ? <EvidenceLinks evidence={response.evidence} /> : null}
-            {response.action && canCreateAlertRule ? <AiAlertRuleActionCard action={response.action} onCreate={port.createAlertRule} /> : null}
+            {response.action && canCreateAlertRule ? (
+              <div data-slot="ai-flat-action">
+                <AiAlertRuleActionCard action={response.action} onCreate={port.createAlertRule} />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
