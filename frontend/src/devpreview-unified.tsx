@@ -465,7 +465,7 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
 function RelGraph({ center, centerIcon: CI, items, onOpenRef }: {
   center: string; centerIcon: typeof Rocket;
   items: { label: string; pfx: string; name: string; tone: keyof typeof TINT_G; kindId?: string }[];
-  onOpenRef?: (kindId: string, name: string) => void;
+  onOpenRef?: (kindId: string, name: string) => void; onShowPods?: (base: string) => void;
 }) {
   const ROW = 46, GAPX = 46, CW = 148;
   const H = Math.max(items.length * ROW, 92);
@@ -632,7 +632,7 @@ function hlYaml(src: string): string {
 }
 const YAML_FONT = { fontSize: 12.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
 
-function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number }) {
+function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
@@ -664,6 +664,8 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, forceFull = fal
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
   const [restartedAt, setRestartedAt] = useState<string | null>(null); // 재시작 요청 흔적 → 이벤트로 남는다
+  const [replicas, setReplicas] = useState(2);        // 복제 수 조정 — 목표값이 즉시 반영되고 롤아웃 진행이 드러난다
+  const [scaled, setScaled] = useState(false);
   const doRestart = () => {
     const t = new Date(); const ts = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
     setRestartedAt(ts);
@@ -761,11 +763,13 @@ status:
               {/* 상태 */}
               <Sec title="상태" icon={Activity}>
                 {isWorkload
-                  ? ([["목표 복제본", "2"], ["현재 복제본", "2"], ["준비됨", bad ? "1" : "2"], ["최신 상태", "2"], ["가용", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono />)
+                  ? ([["목표 복제본", String(replicas)], ["현재 복제본", "2"], ["준비됨", bad ? "1" : "2"], ["최신 상태", "2"], ["가용", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "목표 복제본" && scaled ? BLUE : undefined} />)
                   : ([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : phase === "Pending" ? "#B25A00" : "#1F9D4D") : undefined} />)}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
-                  <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>
-                  {isWorkload && <button style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 조정</button>}
+                  {isWorkload && <button onClick={onShowPods ? () => onShowPods(base) : undefined}
+                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
+                  {isWorkload && <button onClick={() => { const next = replicas + 1; setReplicas(next); setScaled(true); onToast?.({ title: `${base} 복제 수 조정`, sub: `kubectl scale — replicas ${replicas} → ${next}, 롤아웃 진행 중`, tone: "ok" }); }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 +1</button>}
                 </div>
               </Sec>
 
@@ -828,7 +832,9 @@ status:
                   </div>
                 ))}
                 <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 4 }}>규칙 1개 더 있음 · 전체 목록은 ServiceAccount에서 확인</div>
-                <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>전체 권한 보기 →</button>
+                {tabs.includes("rbac") && (
+                  <button onClick={() => setTab("rbac")} style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>권한 탭에서 전체 보기 →</button>
+                )}
               </Sec>
               )}
 
@@ -874,7 +880,8 @@ status:
 
               {/* 최근 이벤트 */}
               <Sec title="최근 이벤트 (85)" icon={Activity}>
-                {[...(restartedAt ? [["RestartTriggered", `수동 재시작 — kubectl rollout restart (${restartedAt})`]] : []),
+                {[...(scaled ? [["ScalingReplicaSet", `복제 수 조정 — ${base}를 ${replicas}개로 확장 중`]] : []),
+                  ...(restartedAt ? [["RestartTriggered", `수동 재시작 — kubectl rollout restart (${restartedAt})`]] : []),
                   ["SuccessfulCreate", `파드 생성: ${base}-5j5td`], ["SuccessfulDelete", `파드 삭제: ${base}-87g9q`], ["SuccessfulCreate", `파드 생성: ${base}-vzbd9`],
                   ...(bad ? [["BackOff", `실패한 컨테이너 재시작 대기 중 · 누적 ${String(row.restarts ?? 3)}회`]] : [])]
                   .map(([r, m], i) => (
@@ -886,7 +893,9 @@ status:
                       <div style={{ fontSize: 12, color: UI.ink2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m as string}</div>
                     </div>
                   ))}
-                <button style={{ border: "none", background: "transparent", color: UI.ink3, fontSize: 12, cursor: "pointer", padding: "4px 0 0" }}>이벤트 50건 더 보기</button>
+                {tabs.includes("events") && (
+                  <button onClick={() => setTab("events")} style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 0 0" }}>이벤트 탭에서 모두 보기 →</button>
+                )}
               </Sec>
 
               {/* 레이블 / 어노테이션 / 메타데이터 */}
@@ -915,7 +924,7 @@ status:
                       <Badge text={cat as string} tone={cat === "Security" ? "purple" : cat === "Reliability" ? "blue" : "green"} />
                     </div>
                   ))}
-                <button style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "9px 0 0" }}>전체 결과 보기 →</button>
+
               </Sec>
               )}
             </div>
@@ -986,7 +995,8 @@ status:
 
           {tab === "events" && (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {[...(restartedAt ? [["Normal", "RestartTriggered", `Manual rollout restart requested (${restartedAt})`, "방금"]] : []),
+              {[...(scaled ? [["Normal", "ScalingReplicaSet", `Scaled up replica set ${base} to ${replicas}`, "방금"]] : []),
+                ...(restartedAt ? [["Normal", "RestartTriggered", `Manual rollout restart requested (${restartedAt})`, "방금"]] : []),
                 ["Normal", "Scheduled", `Successfully assigned to ${nodeName}`, "2m"],
                 ["Normal", "Pulled", `Container image "${imgFor(base)}" already present`, "2m"],
                 ["Normal", "Created", `Created container: ${comp}`, "2m"],
@@ -1433,7 +1443,7 @@ function App() {
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setKindId("Pod"); setQ(b); }} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
