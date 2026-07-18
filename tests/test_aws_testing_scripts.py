@@ -301,6 +301,25 @@ def test_aws_cluster_endpoints_are_bounded_and_control_plane_logs_are_enabled() 
     assert "`0.0.0.0/0`, `::/0`는 거부된다" in runbook
 
 
+def test_aws_targets_share_the_management_vpc_without_relaxing_endpoint_policy() -> None:
+    script = read("scripts/aws-up.sh")
+
+    assert "discover_shared_vpc()" in script
+    assert "'cluster.resourcesVpcConfig.vpcId'" in script
+    assert "'cluster.resourcesVpcConfig.subnetIds'" in script
+    assert 'tags.get("kubernetes.io/role/internal-elb") == "1"' in script
+    assert 'tags.get("kubernetes.io/role/elb") == "1"' in script
+    assert "shared VPC requires private subnets in at least two AZs" in script
+    assert "shared VPC requires public subnets in at least two AZs" in script
+    assert 'assert_cluster_uses_shared_vpc "${cluster_name}"' in script
+    assert 'eksctl create cluster --dry-run -f "${config_path}"' in script
+    assert 'discover_shared_vpc "${MGMT_CLUSTER}"' in script
+    assert "ensure_target_clusters" in script
+    assert '"${SHARED_VPC_CONFIG}" &' in script
+    assert script.index("privateAccess: true") < script.index("publicAccessCIDRs:")
+    assert "world-open EKS public endpoint CIDR is forbidden" in script
+
+
 def test_aws_destroy_requires_blue_green_and_backup_evidence() -> None:
     down_script = read("scripts/aws-down.sh")
 

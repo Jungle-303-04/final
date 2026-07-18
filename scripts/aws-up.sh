@@ -145,6 +145,9 @@ LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 
 RUNTIME_DIR="$(mktemp -d "${ROOT_DIR}/.aws-up.XXXXXX")"
 PORT_FORWARD_PID=""
+SHARED_VPC_ID=""
+SHARED_VPC_CONFIG="${RUNTIME_DIR}/shared-vpc.eksctl.yaml"
+SHARED_SUBNET_IDS=()
 
 case "${RUN_SMOKE}" in
   1|true|TRUE|yes|YES|on|ON)
@@ -314,6 +317,7 @@ render_eksctl_config() {
   local desired_nodes="$5"
   local role="$6"
   local output="$7"
+  local shared_vpc_config="${8:-}"
   local min_nodes="1"
   local max_nodes="$((desired_nodes + 1))"
   local spot="false"
@@ -340,6 +344,11 @@ metadata:
     Project: "${PROJECT_SLUG}"
     Role: "${role}"
 vpc:
+YAML
+  if [[ -n "${shared_vpc_config}" ]]; then
+    sed 's/^/  /' "${shared_vpc_config}" >>"${output}"
+  fi
+  cat >>"${output}" <<YAML
   clusterEndpoints:
     privateAccess: true
     publicAccess: true
@@ -380,6 +389,113 @@ YAML
       Project: "${PROJECT_SLUG}"
       Role: "${role}"
 YAML
+}
+
+discover_shared_vpc() {
+  local cluster_name="$1"
+  local subnet_json="${RUNTIME_DIR}/${cluster_name}.subnets.json"
+  local subnet_ids_text
+
+  SHARED_VPC_ID="$(
+    aws eks describe-cluster \
+      --region "${AWS_REGION}" \
+      --name "${cluster_name}" \
+      --query 'cluster.resourcesVpcConfig.vpcId' \
+      --output text
+  )"
+  subnet_ids_text="$(
+    aws eks describe-cluster \
+      --region "${AWS_REGION}" \
+      --name "${cluster_name}" \
+      --query 'cluster.resourcesVpcConfig.subnetIds' \
+      --output text
+  )"
+  read -r -a SHARED_SUBNET_IDS <<<"${subnet_ids_text}"
+
+  [[ "${SHARED_VPC_ID}" =~ ^vpc-[0-9a-f]+$ ]] || {
+    echo "unable to discover VPC for ${cluster_name}" >&2
+    return 1
+  }
+  if (( ${#SHARED_SUBNET_IDS[@]} < 2 )); then
+    echo "at least two EKS subnets are required for ${cluster_name}" >&2
+    return 1
+  fi
+
+  aws ec2 describe-subnets \
+    --region "${AWS_REGION}" \
+    --subnet-ids "${SHARED_SUBNET_IDS[@]}" \
+    --output json >"${subnet_json}"
+
+  python3 - \
+    "${SHARED_VPC_ID}" \
+    "${subnet_json}" \
+    "${SHARED_VPC_CONFIG}" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+vpc_id, source_path, output_path = sys.argv[1:]
+subnets = json.loads(Path(source_path).read_text())["Subnets"]
+classified: dict[str, dict[str, str]] = {"private": {}, "public": {}}
+
+for subnet in subnets:
+    subnet_id = subnet["SubnetId"]
+    az = subnet["AvailabilityZone"]
+    if subnet.get("VpcId") != vpc_id:
+        raise SystemExit(f"{subnet_id} does not belong to {vpc_id}")
+    tags = {tag["Key"]: tag["Value"] for tag in subnet.get("Tags", [])}
+    is_private = tags.get("kubernetes.io/role/internal-elb") == "1"
+    is_public = tags.get("kubernetes.io/role/elb") == "1"
+    if is_private == is_public:
+        raise SystemExit(
+            f"{subnet_id} must have exactly one Kubernetes subnet role tag"
+        )
+    visibility = "private" if is_private else "public"
+    if az in classified[visibility]:
+        raise SystemExit(f"duplicate {visibility} subnet in {az}")
+    if not re.fullmatch(r"subnet-[0-9a-f]+", subnet_id):
+        raise SystemExit(f"invalid subnet id: {subnet_id}")
+    classified[visibility][az] = subnet_id
+
+if len(classified["private"]) < 2:
+    raise SystemExit("shared VPC requires private subnets in at least two AZs")
+if len(classified["public"]) < 2:
+    raise SystemExit("shared VPC requires public subnets in at least two AZs")
+
+lines = [f'id: "{vpc_id}"', "subnets:"]
+for visibility in ("private", "public"):
+    lines.append(f"  {visibility}:")
+    for az, subnet_id in sorted(classified[visibility].items()):
+        lines.extend((f"    {az}:", f'      id: "{subnet_id}"'))
+Path(output_path).write_text("\n".join(lines) + "\n")
+PY
+
+  aws ec2 create-tags \
+    --region "${AWS_REGION}" \
+    --resources "${SHARED_VPC_ID}" "${SHARED_SUBNET_IDS[@]}" \
+    --tags \
+      "Key=Project,Value=${PROJECT_SLUG}" \
+      "Key=NetworkOwner,Value=${MGMT_CLUSTER}" \
+      "Key=Topology,Value=shared-eks" >/dev/null
+  log "shared EKS network discovered: ${SHARED_VPC_ID}"
+}
+
+assert_cluster_uses_shared_vpc() {
+  local cluster_name="$1"
+  local cluster_vpc
+
+  cluster_vpc="$(
+    aws eks describe-cluster \
+      --region "${AWS_REGION}" \
+      --name "${cluster_name}" \
+      --query 'cluster.resourcesVpcConfig.vpcId' \
+      --output text
+  )"
+  if [[ "${cluster_vpc}" != "${SHARED_VPC_ID}" ]]; then
+    echo "${cluster_name} uses ${cluster_vpc}; expected shared VPC ${SHARED_VPC_ID}" >&2
+    return 1
+  fi
 }
 
 tag_cluster() {
@@ -426,30 +542,41 @@ tag_node_instances() {
       "Key=Role,Value=${role}" >/dev/null
 }
 
-ensure_cluster() {
+create_cluster_if_missing() {
   local cluster_name="$1"
   local display_name="$2"
-  local node_types="$3"
+  local node_types_csv="$3"
   local node_capacity="$4"
   local desired_nodes="$5"
   local role="$6"
+  local shared_vpc_config="${7:-}"
   local config_path="${RUNTIME_DIR}/${cluster_name}.eksctl.yaml"
 
   if cluster_exists "${cluster_name}"; then
     log "EKS cluster already exists: ${cluster_name}"
+    if [[ -n "${shared_vpc_config}" ]]; then
+      assert_cluster_uses_shared_vpc "${cluster_name}"
+    fi
   else
     log "creating EKS cluster ${cluster_name} (${display_name})"
     render_eksctl_config \
       "${cluster_name}" \
       "${display_name}" \
-      "${node_types}" \
+      "${node_types_csv}" \
       "${node_capacity}" \
       "${desired_nodes}" \
       "${role}" \
-      "${config_path}"
+      "${config_path}" \
+      "${shared_vpc_config}"
+    eksctl create cluster --dry-run -f "${config_path}" >/dev/null
     eksctl create cluster -f "${config_path}"
   fi
+}
 
+finalize_cluster() {
+  local cluster_name="$1"
+  local display_name="$2"
+  local role="$3"
   aws eks wait cluster-active --region "${AWS_REGION}" --name "${cluster_name}"
   aws eks update-kubeconfig \
     --region "${AWS_REGION}" \
@@ -457,6 +584,61 @@ ensure_cluster() {
     --alias "${cluster_name}" >/dev/null
   tag_cluster "${cluster_name}" "${display_name}" "${role}"
   tag_node_instances "${cluster_name}" "${display_name}" "${role}"
+}
+
+ensure_cluster() {
+  local cluster_name="$1"
+  local display_name="$2"
+  local node_types_csv="$3"
+  local node_capacity="$4"
+  local desired_nodes="$5"
+  local role="$6"
+  local shared_vpc_config="${7:-}"
+
+  create_cluster_if_missing \
+    "${cluster_name}" \
+    "${display_name}" \
+    "${node_types_csv}" \
+    "${node_capacity}" \
+    "${desired_nodes}" \
+    "${role}" \
+    "${shared_vpc_config}"
+  finalize_cluster "${cluster_name}" "${display_name}" "${role}"
+}
+
+ensure_target_clusters() {
+  local game_pid
+  local demo_pid
+  local status=0
+
+  create_cluster_if_missing \
+    "${TARGET_CLUSTER_1}" \
+    "${TARGET_1_DISPLAY_NAME}" \
+    "${TARGET_1_NODE_TYPES}" \
+    "${TARGET_1_NODE_CAPACITY}" \
+    "${TARGET_1_NODES}" \
+    "target" \
+    "${SHARED_VPC_CONFIG}" &
+  game_pid="$!"
+  create_cluster_if_missing \
+    "${TARGET_CLUSTER_2}" \
+    "${TARGET_2_DISPLAY_NAME}" \
+    "${TARGET_2_NODE_TYPES}" \
+    "${TARGET_2_NODE_CAPACITY}" \
+    "${TARGET_2_NODES}" \
+    "target" \
+    "${SHARED_VPC_CONFIG}" &
+  demo_pid="$!"
+
+  wait "${game_pid}" || status="$?"
+  wait "${demo_pid}" || status="$?"
+  if (( status != 0 )); then
+    echo "one or more target EKS cluster creations failed" >&2
+    return "${status}"
+  fi
+
+  finalize_cluster "${TARGET_CLUSTER_1}" "${TARGET_1_DISPLAY_NAME}" "target"
+  finalize_cluster "${TARGET_CLUSTER_2}" "${TARGET_2_DISPLAY_NAME}" "target"
 }
 
 configure_existing_cluster_context() {
@@ -1519,23 +1701,14 @@ main() {
       "${MGMT_NODE_CAPACITY}" \
       "${MGMT_NODES}" \
       "management"
-    ensure_cluster \
-      "${TARGET_CLUSTER_1}" \
-      "${TARGET_1_DISPLAY_NAME}" \
-      "${TARGET_1_NODE_TYPES}" \
-      "${TARGET_1_NODE_CAPACITY}" \
-      "${TARGET_1_NODES}" \
-      "target"
-    ensure_cluster \
-      "${TARGET_CLUSTER_2}" \
-      "${TARGET_2_DISPLAY_NAME}" \
-      "${TARGET_2_NODE_TYPES}" \
-      "${TARGET_2_NODE_CAPACITY}" \
-      "${TARGET_2_NODES}" \
-      "target"
+    discover_shared_vpc "${MGMT_CLUSTER}"
+    ensure_target_clusters
   else
     log "using existing EKS clusters"
     configure_existing_cluster_context "${MGMT_CLUSTER}"
+    discover_shared_vpc "${MGMT_CLUSTER}"
+    assert_cluster_uses_shared_vpc "${TARGET_CLUSTER_1}"
+    assert_cluster_uses_shared_vpc "${TARGET_CLUSTER_2}"
     configure_existing_cluster_context "${TARGET_CLUSTER_1}"
     configure_existing_cluster_context "${TARGET_CLUSTER_2}"
   fi
@@ -1603,4 +1776,6 @@ main() {
   fi
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
