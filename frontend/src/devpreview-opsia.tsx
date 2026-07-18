@@ -443,12 +443,20 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
 
 // ── 클러스터 로우 ─────────────────────────────
 
-// 듀얼 스파크 — CPU·MEM 한 차트 (Vercel/Tremor 문법: 데이터 범위 자동 스케일 · 완만한 곡선 · 시리즈별 면)
-function DualSpark({ id, a, b, tick, h = 56 }: { id: string; a: number; b: number; tick: number; h?: number }) {
+// 듀얼 스파크 — CPU·MEM 한 차트 (Vercel 문법: 자동 도메인 · rAF 연속 갱신 · 호버 크로스헤어+툴팁)
+function DualSpark({ id, a, b, h = 56 }: { id: string; a: number; b: number; h?: number }) {
   const hsh = id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
   const W = 320, N = 42, PT = 6, PB = 4;
+  // 연속 시계 — 틱 점프 대신 60fps 흐름 (reduced-motion이면 정지)
+  const [clock, setClock] = useState(() => performance.now() / 1000);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0; const loop = () => { setClock(performance.now() / 1000); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop); return () => cancelAnimationFrame(raf);
+  }, []);
+  const [hover, setHover] = useState<number | null>(null); // 0..1 가로 비율
   const series = (base: number, ph: number) => Array.from({ length: N }, (_, i) => {
-    const x = tick * 0.35 - (N - 1) + i; // 느린 이동 = 차분한 라이브
+    const x = clock * 0.9 - (N - 1) + i;
     return base + 5.5 * Math.sin(x * 0.22 + hsh + ph) + 2.5 * Math.sin(x * 0.09 + hsh * 1.7 + ph) + 1.2 * Math.sin(x * 0.47 + ph);
   });
   const va = series(a, 0), vb = series(b, 2.3);
@@ -466,24 +474,54 @@ function DualSpark({ id, a, b, tick, h = 56 }: { id: string; a: number; b: numbe
   };
   const A = mk(va), B = mk(vb);
   const gid = `ds-${id.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const hIdx = hover !== null ? Math.max(0, Math.min(N - 1, Math.round(hover * (N - 1)))) : null;
+  const hx = hIdx !== null ? (hIdx / (N - 1)) * W : 0;
   return (
-    <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden>
-      <defs>
-        <linearGradient id={`${gid}a`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={BLUE} stopOpacity={0.18} /><stop offset="100%" stopColor={BLUE} stopOpacity={0} />
-        </linearGradient>
-        <linearGradient id={`${gid}b`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#8250DF" stopOpacity={0.13} /><stop offset="100%" stopColor="#8250DF" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <line x1="0" x2={W} y1={h - 0.5} y2={h - 0.5} stroke={UI.line2} />
-      <path d={`${B.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid}b)`} />
-      <path d={`${A.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid}a)`} />
-      <path d={B.d} fill="none" stroke="#8250DF" strokeWidth={1.6} strokeOpacity={0.8} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      <path d={A.d} fill="none" stroke={BLUE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={B.last.x} cy={B.last.y} r={2.4} fill="#8250DF" stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
-      <circle cx={A.last.x} cy={A.last.y} r={2.6} fill={BLUE} stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div style={{ position: "relative" }}
+      onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHover(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))); }}
+      onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden>
+        <defs>
+          <linearGradient id={`${gid}a`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={BLUE} stopOpacity={0.18} /><stop offset="100%" stopColor={BLUE} stopOpacity={0} />
+          </linearGradient>
+          <linearGradient id={`${gid}b`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8250DF" stopOpacity={0.13} /><stop offset="100%" stopColor="#8250DF" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <line x1="0" x2={W} y1={h - 0.5} y2={h - 0.5} stroke={UI.line2} />
+        <path d={`${B.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid}b)`} />
+        <path d={`${A.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid}a)`} />
+        <path d={B.d} fill="none" stroke="#8250DF" strokeWidth={1.6} strokeOpacity={0.8} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <path d={A.d} fill="none" stroke={BLUE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {hIdx !== null ? (
+          <g>
+            <line x1={hx} x2={hx} y1={2} y2={h - 2} stroke={UI.ink3} strokeWidth={0.8} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+            <circle cx={hx} cy={Y(vb[hIdx])} r={2.6} fill="#8250DF" stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+            <circle cx={hx} cy={Y(va[hIdx])} r={2.8} fill={BLUE} stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+          </g>
+        ) : (
+          <g>
+            <circle cx={B.last.x} cy={B.last.y} r={2.4} fill="#8250DF" stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+            <circle cx={A.last.x} cy={A.last.y} r={2.6} fill={BLUE} stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+          </g>
+        )}
+      </svg>
+      {/* 호버 툴팁 — 유리 칩 */}
+      {hIdx !== null && (
+        <div style={{ position: "absolute", top: -34, left: `clamp(0px, calc(${(hover! * 100).toFixed(1)}% - 62px), calc(100% - 124px))`, pointerEvents: "none",
+          background: "rgba(255,255,255,0.95)", backdropFilter: "blur(8px)", border: `1px solid ${UI.line}`, borderRadius: 9,
+          boxShadow: "0 8px 22px -10px rgba(17,19,24,0.25)", padding: "5px 9px", display: "flex", alignItems: "center", gap: 9, whiteSpace: "nowrap" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: MONO, color: UI.ink }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />{Math.round(va[hIdx])}%
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: MONO, color: UI.ink }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: "#8250DF" }} />{Math.round(vb[hIdx])}%
+          </span>
+          <span style={{ fontSize: 10, color: UI.ink3 }}>{Math.round((1 - hIdx / (N - 1)) * 10) || "지금"}{hIdx === N - 1 ? "" : "분 전"}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -532,7 +570,7 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
           <span style={{ width: 7, height: 7, borderRadius: 999, background: "#8250DF" }} />MEM <b style={{ fontSize: 15, fontWeight: 700, color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{avgM}%</b>
         </span>
       </div>
-      <DualSpark id={cl.id} a={avgC} b={avgM} tick={tick} h={46} />
+      <DualSpark id={cl.id} a={avgC} b={avgM} h={50} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
         <span title={`정상 ${nOk} · 경고 ${nWarn} · 임계 ${chot} · 대기 ${nPend}`} style={{ display: "flex", height: 5, borderRadius: 999, overflow: "hidden", gap: 1, flex: 1 }}>
