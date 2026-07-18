@@ -7,6 +7,11 @@ output "cluster_names" {
   value       = { for k, m in module.eks : k => m.cluster_name }
 }
 
+output "cluster_display_names" {
+  description = "제품에서 사용하는 클러스터 표시명"
+  value       = { for k, cluster in var.clusters : k => cluster.display_name }
+}
+
 output "cluster_endpoints" {
   value = { for k, m in module.eks : k => m.cluster_endpoint }
 }

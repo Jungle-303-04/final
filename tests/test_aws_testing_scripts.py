@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -49,13 +50,13 @@ def test_management_deploy_removes_legacy_minio_deployment() -> None:
     assert "rollout status deploy/minio" not in local_up
 
 
-def test_management_bootstrap_propagates_rca_test_and_api_prefix_config() -> None:
+def test_management_bootstrap_disables_test_capabilities_by_default() -> None:
     aws_up = read("scripts/aws-up.sh")
     local_up = read("scripts/up.sh")
 
     for script in (aws_up, local_up):
-        assert 'RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"' in script
-        assert 'TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"' in script
+        assert 'RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-0}"' in script
+        assert 'TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-0}"' in script
         assert 'RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"' in script
         assert 'API_ROOT_PATH="${API_ROOT_PATH:-/api}"' in script
         assert '--from-literal=RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED}"' in script
@@ -244,6 +245,83 @@ def test_aws_deploy_uses_first_target_cluster_id_by_default() -> None:
     assert "`SMOKE_CLUSTER_ID`" in runbook
 
 
+def test_aws_topology_uses_canonical_real_cluster_names_and_display_names() -> None:
+    script = read("scripts/aws-up.sh")
+    variables = read("infra/variables.tf")
+    eks = read("infra/eks.tf")
+
+    expected_defaults = (
+        'AWS_REGION="${AWS_REGION:-ap-northeast-2}"',
+        'MGMT_CLUSTER="${MGMT_CLUSTER:-management-server}"',
+        'MGMT_DISPLAY_NAME="${MGMT_DISPLAY_NAME:-메니지먼트}"',
+        'TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-game-server}"',
+        'TARGET_1_DISPLAY_NAME="${TARGET_1_DISPLAY_NAME:-게임 서버}"',
+        'TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-demo-server}"',
+        'TARGET_2_DISPLAY_NAME="${TARGET_2_DISPLAY_NAME:-데모 서버}"',
+    )
+    for expected in expected_defaults:
+        assert expected in script
+
+    assert "AWS_MGMT_CLUSTER" not in script
+    assert 'default     = "ap-northeast-2"' in variables
+    assert 'name           = "management-server"' in variables
+    assert 'display_name   = "메니지먼트"' in variables
+    assert 'name           = "game-server"' in variables
+    assert 'display_name   = "게임 서버"' in variables
+    assert 'name           = "demo-server"' in variables
+    assert 'display_name   = "데모 서버"' in variables
+    assert "cluster_name    = each.value.name" in eks
+    assert "capacity_type  = each.value.capacity_type" in eks
+
+
+def test_aws_cluster_endpoints_are_bounded_and_control_plane_logs_are_enabled() -> None:
+    script = read("scripts/aws-up.sh")
+    variables = read("infra/variables.tf")
+    eks = read("infra/eks.tf")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert 'EKS_PUBLIC_ACCESS_CIDRS="${EKS_PUBLIC_ACCESS_CIDRS:-}"' in script
+    assert "EKS_PUBLIC_ACCESS_CIDRS is required when CREATE_CLUSTERS=1" in script
+    assert "world-open EKS public endpoint CIDR is forbidden" in script
+    assert "validate_eks_endpoint_policy" in script
+    assert "privateAccess: true" in script
+    assert "publicAccessCIDRs:" in script
+    assert "enableTypes:" in script
+    assert "logRetentionInDays: ${EKS_LOG_RETENTION_DAYS}" in script
+    assert 'variable "eks_public_access_cidrs"' in variables
+    assert '!contains(var.eks_public_access_cidrs, "0.0.0.0/0")' in variables
+    assert '!contains(var.eks_public_access_cidrs, "::/0")' in variables
+    assert "cluster_endpoint_private_access" in eks
+    assert "cluster_endpoint_public_access_cidrs" in eks
+    assert re.search(
+        r"cluster_enabled_log_types\s*=\s*"
+        r'\["api", "audit", "authenticator", "controllerManager", "scheduler"\]',
+        eks,
+    )
+    assert "`0.0.0.0/0`, `::/0`는 거부된다" in runbook
+
+
+def test_aws_destroy_requires_blue_green_and_backup_evidence() -> None:
+    down_script = read("scripts/aws-down.sh")
+
+    assert 'DESTROY_MODE="${DESTROY_MODE:-disabled}"' in down_script
+    assert 'ALLOW_AWS_DESTROY="${ALLOW_AWS_DESTROY:-0}"' in down_script
+    assert 'EXPECTED_AWS_ACCOUNT_ID="${EXPECTED_AWS_ACCOUNT_ID:-}"' in down_script
+    assert 'BACKUP_SNAPSHOT_IDS="${BACKUP_SNAPSHOT_IDS:-}"' in down_script
+    assert "require_active_cluster" in down_script
+    assert "verify_backup_snapshots" in down_script
+    assert "disable_cluster_termination_protection" in down_script
+    assert "update-termination-protection" in down_script
+    assert "--no-enable-termination-protection" in down_script
+    assert "--no-deletion-protection" in down_script
+    assert (
+        down_script.index('delete_cluster_if_exists "${DESTROY_DEMO_CLUSTER}"')
+        < down_script.index('delete_cluster_if_exists "${DESTROY_GAME_CLUSTER}"')
+        < down_script.index('delete_cluster_if_exists "${DESTROY_MGMT_CLUSTER}"')
+    )
+    assert "DELETE_ECR=1 is forbidden while retiring blue" in down_script
+
+
 def test_smoke_retries_gateway_health_before_api_flow() -> None:
     script = read("scripts/smoke.sh")
     auth_script = read("scripts/lib/auth.sh")
@@ -266,10 +344,10 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert '"force": True' in script
 
 
-def test_aws_deploy_runs_smoke_by_default_and_normalizes_boolean_input() -> None:
+def test_aws_deploy_requires_explicit_smoke_and_normalizes_boolean_input() -> None:
     script = read("scripts/aws-up.sh")
 
-    assert 'RUN_SMOKE="${RUN_SMOKE:-1}"' in script
+    assert 'RUN_SMOKE="${RUN_SMOKE:-0}"' in script
     assert "1|true|TRUE|yes|YES|on|ON)" in script
     assert 'RUN_SMOKE="1"' in script
     assert "0|false|FALSE|no|NO|off|OFF)" in script
@@ -339,12 +417,12 @@ def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
     assert "--from-literal=PUBLIC_API_BASE_URL=" in script
 
 
-def test_aws_smoke_uses_runnable_application_manifest() -> None:
+def test_aws_smoke_requires_an_explicit_application_manifest() -> None:
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")
 
     assert 'MANIFEST_PATH="${MANIFEST_PATH:-}"' in script
-    assert 'SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in script
-    assert "MANIFEST_PATH is required for AWS deployment" in script
+    assert 'SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-}"' in script
+    assert "MANIFEST_PATH is required when RUN_SMOKE=1" in script
     assert "`MANIFEST_PATH`" in runbook
     assert "deploy/target/target.yaml" not in script

@@ -11,16 +11,16 @@ terraform {
   }
 
   # 원격 state 백엔드 — 팀 공유·잠금용. 최초 1회 부트스트랩 후 주석 해제:
-  #   aws s3 mb s3://<project>-terraform-state --region us-east-1
-  #   aws dynamodb create-table --table-name <project>-terraform-lock \
+  #   aws s3 mb s3://<project>-terraform-state --region ap-northeast-2
+  #   aws dynamodb create-table --region ap-northeast-2 --table-name <project>-terraform-lock \
   #     --attribute-definitions AttributeName=LockID,AttributeType=S \
   #     --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST
   #
   # backend "s3" {
-  #   bucket         = "kubeheal-terraform-state"
+  #   bucket         = "kubernetes-ops-terraform-state"
   #   key            = "infra/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "kubeheal-terraform-lock"
+  #   region         = "ap-northeast-2"
+  #   dynamodb_table = "kubernetes-ops-terraform-lock"
   #   encrypt        = true
   # }
 }

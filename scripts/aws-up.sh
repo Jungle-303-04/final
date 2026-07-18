@@ -16,20 +16,17 @@ default_github_repo() {
 }
 
 PROJECT_SLUG="${PROJECT_SLUG:-kubernetes-ops}"
-AWS_REGION="${AWS_REGION:-us-east-1}"
-MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
-TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
-TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-${PROJECT_SLUG}-target-b}"
+AWS_REGION="${AWS_REGION:-ap-northeast-2}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34}"
+MGMT_CLUSTER="${MGMT_CLUSTER:-management-server}"
+TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-game-server}"
+TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-demo-server}"
 TARGET_CLUSTER_ID_1="${TARGET_CLUSTER_ID_1:-${TARGET_CLUSTER_1}}"
 TARGET_CLUSTER_ID_2="${TARGET_CLUSTER_ID_2:-${TARGET_CLUSTER_2}}"
 
-if [[ "${MGMT_CLUSTER}" == "management" ]]; then
-  MGMT_CLUSTER="${AWS_MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
-fi
-
-MGMT_DISPLAY_NAME="${MGMT_DISPLAY_NAME:-${MGMT_CLUSTER}}"
-TARGET_1_DISPLAY_NAME="${TARGET_1_DISPLAY_NAME:-${TARGET_CLUSTER_1}}"
-TARGET_2_DISPLAY_NAME="${TARGET_2_DISPLAY_NAME:-${TARGET_CLUSTER_2}}"
+MGMT_DISPLAY_NAME="${MGMT_DISPLAY_NAME:-메니지먼트}"
+TARGET_1_DISPLAY_NAME="${TARGET_1_DISPLAY_NAME:-게임 서버}"
+TARGET_2_DISPLAY_NAME="${TARGET_2_DISPLAY_NAME:-데모 서버}"
 
 ECR_REPO="${ECR_REPO:-${PROJECT_SLUG}-service}"
 CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"
@@ -38,11 +35,18 @@ IMAGE_NAME="${IMAGE_NAME:-}"
 CONSOLE_IMAGE_NAME="${CONSOLE_IMAGE_NAME:-}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 
-MGMT_NODE_TYPE="${MGMT_NODE_TYPE:-t3.xlarge}"
+MGMT_NODE_TYPES="${MGMT_NODE_TYPES:-r6i.xlarge}"
+MGMT_NODE_CAPACITY="${MGMT_NODE_CAPACITY:-ON_DEMAND}"
 MGMT_NODES="${MGMT_NODES:-2}"
-TARGET_NODE_TYPE="${TARGET_NODE_TYPE:-t3.large}"
-TARGET_NODES="${TARGET_NODES:-2}"
+TARGET_1_NODE_TYPES="${TARGET_1_NODE_TYPES:-t3.large,t3a.large,m5.large}"
+TARGET_1_NODE_CAPACITY="${TARGET_1_NODE_CAPACITY:-SPOT}"
+TARGET_1_NODES="${TARGET_1_NODES:-3}"
+TARGET_2_NODE_TYPES="${TARGET_2_NODE_TYPES:-t3.large,t3a.large,m5.large}"
+TARGET_2_NODE_CAPACITY="${TARGET_2_NODE_CAPACITY:-SPOT}"
+TARGET_2_NODES="${TARGET_2_NODES:-2}"
 NODE_VOLUME_SIZE_GB="${NODE_VOLUME_SIZE_GB:-50}"
+EKS_PUBLIC_ACCESS_CIDRS="${EKS_PUBLIC_ACCESS_CIDRS:-}"
+EKS_LOG_RETENTION_DAYS="${EKS_LOG_RETENTION_DAYS:-30}"
 
 POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
@@ -56,9 +60,9 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 FILTER_CURSOR_SIGNING_KEY="${FILTER_CURSOR_SIGNING_KEY:-}"
-RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-1}"
+RCA_TEST_RUNS_ENABLED="${RCA_TEST_RUNS_ENABLED:-0}"
 RCA_TEST_RUNS_TOKEN="${RCA_TEST_RUNS_TOKEN:-}"
-TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-1}"
+TEST_FIXTURE_PURGE_ENABLED="${TEST_FIXTURE_PURGE_ENABLED:-0}"
 TRUSTED_PROXY_AUTH_SECRET="${TRUSTED_PROXY_AUTH_SECRET:-}"
 TRUSTED_PROXY_AUTH_USER_ID="${TRUSTED_PROXY_AUTH_USER_ID:-}"
 TRUSTED_PROXY_AUTH_WORKSPACE_ID="${TRUSTED_PROXY_AUTH_WORKSPACE_ID:-default}"
@@ -66,7 +70,7 @@ METRICS_TOKEN="${METRICS_TOKEN:-}"
 API_ROOT_PATH="${API_ROOT_PATH:-/api}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
+SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-}"
 MANIFEST_PATH="${MANIFEST_PATH:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
@@ -121,7 +125,7 @@ PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-}"
 PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-}"
 PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL:-${PUBLIC_API_BASE_URL}}"
 PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
-RUN_SMOKE="${RUN_SMOKE:-1}"
+RUN_SMOKE="${RUN_SMOKE:-0}"
 SKIP_LB_HEALTH_WAIT="${SKIP_LB_HEALTH_WAIT:-0}"
 CREATE_CLUSTERS="${CREATE_CLUSTERS:-1}"
 ENSURE_EBS_CSI="${ENSURE_EBS_CSI:-1}"
@@ -157,8 +161,8 @@ case "${RUN_SMOKE}" in
     exit 1
     ;;
 esac
-if [ -z "${MANIFEST_PATH}" ]; then
-  echo "MANIFEST_PATH is required for AWS deployment; set SMOKE_MANIFEST_PATH only for smoke-only runs" >&2
+if [[ "${RUN_SMOKE}" == "1" && -z "${MANIFEST_PATH}" ]]; then
+  echo "MANIFEST_PATH is required when RUN_SMOKE=1" >&2
   exit 1
 fi
 GENERATED_AUTH_PASSWORD="0"
@@ -205,6 +209,48 @@ need python3
 if [[ "${BOOTSTRAP_ADMIN}" == "1" ]]; then
   need uv
 fi
+
+validate_eks_endpoint_policy() {
+  if [[ "${CREATE_CLUSTERS}" != "1" ]]; then
+    return
+  fi
+
+  EKS_PUBLIC_ACCESS_CIDRS="$(
+    python3 - "${EKS_PUBLIC_ACCESS_CIDRS}" <<'PY'
+import ipaddress
+import sys
+
+raw_cidrs = sys.argv[1]
+cidrs = [value.strip() for value in raw_cidrs.split(",") if value.strip()]
+if not cidrs:
+    raise SystemExit(
+        "EKS_PUBLIC_ACCESS_CIDRS is required when CREATE_CLUSTERS=1"
+    )
+
+normalized: list[str] = []
+for value in cidrs:
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+    except ValueError as error:
+        raise SystemExit(f"invalid EKS public endpoint CIDR: {value}") from error
+    if network.prefixlen == 0:
+        raise SystemExit(f"world-open EKS public endpoint CIDR is forbidden: {value}")
+    normalized.append(str(network))
+
+print(",".join(dict.fromkeys(normalized)))
+PY
+  )"
+
+  case "${EKS_LOG_RETENTION_DAYS}" in
+    1|3|5|7|14|30|60|90|120|150|180|365) ;;
+    *)
+      echo "EKS_LOG_RETENTION_DAYS is not supported by CloudWatch: ${EKS_LOG_RETENTION_DAYS}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+validate_eks_endpoint_policy
 
 if [[ "${BOOTSTRAP_ADMIN}" == "1" || "${REGISTER_TARGETS}" == "1" || "${RUN_SMOKE}" == "1" ]]; then
   require_env AUTH_EMAIL
@@ -263,12 +309,24 @@ PY
 render_eksctl_config() {
   local cluster_name="$1"
   local display_name="$2"
-  local node_type="$3"
-  local desired_nodes="$4"
-  local role="$5"
-  local output="$6"
+  local node_types_csv="$3"
+  local node_capacity="$4"
+  local desired_nodes="$5"
+  local role="$6"
+  local output="$7"
   local min_nodes="1"
   local max_nodes="$((desired_nodes + 1))"
+  local spot="false"
+  local public_access_cidr
+  local node_type
+  local -a node_types
+  local -a public_access_cidrs
+
+  if [[ "${node_capacity}" == "SPOT" ]]; then
+    spot="true"
+  fi
+  IFS=',' read -r -a node_types <<<"${node_types_csv}"
+  IFS=',' read -r -a public_access_cidrs <<<"${EKS_PUBLIC_ACCESS_CIDRS}"
 
   cat >"${output}" <<YAML
 apiVersion: eksctl.io/v1alpha5
@@ -276,15 +334,41 @@ kind: ClusterConfig
 metadata:
   name: ${cluster_name}
   region: ${AWS_REGION}
+  version: "${KUBERNETES_VERSION}"
   tags:
     DisplayName: "${display_name}"
     Project: "${PROJECT_SLUG}"
     Role: "${role}"
+vpc:
+  clusterEndpoints:
+    privateAccess: true
+    publicAccess: true
+  publicAccessCIDRs:
+YAML
+  for public_access_cidr in "${public_access_cidrs[@]}"; do
+    printf '    - %s\n' "${public_access_cidr}" >>"${output}"
+  done
+  cat >>"${output}" <<YAML
+cloudWatch:
+  clusterLogging:
+    enableTypes:
+      - api
+      - audit
+      - authenticator
+      - controllerManager
+      - scheduler
+    logRetentionInDays: ${EKS_LOG_RETENTION_DAYS}
 iam:
   withOIDC: true
 managedNodeGroups:
-  - name: ${cluster_name}-ng
-    instanceType: ${node_type}
+  - name: ${cluster_name}-nodes
+    instanceTypes:
+YAML
+  for node_type in "${node_types[@]}"; do
+    printf '      - %s\n' "${node_type}" >>"${output}"
+  done
+  cat >>"${output}" <<YAML
+    spot: ${spot}
     desiredCapacity: ${desired_nodes}
     minSize: ${min_nodes}
     maxSize: ${max_nodes}
@@ -345,16 +429,24 @@ tag_node_instances() {
 ensure_cluster() {
   local cluster_name="$1"
   local display_name="$2"
-  local node_type="$3"
-  local desired_nodes="$4"
-  local role="$5"
+  local node_types="$3"
+  local node_capacity="$4"
+  local desired_nodes="$5"
+  local role="$6"
   local config_path="${RUNTIME_DIR}/${cluster_name}.eksctl.yaml"
 
   if cluster_exists "${cluster_name}"; then
     log "EKS cluster already exists: ${cluster_name}"
   else
     log "creating EKS cluster ${cluster_name} (${display_name})"
-    render_eksctl_config "${cluster_name}" "${display_name}" "${node_type}" "${desired_nodes}" "${role}" "${config_path}"
+    render_eksctl_config \
+      "${cluster_name}" \
+      "${display_name}" \
+      "${node_types}" \
+      "${node_capacity}" \
+      "${desired_nodes}" \
+      "${role}" \
+      "${config_path}"
     eksctl create cluster -f "${config_path}"
   fi
 
@@ -731,11 +823,26 @@ EOF
 }
 
 bootstrap_management_schema() {
+  local baseline_empty_confirmation
+  local baseline_source_commit
+  local migration_expected_head
+
   log "bootstrapping management database schema"
   kubectl --context "${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/storage.yaml"
   kubectl --context "${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/pgbouncer.yaml"
   management_rollout_status statefulset/postgresql
   management_rollout_status deployment/pgbouncer
+  migration_expected_head="$(
+    PYTHONPATH="${ROOT_DIR}/src" uv run alembic heads | awk '{print $1}'
+  )"
+  baseline_source_commit="$(
+    PYTHONPATH="${ROOT_DIR}/src" uv run python -c \
+      'from packages.storage.baseline import BASELINE_SOURCE_COMMIT; print(BASELINE_SOURCE_COMMIT)'
+  )"
+  baseline_empty_confirmation="$(
+    PYTHONPATH="${ROOT_DIR}/src" uv run python -c \
+      'from packages.storage.baseline import BASELINE_EMPTY_TARGET_CONFIRMATION; print(BASELINE_EMPTY_TARGET_CONFIRMATION)'
+  )"
 
   kubectl --context "${MGMT_CLUSTER}" -n management delete job/management-schema-bootstrap \
     --ignore-not-found --wait=true
@@ -765,15 +872,24 @@ spec:
         - name: schema
           image: ${IMAGE_NAME}
           imagePullPolicy: IfNotPresent
-          command:
-            - python
-            - -c
-            - |
-              from packages.storage.database import Database
-
-              db = Database()
-              db.init()
-              db.verify_schema()
+          command: ["python", "-m", "packages.storage.initialization"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: management-runtime-secret
+                  key: COMMAND_NOTIFY_DATABASE_URL
+            - name: BASELINE_TARGET_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: management-runtime-secret
+                  key: COMMAND_NOTIFY_DATABASE_URL
+            - name: MIGRATION_EXPECTED_HEAD
+              value: "${migration_expected_head}"
+            - name: BASELINE_CONFIRM_SOURCE_COMMIT
+              value: "${baseline_source_commit}"
+            - name: BASELINE_CONFIRM_EMPTY_TARGET
+              value: "${baseline_empty_confirmation}"
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -1294,7 +1410,7 @@ register_target() {
   TARGET_CONTEXT="${context}" \
   TARGET_CLUSTER_ID="${cluster_id}" \
   TARGET_NAME="${display_name}" \
-  TARGET_ENVIRONMENT="aws-test" \
+  TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-development}" \
   LOKI_BASE_URL="${LOKI_BASE_URL}" \
   EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
   IMAGE_NAME="${IMAGE_NAME}" \
@@ -1339,20 +1455,84 @@ run_smoke_if_requested() {
   bash "${ROOT_DIR}/scripts/smoke.sh"
 }
 
+validate_cluster_topology() {
+  local cluster_name
+  local node_capacity
+  local node_count
+
+  [[ "${AWS_REGION}" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]$ ]] || {
+    echo "AWS_REGION must be an AWS region name" >&2
+    exit 1
+  }
+  [[ "${KUBERNETES_VERSION}" =~ ^[0-9]+\.[0-9]+$ ]] || {
+    echo "KUBERNETES_VERSION must be a major.minor version" >&2
+    exit 1
+  }
+  for cluster_name in "${MGMT_CLUSTER}" "${TARGET_CLUSTER_1}" "${TARGET_CLUSTER_2}"; do
+    [[ "${cluster_name}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] || {
+      echo "invalid EKS cluster name: ${cluster_name}" >&2
+      exit 1
+    }
+  done
+  if [[ "${MGMT_CLUSTER}" == "${TARGET_CLUSTER_1}" \
+    || "${MGMT_CLUSTER}" == "${TARGET_CLUSTER_2}" \
+    || "${TARGET_CLUSTER_1}" == "${TARGET_CLUSTER_2}" ]]; then
+    echo "management, game, and demo clusters must be distinct" >&2
+    exit 1
+  fi
+  for node_capacity in \
+    "${MGMT_NODE_CAPACITY}" \
+    "${TARGET_1_NODE_CAPACITY}" \
+    "${TARGET_2_NODE_CAPACITY}"; do
+    case "${node_capacity}" in
+      ON_DEMAND|SPOT) ;;
+      *)
+        echo "node capacity must be ON_DEMAND or SPOT: ${node_capacity}" >&2
+        exit 1
+        ;;
+    esac
+  done
+  for node_count in "${MGMT_NODES}" "${TARGET_1_NODES}" "${TARGET_2_NODES}"; do
+    [[ "${node_count}" =~ ^[1-9][0-9]*$ ]] || {
+      echo "node counts must be positive integers" >&2
+      exit 1
+    }
+  done
+}
+
 main() {
   local account_id
   local base_url
   local lb_host
 
+  validate_cluster_topology
   account_id="$(aws_account_id)"
   log "using AWS account ${account_id}, region ${AWS_REGION}"
 
   ensure_ecr_images "${account_id}"
 
   if [[ "${CREATE_CLUSTERS}" == "1" ]]; then
-    ensure_cluster "${MGMT_CLUSTER}" "${MGMT_DISPLAY_NAME}" "${MGMT_NODE_TYPE}" "${MGMT_NODES}" "management"
-    ensure_cluster "${TARGET_CLUSTER_1}" "${TARGET_1_DISPLAY_NAME}" "${TARGET_NODE_TYPE}" "${TARGET_NODES}" "target"
-    ensure_cluster "${TARGET_CLUSTER_2}" "${TARGET_2_DISPLAY_NAME}" "${TARGET_NODE_TYPE}" "${TARGET_NODES}" "target"
+    ensure_cluster \
+      "${MGMT_CLUSTER}" \
+      "${MGMT_DISPLAY_NAME}" \
+      "${MGMT_NODE_TYPES}" \
+      "${MGMT_NODE_CAPACITY}" \
+      "${MGMT_NODES}" \
+      "management"
+    ensure_cluster \
+      "${TARGET_CLUSTER_1}" \
+      "${TARGET_1_DISPLAY_NAME}" \
+      "${TARGET_1_NODE_TYPES}" \
+      "${TARGET_1_NODE_CAPACITY}" \
+      "${TARGET_1_NODES}" \
+      "target"
+    ensure_cluster \
+      "${TARGET_CLUSTER_2}" \
+      "${TARGET_2_DISPLAY_NAME}" \
+      "${TARGET_2_NODE_TYPES}" \
+      "${TARGET_2_NODE_CAPACITY}" \
+      "${TARGET_2_NODES}" \
+      "target"
   else
     log "using existing EKS clusters"
     configure_existing_cluster_context "${MGMT_CLUSTER}"

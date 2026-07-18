@@ -1,6 +1,6 @@
 # AWS 테스트 실행 기준
 
-실제 서비스 통합 기준은 AWS EKS의 management/target 클러스터다. live 제품 배포의 유일한
+실제 서비스 통합 기준은 AWS EKS의 `management-server`, `game-server`, `demo-server`다. live 제품 배포의 유일한
 진입점은 `.github/workflows/dev-deploy.yml`이다. 이 workflow는 Dev Gate 성공 SHA만 받아
 최신 원본·UI delta·feature-ledger 구조를 다시 검증하고, service와 console을 같은 SHA의
 immutable digest로 배포한 뒤 `scripts/smoke.sh`를 실행한다.
@@ -48,18 +48,21 @@ LoadBalancer DNS가 늦게 전파될 수 있으므로 `SMOKE_GATEWAY_ATTEMPTS` �
 간격은 5초다. rollout 직후 로그인 연결이 잠깐 끊길 수 있어 `AUTH_LOGIN_ATTEMPTS` 기본값은
 12다. 재시도 횟수를 늘리기 전에 pod Ready, ingress와 DNS를 먼저 확인한다.
 
-## 로컬 인프라 bootstrap
+## AWS 인프라 bootstrap
 
-`scripts/aws-up.sh`는 새 sandbox 인프라 bootstrap과 복구 도구다. 기존 live
-`kubernetes-ops` workload의 제품 release에는 실행하지 않는다. live 배포는 `Dev Deploy`
-workflow만 사용한다.
+`scripts/aws-up.sh`는 신규 green 인프라 bootstrap과 복구 도구다. 기존 blue의 제품
+release에는 실행하지 않는다. 기존 이름은 tracked 문서와 배포 기본값에 남기지 않는다.
+live 앱 배포는 `Dev Deploy` workflow만 사용한다.
 
 ```bash
-export AWS_REGION="<region>"
+export AWS_REGION="ap-northeast-2"
 export AWS_PROFILE="<profile>"
-export MGMT_CLUSTER="<management cluster>"
-export TARGET_CLUSTER_1="<target cluster 1>"
-export TARGET_CLUSTER_2="<target cluster 2>"
+export MGMT_CLUSTER="management-server"
+export MGMT_DISPLAY_NAME="메니지먼트"
+export TARGET_CLUSTER_1="game-server"
+export TARGET_1_DISPLAY_NAME="게임 서버"
+export TARGET_CLUSTER_2="demo-server"
+export TARGET_2_DISPLAY_NAME="데모 서버"
 export MANIFEST_PATH="<repository manifest path>"
 export CREATE_CLUSTERS=0
 export ENSURE_EBS_CSI=0
@@ -69,12 +72,41 @@ export RUN_SMOKE=1
 bash scripts/aws-up.sh
 ```
 
+새 EKS를 생성할 때는 `CREATE_CLUSTERS=1`과 함께 승인된
+`EKS_PUBLIC_ACCESS_CIDRS`를 쉼표 구분 CIDR로 명시한다. 빈 값과
+`0.0.0.0/0`, `::/0`는 거부된다. GitHub-hosted runner를 유지하면 공식 GitHub Meta API의
+Actions CIDR 변경을 배포 전에 반영하고, 가능하면 VPC 내부 self-hosted runner를 사용한다.
+control-plane의 API, audit, authenticator, controller manager, scheduler 로그는 항상
+활성화한다.
+
 `MANIFEST_PATH`는 운영 배포에서 필수다. smoke 전용으로만 실행할 때는
 `SMOKE_MANIFEST_PATH=src/samples/smoke/deploy.yaml`을 쓸 수 있다. target agent 설치용
 `deploy/target/target.yaml`은 애플리케이션 GitOps 입력으로 사용하지 않는다.
 
 주요 이미지 환경값은 서비스용 `ECR_REPO`와 콘솔용 `CONSOLE_ECR_REPO`다. 배포 스크립트는
 두 이미지를 ECR에 push하고 immutable tag를 management kustomization에 반영한다.
+
+## blue 환경 철거
+
+`scripts/aws-down.sh`는 아무 환경값 없이 실행하면 중단된다. green 세 클러스터가 ACTIVE이고
+Cloudflare/agent API 전환과 실제 데이터 검증이 끝난 뒤에만 다음 보호값을 모두 넣는다.
+
+```bash
+export DESTROY_MODE="retire-blue"
+export ALLOW_AWS_DESTROY=1
+export EXPECTED_AWS_ACCOUNT_ID="<12 digit account id>"
+export BACKUP_SNAPSHOT_IDS="<postgres snapshot>,<nats snapshot>,<minio snapshot>"
+export BLUE_MGMT_CLUSTER="<legacy management slug>"
+export BLUE_GAME_CLUSTER="<legacy game slug>"
+export BLUE_DEMO_CLUSTER="<legacy demo slug>"
+export DESTROY_CONFIRMATION="destroy:<account>:ap-northeast-2:<legacy management>,<legacy game>,<legacy demo>"
+bash scripts/aws-down.sh
+```
+
+스크립트는 snapshot 완료·암호화, green ACTIVE, 정확한 계정/리전/대상, kubeconfig context를
+검증한 뒤 target부터 제거한다. EKS와 eksctl CloudFormation termination protection을
+해제하기 전에 LoadBalancer Service와 PVC를 정리하며, management는 마지막에 제거한다.
+blue와 green이 같은 ECR을 사용하므로 `retire-blue`에서는 `DELETE_ECR=1`을 거부한다.
 
 ## 일시적인 EKS API 오류
 

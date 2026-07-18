@@ -1,8 +1,9 @@
 # EKS 운영 배포 기준
 
-이 폴더는 운영 배포 overlay를 만들 때 따를 기준을 기록한다.
+이 폴더는 서울 리전의 실제 EKS 배포 기준을 기록한다.
 
-현재 실제 실행 manifest는 `deploy/management`, `deploy/target`, `deploy/kind`에 있다. EKS manifest를 바로 추가하지 않는 이유는 AWS 계정, VPC, subnet, IAM, domain, secret manager 선택이 확정되지 않았기 때문이다.
+실행 manifest는 `deploy/management`, `deploy/target`에 있다. `deploy/kind`는 로컬
+검증 전용이며 AWS 배포 근거로 사용하지 않는다.
 
 ## 기본 방향
 
@@ -12,12 +13,16 @@ local/dev
   kind target cluster
   in-cluster PostgreSQL/Redis/MinIO/NATS
 
-production candidate
-  EKS management cluster
-  EKS target cluster 또는 외부 Kubernetes target
-  managed node group 중심
-  RDS / ElastiCache / S3 후보
+AWS
+  management-server / 메니지먼트
+  game-server / 게임 서버
+  demo-server / 데모 서버
+  target cluster-agent는 management로 outbound 연결
 ```
+
+물리 slug는 ASCII 소문자와 하이픈을 사용하고 한글은 `DisplayName`으로만 유지한다.
+EKS 이름은 rename할 수 없으므로 legacy blue는 green 검증 뒤 제거한다. 기존 이름은
+tracked 문서나 배포 기본값에 저장하지 않고 삭제 실행 시점에만 주입한다.
 
 ## Management Cluster
 
@@ -67,9 +72,12 @@ Fargate는 stateless workload에만 선택 적용한다.
 AWS_ACCOUNT_ID
 AWS_REGION
 CLUSTER_NAME
+CLUSTER_DISPLAY_NAME
+CLUSTER_ROLE
 PRIVATE_SUBNET_IDS
 PUBLIC_SUBNET_IDS
 VPC_ID
+EKS_PUBLIC_ACCESS_CIDRS
 ALB_CERTIFICATE_ARN
 DOMAIN_NAME
 RDS_ENDPOINT
@@ -79,12 +87,17 @@ SECRETS_MANAGER_PREFIX
 IRSA_ROLE_ARN_LIST
 ```
 
-위 값이 정해지기 전에는 EKS manifest를 임의 값으로 만들지 않는다. 대신 이 문서를 기준으로 local manifest와 차이를 추적한다.
+위 값은 AWS 조회 또는 승인된 배포 설정으로만 주입한다. 임의 endpoint, resource ID,
+cluster ID, synthetic inventory를 manifest에 넣지 않는다.
 
 ## 운영 전 체크리스트
 
 - management API는 ALB/Ingress 뒤에 둔다.
 - cluster-agent는 outbound 연결만 사용한다.
+- control-plane 로그 `api/audit/authenticator/controllerManager/scheduler`를 활성화한다.
+- EKS public endpoint에 `0.0.0.0/0` 또는 `::/0`를 허용하지 않는다.
+- GitHub-hosted runner를 쓰면 공식 Actions CIDR을 배포 설정으로 명시하고,
+  가능하면 VPC 내부 self-hosted runner로 전환한다.
 - node-collector는 Fargate profile 대상에 넣지 않는다.
 - stateful store는 managed service 전환 계획을 둔다.
 - ServiceAccount/RBAC는 sandbox write만 허용한다.
