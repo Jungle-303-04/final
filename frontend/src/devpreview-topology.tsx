@@ -4,6 +4,7 @@
 import ReactDOM from "react-dom/client";
 import { useRef, useState } from "react";
 import { motion } from "motion/react";
+import { DoorOpen, Network, Globe, Braces, ShoppingCart, Search, KeyRound, CreditCard, Send } from "lucide-react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
 import { UI, BLUE, ST, MONO } from "./devpreview/theme";
 import { BRAND, BRAND_COLOR } from "./devpreview/brandIcons";
@@ -26,6 +27,10 @@ const SERVICES: Svc[] = [
   { id: "redis", name: "redis", kind: "StatefulSet", layer: 5, replicas: 1, status: "ok" },
   { id: "postgres", name: "postgres", kind: "StatefulSet", layer: 5, replicas: 1, status: "ok" },
 ];
+const SVC_GLYPH: Record<string, typeof Globe> = {
+  ingress: DoorOpen, gateway: Network, "shop-web": Globe, "shop-api": Braces,
+  checkout: ShoppingCart, search: Search, auth: KeyRound, payments: CreditCard, notifier: Send,
+};
 const SVC = (id: string) => SERVICES.find((s) => s.id === id)!;
 type TEdge = { from: string; to: string; rps: number };
 const EDGES: TEdge[] = [
@@ -228,9 +233,11 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
                   <g clipPath={`url(#clip-${s.id})`} style={{ pointerEvents: "none" }}>
                     {(s.id === "redis" || s.id === "postgres") ? (
                       <g transform={`translate(${p.x + 9}, ${p.y + 10}) scale(${14 / 24})`}><path d={BRAND[s.id as "redis" | "postgres"]} fill={BRAND_COLOR[s.id as "redis" | "postgres"]} /></g>
-                    ) : (
-                      <circle cx={p.x + 15} cy={p.y + 17} r={4} fill={ST[s.status]} />
-                    )}
+                    ) : (() => { const G = SVC_GLYPH[s.id] ?? Globe; return (
+                      <foreignObject x={p.x + 8} y={p.y + 9} width={17} height={17}>
+                        <G size={14} style={{ color: ST[s.status], display: "block" }} />
+                      </foreignObject>
+                    ); })()}
                     <text x={p.x + 26} y={p.y + 20.5} fontSize="11" fontWeight="600" fill={UI.ink} fontFamily={MONO} letterSpacing="-0.01em">{s.name}</text>
                     <text x={p.x + 13} y={p.y + 34} fontSize="8.5" fill={UI.ink3}>{on ? `${rps.toLocaleString()} req/s` : `${s.kind} · ×${s.replicas}`}</text>
                     {Array.from({ length: Math.min(s.replicas, 8) }).map((_, k) => (

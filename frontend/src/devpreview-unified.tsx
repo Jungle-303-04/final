@@ -419,16 +419,15 @@ function ResourceTable({ kind, rows, q, inScope, dense, onOpen }: { kind: Kind; 
 // ── 상세 오버레이 (최상위 레이어) ─────────────────────────────
 // 탭 구성은 리소스 상세 드로어 기준: 개요 · YAML · 관련 리소스 · 이벤트 · 로그 · 권한(RBAC)
 const DETAIL_TABS = [
-  { id: "overview", label: "개요" }, { id: "yaml", label: "YAML" }, { id: "related", label: "관련 리소스" },
-  { id: "events", label: "이벤트" }, { id: "logs", label: "로그" }, { id: "rbac", label: "권한" },
+  { id: "overview", label: "개요" }, { id: "yaml", label: "YAML" }, { id: "events", label: "이벤트" }, { id: "logs", label: "로그" }, { id: "rbac", label: "권한" },
 ] as const;
 type DetailTab = (typeof DETAIL_TABS)[number]["id"];
 const TABS_FOR = (kindId: string): DetailTab[] => {
-  if (kindId === "Pod") return ["overview", "yaml", "related", "events", "logs", "rbac"];
-  if (["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kindId)) return ["overview", "yaml", "related", "events", "logs", "rbac"];
-  if (["ServiceAccount", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"].includes(kindId)) return ["overview", "yaml", "related", "rbac"];
-  if (kindId === "Node") return ["overview", "yaml", "related", "events"];
-  return ["overview", "yaml", "related", "events"];
+  if (kindId === "Pod") return ["overview", "yaml", "events", "logs", "rbac"];
+  if (["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kindId)) return ["overview", "yaml", "events", "logs", "rbac"];
+  if (["ServiceAccount", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"].includes(kindId)) return ["overview", "yaml", "rbac"];
+  if (kindId === "Node") return ["overview", "yaml", "events"];
+  return ["overview", "yaml", "events"];
 };
 
 // 섹션 래퍼 — 접기 가능한 리소스 상세 드로어 구조
@@ -983,22 +982,6 @@ status:
             );
           })()}
 
-          {tab === "related" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {[["Service", base, Plug], ["ConfigMap", Array.isArray(row.cfgs) && row.cfgs.length ? String(row.cfgs[0]) : "app-config", FileCog], ["Secret", "db-credentials", KeyRound], ["Node", nodeName, Cpu], ["ReplicaSet", `${base}-7f9c4`, Copy]]
-                .map(([k, n, I]) => (
-                  <button key={n as string} className="rrow" onClick={onOpenRef ? () => onOpenRef(k as string, String(n)) : undefined}
-                    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 10, padding: "9px 12px", cursor: "pointer" }}>
-                    <I size={13} style={{ color: UI.ink3 }} />
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>{n as string}</span>
-                      <span style={{ display: "block", fontSize: 11, color: UI.ink3, marginTop: 1 }}>{k as string}</span>
-                    </span>
-                    <ChevronDown size={12} style={{ color: "#C6CAD1", transform: "rotate(-90deg)" }} />
-                  </button>
-                ))}
-            </div>
-          )}
 
           {tab === "events" && (
             <div style={{ display: "flex", flexDirection: "column" }}>
