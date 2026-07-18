@@ -1205,7 +1205,8 @@ function App() {
   const [topH, setTopH] = useState(TOPBAR_H);
   useEffect(() => {
     const el = headerRef.current; if (!el) return;
-    const ro = new ResizeObserver(() => setTopH(Math.round(el.getBoundingClientRect().height)));
+    // offsetHeight = CSS 픽셀 — zoom 컨테이너 안의 fixed top과 같은 좌표계 (시각 픽셀로 재면 zoom만큼 밀린다)
+    const ro = new ResizeObserver(() => setTopH(el.offsetHeight));
     ro.observe(el); return () => ro.disconnect();
   }, []);
   useEffect(() => {
