@@ -6,7 +6,8 @@ import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { DoorOpen, Network, Globe, Braces, ShoppingCart, Search, KeyRound, CreditCard, Send } from "lucide-react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
-import { UI, BLUE, ST, MONO } from "./devpreview/theme";
+import { UI, BLUE, ST, MONO, PRESENT_SCALE } from "./devpreview/theme";
+import { podInventory } from "./devpreview-opsia";
 import { BRAND, BRAND_COLOR } from "./devpreview/brandIcons";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -14,19 +15,31 @@ import "./styles/foundation.css";
 
 type Status = "ok" | "warn" | "crit";
 type Svc = { id: string; name: string; kind: string; layer: number; replicas: number; status: Status };
-const SERVICES: Svc[] = [
-  { id: "ingress", name: "ingress-nginx", kind: "Ingress", layer: 0, replicas: 2, status: "ok" },
-  { id: "gateway", name: "gateway", kind: "Deployment", layer: 1, replicas: 3, status: "ok" },
-  { id: "shop-web", name: "shop-web", kind: "Deployment", layer: 2, replicas: 4, status: "ok" },
-  { id: "shop-api", name: "shop-api", kind: "Deployment", layer: 2, replicas: 6, status: "warn" },
-  { id: "checkout", name: "checkout", kind: "Deployment", layer: 3, replicas: 3, status: "warn" },
-  { id: "search", name: "search", kind: "Deployment", layer: 3, replicas: 2, status: "ok" },
-  { id: "auth", name: "auth", kind: "Deployment", layer: 3, replicas: 2, status: "ok" },
-  { id: "payments", name: "payments", kind: "Deployment", layer: 4, replicas: 3, status: "crit" },
-  { id: "notifier", name: "notifier", kind: "Deployment", layer: 4, replicas: 2, status: "ok" },
-  { id: "redis", name: "redis", kind: "StatefulSet", layer: 5, replicas: 1, status: "ok" },
-  { id: "postgres", name: "postgres", kind: "StatefulSet", layer: 5, replicas: 1, status: "ok" },
+// 상태·복제 수는 단일 인벤토리에서 파생 — 지도·벨·홈과 흐름이 같은 장애를 말해야 한다(다르면 버그)
+const INV = podInventory();
+const svcStat = (id: string): Status =>
+  INV.some((p) => p.svc === id && p.bad) ? "crit"
+  : INV.some((p) => p.svc === id && (p.status === "Pending" || p.restarts >= 2)) ? "warn" : "ok";
+const svcReplicas = (id: string) => INV.filter((p) => p.svc === id).length;
+const SVC_BASE: { id: string; name: string; kind: string; layer: number }[] = [
+  { id: "ingress", name: "ingress-nginx", kind: "Ingress", layer: 0 },
+  { id: "gateway", name: "gateway", kind: "Deployment", layer: 1 },
+  { id: "shop-web", name: "shop-web", kind: "Deployment", layer: 2 },
+  { id: "shop-api", name: "shop-api", kind: "Deployment", layer: 2 },
+  { id: "checkout", name: "checkout", kind: "Deployment", layer: 3 },
+  { id: "search", name: "search", kind: "Deployment", layer: 3 },
+  { id: "auth", name: "auth", kind: "Deployment", layer: 3 },
+  { id: "payments", name: "payments", kind: "Deployment", layer: 4 },
+  { id: "notifier", name: "notifier", kind: "Deployment", layer: 4 },
+  { id: "worker", name: "worker", kind: "Deployment", layer: 4 },
+  { id: "redis", name: "redis", kind: "StatefulSet", layer: 5 },
+  { id: "postgres", name: "postgres", kind: "StatefulSet", layer: 5 },
 ];
+const SERVICES: Svc[] = SVC_BASE.map((s) => ({
+  ...s,
+  replicas: ["ingress"].includes(s.id) ? 2 : svcReplicas(s.id) || 1,
+  status: s.id === "ingress" ? "ok" : svcStat(s.id),
+}));
 const SVC_GLYPH: Record<string, typeof Globe> = {
   ingress: DoorOpen, gateway: Network, "shop-web": Globe, "shop-api": Braces,
   checkout: ShoppingCart, search: Search, auth: KeyRound, payments: CreditCard, notifier: Send,
@@ -41,6 +54,7 @@ const EDGES: TEdge[] = [
   { from: "shop-api", to: "auth", rps: 300 }, { from: "shop-api", to: "redis", rps: 640 },
   { from: "checkout", to: "payments", rps: 210 }, { from: "checkout", to: "postgres", rps: 190 }, { from: "checkout", to: "notifier", rps: 90 },
   { from: "payments", to: "postgres", rps: 180 }, { from: "auth", to: "postgres", rps: 150 }, { from: "search", to: "redis", rps: 240 },
+  { from: "shop-api", to: "worker", rps: 120 }, { from: "worker", to: "redis", rps: 310 }, { from: "worker", to: "postgres", rps: 80 },
 ];
 
 // ── 좌표 (초기 배치 — 드래그로 자유 이동) ─────────────────────────────
@@ -96,6 +110,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
   const [dragId, setDragId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const movedRef = useRef(false); // 드래그로 이동했으면 릴리즈 직후 click을 무시(오클릭 상세 방지)
 
   const ctx = context(sel);
   const ekey = (e: TEdge) => `${e.from}-${e.to}`;
@@ -110,11 +125,13 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
   const startDrag = (id: string) => (e: React.PointerEvent) => {
     const v = toVB(e.clientX, e.clientY);
     dragRef.current = { id, dx: v.x - P(id).x, dy: v.y - P(id).y };
+    movedRef.current = false;
     setDragId(id); setEtip(null);
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
   const onMove = (e: React.PointerEvent) => {
     const d = dragRef.current; if (!d) return;
+    movedRef.current = true;
     const v = toVB(e.clientX, e.clientY);
     const x = Math.max(4, Math.min(VW - NW - 4, v.x - d.dx));
     const y = Math.max(4, Math.min(VH - NH - 4, v.y - d.dy));
@@ -213,8 +230,8 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
                   <path d={d} fill="none" stroke={col} strokeWidth={3} strokeLinecap="round" strokeDasharray="3 11" className="flow" style={{ animationDuration: `${dur}s` }} />
                   <path d={d} fill="none" stroke="transparent" strokeWidth={16} strokeLinecap="round" style={{ cursor: "pointer" }}
                     onClick={() => { if (onOpenService) { onOpenService(e.to); setEtip(null); } else { setPinEdge(pinned ? null : e); setEtip(null); } }}
-                    onMouseEnter={(ev) => { if (dragRef.current) return; setEtip({ x: ev.clientX, y: ev.clientY, e }); setSel(null); }}
-                    onMouseMove={(ev) => { if (dragRef.current) return; setEtip({ x: ev.clientX, y: ev.clientY, e }); }}
+                    onMouseEnter={(ev) => { if (dragRef.current) return; const s = embedded ? PRESENT_SCALE : 1; setEtip({ x: ev.clientX / s, y: ev.clientY / s, e }); setSel(null); }}
+                    onMouseMove={(ev) => { if (dragRef.current) return; const s = embedded ? PRESENT_SCALE : 1; setEtip({ x: ev.clientX / s, y: ev.clientY / s, e }); }}
                     onMouseLeave={() => setEtip(null)} />
                 </g>
               );
@@ -226,7 +243,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
               const rps = EDGES.filter((e) => e.from === s.id).reduce((t, e) => t + e.rps, 0);
               return (
                 <g key={s.id} onMouseEnter={() => { if (!dragRef.current) setSel(s.id); }} onPointerDown={startDrag(s.id)}
-                  onClick={() => { if (!dragRef.current && onOpenService) onOpenService(s.id); }}
+                  onClick={() => { if (movedRef.current) { movedRef.current = false; return; } if (!dragRef.current && onOpenService) onOpenService(s.id); }}
                   onDoubleClick={() => { if (!onOpenService) window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
                   style={{ cursor: dragId === s.id ? "grabbing" : "grab", opacity: lit ? 1 : 0.22, transition: "opacity .18s" }}>
                   <rect x={p.x} y={p.y} width={NW} height={NH} rx={12} fill={UI.card} stroke={dragId === s.id || on ? BLUE : UI.line} strokeWidth={on || dragId === s.id ? 1.5 : 1}
@@ -255,7 +272,6 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="29" y2="4" stroke="#C3CAD6" strokeWidth="3" strokeLinecap="round" strokeDasharray="3 6" /></svg>호출(흐름 속도 = req/s)</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: ST.ok }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.warn, marginLeft: 6 }} />경고<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.crit, marginLeft: 6 }} />임계</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: "rgba(10,132,255,0.4)" }} />파드(소유)</span>
-            <span style={{ marginLeft: "auto", color: UI.ink3 }}>드래그 = 재배치 · 노드 호버 = 관계 · 선 호버 = 수치 · 선 클릭 = 오류 상세</span>
           </div>
         </div>
       </div>

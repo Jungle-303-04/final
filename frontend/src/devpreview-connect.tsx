@@ -55,9 +55,9 @@ const MANIFESTS = [
 ];
 // 이미 연결된 클러스터(데모) — 배포 대상 후보
 const CLUSTERS = [
-  { id: "cluster-1", env: "prod", region: "ap-northeast-2", dot: "dot-r" },
-  { id: "cluster-2", env: "staging", region: "ap-northeast-2", dot: "dot-o" },
-  { id: "cluster-3", env: "dev", region: "us-west-2", dot: "dot-g" },
+  { id: "prod-eks", env: "prod", region: "ap-northeast-2", dot: "dot-r" },
+  { id: "dev-eks", env: "dev", region: "ap-northeast-2", dot: "dot-o" },
+  
 ];
 const REPO_STEPS = ["저장소", "매니페스트", "배포"];
 const CLUSTER_STEPS = ["정보", "설치", "연결"];
@@ -335,7 +335,7 @@ function ManifestStep({ repo, onBack, onNext }: { repo: string; onBack: () => vo
 }
 
 function DeployStep({ onBack, onDeploy }: { onBack: () => void; onDeploy: (clusters: string[], ns: string) => void }) {
-  const [sel, setSel] = useState<Record<string, boolean>>({ "cluster-2": true });
+  const [sel, setSel] = useState<Record<string, boolean>>({ "dev-eks": true });
   const chosen = CLUSTERS.filter((c) => sel[c.id]).map((c) => c.id);
   const [ns, setNs] = useState("shop");
   const [autoSync, setAutoSync] = useState(true);

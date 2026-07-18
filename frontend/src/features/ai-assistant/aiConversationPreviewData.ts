@@ -5,7 +5,7 @@ import type { AiConversation } from "./aiConversationContract";
 
 export const DUMMY_CONVERSATION: AiConversation = {
   id: "aic-dummy",
-  title: "checkout 장애 분석",
+  title: "redis 장애 분석",
   updatedAt: new Date().toISOString(),
   turns: [
     {
@@ -19,7 +19,7 @@ export const DUMMY_CONVERSATION: AiConversation = {
     {
       id: "t1",
       role: "user",
-      question: "checkout 파드가 왜 죽었어?",
+      question: "redis 파드가 왜 죽었어?",
       collapsed: false,
       createdAt: new Date(Date.now() - 90_000).toISOString(),
     },
@@ -33,7 +33,7 @@ export const DUMMY_CONVERSATION: AiConversation = {
           kind: "steps",
           running: false,
           steps: [
-            { id: "s1", label: "리소스 조회", detail: "checkout 파드 3건", state: "done" },
+            { id: "s1", label: "리소스 조회", detail: "redis 파드 9건", state: "done" },
             { id: "s2", label: "메트릭 확인", detail: "메모리 107% · CPU 62%", state: "done" },
             { id: "s3", label: "로그 확인", detail: "OOMKilled 종료 이벤트 2건", state: "done" },
           ],
@@ -41,7 +41,7 @@ export const DUMMY_CONVERSATION: AiConversation = {
         {
           kind: "text",
           markdown:
-            "`checkout-104` 파드가 **OOMKilled**로 종료됐습니다. 관측된 근거상 메모리 사용률이 한도(512Mi) 대비 **107%**까지 올라 컨테이너가 강제 종료됐고, 직전 5분간 요청량이 3배로 늘었습니다.",
+            "`redis-605` 파드가 **OOMKilled**로 종료됐습니다. 관측된 근거상 메모리 사용률이 한도(512Mi) 대비 **107%**까지 올라 컨테이너가 강제 종료됐고, 직전 5분간 요청량이 3배로 늘었습니다.",
         },
         {
           kind: "result",
@@ -57,15 +57,15 @@ export const DUMMY_CONVERSATION: AiConversation = {
         {
           kind: "evidence",
           items: [
-            { type: "event", id: "e1", label: "Event · OOMKilled @ 19:34", link: "/resources?detail=pod/shop/checkout-104" },
-            { type: "metric", id: "m1", label: "메모리 시계열 · 107%", link: "/resources?detail=pod/shop/checkout-104&tab=metrics" },
-            { type: "log", id: "l1", label: "로그 · signal: killed", link: "/resources?detail=pod/shop/checkout-104&tab=logs" },
+            { type: "event", id: "e1", label: "Event · OOMKilled @ 19:34", link: "/resources?detail=pod/platform/redis-605" },
+            { type: "metric", id: "m1", label: "메모리 시계열 · 107%", link: "/resources?detail=pod/platform/redis-605&tab=metrics" },
+            { type: "log", id: "l1", label: "로그 · signal: killed", link: "/resources?detail=pod/platform/redis-605&tab=logs" },
           ],
         },
         {
           kind: "links",
           items: [
-            { label: "이 파드 상세 열기", href: "/resources?detail=pod/shop/checkout-104", icon: "resources" },
+            { label: "이 파드 상세 열기", href: "/resources?detail=pod/platform/redis-605", icon: "resources" },
             { label: "인시던트로 보기", href: "/issues", icon: "incident" },
           ],
         },
@@ -138,7 +138,7 @@ export const DUMMY_SUGGESTIONS = [
 ];
 
 export const DUMMY_CONVERSATION_LIST = [
-  { id: "aic-dummy", title: "checkout 장애 분석", updatedAt: "방금" },
+  { id: "aic-dummy", title: "redis 장애 분석", updatedAt: "방금" },
   { id: "aic-2", title: "prod-eks CPU 알림 설정", updatedAt: "12분 전" },
   { id: "aic-3", title: "shop-frontend 롤백 확인", updatedAt: "1시간 전" },
 ];

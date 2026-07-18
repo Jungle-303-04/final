@@ -152,12 +152,19 @@ function ResultPart({ part, first }: { part: AiResultPart; first?: boolean }) {
   );
 }
 
+// AI 안의 링크는 전부 실 목적지 — 셸 버스로 상세 시트/장애 목록을 연다. href="#" 같은 죽은 링크 금지.
+const followAiLink = (href: string) => {
+  const pod = href.match(/detail=pod\/[^/]+\/([^&]+)/);
+  if (pod) { emitAction({ kind: "open_ref", title: "Pod", body: pod[1] }); return; }
+  if (href.includes("health=critical")) { emitAction({ kind: "open_crit", title: "", body: "" }); return; }
+};
+
 function EvidencePart({ part }: { part: Extract<AiMessagePart, { kind: "evidence" }> }) {
   return (
     <p className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[12px]" style={{ animation: `fadeUp 0.45s ${SPRING}` }}>
       <span className="font-medium text-muted-foreground/70">근거</span>
       {part.items.map((e) => { const Icon = evIcon(e.type); return (
-        <a href="#" key={e.id} className={`inline-flex items-center gap-1 ${LINK}`}><Icon className="size-3 opacity-60" />{e.label}</a>
+        <button type="button" key={e.id} onClick={() => followAiLink(e.link ?? "")} className={`inline-flex items-center gap-1 ${LINK}`}><Icon className="size-3 opacity-60" />{e.label}</button>
       ); })}
     </p>
   );
@@ -167,7 +174,7 @@ function LinksPart({ part }: { part: Extract<AiMessagePart, { kind: "links" }> }
   return (
     <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]" style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       {part.items.map((l) => { const Icon = linkIcon(l.icon); return (
-        <a href="#" key={l.href} className={`inline-flex items-center gap-1 ${LINK}`}><Icon className="size-3.5 opacity-60" />{l.label}<ArrowUpRight className="size-3 opacity-50" /></a>
+        <button type="button" key={l.href} onClick={() => followAiLink(l.href)} className={`inline-flex items-center gap-1 ${LINK}`}><Icon className="size-3.5 opacity-60" />{l.label}<ArrowUpRight className="size-3 opacity-50" /></button>
       ); })}
     </p>
   );
@@ -189,8 +196,6 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
         <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span>
         <span className="font-medium text-foreground/90">{p.name}</span><span>생성됨</span>
-        <span className="mx-0.5 text-muted-foreground/40">·</span>
-        <a href="#" className={LINK} onClick={(e) => e.stopPropagation()}>규칙 보기</a>
       </button>
     );
   }
@@ -215,7 +220,7 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
             {state === "creating" ? <Spinner className="size-4" decorative /> : <BellPlus className="size-4" />}
             {state === "creating" ? "만드는 중" : "만들기"}
           </button>
-          <button type="button" className="rounded-xl px-3 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">수정</button>
+          
         </div>
       ) : null}
     </div>
@@ -352,10 +357,10 @@ function scriptedReply(id: string, q: string): AiTurn {
   if (/위험|상태|어때|health|문제|이상/.test(q)) {
     return { ...base, parts: [
       { kind: "steps", running: false, steps: [
-        { id: id + "a", label: "리소스 조회", detail: "42건 · 파드 37", state: "done" },
-        { id: id + "b", label: "상태 평가", detail: "위험 1 · 경고 2", state: "done" },
+        { id: id + "a", label: "리소스 조회", detail: "78건 · 파드 78", state: "done" },
+        { id: id + "b", label: "상태 평가", detail: "장애 3 · 주의 1", state: "done" },
       ] },
-      { kind: "result", title: "위험 1 · 경고 2", tone: "warning", summary: "checkout 메모리 초과가 시급", metrics: [
+      { kind: "result", title: "장애 3 · 주의 1", tone: "warning", summary: "redis 메모리 초과가 시급", metrics: [
         { label: "위험", value: "1", tone: "critical" }, { label: "경고", value: "2", tone: "warning" }, { label: "정상", value: "34", tone: "healthy" },
       ] },
       { kind: "links", items: [{ label: "위험 리소스 열기", href: "/resources?health=critical", icon: "resources" }] },
@@ -433,7 +438,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em]">Opsia AI</h2><p className="truncate text-[11.5px] text-muted-foreground">현재 화면 맥락으로 질문하고 근거를 확인합니다</p></div>
-        {[{ i: Play, t: "재생", a: () => setRunId((r) => r + 1) }, { i: SquarePen, t: "대화 목록", a: () => setListOpen((v) => !v) }, { i: Plus, t: "새 대화", a: undefined }, { i: X, t: "닫기", a: onClose }].map(({ i: Ico, t, a }) => (
+        {[{ i: Play, t: "재생", a: () => setRunId((r) => r + 1) }, { i: SquarePen, t: "대화 목록", a: () => setListOpen((v) => !v) }, { i: X, t: "닫기", a: onClose }].map(({ i: Ico, t, a }) => (
           <button className="grid size-8 place-items-center rounded-full text-muted-foreground/80 transition-colors hover:bg-black/[0.05] hover:text-foreground" key={t} onClick={a} title={t} type="button"><Ico className="size-[17px]" /></button>
         ))}
       </header>
@@ -466,7 +471,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
             className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-[13.5px] leading-relaxed tracking-[-0.006em] outline-none placeholder:text-muted-foreground/60"
             onChange={(e) => setInput(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
-            placeholder="지금 보고 있는 것에 대해 질문하세요…"
+            placeholder="질문 입력"
             value={input}
           />
           <button className="absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_6px_-1px_color-mix(in_oklch,var(--primary)_50%,transparent)] transition-all hover:brightness-105 active:scale-90 disabled:scale-90 disabled:opacity-40" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>

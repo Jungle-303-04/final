@@ -267,14 +267,9 @@ function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; d
       <MiniBar v={memV} />
       <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: p.restarts > 0 ? HP.crit : UI.ink3, fontWeight: p.restarts > 0 ? 700 : 500 }}>{p.restarts}</span>
       <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: UI.ink3 }}>{ageOf(p)}</span>
-      {/* 행 액션 — 호버 시 등장 */}
-      <span className="pacts" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, padding: "2px 4px", boxShadow: "0 6px 16px -8px rgba(17,19,24,0.25)" }}>
-        {([["로그", ScrollText], ["이벤트", Activity], ["재시작", RotateCw]] as const).map(([label, I]) => (
-          <span key={label} role="button" title={label} onClick={(e) => e.stopPropagation()}
-            style={{ display: "grid", placeItems: "center", width: 20, height: 20, borderRadius: 6, color: UI.ink3 }} className="pact">
-            <I size={12} />
-          </span>
-        ))}
+      {/* 행 호버 표시 — 액션은 상세 시트가 오너(로그·이벤트·재시작 탭). 동작 없는 버튼을 두지 않는다 */}
+      <span className="pacts" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, padding: "2px 6px", boxShadow: "0 6px 16px -8px rgba(17,19,24,0.25)" }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: UI.ink3 }}>상세</span>
         <ChevronRight size={12} style={{ color: "#C6CAD1", marginLeft: 2 }} />
       </span>
     </motion.button>
@@ -496,7 +491,7 @@ function ClusterOverview({ clId, pods, tick, meta, onKind }: {
         <span>CPU {st.usedCores.toFixed(1)}/{st.cores} cores · MEM {st.usedMem.toFixed(1)}/{st.memGi} GiB · NET {st.net}KB/s · DISK {st.disk}%</span>
         <span style={{ color: UI.ink3, fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>arn:aws:eks:ap-northeast-2:183548421506:cluster/{clId}</span>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: UI.ink3 }}>
-          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신 · 방금 전<RotateCw size={10} style={{ marginLeft: 1 }} />
+          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신 · 방금 전
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 18px", alignContent: "center" }}>
@@ -544,7 +539,7 @@ function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
 
       <div style={{ display: "flex", gap: 14, fontSize: 12, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
         <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.ready.length}/{st.nodes.length}</b> ready</span>
-        <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.cp.length}</b>{st.chot > 0 && <b style={{ color: "#C43028", fontFamily: MONO }}> · 임계 {st.chot}</b>}</span>
+        <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.cp.length}</b>{st.chot > 0 && <b style={{ color: "#C43028", fontFamily: MONO }}> · 장애 {st.chot}</b>}</span>
         <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{meta?.Namespace ?? "-"}</b></span>
       </div>
 
@@ -636,7 +631,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   const [lens, setLens] = useState<Lens>(null);
   const [pin, setPin] = useState<Lens>(() => readDevpreviewOpsiaPin(Object.keys(SVC)));
   const [tip, setTip] = useState<{ x: number; y: number; list: Pod[] } | null>(null);
-  const onTip = (x: number, y: number, list: Pod[] | null) => setTip(list && list.length ? { x, y, list } : null);
+  // 툴팁 좌표는 CSS px로 — zoom(PRESENT_SCALE) 컨테이너 안 fixed는 시각 px 그대로 쓰면 스케일만큼 어긋난다(DESIGN-RULES 5장)
+  const tipScale = embedded ? PRESENT_SCALE : 1;
+  const onTip = (x: number, y: number, list: Pod[] | null) => setTip(list && list.length ? { x: x / tipScale, y: y / tipScale, list } : null);
 
   const incident = focusPod && isCrit(focusPod) ? focusPod : null;
   const effLens: Lens = lens ?? pin ?? (incident ? { kind: "svc", id: incident.svc } : null);
@@ -651,7 +648,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   const litFn = (p: Pod) => !!effLens && related.has(p.id);
   const crit = pods.filter(isCrit).length;
 
-  const gotoNode = (p: Pod) => { go({ level: "pods", cluster: p.cluster, node: p.node }, 1); setFocusPod(p); };
+  // 임베드에서 상세는 셸 오버레이 하나로 일원화 — 내부 미니 상세(focusPod 패널)를 두 번째 상세로 쓰지 않는다
+  const gotoNode = (p: Pod) => { go({ level: "pods", cluster: p.cluster, node: p.node }, 1); if (embedded && onOpenResource) { selectPod(p); } else { setFocusPod(p); } };
   const openNodeById = (id: string) => { const n = NODES.find((x) => x.id === id); if (n) go({ level: "pods", cluster: n.cluster, node: n.id }, 1); };
   const selectPod = (p: Pod) => {
     // 임베드 모드에서는 상세를 셸의 최상위 오버레이 하나로 일원화한다 (내부 패널과 이원화 금지)
@@ -689,7 +687,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             </nav>
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 12, fontWeight: 600, color: UI.ink2 }}>
-            {([["정상", HP.ok], ["경고", HP.warn], ["임계", HP.crit], ["대기", HP.pending]] as const).map(([k, c]) => (
+            {([["정상", HP.ok], ["주의", HP.warn], ["장애", HP.crit], ["대기", HP.pending]] as const).map(([k, c]) => (
               <span key={k} style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: c }} />{k}</span>
             ))}
           </div>

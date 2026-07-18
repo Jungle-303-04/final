@@ -394,9 +394,10 @@ function ResourceTable({ kind, rows, q, dense, filterDesc = "", onClearFilter, o
     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
     <div>
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD", position: "sticky", top: 0, zIndex: 2 }}>
+        {/* 정렬 미구현 — 동작 없는 정렬 셰브론을 그리지 않는다(가짜 컨트롤 금지) */}
         {spec.cols.map((c) => (
           <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
-            {c.label}<ChevronDown size={9} style={{ opacity: 0.5 }} />
+            {c.label}
           </span>
         ))}
       </div>
@@ -650,7 +651,8 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, for
   const nodeName = String(row.node ?? "ip-10-0-1-24");
   const hostIp = nodeName.replace(/^ip-/, "").replace(/-/g, ".");           // EKS 노드 이름 ↔ 호스트 IP 일치
   const podIp = `10.0.${1 + (name.length % 4)}.${20 + ((name.length * 13) % 200)}`; // VPC CNI — 파드도 VPC 대역
-  const phase = String(row.status ?? (bad ? "CrashLoopBackOff" : "Running"));
+  // Node 등 파드가 아닌 종류는 자기 상태 필드(st)가 진실 — 파드형 기본값 "Running"으로 덮지 않는다
+  const phase = String(row.status ?? row.st ?? (bad ? "CrashLoopBackOff" : kind.id === "Pod" ? "Running" : "Active"));
   const qos = String(row.qos ?? "BestEffort");
   const isSts = row.ownerKind === "StatefulSet";
   // YAML 편집 — 실제 제품처럼 보기 ↔ 편집 전환, 저장 시 kubectl apply 흐름
@@ -781,7 +783,7 @@ status:
               {/* 전략 (워크로드) */}
               {isWorkload && (
                 <Sec title="전략">
-                  <KV k="업데이트 전략" v={kind.id === "Deployment" ? "Recreate" : "RollingUpdate"} />
+                  <KV k="업데이트 전략" v="RollingUpdate" />
                 </Sec>
               )}
 
@@ -1035,7 +1037,7 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
               <div style={{ fontSize: 12, color: UI.ink2, lineHeight: 1.6, marginBottom: 12 }}>
                 이 리소스가 사용하는 ServiceAccount가 가진 권한입니다. 이 워크로드가 만드는 모든 파드가 아래 권한을 상속합니다.
               </div>
-              <KV k="ServiceAccount" v={`${name.split("-")[0]}-sa`} mono />
+              <KV k="ServiceAccount" v={`${String(name).replace(/-\d+$/, "")}-sa`} mono />
               <KV k="바인딩" v="RoleBinding/app-reader · ClusterRoleBinding/metrics-view" mono />
               <div style={{ marginTop: 16, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginBottom: 8 }}>유효 권한</div>
               {[["get, list, watch", "pods, services, configmaps"], ["create, patch", "events"], ["get", "secrets (app-config만)"]].map(([verbs, res]) => (
@@ -1177,7 +1179,7 @@ const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 }[] = [
   { id: "W3", title: "동기화 상태", info: "연결된 Git 저장소의 Synced/OutOfSync 비율", span: 1 },
   { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·임계 리소스 수의 흐름", span: 1 },
   { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", span: 1 },
-  { id: "W6", title: "임계·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 1 },
+  { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 1 },
   { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", span: 1 },
   { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", span: 2 },
 ];
@@ -1240,7 +1242,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
     return [
       c0 && { id: "c1", time: "2분 전", tone: "crit" as const, title: `${c0.name} ${c0.status} — 재시작 ${c0.restarts}회`, ref: { kind: "Pod", name: c0.name } },
       r0 && { id: "c2", time: "17분 전", tone: "warn" as const, title: `${r0.repo} 동기화 지연 · 리비전 ${r0.rev}` },
-      { id: "c3", time: "44분 전", tone: "ok" as const, title: "shop-api 복제 6 → 8 스케일 완료" },
+      { id: "c3", time: "44분 전", tone: "ok" as const, title: `shop-api 스케일 아웃 완료 — 파드 ${pods.filter((p) => p.svc === "shop-api").length}개 유지` },
       { id: "c4", time: "1시간 전", tone: "ok" as const, title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
       { id: "c5", time: "2시간 전", tone: "ok" as const, title: "Jungle-303-04/final main 배포 · 정상" },
     ].filter(Boolean) as { id: string; time: string; tone: "ok" | "warn" | "crit"; title: string; ref?: { kind: string; name: string } }[];
@@ -1259,14 +1261,14 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
         return <MultiLine series={[
           { label: "배포", color: BLUE, values: wave(1, 6, 3) },
           { label: "알림", color: HP.warn, values: pin(wave(4, 4, 3), nowAlerts) },
-          { label: "임계", color: HP.crit, values: pin(wave(7, Math.min(crit.length, 4), 1.6), crit.length) },
+          { label: "장애", color: HP.crit, values: pin(wave(7, Math.min(crit.length, 4), 1.6), crit.length) },
         ]} />;
       }
       case "W5": return <Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} />;
       case "W6": return <RankList onPick={onOpenPod} rows={watch} />;
       case "W7": return (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <KpiValue value="$1,284" delta="+4.2%" deltaTone="warn" summary={<>지난달보다 <b style={{ color: "#B25A00" }}>$52</b> 증가 — 노드 7대 · 스팟 비중 38%</>} />
+          <KpiValue value="$1,284" delta="+4.2%" deltaTone="warn" summary={<>지난달보다 <b style={{ color: "#B25A00" }}>$52</b> 증가 — 노드 {nodes.length}대 · 스팟 비중 38%</>} />
           <MiniBars values={[860, 920, 1010, 980, 1120, 1180, 1232, 1284]} labels={["12", "1", "2", "3", "4", "5", "6", "7"]} currentIndex={7} tone={HP.warn} />
         </div>
       );
@@ -1408,13 +1410,6 @@ function App() {
     const ro = new ResizeObserver(() => setTopH(el.offsetHeight));
     ro.observe(el); return () => ro.disconnect();
   }, []);
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDetail(null);
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
-    };
-    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
-  }, []);
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
   const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
   useEffect(() => {
@@ -1474,6 +1469,9 @@ function App() {
   };
   // 버스 수신 → 토스트 + 세션 알림 (선언은 위쪽, 여기서는 구독만)
   useEffect(() => onAction((a: DemoAction) => {
+    // 내비게이션 액션 — AI 근거/링크가 셸의 실제 표면을 연다
+    if (a.kind === "open_ref") { openRef(a.title, a.body); return; }
+    if (a.kind === "open_crit") { setSurface("resources"); setResView("list"); setKindId("Pod"); return; }
     setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
     if (a.kind === "connect") window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
@@ -1489,6 +1487,20 @@ function App() {
     const found = rows.find((r) => String(r.name) === name || String(r.name).startsWith(name));
     setDetail({ kind: k, row: found ?? { name, ns: nsFor(name) } });
   };
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // 최상위 표면부터 z-서열 역순으로 '한 겹씩' 닫는다: 팝오버 → 연결 모달 → 상세 → AI
+        if (bellOpen || nsOpen || meOpen) { setBellOpen(false); setNsOpen(false); setMeOpen(false); }
+        else if (connectModal) setConnectModal(null);
+        else if (detail) setDetail(null);
+        else if (aiOpen) setAiOpen(false);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  }, [bellOpen, nsOpen, meOpen, connectModal, detail, aiOpen]);
 
   return (
     <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
@@ -1536,7 +1548,7 @@ function App() {
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
           <input ref={searchRef} value={q}
             onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface === "home") { setSurface("resources"); setResView("list"); } }}
-            placeholder="리소스 검색 — 종류와 이름을 함께 찾습니다" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
+            placeholder="리소스 검색" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: UI.ink2 }}>
@@ -1618,7 +1630,7 @@ function App() {
                   <div style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginTop: 2 }}>woonyong.dev@gmail.com</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />jungle-303 워크스페이스</div>
                 </div>
-                <button className="rrow" onClick={() => { try { sessionStorage.clear(); } catch { /* 데모 */ } window.location.reload(); }}
+                <button className="rrow" onClick={() => { try { sessionStorage.clear(); localStorage.removeItem(BOARD_KEY); } catch { /* 데모 */ } window.location.reload(); }}
                   style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", borderRadius: 8, padding: "8px 10px", marginTop: 3, fontSize: 12.5, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
                   <LogOut size={13} style={{ color: UI.ink3 }} />로그아웃
                 </button>
