@@ -43,6 +43,7 @@ def test_make_gate_is_the_single_full_gate_entrypoint() -> None:
         "reference-feature-ledger-check"
     ) in makefile
     assert "tests/test_dev_gate_workflow.py" in minimum_recipe
+    assert "tests/test_merged_pr_gate_reuse.py" in minimum_recipe
     assert "bash scripts/manifest-check.sh" in minimum_recipe
 
     frontend_recipe = make_recipe("gate-frontend")
@@ -123,7 +124,7 @@ def test_pre_push_wrapper_scrubs_parent_repository_git_environment() -> None:
     assert exported["PRE_COMMIT_ALLOW_NO_CONFIG"] == "1"
 
 
-def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:
+def test_dev_ci_reuses_pr_proof_on_push_and_keeps_full_pr_checks() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/dev-gate.yml").read_text())
     triggers = workflow_triggers(workflow)
 
@@ -131,14 +132,24 @@ def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:
     assert triggers["pull_request"]["branches"] == ["dev"]
     jobs = workflow["jobs"]
     assert set(jobs) == {"source-proof", "backend", "frontend", "gate"}
-    assert all("needs" not in jobs[job_id] for job_id in ("source-proof", "backend", "frontend"))
+    assert "needs" not in jobs["source-proof"]
+    assert jobs["backend"]["needs"] == "source-proof"
+    assert jobs["frontend"]["needs"] == "source-proof"
+    resolver = next(
+        step for step in jobs["source-proof"]["steps"] if step.get("name") == "Resolve gate scope"
+    )
+    assert "verify-merged-pr-gate.sh" in resolver["run"]
+    assert "classify-dev-gate-scope.sh" in resolver["run"]
+    assert jobs["source-proof"]["outputs"]["gate_scope"] == (
+        "${{ steps.gate-scope.outputs.scope }}"
+    )
     assert jobs["gate"]["needs"] == ["source-proof", "backend", "frontend"]
     helm_step = next(step for step in jobs["backend"]["steps"] if step.get("name") == "Set up Helm")
     assert helm_step["uses"] == "Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310"
     assert helm_step["with"]["version"] == "v4.2.2"
     assert helm_step["if"] == (
-        "${{ steps.gate-scope.outputs.scope == 'FULL' "
-        "|| steps.gate-scope.outputs.scope == 'BACKEND' }}"
+        "${{ needs.source-proof.outputs.gate_scope == 'FULL' "
+        "|| needs.source-proof.outputs.gate_scope == 'BACKEND' }}"
     )
     commit_test = next(
         step
@@ -146,15 +157,15 @@ def test_dev_push_ci_calls_the_canonical_gate_before_any_deploy_job() -> None:
         if step.get("name") == "Verify commit message gate rules"
     )
     full_or_backend = (
-        "${{ steps.gate-scope.outputs.scope == 'FULL' "
-        "|| steps.gate-scope.outputs.scope == 'BACKEND' }}"
+        "${{ needs.source-proof.outputs.gate_scope == 'FULL' "
+        "|| needs.source-proof.outputs.gate_scope == 'BACKEND' }}"
     )
     assert commit_test["if"] == full_or_backend
     assert jobs["backend"]["steps"][-1]["run"] == "make gate-backend"
     assert jobs["backend"]["steps"][-1]["if"] == full_or_backend
     assert jobs["frontend"]["steps"][-1]["run"] == "make gate-frontend"
     assert jobs["frontend"]["steps"][-1]["if"] == (
-        "${{ steps.gate-scope.outputs.scope == 'FULL' }}"
+        "${{ needs.source-proof.outputs.gate_scope == 'FULL' }}"
     )
     for job_id in jobs:
         if "deploy" not in job_id.lower():
