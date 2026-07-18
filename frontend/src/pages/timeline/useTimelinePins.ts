@@ -6,6 +6,7 @@ import {
   type TimelinePinTarget,
   type TimelinePort,
 } from "../../features/timeline/timelineContract";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { timelinePinTargetKey } from "../../features/timeline/timelinePinTargets";
 
 export type TimelinePinsPhase = "disabled" | "loading" | "ready" | "forbidden" | "unavailable" | "failed";
@@ -77,13 +78,17 @@ export function useTimelinePins({
     const generation = generationRef.current;
     mutationPendingRef.current = false;
     if (!enabled) return;
-    const controller = new AbortController();
     let active = true;
+    const sharedRequest = acquireSharedRequest(
+      port,
+      `timeline:pins:${JSON.stringify(workspaceCacheKey ?? null)}:r${reloadToken}`,
+      (signal) => port.readTimelinePins(signal, workspaceCacheKey),
+    );
     void Promise.resolve().then(async () => {
       if (!active || generationRef.current !== generation) return;
       setRecord({ ...LOADING_STATE, loaded: true, workspaceCacheKey });
       try {
-        const pinSet = await port.readTimelinePins(controller.signal, workspaceCacheKey);
+        const pinSet = await sharedRequest.promise;
         if (!active || generationRef.current !== generation) return;
         setRecord({
           phase: "ready",
@@ -101,7 +106,7 @@ export function useTimelinePins({
     });
     return () => {
       active = false;
-      controller.abort();
+      sharedRequest.release();
     };
   }, [enabled, port, reloadToken, workspaceCacheKey]);
 
