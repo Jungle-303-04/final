@@ -662,7 +662,7 @@ function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, for
   const onEdgeDown = (e: React.PointerEvent) => {
     if (full) return;
     e.preventDefault(); setDwDragging(true);
-    const move = (ev: PointerEvent) => { const cssW = window.innerWidth / PRESENT_SCALE; setDw(Math.min(cssW - leftInset - 40, Math.max(460, cssW - ev.clientX / PRESENT_SCALE))); };
+    const move = (ev: PointerEvent) => { const cssW = document.documentElement.clientWidth / PRESENT_SCALE; setDw(Math.min(cssW - leftInset - 40, Math.max(460, cssW - ev.clientX / PRESENT_SCALE))); };
     const up = () => { setDwDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
@@ -1191,7 +1191,7 @@ function App() {
   const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
-    const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, window.innerWidth / PRESENT_SCALE - ev.clientX / PRESENT_SCALE)));
+    const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, (document.documentElement.clientWidth - ev.clientX) / PRESENT_SCALE)));
     const up = () => { setAiDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
@@ -1217,9 +1217,9 @@ function App() {
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
-  const [vwCss, setVwCss] = useState(() => window.innerWidth / PRESENT_SCALE);
+  const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
   useEffect(() => {
-    const on = () => setVwCss(window.innerWidth / PRESENT_SCALE);
+    const on = () => setVwCss(document.documentElement.clientWidth / PRESENT_SCALE);
     window.addEventListener("resize", on); return () => window.removeEventListener("resize", on);
   }, []);
   // 반응형 — 좁은 화면(200% 확대 등)에서 내비를 자동으로 아이콘만 남긴다
