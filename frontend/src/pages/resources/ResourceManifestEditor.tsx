@@ -1,4 +1,4 @@
-import { GitPullRequestArrow, Play, RefreshCw, ShieldCheck } from "lucide-react";
+import { FilePenLine, GitPullRequestArrow, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -190,7 +190,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
         type="button"
         variant="outline"
       >
-        <GitPullRequestArrow aria-hidden="true" />
+        <FilePenLine aria-hidden="true" />
         {t("resources.manifest.open")}
       </Button>
       <Dialog
@@ -238,14 +238,21 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
             ) : source && !available ? (
               <Alert className="my-4" variant="destructive">
                 <AlertTitle>{t("resources.manifest.unavailable")}</AlertTitle>
-                <AlertDescription>{source.reason ?? t("resources.manifest.failed")}</AlertDescription>
+                <AlertDescription>{t("resources.manifest.unavailableDescription")}</AlertDescription>
               </Alert>
-            ) : available && source?.selected ? (
+            ) : available && source ? (
               <div className="grid min-h-0 gap-4 py-4">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline">{source.selected.repositoryRef}</Badge>
-                  <Badge variant="outline">{source.selected.branch}</Badge>
-                  <span className="min-w-0 break-all">{source.selected.manifestPath}</span>
+                  {source.selected ? (
+                    <>
+                      <Badge variant="outline">{t("resources.manifest.gitSource")}</Badge>
+                      <Badge variant="outline">{source.selected.repositoryRef}</Badge>
+                      <Badge variant="outline">{source.selected.branch}</Badge>
+                      <span className="min-w-0 break-all">{source.selected.manifestPath}</span>
+                    </>
+                  ) : (
+                    <Badge variant="outline">{t("resources.manifest.liveSource")}</Badge>
+                  )}
                   <span className="ml-auto font-mono">{source.baseSha?.slice(0, 12)}</span>
                 </div>
                 <div className="grid min-h-[28rem] gap-4 lg:grid-cols-2">
@@ -255,7 +262,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
                       aria-label={t("resources.manifest.yaml")}
                       autoCapitalize="off"
                       autoCorrect="off"
-                      className="min-h-[24rem] w-full resize-y rounded-lg border border-input bg-[#0d1117] p-4 font-mono text-xs leading-5 text-[#e6edf3] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="min-h-[24rem] w-full resize-y rounded-lg border border-input bg-code p-4 font-mono text-xs leading-5 text-code-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       disabled={busy || receipt !== null || applyReceipt !== null}
                       id="resource-manifest-yaml"
                       onChange={(event) => {
@@ -305,7 +312,9 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
                 {preview?.valid && preview.applyAvailability === "unavailable" ? (
                   <Alert>
                     <AlertTitle>{t("resources.manifest.applyUnavailable")}</AlertTitle>
-                    <AlertDescription>{preview.applyReasonCodes.join(", ")}</AlertDescription>
+                    <AlertDescription>
+                      {preview.applyReasonCodes.map((code) => applyReason(code, t)).join(", ")}
+                    </AlertDescription>
                   </Alert>
                 ) : null}
                 {failure ? (
@@ -377,7 +386,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
                 {t("resources.manifest.preview")}
               </Button>
             ) : null}
-            {preview?.valid && !receipt && !applyReceipt ? (
+            {preview?.valid && source?.selected && !receipt && !applyReceipt ? (
               <Button aria-busy={phase === "approving"} disabled={busy || reason.trim().length < 3} onClick={() => void approve()} type="button">
                 {phase === "approving" ? <Spinner decorative /> : <GitPullRequestArrow aria-hidden="true" />}
                 {t("resources.manifest.approve")}
@@ -397,11 +406,24 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
 });
 
 function editInput(source: ResourceManifestSource | null, applicationId: string, yaml: string) {
-  if (!source?.baseSha || !source.sourceSha256 || !applicationId || !yaml) return null;
+  if (!source?.baseSha || !source.sourceSha256 || !yaml) return null;
   return {
-    applicationId,
+    applicationId: source.selected?.applicationId ?? (applicationId || null),
     baseSha: source.baseSha,
     sourceSha256: source.sourceSha256,
     editedYaml: yaml,
   };
+}
+
+function applyReason(
+  code: string,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const key = {
+    agent_unavailable: "resources.manifest.applyReason.agentUnavailable",
+    resource_uid_unavailable: "resources.manifest.applyReason.uidUnavailable",
+    namespace_unresolved: "resources.manifest.applyReason.namespaceUnresolved",
+    namespace_not_allowed: "resources.manifest.applyReason.namespaceDenied",
+  }[code] as Parameters<typeof t>[0] | undefined;
+  return key ? t(key) : t("resources.manifest.applyReason.unknown", { code });
 }

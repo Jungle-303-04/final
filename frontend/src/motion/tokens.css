@@ -66,14 +66,14 @@
 @keyframes motion-detail-enter {
   from {
     opacity: 0;
-    transform: translateX(3rem);
+    transform: translateX(var(--motion-detail-inline-offset, 3rem));
   }
 }
 
 @keyframes motion-detail-exit {
   to {
     opacity: 0;
-    transform: translateX(3rem);
+    transform: translateX(var(--motion-detail-inline-offset, 3rem));
   }
 }
 
@@ -156,7 +156,12 @@
 }
 
 .motion-detail-workspace {
+  --motion-detail-inline-offset: 3rem;
   animation: motion-detail-enter var(--motion-layout) var(--ease-spring) backwards;
+}
+
+:where([dir="rtl"]) .motion-detail-workspace {
+  --motion-detail-inline-offset: -3rem;
 }
 
 .motion-detail-workspace[data-closing="true"] {

@@ -40,6 +40,16 @@ describe("motion CSS contract", () => {
     expect(tokens).not.toContain("transition: height var(--motion-layout)");
   });
 
+  it("enters detail workspaces from the logical end edge and reverses for RTL", () => {
+    expect(tokens).toContain("transform: translateX(var(--motion-detail-inline-offset, 3rem))");
+    expect(tokens).toMatch(
+      /:where\(\[dir="rtl"\]\) \.motion-detail-workspace \{[\s\S]*?--motion-detail-inline-offset: -3rem;/,
+    );
+    expect(tokens).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.motion-detail-workspace[\s\S]*?animation: none !important/,
+    );
+  });
+
   it("keeps live preview motion disabled for reduced-motion users", () => {
     expect(tokens).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.motion-live-preview-value[\s\S]*?transition: none !important/,

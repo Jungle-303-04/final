@@ -34,6 +34,7 @@ describe("ResourcesPage URL-backed detail", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    expect(dialog.getAttribute("data-motion-side")).toBe("end");
     expect(dialog.querySelector('[data-slot="resource-detail-loading"]')).toBeTruthy();
     expect(dialog.querySelector('[data-slot="product-page-frame"]')).toBeNull();
 

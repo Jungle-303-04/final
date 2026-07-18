@@ -12,6 +12,8 @@ from domains.manifest_editor.router import (
     approve_resource_manifest_edit,
     edit_workflow_id,
     ensure_source_is_current,
+    get_resource_manifest_source,
+    preview_resource_manifest_edit,
 )
 from domains.manifest_editor.validation import (
     ManifestIdentity,
@@ -25,6 +27,7 @@ from packages.contracts.auth import Actor
 from packages.contracts.gateway.requests import (
     ResourceManifestApproveRequest,
     ResourceManifestDirectApplyRequest,
+    ResourceManifestPreviewRequest,
 )
 
 SOURCE = """\
@@ -142,6 +145,34 @@ class ManifestApprovalDb:
             "namespace": "shop",
             "name": "checkout-api",
             "uid": "deployment-uid-1",
+            "snapshot_id": "snapshot-1",
+            "resource_version": "17",
+            "raw": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {
+                    "name": "checkout-api",
+                    "namespace": "shop",
+                    "uid": "deployment-uid-1",
+                    "resourceVersion": "17",
+                },
+                "spec": {
+                    "replicas": 2,
+                    "selector": {"matchLabels": {"app": "checkout-api"}},
+                    "template": {
+                        "metadata": {"labels": {"app": "checkout-api"}},
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": "checkout-api",
+                                    "image": "ghcr.io/project/checkout-api:v2",
+                                }
+                            ]
+                        },
+                    },
+                },
+                "status": {"availableReplicas": 2},
+            },
         }
 
     def list_resource_manifest_sources(
@@ -199,6 +230,18 @@ class ManifestApprovalClient:
         return SOURCE.encode()
 
 
+class LiveManifestDb(ManifestApprovalDb):
+    def list_resource_manifest_sources(
+        self, *, workspace_id: str, resource_id: str, cluster_id: str
+    ) -> list[dict[str, object]]:
+        assert (workspace_id, resource_id, cluster_id) == (
+            "workspace-1",
+            "resource-1",
+            "cluster-1",
+        )
+        return []
+
+
 class PinnedManifestClient(ManifestApprovalClient):
     def __init__(self, content: str) -> None:
         self.pinned_content = content
@@ -231,6 +274,85 @@ class ManifestOperationEvents:
 
     async def publish(self, **payload: object) -> None:
         self.published.append(payload)
+
+
+def test_live_inventory_source_is_editable_without_inventing_gitops_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "shop")
+    db = LiveManifestDb()
+    current = SimpleNamespace(
+        workspace_id="workspace-1",
+        user_id="operator-1",
+        roles=("release_operator",),
+    )
+    source = asyncio.run(
+        get_resource_manifest_source(
+            "resource-1",
+            None,
+            current,
+            db,
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+
+    assert source.status == "available"
+    assert source.selected is None
+    assert source.choices == []
+    assert source.content is not None
+    assert "status:" not in source.content
+    assert "uid:" not in source.content
+    assert "resourceVersion:" not in source.content
+    assert source.base_sha == manifest_sha256(source.content).removeprefix("sha256:")
+
+    desired = source.content.replace("replicas: 2", "replicas: 3")
+    preview = asyncio.run(
+        preview_resource_manifest_edit(
+            "resource-1",
+            ResourceManifestPreviewRequest(
+                application_id=None,
+                base_sha=source.base_sha,
+                source_sha256=source.source_sha256,
+                edited_yaml=desired,
+            ),
+            current,
+            db,
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+    assert preview.valid is True
+    assert preview.apply_availability == "available"
+
+    events = ManifestApprovalEvents()
+    operation_events = ManifestOperationEvents()
+    receipt = asyncio.run(
+        apply_resource_manifest_now(
+            "resource-1",
+            ResourceManifestDirectApplyRequest(
+                application_id=None,
+                base_sha=source.base_sha,
+                source_sha256=source.source_sha256,
+                edited_yaml=desired,
+                expected_desired_sha256=preview.desired_sha256,
+                confirmation=True,
+                reason="Apply the inspected live manifest change",
+            ),
+            "manifest-live-idempotency-001",
+            current,
+            db,
+            events,
+            operation_events,
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+
+    assert receipt.status == "queued"
+    command = events.body
+    assert command.payload["source"]["authority"] == "live_inventory"
+    assert command.payload["source"]["snapshot_id"] == "snapshot-1"
+    assert command.payload["desired_documents"][0]["spec"]["replicas"] == 3
+    assert command.diff.basis["source_authority"] == "live_inventory"
+    assert operation_events.published[0]["command_id"] == receipt.command_id
 
 
 def test_approval_records_exact_authority_before_requesting_safe_pr() -> None:

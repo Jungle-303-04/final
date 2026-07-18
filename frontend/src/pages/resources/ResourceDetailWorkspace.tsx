@@ -129,6 +129,7 @@ export function ResourceDetailWorkspace({
       className="motion-detail-workspace grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background shadow-2xl shadow-black/5"
       data-closing={closing || undefined}
       data-detail-size={full ? "full" : "peek"}
+      data-motion-side="end"
       data-slot="resource-detail-workspace"
       onKeyDown={(event) => {
         if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {

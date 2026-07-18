@@ -14,7 +14,7 @@ import {
 import { encodePathSegment, withQuery } from "./url";
 
 export interface ResourceManifestEditInput {
-  applicationId: string;
+  applicationId: string | null;
   baseSha: string;
   sourceSha256: string;
   editedYaml: string;

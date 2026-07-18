@@ -31,7 +31,7 @@ describe("ResourceManifestEditor", () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
 
     const status = await screen.findByRole("status");
     const spinner = status.querySelector<HTMLElement>("[data-slot=spinner]");
@@ -101,7 +101,7 @@ describe("ResourceManifestEditor", () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
     const editor = await screen.findByRole("textbox", { name: "YAML 원문" });
     expect(editor.getAttribute("autocapitalize")).toBe("off");
     expect(editor.getAttribute("autocorrect")).toBe("off");
@@ -118,7 +118,7 @@ describe("ResourceManifestEditor", () => {
     const approve = screen.getByRole("button", { name: "Safe PR 승인" });
     expect(screen.getByRole("button", { name: "지금 적용" })).toBeTruthy();
     expect(approve.hasAttribute("disabled")).toBe(true);
-    await user.type(screen.getByPlaceholderText("이 Git 변경을 검토해야 하는 이유"), "운영 정책 반영");
+    await user.type(screen.getByPlaceholderText("이 매니페스트 변경을 적용하는 이유"), "운영 정책 반영");
     expect(approve.hasAttribute("disabled")).toBe(false);
     await user.click(approve);
 
@@ -187,17 +187,74 @@ describe("ResourceManifestEditor", () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "YAML 원문" }), {
       target: { value: sourceYaml.replace("Always", "Never") },
     });
     await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
-    await user.type(screen.getByPlaceholderText("이 Git 변경을 검토해야 하는 이유"), "즉시 반영 필요");
+    await user.type(screen.getByPlaceholderText("이 매니페스트 변경을 적용하는 이유"), "즉시 반영 필요");
     await user.click(screen.getByRole("button", { name: "지금 적용" }));
 
     await waitFor(() => expect(port.applyNow).toHaveBeenCalledOnce());
     expect(start).toHaveBeenCalledWith("cmd-manifest-1");
     expect(await screen.findByText("클러스터 적용 접수")).toBeTruthy();
+  });
+
+  it("edits an agent-observed live source without offering a fake Safe PR", async () => {
+    const user = userEvent.setup();
+    const sourceYaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: checkout-api-0\n  namespace: shop\nspec:\n  restartPolicy: Always\n";
+    const port: ResourceManifestPort = {
+      loadSource: vi.fn().mockResolvedValue({
+        resourceId: POD_DETAIL.resource.inventoryKey,
+        status: "available",
+        choices: [],
+        selected: null,
+        baseSha: "a".repeat(64),
+        sourceSha256: `sha256:${"b".repeat(64)}`,
+        content: sourceYaml,
+        reason: null,
+      }),
+      preview: vi.fn().mockResolvedValue({
+        valid: true,
+        changed: true,
+        baseSha: "a".repeat(64),
+        sourceSha256: `sha256:${"b".repeat(64)}`,
+        desiredSha256: `sha256:${"c".repeat(64)}`,
+        diff: "+  restartPolicy: Never\n",
+        errors: [],
+        warnings: [],
+        applyAvailability: "available",
+        applyReasonCodes: [],
+        impact: [{
+          apiVersion: "v1",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-0",
+          selected: true,
+        }],
+      }),
+      approve: vi.fn(),
+      applyNow: vi.fn(),
+    };
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourceManifestEditor detail={POD_DETAIL} port={port} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
+    expect(await screen.findByText("에이전트 관측 라이브 원문")).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "YAML 원문" }), {
+      target: { value: sourceYaml.replace("Always", "Never") },
+    });
+    await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
+
+    expect(await screen.findByRole("button", { name: "지금 적용" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Safe PR 승인" })).toBeNull();
+    expect(port.preview).toHaveBeenCalledWith(
+      POD_DETAIL.resource.inventoryKey,
+      expect.objectContaining({ applicationId: null }),
+    );
   });
 });
 

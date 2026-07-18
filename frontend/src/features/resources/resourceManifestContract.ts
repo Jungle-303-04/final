@@ -19,7 +19,7 @@ export interface ResourceManifestSource {
 }
 
 export interface ResourceManifestEditInput {
-  applicationId: string;
+  applicationId: string | null;
   baseSha: string;
   sourceSha256: string;
   editedYaml: string;
