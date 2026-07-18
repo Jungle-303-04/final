@@ -1316,7 +1316,7 @@ function App() {
         /* 토폴로지 — 호출 그래프 서피스 (맵=물리 · 토폴로지=호출 분업 유지) */
         <div style={{ padding: "16px 18px 40px", background: UI.bg }}>
           {/* 더블클릭 = 셸 안에서 리소스 서피스로 복귀 + Service 종류 선택 (페이지 이탈 없음) */}
-          <TopologyView embedded onOpenService={() => { setSurface("resources"); setKindId("Service"); }} />
+          <TopologyView embedded onOpenService={(id) => openRef("Service", id)} />
         </div>
       ) : (
         <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 18, padding: "16px 18px 40px" }}>

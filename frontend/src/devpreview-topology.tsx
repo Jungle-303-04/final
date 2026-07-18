@@ -1,11 +1,12 @@
 // ⚠ 데모 · 서비스 토폴로지 v4 — 호출(트래픽) 전용 그래프.
 // 분업: 맵 = 물리 · 토폴로지 = 호출 · 렌즈 = 의존 · 상세 = 전체 스펙. 설정 의존성은 통합 맵 렌즈가 주인.
-// 드래그 재배치 + 방향 화살표 + 선 호버 = 수치 + 선 클릭 = 오류 상세 고정.
+// 드래그 재배치 + 방향 화살표 + 선 호버 = 수치 + 선·노드 클릭 = 리소스 상세 고정.
 import ReactDOM from "react-dom/client";
 import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
 import { UI, BLUE, ST, MONO } from "./devpreview/theme";
+import { BRAND, BRAND_COLOR } from "./devpreview/brandIcons";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -65,11 +66,6 @@ function anchors(a: { x: number; y: number }, b: { x: number; y: number }) {
   if (b.y >= a.y + NH) return { x1: a.x + NW / 2, y1: a.y + NH, x2: b.x + NW / 2, y2: b.y, dirY: 1, horiz: false };
   return { x1: a.x + NW / 2, y1: a.y, x2: b.x + NW / 2, y2: b.y + NH, dirY: -1, horiz: false };
 }
-const arrowAt = (an: ReturnType<typeof anchors>) => {
-  const { x2, y2 } = an;
-  if (an.horiz) return an.dirX === 1 ? `M ${x2 - 7} ${y2 - 3.6} L ${x2 - 0.5} ${y2} L ${x2 - 7} ${y2 + 3.6} Z` : `M ${x2 + 7} ${y2 - 3.6} L ${x2 + 0.5} ${y2} L ${x2 + 7} ${y2 + 3.6} Z`;
-  return an.dirY === 1 ? `M ${x2 - 3.6} ${y2 - 7} L ${x2} ${y2 - 0.5} L ${x2 + 3.6} ${y2 - 7} Z` : `M ${x2 - 3.6} ${y2 + 7} L ${x2} ${y2 + 0.5} L ${x2 + 3.6} ${y2 + 7} Z`;
-};
 
 // 선택 문맥: 트래픽 이웃
 function context(sel: string | null) {
@@ -209,9 +205,8 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
                 <g key={ekey(e)} style={{ opacity: on ? 1 : 0.08, transition: "opacity .18s" }}>
                   <path d={d} fill="none" stroke={col} strokeWidth={3} strokeOpacity={hovered ? 0.5 : 0.35} strokeLinecap="round" />
                   <path d={d} fill="none" stroke={col} strokeWidth={3} strokeLinecap="round" strokeDasharray="3 11" className="flow" style={{ animationDuration: `${dur}s` }} />
-                  <path d={arrowAt(an)} fill={col} opacity={hovered ? 0.9 : 0.55} />
                   <path d={d} fill="none" stroke="transparent" strokeWidth={16} strokeLinecap="round" style={{ cursor: "pointer" }}
-                    onClick={() => { setPinEdge(pinned ? null : e); setEtip(null); }}
+                    onClick={() => { if (onOpenService) { onOpenService(e.to); setEtip(null); } else { setPinEdge(pinned ? null : e); setEtip(null); } }}
                     onMouseEnter={(ev) => { if (dragRef.current) return; setEtip({ x: ev.clientX, y: ev.clientY, e }); setSel(null); }}
                     onMouseMove={(ev) => { if (dragRef.current) return; setEtip({ x: ev.clientX, y: ev.clientY, e }); }}
                     onMouseLeave={() => setEtip(null)} />
@@ -225,12 +220,17 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
               const rps = EDGES.filter((e) => e.from === s.id).reduce((t, e) => t + e.rps, 0);
               return (
                 <g key={s.id} onMouseEnter={() => { if (!dragRef.current) setSel(s.id); }} onPointerDown={startDrag(s.id)}
-                  onDoubleClick={() => { if (onOpenService) onOpenService(s.id); else window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
+                  onClick={() => { if (!dragRef.current && onOpenService) onOpenService(s.id); }}
+                  onDoubleClick={() => { if (!onOpenService) window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
                   style={{ cursor: dragId === s.id ? "grabbing" : "grab", opacity: lit ? 1 : 0.22, transition: "opacity .18s" }}>
                   <rect x={p.x} y={p.y} width={NW} height={NH} rx={12} fill={UI.card} stroke={dragId === s.id || on ? BLUE : UI.line} strokeWidth={on || dragId === s.id ? 1.5 : 1}
                     style={{ filter: dragId === s.id ? "drop-shadow(0 16px 30px rgba(10,132,255,0.22))" : on ? "drop-shadow(0 8px 18px rgba(10,132,255,0.16))" : "drop-shadow(0 1px 2px rgba(17,19,24,0.05))" }} />
                   <g clipPath={`url(#clip-${s.id})`} style={{ pointerEvents: "none" }}>
-                    <circle cx={p.x + 15} cy={p.y + 17} r={4} fill={ST[s.status]} />
+                    {(s.id === "redis" || s.id === "postgres") ? (
+                      <g transform={`translate(${p.x + 9}, ${p.y + 10}) scale(${14 / 24})`}><path d={BRAND[s.id as "redis" | "postgres"]} fill={BRAND_COLOR[s.id as "redis" | "postgres"]} /></g>
+                    ) : (
+                      <circle cx={p.x + 15} cy={p.y + 17} r={4} fill={ST[s.status]} />
+                    )}
                     <text x={p.x + 26} y={p.y + 20.5} fontSize="11" fontWeight="600" fill={UI.ink} fontFamily={MONO} letterSpacing="-0.01em">{s.name}</text>
                     <text x={p.x + 13} y={p.y + 34} fontSize="8.5" fill={UI.ink3}>{on ? `${rps.toLocaleString()} req/s` : `${s.kind} · ×${s.replicas}`}</text>
                     {Array.from({ length: Math.min(s.replicas, 8) }).map((_, k) => (
@@ -244,7 +244,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
 
           {/* 레전드 */}
           <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: UI.ink2, alignItems: "center" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#C3CAD6" strokeWidth="3" strokeLinecap="round" /><path d="M22 0.5 L29 4 L22 7.5 Z" fill="#C3CAD6" /></svg>호출(속도 = req/s)</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="29" y2="4" stroke="#C3CAD6" strokeWidth="3" strokeLinecap="round" strokeDasharray="3 6" /></svg>호출(흐름 속도 = req/s)</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: ST.ok }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.warn, marginLeft: 6 }} />경고<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.crit, marginLeft: 6 }} />임계</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: "rgba(10,132,255,0.4)" }} />파드(소유)</span>
             <span style={{ marginLeft: "auto", color: UI.ink3 }}>드래그 = 재배치 · 노드 호버 = 관계 · 선 호버 = 수치 · 선 클릭 = 오류 상세</span>
