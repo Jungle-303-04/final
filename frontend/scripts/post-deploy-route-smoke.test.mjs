@@ -12,6 +12,7 @@ import {
   isFailureProductState,
   isObservedRouteApiRequest,
   isRouteNetworkSettled,
+  isSuccessfulLongLivedApiResponse,
   isStableRouteSurfaceSample,
   normalizeSurfaceText,
   orderRoutesForTraversal,
@@ -238,6 +239,21 @@ describe("post-deploy route smoke helpers", () => {
     })).toBe(false);
   });
 
+  it("recognizes successful streaming media without accepting failed or ordinary responses", () => {
+    expect(isSuccessfulLongLivedApiResponse(200, {
+      "content-type": "application/x-ndjson; charset=utf-8",
+    })).toBe(true);
+    expect(isSuccessfulLongLivedApiResponse(204, {
+      "Content-Type": "text/event-stream",
+    })).toBe(false);
+    expect(isSuccessfulLongLivedApiResponse(503, {
+      "content-type": "text/event-stream",
+    })).toBe(false);
+    expect(isSuccessfulLongLivedApiResponse(200, {
+      "content-type": "application/json",
+    })).toBe(false);
+  });
+
   it("waits for the API response body before settling and reports its full duration", async () => {
     let now = 1_000;
     const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
@@ -276,7 +292,10 @@ describe("post-deploy route smoke helpers", () => {
       expect(observer.summarize(
         phase,
         now - phase.startedAt,
-      ).criticalApiRequestCount).toBe(0);
+      )).toMatchObject({
+        criticalApiRequestCount: 1,
+        criticalInFlightRequestCount: 1,
+      });
 
       emit("requestfinished", request);
       await observer.waitForSettled(phase, 1_000);
@@ -284,6 +303,7 @@ describe("post-deploy route smoke helpers", () => {
         backgroundApiRequestCount: 0,
         backgroundInFlightRequestCount: 0,
         criticalApiRequestCount: 1,
+        criticalInFlightRequestCount: 0,
         durationMs: 950,
         slowBackgroundApi: [],
         slowCriticalApi: [{
@@ -298,6 +318,68 @@ describe("post-deploy route smoke helpers", () => {
       expect([...listeners.values()].every((eventListeners) => eventListeners.size === 0)).toBe(true);
     } finally {
       dateNow.mockRestore();
+    }
+  });
+
+  it("settles after a successful streaming response while retaining in-flight evidence", async () => {
+    const harness = createNetworkHarness();
+    const request = { url: () => "https://example.test/api/timeline/stream" };
+    const observer = createRouteNetworkObserver(harness.page, "https://example.test");
+
+    try {
+      const phase = observer.beginPhase("/timeline");
+      harness.advance(25);
+      harness.emit("request", request);
+      harness.advance(25);
+      harness.emit("response", {
+        headers: () => ({ "content-type": "application/x-ndjson; charset=utf-8" }),
+        request: () => request,
+        status: () => 200,
+      });
+
+      await observer.waitForSettled(phase, 1_000);
+
+      expect(observer.summarize(
+        phase,
+        harness.now() - phase.startedAt,
+      )).toMatchObject({
+        backgroundApiRequestCount: 0,
+        criticalApiRequestCount: 1,
+        criticalInFlightRequestCount: 1,
+        slowCriticalApi: [{
+          in_flight: true,
+          path: "/api/timeline/stream",
+          status: 200,
+        }],
+      });
+    } finally {
+      observer.dispose();
+      harness.restore();
+    }
+  });
+
+  it("keeps a failed streaming handshake in the critical completion gate", async () => {
+    const harness = createNetworkHarness();
+    const request = { url: () => "https://example.test/api/timeline/stream" };
+    const observer = createRouteNetworkObserver(harness.page, "https://example.test");
+
+    try {
+      const phase = observer.beginPhase("/timeline");
+      harness.advance(25);
+      harness.emit("request", request);
+      harness.advance(25);
+      harness.emit("response", {
+        headers: () => ({ "content-type": "application/x-ndjson" }),
+        request: () => request,
+        status: () => 503,
+      });
+
+      await expect(observer.waitForSettled(phase, 700)).rejects.toThrow(
+        "route critical API requests did not settle",
+      );
+    } finally {
+      observer.dispose();
+      harness.restore();
     }
   });
 

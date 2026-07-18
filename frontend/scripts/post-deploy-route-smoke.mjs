@@ -14,6 +14,10 @@ const ROUTE_STABLE_SAMPLE_COUNT = 3;
 const SLOW_API_LIMIT = 5;
 const DIAGNOSTIC_ITEM_LIMIT = 50;
 const DEMO_WORKSPACE_ROUTE = "/home";
+const LONG_LIVED_API_MEDIA_TYPES = new Set([
+  "application/x-ndjson",
+  "text/event-stream",
+]);
 const SENSITIVE_ASSIGNMENT_PATTERN = /\b(authorization|bearer|credential|password|passwd|private[_ -]?key|secret|token|api[_ -]?key|apikey|cookie|set[_ -]?cookie)\s*([:=])\s*(?:Bearer\s+)?[^\s,"']+/giu;
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+\/=-]+/giu;
 const FAILURE_PRODUCT_STATES = new Set([
@@ -166,6 +170,18 @@ export function isRouteNetworkSettled({
   quietWindowMs,
 }) {
   return pendingRequestCount === 0 && now - lastActivityAt >= quietWindowMs;
+}
+
+export function isSuccessfulLongLivedApiResponse(status, headers = {}) {
+  // Streaming handshakes must carry a body. A generic 2xx such as 204 is not
+  // enough to release the request from the route completion gate.
+  if (status !== 200) return false;
+  const contentType = Object.entries(headers)
+    .find(([name]) => name.toLowerCase() === "content-type")?.[1]
+    ?.split(";", 1)[0]
+    ?.trim()
+    ?.toLowerCase();
+  return contentType !== undefined && LONG_LIVED_API_MEDIA_TYPES.has(contentType);
 }
 
 export function createRouteSmokeDiagnostics() {
@@ -574,6 +590,10 @@ export function createRouteNetworkObserver(page, baseUrl) {
     const pending = pendingRequests.get(response.request());
     if (pending === undefined) return;
     pending.status = response.status();
+    pending.longLived = isSuccessfulLongLivedApiResponse(
+      pending.status,
+      response.headers?.() ?? {},
+    );
     sequence += 1;
     recordActivity(pending);
   };
@@ -643,17 +663,33 @@ export function createRouteNetworkObserver(page, baseUrl) {
           path: request.path,
           status: request.status,
         }));
+      const pendingCriticalRequests = [...pendingRequests.values()]
+        .filter((request) => (
+          request.requestSequence > phase.sequence
+          && classifyObservedApiPath(phase.routePathname, request.path) === "critical"
+        ))
+        .map((request) => ({
+          durationMs: Date.now() - request.startedAt,
+          inFlight: true,
+          path: request.path,
+          status: request.status,
+        }));
       const measuredBackgroundRequests = [
         ...backgroundRequests.map((request) => ({ ...request, inFlight: false })),
         ...pendingBackgroundRequests,
       ];
+      const measuredCriticalRequests = [
+        ...criticalRequests.map((request) => ({ ...request, inFlight: false })),
+        ...pendingCriticalRequests,
+      ];
       return {
         backgroundApiRequestCount: measuredBackgroundRequests.length,
         backgroundInFlightRequestCount: pendingBackgroundRequests.length,
-        criticalApiRequestCount: criticalRequests.length,
+        criticalApiRequestCount: measuredCriticalRequests.length,
+        criticalInFlightRequestCount: pendingCriticalRequests.length,
         durationMs,
         slowBackgroundApi: slowRequestSummary(measuredBackgroundRequests),
-        slowCriticalApi: slowRequestSummary(criticalRequests),
+        slowCriticalApi: slowRequestSummary(measuredCriticalRequests),
       };
     },
     async waitForSettled(phase, timeoutMs) {
@@ -671,6 +707,7 @@ export function createRouteNetworkObserver(page, baseUrl) {
           .filter((request) => (
             request.requestSequence > phase.sequence
             && classifyObservedApiPath(phase.routePathname, request.path) === "critical"
+            && !request.longLived
           ));
         const pendingRequestCount = pendingCriticalRequests
           .length;
@@ -688,6 +725,7 @@ export function createRouteNetworkObserver(page, baseUrl) {
             .filter((request) => (
               request.requestSequence > phase.sequence
               && classifyObservedApiPath(phase.routePathname, request.path) === "critical"
+              && !request.longLived
             ))
             .map((request) => request.path),
           route: phase.routePathname,
@@ -714,12 +752,14 @@ function formatRouteTiming({ direct, pathname, spa, totalDurationMs }) {
     direct_background_api_requests: direct.backgroundApiRequestCount,
     direct_background_in_flight: direct.backgroundInFlightRequestCount,
     direct_critical_api_requests: direct.criticalApiRequestCount,
+    direct_critical_in_flight: direct.criticalInFlightRequestCount,
     direct_ms: direct.durationMs,
     direct_slow_background_api: direct.slowBackgroundApi,
     direct_slow_critical_api: direct.slowCriticalApi,
     spa_background_api_requests: spa.backgroundApiRequestCount,
     spa_background_in_flight: spa.backgroundInFlightRequestCount,
     spa_critical_api_requests: spa.criticalApiRequestCount,
+    spa_critical_in_flight: spa.criticalInFlightRequestCount,
     spa_ms: spa.durationMs,
     spa_slow_background_api: spa.slowBackgroundApi,
     spa_slow_critical_api: spa.slowCriticalApi,
