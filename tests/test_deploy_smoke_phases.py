@@ -171,6 +171,9 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
     assert "EXPECTED_SERVICE_IMAGE" in source
     assert "EXPECTED_CONSOLE_IMAGE" in source
     assert "@sha256:" in source
+    assert '-n "${MGMT_NS}" get deployments -o json' in source
+    assert "get deployments --all-namespaces" not in source
+    assert 'get "${resource}" -o json' not in source
     assert "post-deploy public edge convergence" in source
     assert "wait_for_public_edge_release" in source
     assert "non-blocking" not in source
