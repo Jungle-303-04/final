@@ -557,10 +557,42 @@ function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
   );
 }
 
+// '+ 클러스터 연결' 점선 카드 — 지도 클러스터 뷰와 홈 클러스터 섹션이 하나를 공유(두 번째 구현 금지)
+function AddClusterCard({ onClick, delay = 0 }: { onClick: () => void; delay?: number }) {
+  return (
+    <motion.button initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
+      onClick={onClick} whileHover={{ borderColor: "#B9D6FB", background: "rgba(10,132,255,0.03)" }}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
+        border: "1.5px dashed #D5D9E0", borderRadius: 16, background: "transparent", cursor: "pointer" }}>
+      <span style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(10,132,255,0.09)", display: "grid", placeItems: "center", color: BLUE, fontSize: 19, fontWeight: 600, lineHeight: 1 }}>+</span>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
+      <span style={{ fontSize: 11.5, color: UI.ink3 }}>에이전트 설치로 등록</span>
+    </motion.button>
+  );
+}
+
+// ── 홈 서피스용 클러스터 섹션 (D21 2층 — 보드 밖 고정) — 카드는 지도와 같은 ClusterRow 하나 ──
+export function HomeClusterSection({ meta, onOpen, onAddCluster }: {
+  meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; onAddCluster?: () => void;
+}) {
+  const pods = useMemo(() => genPods(), []);
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const iv = setInterval(() => setTick((t) => t + 1), 1500); return () => clearInterval(iv); }, []);
+  const none = useMemo(() => new Set<string>(), []);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14 }}>
+      {CLUSTERS.map((cl) => (
+        <ClusterRow key={cl.id} cl={cl} pods={pods} tick={tick} related={none} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
+      ))}
+      {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={CLUSTERS.length * 0.05} />}
+    </div>
+  );
+}
+
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -580,13 +612,15 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   clusterMeta?: Record<string, Record<string, number>>;
   /** 카드의 종류 링크 클릭 — 드릴과 함께 셸 표 종류를 전환 */
   onOpenKind?: (kindId: string) => void;
+  /** 홈 카드 클릭 등 외부 진입 시 해당 클러스터 노드 뷰로 시작 (스코프 전달 — D21) */
+  initialCluster?: string;
 } = {}) {
   const pods = useMemo(() => genPods(), []);
   const [tick, setTick] = useState(0);
   useEffect(() => { const iv = setInterval(() => setTick((t) => t + 1), 1500); return () => clearInterval(iv); }, []);
   const live = (p: Pod) => (p.status !== "Running" ? 0 : Math.round(Math.sin((tick + p.cpu + p.id.length * 3) * 1.1) * 4 + Math.sin((tick + p.mem) * 0.37) * 2));
 
-  const [view, setView] = useState<View>({ level: "clusters" });
+  const [view, setView] = useState<View>(initialCluster ? { level: "nodes", cluster: initialCluster } : { level: "clusters" });
   useEffect(() => { onScopeChange?.(view); }, [view]);
   const [dir, setDir] = useState(1);
   const [mode, setMode] = useState<"push" | "hero">("push");
@@ -769,16 +803,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                           onKind={onOpenKind ? (kid) => { go({ level: "nodes", cluster: cl.id }, 1); onOpenKind(kid); } : undefined} />
                       </motion.div>
                     ))}
-                    {onAddCluster && (
-                      <motion.button initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: CLUSTERS.length * 0.05 }}
-                        onClick={onAddCluster} whileHover={{ borderColor: "#B9D6FB", background: "rgba(10,132,255,0.03)" }}
-                        style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
-                          border: "1.5px dashed #D5D9E0", borderRadius: 16, background: "transparent", cursor: "pointer" }}>
-                        <span style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(10,132,255,0.09)", display: "grid", placeItems: "center", color: BLUE, fontSize: 19, fontWeight: 600, lineHeight: 1 }}>+</span>
-                        <span style={{ fontSize: 13.5, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
-                        <span style={{ fontSize: 11.5, color: UI.ink3 }}>에이전트 설치로 등록</span>
-                      </motion.button>
-                    )}
+                    {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={CLUSTERS.length * 0.05} />}
                   </div>
                 )}
 
