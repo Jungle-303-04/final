@@ -1,0 +1,15 @@
+export type ConnectionsMessageKey =
+  | "connections.launcher.title"
+  | "connections.launcher.description"
+  | "connections.launcher.repository.title"
+  | "connections.launcher.repository.description"
+  | "connections.launcher.cluster.title"
+  | "connections.launcher.cluster.description"
+  | "connections.repository.source.checking"
+  | "connections.repository.source.notFound.title"
+  | "connections.repository.source.notFound.description"
+  | "connections.repository.source.visibility.public"
+  | "connections.repository.source.visibility.private"
+  | "connections.repository.source.manifestCount"
+  | "connections.repository.source.privateToken"
+  | "connections.repository.source.tokenPlaceholder";

@@ -73,6 +73,10 @@
   --product-floating-action-clearance: calc(
     var(--product-floating-action-size) + var(--product-floating-action-block-end)
   );
+  --product-connection-launcher-width: 28.75rem;
+  --product-connection-wizard-width: 36.25rem;
+  --product-operation-toast-width: 22.5rem;
+  --product-choice-indicator-size: 1.25rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -113,6 +117,14 @@
   --chart-5: oklch(0.60 0.19 30);
   --code-background: oklch(0.17 0.015 255);
   --code-foreground: oklch(0.94 0.01 255);
+  --product-overlay-scrim: color-mix(in oklch, var(--foreground) 28%, transparent);
+  --product-surface-soft: color-mix(in oklch, var(--muted) 78%, var(--card));
+  --product-surface-raised: color-mix(in oklch, var(--card) 94%, var(--background));
+  --product-surface-selected: color-mix(in oklch, var(--primary) 7%, var(--card));
+  --product-surface-success: color-mix(in oklch, var(--status-healthy) 10%, var(--card));
+  --product-surface-warning: color-mix(in oklch, var(--status-warning) 10%, var(--card));
+  --product-surface-danger: color-mix(in oklch, var(--destructive) 9%, var(--card));
+  --product-ambient-primary: color-mix(in oklch, var(--primary) 12%, transparent);
 }
 
 @media (min-width: 80rem) {

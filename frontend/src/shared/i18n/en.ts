@@ -17,6 +17,7 @@ import { compareEn } from "./catalogs/en/compare";
 import { helmEn } from "./catalogs/en/helm";
 import { workloadDetailEn } from "./catalogs/en/workloadDetail";
 import { diagnoseEn } from "./catalogs/en/diagnose";
+import { connectionsEn } from "./catalogs/en/connections";
 
 export const en = {
   "product.name": "Opsia",
@@ -436,6 +437,7 @@ export const en = {
   ...helmEn,
   ...workloadDetailEn,
   ...diagnoseEn,
+  ...connectionsEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

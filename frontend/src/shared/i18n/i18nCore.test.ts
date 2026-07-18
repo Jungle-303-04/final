@@ -40,6 +40,17 @@ describe("i18n catalogs", () => {
     expect(translate("en", "helm.upgrade.selectValue")).toBe("Select a value");
     expect(translate("ko", "helm.upgrade.selectValue")).toBe("값 선택");
   });
+
+  it("localizes connection choreography and assistant evidence progress", () => {
+    expect(translate("en", "connections.launcher.description"))
+      .toBe("What would you like to connect?");
+    expect(translate("ko", "connections.launcher.description"))
+      .toBe("무엇을 연결할까요?");
+    expect(translate("en", "shell.ai.evidenceProgress", { current: 2, total: 3 }))
+      .toBe("Evidence 2/3");
+    expect(translate("ko", "shell.ai.evidenceProgress", { current: 2, total: 3 }))
+      .toBe("근거 2/3");
+  });
 });
 
 describe("locale resolution", () => {

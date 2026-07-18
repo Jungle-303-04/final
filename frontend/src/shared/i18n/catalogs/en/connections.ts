@@ -1,0 +1,18 @@
+import type { ConnectionsMessageKey } from "../../keys/connections";
+
+export const connectionsEn = {
+  "connections.launcher.title": "Connect an environment",
+  "connections.launcher.description": "What would you like to connect?",
+  "connections.launcher.repository.title": "Git repository",
+  "connections.launcher.repository.description": "Discover manifests and deploy them to connected clusters.",
+  "connections.launcher.cluster.title": "Kubernetes cluster",
+  "connections.launcher.cluster.description": "Install the outbound agent and begin verified observation.",
+  "connections.repository.source.checking": "Checking repository…",
+  "connections.repository.source.notFound.title": "Repository not found",
+  "connections.repository.source.notFound.description": "Check the repository URL and your access, then try again.",
+  "connections.repository.source.visibility.public": "Public",
+  "connections.repository.source.visibility.private": "Private",
+  "connections.repository.source.manifestCount": "{count} manifests",
+  "connections.repository.source.privateToken": "This private repository requires an access token.",
+  "connections.repository.source.tokenPlaceholder": "Paste a repository access token",
+} satisfies Record<ConnectionsMessageKey, string>;

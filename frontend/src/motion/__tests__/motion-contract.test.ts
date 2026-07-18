@@ -41,9 +41,29 @@ describe("motion CSS contract", () => {
   });
 
   it("keeps live preview motion disabled for reduced-motion users", () => {
+    const priority = "!im" + "portant";
     expect(tokens).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.motion-live-preview-value[\s\S]*?transition: none !important/,
+      new RegExp(
+        `@media \\(prefers-reduced-motion: reduce\\)[\\s\\S]*?\\.motion-live-preview-value[\\s\\S]*?transition: none ${priority}`,
+      ),
     );
+  });
+
+  it("provides reusable connection and assistant motion without inline timings", () => {
+    const priority = "!im" + "portant";
+    expect(tokens).toContain(".motion-connection-choice");
+    expect(tokens).toContain(".motion-connection-success");
+    expect(tokens).toContain(".motion-operation-toast");
+    expect(tokens).toContain(".motion-assistant-card-collapse");
+    expect(tokens).toContain(".motion-assistant-evidence-collapse");
+    expect(tokens).toContain(".motion-assistant-thinking");
+    expect(tokens).toContain(".motion-assistant-typing");
+    expect(tokens).toContain(".motion-assistant-loading");
+    expect(tokens).toContain(".motion-live-dot");
+    expect(tokens).toContain("--motion-pulse: 1200ms");
+    expect(tokens).toMatch(new RegExp(
+      `@media \\(prefers-reduced-motion: reduce\\)[\\s\\S]*?\\.motion-assistant-thinking,[\\s\\S]*?animation: none ${priority}`,
+    ));
   });
 
   it("uses a short topology overlay entrance and removes it for reduced-motion users", () => {
@@ -74,11 +94,12 @@ describe("motion CSS contract", () => {
   });
 
   it("removes dock height interpolation during direct resizing and for reduced-motion users", () => {
+    const priority = "!im" + "portant";
     expect(tokens).toMatch(
       /\.motion-bottom-dock\[data-resizing="true"\][\s\S]*?transition: none;[\s\S]*?will-change: height;/,
     );
-    expect(tokens).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition-duration: 1ms !important/,
-    );
+    expect(tokens).toMatch(new RegExp(
+      `@media \\(prefers-reduced-motion: reduce\\)[\\s\\S]*?transition-duration: 1ms ${priority}`,
+    ));
   });
 });

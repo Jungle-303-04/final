@@ -17,6 +17,7 @@ import { compareKo } from "./catalogs/ko/compare";
 import { helmKo } from "./catalogs/ko/helm";
 import { workloadDetailKo } from "./catalogs/ko/workloadDetail";
 import { diagnoseKo } from "./catalogs/ko/diagnose";
+import { connectionsKo } from "./catalogs/ko/connections";
 
 export const ko = {
   "product.name": "Opsia",
@@ -436,6 +437,7 @@ export const ko = {
   ...helmKo,
   ...workloadDetailKo,
   ...diagnoseKo,
+  ...connectionsKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,
