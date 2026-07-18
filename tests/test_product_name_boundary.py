@@ -12,7 +12,7 @@ def product_runtime_paths() -> list[Path]:
     # These tools inspect the isolated source and must retain source identifiers
     # to verify provenance or to remove them while importing. They are not part
     # of the shipped product/runtime boundary.
-    reference_tool_prefixes = ("reference-", "absorb")
+    reference_tool_prefixes = ("reference-",)
     for path in (ROOT / "scripts").iterdir():
         if not path.is_file() or path.name.startswith(reference_tool_prefixes):
             continue
