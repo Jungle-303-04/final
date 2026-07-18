@@ -277,7 +277,6 @@ export function ResourceDetailWorkspace({
               <ResourceManifestEditor
                 detail={detail.data}
                 disabledReason={managementReadOnlyReason}
-                onInvalidate={onResourceActionInvalidation}
                 onUnauthorized={onUnauthorized}
                 port={manifestPort}
                 ref={manifestEditorRef}
