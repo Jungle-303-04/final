@@ -44,13 +44,19 @@ const CLUSTERS = [
   { id: "prod-eks", env: "prod", region: "ap-northeast-2", platform: "Amazon EKS" },
   { id: "dev-eks", env: "dev", region: "ap-northeast-2", platform: "Amazon EKS" },
 ];
-const NODES = [
-  { id: "ip-10-0-1-24", cluster: "prod-eks", zone: "apne2-a", instance: "m5.xlarge", cap: 20 },
-  { id: "ip-10-0-2-91", cluster: "prod-eks", zone: "apne2-b", instance: "m5.xlarge", cap: 20 },
-  { id: "ip-10-0-3-15", cluster: "prod-eks", zone: "apne2-c", instance: "m5.2xlarge", cap: 30 },
-  { id: "ip-10-1-0-11", cluster: "dev-eks", zone: "apne2-a", instance: "t3.large", cap: 10 },
-  { id: "ip-10-1-0-42", cluster: "dev-eks", zone: "apne2-b", instance: "t3.large", cap: 10 },
+// state: Ready(가동) · Provisioning(예약됨 — 아직 스케줄 불가) · Cordoned(비활성)
+type NodeState = "Ready" | "Provisioning" | "Cordoned";
+const NODES: { id: string; cluster: string; zone: string; instance: string; cap: number; state: NodeState }[] = [
+  { id: "ip-10-0-1-24", cluster: "prod-eks", zone: "apne2-a", instance: "m5.xlarge", cap: 20, state: "Ready" },
+  { id: "ip-10-0-2-91", cluster: "prod-eks", zone: "apne2-b", instance: "m5.xlarge", cap: 20, state: "Ready" },
+  { id: "ip-10-0-3-15", cluster: "prod-eks", zone: "apne2-c", instance: "m5.2xlarge", cap: 30, state: "Ready" },
+  { id: "ip-10-0-4-63", cluster: "prod-eks", zone: "apne2-a", instance: "m5.xlarge", cap: 20, state: "Provisioning" },
+  { id: "ip-10-1-0-11", cluster: "dev-eks", zone: "apne2-a", instance: "t3.large", cap: 10, state: "Ready" },
+  { id: "ip-10-1-0-42", cluster: "dev-eks", zone: "apne2-b", instance: "t3.large", cap: 10, state: "Cordoned" },
 ];
+// 노드 정렬: 가동(0) → 예약됨(1) → 비활성(2) — 아직 못 쓰는 노드는 뒤로
+const nodeRank = (n: { state: NodeState }) => (n.state === "Ready" ? 0 : n.state === "Provisioning" ? 1 : 2);
+const nodeIdle = (n: { state: NodeState }) => n.state !== "Ready";
 const SERVICES = [
   { id: "shop-api", color: "#0A84FF", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
   { id: "shop-web", color: "#28A745", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
@@ -94,6 +100,7 @@ function makeRng(seed: number) { let s = seed >>> 0; return () => { s = (s * 166
 function genPods(): Pod[] {
   const r = makeRng(23); const pods: Pod[] = []; let k = 0;
   NODES.forEach((node) => {
+    if (node.state !== "Ready") return; // 예약·비활성 노드엔 파드가 배치되지 않는다
     const count = node.cap - Math.floor(r() * 2);
     for (let i = 0; i < count; i++) {
       const svc = SERVICES[Math.floor(r() * SERVICES.length)].id;
@@ -111,6 +118,8 @@ const isCrit = (p: Pod) => p.status === "OOMKilled" || p.status === "CrashLoopBa
 const healthColor = (p: Pod) => (p.status === "Pending" ? HP.pending : isCrit(p) ? HP.crit : health(p) >= 75 ? HP.warn : HP.ok);
 const pct = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
 const spanOf = (cap: number) => Math.min(3, Math.max(1, Math.ceil(cap / 10)));
+// 정렬 랭크: 임계(0) → 실행 중(1) → 대기·미할당(2)
+const rank = (p: Pod) => (isCrit(p) ? 0 : p.status === "Pending" ? 2 : 1);
 
 type Lens = { kind: "svc" | "cfg" | "git" | "crit"; id: string } | null;
 type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { level: "pods"; cluster: string; node: string };
@@ -120,10 +129,9 @@ type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { leve
 function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: boolean; dim: boolean; lit: boolean; live: number; onClick: () => void; onTip: (x: number, y: number, pods: Pod[] | null) => void }) {
   const cpuV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.cpu + live));
   const c = healthColor(p);
-  // 강도: 14% ~ 80% (저부하는 차분하게, 고부하만 깊은 색)
-  const mix = p.status === "Pending" ? 0 : isCrit(p) ? 100 : Math.round(14 + (cpuV / 100) * 66);
-  const bg = p.status === "Pending" ? "#F0F1F4" : `color-mix(in srgb, ${c} ${mix}%, #fff)`;
-  const deep = mix > 52; // 진한 타일 위 텍스트는 밝게
+  // 강도 램프: 뉴트럴(차분) → 상태색(포화). 저부하는 거의 회색, 고부하만 색이 선다.
+  const mix = p.status === "Pending" ? 0 : isCrit(p) ? 100 : Math.round(10 + (cpuV / 100) * 78);
+  const bg = p.status === "Pending" ? "#EDEFF3" : `color-mix(in srgb, ${c} ${mix}%, #EFF1F4)`;
   return (
     <motion.button layout data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
       initial={false}
@@ -133,14 +141,13 @@ function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: bool
       style={{
         aspectRatio: "1", border: "none", borderRadius: big ? 11 : 6.5, cursor: "pointer", position: "relative", overflow: "hidden",
         background: bg, transition: "background 1.2s ease",
-        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : `inset 0 0 0 1px color-mix(in srgb, ${c} ${Math.min(mix + 12, 100)}%, rgba(17,19,24,0.06))`,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: big ? 2 : 0, padding: 0, minWidth: 0,
+        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 3px ${BLUE}` : p.status === "Pending" ? "inset 0 0 0 1px rgba(17,19,24,0.07)" : `inset 0 0 0 1px color-mix(in srgb, ${c} ${Math.min(mix + 14, 100)}%, rgba(17,19,24,0.06))`,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0,
       }}>
-      {big && (
-        <>
-          <span style={{ position: "relative", zIndex: 1, fontSize: 11, fontWeight: 600, color: deep ? "rgba(255,255,255,0.95)" : "rgba(17,19,24,0.8)", letterSpacing: "-0.01em", maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: MONO }}>{p.svc}</span>
-          <span style={{ position: "relative", zIndex: 1, fontSize: 9, fontWeight: 600, color: deep ? "rgba(255,255,255,0.75)" : "rgba(17,19,24,0.5)", fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>{p.status === "Running" ? `${cpuV}%` : p.status}</span>
-        </>
+      {/* 이름은 그룹 헤더가 전담 — 타일 안엔 텍스트를 넣지 않아 대비 문제를 없앤다.
+          예외: 대기(미할당)는 상태 자체가 정보라 점선 링으로 표기. */}
+      {p.status === "Pending" && (
+        <span style={{ width: big ? 14 : 8, height: big ? 14 : 8, borderRadius: 999, border: `1.5px dashed ${UI.ink3}`, opacity: 0.65 }} />
       )}
     </motion.button>
   );
@@ -193,14 +200,87 @@ function Spark({ id, base, tick, h = 22, color = HP.ok }: { id: string; base: nu
   );
 }
 
+// ── 파드 표 행: 상태칩 · 이름 · 부하 · 재시작 · 나이 → 클릭 시 상세 ─────────────────────────────
+const PODCOLS = "16px minmax(0,1fr) 92px 92px 54px 46px 12px";
+const ageOf = (p: Pod) => { const h = p.id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0) % 220; return h < 24 ? `${h + 1}h` : `${Math.floor(h / 24)}d`; };
+
+function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; dim: boolean; lit: boolean; onClick: () => void; onTip: (x: number, y: number, pods: Pod[] | null) => void }) {
+  const c = healthColor(p);
+  const cpuV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.cpu + live));
+  const memV = p.status === "Pending" ? 0 : Math.max(3, Math.min(99, p.mem + Math.round(live * 0.6)));
+  const stLabel = p.status === "Running" ? "Running" : p.status;
+  return (
+    <motion.button data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onMouseEnter={(e) => onTip(e.clientX, e.clientY, [p])} onMouseMove={(e) => onTip(e.clientX, e.clientY, [p])} onMouseLeave={() => onTip(0, 0, null)}
+      initial={false} animate={{ opacity: dim ? 0.3 : 1 }} transition={SOFT}
+      className="podrow"
+      style={{
+        display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, width: "100%", textAlign: "left",
+        border: "none", background: lit ? "rgba(10,132,255,0.06)" : "transparent", borderRadius: 9, padding: "8px 10px", cursor: "pointer",
+        borderLeft: lit ? `2px solid ${BLUE}` : "2px solid transparent",
+      }}>
+      {/* 상태 사각형 */}
+      <span title={stLabel} className={isCrit(p) ? "stchip crit" : "stchip"}
+        style={{ width: 12, height: 12, borderRadius: 4, background: p.status === "Pending" ? "transparent" : c, border: p.status === "Pending" ? `1.5px dashed ${UI.ink3}` : "none", boxSizing: "border-box" }} />
+      {/* 이름 + 상태 라벨 */}
+      <span style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+        {p.status !== "Running" && <span style={{ fontSize: 9.5, fontWeight: 600, color: isCrit(p) ? HP.crit : UI.ink3, flexShrink: 0 }}>{stLabel}</span>}
+      </span>
+      <MiniBar v={cpuV} />
+      <MiniBar v={memV} />
+      <span style={{ fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: p.restarts > 0 ? HP.crit : UI.ink3, fontWeight: p.restarts > 0 ? 700 : 500 }}>{p.restarts}</span>
+      <span style={{ fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: UI.ink3 }}>{ageOf(p)}</span>
+      <ChevronRight size={12} style={{ color: "#C6CAD1" }} />
+    </motion.button>
+  );
+}
+
+function MiniBar({ v }: { v: number }) {
+  const c = v >= 90 ? HP.crit : v >= 75 ? HP.warn : HP.ok;
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <span style={{ flex: 1, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
+        <motion.span animate={{ width: `${v}%` }} transition={{ duration: 1.4, ease: "easeInOut" }} style={{ display: "block", height: "100%", borderRadius: 999, background: c }} />
+      </span>
+      <span style={{ width: 26, textAlign: "right", fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}><Num v={v} /></span>
+    </span>
+  );
+}
+
+// ── 메트릭 셀: 값 + 추이(또는 용량 바)를 한 칸에 ─────────────────────────────
+function MetricCell({ label, value, unit, tone, sub, spark, bar }: {
+  label: string; value: number; unit: string; tone: string; sub?: string;
+  spark?: { id: string; base: number; tick: number }; bar?: number;
+}) {
+  return (
+    <div style={{ background: UI.card, padding: "11px 13px 9px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+        <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><Num v={value} /></span>
+        <span style={{ fontSize: 10, fontWeight: 600, color: UI.ink3 }}>{unit}</span>
+        {sub && <span style={{ marginLeft: "auto", fontSize: 9.5, color: UI.ink3, fontFamily: MONO, whiteSpace: "nowrap" }}>{sub}</span>}
+      </div>
+      <div style={{ height: 20 }}>
+        {spark && <Spark id={spark.id} base={spark.base} tick={spark.tick} h={20} color={tone} />}
+        {bar !== undefined && (
+          <div style={{ marginTop: 7, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
+            <motion.div animate={{ width: `${Math.min(100, bar * 100)}%` }} transition={{ duration: 1.2, ease: "easeInOut" }} style={{ height: "100%", borderRadius: 999, background: tone }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── 노드 위젯 ─────────────────────────────
 function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, onPod, onTip, onCritEnter, onCritLeave, onCritClick }: {
   node: (typeof NODES)[number]; pods: Pod[]; expanded: boolean; dimFn: (p: Pod) => boolean; litFn: (p: Pod) => boolean; live: (p: Pod) => number;
   tick: number; onOpen: () => void; onPod: (p: Pod) => void; onTip: (x: number, y: number, pods: Pod[] | null) => void;
   onCritEnter: () => void; onCritLeave: () => void; onCritClick: () => void;
 }) {
-  // 스캔 순서: 임계 먼저 → 서비스별 그룹 → 부하 내림차순 (같은 서비스 파드가 뭉쳐 워크로드처럼 읽힘)
-  const np = pods.filter((p) => p.node === node.id).sort((a, b) => (isCrit(b) ? 1 : 0) - (isCrit(a) ? 1 : 0) || a.svc.localeCompare(b.svc) || health(b) - health(a));
+  // 스캔 순서: ① 임계 ② 실행 중(워크로드별 묶음, 부하 높은 순) ③ 대기(미할당) 맨 뒤
+  const np = pods.filter((p) => p.node === node.id).sort((a, b) => rank(a) - rank(b) || a.svc.localeCompare(b.svc) || health(b) - health(a));
   const act = np.filter((p) => p.status === "Running");
   // 실시간: 파드 지터가 노드 평균에도 반영 — 게이지·숫자가 매 틱 움직인다
   const avgC = pct(act.reduce((s, p) => s + p.cpu + live(p), 0) / (act.length || 1));
@@ -211,7 +291,8 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
   return (
     <motion.div transition={SPRING} onClick={expanded ? undefined : onOpen}
       style={{
-        background: UI.card, borderRadius: 16, padding: expanded ? 24 : 16, border: `1px solid ${UI.line}`,
+        background: nodeIdle(node) ? "#FBFBFD" : UI.card, borderRadius: 16, padding: expanded ? 24 : 16,
+        border: nodeIdle(node) ? "1px dashed #DFE1E7" : `1px solid ${UI.line}`, opacity: nodeIdle(node) ? 0.82 : 1,
         boxShadow: "none", cursor: expanded ? "default" : "pointer", display: "flex", flexDirection: "column", gap: expanded ? 16 : 12, minWidth: 0, height: "100%", boxSizing: "border-box",
       }}
       whileHover={expanded ? undefined : { boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
@@ -222,7 +303,9 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
             <Server size={expanded ? 15 : 12} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0 }} />
             <span style={{ fontSize: expanded ? 17 : 12.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.id}</span>
           </div>
-          <div style={{ fontSize: expanded ? 11.5 : 9.5, color: UI.ink3, marginTop: 2, marginLeft: expanded ? 21 : 18, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.instance} · {node.zone} · Ready</div>
+          <div style={{ fontSize: expanded ? 11.5 : 9.5, color: UI.ink3, marginTop: 2, marginLeft: expanded ? 21 : 18, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {node.instance} · {node.zone} · <span style={{ color: nodeIdle(node) ? "#B25A00" : UI.ink3, fontWeight: nodeIdle(node) ? 600 : 400 }}>{node.state === "Ready" ? "Ready" : node.state === "Provisioning" ? "예약됨" : "비활성"}</span>
+          </div>
         </div>
         <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginTop: 1 }}>
           {/* 장애 배지 — 호버: 에러 툴팁+미리보기 / 클릭: 에러 모아보기 */}
@@ -239,43 +322,63 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, live, tick, onOpen, on
           <span style={{ fontSize: expanded ? 12 : 10.5, fontWeight: 600, color: UI.ink2, fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>{np.length}<span style={{ color: UI.ink3 }}>/{node.cap}</span></span>
         </span>
       </div>
-      <div style={{ display: "flex", gap: 14 }}>
-        <Gauge label="CPU" v={avgC} /><Gauge label="MEM" v={avgM} />
-      </div>
-      {expanded && (
-        <div style={{ border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 12, padding: "12px 14px 8px" }}>
-          <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginBottom: 8 }}>CPU · 최근 24 틱</div>
-          <Spark id={node.id} base={avgC} tick={tick} h={36} color={avgC >= 75 ? HP.warn : HP.ok} />
+      {expanded ? (
+        // 노드 메트릭 — 지표마다 값 + 추이를 한 칸에 (CPU 중복 제거)
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: UI.line, border: `1px solid ${UI.line}`, borderRadius: 12, overflow: "hidden" }}>
+          <MetricCell label="CPU" value={avgC} unit="%" tone={avgC >= 90 ? HP.crit : avgC >= 75 ? HP.warn : HP.ok} spark={{ id: `${node.id}-c`, base: avgC, tick }} />
+          <MetricCell label="MEM" value={avgM} unit="%" tone={avgM >= 90 ? HP.crit : avgM >= 75 ? HP.warn : HP.ok} spark={{ id: `${node.id}-m`, base: avgM, tick }} />
+          <MetricCell label="파드 밀도" value={Math.round((np.length / node.cap) * 100)} unit="%" tone={BLUE} sub={`${np.length} / ${node.cap} 슬롯`} bar={np.length / node.cap} />
+          <MetricCell label="재시작 24h" value={np.reduce((s, p) => s + p.restarts, 0)} unit="회" tone={hot ? HP.crit : UI.ink3} sub={hot ? `임계 파드 ${hot}` : "안정"} />
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 14 }}>
+          <Gauge label="CPU" v={avgC} /><Gauge label="MEM" v={avgM} />
         </div>
       )}
       {expanded ? (
-        // 파드뷰: 워크로드(Deployment/StatefulSet) 그룹핑 + 네임스페이스 표기
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        // 파드뷰 = 표. 상태 · 이름 · 워크로드 · 부하 · 재시작 · 나이 → 클릭하면 상세.
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink }}>파드 {np.length}</span>
+            <span style={{ fontSize: 10.5, color: UI.ink3, lineHeight: 1.5 }}>
+              워크로드(Deployment·StatefulSet)별로 묶었습니다 — 워크로드가 곧 스케일링 단위라 같은 이미지·설정의 복제본이 한 줄에 모입니다.
+              순서는 <b style={{ color: UI.ink2, fontWeight: 600 }}>임계 → 부하 높은 순 → 대기(미할당)</b>.
+            </span>
+          </div>
+
+          {/* 표 헤더 */}
+          <div style={{ display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
+            <span>상태</span><span>파드</span><span>CPU</span><span>MEM</span><span style={{ textAlign: "right" }}>재시작</span><span style={{ textAlign: "right" }}>나이</span><span />
+          </div>
+
           {(() => {
             const bySvc = new Map<string, Pod[]>();
             np.forEach((p) => { const arr = bySvc.get(p.svc) ?? []; arr.push(p); bySvc.set(p.svc, arr); });
-            const groups = [...bySvc.entries()].sort((a, b) => (b[1].some(isCrit) ? 1 : 0) - (a[1].some(isCrit) ? 1 : 0) || a[0].localeCompare(b[0]));
+            const gRank = (list: Pod[]) => (list.some(isCrit) ? 0 : list.every((p) => p.status === "Pending") ? 2 : 1);
+            const groups = [...bySvc.entries()].sort((a, b) => gRank(a[1]) - gRank(b[1]) || a[0].localeCompare(b[0]));
             return groups.map(([svc, list]) => {
               const meta = SVC[svc];
               const worst = list.some(isCrit) ? HP.crit : list.some((p) => p.status === "Running" && health(p) >= 75) ? HP.warn : HP.ok;
               return (
                 <div key={svc}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7, minWidth: 0 }}>
+                  {/* 워크로드 그룹 헤더 */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 10px 6px", minWidth: 0 }}>
                     <span style={{ width: 6, height: 6, borderRadius: 999, background: worst, flexShrink: 0 }} />
                     <span style={{ fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{svc}</span>
-                    <span style={{ fontSize: 10, color: UI.ink3 }}>{meta.kind} · ×{list.length}</span>
+                    <span style={{ fontSize: 10, color: UI.ink3 }}>{meta.kind} · 복제본 {list.length}</span>
                     <span style={{ marginLeft: "auto", fontSize: 9.5, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 7px", fontFamily: MONO }}>{meta.ns}</span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
-                    {list.map((p) => <PodTile key={p.id} p={p} big dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
-                  </div>
+                  {[...list].sort((a, b) => rank(a) - rank(b) || health(b) - health(a)).map((p) => (
+                    <PodRow key={p.id} p={p} live={live(p)} dim={dimFn(p)} lit={litFn(p)} onClick={() => onPod(p)} onTip={onTip} />
+                  ))}
                 </div>
               );
             });
           })()}
+
           {node.cap - np.length > 0 && (
-            <div style={{ fontSize: 10, color: UI.ink3, display: "flex", alignItems: "center", gap: 7 }}>
-              <span style={{ width: 12, height: 12, borderRadius: 4, border: "1px dashed #E2E4E9", boxSizing: "border-box" }} />빈 슬롯 {node.cap - np.length}
+            <div style={{ fontSize: 10, color: UI.ink3, display: "flex", alignItems: "center", gap: 7, padding: "8px 10px 0", borderTop: `1px solid ${UI.line2}` }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, border: "1px dashed #D8DBE1", boxSizing: "border-box" }} />남은 슬롯 {node.cap - np.length} · 스케줄 가능
             </div>
           )}
         </div>
@@ -498,7 +601,7 @@ function App() {
 
                 {view.level === "nodes" && (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-                    {NODES.filter((n) => n.cluster === view.cluster).map((node, i) => (
+                    {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
                       <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}` }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
                         <NodeWidget node={node} pods={pods} expanded={false} dimFn={dimFn} litFn={litFn} live={live} tick={tick}
                           onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.id }, 1)} onPod={selectPod} onTip={onTip}
@@ -557,7 +660,9 @@ function App() {
       <style>{`
         html, body { background: ${UI.bg}; }
         .op { min-height: 100vh; background: ${UI.bg}; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
-        .op .tile.crit { animation: critp 1.3s ease-in-out infinite; }
+        .op .tile.crit, .op .stchip.crit { animation: critp 1.3s ease-in-out infinite; }
+        .op .podrow { transition: background .15s ease; }
+        .op .podrow:hover { background: rgba(17,19,24,0.035) !important; }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.12) saturate(1.15); } }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
