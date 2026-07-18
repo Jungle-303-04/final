@@ -203,6 +203,8 @@ function report(): IssueRcaReport {
     candidates: [],
     supportingEvidenceRefs: [],
     missingEvidenceChecks: [],
+    evidenceSummary: null,
+    evidenceBundleSummary: null,
     narrative: {
       locale: "ko",
       executiveSummary: "summary",

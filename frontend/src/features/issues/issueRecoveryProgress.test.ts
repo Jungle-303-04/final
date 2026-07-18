@@ -23,6 +23,10 @@ const SELECTED: IssueSummary = {
   pullRequestUrl: null,
   errorReason: null,
   updatedAt: "2026-07-15T05:00:00Z",
+  situationSummary: null,
+  recommendedActionSummary: null,
+  evidenceSummary: null,
+  evidenceBundleSummary: null,
 };
 
 describe("issueRecoveryProgress", () => {

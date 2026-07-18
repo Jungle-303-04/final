@@ -523,6 +523,10 @@ class RecoveryActionCandidate(EventBody):
     validation_checks: list[str]
     rollback_plan: str
     evidence_refs: list[str]
+    recommendation_reason: str = ""
+    expected_outcome: str = ""
+    risk_explanation: str = ""
+    rollback_reason: str = ""
 
 
 @dataclass(frozen=True)

@@ -150,6 +150,10 @@ const recoveryPlan = {
     validation_checks: ["rollout healthy"],
     rollback_plan: "Restore the previous limit",
     evidence_refs: ["evidence-1"],
+    recommendation_reason: null,
+    expected_outcome: null,
+    risk_explanation: null,
+    rollback_reason: null,
   }],
 };
 describe("createIssuesAdapter", () => {

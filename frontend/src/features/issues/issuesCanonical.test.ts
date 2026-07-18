@@ -90,6 +90,10 @@ describe("Issues canonical list", () => {
       pullRequestUrl: "https://example.invalid/pull/1",
       errorReason: null,
       updatedAt: "2026-07-12T15:00:00.000Z",
+      situationSummary: null,
+      recommendedActionSummary: null,
+      evidenceSummary: null,
+      evidenceBundleSummary: null,
     });
     expect(result.items[1]?.status).toBe("vendor_future_literal");
     expect(result).toMatchObject({

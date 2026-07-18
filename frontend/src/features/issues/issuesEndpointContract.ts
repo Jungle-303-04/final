@@ -127,6 +127,8 @@ export interface IssuesEndpointRcaReport {
   evidence_ref: string | null;
   supporting_evidence: string[];
   missing_evidence: string[];
+  evidence_summary?: string | null;
+  evidence_bundle_summary?: string | null;
   created_at: string | null;
   resource_kind: string | null;
   resource_name: string | null;
@@ -162,6 +164,10 @@ export interface IssuesEndpointRecoveryCandidate {
   validation_checks: string[];
   rollback_plan: string;
   evidence_refs: string[];
+  recommendation_reason?: string | null;
+  expected_outcome?: string | null;
+  risk_explanation?: string | null;
+  rollback_reason?: string | null;
 }
 
 export interface IssuesEndpointRecoveryPlan {

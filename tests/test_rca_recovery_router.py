@@ -48,6 +48,10 @@ def _candidate(action_id: str, *, title: str, rank: int) -> RecoveryActionCandid
         validation_checks=["rollout status"],
         rollback_plan="undo rollout",
         evidence_refs=["evidence://corr-1"],
+        recommendation_reason="RCA evidence points to this action first.",
+        expected_outcome="The workload should recover.",
+        risk_explanation="Only one deployment is affected.",
+        rollback_reason="The previous rollout can be restored.",
     )
 
 
@@ -226,6 +230,12 @@ def test_recovery_plan_by_correlation_returns_selected_action_status() -> None:
         assert response.selected_action_id == "safe-pr"
         assert response.selected_action is not None
         assert response.selected_action.title == "Open Safe PR"
+        assert response.selected_action.recommendation_reason == (
+            "RCA evidence points to this action first."
+        )
+        assert response.selected_action.expected_outcome == "The workload should recover."
+        assert response.selected_action.risk_explanation == "Only one deployment is affected."
+        assert response.selected_action.rollback_reason == "The previous rollout can be restored."
         assert response.candidates[0].action_id == "restart"
         assert (
             "can_access",

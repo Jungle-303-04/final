@@ -41,6 +41,16 @@ const FAILURE_MESSAGE: Record<IssuesFailureCode, MessageKey> = {
   error: "issues.surface.failure.error",
 };
 
+const RECOVERY_CARD_MESSAGE: Record<
+  Parameters<IssuesSurfaceCopy["recoveryCardProgress"]>[0],
+  MessageKey
+> = {
+  active: "issues.recovery.card.active",
+  approval: "issues.recovery.card.approval",
+  completed: "issues.recovery.card.completed",
+  failed: "issues.recovery.card.failed",
+};
+
 const CAUSE_MESSAGE: Record<string, MessageKey> = {
   oom_killed: "issues.cause.oomKilled",
   memory_limit_too_low: "issues.cause.oomKilled",
@@ -53,6 +63,20 @@ const CAUSE_MESSAGE: Record<string, MessageKey> = {
   wrong_image_tag: "issues.cause.wrongImageTag",
   bad_image_rollout: "issues.cause.wrongImageTag",
   registry_unavailable: "issues.cause.registryUnavailable",
+};
+
+const EVIDENCE_NAME_MESSAGE: Record<string, MessageKey> = {
+  broken_image_startup_log: "issues.evidence.name.brokenImageStartupLog",
+  cluster_resource_state: "issues.evidence.name.clusterResourceState",
+  config_error_log: "issues.evidence.name.configErrorLog",
+  current_workload_snapshots: "issues.evidence.name.currentWorkloadSnapshots",
+  dependency_error_log: "issues.evidence.name.dependencyErrorLog",
+  port_bind_failure_signal: "issues.evidence.name.portBindFailureSignal",
+  related_logs: "issues.evidence.name.relatedLogs",
+  related_traces: "issues.evidence.name.relatedTraces",
+  startup_crash_signal: "issues.evidence.name.startupCrashSignal",
+  startup_permission_denied_signal: "issues.evidence.name.startupPermissionDeniedSignal",
+  telemetry_metrics: "issues.evidence.name.telemetryMetrics",
 };
 
 export function IssuesPage({ port }: { port: IssuesPort }) {
@@ -204,6 +228,67 @@ function createIssuesCopy(
     refresh: t("common.action.refresh"),
     status: t("issues.surface.status"),
     statusLabel: (status) => translateOperationalValue(status, ISSUE_STATUS_MESSAGE, t),
+    lifecycleOpen: t("issues.lifecycle.open"),
+    lifecycleClosed: t("issues.lifecycle.closed"),
+    actionReviewRequired: t("issues.action.reviewRequired"),
+    actionReviewAgainRequired: t("issues.action.reviewAgainRequired"),
+    actionAutoApprovalAvailable: t("issues.action.autoApprovalAvailable"),
+    scope: t("issues.surface.scope"),
+    namespaceSuffix: t("issues.surface.namespaceSuffix"),
+    cluster: t("issues.context.cluster"),
+    namespace: t("issues.context.namespace"),
+    resourceKind: t("issues.context.resourceKind"),
+    analysisComplete: t("issues.analysis.complete"),
+    severityFilterLabel: t("issues.severity.filter"),
+    severityFilterAll: t("issues.severity.all"),
+    severityCritical: t("issues.severity.critical"),
+    severityWarning: t("issues.severity.warning"),
+    severityHealthy: t("issues.severity.healthy"),
+    severityTooltip: (value) => t("issues.severity.tooltip", { value }),
+    valueUnknown: t("issues.value.unknown"),
+    recoveryCardProgress: (state) => t(RECOVERY_CARD_MESSAGE[state]),
+    situationSummary: t("issues.summary.situation"),
+    situationSummaryText: (symptom, cause, status) => t("issues.summary.text", {
+      cause: cause || t("issues.value.unknown"),
+      status,
+      symptom,
+    }),
+    noAdditionalAction: t("issues.action.none"),
+    impactScope: t("issues.report.impactScope"),
+    finalJudgement: t("issues.report.finalJudgement"),
+    finalCause: t("issues.report.finalCause"),
+    evidenceSummaryTitle: t("issues.report.evidenceSummary"),
+    evidenceDetailsTitle: t("issues.report.evidenceDetails"),
+    recommendedActionTitle: t("issues.report.recommendedAction"),
+    viewRecoveryAction: t("issues.report.viewRecovery"),
+    actionRisk: t("issues.report.actionRisk"),
+    time: t("issues.report.time"),
+    evidenceCoverage: (confirmed, total) => t("issues.report.evidenceCoverage", {
+      confirmed: formatNumber(confirmed),
+      total: formatNumber(total),
+    }),
+    causeCandidates: t("issues.report.causeCandidates"),
+    itemCount: (count) => t("issues.count.items", { count: formatNumber(count) }),
+    finalJudgementText: (cause, symptom) => t("issues.report.judgementText", { cause, symptom }),
+    memoryRecommendation: t("issues.report.memoryRecommendation"),
+    reviewRecoveryPlan: t("issues.report.reviewRecovery"),
+    evidenceNameLabel: (name) => translateOperationalValue(name, EVIDENCE_NAME_MESSAGE, t),
+    recommendedRecoveryActions: t("issues.recovery.recommendedActions"),
+    otherRecoveryCandidates: t("issues.recovery.otherCandidates"),
+    recommendationReason: t("issues.recovery.recommendationReason"),
+    expectedOutcome: t("issues.recovery.expectedOutcome"),
+    riskExplanation: t("issues.recovery.riskExplanation"),
+    actionToRun: t("issues.recovery.actionToRun"),
+    validationChecks: t("issues.recovery.validationChecks"),
+    rollbackAction: t("issues.recovery.rollbackAction"),
+    selectRecoveryAction: t("issues.recovery.selectAction"),
+    riskLabel: (severity) => {
+      const normalized = severity?.trim().toLowerCase();
+      if (normalized === "critical") return t("issues.risk.critical");
+      if (normalized === "medium" || normalized === "warning") return t("issues.risk.medium");
+      if (normalized === "low" || normalized === "info") return t("issues.risk.low");
+      return t("issues.value.unknown");
+    },
     severityLabel: (severity) => t(
       severity === "critical"
         ? "issues.severity.critical"

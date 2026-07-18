@@ -378,8 +378,8 @@ export function IssuesSurface({
       </Card>
       {selected === null ? null : (
         <div className={cn(
-          "min-w-0 w-full basis-full shrink-0 transition-[flex-basis] duration-300 ease-out motion-reduce:transition-none",
-          detailFull ? "lg:basis-full" : "lg:basis-[30rem]",
+          "min-w-0 w-full basis-full shrink-0 animate-in fade-in-0 slide-in-from-right-4 transition-[flex-basis] duration-500 ease-out motion-reduce:animate-none motion-reduce:transition-none",
+          detailFull ? "lg:basis-full" : "lg:basis-[42rem]",
         )}
         >
           <IssuesPanels

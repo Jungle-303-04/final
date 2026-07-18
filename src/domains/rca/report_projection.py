@@ -33,6 +33,8 @@ def rca_report_projection(payload: JsonObject) -> JsonObject:
         "evidence_ref": payload.get("evidence_ref"),
         "supporting_evidence": _str_list(detail.get("supporting_evidence")),
         "missing_evidence": _str_list(detail.get("missing_evidence")),
+        "evidence_summary": _optional_str(detail.get("evidence_summary")),
+        "evidence_bundle_summary": _optional_str(detail.get("evidence_bundle_summary")),
         "resource_kind": incident.get("resource_kind"),
         "resource_name": incident.get("resource_name"),
         "namespace": incident.get("namespace"),
@@ -74,6 +76,8 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
         "evidence_ref": value("evidence_ref"),
         "supporting_evidence": _str_list(value("supporting_evidence", [])),
         "missing_evidence": _str_list(value("missing_evidence", [])),
+        "evidence_summary": _optional_str(value("evidence_summary")),
+        "evidence_bundle_summary": _optional_str(value("evidence_bundle_summary")),
         "created_at": row.get("created_at"),
         "resource_kind": value("resource_kind"),
         "resource_name": value("resource_name"),
@@ -101,6 +105,10 @@ def _str_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _optional_str(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _object_list(value: Any) -> list[JsonObject]:

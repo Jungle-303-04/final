@@ -13,6 +13,7 @@ from domains.dashboard.repository import (
     incident_logical_key,
     incident_logical_key_from_projection,
     issue_severity_projection,
+    serialize_timeline_row,
     timeline_update_from_event,
 )
 from domains.rca.timeline import issue_presentation_severity
@@ -105,6 +106,9 @@ def test_dashboard_worker_upserts_timeline_row_without_chaining() -> None:
     assert row["confidence"] == 0.92
     assert row["supporting_evidence"] == ["pod waiting reason", "registry 401"]
     assert row["missing_evidence"] == ["trace-span"]
+    item = serialize_timeline_row(row)
+    assert "situation_summary" not in item
+    assert "recommended_action_summary" not in item
 
 
 def test_issue_severity_projection_reuses_the_shared_typed_timeline_policy() -> None:
