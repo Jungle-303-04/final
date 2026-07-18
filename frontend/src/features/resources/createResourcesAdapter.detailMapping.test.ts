@@ -130,4 +130,51 @@ describe("canonical Resources detail mapping", () => {
     });
     expect(JSON.stringify(result.providerDetail)).not.toContain("must_not_reach_product_state");
   });
+
+  it("maps the core Ingress projection without exposing Secret values", async () => {
+    const dependencies = endpoints({
+      getInventoryResourceDetail: () => Promise.resolve({
+        ...RESOURCE_DETAIL,
+        identity: {
+          resource_type: "custom_resource",
+          kind: "Ingress",
+          namespace: "shop",
+          name: "shop",
+        },
+        resource: {
+          ...RESOURCE_DETAIL.resource,
+          resource_type: "custom_resource",
+          api_version: "networking.k8s.io/v1",
+          kind: "Ingress",
+          name: "shop",
+        },
+        provider_detail: {
+          type: "core-ingress",
+          ingress_class_name: "nginx",
+          addresses: ["203.0.113.10"],
+          routes: [{
+            host: "shop.example.test",
+            path: "/api",
+            path_type: "Prefix",
+            backend_service: "checkout",
+            backend_port: "80",
+          }],
+          tls: [{ secret_name: "shop-tls", hosts: ["shop.example.test"] }],
+          conditions: [],
+        },
+      }),
+    });
+
+    const result = await createResourcesAdapter(dependencies).loadResourceDetail(
+      "cluster-1",
+      { resourceType: "custom_resource", kind: "Ingress", namespace: "shop", name: "shop" },
+    );
+
+    expect(result.providerDetail).toMatchObject({
+      type: "core-ingress",
+      ingressClassName: "nginx",
+      routes: [{ backendService: "checkout", backendPort: "80" }],
+      tls: [{ secretName: "shop-tls" }],
+    });
+  });
 });

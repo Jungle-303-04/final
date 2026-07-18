@@ -56,6 +56,26 @@ describe("resource manifest adapter", () => {
       correlation_id: "correlation-command-1",
       status: "queued",
     });
+    const deployResourceManifestEdit = vi.fn().mockResolvedValue({
+      accepted: true,
+      pathway: "git",
+      operation_id: "event-yaml-1",
+      workflow_run_id: "workflow-1",
+      correlation_id: "correlation-1",
+      current_stage: "commit",
+      preview: await previewResourceManifestEdit(),
+      stages: [{
+        stage: "validation",
+        status: "completed",
+        evidence: { desired_sha256: `sha256:${"c".repeat(64)}` },
+        reason_code: null,
+      }],
+      command_id: "event-yaml-1",
+      event_id: "event-1",
+      approval_id: "approval-1",
+      pending_reason_codes: [],
+    });
+    previewResourceManifestEdit.mockClear();
     const getResourceManifestCreateCapability = vi.fn().mockResolvedValue({
       cluster_id: "cluster-1",
       namespace: "shop",
@@ -87,6 +107,7 @@ describe("resource manifest adapter", () => {
       applyResourceManifestNow,
       createResourceManifest,
       dryRunResourceManifestCreate,
+      deployResourceManifestEdit,
       getResourceManifestSource,
       getResourceManifestCreateCapability,
       previewResourceManifestEdit,
@@ -106,6 +127,23 @@ describe("resource manifest adapter", () => {
       valid: true,
       diff: "+spec: {}\n",
     });
+    await expect(port.saveAndDeploy("resource-1", { ...input, reason: "" }))
+      .resolves.toMatchObject({
+        pathway: "git",
+        operationId: "event-yaml-1",
+        workflowRunId: "workflow-1",
+        currentStage: "commit",
+        stages: [{
+          stage: "validation",
+          status: "completed",
+          evidence: { desired_sha256: `sha256:${"c".repeat(64)}` },
+        }],
+      });
+    expect(deployResourceManifestEdit).toHaveBeenCalledWith(
+      "resource-1",
+      expect.objectContaining({ confirmation: true, reason: "" }),
+      undefined,
+    );
     await expect(port.approve("resource-1", { ...input, reason: "approved" }))
       .resolves.toEqual({
         correlationId: "correlation-1",

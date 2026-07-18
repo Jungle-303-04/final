@@ -8,6 +8,7 @@ import { Collapse, CollapseChevron } from "../../shared/ui/primitives/collapse";
 import { Input } from "../../shared/ui/primitives/input";
 import { Progress } from "../../shared/ui/primitives/progress";
 import type {
+  ProviderContainerProjection,
   ProviderCondition,
   ProviderResourceDetail,
 } from "../../features/resources/providerResourceContract";
@@ -65,6 +66,15 @@ export function ProviderResourceDetailPanel({
           <DefinitionGrid entries={section.rows.map(([label, value]) => [t(label), value])} />
         </section>
       ))}
+      {detail.type === "core-workload" || detail.type === "core-pod" ? (
+        <>
+          <ContainerProjectionPanel containers={detail.initContainers} title={t("resources.detail.provider.initContainers")} />
+          <ContainerProjectionPanel containers={detail.containers} title={t("resources.detail.provider.containers")} />
+        </>
+      ) : null}
+      {detail.type === "core-config-map" ? <ConfigMapEntriesPanel detail={detail} /> : null}
+      {detail.type === "core-hpa" ? <HpaMetricsPanel detail={detail} /> : null}
+      {detail.type === "core-rbac" ? <RbacRulesPanel detail={detail} /> : null}
       {detail.type === "persistent-volume-claim" ? (
         <PvcObservedUsagePanel frame={metricHistory} resourceId={resourceId} />
       ) : null}
@@ -94,6 +104,166 @@ export function ProviderResourceDetailPanel({
         />
       ) : null}
       {detail.conditions.length > 0 ? <ProviderConditions conditions={detail.conditions} /> : null}
+    </section>
+  );
+}
+
+type ConfigMapDetail = Extract<ProviderResourceDetail, { type: "core-config-map" }>;
+type HpaDetail = Extract<ProviderResourceDetail, { type: "core-hpa" }>;
+type RbacDetail = Extract<ProviderResourceDetail, { type: "core-rbac" }>;
+
+function ConfigMapEntriesPanel({ detail }: { detail: ConfigMapDetail }) {
+  const { formatNumber, t } = useI18n();
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  if (detail.entries.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-config-map-data" className="grid gap-2">
+      <h4 className="text-sm font-medium" id="provider-config-map-data">
+        {t("resources.detail.provider.data")}
+      </h4>
+      <ul className="grid gap-2">
+        {detail.entries.map((entry) => {
+          const open = expanded.has(entry.key);
+          const contentId = `config-map-entry-${safeId(entry.key)}`;
+          return (
+            <li className="rounded-lg border bg-background/65" key={entry.key}>
+              <button
+                aria-controls={contentId}
+                aria-expanded={open}
+                className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left"
+                onClick={() => setExpanded((current) => toggleSet(current, entry.key))}
+                type="button"
+              >
+                <CollapseChevron className="size-4" open={open} />
+                <code className="min-w-0 flex-1 truncate text-xs">{entry.key}</code>
+                <Badge variant="outline">
+                  {entry.binary
+                    ? t("resources.detail.provider.binaryValue")
+                    : t("resources.detail.provider.textValue")}
+                </Badge>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {t("resources.detail.provider.bytes", { count: formatNumber(entry.sizeBytes) })}
+                </span>
+              </button>
+              <Collapse mountLazily open={open}>
+                <div className="border-t p-3" id={contentId}>
+                  {entry.binary ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("resources.detail.provider.binaryValueHidden")}
+                    </p>
+                  ) : (
+                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-code p-3 text-xs text-code-foreground">
+                      {entry.preview}
+                      {entry.truncated ? `\n${t("resources.detail.provider.valueTruncated")}` : ""}
+                    </pre>
+                  )}
+                </div>
+              </Collapse>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function HpaMetricsPanel({ detail }: { detail: HpaDetail }) {
+  const { t } = useI18n();
+  if (detail.metrics.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-hpa-metrics" className="grid gap-2">
+      <h4 className="text-sm font-medium" id="provider-hpa-metrics">
+        {t("resources.detail.provider.metrics")}
+      </h4>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {detail.metrics.map((metric, index) => (
+          <li className="grid gap-2 rounded-lg border bg-background/65 p-3" key={`${metric.type}:${metric.name}:${index}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-sm font-medium">{metric.name}</span>
+              <Badge variant="outline">{metric.type}</Badge>
+            </div>
+            <DefinitionGrid entries={[
+              [t("resources.detail.provider.current"), metric.current ?? t("common.value.unavailable")],
+              [t("resources.detail.provider.target"), metric.target ?? t("common.value.unavailable")],
+              ...(metric.unavailableReason
+                ? [[t("resources.detail.provider.unavailableReason"), metric.unavailableReason] as [string, string]]
+                : []),
+            ]} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RbacRulesPanel({ detail }: { detail: RbacDetail }) {
+  const { t } = useI18n();
+  if (detail.rules.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-rbac-rules" className="grid gap-2">
+      <h4 className="text-sm font-medium" id="provider-rbac-rules">
+        {t("resources.detail.provider.effectiveRules")}
+      </h4>
+      <ul className="grid gap-2">
+        {detail.rules.map((rule, index) => (
+          <li className="grid gap-2 rounded-lg border bg-background/65 p-3" key={index}>
+            <div className="flex flex-wrap gap-2">
+              {rule.wildcard ? <Badge variant="destructive">{t("resources.detail.provider.wildcardWarning")}</Badge> : null}
+              {rule.escalation ? <Badge variant="destructive">{t("resources.detail.provider.escalationWarning")}</Badge> : null}
+            </div>
+            <DefinitionGrid entries={[
+              [t("resources.detail.provider.verbs"), join(rule.verbs) ?? t("common.value.unavailable")],
+              [t("resources.detail.provider.apiGroups"), join(rule.apiGroups) ?? t("common.value.unavailable")],
+              [t("resources.detail.provider.resources"), join(rule.resources) ?? t("common.value.unavailable")],
+              ...(rule.resourceNames.length
+                ? [[t("resources.detail.provider.resourceNames"), rule.resourceNames.join(" · ")] as [string, string]]
+                : []),
+              ...(rule.nonResourceUrls.length
+                ? [[t("resources.detail.provider.nonResourceUrls"), rule.nonResourceUrls.join(" · ")] as [string, string]]
+                : []),
+            ]} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ContainerProjectionPanel({
+  containers,
+  title,
+}: {
+  containers: ProviderContainerProjection[];
+  title: string;
+}) {
+  const { formatNumber, t } = useI18n();
+  if (containers.length === 0) return null;
+  return (
+    <section className="grid gap-2">
+      <h4 className="text-sm font-medium">{title}</h4>
+      <ul className="grid gap-2">
+        {containers.map((container) => (
+          <li className="grid gap-2 rounded-lg border bg-background/65 p-3" key={container.name}>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-sm font-medium" title={container.name}>{container.name}</span>
+              <StatusMark
+                label={container.stateReason ?? container.state ?? t("common.value.unavailable")}
+                tone={container.ready === true ? "healthy" : container.ready === false ? "critical" : "unknown"}
+              />
+            </div>
+            <DefinitionGrid entries={[
+              ...(container.image ? [[t("resources.detail.provider.image"), container.image] as [string, string]] : []),
+              [t("resources.detail.provider.restarts"), formatNumber(container.restartCount)],
+              ...(container.ports.length ? [[
+                t("resources.detail.provider.ports"),
+                container.ports.map((port) => `${port.name ? `${port.name}:` : ""}${port.containerPort}/${port.protocol}`).join(" · "),
+              ] as [string, string]] : []),
+              ...(container.requests.length ? [[t("resources.detail.provider.requests"), formatKeyValues(container.requests)!] as [string, string]] : []),
+              ...(container.limits.length ? [[t("resources.detail.provider.limits"), formatKeyValues(container.limits)!] as [string, string]] : []),
+            ]} />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -685,6 +855,191 @@ function providerSections(
   detail: ProviderResourceDetail,
   t: TranslationFunction,
 ): ProviderSection[] {
+  if (detail.type === "core-workload") return [
+    section("workload-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.kind", detail.kind],
+      ["resources.detail.provider.owner", namedReferenceLabel(detail.owner)],
+      ["resources.detail.provider.desired", number(detail.replicas.desired)],
+      ["resources.detail.provider.ready", number(detail.replicas.ready)],
+      ["resources.detail.provider.available", number(detail.replicas.available)],
+      ["resources.detail.provider.upToDate", number(detail.replicas.upToDate)],
+      ["resources.detail.provider.unavailable", number(detail.unavailable)],
+    ]),
+    section("workload-strategy", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.strategy", detail.strategyType],
+      ["resources.detail.provider.maxSurge", detail.maxSurge],
+      ["resources.detail.provider.maxUnavailable", detail.maxUnavailable],
+      ["resources.detail.provider.minReadySeconds", number(detail.minReadySeconds)],
+      ["resources.detail.provider.revisionHistory", number(detail.revisionHistoryCount)],
+      ["resources.detail.provider.serviceAccount", detail.serviceAccountName],
+      ["resources.detail.provider.selector", formatKeyValues(detail.selector)],
+    ]),
+  ];
+  if (detail.type === "core-pod") return [
+    section("pod-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.node", detail.nodeName],
+      ["resources.detail.provider.podIp", detail.podIp],
+      ["resources.detail.provider.hostIp", detail.hostIp],
+      ["resources.detail.provider.serviceAccount", detail.serviceAccountName],
+      ["resources.detail.provider.owner", namedReferenceLabel(detail.owner)],
+      ["resources.detail.provider.ephemeralContainers", join(detail.ephemeralContainerNames)],
+    ]),
+  ];
+  if (detail.type === "core-service") return [
+    section("service-network", "resources.detail.provider.network", [
+      ["resources.detail.provider.serviceType", detail.serviceType],
+      ["resources.detail.provider.clusterIp", detail.clusterIp],
+      ["resources.detail.provider.externalName", detail.externalName],
+      ["resources.detail.provider.externalIps", join(detail.externalIps)],
+      ["resources.detail.provider.addresses", join(detail.loadBalancerAddresses)],
+      ["resources.detail.provider.ipFamilies", join(detail.ipFamilies)],
+      ["resources.detail.provider.externalTrafficPolicy", detail.externalTrafficPolicy],
+      ["resources.detail.provider.internalTrafficPolicy", detail.internalTrafficPolicy],
+      ["resources.detail.provider.ports", join(detail.ports)],
+      ["resources.detail.provider.selector", formatKeyValues(detail.selector)],
+    ]),
+  ];
+  if (detail.type === "core-ingress") return [
+    section("ingress-network", "resources.detail.provider.network", [
+      ["resources.detail.provider.ingressClass", detail.ingressClassName],
+      ["resources.detail.provider.addresses", join(detail.addresses)],
+      ["resources.detail.provider.routes", join(detail.routes.map((route) => (
+        `${route.host ?? "*"}${route.path} → ${route.backendService}${route.backendPort ? `:${route.backendPort}` : ""}${route.pathType ? ` (${route.pathType})` : ""}`
+      )))],
+      ["resources.detail.provider.tls", join(detail.tls.map((tls) => (
+        `${join(tls.hosts) ?? "*"} → ${tls.secretName ?? t("common.value.unavailable")}`
+      )))],
+    ]),
+  ];
+  if (detail.type === "argo-application") return [
+    section("argo-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.syncStatus", detail.syncStatus],
+      ["resources.detail.provider.health", detail.healthStatus],
+      ["resources.detail.provider.operation", detail.operationPhase],
+      ["resources.detail.provider.managedResources", number(detail.managedResourceCount)],
+    ]),
+    section("argo-source", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.repository", detail.repositoryUrl],
+      ["resources.detail.provider.sourcePath", detail.sourcePath],
+      ["resources.detail.provider.targetRevision", detail.targetRevision],
+      ["resources.detail.provider.chart", detail.chart],
+      ["resources.detail.provider.destination", join([detail.destinationServer, detail.destinationNamespace])],
+      ["resources.detail.provider.automated", yesNo(detail.automated, t)],
+      ["resources.detail.provider.selfHeal", yesNo(detail.selfHeal, t)],
+      ["resources.detail.provider.prune", yesNo(detail.prune, t)],
+      ["resources.detail.provider.retry", yesNo(detail.retryEnabled, t)],
+      ["resources.detail.provider.revisionHistory", join(detail.revisionHistory)],
+    ]),
+  ];
+  if (detail.type === "core-cron-job") return [
+    section("cron-schedule", "resources.detail.provider.schedule", [
+      ["resources.detail.provider.schedule", detail.schedule],
+      ["resources.detail.provider.scheduleDescription", detail.scheduleDescription],
+      ["resources.detail.provider.timezone", detail.timezone],
+      ["resources.detail.provider.suspended", yesNo(detail.suspended, t)],
+      ["resources.detail.provider.lastScheduled", detail.lastScheduleTime],
+      ["resources.detail.provider.lastSuccessful", detail.lastSuccessfulTime],
+      ["resources.detail.provider.activeJobs", join(detail.activeJobs.map(namedReferenceLabel))],
+    ]),
+    section("cron-policy", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.concurrency", detail.concurrencyPolicy],
+      ["resources.detail.provider.startingDeadline", seconds(detail.startingDeadlineSeconds)],
+      ["resources.detail.provider.successHistory", number(detail.successfulHistoryLimit)],
+      ["resources.detail.provider.failedHistory", number(detail.failedHistoryLimit)],
+    ]),
+  ];
+  if (detail.type === "core-config-map") return [
+    section("config-map-summary", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.immutable", yesNo(detail.immutable, t)],
+      ["resources.detail.provider.keyCount", number(detail.keyCount)],
+      ["resources.detail.provider.textKeyCount", number(detail.entries.filter((entry) => !entry.binary).length)],
+      ["resources.detail.provider.binaryKeyCount", number(detail.entries.filter((entry) => entry.binary).length)],
+    ]),
+  ];
+  if (detail.type === "core-hpa") return [
+    section("hpa-scaling", "resources.detail.provider.scaling", [
+      ["resources.detail.provider.target", namedReferenceLabel(detail.target)],
+      ["resources.detail.provider.minimum", number(detail.minimumReplicas)],
+      ["resources.detail.provider.maximum", number(detail.maximumReplicas)],
+      ["resources.detail.provider.current", number(detail.currentReplicas)],
+      ["resources.detail.provider.desired", number(detail.desiredReplicas)],
+      ["resources.detail.provider.lastScale", detail.lastScaleTime],
+    ]),
+  ];
+  if (detail.type === "core-node") return [
+    section("node-status", "resources.detail.provider.status", [
+      ["resources.detail.provider.ready", yesNo(detail.ready, t)],
+      ["resources.detail.provider.cordoned", yesNo(detail.unschedulable, t)],
+      ["resources.detail.provider.managedPods", number(detail.managedPodCount)],
+      ["resources.detail.provider.providerId", detail.providerId],
+      ["resources.detail.provider.addresses", join(detail.addresses.map((item) => `${item.type}: ${item.address}`))],
+    ]),
+    section("node-runtime", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.osImage", detail.osImage],
+      ["resources.detail.provider.architecture", detail.architecture],
+      ["resources.detail.provider.kernel", detail.kernelVersion],
+      ["resources.detail.provider.containerRuntime", detail.containerRuntimeVersion],
+      ["resources.detail.provider.kubelet", detail.kubeletVersion],
+      ["resources.detail.provider.region", detail.region],
+      ["resources.detail.provider.zone", detail.zone],
+      ["resources.detail.provider.nodePool", detail.nodePool],
+      ["resources.detail.provider.taints", join(detail.taints.map((taint) => join([`${taint.key}${taint.value ? `=${taint.value}` : ""}`, taint.effect])!))],
+    ]),
+    section("node-capacity", "resources.detail.provider.capacity", [
+      ["resources.detail.provider.capacity", formatKeyValues(detail.capacity)],
+      ["resources.detail.provider.allocatable", formatKeyValues(detail.allocatable)],
+      ["resources.detail.provider.usage", formatKeyValues(detail.usage)],
+      ["resources.detail.provider.metricObservedAt", detail.metricsObservedAt],
+    ]),
+  ];
+  if (detail.type === "core-namespace") return [
+    section("namespace-overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.manager", detail.manager],
+      ["resources.detail.provider.injection", detail.injection],
+      ["resources.detail.provider.serviceAccounts", number(detail.serviceAccountCount)],
+      ["resources.detail.provider.roleBindings", number(detail.roleBindingCount)],
+      ["resources.detail.provider.clusterRoleBindings", number(detail.clusterRoleBindingCount)],
+    ]),
+    section("namespace-quotas", "resources.detail.provider.quotas", [
+      ["resources.detail.provider.quotas", join(detail.quotas.map((quota) => (
+        `${quota.name}: ${t("resources.detail.provider.hard")} ${formatKeyValues(quota.hard) ?? "-"} / ${t("resources.detail.provider.used")} ${formatKeyValues(quota.used) ?? "-"}`
+      )))],
+    ]),
+  ];
+  if (detail.type === "core-event") return [
+    section("event-overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.eventType", detail.eventType],
+      ["resources.detail.provider.reason", detail.reason],
+      ["resources.detail.provider.message", detail.message],
+      ["resources.detail.provider.involvedObject", referenceLabel(detail.involvedObject)],
+      ["resources.detail.provider.count", number(detail.count)],
+      ["resources.detail.provider.firstObserved", detail.firstObservedAt],
+      ["resources.detail.provider.lastObserved", detail.lastObservedAt],
+      ["resources.detail.provider.duration", seconds(detail.durationSeconds)],
+    ]),
+    section("event-source", "resources.detail.provider.source", [
+      ["resources.detail.provider.sourceComponent", detail.sourceComponent],
+      ["resources.detail.provider.sourceHost", detail.sourceHost],
+      ["resources.detail.provider.reportingController", detail.reportingController],
+      ["resources.detail.provider.reportingInstance", detail.reportingInstance],
+      ["resources.detail.provider.apiVersion", detail.apiVersion],
+      ["resources.detail.provider.resourceVersion", detail.resourceVersion],
+    ]),
+  ];
+  if (detail.type === "core-rbac") return [
+    section("rbac-overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.kind", detail.kind],
+      ["resources.detail.provider.automountToken", yesNo(detail.automountServiceAccountToken, t)],
+      ["resources.detail.provider.secretNames", join(detail.secretNames)],
+      ["resources.detail.provider.imagePullSecrets", join(detail.imagePullSecretNames)],
+      ["resources.detail.provider.roleReference", namedReferenceLabel(detail.roleRef)],
+      ["resources.detail.provider.subjects", join(detail.subjects.map((subject) => join([subject.kind, subject.namespace, subject.name])!))],
+      ["resources.detail.provider.wildcardWarning", yesNo(detail.wildcardWarning, t)],
+      ["resources.detail.provider.escalationWarning", yesNo(detail.escalationWarning, t)],
+    ]),
+  ];
   if (detail.type === "aws-machine") return [
     section("instance", "resources.detail.provider.overview", [
       ["resources.detail.provider.instanceType", detail.instanceType],

@@ -1138,8 +1138,17 @@ class KubernetesSnapshotProvider:
                 telemetry_query.label_selector,
             )
         ]
+        pod_counts_by_node: dict[str, int] = {}
+        for pod in raw_pods:
+            node_name = as_text(spec(pod).get("nodeName"))
+            if node_name:
+                pod_counts_by_node[node_name] = pod_counts_by_node.get(node_name, 0) + 1
         snapshot[K8S_SNAPSHOT_NODES_KEY] = [
-            node_summary(item, node_metrics.get(str(metadata(item).get("name") or "")))
+            node_summary(
+                item,
+                node_metrics.get(str(metadata(item).get("name") or "")),
+                managed_pod_count=pod_counts_by_node.get(str(metadata(item).get("name") or ""), 0),
+            )
             for item in raw_nodes
         ]
         snapshot[K8S_SNAPSHOT_WORKLOADS_KEY] = [
@@ -2081,6 +2090,13 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     cpu_request_mcores, mem_request_mib = pod_request_totals(pod_spec)
     cpu_limit_mcores, mem_limit_mib = pod_limit_totals(pod_spec)
     containers, container_ports_complete = pod_container_summaries(pod_spec, pod_status)
+    if "initContainers" in pod_spec or "initContainerStatuses" in pod_status:
+        init_containers, init_container_ports_complete = pod_container_summaries(
+            {"containers": pod_spec.get("initContainers")},
+            {"containerStatuses": pod_status.get("initContainerStatuses")},
+        )
+    else:
+        init_containers, init_container_ports_complete = [], True
     ephemeral_containers = (
         [
             {"name": name}
@@ -2115,9 +2131,10 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "pod_ip": pod_status.get("podIP"),
         "host_ip": pod_status.get("hostIP"),
         "conditions": pod_status.get("conditions", []),
+        "init_containers": init_containers,
         "containers": containers,
         "ephemeral_containers": ephemeral_containers,
-        "container_ports_complete": container_ports_complete,
+        "container_ports_complete": container_ports_complete and init_container_ports_complete,
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),
         "metrics_observed_at": measured.get("metrics_observed_at"),
@@ -2207,7 +2224,15 @@ def pod_container_summaries(
         ports, ports_complete = container_port_observations(value)
         complete = complete and ports_complete
         status_summary = container_summary(statuses.get(name, {"name": name}))
-        result.append({**status_summary, "name": name, "ports": ports})
+        result.append(
+            {
+                **status_summary,
+                "name": name,
+                "image": status_summary.get("image") or as_text(value.get("image")) or None,
+                "ports": ports,
+                "resources": container_resource_summary(value),
+            }
+        )
 
     for name, value in statuses.items():
         if name in observed_names:
@@ -2215,6 +2240,19 @@ def pod_container_summaries(
         complete = False
         result.append({**container_summary(value), "name": name, "ports": []})
     return result, complete
+
+
+def container_resource_summary(container: JsonObject) -> JsonObject:
+    """Keep declared quantities while excluding environment and credential-bearing fields."""
+    resources = object_or_empty(container.get("resources"))
+    return {
+        bucket: {
+            str(key): str(value)
+            for key, value in object_or_empty(resources.get(bucket)).items()
+            if str(key) and isinstance(value, (str, int, float))
+        }
+        for bucket in ("requests", "limits")
+    }
 
 
 def container_port_observations(container: JsonObject) -> tuple[list[JsonObject], bool]:
@@ -2382,6 +2420,10 @@ def event_summary(item: JsonObject) -> JsonObject:
         "last_timestamp": last_occurrence_at,
         "last_occurrence_at": last_occurrence_at,
         "reporting_component": item.get("reportingComponent") or source.get("component"),
+        "reporting_instance": item.get("reportingInstance"),
+        "source_component": source.get("component"),
+        "source_host": source.get("host"),
+        "api_version": item.get("apiVersion"),
         "involved_kind": involved.get("kind"),
         "involved_name": involved.get("name"),
         "involved_uid": involved.get("uid"),
@@ -2469,7 +2511,12 @@ def scheduling_causes(message_text: str) -> list[str]:
     return causes
 
 
-def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:
+def node_summary(
+    item: JsonObject,
+    metrics: JsonObject | None = None,
+    *,
+    managed_pod_count: int | None = None,
+) -> JsonObject:
     """Build a node summary with readiness, taints, and capacity data."""
     node_status = status(item)
     allocatable = node_status.get("allocatable", {}) if isinstance(node_status, dict) else {}
@@ -2498,8 +2545,10 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "name": meta.get("name"),
         **bounded_label_summary(item),
         "ready": ready_condition.get("status") == "True",
+        "unschedulable": spec(item).get("unschedulable") is True,
         "conditions": conditions,
         "taints": spec(item).get("taints", []),
+        "addresses": node_status.get("addresses", []),
         "provider_id": as_text(spec(item).get("providerID")),
         "capacity": node_status.get("capacity", {}),
         "allocatable": allocatable,
@@ -2507,6 +2556,7 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "mem_mib": mem_mib,
         "metrics_observed_at": measured.get("metrics_observed_at"),
         "metrics_window": measured.get("metrics_window"),
+        "managed_pod_count": managed_pod_count,
         "cpu_ratio": safe_ratio(cpu_mcores, allocatable_cpu),
         "mem_ratio": safe_ratio(mem_mib, allocatable_mem),
         "node_info": node_status.get("nodeInfo", {}),
@@ -2627,7 +2677,10 @@ def workload_summary(
     """Build a small workload summary for deployments and similar objects."""
     meta = metadata(item)
     workload_status = status(item)
+    workload_spec = spec(item)
     owner_kind, owner_name = owner_ref(item)
+    strategy = object_or_empty(workload_spec.get("strategy") or workload_spec.get("updateStrategy"))
+    rolling_update = object_or_empty(strategy.get("rollingUpdate"))
     summary: JsonObject = {
         "kind": kind,
         "api_version": "batch/v1" if kind in {"Job", "CronJob"} else "apps/v1",
@@ -2643,28 +2696,51 @@ def workload_summary(
         "generation": meta.get("generation"),
         "creation_timestamp": meta.get("creationTimestamp"),
         "observed_generation": workload_status.get("observedGeneration"),
-        "desired_replicas": spec(item).get("replicas"),
+        "desired_replicas": workload_spec.get("replicas"),
         "ready_replicas": workload_status.get("readyReplicas", 0),
         "available_replicas": workload_status.get("availableReplicas", 0),
         "updated_replicas": workload_status.get("updatedReplicas", 0),
         "unavailable_replicas": workload_status.get("unavailableReplicas", 0),
         "conditions": workload_status.get("conditions", []),
-        "selector": spec(item).get("selector", {}),
+        "selector": workload_spec.get("selector", {}),
+        "strategy_type": strategy.get("type"),
+        "max_surge": rolling_update.get("maxSurge"),
+        "max_unavailable": rolling_update.get("maxUnavailable"),
+        "min_ready_seconds": workload_spec.get("minReadySeconds"),
         "active": len(workload_status.get("active", []))
         if isinstance(workload_status.get("active"), list)
         else int(workload_status.get("active") or 0),
         "succeeded": int(workload_status.get("succeeded") or 0),
         "failed": int(workload_status.get("failed") or 0),
-        "completions": int(spec(item).get("completions") or 1),
+        "completions": int(workload_spec.get("completions") or 1),
         "start_time": workload_status.get("startTime"),
         "completion_time": workload_status.get("completionTime"),
         "scheduled_run_kinds": ["Job"] if kind == "CronJob" else [],
     }
+    if kind == "CronJob":
+        summary.update(
+            {
+                "spec": {
+                    "schedule": workload_spec.get("schedule"),
+                    "timeZone": workload_spec.get("timeZone"),
+                    "suspend": workload_spec.get("suspend", False),
+                    "concurrencyPolicy": workload_spec.get("concurrencyPolicy"),
+                    "startingDeadlineSeconds": workload_spec.get("startingDeadlineSeconds"),
+                    "successfulJobsHistoryLimit": workload_spec.get("successfulJobsHistoryLimit"),
+                    "failedJobsHistoryLimit": workload_spec.get("failedJobsHistoryLimit"),
+                },
+                "status": {
+                    "lastScheduleTime": workload_status.get("lastScheduleTime"),
+                    "lastSuccessfulTime": workload_status.get("lastSuccessfulTime"),
+                    "active": workload_status.get("active", []),
+                },
+            }
+        )
     if kind in {K8S_KIND_DEPLOYMENT, "StatefulSet", "DaemonSet"}:
         owned = owned_workload_revisions(item, kind, revisions or [])
         summary.update(
             {
-                "pod_template": spec(item).get("template"),
+                "pod_template": workload_spec.get("template"),
                 "revision_history_count": len(owned),
                 "revision_history_complete": True,
             }
@@ -2778,6 +2854,11 @@ def service_summary(item: JsonObject) -> JsonObject:
         **bounded_label_summary(item),
         "type": service_spec.get("type"),
         "cluster_ip": service_spec.get("clusterIP"),
+        "external_name": service_spec.get("externalName"),
+        "external_ips": service_spec.get("externalIPs", []),
+        "external_traffic_policy": service_spec.get("externalTrafficPolicy"),
+        "internal_traffic_policy": service_spec.get("internalTrafficPolicy"),
+        "ip_families": service_spec.get("ipFamilies", []),
         "ports": service_spec.get("ports", []),
         "selector": service_spec.get("selector", {}),
         "load_balancer": {"ingress": ingress},

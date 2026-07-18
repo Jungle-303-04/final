@@ -22,6 +22,218 @@ export function toProviderResourceDetail(
   const raw = record(value);
   const type = requiredString(raw.type);
   const conditions = conditionList(raw.conditions);
+  if (type === "core-workload") return {
+    type,
+    conditions,
+    kind: requiredString(raw.kind),
+    owner: namedReference(raw.owner),
+    replicas: replicas(raw.replicas),
+    unavailable: optionalInteger(raw.unavailable),
+    strategyType: optionalString(raw.strategy_type),
+    maxSurge: optionalString(raw.max_surge),
+    maxUnavailable: optionalString(raw.max_unavailable),
+    minReadySeconds: optionalInteger(raw.min_ready_seconds),
+    revisionHistoryCount: optionalInteger(raw.revision_history_count),
+    serviceAccountName: optionalString(raw.service_account_name),
+    selector: keyValues(raw.selector),
+    initContainers: containerProjections(raw.init_containers),
+    containers: containerProjections(raw.containers),
+  };
+  if (type === "core-pod") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    nodeName: optionalString(raw.node_name),
+    podIp: optionalString(raw.pod_ip),
+    hostIp: optionalString(raw.host_ip),
+    serviceAccountName: optionalString(raw.service_account_name),
+    owner: namedReference(raw.owner),
+    initContainers: containerProjections(raw.init_containers),
+    containers: containerProjections(raw.containers),
+    ephemeralContainerNames: stringList(raw.ephemeral_container_names),
+  };
+  if (type === "core-service") return {
+    type,
+    conditions,
+    serviceType: optionalString(raw.service_type),
+    clusterIp: optionalString(raw.cluster_ip),
+    externalName: optionalString(raw.external_name),
+    externalIps: stringList(raw.external_ips),
+    loadBalancerAddresses: stringList(raw.load_balancer_addresses),
+    externalTrafficPolicy: optionalString(raw.external_traffic_policy),
+    internalTrafficPolicy: optionalString(raw.internal_traffic_policy),
+    ipFamilies: stringList(raw.ip_families),
+    ports: stringList(raw.ports),
+    selector: keyValues(raw.selector),
+  };
+  if (type === "core-ingress") return {
+    type,
+    conditions,
+    ingressClassName: optionalString(raw.ingress_class_name),
+    addresses: stringList(raw.addresses),
+    routes: records(raw.routes).map((item) => ({
+      host: optionalString(item.host),
+      path: requiredString(item.path),
+      pathType: optionalString(item.path_type),
+      backendService: requiredString(item.backend_service),
+      backendPort: optionalString(item.backend_port),
+    })),
+    tls: records(raw.tls).map((item) => ({
+      secretName: optionalString(item.secret_name),
+      hosts: stringList(item.hosts),
+    })),
+  };
+  if (type === "argo-application") return {
+    type,
+    conditions,
+    syncStatus: optionalString(raw.sync_status),
+    healthStatus: optionalString(raw.health_status),
+    operationPhase: optionalString(raw.operation_phase),
+    repositoryUrl: optionalString(raw.repository_url),
+    sourcePath: optionalString(raw.source_path),
+    targetRevision: optionalString(raw.target_revision),
+    chart: optionalString(raw.chart),
+    destinationServer: optionalString(raw.destination_server),
+    destinationNamespace: optionalString(raw.destination_namespace),
+    automated: requiredBoolean(raw.automated),
+    selfHeal: requiredBoolean(raw.self_heal),
+    prune: requiredBoolean(raw.prune),
+    retryEnabled: requiredBoolean(raw.retry_enabled),
+    managedResourceCount: requiredInteger(raw.managed_resource_count),
+    revisionHistory: stringList(raw.revision_history),
+  };
+  if (type === "core-cron-job") return {
+    type,
+    conditions,
+    schedule: optionalString(raw.schedule),
+    scheduleDescription: optionalString(raw.schedule_description),
+    timezone: optionalString(raw.timezone),
+    suspended: requiredBoolean(raw.suspended),
+    lastScheduleTime: optionalString(raw.last_schedule_time),
+    lastSuccessfulTime: optionalString(raw.last_successful_time),
+    activeJobs: namedReferences(raw.active_jobs),
+    concurrencyPolicy: optionalString(raw.concurrency_policy),
+    startingDeadlineSeconds: optionalInteger(raw.starting_deadline_seconds),
+    successfulHistoryLimit: optionalInteger(raw.successful_history_limit),
+    failedHistoryLimit: optionalInteger(raw.failed_history_limit),
+  };
+  if (type === "core-config-map") return {
+    type,
+    conditions,
+    immutable: requiredBoolean(raw.immutable),
+    keyCount: requiredInteger(raw.key_count),
+    entries: records(raw.entries).map((item) => ({
+      key: requiredString(item.key),
+      sizeBytes: requiredInteger(item.size_bytes),
+      preview: optionalString(item.preview),
+      truncated: requiredBoolean(item.truncated),
+      binary: requiredBoolean(item.binary),
+    })),
+  };
+  if (type === "core-hpa") return {
+    type,
+    conditions,
+    target: namedReference(raw.target),
+    minimumReplicas: optionalInteger(raw.minimum_replicas),
+    maximumReplicas: optionalInteger(raw.maximum_replicas),
+    currentReplicas: optionalInteger(raw.current_replicas),
+    desiredReplicas: optionalInteger(raw.desired_replicas),
+    lastScaleTime: optionalString(raw.last_scale_time),
+    metrics: records(raw.metrics).map((item) => ({
+      type: requiredString(item.type),
+      name: requiredString(item.name),
+      current: optionalString(item.current),
+      target: optionalString(item.target),
+      unavailableReason: optionalString(item.unavailable_reason),
+    })),
+  };
+  if (type === "core-node") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    unschedulable: requiredBoolean(raw.unschedulable),
+    providerId: optionalString(raw.provider_id),
+    osImage: optionalString(raw.os_image),
+    architecture: optionalString(raw.architecture),
+    kernelVersion: optionalString(raw.kernel_version),
+    containerRuntimeVersion: optionalString(raw.container_runtime_version),
+    kubeletVersion: optionalString(raw.kubelet_version),
+    capacity: keyValues(raw.capacity),
+    allocatable: keyValues(raw.allocatable),
+    usage: keyValues(raw.usage),
+    addresses: records(raw.addresses).map((item) => ({
+      type: requiredString(item.type),
+      address: requiredString(item.address),
+    })),
+    zone: optionalString(raw.zone),
+    region: optionalString(raw.region),
+    nodePool: optionalString(raw.node_pool),
+    taints: records(raw.taints).map((item) => ({
+      key: requiredString(item.key),
+      value: optionalString(item.value),
+      effect: optionalString(item.effect),
+    })),
+    managedPodCount: optionalInteger(raw.managed_pod_count),
+    metricsObservedAt: optionalString(raw.metrics_observed_at),
+  };
+  if (type === "core-namespace") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    manager: optionalString(raw.manager),
+    injection: optionalString(raw.injection),
+    quotas: records(raw.quotas).map((item) => ({
+      name: requiredString(item.name),
+      hard: keyValues(item.hard),
+      used: keyValues(item.used),
+    })),
+    serviceAccountCount: optionalInteger(raw.service_account_count),
+    roleBindingCount: optionalInteger(raw.role_binding_count),
+    clusterRoleBindingCount: optionalInteger(raw.cluster_role_binding_count),
+  };
+  if (type === "core-event") return {
+    type,
+    conditions,
+    eventType: optionalString(raw.event_type),
+    reason: optionalString(raw.reason),
+    message: optionalString(raw.message),
+    involvedObject: reference(raw.involved_object),
+    count: optionalInteger(raw.count),
+    firstObservedAt: optionalString(raw.first_observed_at),
+    lastObservedAt: optionalString(raw.last_observed_at),
+    durationSeconds: optionalInteger(raw.duration_seconds),
+    sourceComponent: optionalString(raw.source_component),
+    sourceHost: optionalString(raw.source_host),
+    reportingController: optionalString(raw.reporting_controller),
+    reportingInstance: optionalString(raw.reporting_instance),
+    apiVersion: optionalString(raw.api_version),
+    resourceVersion: optionalString(raw.resource_version),
+  };
+  if (type === "core-rbac") return {
+    type,
+    conditions,
+    kind: requiredString(raw.kind),
+    automountServiceAccountToken: optionalBoolean(raw.automount_service_account_token),
+    secretNames: stringList(raw.secret_names),
+    imagePullSecretNames: stringList(raw.image_pull_secret_names),
+    roleRef: namedReference(raw.role_ref),
+    subjects: records(raw.subjects).map((item) => ({
+      kind: requiredString(item.kind),
+      namespace: optionalString(item.namespace),
+      name: requiredString(item.name),
+    })),
+    rules: records(raw.rules).map((item) => ({
+      verbs: stringList(item.verbs),
+      apiGroups: stringList(item.api_groups),
+      resources: stringList(item.resources),
+      resourceNames: stringList(item.resource_names),
+      nonResourceUrls: stringList(item.non_resource_urls),
+      wildcard: requiredBoolean(item.wildcard),
+      escalation: requiredBoolean(item.escalation),
+    })),
+    wildcardWarning: requiredBoolean(raw.wildcard_warning),
+    escalationWarning: requiredBoolean(raw.escalation_warning),
+  };
   if (type === "aws-machine") return {
     type,
     conditions,
@@ -747,6 +959,24 @@ function conditionList(value: unknown): ProviderCondition[] {
       lastTransitionTime: optionalString(item.last_transition_time),
     };
   });
+}
+
+function containerProjections(value: unknown) {
+  return records(value).map((item) => ({
+    name: requiredString(item.name),
+    image: optionalString(item.image),
+    state: optionalString(item.state),
+    stateReason: optionalString(item.state_reason),
+    ready: optionalBoolean(item.ready),
+    restartCount: requiredInteger(item.restart_count),
+    ports: records(item.ports).map((port) => ({
+      name: optionalString(port.name),
+      containerPort: requiredInteger(port.container_port),
+      protocol: requiredString(port.protocol),
+    })),
+    requests: keyValues(item.requests),
+    limits: keyValues(item.limits),
+  }));
 }
 
 function scaling(value: unknown): ProviderScaling {

@@ -6,6 +6,28 @@ const RESOURCE_NAME_MAX_LENGTH = 253;
 const CLUSTER_ID_MAX_LENGTH = 512;
 const CANONICAL_TARGET_PREFIX = "v1";
 const CLUSTER_SCOPED_NAMESPACE = "~";
+const RESOURCE_TYPE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  deployment: "workload",
+  daemonset: "workload",
+  statefulset: "workload",
+  replicaset: "workload",
+  job: "workload",
+  cronjob: "workload",
+  ingress: "custom_resource",
+  configmap: "custom_resource",
+  secret: "custom_resource",
+  hpa: "custom_resource",
+  horizontalpodautoscaler: "custom_resource",
+  pvc: "custom_resource",
+  persistentvolumeclaim: "custom_resource",
+  namespace: "custom_resource",
+  serviceaccount: "custom_resource",
+  role: "custom_resource",
+  rolebinding: "custom_resource",
+  clusterrole: "custom_resource",
+  clusterrolebinding: "custom_resource",
+  application: "custom_resource",
+});
 
 export interface ResourceDetailTarget {
   clusterId: string;
@@ -22,7 +44,12 @@ export function resolveResourceType(wildcard: string | undefined): ResourceTypeR
   if (!isResourceType(wildcard)) {
     return { kind: "invalid", value: wildcard };
   }
-  return { kind: "valid", value: wildcard };
+  return { kind: "valid", value: canonicalResourceType(wildcard) };
+}
+
+export function canonicalResourceType(resourceType: string): string {
+  const normalized = resourceType.trim().toLowerCase();
+  return RESOURCE_TYPE_ALIASES[normalized] ?? resourceType;
 }
 
 export function resourceTypePath(resourceType: string): string {

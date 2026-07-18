@@ -1132,6 +1132,28 @@ class ResourceManifestApproveResponse(StrictModel):
     sync_state: Literal["awaiting_pr_merge"] = "awaiting_pr_merge"
 
 
+class ResourceManifestDeploymentStage(StrictModel):
+    stage: Literal["validation", "commit", "pull_request", "merge", "sync", "rollout", "done"]
+    status: Literal["completed", "accepted", "pending", "failed", "unavailable"]
+    evidence: dict[str, str] = Field(default_factory=dict)
+    reason_code: str | None = None
+
+
+class ResourceManifestDeployResponse(StrictModel):
+    accepted: bool
+    pathway: Literal["git", "agent"]
+    operation_id: str
+    workflow_run_id: str | None = None
+    correlation_id: str
+    current_stage: Literal["commit", "pull_request", "merge", "sync", "rollout", "done"]
+    preview: ResourceManifestPreviewResponse
+    stages: list[ResourceManifestDeploymentStage]
+    command_id: str | None = None
+    event_id: str | None = None
+    approval_id: str | None = None
+    pending_reason_codes: list[str] = Field(default_factory=list)
+
+
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
 FilterFacetAvailability = Literal["available", "restricted", "unresolved"]
 FilterFacetAxis = Literal[*gateway_facets.RESOURCE_FILTER_FACET_AXES]

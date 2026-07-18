@@ -27,6 +27,9 @@ import {
 } from "./resourcesPageStateModel";
 
 const RESOURCE_LIST_LIMIT = 200;
+const RESOURCE_CATALOG_CACHE_MS = 15_000;
+const RESOURCE_LIST_CACHE_MS = 10_000;
+const RESOURCE_DETAIL_CACHE_MS = 15_000;
 
 interface ScopedState<T> {
   scope: string | null;
@@ -159,6 +162,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
         catalogNamespaceKey === "" ? [] : catalogNamespaceKey.split(","),
         signal,
       ),
+      { retainForMs: RESOURCE_CATALOG_CACHE_MS },
     );
     void request.promise.then(
       (data) => {
@@ -202,6 +206,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
         namespace,
         resourceType: selectedResourceType,
       }, signal),
+      { retainForMs: RESOURCE_LIST_CACHE_MS },
     );
     void request.promise.then(
       (data) => {
@@ -238,6 +243,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
       port,
       `resources:detail:${detailScope}:r${listRevision}`,
       (signal) => port.loadResourceDetail(detailClusterId, detailIdentity, signal),
+      { retainForMs: RESOURCE_DETAIL_CACHE_MS },
     );
     void request.promise.then(
       (data) => {

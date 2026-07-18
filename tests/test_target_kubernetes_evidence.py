@@ -2593,3 +2593,135 @@ def test_dynamic_resource_query_distinguishes_core_and_cluster_scopes(
         f"{group}/{version}" if group else version
     )
     assert kubernetes["custom_resources"][0]["namespace"] == observed_namespace
+
+
+def test_core_detail_summaries_keep_typed_configuration_without_secret_environment() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    pod = kubernetes_module.pod_summary(
+        {
+            "metadata": {"uid": "pod-1", "name": "api-0", "namespace": "shop"},
+            "spec": {
+                "serviceAccountName": "checkout",
+                "initContainers": [{"name": "migrate", "image": "migrate:v1"}],
+                "containers": [
+                    {
+                        "name": "api",
+                        "image": "api:v1",
+                        "env": [{"name": "TOKEN", "value": "must-not-leak"}],
+                        "resources": {"requests": {"cpu": "25m"}, "limits": {"memory": "256Mi"}},
+                    }
+                ],
+            },
+            "status": {
+                "phase": "Running",
+                "initContainerStatuses": [{"name": "migrate", "ready": True, "restartCount": 0}],
+                "containerStatuses": [{"name": "api", "ready": True, "restartCount": 1}],
+            },
+        }
+    )
+
+    assert pod["init_containers"][0]["image"] == "migrate:v1"
+    assert pod["containers"][0]["resources"] == {
+        "requests": {"cpu": "25m"},
+        "limits": {"memory": "256Mi"},
+    }
+    assert "must-not-leak" not in str(pod)
+
+
+def test_workload_and_service_summaries_preserve_strategy_and_network_policy() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    workload = kubernetes_module.workload_summary(
+        "DaemonSet",
+        {
+            "metadata": {"uid": "ds-1", "name": "aws-node", "namespace": "kube-system"},
+            "spec": {
+                "selector": {"matchLabels": {"k8s-app": "aws-node"}},
+                "updateStrategy": {
+                    "type": "RollingUpdate",
+                    "rollingUpdate": {"maxUnavailable": "1"},
+                },
+                "minReadySeconds": 5,
+                "template": {
+                    "spec": {"containers": [{"name": "aws-node", "image": "aws-node:v1"}]}
+                },
+            },
+            "status": {"desiredNumberScheduled": 4, "numberReady": 4},
+        },
+    )
+    service = kubernetes_module.service_summary(
+        {
+            "metadata": {"uid": "service-1", "name": "checkout", "namespace": "shop"},
+            "spec": {
+                "type": "LoadBalancer",
+                "clusterIP": "10.0.0.10",
+                "externalIPs": ["203.0.113.10"],
+                "externalTrafficPolicy": "Local",
+                "internalTrafficPolicy": "Cluster",
+                "ipFamilies": ["IPv4"],
+            },
+            "status": {},
+        }
+    )
+
+    assert workload["strategy_type"] == "RollingUpdate"
+    assert workload["max_unavailable"] == "1"
+    assert workload["min_ready_seconds"] == 5
+    assert service["external_ips"] == ["203.0.113.10"]
+    assert service["external_traffic_policy"] == "Local"
+    assert service["ip_families"] == ["IPv4"]
+
+
+def test_cronjob_node_and_event_summaries_preserve_detail_projection_evidence() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    cronjob = kubernetes_module.workload_summary(
+        "CronJob",
+        {
+            "metadata": {"uid": "cron-1", "name": "backup", "namespace": "shop"},
+            "spec": {
+                "schedule": "*/5 * * * *",
+                "timeZone": "Asia/Seoul",
+                "concurrencyPolicy": "Forbid",
+                "successfulJobsHistoryLimit": 3,
+            },
+            "status": {
+                "lastScheduleTime": "2026-07-18T01:00:00Z",
+                "active": [{"kind": "Job", "name": "backup-1"}],
+            },
+        },
+    )
+    node = kubernetes_module.node_summary(
+        {
+            "metadata": {
+                "uid": "node-1",
+                "name": "worker-a",
+                "labels": {"topology.kubernetes.io/zone": "ap-northeast-2a"},
+            },
+            "spec": {"unschedulable": True},
+            "status": {
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "addresses": [{"type": "InternalIP", "address": "10.0.0.10"}],
+                "capacity": {"cpu": "8"},
+                "allocatable": {"cpu": "7800m"},
+            },
+        },
+        {"cpu_mcores": 800, "mem_mib": 4096, "metrics_observed_at": "2026-07-18T01:00:00Z"},
+        managed_pod_count=12,
+    )
+    event = kubernetes_module.event_summary(
+        {
+            "apiVersion": "v1",
+            "metadata": {"uid": "event-1", "resourceVersion": "9"},
+            "type": "Warning",
+            "reason": "FailedScheduling",
+            "source": {"component": "default-scheduler", "host": "control-plane"},
+            "reportingInstance": "scheduler-1",
+        }
+    )
+
+    assert cronjob["spec"]["schedule"] == "*/5 * * * *"
+    assert cronjob["status"]["active"][0]["name"] == "backup-1"
+    assert node["unschedulable"] is True
+    assert node["managed_pod_count"] == 12
+    assert node["addresses"][0]["address"] == "10.0.0.10"
+    assert event["source_host"] == "control-plane"
+    assert event["reporting_instance"] == "scheduler-1"

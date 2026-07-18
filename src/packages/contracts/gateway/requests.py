@@ -147,7 +147,9 @@ class GitHubWebhookRequest(StrictModel):
 
 
 class ResourceManifestPreviewRequest(StrictModel):
-    application_id: str = Field(min_length=1, max_length=200)
+    # A missing application identifies the exact live inventory source.  An
+    # application id is present only when the resource has a GitOps authority.
+    application_id: str | None = Field(default=None, min_length=1, max_length=200)
     base_sha: str = Field(pattern=r"^[0-9a-f]{40,64}$")
     source_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     edited_yaml: str = Field(min_length=1, max_length=MAX_RESOURCE_MANIFEST_BYTES)
@@ -162,6 +164,11 @@ class ResourceManifestDirectApplyRequest(ResourceManifestPreviewRequest):
     expected_desired_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     confirmation: Literal[True]
     reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceManifestDeployRequest(ResourceManifestPreviewRequest):
+    confirmation: Literal[True]
+    reason: str = Field(default="", max_length=500)
 
 
 class ResourceDeleteRequest(StrictModel):

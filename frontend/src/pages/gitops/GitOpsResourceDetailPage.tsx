@@ -12,6 +12,8 @@ import type {
   GitOpsResourceLocator,
   GitOpsResourceTree,
 } from "../../features/gitops/gitOpsContract";
+import { GitOpsPortFailure } from "../../features/gitops/gitOpsContract";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import type { CommandReceipt } from "../../shared/parity/referenceParity";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -43,7 +45,9 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
   const [revision, setRevision] = useState(0);
   const [tree, setTree] = useState<GitOpsResourceTree | null>(null);
   const [insights, setInsights] = useState<GitOpsResourceInsights | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [treeFailure, setTreeFailure] = useState<GitOpsPortFailure | null>(null);
+  const [insightsFailure, setInsightsFailure] = useState<GitOpsPortFailure | null>(null);
+  const [actionFailed, setActionFailed] = useState(false);
   const [pending, setPending] = useState(false);
   const [action, setAction] = useState<GitOpsResourceAction | null>(null);
   const [receipt, setReceipt] = useState<CommandReceipt | null>(null);
@@ -57,7 +61,9 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
   const [syncOptions, setSyncOptions] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const reload = useCallback(() => {
-    setFailed(false);
+    setTreeFailure(null);
+    setInsightsFailure(null);
+    setActionFailed(false);
     setRevision((value) => value + 1);
   }, []);
 
@@ -65,17 +71,37 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
     if (!port.getResourceTree || !port.getResourceInsights) {
       return;
     }
-    const controller = new AbortController();
-    void Promise.all([
-      port.getResourceTree(locator, controller.signal),
-      port.getResourceInsights(locator, controller.signal),
-    ]).then(([nextTree, nextInsights]) => {
-      setTree(nextTree);
-      setInsights(nextInsights);
-    }).catch((error: unknown) => {
-      if (!isAbortError(error)) setFailed(true);
+    const key = `${locator.clusterId}:${locator.apiVersion}:${locator.kind}:${locator.namespace}:${locator.name}`;
+    const treeRequest = acquireSharedRequest(
+      port,
+      `gitops:resource-tree:${key}:r${revision}`,
+      (signal) => port.getResourceTree!(locator, signal),
+      { retainForMs: 15_000 },
+    );
+    const insightsRequest = acquireSharedRequest(
+      port,
+      `gitops:resource-insights:${key}:r${revision}`,
+      (signal) => port.getResourceInsights!(locator, signal),
+      { retainForMs: 15_000 },
+    );
+    void Promise.allSettled([treeRequest.promise, insightsRequest.promise]).then(([treeResult, insightsResult]) => {
+      if (treeResult.status === "fulfilled") {
+        setTree(treeResult.value);
+        setTreeFailure(null);
+      } else if (!isAbortError(treeResult.reason)) {
+        setTreeFailure(toGitOpsFailure(treeResult.reason));
+      }
+      if (insightsResult.status === "fulfilled") {
+        setInsights(insightsResult.value);
+        setInsightsFailure(null);
+      } else if (!isAbortError(insightsResult.reason)) {
+        setInsightsFailure(toGitOpsFailure(insightsResult.reason));
+      }
     });
-    return () => controller.abort();
+    return () => {
+      treeRequest.release();
+      insightsRequest.release();
+    };
   }, [locator, port, revision]);
 
   const selectedResources = useMemo(() => (
@@ -89,14 +115,17 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
       }))
   ), [selectedNodeIds, tree]);
 
-  if (!port.getResourceTree || !port.getResourceInsights || (failed && (!tree || !insights))) {
-    return <ProductStateScreen kind="error" issue={{ code: "unknown" }} placement="content" retry={{ onRetry: reload, pending: false }} />;
+  if (!port.getResourceTree || !port.getResourceInsights) {
+    return <ProductStateScreen kind="not-found" placement="content" />;
   }
-  if (!tree || !insights) return <ProductStateScreen kind="loading" placement="content" />;
+  if (!tree && !insights && (treeFailure || insightsFailure)) {
+    return <GitOpsFailureState failure={insightsFailure ?? treeFailure!} onRetry={reload} />;
+  }
+  if (!tree && !insights) return <ProductStateScreen kind="loading" placement="content" />;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!action || !port.executeResourceAction || pending || !reason.trim()) return;
+    if (!action || !insights || !port.executeResourceAction || pending || !reason.trim()) return;
     setPending(true);
     try {
       const next = await port.executeResourceAction(locator, {
@@ -123,7 +152,7 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
       setAction(null);
       reload();
     } catch {
-      setFailed(true);
+      setActionFailed(true);
     } finally {
       setPending(false);
     }
@@ -135,7 +164,7 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
         <WorkflowInlineHeading
           as="h1"
           icon={<GitBranch aria-hidden="true" />}
-          title={insights.resource.name}
+          title={insights?.resource.name ?? tree?.root.name ?? locator.name}
           variant="page"
         />
         <Button aria-label={t("common.action.refresh")} onClick={reload} size="icon" type="button" variant="outline">
@@ -143,7 +172,7 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
         </Button>
       </div>
 
-      {failed ? <Alert variant="destructive"><AlertDescription>{t("workflows.resource.actionFailed")}</AlertDescription></Alert> : null}
+      {actionFailed ? <Alert variant="destructive"><AlertDescription>{t("workflows.resource.actionFailed")}</AlertDescription></Alert> : null}
       {receipt ? (
         operationStore
           ? <OperationStatusFeedback commandId={receipt.commandId} correlationId={receipt.correlationId} />
@@ -151,7 +180,7 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
       ) : null}
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-        <Surface aria-labelledby="gitops-resource-tree-title" as="section" className="min-w-0 p-4">
+        {tree ? <Surface aria-labelledby="gitops-resource-tree-title" as="section" className="min-w-0 p-4">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold" id="gitops-resource-tree-title">{t("workflows.resource.tree")}</h2>
             <span className="text-xs text-muted-foreground">
@@ -195,10 +224,10 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
               </li>
             ))}
           </ul>
-        </Surface>
+        </Surface> : <GitOpsFailureState failure={treeFailure ?? new GitOpsPortFailure("error")} onRetry={reload} />}
 
         <div className="grid min-w-0 content-start gap-4">
-          <Surface aria-labelledby="gitops-resource-insights-title" as="section" className="min-w-0 p-4">
+          {insights ? <><Surface aria-labelledby="gitops-resource-insights-title" as="section" className="min-w-0 p-4">
             <h2 className="text-sm font-semibold" id="gitops-resource-insights-title">{t("workflows.resource.insights")}</h2>
             <dl className="mt-3 grid gap-3 text-sm">
               <Fact label={t("workflows.detail.status")} value={insights.status} />
@@ -229,14 +258,14 @@ export function GitOpsResourceDetailPage({ locator, port, rcaContextPort = EMPTY
                 ))}
               </ul>
             </Surface>
-          ) : null}
+          ) : null}</> : <GitOpsFailureState failure={insightsFailure ?? new GitOpsPortFailure("error")} onRetry={reload} />}
         </div>
       </div>
 
-      <RcaContextPanel
+      {insights ? <RcaContextPanel
         port={rcaContextPort}
         subject={{ kind: "resource", scope: insights.scope, resource: insights.resource }}
-      />
+      /> : null}
 
       <Dialog onOpenChange={(open) => { if (!open && !pending) setAction(null); }} open={action !== null}>
         <DialogContent>
@@ -300,7 +329,45 @@ function actionLabel(action: GitOpsResourceAction, t: ReturnType<typeof useI18n>
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
+
+function toGitOpsFailure(error: unknown): GitOpsPortFailure {
+  return error instanceof GitOpsPortFailure ? error : new GitOpsPortFailure("error");
+}
+
+function GitOpsFailureState({
+  failure,
+  onRetry,
+}: {
+  failure: GitOpsPortFailure;
+  onRetry: () => void;
+}) {
+  const { t } = useI18n();
+  if (failure.code === "unauthorized" || failure.code === "forbidden") {
+    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden" }} placement="content" />;
+  }
+  if (failure.code === "not-found") {
+    return <ProductStateScreen kind="not-found" placement="content" />;
+  }
+  if (failure.code === "offline") {
+    return <ProductStateScreen kind="offline" issue={{ code: "network" }} placement="content" retry={{ onRetry, pending: false }} />;
+  }
+  const invalid = failure.code === "invalid-response";
+  const rateLimited = failure.code === "rate-limited";
+  return (
+    <ProductStateScreen
+      kind="error"
+      issue={{
+        code: invalid ? "invalid-response" : "unknown",
+        safeDetail: rateLimited
+          ? t("workflows.resource.rateLimited", { seconds: failure.retryAfter ?? 0 })
+          : undefined,
+      }}
+      placement="content"
+      retry={{ onRetry, pending: false }}
+    />
+  );
 }
 
 const CHILD_GITOPS_IDENTITIES = new Set([

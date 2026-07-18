@@ -24,6 +24,7 @@ describe("ResourceManifestEditor", () => {
       preview: vi.fn(),
       approve: vi.fn(),
       applyNow: vi.fn(),
+      saveAndDeploy: vi.fn(),
     };
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
@@ -31,7 +32,7 @@ describe("ResourceManifestEditor", () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
 
     const status = await screen.findByRole("status");
     const spinner = status.querySelector<HTMLElement>("[data-slot=spinner]");
@@ -40,7 +41,7 @@ describe("ResourceManifestEditor", () => {
     expect(spinner?.classList.contains("motion-reduce:animate-none")).toBe(true);
   });
 
-  it("loads Git YAML, validates an exact diff, and requires a human approval reason", async () => {
+  it("submits one server-owned Git deployment request and renders its exact diff and stages", async () => {
     const user = userEvent.setup();
     const sourceYaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: checkout-api-0\n  namespace: shop\nspec:\n  restartPolicy: Always\n";
     const port: ResourceManifestPort = {
@@ -61,39 +62,10 @@ describe("ResourceManifestEditor", () => {
         content: sourceYaml,
         reason: null,
       }),
-      preview: vi.fn().mockResolvedValue({
-        valid: true,
-        changed: true,
-        baseSha: "a".repeat(40),
-        sourceSha256: `sha256:${"b".repeat(64)}`,
-        desiredSha256: `sha256:${"c".repeat(64)}`,
-        diff: "-  restartPolicy: Always\n+  restartPolicy: Never\n",
-        errors: [],
-        warnings: [],
-        applyAvailability: "available",
-        applyReasonCodes: [],
-        impact: [{
-          apiVersion: "v1",
-          kind: "Pod",
-          namespace: "shop",
-          name: "checkout-api-0",
-          selected: true,
-        }],
-      }),
-      approve: vi.fn().mockResolvedValue({
-        correlationId: "correlation-1",
-        workflowRunId: "workflow-1",
-        approvalId: "approval-1",
-        syncState: "awaiting-pr-merge",
-      }),
-      applyNow: vi.fn().mockResolvedValue({
-        accepted: true,
-        commandId: "cmd-manifest-1",
-        eventId: "event-manifest-1",
-        auditEventId: "event-manifest-1",
-        correlationId: "correlation-manifest-1",
-        status: "queued",
-      }),
+      preview: vi.fn(),
+      approve: vi.fn(),
+      applyNow: vi.fn(),
+      saveAndDeploy: vi.fn().mockResolvedValue(deployment("git")),
     };
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
@@ -101,30 +73,31 @@ describe("ResourceManifestEditor", () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
     const editor = await screen.findByRole("textbox", { name: "YAML 원문" });
     expect(editor.getAttribute("autocapitalize")).toBe("off");
     expect(editor.getAttribute("autocorrect")).toBe("off");
     expect(editor.getAttribute("spellcheck")).toBe("false");
     fireEvent.change(editor, { target: { value: sourceYaml.replace("Always", "Never") } });
-    await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
-    expect(await screen.findByText("승인 준비 완료")).toBeTruthy();
+    const approve = screen.getByRole("button", { name: "저장 및 배포" });
+    expect(screen.queryByRole("button", { name: "Safe PR 승인" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "지금 적용" })).toBeNull();
+    expect(approve.hasAttribute("disabled")).toBe(false);
+    await user.click(approve);
+
+    await waitFor(() => expect(port.saveAndDeploy).toHaveBeenCalledOnce());
+    expect(port.preview).not.toHaveBeenCalled();
+    expect(port.approve).not.toHaveBeenCalled();
+    expect(port.applyNow).not.toHaveBeenCalled();
     expect(screen.getAllByText(/restartPolicy: Never/u).length).toBeGreaterThan(0);
     expect(document.querySelector('[data-slot="unified-diff"]')).toBeTruthy();
     expect(document.querySelector('[data-diff-kind="removal"]')).toBeTruthy();
     expect(document.querySelector('[data-diff-kind="addition"]')).toBeTruthy();
     expect(screen.getByText("Pod/checkout-api-0")).toBeTruthy();
-
-    const approve = screen.getByRole("button", { name: "Safe PR 승인" });
-    expect(screen.getByRole("button", { name: "지금 적용" })).toBeTruthy();
-    expect(approve.hasAttribute("disabled")).toBe(true);
-    await user.type(screen.getByPlaceholderText("이 Git 변경을 검토해야 하는 이유"), "운영 정책 반영");
-    expect(approve.hasAttribute("disabled")).toBe(false);
-    await user.click(approve);
-
-    await waitFor(() => expect(port.approve).toHaveBeenCalledOnce());
-    expect(await screen.findByText("Safe PR 워크플로 수락")).toBeTruthy();
-    expect(screen.getByText(/PR 검토·병합 후에만/u)).toBeTruthy();
+    expect(await screen.findByText("보호된 Git 워크플로")).toBeTruthy();
+    expect(screen.getAllByText("Pull Request").length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
   });
 
   it("starts the common operation stream only after direct apply is accepted", async () => {
@@ -137,47 +110,16 @@ describe("ResourceManifestEditor", () => {
         resourceId: POD_DETAIL.resource.inventoryKey,
         status: "available",
         choices: [],
-        selected: {
-          applicationId: "app-1",
-          applicationName: "checkout",
-          repositoryRef: "project/checkout",
-          branch: "main",
-          manifestPath: "deploy/app.yaml",
-          environment: "staging",
-        },
+        selected: null,
         baseSha: "a".repeat(40),
         sourceSha256: `sha256:${"b".repeat(64)}`,
         content: sourceYaml,
         reason: null,
       }),
-      preview: vi.fn().mockResolvedValue({
-        valid: true,
-        changed: true,
-        baseSha: "a".repeat(40),
-        sourceSha256: `sha256:${"b".repeat(64)}`,
-        desiredSha256: `sha256:${"c".repeat(64)}`,
-        diff: "+  restartPolicy: Never\n",
-        errors: [],
-        warnings: [],
-        applyAvailability: "available",
-        applyReasonCodes: [],
-        impact: [{
-          apiVersion: "v1",
-          kind: "Pod",
-          namespace: "shop",
-          name: "checkout-api-0",
-          selected: true,
-        }],
-      }),
+      preview: vi.fn(),
       approve: vi.fn(),
-      applyNow: vi.fn().mockResolvedValue({
-        accepted: true,
-        commandId: "cmd-manifest-1",
-        eventId: "event-manifest-1",
-        auditEventId: "event-manifest-1",
-        correlationId: "correlation-manifest-1",
-        status: "queued",
-      }),
+      applyNow: vi.fn(),
+      saveAndDeploy: vi.fn().mockResolvedValue(deployment("agent")),
     };
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
@@ -187,19 +129,106 @@ describe("ResourceManifestEditor", () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "YAML 원문" }), {
       target: { value: sourceYaml.replace("Always", "Never") },
     });
-    await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
-    await user.type(screen.getByPlaceholderText("이 Git 변경을 검토해야 하는 이유"), "즉시 반영 필요");
-    await user.click(screen.getByRole("button", { name: "지금 적용" }));
+    await user.click(screen.getByRole("button", { name: "저장 및 배포" }));
 
-    await waitFor(() => expect(port.applyNow).toHaveBeenCalledOnce());
+    await waitFor(() => expect(port.saveAndDeploy).toHaveBeenCalledOnce());
+    expect(port.preview).not.toHaveBeenCalled();
+    expect(port.approve).not.toHaveBeenCalled();
+    expect(port.applyNow).not.toHaveBeenCalled();
     expect(start).toHaveBeenCalledWith("cmd-manifest-1");
-    expect(await screen.findByText("클러스터 적용 접수")).toBeTruthy();
+    expect(await screen.findByText("Outbound 에이전트")).toBeTruthy();
+  });
+
+  it("edits an agent-observed live source without offering a fake Safe PR", async () => {
+    const user = userEvent.setup();
+    const sourceYaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: checkout-api-0\n  namespace: shop\nspec:\n  restartPolicy: Always\n";
+    const port: ResourceManifestPort = {
+      loadSource: vi.fn().mockResolvedValue({
+        resourceId: POD_DETAIL.resource.inventoryKey,
+        status: "available",
+        choices: [],
+        selected: null,
+        baseSha: "a".repeat(64),
+        sourceSha256: `sha256:${"b".repeat(64)}`,
+        content: sourceYaml,
+        reason: null,
+      }),
+      preview: vi.fn(),
+      approve: vi.fn(),
+      applyNow: vi.fn(),
+      saveAndDeploy: vi.fn().mockResolvedValue(deployment("agent", 64)),
+    };
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourceManifestEditor detail={POD_DETAIL} port={port} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "YAML 편집" }));
+    expect(await screen.findByText("에이전트 관측 라이브 원문")).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "YAML 원문" }), {
+      target: { value: sourceYaml.replace("Always", "Never") },
+    });
+    await user.click(await screen.findByRole("button", { name: "저장 및 배포" }));
+
+    expect(screen.queryByRole("button", { name: "Safe PR 승인" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "지금 적용" })).toBeNull();
+    expect(port.preview).not.toHaveBeenCalled();
+    expect(port.saveAndDeploy).toHaveBeenCalledWith(
+      POD_DETAIL.resource.inventoryKey,
+      expect.objectContaining({ applicationId: null, reason: "" }),
+      expect.any(AbortSignal),
+    );
   });
 });
+
+function deployment(pathway: "git" | "agent", baseLength = 40) {
+  const preview = {
+    valid: true,
+    changed: true,
+    baseSha: "a".repeat(baseLength),
+    sourceSha256: `sha256:${"b".repeat(64)}`,
+    desiredSha256: `sha256:${"c".repeat(64)}`,
+    diff: "-  restartPolicy: Always\n+  restartPolicy: Never\n",
+    errors: [],
+    warnings: [],
+    applyAvailability: "available" as const,
+    applyReasonCodes: [],
+    impact: [{
+      apiVersion: "v1",
+      kind: "Pod",
+      namespace: "shop",
+      name: "checkout-api-0",
+      selected: true,
+    }],
+  };
+  return {
+    accepted: true,
+    pathway,
+    operationId: pathway === "git" ? "event-yaml-1" : "cmd-manifest-1",
+    workflowRunId: pathway === "git" ? "workflow-1" : null,
+    correlationId: "correlation-manifest-1",
+    currentStage: pathway === "git" ? "pull_request" as const : "rollout" as const,
+    preview,
+    stages: [
+      { stage: "validation" as const, status: "completed" as const, evidence: {}, reasonCode: null },
+      { stage: "commit" as const, status: pathway === "git" ? "pending" as const : "unavailable" as const, evidence: {}, reasonCode: null },
+      { stage: "pull_request" as const, status: pathway === "git" ? "accepted" as const : "unavailable" as const, evidence: {}, reasonCode: null },
+      { stage: "merge" as const, status: pathway === "git" ? "pending" as const : "unavailable" as const, evidence: {}, reasonCode: null },
+      { stage: "sync" as const, status: pathway === "git" ? "pending" as const : "unavailable" as const, evidence: {}, reasonCode: null },
+      { stage: "rollout" as const, status: pathway === "agent" ? "accepted" as const : "pending" as const, evidence: {}, reasonCode: null },
+      { stage: "done" as const, status: "pending" as const, evidence: {}, reasonCode: null },
+    ],
+    commandId: pathway === "git" ? "event-yaml-1" : "cmd-manifest-1",
+    eventId: "event-manifest-1",
+    approvalId: pathway === "git" ? "approval-1" : null,
+    pendingReasonCodes: [],
+  };
+}
 
 function operationStore(start: (commandId: string) => void): OperationStatusStore {
   const snapshots: ReturnType<OperationStatusStore["getSnapshots"]> = [];

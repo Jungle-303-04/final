@@ -56,6 +56,255 @@ class ProviderReplicas(StrictModel):
     up_to_date: int | None = None
 
 
+class ProviderContainerPort(StrictModel):
+    name: str | None = None
+    container_port: int
+    protocol: str
+
+
+class ProviderContainerProjection(StrictModel):
+    name: str
+    image: str | None = None
+    state: str | None = None
+    state_reason: str | None = None
+    ready: bool | None = None
+    restart_count: int = 0
+    ports: list[ProviderContainerPort] = Field(default_factory=list)
+    requests: list[ProviderKeyValue] = Field(default_factory=list)
+    limits: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class CoreWorkloadProviderDetail(StrictModel):
+    type: Literal["core-workload"] = "core-workload"
+    kind: str
+    owner: ProviderNamedReference | None = None
+    replicas: ProviderReplicas
+    unavailable: int | None = None
+    strategy_type: str | None = None
+    max_surge: str | None = None
+    max_unavailable: str | None = None
+    min_ready_seconds: int | None = None
+    revision_history_count: int | None = None
+    service_account_name: str | None = None
+    selector: list[ProviderKeyValue] = Field(default_factory=list)
+    init_containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CorePodProviderDetail(StrictModel):
+    type: Literal["core-pod"] = "core-pod"
+    phase: str | None = None
+    node_name: str | None = None
+    pod_ip: str | None = None
+    host_ip: str | None = None
+    service_account_name: str | None = None
+    owner: ProviderNamedReference | None = None
+    init_containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    containers: list[ProviderContainerProjection] = Field(default_factory=list)
+    ephemeral_container_names: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreServiceProviderDetail(StrictModel):
+    type: Literal["core-service"] = "core-service"
+    service_type: str | None = None
+    cluster_ip: str | None = None
+    external_name: str | None = None
+    external_ips: list[str] = Field(default_factory=list)
+    load_balancer_addresses: list[str] = Field(default_factory=list)
+    external_traffic_policy: str | None = None
+    internal_traffic_policy: str | None = None
+    ip_families: list[str] = Field(default_factory=list)
+    ports: list[str] = Field(default_factory=list)
+    selector: list[ProviderKeyValue] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreIngressRoute(StrictModel):
+    host: str | None = None
+    path: str
+    path_type: str | None = None
+    backend_service: str
+    backend_port: str | None = None
+
+
+class CoreIngressTls(StrictModel):
+    secret_name: str | None = None
+    hosts: list[str] = Field(default_factory=list)
+
+
+class CoreIngressProviderDetail(StrictModel):
+    type: Literal["core-ingress"] = "core-ingress"
+    ingress_class_name: str | None = None
+    addresses: list[str] = Field(default_factory=list)
+    routes: list[CoreIngressRoute] = Field(default_factory=list)
+    tls: list[CoreIngressTls] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class ArgoApplicationProviderDetail(StrictModel):
+    type: Literal["argo-application"] = "argo-application"
+    sync_status: str | None = None
+    health_status: str | None = None
+    operation_phase: str | None = None
+    repository_url: str | None = None
+    source_path: str | None = None
+    target_revision: str | None = None
+    chart: str | None = None
+    destination_server: str | None = None
+    destination_namespace: str | None = None
+    automated: bool
+    self_heal: bool
+    prune: bool
+    retry_enabled: bool
+    managed_resource_count: int
+    revision_history: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreCronJobProviderDetail(StrictModel):
+    type: Literal["core-cron-job"] = "core-cron-job"
+    schedule: str | None = None
+    schedule_description: str | None = None
+    timezone: str | None = None
+    suspended: bool
+    last_schedule_time: str | None = None
+    last_successful_time: str | None = None
+    active_jobs: list[ProviderNamedReference] = Field(default_factory=list)
+    concurrency_policy: str | None = None
+    starting_deadline_seconds: int | None = None
+    successful_history_limit: int | None = None
+    failed_history_limit: int | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreConfigMapEntry(StrictModel):
+    key: str
+    size_bytes: int = Field(ge=0)
+    preview: str | None = None
+    truncated: bool
+    binary: bool
+
+
+class CoreConfigMapProviderDetail(StrictModel):
+    type: Literal["core-config-map"] = "core-config-map"
+    immutable: bool
+    key_count: int = Field(ge=0)
+    entries: list[CoreConfigMapEntry] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreHpaMetric(StrictModel):
+    type: str
+    name: str
+    current: str | None = None
+    target: str | None = None
+    unavailable_reason: str | None = None
+
+
+class CoreHpaProviderDetail(StrictModel):
+    type: Literal["core-hpa"] = "core-hpa"
+    target: ProviderNamedReference | None = None
+    minimum_replicas: int | None = None
+    maximum_replicas: int | None = None
+    current_replicas: int | None = None
+    desired_replicas: int | None = None
+    last_scale_time: str | None = None
+    metrics: list[CoreHpaMetric] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreNodeProviderDetail(StrictModel):
+    type: Literal["core-node"] = "core-node"
+    ready: bool | None = None
+    unschedulable: bool
+    provider_id: str | None = None
+    os_image: str | None = None
+    architecture: str | None = None
+    kernel_version: str | None = None
+    container_runtime_version: str | None = None
+    kubelet_version: str | None = None
+    capacity: list[ProviderKeyValue] = Field(default_factory=list)
+    allocatable: list[ProviderKeyValue] = Field(default_factory=list)
+    usage: list[ProviderKeyValue] = Field(default_factory=list)
+    addresses: list[ProviderAddress] = Field(default_factory=list)
+    zone: str | None = None
+    region: str | None = None
+    node_pool: str | None = None
+    taints: list[ProviderTaint] = Field(default_factory=list)
+    managed_pod_count: int | None = None
+    metrics_observed_at: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreNamespaceQuota(StrictModel):
+    name: str
+    hard: list[ProviderKeyValue] = Field(default_factory=list)
+    used: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class CoreNamespaceProviderDetail(StrictModel):
+    type: Literal["core-namespace"] = "core-namespace"
+    phase: str | None = None
+    manager: str | None = None
+    injection: str | None = None
+    quotas: list[CoreNamespaceQuota] = Field(default_factory=list)
+    service_account_count: int | None = None
+    role_binding_count: int | None = None
+    cluster_role_binding_count: int | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreEventProviderDetail(StrictModel):
+    type: Literal["core-event"] = "core-event"
+    event_type: str | None = None
+    reason: str | None = None
+    message: str | None = None
+    involved_object: ProviderReference | None = None
+    count: int | None = None
+    first_observed_at: str | None = None
+    last_observed_at: str | None = None
+    duration_seconds: int | None = None
+    source_component: str | None = None
+    source_host: str | None = None
+    reporting_controller: str | None = None
+    reporting_instance: str | None = None
+    api_version: str | None = None
+    resource_version: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreRbacSubject(StrictModel):
+    kind: str
+    namespace: str | None = None
+    name: str
+
+
+class CoreRbacRule(StrictModel):
+    verbs: list[str] = Field(default_factory=list)
+    api_groups: list[str] = Field(default_factory=list)
+    resources: list[str] = Field(default_factory=list)
+    resource_names: list[str] = Field(default_factory=list)
+    non_resource_urls: list[str] = Field(default_factory=list)
+    wildcard: bool
+    escalation: bool
+
+
+class CoreRbacProviderDetail(StrictModel):
+    type: Literal["core-rbac"] = "core-rbac"
+    kind: str
+    automount_service_account_token: bool | None = None
+    secret_names: list[str] = Field(default_factory=list)
+    image_pull_secret_names: list[str] = Field(default_factory=list)
+    role_ref: ProviderNamedReference | None = None
+    subjects: list[CoreRbacSubject] = Field(default_factory=list)
+    rules: list[CoreRbacRule] = Field(default_factory=list)
+    wildcard_warning: bool
+    escalation_warning: bool
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 class CapiUnhealthyCondition(StrictModel):
     type: str
     status: str | None = None
@@ -942,7 +1191,19 @@ class TlsRouteProviderDetail(StrictModel):
 
 
 ResourceProviderDetail = Annotated[
-    AwsMachineProviderDetail
+    CoreWorkloadProviderDetail
+    | CorePodProviderDetail
+    | CoreServiceProviderDetail
+    | CoreIngressProviderDetail
+    | ArgoApplicationProviderDetail
+    | CoreCronJobProviderDetail
+    | CoreConfigMapProviderDetail
+    | CoreHpaProviderDetail
+    | CoreNodeProviderDetail
+    | CoreNamespaceProviderDetail
+    | CoreEventProviderDetail
+    | CoreRbacProviderDetail
+    | AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
     | AwsManagedControlPlaneProviderDetail
     | AwsManagedMachinePoolProviderDetail

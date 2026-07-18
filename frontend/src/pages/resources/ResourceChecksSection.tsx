@@ -52,10 +52,10 @@ function ExactResourceChecks({
     return <Skeleton aria-label={t("resources.detail.checks.loading")} className="h-20 w-full" />;
   }
   if (frame.phase === "failed") {
-    return <ChecksStatus text={t("resources.detail.checks.failed")} />;
+    return <ChecksStatus clusterId={clusterId} text={t("resources.detail.checks.failed")} />;
   }
   if (frame.data.resultSet.availability === "unavailable") {
-    return <ChecksStatus text={t("resources.detail.checks.unavailable")} />;
+    return <ChecksStatus clusterId={clusterId} text={t("resources.detail.checks.unavailable")} />;
   }
   const findings = frame.data.resultSet.checks.filter(
     (finding) => finding.clusterId === clusterId && sameResourceRef(finding.resource, resource),
@@ -112,12 +112,18 @@ function ExactResourceChecks({
   );
 }
 
-function ChecksStatus({ text }: { text: string }) {
+function ChecksStatus({ clusterId, text }: { clusterId: string; text: string }) {
   const { t } = useI18n();
   return (
     <section className="rounded-xl border border-status-warning/30 bg-status-warning/5 p-4" role="status">
       <h3 className="font-medium">{t("resources.detail.checks.title")}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+      <a
+        className="mt-3 inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
+        href={`/checks?clusters=${encodeURIComponent(clusterId)}`}
+      >
+        {t("resources.detail.checks.open")}
+      </a>
     </section>
   );
 }

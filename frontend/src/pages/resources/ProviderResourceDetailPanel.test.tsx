@@ -11,6 +11,53 @@ import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDat
 afterEach(cleanup);
 
 describe("ProviderResourceDetailPanel", () => {
+  it("renders DaemonSet status, strategy, pod template, and service account as typed sections", () => {
+    renderPanel({
+      type: "core-workload",
+      kind: "DaemonSet",
+      owner: null,
+      replicas: { desired: 4, ready: 3, available: 3, upToDate: 4 },
+      unavailable: 1,
+      strategyType: "RollingUpdate",
+      maxSurge: "0",
+      maxUnavailable: "1",
+      minReadySeconds: 10,
+      revisionHistoryCount: 3,
+      serviceAccountName: "aws-node",
+      selector: [{ key: "k8s-app", value: "aws-node" }],
+      initContainers: [{
+        name: "install-cni",
+        image: "example.invalid/cni:v1",
+        state: "terminated",
+        stateReason: "Completed",
+        ready: true,
+        restartCount: 0,
+        ports: [],
+        requests: [],
+        limits: [],
+      }],
+      containers: [{
+        name: "aws-node",
+        image: "example.invalid/aws-node:v1",
+        state: "running",
+        stateReason: null,
+        ready: true,
+        restartCount: 1,
+        ports: [{ name: "metrics", containerPort: 61678, protocol: "TCP" }],
+        requests: [{ key: "cpu", value: "25m" }],
+        limits: [{ key: "memory", value: "256Mi" }],
+      }],
+      conditions: [],
+    });
+
+    expect(screen.getByText("DaemonSet")).toBeTruthy();
+    expect(screen.getByText("RollingUpdate")).toBeTruthy();
+    expect(screen.getAllByText("aws-node").length).toBeGreaterThan(0);
+    expect(screen.getByText("metrics:61678/TCP")).toBeTruthy();
+    expect(screen.getByText("cpu=25m")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Init containers" })).toBeTruthy();
+  });
+
   it("renders observed PVC usage with Prometheus provenance and freshness", () => {
     renderPanel(pvcDetail(), pvcMetricFrame({
       completeness: "exact",
@@ -820,6 +867,70 @@ describe("ProviderResourceDetailPanel", () => {
     expect(screen.getByText("2 of 2 nodes")).toBeTruthy();
     expect(screen.getByText("publish: image pull failed")).toBeTruthy();
     expect(document.querySelector("[data-workflow-node='publish']")).toBeTruthy();
+  });
+  it("renders ConfigMap folding, HPA evidence, and RBAC risk without exposing hidden values", () => {
+    const { rerender } = renderPanel({
+      type: "core-config-map",
+      immutable: false,
+      keyCount: 2,
+      entries: [
+        { key: "app.yaml", sizeBytes: 12, preview: "port: 8080", truncated: false, binary: false },
+        { key: "certificate.bin", sizeBytes: 2048, preview: null, truncated: false, binary: true },
+      ],
+      conditions: [],
+    });
+
+    expect(screen.getByText("app.yaml")).toBeTruthy();
+    expect(screen.queryByText("port: 8080")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /app.yaml/u }));
+    expect(screen.getByText("port: 8080")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /certificate.bin/u }));
+    expect(screen.getByText("Binary values are not exposed in resource details.")).toBeTruthy();
+
+    rerender(panel({
+      type: "core-hpa",
+      target: { apiVersion: "apps/v1", kind: "Deployment", namespace: "shop", name: "api" },
+      minimumReplicas: 2,
+      maximumReplicas: 10,
+      currentReplicas: 2,
+      desiredReplicas: 4,
+      lastScaleTime: null,
+      metrics: [{
+        type: "Resource",
+        name: "cpu",
+        current: null,
+        target: "70%",
+        unavailableReason: "metrics_api_unavailable",
+      }],
+      conditions: [],
+    }));
+    expect(screen.getByText("metrics_api_unavailable")).toBeTruthy();
+    expect(screen.getByText("70%")).toBeTruthy();
+
+    rerender(panel({
+      type: "core-rbac",
+      kind: "ClusterRole",
+      automountServiceAccountToken: null,
+      secretNames: [],
+      imagePullSecretNames: [],
+      roleRef: null,
+      subjects: [],
+      rules: [{
+        verbs: ["*"],
+        apiGroups: ["*"],
+        resources: ["*"],
+        resourceNames: [],
+        nonResourceUrls: [],
+        wildcard: true,
+        escalation: true,
+      }],
+      wildcardWarning: true,
+      escalationWarning: true,
+      conditions: [],
+    }));
+    expect(screen.getByRole("heading", { name: "Effective rules" })).toBeTruthy();
+    expect(screen.getAllByText("Wildcard permission").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Privilege escalation possible").length).toBeGreaterThan(0);
   });
 });
 

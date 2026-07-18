@@ -56,6 +56,27 @@ export type ResourceManifestApproveEndpoint = z.infer<typeof resourceManifestApp
 export const resourceManifestApplySchema = commandAcceptedSchema;
 export type ResourceManifestApplyEndpoint = z.infer<typeof resourceManifestApplySchema>;
 
+export const resourceManifestDeploySchema = z.strictObject({
+  accepted: z.boolean(),
+  pathway: z.enum(["git", "agent"]),
+  operation_id: z.string().min(1),
+  workflow_run_id: z.string().min(1).nullable(),
+  correlation_id: z.string().min(1),
+  current_stage: z.enum(["commit", "pull_request", "merge", "sync", "rollout", "done"]),
+  preview: resourceManifestPreviewSchema,
+  stages: z.array(z.strictObject({
+    stage: z.enum(["validation", "commit", "pull_request", "merge", "sync", "rollout", "done"]),
+    status: z.enum(["completed", "accepted", "pending", "failed", "unavailable"]),
+    evidence: z.record(z.string(), z.string()),
+    reason_code: z.string().nullable(),
+  })),
+  command_id: z.string().nullable(),
+  event_id: z.string().nullable(),
+  approval_id: z.string().nullable(),
+  pending_reason_codes: z.array(z.string()),
+});
+export type ResourceManifestDeployEndpoint = z.infer<typeof resourceManifestDeploySchema>;
+
 export const resourceManifestCreateCapabilitySchema = z.strictObject({
   cluster_id: z.string().min(1),
   namespace: z.string().min(1),

@@ -64,6 +64,7 @@ function createPort(): ResourceManifestPort & ResourceManifestCreatePort {
     preview: vi.fn(),
     approve: vi.fn(),
     applyNow: vi.fn(),
+    saveAndDeploy: vi.fn(),
     loadCreateCapability: vi.fn().mockResolvedValue({
       clusterId: "cluster-1",
       namespace: "shop",

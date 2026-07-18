@@ -50,6 +50,28 @@ export interface ResourceManifestApplyEndpoint {
   status: ResourceActionStatus;
 }
 
+export type ResourceManifestDeploymentStageEndpoint = {
+  stage: "validation" | "commit" | "pull_request" | "merge" | "sync" | "rollout" | "done";
+  status: "completed" | "accepted" | "pending" | "failed" | "unavailable";
+  evidence: Record<string, string>;
+  reason_code: string | null;
+};
+
+export interface ResourceManifestDeployEndpoint {
+  accepted: boolean;
+  pathway: "git" | "agent";
+  operation_id: string;
+  workflow_run_id: string | null;
+  correlation_id: string;
+  current_stage: "commit" | "pull_request" | "merge" | "sync" | "rollout" | "done";
+  preview: ResourceManifestPreviewEndpoint;
+  stages: ResourceManifestDeploymentStageEndpoint[];
+  command_id: string | null;
+  event_id: string | null;
+  approval_id: string | null;
+  pending_reason_codes: string[];
+}
+
 export interface ResourceManifestCreateCapabilityEndpoint {
   cluster_id: string;
   namespace: string;
@@ -100,6 +122,11 @@ export interface ResourceManifestEndpointDependencies {
     },
     signal?: AbortSignal,
   ): Promise<ResourceManifestApplyEndpoint>;
+  deployResourceManifestEdit(
+    resourceId: string,
+    input: ResourceManifestEditInput & { confirmation: true; reason: string },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestDeployEndpoint>;
   getResourceManifestCreateCapability(
     clusterId: string,
     namespace: string,

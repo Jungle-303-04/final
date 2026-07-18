@@ -83,6 +83,7 @@ export const workflowsEn = {
   "workflows.resource.confirm": "Confirm the exact resource, impact, and options before execution.",
   "workflows.resource.reason": "Reason",
   "workflows.resource.syncOptions": "Sync options (comma-separated)",
+  "workflows.resource.rateLimited": "Too many requests. Retry after {seconds} seconds.",
   "workflows.resource.prune": "Prune resources",
   "workflows.resource.dryRun": "Dry run",
   "workflows.resource.force": "Force apply",

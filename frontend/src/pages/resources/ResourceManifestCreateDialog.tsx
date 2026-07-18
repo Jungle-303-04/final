@@ -196,7 +196,7 @@ export function ResourceManifestCreateDialog({
                       <Label htmlFor="resource-create-yaml">{t("resources.manifestCreate.yaml")}</Label>
                       <textarea
                         aria-label={t("resources.manifestCreate.yaml")}
-                        className="min-h-[20rem] w-full resize-y rounded-lg border border-input bg-[#0d1117] p-4 font-mono text-xs leading-5 text-[#e6edf3] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        className="min-h-[20rem] w-full resize-y rounded-lg border border-input bg-code p-4 font-mono text-xs leading-5 text-code-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                         disabled={busy || createReceipt !== null}
                         id="resource-create-yaml"
                         onChange={(event) => {

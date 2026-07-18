@@ -160,7 +160,201 @@ interface ProviderDetailBase {
   conditions: ProviderCondition[];
 }
 
+export interface ProviderContainerProjection {
+  name: string;
+  image: string | null;
+  state: string | null;
+  stateReason: string | null;
+  ready: boolean | null;
+  restartCount: number;
+  ports: Array<{ name: string | null; containerPort: number; protocol: string }>;
+  requests: ProviderKeyValue[];
+  limits: ProviderKeyValue[];
+}
+
 export type ProviderResourceDetail =
+  | (ProviderDetailBase & {
+      type: "core-workload";
+      kind: string;
+      owner: ProviderNamedReference | null;
+      replicas: ProviderReplicas;
+      unavailable: number | null;
+      strategyType: string | null;
+      maxSurge: string | null;
+      maxUnavailable: string | null;
+      minReadySeconds: number | null;
+      revisionHistoryCount: number | null;
+      serviceAccountName: string | null;
+      selector: ProviderKeyValue[];
+      initContainers: ProviderContainerProjection[];
+      containers: ProviderContainerProjection[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-pod";
+      phase: string | null;
+      nodeName: string | null;
+      podIp: string | null;
+      hostIp: string | null;
+      serviceAccountName: string | null;
+      owner: ProviderNamedReference | null;
+      initContainers: ProviderContainerProjection[];
+      containers: ProviderContainerProjection[];
+      ephemeralContainerNames: string[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-service";
+      serviceType: string | null;
+      clusterIp: string | null;
+      externalName: string | null;
+      externalIps: string[];
+      loadBalancerAddresses: string[];
+      externalTrafficPolicy: string | null;
+      internalTrafficPolicy: string | null;
+      ipFamilies: string[];
+      ports: string[];
+      selector: ProviderKeyValue[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-ingress";
+      ingressClassName: string | null;
+      addresses: string[];
+      routes: Array<{
+        host: string | null;
+        path: string;
+        pathType: string | null;
+        backendService: string;
+        backendPort: string | null;
+      }>;
+      tls: Array<{ secretName: string | null; hosts: string[] }>;
+    })
+  | (ProviderDetailBase & {
+      type: "argo-application";
+      syncStatus: string | null;
+      healthStatus: string | null;
+      operationPhase: string | null;
+      repositoryUrl: string | null;
+      sourcePath: string | null;
+      targetRevision: string | null;
+      chart: string | null;
+      destinationServer: string | null;
+      destinationNamespace: string | null;
+      automated: boolean;
+      selfHeal: boolean;
+      prune: boolean;
+      retryEnabled: boolean;
+      managedResourceCount: number;
+      revisionHistory: string[];
+    })
+  | (ProviderDetailBase & {
+      type: "core-cron-job";
+      schedule: string | null;
+      scheduleDescription: string | null;
+      timezone: string | null;
+      suspended: boolean;
+      lastScheduleTime: string | null;
+      lastSuccessfulTime: string | null;
+      activeJobs: ProviderNamedReference[];
+      concurrencyPolicy: string | null;
+      startingDeadlineSeconds: number | null;
+      successfulHistoryLimit: number | null;
+      failedHistoryLimit: number | null;
+    })
+  | (ProviderDetailBase & {
+      type: "core-config-map";
+      immutable: boolean;
+      keyCount: number;
+      entries: Array<{
+        key: string;
+        sizeBytes: number;
+        preview: string | null;
+        truncated: boolean;
+        binary: boolean;
+      }>;
+    })
+  | (ProviderDetailBase & {
+      type: "core-hpa";
+      target: ProviderNamedReference | null;
+      minimumReplicas: number | null;
+      maximumReplicas: number | null;
+      currentReplicas: number | null;
+      desiredReplicas: number | null;
+      lastScaleTime: string | null;
+      metrics: Array<{
+        type: string;
+        name: string;
+        current: string | null;
+        target: string | null;
+        unavailableReason: string | null;
+      }>;
+    })
+  | (ProviderDetailBase & {
+      type: "core-node";
+      ready: boolean | null;
+      unschedulable: boolean;
+      providerId: string | null;
+      osImage: string | null;
+      architecture: string | null;
+      kernelVersion: string | null;
+      containerRuntimeVersion: string | null;
+      kubeletVersion: string | null;
+      capacity: ProviderKeyValue[];
+      allocatable: ProviderKeyValue[];
+      usage: ProviderKeyValue[];
+      addresses: Array<{ type: string; address: string }>;
+      zone: string | null;
+      region: string | null;
+      nodePool: string | null;
+      taints: Array<{ key: string; value: string | null; effect: string | null }>;
+      managedPodCount: number | null;
+      metricsObservedAt: string | null;
+    })
+  | (ProviderDetailBase & {
+      type: "core-namespace";
+      phase: string | null;
+      manager: string | null;
+      injection: string | null;
+      quotas: Array<{ name: string; hard: ProviderKeyValue[]; used: ProviderKeyValue[] }>;
+      serviceAccountCount: number | null;
+      roleBindingCount: number | null;
+      clusterRoleBindingCount: number | null;
+    })
+  | (ProviderDetailBase & {
+      type: "core-event";
+      eventType: string | null;
+      reason: string | null;
+      message: string | null;
+      involvedObject: ProviderReference | null;
+      count: number | null;
+      firstObservedAt: string | null;
+      lastObservedAt: string | null;
+      durationSeconds: number | null;
+      sourceComponent: string | null;
+      sourceHost: string | null;
+      reportingController: string | null;
+      reportingInstance: string | null;
+      apiVersion: string | null;
+      resourceVersion: string | null;
+    })
+  | (ProviderDetailBase & {
+      type: "core-rbac";
+      kind: string;
+      automountServiceAccountToken: boolean | null;
+      secretNames: string[];
+      imagePullSecretNames: string[];
+      roleRef: ProviderNamedReference | null;
+      subjects: Array<{ kind: string; namespace: string | null; name: string }>;
+      rules: Array<{
+        verbs: string[];
+        apiGroups: string[];
+        resources: string[];
+        resourceNames: string[];
+        nonResourceUrls: string[];
+        wildcard: boolean;
+        escalation: boolean;
+      }>;
+      wildcardWarning: boolean;
+      escalationWarning: boolean;
+    })
   | (ProviderDetailBase & {
       type: "aws-machine";
       instanceType: string | null;

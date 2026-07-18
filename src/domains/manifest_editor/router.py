@@ -11,7 +11,8 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+import yaml
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 
 from domains.command.events import CommandRequestedBody
 from domains.command.router import (
@@ -50,6 +51,7 @@ from domains.manifest_editor.validation import (
     validate_manifest_edit,
     validate_manifest_source,
 )
+from domains.manifest_editor.yaml_delivery import build_yaml_delivery_orchestrator
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.config.constants import Command, Sandbox
@@ -60,6 +62,7 @@ from packages.contracts.gateway.requests import (
     ResourceManifestApproveRequest,
     ResourceManifestCreateDryRunRequest,
     ResourceManifestCreateRequest,
+    ResourceManifestDeployRequest,
     ResourceManifestDirectApplyRequest,
     ResourceManifestPreviewRequest,
 )
@@ -67,6 +70,8 @@ from packages.contracts.gateway.responses import (
     ResourceManifestApproveResponse,
     ResourceManifestCreateCapabilityResource,
     ResourceManifestCreateCapabilityResponse,
+    ResourceManifestDeploymentStage,
+    ResourceManifestDeployResponse,
     ResourceManifestImpact,
     ResourceManifestPreviewResponse,
     ResourceManifestSourceChoice,
@@ -81,6 +86,7 @@ from packages.contracts.identity import (
 )
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.contracts.parity import CommandReceipt, ResourceRef
+from packages.contracts.yaml_delivery import YamlDeliveryRequest
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.engine import unit_of_work_or_null
 
@@ -89,6 +95,7 @@ SAFE_PR_MANIFEST_EDIT_KIND = "safe_pr_manifest_edit"
 UNSUPPORTED_SOURCE = "Only a single raw YAML GitHub source can be edited safely."
 STALE_SOURCE = "The Git source changed after it was loaded. Reload before approving."
 SOURCE_NOT_FOUND = "No exact GitOps source binding was found for this live resource."
+LIVE_SOURCE_UNAVAILABLE = "The observed live manifest cannot be edited safely."
 DIRECT_APPLY_AGENT_UNAVAILABLE = "agent_unavailable"
 DIRECT_APPLY_UID_UNAVAILABLE = "resource_uid_unavailable"
 DIRECT_APPLY_NAMESPACE_UNRESOLVED = "namespace_unresolved"
@@ -100,6 +107,8 @@ IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 CREATE_CAPABILITY_UNAVAILABLE = "resource_create_capability_unavailable"
 CREATE_DRY_RUN_REQUIRED = "resource_create_dry_run_required"
 CREATE_FIELD_MANAGER = "opsia-resource-create"
+GITOPS_SOURCE_AUTHORITY = "gitops"
+LIVE_SOURCE_AUTHORITY = "live_inventory"
 
 
 @router.get(
@@ -117,11 +126,30 @@ async def get_resource_manifest_source(
     sources = authorized_sources(db, current, context, application_id=application_id)
     choices = [source_choice(source) for source in sources]
     if not sources:
+        if application_id is not None:
+            return ResourceManifestSourceResponse(
+                resource_id=resource_id,
+                status="unsupported",
+                choices=[],
+                reason=SOURCE_NOT_FOUND,
+            )
+        try:
+            base_sha, content = live_manifest_source(context)
+        except ValueError as exc:
+            return ResourceManifestSourceResponse(
+                resource_id=resource_id,
+                status="unsupported",
+                choices=[],
+                reason=str(exc),
+            )
         return ResourceManifestSourceResponse(
             resource_id=resource_id,
-            status="unsupported",
+            status="available",
             choices=[],
-            reason=SOURCE_NOT_FOUND,
+            selected=None,
+            base_sha=base_sha,
+            source_sha256=manifest_sha256(content),
+            content=content,
         )
     if application_id is None and len(sources) > 1:
         return ResourceManifestSourceResponse(
@@ -175,8 +203,11 @@ async def preview_resource_manifest_edit(
     fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> ResourceManifestPreviewResponse:
     context = resource_context(db, current, resource_id, write=True)
-    source = exact_source(db, current, context, payload.application_id)
-    base_sha, content = await read_pinned_source(db, current, source, fallback_service)
+    if payload.application_id is None:
+        base_sha, content = require_live_manifest_source(context)
+    else:
+        source = exact_source(db, current, context, payload.application_id)
+        base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
     validation = validate_manifest_edit(
         content,
@@ -191,6 +222,203 @@ async def preview_resource_manifest_edit(
         apply_availability="available" if not reason_codes else "unavailable",
         apply_reason_codes=reason_codes,
         impact=impact,
+    )
+
+
+@router.post(
+    gateway_routes.RESOURCE_MANIFEST_DEPLOY_PATH,
+    response_model=ResourceManifestDeployResponse,
+    status_code=202,
+)
+async def deploy_resource_manifest_edit(
+    resource_id: str,
+    payload: ResourceManifestDeployRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+    fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
+    background_tasks: BackgroundTasks = None,
+) -> ResourceManifestDeployResponse:
+    """Validate, diff, select the authority-owned path, and submit one operation."""
+
+    if IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
+        raise HTTPException(status_code=422, detail="invalid Idempotency-Key")
+    preview = await preview_resource_manifest_edit(
+        resource_id,
+        ResourceManifestPreviewRequest(
+            application_id=payload.application_id,
+            base_sha=payload.base_sha,
+            source_sha256=payload.source_sha256,
+            edited_yaml=payload.edited_yaml,
+        ),
+        current=current,
+        db=db,
+        fallback_service=fallback_service,
+    )
+    if not preview.valid:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "manifest_invalid", "detail": preview.errors[0]},
+        )
+    validation_stage = ResourceManifestDeploymentStage(
+        stage="validation",
+        status="completed",
+        evidence={
+            "base_sha": preview.base_sha,
+            "source_sha256": preview.source_sha256,
+            "desired_sha256": preview.desired_sha256,
+        },
+    )
+    audit_reason = payload.reason.strip() or "manifest update requested from resource detail"
+    if payload.application_id is not None:
+        context = resource_context(db, current, resource_id, write=True)
+        source = exact_source(db, current, context, payload.application_id)
+        approval = await approve_resource_manifest_edit(
+            resource_id,
+            ResourceManifestApproveRequest(
+                application_id=payload.application_id,
+                base_sha=payload.base_sha,
+                source_sha256=payload.source_sha256,
+                edited_yaml=payload.edited_yaml,
+                confirmed=True,
+                reason=audit_reason,
+            ),
+            current=current,
+            db=db,
+            events=events,
+            fallback_service=fallback_service,
+        )
+        operation_id = approval.event_id
+        delivery_request = YamlDeliveryRequest(
+            operation_id=operation_id,
+            workflow_run_id=approval.workflow_run_id,
+            workspace_id=context["workspace_id"],
+            application_id=str(source["application_id"]),
+            binding_id=str(source["binding_id"]),
+            environment=str(source["environment"]),
+            cluster_id=context["cluster_id"],
+            repository_id=str(source["repository_id"]),
+            repo_ref=str(source["repo_ref"]),
+            base_branch=str(source["branch"]),
+            manifest_path=str(source["manifest_path"]),
+            change_ref=approval.approval_id,
+            source_revision=preview.base_sha,
+            desired_sha256=preview.desired_sha256,
+        )
+        publish = getattr(operation_events, "publish", None)
+        if not callable(publish):
+            raise HTTPException(status_code=503, detail="operation event stream unavailable")
+        await publish(
+            command_id=operation_id,
+            workspace_id=context["workspace_id"],
+            kind="progress",
+            payload={
+                "cluster_id": context["cluster_id"],
+                "operation_id": operation_id,
+                "workflow_run_id": approval.workflow_run_id,
+                "stage": "validation",
+                "status": "accepted",
+                "evidence": {
+                    "base_sha": preview.base_sha,
+                    "source_sha256": preview.source_sha256,
+                    "desired_sha256": preview.desired_sha256,
+                },
+            },
+        )
+        delivery = build_yaml_delivery_orchestrator(
+            db=db,
+            current=current,
+            events=events,
+            operation_events=operation_events,
+        )
+        await delivery.prepare(delivery_request)
+        if background_tasks is None:
+            raise HTTPException(status_code=503, detail="YAML delivery runner unavailable")
+        background_tasks.add_task(delivery.execute, delivery_request)
+        return ResourceManifestDeployResponse(
+            accepted=approval.accepted,
+            pathway="git",
+            operation_id=operation_id,
+            workflow_run_id=approval.workflow_run_id,
+            correlation_id=approval.correlation_id,
+            current_stage="commit",
+            preview=preview,
+            approval_id=approval.approval_id,
+            event_id=approval.event_id,
+            command_id=operation_id,
+            stages=[
+                validation_stage,
+                ResourceManifestDeploymentStage(
+                    stage="commit",
+                    status="accepted",
+                    evidence={"workflow_run_id": approval.workflow_run_id},
+                ),
+                ResourceManifestDeploymentStage(
+                    stage="pull_request",
+                    status="pending",
+                    evidence={"approval_id": approval.approval_id},
+                ),
+                ResourceManifestDeploymentStage(stage="merge", status="pending"),
+                ResourceManifestDeploymentStage(stage="sync", status="pending"),
+                ResourceManifestDeploymentStage(stage="rollout", status="pending"),
+                ResourceManifestDeploymentStage(stage="done", status="pending"),
+            ],
+        )
+
+    receipt = await apply_resource_manifest_now(
+        resource_id,
+        ResourceManifestDirectApplyRequest(
+            application_id=None,
+            base_sha=payload.base_sha,
+            source_sha256=payload.source_sha256,
+            edited_yaml=payload.edited_yaml,
+            expected_desired_sha256=preview.desired_sha256,
+            confirmation=True,
+            reason=audit_reason,
+        ),
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+        fallback_service=fallback_service,
+    )
+    return ResourceManifestDeployResponse(
+        accepted=receipt.accepted,
+        pathway="agent",
+        operation_id=receipt.command_id,
+        workflow_run_id=None,
+        correlation_id=receipt.correlation_id,
+        current_stage="rollout",
+        preview=preview,
+        command_id=receipt.command_id,
+        event_id=receipt.event_id,
+        stages=[
+            validation_stage,
+            ResourceManifestDeploymentStage(
+                stage="commit", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="pull_request", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="merge", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="sync", status="unavailable", reason_code="not_applicable_to_agent"
+            ),
+            ResourceManifestDeploymentStage(
+                stage="rollout",
+                status="accepted",
+                evidence={"command_id": receipt.command_id, "receipt_status": receipt.status},
+            ),
+            ResourceManifestDeploymentStage(stage="done", status="pending"),
+        ],
     )
 
 
@@ -218,8 +446,12 @@ async def apply_resource_manifest_now(
     if IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
         raise HTTPException(status_code=422, detail="invalid Idempotency-Key")
     context = resource_context(db, current, resource_id, write=True)
-    source = exact_source(db, current, context, payload.application_id)
-    base_sha, content = await read_pinned_source(db, current, source, fallback_service)
+    source: dict[str, Any] | None = None
+    if payload.application_id is None:
+        base_sha, content = require_live_manifest_source(context)
+    else:
+        source = exact_source(db, current, context, payload.application_id)
+        base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
     validation = validate_manifest_edit(
         content,
@@ -274,22 +506,56 @@ async def apply_resource_manifest_now(
     selected_document = next(
         item for item, item_impact in zip(documents, impact, strict=True) if item_impact.selected
     )
-    workflow_run_id = edit_workflow_id(
-        context["workspace_id"],
-        resource_id,
-        source,
-        base_sha,
-        validation.desired_sha256,
+    workflow_run_id = (
+        edit_workflow_id(
+            context["workspace_id"],
+            resource_id,
+            source,
+            base_sha,
+            validation.desired_sha256,
+        )
+        if source is not None
+        else live_edit_workflow_id(
+            context["workspace_id"],
+            resource_id,
+            base_sha,
+            validation.desired_sha256,
+        )
+    )
+    authority = live_manifest_authority(context, base_sha, validation.source_sha256)
+    diff_authority = (
+        {
+            "repository_id": str(source["repository_id"]),
+            "binding_id": str(source["binding_id"]),
+            "application_id": str(source["application_id"]),
+            "environment": str(source["environment"]),
+            "manifest_path": str(source["manifest_path"]),
+        }
+        if source is not None
+        else {}
+    )
+    source_payload = (
+        {
+            "authority": GITOPS_SOURCE_AUTHORITY,
+            "repository_id": str(source["repository_id"]),
+            "repo_ref": str(source["repo_ref"]),
+            "branch": str(source["branch"]),
+            "manifest_path": str(source["manifest_path"]),
+            "base_sha": base_sha,
+            "source_sha256": validation.source_sha256,
+            "desired_sha256": validation.desired_sha256,
+        }
+        if source is not None
+        else authority
+        | {
+            "desired_sha256": validation.desired_sha256,
+        }
     )
     diff = Diff(
         workspace_id=context["workspace_id"],
         cluster_id=context["cluster_id"],
-        repository_id=str(source["repository_id"]),
-        binding_id=str(source["binding_id"]),
-        application_id=str(source["application_id"]),
         workflow_run_id=workflow_run_id,
-        environment=str(source["environment"]),
-        manifest_path=str(source["manifest_path"]),
+        **diff_authority,
         resource=f"{resource_ref.kind}/{resource_ref.name}",
         namespace=resource_ref.namespace or "",
         desired_image="",
@@ -304,6 +570,9 @@ async def apply_resource_manifest_now(
             "base_sha": base_sha,
             "source_sha256": validation.source_sha256,
             "desired_sha256": validation.desired_sha256,
+            "source_authority": (
+                GITOPS_SOURCE_AUTHORITY if source is not None else LIVE_SOURCE_AUTHORITY
+            ),
         },
     )
     command = CommandRequestedBody(
@@ -316,22 +585,20 @@ async def apply_resource_manifest_now(
         payload={
             "request_fingerprint": request_fingerprint,
             "resource_ref": resource_ref.model_dump(),
-            "source": {
-                "repository_id": str(source["repository_id"]),
-                "repo_ref": str(source["repo_ref"]),
-                "branch": str(source["branch"]),
-                "manifest_path": str(source["manifest_path"]),
-                "base_sha": base_sha,
-                "source_sha256": validation.source_sha256,
-                "desired_sha256": validation.desired_sha256,
-            },
+            "source": source_payload,
             "desired_documents": documents,
         },
         workspace_id=context["workspace_id"],
-        application_id=str(source["application_id"]),
+        **(
+            {
+                "application_id": str(source["application_id"]),
+                "binding_id": str(source["binding_id"]),
+                "environment": str(source["environment"]),
+            }
+            if source is not None
+            else {}
+        ),
         workflow_run_id=workflow_run_id,
-        binding_id=str(source["binding_id"]),
-        environment=str(source["environment"]),
         priority=COMMAND_PRIORITY_HIGH,
         requested_by=str(current.user_id),
         direct_execution=True,
@@ -490,6 +757,11 @@ async def approve_resource_manifest_edit(
     fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> ResourceManifestApproveResponse:
     context = resource_context(db, current, resource_id, write=True)
+    if payload.application_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Safe PR requires an exact GitOps source binding.",
+        )
     source = exact_source(db, current, context, payload.application_id)
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
@@ -1313,6 +1585,84 @@ def ensure_source_is_current(
             status_code=409,
             detail={"code": "manifest_source_stale", "detail": STALE_SOURCE},
         )
+
+
+def live_manifest_source(context: Mapping[str, Any]) -> tuple[str, str]:
+    """Materialize one safe, status-free manifest from retained agent inventory.
+
+    The gateway never contacts Kubernetes.  The source is the exact object
+    already delivered by the outbound cluster agent, and its content digest is
+    used as the optimistic-concurrency revision for preview and apply.
+    """
+
+    resource = context["resource"]
+    raw = resource.get("raw") if isinstance(resource, Mapping) else None
+    if not isinstance(raw, Mapping):
+        raise ValueError(LIVE_SOURCE_UNAVAILABLE)
+    manifest = deepcopy(dict(raw))
+    manifest.pop("status", None)
+    metadata = manifest.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ValueError(LIVE_SOURCE_UNAVAILABLE)
+    clean_metadata = deepcopy(dict(metadata))
+    for field in SERVER_OWNED_METADATA:
+        clean_metadata.pop(field, None)
+    annotations = clean_metadata.get("annotations")
+    if isinstance(annotations, Mapping):
+        clean_annotations = dict(annotations)
+        clean_annotations.pop("kubectl.kubernetes.io/last-applied-configuration", None)
+        clean_metadata["annotations"] = clean_annotations
+    manifest["metadata"] = clean_metadata
+    content = yaml.safe_dump(
+        manifest,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+    safety_errors = validate_manifest_source(
+        content,
+        selected_identity=context["identity"],
+    )
+    if safety_errors:
+        raise ValueError(LIVE_SOURCE_UNAVAILABLE)
+    return manifest_sha256(content).removeprefix("sha256:"), content
+
+
+def require_live_manifest_source(context: Mapping[str, Any]) -> tuple[str, str]:
+    try:
+        return live_manifest_source(context)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "live_manifest_unavailable", "detail": str(exc)},
+        ) from exc
+
+
+def live_manifest_authority(
+    context: Mapping[str, Any],
+    base_sha: str,
+    source_sha256: str,
+) -> dict[str, Any]:
+    resource = context["resource"]
+    return {
+        "authority": LIVE_SOURCE_AUTHORITY,
+        "snapshot_id": str(resource.get("snapshot_id") or ""),
+        "resource_version": str(resource.get("resource_version") or ""),
+        "base_sha": base_sha,
+        "source_sha256": source_sha256,
+    }
+
+
+def live_edit_workflow_id(
+    workspace_id: str,
+    resource_id: str,
+    base_sha: str,
+    desired_sha256: str,
+) -> str:
+    authority = "\0".join(
+        (workspace_id, resource_id, LIVE_SOURCE_AUTHORITY, base_sha, desired_sha256)
+    )
+    return f"workflow-manifest-edit-{hashlib.sha256(authority.encode()).hexdigest()[:32]}"
 
 
 def edit_workflow_id(

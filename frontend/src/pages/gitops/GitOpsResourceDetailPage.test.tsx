@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GitOpsResourceInsights, GitOpsResourceTree } from "../../features/gitops/gitOpsContract";
+import { GitOpsPortFailure } from "../../features/gitops/gitOpsContract";
 import { gitOpsPort, renderGitOps } from "./GitOpsPage.testSupport";
 
 afterEach(() => cleanup());
@@ -102,6 +103,35 @@ describe("GitOpsResourceDetailPage", () => {
       scope: scope(),
       resource: insightsFixture().resource,
     }), expect.any(AbortSignal));
+  });
+
+  it("keeps validated insights visible when the resource tree is forbidden", async () => {
+    const port = gitOpsPort();
+    port.getResourceTree = vi.fn().mockRejectedValue(new GitOpsPortFailure("forbidden"));
+    port.getResourceInsights = vi.fn().mockResolvedValue(insightsFixture());
+
+    renderGitOps(
+      "/gitops/resource?cluster=cluster-a&apiVersion=argoproj.io%2Fv1alpha1&kind=Application&namespace=argocd&name=storefront",
+      port,
+    );
+
+    expect(await screen.findByRole("heading", { name: "storefront" })).toBeTruthy();
+    expect(screen.getByText("Synced")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "You cannot access this scope" })).toBeTruthy();
+  });
+
+  it("shows the server retry window for a rate-limited exact resource", async () => {
+    const port = gitOpsPort();
+    port.getResourceTree = vi.fn().mockRejectedValue(new GitOpsPortFailure("rate-limited", 9));
+    port.getResourceInsights = vi.fn().mockRejectedValue(new GitOpsPortFailure("rate-limited", 9));
+
+    renderGitOps(
+      "/gitops/resource?cluster=cluster-a&apiVersion=argoproj.io%2Fv1alpha1&kind=Application&namespace=argocd&name=storefront",
+      port,
+    );
+
+    expect(await screen.findByText("Too many requests. Retry after 9 seconds.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 });
 
