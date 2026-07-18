@@ -33,7 +33,7 @@ function nsFor(name: string): string {
   if (n.includes("jsonnet")) return "argocd-demo-jsonnet";
   if (n.includes("guestbook")) return "argocd-demo-waves";
   if (n.startsWith("shop") || ["checkout", "payments", "search"].some((s) => n.startsWith(s))) return "shop";
-  if (["auth", "gateway", "worker", "notifier", "media", "redis", "backend"].some((s) => n.startsWith(s))) return "platform";
+  if (["auth", "gateway", "worker", "notifier", "media", "redis", "postgres", "backend"].some((s) => n.startsWith(s))) return "platform";
   return "sandbox";
 }
 // 이름 → 클러스터 결정 귀속 — 맵 드릴 범위와 표를 실제로 연동하기 위한 기준
