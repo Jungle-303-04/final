@@ -71,9 +71,12 @@ export function ProductRouter({
             {composition.surfaces.flatMap((registration) => {
               const { id } = registration;
               const routeDefinition = routeDefinitionForSurface(id);
+              const routeElement = routeDefinition.redirectTo === null
+                ? <RouteSurface key={id} registration={registration} />
+                : <ProductLegacyRedirect routeDefinition={routeDefinition} />;
               return [
                 <Route
-                  element={<RouteSurface key={id} registration={registration} />}
+                  element={routeElement}
                   key={id}
                   path={routePathForDefinition(routeDefinition, routeDefinition.path)}
                 />,
@@ -146,4 +149,24 @@ function routePathForDefinition(
 function ProductFallbackRedirect({ path }: { path: `/${string}` }) {
   const filter = useUnifiedFilter();
   return <Navigate replace to={filter.navigationHref(path)} />;
+}
+
+function ProductLegacyRedirect({
+  routeDefinition,
+}: {
+  routeDefinition: ProductRouteDefinition;
+}) {
+  const filter = useUnifiedFilter();
+  const target = routeDefinition.redirectTo;
+  if (target === null) return <ProductFallbackRedirect path="/home" />;
+  const targetRoute = routeDefinitionForSurface(target);
+  return (
+    <Navigate
+      replace
+      to={filter.navigationHref(targetRoute.path, {
+        ...filter.detail,
+        surfaceTab: routeDefinition.redirectSection ?? undefined,
+      })}
+    />
+  );
 }

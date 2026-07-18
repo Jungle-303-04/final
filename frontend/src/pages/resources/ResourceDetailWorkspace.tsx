@@ -115,12 +115,6 @@ export function ResourceDetailWorkspace({
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     };
   }, []);
-  useEffect(() => {
-    if (tab !== "manifest" || detail.phase !== "ready" || !manifestPort) return;
-    manifestEditorRef.current?.open();
-    onTabChange("overview");
-  }, [detail.phase, manifestPort, onTabChange, tab]);
-
   const requestClose = () => {
     if (closing) return;
     if (reducedMotion) {
@@ -152,7 +146,7 @@ export function ResourceDetailWorkspace({
           !managementReadOnly
         ) {
           event.preventDefault();
-          manifestEditorRef.current?.open();
+          onTabChange("manifest");
           return;
         }
         if (event.key === "Escape") {
@@ -302,6 +296,8 @@ export function ResourceDetailWorkspace({
           onNavigateResource={onNavigateResource}
           resourceIssues={resourceIssues}
           checksPort={checksPort}
+          manifestPort={managementReadOnly ? undefined : manifestPort}
+          onManifestUnauthorized={onUnauthorized}
           onTabChange={onTabChange}
           tab={tab}
         />

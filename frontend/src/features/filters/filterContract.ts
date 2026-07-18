@@ -94,6 +94,7 @@ export interface ProductDetailQuery {
   rightsizingQuery?: string | null;
   timeAt?: number;
   graphCollapsed?: true;
+  surfaceTab?: "applications" | "repositories" | "helm" | "incidents" | "rules";
   trafficSince?: TrafficSince;
   trafficProtocols?: readonly TrafficProtocol[];
   trafficVerdicts?: readonly TrafficVerdict[];
@@ -165,6 +166,7 @@ export type DetailMutationIntent =
   | "time-range"
   | "time-at"
   | "graph-visibility"
+  | "surface-tab"
   | "traffic-filter"
   | "traffic-sort"
   | "traffic-flow"

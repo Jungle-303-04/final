@@ -24,6 +24,7 @@ const WORKFLOW_VIEWS = ["overview", "edit", "runs", "yaml"] as const;
 const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 const COST_RANGES = ["6h", "24h", "7d"] as const;
+const SURFACE_TABS = ["applications", "repositories", "helm", "incidents", "rules"] as const;
 const RIGHTSIZING_CLASSES = ["increase", "reduction", "review", "in_range", "need_data"] as const;
 const TRAFFIC_SINCE = ["1m", "5m", "15m", "1h"] as const;
 const TRAFFIC_PROTOCOLS = ["tcp", "udp", "http", "grpc", "dns", "unknown"] as const;
@@ -64,6 +65,7 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   appendNullableStableText(pairs, "rfQ", detail.rightsizingQuery ?? null);
   if (detail.timeAt !== undefined) appendText(pairs, "t.at", String(detail.timeAt));
   if (detail.graphCollapsed) appendText(pairs, "graph", "0");
+  if (detail.surfaceTab) appendText(pairs, "section", detail.surfaceTab);
   if (detail.trafficSince && detail.trafficSince !== "5m") {
     appendText(pairs, "traffic.since", detail.trafficSince);
   }
@@ -135,6 +137,8 @@ export function parseProductDetailQuery(
   const graph = readScalar(params, "graph", invalidGraph);
   if (graph === "0") detail.graphCollapsed = true;
   else if (graph !== null) invalidGraph.push(graph);
+  const surfaceTab = readStableText(params, "section");
+  if (isMember(SURFACE_TABS, surfaceTab)) detail.surfaceTab = surfaceTab;
   const trafficSince = readScalar(params, "traffic.since", []);
   if (isMember(TRAFFIC_SINCE, trafficSince)) detail.trafficSince = trafficSince;
   const trafficProtocols = readEnumList(params, "traffic.protocols", TRAFFIC_PROTOCOLS);

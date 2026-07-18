@@ -19,15 +19,14 @@ describe("shell shortcut registry", () => {
       .toEqual(expect.arrayContaining([
         ["route:home", "g h", true],
         ["route:resources", "g r", false],
+        ["route:deploy", "g d", false],
         ["route:issues", "g i", true],
-        ["route:applications", "g a", false],
         ["route:timeline", "g l", false],
-        ["route:traffic", "g f", false],
-        ["route:helm", "g m", false],
-        ["route:gitops", "g o", false],
         ["route:checks", "g u", false],
         ["route:cost", "g c", false],
+        ["route:settings", "g s", false],
       ]));
+    expect(definitions.filter((definition) => definition.id.startsWith("route:"))).toHaveLength(8);
     expect(definitions.find((definition) => definition.id === "command"))
       .toMatchObject({
         allowInInputs: true,

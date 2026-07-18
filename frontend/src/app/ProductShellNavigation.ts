@@ -8,6 +8,7 @@ import {
   Home,
   Layers3,
   Package,
+  Rocket,
   Server,
   Settings,
   ShieldCheck,
@@ -22,6 +23,7 @@ export const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   clusters: Server,
   home: Home,
   resources: Boxes,
+  deploy: Rocket,
   issues: TriangleAlert,
   timeline: Clock,
   traffic: Activity,
@@ -47,5 +49,6 @@ export const navLabelKeys = {
   cost: "shell.nav.cost",
   alerts: "settings.section.alerts",
   resources: "shell.nav.resources",
+  deploy: "shell.nav.deploy",
   settings: "shell.nav.settings",
 } satisfies Record<ProductSurfaceId, MessageKey>;

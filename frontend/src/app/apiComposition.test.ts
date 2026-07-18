@@ -17,6 +17,7 @@ const APPROVED_SURFACE_IDS = new Set<ProductSurfaceId>([
   "clusters",
   "cost",
   "checks",
+  "deploy",
   "gitops",
   "helm",
   "home",

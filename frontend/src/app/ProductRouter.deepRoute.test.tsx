@@ -31,11 +31,12 @@ afterEach(() => cleanup());
 beforeEach(() => installMatchMedia(false));
 
 describe("deferred product routes", () => {
-  it("keeps a declared deep route through navigation back and forward", async () => {
+  it("canonicalizes a legacy GitOps deep route to the Deploy repository section", async () => {
     const user = userEvent.setup();
     const deepRoute = "/gitops/detail/application/default/storefront";
     const composition = createProductComposition([
       { id: "home", loader: surfaceLoader(HomeSurface) },
+      { id: "deploy", loader: surfaceLoader(DeploySurface) },
       { id: "gitops", loader: surfaceLoader(GitOpsSurface) },
     ], authPort, testClusterScope);
     const router = createMemoryRouter([{
@@ -53,16 +54,18 @@ describe("deferred product routes", () => {
 
     render(<RouterProvider router={router} />);
 
-    expect(await screen.findByText("GitOps surface")).toBeTruthy();
-    expect(router.state.location.pathname).toBe(deepRoute);
+    expect(await screen.findByText("Deploy surface")).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/deploy");
+    expect(router.state.location.search).toBe("?section=repositories");
 
     await user.keyboard("gh");
     await waitFor(() => expect(router.state.location.pathname).toBe("/home"));
 
     await router.navigate(-1);
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe(deepRoute);
-      expect(screen.getByText("GitOps surface")).toBeTruthy();
+      expect(router.state.location.pathname).toBe("/deploy");
+      expect(router.state.location.search).toBe("?section=repositories");
+      expect(screen.getByText("Deploy surface")).toBeTruthy();
     });
   });
 
@@ -111,6 +114,10 @@ function HomeSurface() {
 
 function GitOpsSurface() {
   return <p>GitOps surface</p>;
+}
+
+function DeploySurface() {
+  return <p>Deploy surface</p>;
 }
 
 function ResourcesSurface() {

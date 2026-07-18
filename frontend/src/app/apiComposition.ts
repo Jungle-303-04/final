@@ -205,9 +205,21 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
       })),
     },
     {
+      id: "deploy",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/deploy")).loadDeploySurface(
+          refreshPolicies,
+          rcaContextPort,
+        ),
+      })),
+    },
+    {
       id: "issues",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(issuesPort),
+        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(
+          issuesPort,
+          alertRulesPort,
+        ),
       })),
     },
     {
