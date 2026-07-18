@@ -8,7 +8,7 @@ import {
   Server, FileCog, Network, Globe, Search, KeyRound,
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
-  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Moon, CircleHelp,
+  Home, ListTree, AlertTriangle, Share2, Clock, Package, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh,
 } from "lucide-react";
 import { OpsiaMap, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
@@ -511,6 +511,8 @@ const TINT_G = {
   lime: { fg: "#4D7C0F", bg: "#F3FAE7", bd: "#DDF0BB" }, amber: { fg: "#B25A00", bg: "#FFF8EF", bd: "#F3D8B7" },
   purple: { fg: "#8250DF", bg: "#F6F1FE", bd: "#E3D5FA" }, gray: { fg: "#5F6570", bg: "#F4F5F7", bd: "#E4E6EA" },
 } as const;
+
+const NS_OPTIONS = ["모든 네임스페이스", "argocd", "shop", "platform", "kube-system", "caretta", "sandbox"] as const;
 
 const TOPBAR_H = 57; // 상단 크롬 높이 — 오버레이는 이 아래부터 시작한다
 
@@ -1167,6 +1169,7 @@ function App() {
   const [pinned, setPinned] = useState<string[]>([]);
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
   const [ns, setNs] = useState("모든 네임스페이스");
+  const [nsOpen, setNsOpen] = useState(false);
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -1213,7 +1216,8 @@ function App() {
   const inScope = scope.level !== "clusters" && !!scope.cluster;
   // 행에 실제 클러스터 귀속(cluster 필드)이 있으면 그것을 쓰고, 없으면 결정적 귀속으로 보완
   const scopedRows = useMemo(() => (inScope ? allRows.filter((r) => String(r.cluster ?? clusterOf(String(r.name ?? ""))) === scope.cluster) : allRows), [allRows, inScope, scope.cluster]);
-  const shownRows = useMemo(() => (q ? scopedRows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : scopedRows), [scopedRows, q]);
+  const nsRows = useMemo(() => (ns === "모든 네임스페이스" ? scopedRows : scopedRows.filter((r) => r.ns === undefined || String(r.ns) === ns)), [scopedRows, ns]);
+  const shownRows = useMemo(() => (q ? nsRows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : nsRows), [nsRows, q]);
   const openFromMap = (kid: string, data: Record<string, unknown>) => {
     const k = KINDS.find((x) => x.id === kid); if (k) setDetail({ kind: k, row: data });
   };
@@ -1260,13 +1264,29 @@ function App() {
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 66, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+        {/* 현재 스코프 표시 — 맵 드릴과 항상 일치 (컨트롤이 아니라 사실) */}
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
-          <Server size={13} style={{ color: UI.ink3 }} />prod-eks<ChevronDown size={12} style={{ color: UI.ink3 }} />
+          <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
         </span>
-        <button onClick={() => setNs(ns === "모든 네임스페이스" ? "argocd" : "모든 네임스페이스")}
-          style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink, cursor: "pointer" }}>
-          <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3 }} />
-        </button>
+        <span style={{ position: "relative" }}>
+          <button onClick={() => setNsOpen(!nsOpen)}
+            style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? "rgba(10,132,255,0.45)" : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
+            <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3, transform: nsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+          </button>
+          <AnimatePresence>
+            {nsOpen && (
+              <motion.div key="ns" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={SOFT}
+                style={{ position: "absolute", top: 40, left: 0, minWidth: 190, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", padding: 5, overflow: "hidden" }}>
+                {NS_OPTIONS.map((o) => (
+                  <button key={o} className="rrow" onClick={() => { setNs(o); setNsOpen(false); }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: ns === o ? "rgba(10,132,255,0.08)" : "transparent", borderRadius: 8, padding: "7px 10px", fontSize: 12.5, fontWeight: ns === o ? 700 : 500, color: ns === o ? BLUE : UI.ink, cursor: "pointer" }}>
+                    {o}{ns === o && <Check size={12} style={{ marginLeft: "auto" }} />}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </span>
         <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />
         <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: "#FBFBFD", borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
@@ -1339,11 +1359,6 @@ function App() {
             )}
           </AnimatePresence>
         </span>
-        {[CircleHelp, Moon].map((I, i) => (
-          <button key={i} className="gnav hide-narrow" style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.045)", color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
-            <I size={14} />
-          </button>
-        ))}
       </header>
 
       {surface === "connect" ? (
