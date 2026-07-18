@@ -474,26 +474,16 @@ async def get_inventory_summary(
     require_inventory_access(db, current, workspace_id, cluster_id)
     namespace_scope = _inventory_count_namespaces(namespaces)
     snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
-    counts = db.inventory_resource_counts(
-        workspace_id,
-        cluster_id,
-        namespaces=namespace_scope,
-    )
-    workload_kind_counts = getattr(db, "inventory_workload_kind_counts", None)
-    if callable(workload_kind_counts):
-        counts = [
-            *counts,
-            *workload_kind_counts(
-                workspace_id,
-                cluster_id,
-                namespaces=namespace_scope,
-            ),
-        ]
     evidence = project_inventory_resource_counts_evidence(
         snapshot,
         namespace_scope=namespace_scope,
     )
-    if evidence.completeness == "observed" and not namespace_scope:
+    counts = db.inventory_product_resource_counts(
+        workspace_id,
+        cluster_id,
+        namespaces=namespace_scope,
+    )
+    if evidence.completeness == "observed":
         counts = include_discoverable_zero_counts(counts, snapshot=snapshot)
     return InventorySummaryResponse(
         cluster_id=cluster_id,

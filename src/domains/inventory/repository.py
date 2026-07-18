@@ -40,7 +40,7 @@ from domains.inventory.models import (
     live_inventory_snapshot_clause,
     timeline_coverage_snapshot_clause,
 )
-from domains.inventory.resource_types import resource_type_for_workload_kind
+from domains.inventory.resource_types import project_inventory_product_counts
 from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
     sync_inventory_filter_projection,
@@ -2355,44 +2355,37 @@ class InventoryRepository(DatabaseConnection):
             for row in rows
         ]
 
-    def inventory_workload_kind_counts(
+    def inventory_product_resource_counts(
         self,
         workspace_id: str,
         cluster_id: str,
         *,
         namespaces: tuple[str, ...] = (),
     ) -> list[JsonObject]:
-        """Project concrete workload-kind counts without duplicating stored resources."""
+        """Return product resource counts from one grouped database query."""
+
         table = ClusterInventoryResourceRecord.__table__
         predicates = [
             table.c.workspace_id == workspace_id,
             table.c.cluster_id == cluster_id,
-            table.c.resource_type == WORKLOAD_RESOURCE_TYPE,
             table.c.deleted_at.is_(None),
         ]
         if namespaces:
             predicates.append(or_(table.c.namespace.is_(None), table.c.namespace.in_(namespaces)))
         statement = (
-            select(table.c.kind, table.c.health, func.count().label("count"))
+            select(
+                table.c.resource_type,
+                table.c.kind,
+                table.c.health,
+                func.count().label("count"),
+            )
             .where(*predicates)
-            .group_by(table.c.kind, table.c.health)
-            .order_by(table.c.kind, table.c.health)
+            .group_by(table.c.resource_type, table.c.kind, table.c.health)
+            .order_by(table.c.resource_type, table.c.kind, table.c.health)
         )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        counts: list[JsonObject] = []
-        for row in rows:
-            resource_type = resource_type_for_workload_kind(str(row["kind"]))
-            if resource_type is None:
-                continue
-            counts.append(
-                {
-                    "resource_type": resource_type,
-                    "health": row["health"],
-                    "count": int(row["count"]),
-                }
-            )
-        return counts
+        return project_inventory_product_counts(rows)
 
     def inventory_resource_counts_by_cluster(
         self,
