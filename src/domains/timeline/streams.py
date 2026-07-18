@@ -46,19 +46,34 @@ def _encoded_frames(frames: Iterable[TimelineStreamFrame]) -> tuple[str, ...]:
 
 
 def _encode(frame: TimelineStreamFrame) -> str:
-    # A discriminated subject's ``kind`` can equal its model default.  Omitting
-    # defaults would remove that discriminator and make the NDJSON frame
-    # impossible for a strict browser/desktop decoder to validate.
-    payload = frame.model_dump(mode="json", exclude_defaults=True, exclude_none=True)
-    if frame.event is not None:
+    payload: dict[str, object] = {
+        "kind": frame.kind,
+        "cursor": frame.cursor.model_dump(mode="json"),
+        "pin_set_revision": frame.pin_set_revision,
+    }
+    if frame.kind == "snapshot":
+        if frame.policy is None or frame.capabilities is None:
+            raise TimelineStreamProtocolError("timeline snapshot contract is incomplete")
+        payload.update(
+            scopes=[scope.model_dump(mode="json") for scope in frame.scopes],
+            policy=frame.policy.model_dump(mode="json"),
+            capabilities=frame.capabilities.model_dump(mode="json"),
+            events=[_event_payload(event) for event in frame.events],
+            coverage=[item.model_dump(mode="json") for item in frame.coverage],
+        )
+    elif frame.kind == "event":
+        if frame.event is None:
+            raise TimelineStreamProtocolError("timeline event contract is incomplete")
         payload["event"] = _event_payload(frame.event)
-    if frame.events:
-        payload["events"] = [_event_payload(event) for event in frame.events]
+    elif frame.kind == "coverage":
+        payload["coverage"] = [item.model_dump(mode="json") for item in frame.coverage]
+    elif frame.reason is not None:
+        payload["reason"] = frame.reason
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def _event_payload(event: TimelineEvent) -> dict[str, object]:
-    payload = event.model_dump(mode="json", exclude_defaults=True, exclude_none=True)
+    payload = event.model_dump(mode="json")
     subject = payload.get("subject")
     if not isinstance(subject, dict):
         raise TimelineStreamProtocolError("timeline event subject is invalid")

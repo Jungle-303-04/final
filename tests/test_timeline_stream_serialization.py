@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -87,12 +88,12 @@ def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
     )
 
     assert encode_ndjson(frames).splitlines()[-1] == (
-        '{"kind":"end","cursor":{"token":"timeline-cursor-5"}}'
+        '{"kind":"end","cursor":{"token":"timeline-cursor-5"},"pin_set_revision":null}'
     )
     assert encode_sse(frames).split("\n\n")[-2].splitlines() == [
         "id: timeline-cursor-5",
         "event: end",
-        'data: {"kind":"end","cursor":{"token":"timeline-cursor-5"}}',
+        'data: {"kind":"end","cursor":{"token":"timeline-cursor-5"},"pin_set_revision":null}',
     ]
 
 
@@ -127,14 +128,42 @@ def test_snapshot_serializes_the_server_owned_reconnect_budget() -> None:
     assert snapshot.capabilities.query_bounds.max_window_ms == 2_592_000_000
 
 
+def test_stream_keeps_fields_required_by_the_strict_browser_contract() -> None:
+    snapshot_line, end_line = encode_ndjson(
+        (_snapshot(), TimelineStreamFrame(kind="end", cursor=_cursor(4)))
+    ).splitlines()
+    snapshot = json.loads(snapshot_line)
+    end = json.loads(end_line)
+    controls = snapshot["capabilities"]["control_surface"]
+
+    assert snapshot["pin_set_revision"] is None
+    assert snapshot["scopes"][0]["namespaces"] == []
+    assert snapshot["scopes"][0]["freshness"] == "live"
+    assert snapshot["events"][0]["owner"] is None
+    assert snapshot["events"][0]["metadata"] == {}
+    assert controls["views"][0]["description"] is None
+    assert controls["activity"][0]["activity"] == []
+    assert controls["activity"][0]["problems_activity"] == ["unhealthy", "warning"]
+    assert controls["custom_time_range_id"] == "custom"
+    assert end == {
+        "kind": "end",
+        "cursor": {"token": "timeline-cursor-4"},
+        "pin_set_revision": None,
+    }
+
+
 def test_live_sse_frame_keeps_opaque_cursor_without_claiming_a_terminal() -> None:
     frame = TimelineStreamFrame(kind="event", cursor=_cursor(5), event=_event(5))
+    lines = encode_sse_frame(frame).splitlines()
+    payload = json.loads(lines[2].removeprefix("data: "))
 
-    assert encode_sse_frame(frame).splitlines()[:-1] == [
+    assert lines[:2] == [
         "id: timeline-cursor-5",
         "event: event",
-        'data: {"kind":"event","cursor":{"token":"timeline-cursor-5"},"event":{"event_id":"event-5","source":"inventory","source_key":"inventory:event-5","native_id":"native-5","activity":"change","occurred_at":"2026-07-15T00:00:00Z","scope":{"workspace_id":"workspace-a","cluster_id":"cluster-a"},"subject":{"resource":{"kind":"Pod","namespace":"default","name":"api","uid":"uid-a"},"kind":"resource"},"resource":{"kind":"Pod","namespace":"default","name":"api","uid":"uid-a"},"event_type":"update","severity":"info","title":"Pod api updated"}}',
     ]
+    assert payload["pin_set_revision"] is None
+    assert payload["event"]["subject"]["kind"] == "resource"
+    assert payload["event"]["owner"] is None
 
 
 @pytest.mark.parametrize(
