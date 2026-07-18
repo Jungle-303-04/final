@@ -85,6 +85,8 @@
 | 연결 | `devpreview-connect.tsx` | 모달 팝업(서피스 전환 금지), `initialView "repo"|"cluster"` 딥오픈, 완료→버스 발화→모달 자동 닫힘 |
 | 토폴로지 | `devpreview-topology.tsx` | 호출 흐름, 화살촉 없는 흐름 대시, 노드·엣지 클릭=Service 상세 시트(팝업 금지) |
 | 토큰 | `devpreview/theme.ts` | UI/BLUE/HP/TINT/TYPE/모션/ELEV/RADIUS — 4장의 매핑표로 제품 토큰에 흡수 후 **파일 자체는 데모 전용으로 존속** |
+| 6개 서피스 견본 | `devpreview-surfaces.tsx` | 배포(탭3)·인시던트(탭2)·타임라인·점검·비용·설정 — 5.7~5.10 사양의 데모 구현. `costModel()`·`timelineItems()` 단일 소스 |
+| 위젯 부품 | `devpreview/widgets.tsx` | WidgetFrame·KpiValue·RatioBar·MiniBars·Donut·RankList·MultiLine·MiniTimeline·RingGauge — D13/D21 부품의 데모 원본 |
 | 브랜드 아이콘 | `devpreview/brandIcons.tsx` | AWS(EKS)/GitHub/Redis/PostgreSQL simple-icons 패스 — 제품 `ClusterProviderIcon` 계열로 이식 |
 
 ### 2.4 감사에서 확정된 결함 목록 (전부 3장·7장에서 해소됨 — 방치 금지)

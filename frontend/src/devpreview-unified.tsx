@@ -1206,7 +1206,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
 // 모든 숫자는 단일 인벤토리 파생. 위젯 배치는 localStorage 보존, 편집=숨김·추가·이동(제품은 dnd-kit 드래그).
 const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 }[] = [
   { id: "W2", title: "인시던트", info: "장애 상태 파드에서 파생된 활성 인시던트 상위 3건", span: 1 },
-  { id: "W3", title: "동기화 상태", info: "연결된 Git 저장소의 Synced/OutOfSync 비율", span: 1 },
+  { id: "W3", title: "저장소 동기화", info: "Git 저장소 단위 Synced/OutOfSync — 앱 단위 현황은 배포 서피스", span: 1 },
   { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", span: 1 },
   { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", span: 1 },
   { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 1 },
