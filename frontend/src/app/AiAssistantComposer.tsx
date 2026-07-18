@@ -29,7 +29,7 @@ export function AiAssistantComposer({
       {suggestions.length ? (
         <div aria-label={t("shell.ai.suggestion.aria")} className="mb-2.5 flex gap-1.5 overflow-x-auto" role="group">
           {suggestions.map((suggestion) => (
-            <Button className="h-auto shrink-0 rounded-full px-3 py-1.5 text-xs" key={suggestion.id} onClick={() => onSuggestion(suggestion)} type="button" variant="outline">
+            <Button className="h-auto max-w-full shrink-0 truncate whitespace-nowrap rounded-full px-3 py-1.5 text-xs" key={suggestion.id} onClick={() => onSuggestion(suggestion)} title={suggestion.prompt} type="button" variant="outline">
               {suggestion.prompt}
             </Button>
           ))}

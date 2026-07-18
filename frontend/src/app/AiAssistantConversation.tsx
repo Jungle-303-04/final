@@ -52,8 +52,12 @@ export function AiAssistantConversation({
     >
       <section aria-labelledby="ai-context-title" className="grid gap-2">
         <h3 className="text-xs font-medium text-muted-foreground" id="ai-context-title">{t("shell.ai.context")}</h3>
-        <div className="flex flex-wrap gap-1.5">
-          {chips.map((chip, index) => <Badge key={`${chip}:${index}`} variant="outline">{chip}</Badge>)}
+        <div className="flex flex-nowrap gap-1.5 overflow-hidden">
+          {chips.map((chip, index) => (
+            <Badge className="min-w-0 truncate whitespace-nowrap" key={`${chip}:${index}`} title={chip} variant="outline">
+              {chip}
+            </Badge>
+          ))}
         </div>
       </section>
 
@@ -61,7 +65,6 @@ export function AiAssistantConversation({
         {entries.map((entry) => (
           <article className="motion-ai-turn-enter grid gap-2.5" key={entry.id}>
             <UserQuestion question={entry.question} />
-            <AnalysisProgress complete />
             <AiResultCard canCreateAlertRule={canCreateAlertRule} port={port} response={entry.response} />
           </article>
         ))}
@@ -172,7 +175,8 @@ function AiResultCard({
       <div aria-hidden={collapsed} className="motion-ai-result-content">
         <div className="min-h-0 overflow-hidden">
           <div className="grid gap-3 px-4 py-4">
-            <p className={unsupported ? "text-sm leading-relaxed text-muted-foreground" : "text-sm leading-relaxed"}>
+            <AnalysisComplete evidenceCount={response.evidence.length} />
+            <p className={unsupported ? "border-t pt-3 text-sm leading-relaxed text-muted-foreground" : "border-t pt-3 text-sm leading-relaxed"}>
               {unsupported ? t("shell.ai.noEvidence") : response.answer}
             </p>
             {response.evidence.length > 0 ? <EvidenceLinks evidence={response.evidence} /> : null}
@@ -181,6 +185,23 @@ function AiResultCard({
         </div>
       </div>
     </section>
+  );
+}
+
+function AnalysisComplete({ evidenceCount }: { evidenceCount: number }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-xs" data-slot="ai-analysis-complete">
+      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
+        <Check aria-hidden="true" className="size-3" strokeWidth={3} />
+      </span>
+      <span className="min-w-0 flex-1 truncate whitespace-nowrap font-medium">
+        {t("shell.ai.analysis.complete")}
+      </span>
+      <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+        {t("shell.ai.result.summary", { count: evidenceCount })}
+      </span>
+    </div>
   );
 }
 
