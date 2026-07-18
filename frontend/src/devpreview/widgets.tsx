@@ -211,6 +211,25 @@ export function MultiLine({ series, height = 92 }: {
   );
 }
 
+// ── RingGauge — 순간 사용률 (P-31: 상세 시트 개요 한정. 카드·홈 금지 — D21) ──
+export function RingGauge({ label, value }: { label: string; value: number }) {
+  const R = 20, C = 2 * Math.PI * R;
+  const tone = value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ position: "relative", width: 52, height: 52 }}>
+        <svg width={52} height={52} viewBox="0 0 52 52" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={26} cy={26} r={R} fill="none" stroke="rgba(17,19,24,0.07)" strokeWidth={5} />
+          <motion.circle cx={26} cy={26} r={R} fill="none" stroke={tone} strokeWidth={5} strokeLinecap="round"
+            strokeDasharray={C} initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: C * (1 - value / 100) }} transition={{ duration: 0.9, ease: "easeInOut" }} />
+        </svg>
+        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}%</span>
+      </div>
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{label}</span>
+    </div>
+  );
+}
+
 // ── MiniTimeline — 최근 변경 세로 리스트 (P-21 문법: 시간·노드·점선 연결) ──
 export function MiniTimeline({ items, onPick }: {
   items: { id: string; time: string; tone: "ok" | "warn" | "crit"; title: string; ref?: { kind: string; name: string } }[];

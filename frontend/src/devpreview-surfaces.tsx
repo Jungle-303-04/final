@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins, Server,
-  Building2, Globe, Radio,
+  Building2, Globe, Radio, Check, ChevronDown,
 } from "lucide-react";
 import { UI, BLUE, HP, MONO, SOFT } from "./devpreview/theme";
 import { GithubIcon, AwsIcon } from "./devpreview/brandIcons";
@@ -78,6 +78,21 @@ function TRow({ cols, cells, onClick, i = 0 }: { cols: [string, string][]; cells
     </motion.button>
   );
 }
+// 서피스 요약 칩 — 홈·지도 상태 요약 줄과 같은 칩 문법(제품 P2에서 공용 컴포넌트로 수렴)
+const segStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
+const numStyle: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
+function ChipRow({ chips }: { chips: { label: string; value: React.ReactNode; warn?: boolean; crit?: boolean }[] }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {chips.map((c) => (
+        <span key={c.label} style={{ ...segStyle, ...(c.crit ? { borderColor: "#F0B8B4", background: "#FFF7F6", color: "#C43028" } : c.warn ? { borderColor: "#F3D8B7", background: "#FFF8EF", color: "#B25A00" } : {}) }}>
+          {c.label} <b style={numStyle}>{c.value}</b>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const Mono = ({ children, dim }: { children: React.ReactNode; dim?: boolean }) => (
   <span style={{ fontFamily: MONO, fontSize: 12, color: dim ? UI.ink3 : UI.ink, fontVariantNumeric: "tabular-nums" }}>{children}</span>
 );
@@ -135,6 +150,12 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
   return (
     <Page title="배포" icon={Rocket} tabs={["애플리케이션", "저장소·동기화", "Helm 릴리스"]} tab={tab} onTab={setTab}
       action={tab === "저장소·동기화" ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: "#fff", borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button> : null}>
+      <ChipRow chips={[
+        { label: "앱", value: apps.length },
+        { label: "Synced", value: apps.filter((x) => x.sync !== "OutOfSync").length },
+        { label: "OutOfSync", value: apps.filter((x) => x.sync === "OutOfSync").length, warn: apps.some((x) => x.sync === "OutOfSync") },
+        { label: "저장소", value: repos.length + pendingRepos.length },
+      ]} />
       {tab === "애플리케이션" && (
         <Card pad={0}>
           <THead cols={appCols} />
@@ -206,6 +227,12 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
   return (
     <Page title="인시던트" icon={AlertTriangle} tabs={["인시던트", "알림 규칙"]} tab={tab} onTab={setTab}
       action={tab === "인시던트" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid rgba(10,132,255,0.4)`, background: "rgba(10,132,255,0.07)", color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+      <ChipRow chips={[
+        { label: "장애", value: crit.length, crit: crit.length > 0 },
+        { label: "주의", value: pods.filter((p) => !p.bad && p.restarts >= 2).length, warn: true },
+        { label: "open", value: crit.length },
+        { label: "규칙", value: rules.length },
+      ]} />
       {tab === "인시던트" && (
         <Card pad={0}>
           <THead cols={incCols} />
@@ -273,6 +300,7 @@ export function TimelineSurface({ onOpenRef }: { onOpenRef: (kind: string, name:
 
 // ── 점검 /checks (5.10 — 정책 결과, 대상 클릭=상세 시트) ──
 export function ChecksSurface({ onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
+  const [showPassed, setShowPassed] = useState(false);
   const pods = useMemo(() => podInventory(), []);
   const crit = pods.filter((p) => p.bad);
   const bestEffort = pods.filter((p) => p.qos === "BestEffort" && !p.bad).slice(0, 3);
@@ -281,7 +309,16 @@ export function ChecksSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
     ...bestEffort.map((p) => ({ pol: "리소스 요청 미설정", target: p.name, kind: "Pod", sev: "주의" as const, note: "QoS BestEffort — 축출 우선순위 높음" })),
     { pol: "이미지 태그 고정", target: "shop-web", kind: "Service", sev: "주의" as const, note: "latest 태그 사용 1건" },
   ];
-  const passed = 24 - rows.length;
+  const POLICY_CATALOG = [
+    "컨테이너 반복 종료", "리소스 요청 미설정", "이미지 태그 고정", "권한 상승 금지", "루트 실행 금지",
+    "호스트 네트워크 금지", "호스트 경로 마운트 제한", "리소스 한도 필수", "레지스트리 허용 목록", "Secret 환경변수 노출 금지",
+    "PDB 존재", "복제본 2 이상", "프로브 설정(liveness)", "프로브 설정(readiness)", "이미지 서명 검증",
+    "네트워크 정책 존재", "네임스페이스 라벨 규약", "서비스 어카운트 전용", "만료 인증서 감시", "권한(RBAC) 와일드카드 금지",
+    "스토리지 암호화", "노드 격리 라벨", "우선순위 클래스 지정", "종료 유예 설정",
+  ];
+  const violated = new Set(rows.map((r) => r.pol));
+  const passedList = POLICY_CATALOG.filter((pn) => !violated.has(pn));
+  const passed = passedList.length;
   const cols: [string, string][] = [["정책", "minmax(150px,1.3fr)"], ["대상", "minmax(130px,1.1fr)"], ["심각도", "84px"], ["내용", "minmax(200px,1.8fr)"]];
   return (
     <Page title="점검" icon={ShieldCheck}>
@@ -299,6 +336,23 @@ export function ChecksSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
             <span key="n" style={{ fontSize: 12, color: UI.ink2 }}>{r.note}</span>,
           ]} />
         ))}
+      </Card>
+      <Card pad={0}>
+        <button onClick={() => setShowPassed(!showPassed)} className="rrow"
+          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "12px 15px", cursor: "pointer" }}>
+          <Check size={14} style={{ color: HP.ok }} />
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: UI.ink }}>통과한 정책 {passed}</span>
+          <ChevronDown size={13} style={{ color: UI.ink3, marginLeft: "auto", transform: showPassed ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+        </button>
+        {showPassed && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "6px 14px", padding: "0 15px 14px", borderTop: `1px solid ${UI.line2}`, paddingTop: 12 }}>
+            {passedList.map((pn) => (
+              <span key={pn} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: UI.ink2 }}>
+                <Check size={11} style={{ color: HP.ok, flexShrink: 0 }} />{pn}
+              </span>
+            ))}
+          </div>
+        )}
       </Card>
     </Page>
   );

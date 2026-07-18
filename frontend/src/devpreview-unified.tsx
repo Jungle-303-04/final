@@ -12,7 +12,7 @@ import {
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
-import { WidgetFrame, KpiValue, RatioBar, MiniBars, Donut, RankList, MultiLine, MiniTimeline } from "./devpreview/widgets";
+import { WidgetFrame, KpiValue, RatioBar, MiniBars, Donut, RankList, MultiLine, MiniTimeline, RingGauge } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, costModel, timelineItems } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
@@ -793,7 +793,15 @@ spec: {}`;
               <Sec title="상태" icon={Activity}>
                 {isWorkload
                   ? ([["목표 복제본", String(replicas)], ["현재 복제본", "2"], ["준비됨", bad ? "1" : "2"], ["최신 상태", "2"], ["가용", bad ? "1" : "2"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "목표 복제본" && scaled ? BLUE : undefined} />)
-                  : ([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : phase === "Pending" ? "#B25A00" : "#1F9D4D") : undefined} />)}
+                  : (<>
+                    {isPod && (
+                      <div style={{ display: "flex", gap: 20, padding: "2px 0 10px" }}>
+                        <RingGauge label="CPU" value={Math.min(Number(row.cpu) || 0, 100)} />
+                        <RingGauge label="MEM" value={Math.min(Number(row.mem) || 0, 100)} />
+                      </div>
+                    )}
+                    {([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : phase === "Pending" ? "#B25A00" : "#1F9D4D") : undefined} />)}
+                  </>)}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   {isWorkload && <button onClick={onShowPods ? () => onShowPods(base) : undefined}
                     style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
@@ -1606,6 +1614,24 @@ function App() {
                   <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
                   <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
                 </div>
+                {(pendingCl.length + pendingRepo.length > 0) && (
+                  <div style={{ padding: "0 8px 8px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, padding: "0 2px 6px" }}>진행 중</div>
+                    {[...pendingCl.map((n) => ({ id: `pc-${n}`, t: n, b: "에이전트 부트스트랩 · 첫 인벤토리 수집 대기" })), ...pendingRepo.map((n) => ({ id: `pr-${n}`, t: n, b: "초기 동기화 대기" }))].map((x) => (
+                      <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.85)", border: "1px solid rgba(17,19,24,0.05)", borderRadius: 14, padding: "10px 12px", marginBottom: 6 }}>
+                        <span className="pulsedot" style={{ width: 8, height: 8, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t}</span>
+                          <span style={{ display: "block", fontSize: 11, color: UI.ink2, marginTop: 1 }}>{x.b}</span>
+                        </span>
+                        <span style={{ width: 34, height: 4, borderRadius: 999, background: "rgba(10,132,255,0.15)", overflow: "hidden", flexShrink: 0 }}>
+                          <motion.span initial={{ x: -20 }} animate={{ x: 34 }} transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }} style={{ display: "block", width: 20, height: "100%", borderRadius: 999, background: BLUE }} />
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, padding: "6px 2px 0" }}>최근</div>
+                  </div>
+                )}
                 {(() => {
                   const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => (
                     <button className="acard" onClick={onClick} disabled={!onClick}
