@@ -442,6 +442,42 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
 }
 
 // ── 클러스터 로우 ─────────────────────────────
+
+// 듀얼 스파크 — CPU·MEM 한 차트 (게이지 2개+스파크 중복을 하나로)
+function DualSpark({ id, a, b, tick, h = 44 }: { id: string; a: number; b: number; tick: number; h?: number }) {
+  const hsh = id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
+  const W = 100, N = 36;
+  const series = (base: number, ph: number) => Array.from({ length: N }, (_, i) => {
+    const x = tick - (N - 1) + i;
+    return Math.max(3, Math.min(97, base + 8 * Math.sin(x * 0.42 + hsh + ph) + 4.5 * Math.sin(x * 0.19 + hsh * 1.7 + ph) + 2 * Math.sin(x * 0.83 + ph)));
+  });
+  const mk = (vals: number[]) => {
+    const pts = vals.map((v, i) => ({ x: (i / (N - 1)) * W, y: 2.5 + (1 - v / 100) * (h - 5) }));
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`;
+    }
+    return { d, last: pts[pts.length - 1] };
+  };
+  const A = mk(series(a, 0)), B = mk(series(b, 2.3));
+  const gid = `ds-${id.replace(/[^a-zA-Z0-9]/g, "")}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={BLUE} stopOpacity={0.14} /><stop offset="100%" stopColor={BLUE} stopOpacity={0.01} />
+        </linearGradient>
+      </defs>
+      <path d={`${A.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid})`} />
+      <path d={B.d} fill="none" stroke="#8250DF" strokeWidth={1.8} strokeOpacity={0.75} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <path d={A.d} fill="none" stroke={BLUE} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={A.last.x} cy={A.last.y} r={1.8} fill={BLUE} vectorEffect="non-scaling-stroke" />
+      <circle cx={B.last.x} cy={B.last.y} r={1.8} fill="#8250DF" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)[number]; pods: Pod[]; tick: number; related: Set<string>; onOpen: () => void }) {
   const cp = pods.filter((p) => p.cluster === cl.id);
   const act = cp.filter((p) => p.status === "Running");
@@ -478,11 +514,16 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
         {chot > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 6, padding: "2px 7px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{chot}⚠</span>}
       </div>
 
-      <Spark id={cl.id} base={avgC} tick={tick} h={34} color={avgC >= 75 ? HP.warn : HP.ok} />
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Gauge label="CPU" v={avgC} /><Gauge label="MEM" v={avgM} />
+      {/* CPU·MEM 통합 차트 — 범례 숫자가 곧 현재값 (게이지 중복 제거, 정보 손실 없음) */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink3 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, background: BLUE }} />CPU <b style={{ fontSize: 15, fontWeight: 700, color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{avgC}%</b>
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink3 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, background: "#8250DF" }} />MEM <b style={{ fontSize: 15, fontWeight: 700, color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{avgM}%</b>
+        </span>
       </div>
+      <DualSpark id={cl.id} a={avgC} b={avgM} tick={tick} h={46} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 12, borderTop: `1px solid ${UI.line2}` }}>
         <span title={`정상 ${nOk} · 경고 ${nWarn} · 임계 ${chot} · 대기 ${nPend}`} style={{ display: "flex", height: 5, borderRadius: 999, overflow: "hidden", gap: 1, flex: 1 }}>
@@ -498,7 +539,7 @@ function ClusterRow({ cl, pods, tick, related, onOpen }: { cl: (typeof CLUSTERS)
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -509,6 +550,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   belowContent?: React.ReactNode;
   /** 우측 패널 '리소스' 탭 내용 — 셸의 종류 탐색이 여기로 통합된다 (보조 사이드바 대체) */
   kindsTab?: React.ReactNode;
+  /** 실서비스 배치: 클러스터 뷰의 '+ 연결' 카드 / 배포 탭의 '+ 저장소 연결' */
+  onAddCluster?: () => void;
+  onAddRepo?: () => void;
 } = {}) {
   const pods = useMemo(() => genPods(), []);
   const [tick, setTick] = useState(0);
@@ -696,6 +740,16 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                         <ClusterRow cl={cl} pods={pods} tick={tick} related={effLens ? related : new Set()} onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
                       </motion.div>
                     ))}
+                    {onAddCluster && (
+                      <motion.button initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: CLUSTERS.length * 0.05 }}
+                        onClick={onAddCluster} whileHover={{ borderColor: "#B9D6FB", background: "rgba(10,132,255,0.03)" }}
+                        style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
+                          border: "1.5px dashed #D5D9E0", borderRadius: 16, background: "transparent", cursor: "pointer" }}>
+                        <span style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(10,132,255,0.09)", display: "grid", placeItems: "center", color: BLUE, fontSize: 19, fontWeight: 600, lineHeight: 1 }}>+</span>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
+                        <span style={{ fontSize: 11.5, color: UI.ink3 }}>에이전트 설치로 등록</span>
+                      </motion.button>
+                    )}
                   </div>
                 )}
 
@@ -724,7 +778,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             {belowContent && <div style={{ marginTop: 18 }}>{belowContent}</div>}
           </div>
 
-          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} />
+          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} />
         </div>
       </div>
 
@@ -783,8 +837,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 }
 
 // ── 우측 패널 ─────────────────────────────
-function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled }: {
-  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean;
+function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled, onAddRepo }: {
+  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean; onAddRepo?: () => void;
 }) {
   const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? (kindsTab ? "res" : "svc"));
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
@@ -833,7 +887,16 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
               {tab === "res" && kindsTab}
               {tab === "svc" && SERVICES.map((s) => <Row key={s.id} l={{ kind: "svc", id: s.id }} icon={<ServiceIcon id={s.id} size={14} style={{ color: s.color, flexShrink: 0 }} />} label={s.id} sub={s.repo} />)}
               {tab === "cfg" && CONFIGS.map((c) => <Row key={c.id} l={{ kind: "cfg", id: c.id }} icon={<FileCog size={14} style={{ color: c.kind === "Secret" ? "#8250DF" : BLUE, flexShrink: 0 }} />} label={c.id} sub={c.kind} />)}
-              {tab === "git" && REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
+              {tab === "git" && (<>
+                {REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
+                {onAddRepo && (
+                  <button onClick={onAddRepo}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",
+                      border: "1.5px dashed #D5D9E0", borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: BLUE }}>
+                    + 저장소 연결
+                  </button>
+                )}
+              </>)}
             </div>
           </motion.div>
         )}

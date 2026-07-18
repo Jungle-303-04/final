@@ -606,8 +606,8 @@ function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
 }
 
 // ── 루트 ─────────────────────────────
-export function ConnectWizard({ embedded = false }: { embedded?: boolean } = {}) {
-  const [view, setView] = useState<null | "repo" | "cluster">(null);
+export function ConnectWizard({ embedded = false, initialView = null }: { embedded?: boolean; initialView?: null | "repo" | "cluster" } = {}) {
+  const [view, setView] = useState<null | "repo" | "cluster">(initialView);
   const [toast, setToast] = useState<ToastData | null>(null);
   const fireToast = (t: ToastData) => {
     setView(null); setToast(t);

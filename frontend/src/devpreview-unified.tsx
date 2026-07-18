@@ -380,7 +380,7 @@ function Hi({ text, q }: { text: string; q: string }) {
   return <>{text.slice(0, i)}<span style={{ background: "#FFF1B8", borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
 }
 
-function ResourceTable({ kind, rows, q, inScope, dense, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; inScope: boolean; dense: boolean; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
+function ResourceTable({ kind, rows, q, dense, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; dense: boolean; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
   const spec = SPEC[kind.id];
   if (!spec) return null;
   const filtered = rows;
@@ -1188,6 +1188,7 @@ function App() {
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
   const [surface, setSurface] = useState<Surface>("resources"); // 셸 내 서피스 전환 (리소스·토폴로지·연결 설정)
+  const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상
   const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
@@ -1281,7 +1282,7 @@ function App() {
     <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
       {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
-        surface={surface} onSurface={setSurface} />
+        surface={surface} onSurface={(sf) => { setSurface(sf); if (sf === "connect") setConnectView(null); }} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
@@ -1386,7 +1387,7 @@ function App() {
       {surface === "connect" ? (
         /* 연결 설정 — 셸 안에서 위저드 서피스로 전환 (별도 페이지 아님) */
         <div style={{ position: "relative", minHeight: `calc(100vh / ${PRESENT_SCALE} - 57px)`, background: UI.bg }}>
-          <ConnectWizard embedded />
+          <ConnectWizard key={connectView ?? "launcher"} embedded initialView={connectView} />
         </div>
       ) : surface === "topology" ? (
         /* 토폴로지 — 호출 그래프 서피스 (맵=물리 · 토폴로지=호출 분업 유지) */
@@ -1399,6 +1400,8 @@ function App() {
           {/* ── 드릴 맵 + 스코프 연동 표 — 종류 탐색은 우측 '탐색' 패널의 리소스 탭으로 통합.
                 파드뷰에선 맵이 파드 표를 이미 보여주므로 숨김(중복 제거) ── */}
           <OpsiaMap embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
+            onAddCluster={() => { setConnectView("cluster"); setSurface("connect"); }}
+            onAddRepo={() => { setConnectView("repo"); setSurface("connect"); }}
             kindsTab={<KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />}
             belowContent={scope.level !== "pods" && (
               <div style={{ borderTop: `1px solid ${UI.line}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1419,7 +1422,7 @@ function App() {
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
-                  <ResourceTable kind={kind} rows={shownRows} q={q} inScope={inScope} dense={dense}
+                  <ResourceTable kind={kind} rows={shownRows} q={q} dense={dense}
                     filterDesc={[inScope ? `${scopeLabel}` : "", ns !== "모든 네임스페이스" ? `${ns} 네임스페이스` : ""].filter(Boolean).join(" · ")}
                     onClearFilter={() => { setQ(""); setNs("모든 네임스페이스"); }}
                     onOpen={(r) => setDetail({ kind, row: r })} />
