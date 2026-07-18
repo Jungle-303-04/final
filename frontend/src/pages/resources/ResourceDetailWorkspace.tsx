@@ -2,6 +2,8 @@ import { Maximize2, Minimize2, ScrollText, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import { isManagementCluster } from "../../features/clusters/clusterDisconnectPolicy";
 import type {
   ResourceDetail,
   ResourceIdentity,
@@ -85,6 +87,7 @@ export function ResourceDetailWorkspace({
   const { t } = useI18n();
   const dock = useBottomDock();
   const filter = useUnifiedFilter();
+  const clusterScope = useClusterScope();
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
   const manifestEditorRef = useRef<ResourceManifestEditorHandle>(null);
@@ -100,6 +103,11 @@ export function ResourceDetailWorkspace({
     : t("resources.detail.errorTitle");
   const labels = contextLabels(filter.state, t);
   const logTarget = detail.phase === "ready" ? logStreamTargetFromDetail(detail.data) : null;
+  const managementReadOnly = clusterScope.selectedCluster !== null
+    && isManagementCluster(clusterScope.selectedCluster);
+  const managementReadOnlyReason = managementReadOnly
+    ? t("resources.detail.managementReadOnlyDescription")
+    : null;
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -140,7 +148,8 @@ export function ResourceDetailWorkspace({
           event.key.toLowerCase() === "y" &&
           !isEditingElement(event.target) &&
           detail.phase === "ready" &&
-          manifestPort
+          manifestPort &&
+          !managementReadOnly
         ) {
           event.preventDefault();
           manifestEditorRef.current?.open();
@@ -207,6 +216,14 @@ export function ResourceDetailWorkspace({
                 <Badge key={label} variant="outline">{label}</Badge>
               ))
             : <span className="text-xs text-muted-foreground">{t("resources.detail.contextAll")}</span>}
+          {managementReadOnly ? (
+            <Badge
+              title={managementReadOnlyReason ?? undefined}
+              variant="secondary"
+            >
+              {t("resources.detail.managementReadOnly")}
+            </Badge>
+          ) : null}
         </div>
         {detail.phase === "ready" ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="resource-detail-command-bar">
@@ -221,37 +238,46 @@ export function ResourceDetailWorkspace({
                 {t("shell.shortcut.resources.openLogs")}
               </Button>
             ) : null}
-            <PodTerminalDialog
-              capabilities={capabilities}
-              detail={detail.data}
-              port={terminalPort}
-              preferredTarget={preferredTerminalTarget}
-              onPreferredTargetHandled={clearPreferredTerminalTarget}
-            />
-            {resourceFilesPort ? (
-              <ResourceFilesystemBrowser
+            <fieldset
+              className="contents"
+              disabled={managementReadOnly}
+              title={managementReadOnlyReason ?? undefined}
+            >
+              <PodTerminalDialog
                 capabilities={capabilities}
                 detail={detail.data}
-                port={resourceFilesPort}
+                port={terminalPort}
+                preferredTarget={preferredTerminalTarget}
+                onPreferredTargetHandled={clearPreferredTerminalTarget}
               />
-            ) : null}
-            {serviceAccessPort ? (
-              <ServiceAccessActions
-                detail={detail.data}
-                port={serviceAccessPort}
-                portForwardSessions={portForwardSessions}
-              />
-            ) : null}
+              {resourceFilesPort ? (
+                <ResourceFilesystemBrowser
+                  capabilities={capabilities}
+                  detail={detail.data}
+                  port={resourceFilesPort}
+                />
+              ) : null}
+              {serviceAccessPort ? (
+                <ServiceAccessActions
+                  detail={detail.data}
+                  port={serviceAccessPort}
+                  portForwardSessions={portForwardSessions}
+                />
+              ) : null}
+            </fieldset>
             <ResourceDetailActions
               actionsPort={actionsPort}
               capabilities={capabilities}
               detail={detail.data}
+              disabledReason={managementReadOnlyReason}
               onInvalidate={onResourceActionInvalidation}
               onTerminalReady={setPreferredTerminalTarget}
             />
             {manifestPort ? (
               <ResourceManifestEditor
                 detail={detail.data}
+                disabledReason={managementReadOnlyReason}
+                onInvalidate={onResourceActionInvalidation}
                 onUnauthorized={onUnauthorized}
                 port={manifestPort}
                 ref={manifestEditorRef}

@@ -42,12 +42,14 @@ export function ResourceDetailActions({
   actionsPort,
   capabilities,
   detail,
+  disabledReason = null,
   onInvalidate,
   onTerminalReady,
 }: {
   actionsPort: ResourceActionsPort;
   capabilities: ResourceCapabilitiesFrame;
   detail: ResourceDetail;
+  disabledReason?: string | null;
   onInvalidate?: (context: ResourceActionExecutionContext) => void;
   onTerminalReady?: (target: PodTerminalCoordinates) => void;
 }) {
@@ -171,9 +173,11 @@ export function ResourceDetailActions({
         ) : null}
         {enabled.map((capability) => (
           <Button
+            disabled={pending || disabledReason !== null}
             key={capability.capabilityId}
             onClick={() => void open(capability)}
             size="sm"
+            title={disabledReason ?? capability.description}
             type="button"
             variant="outline"
           >
@@ -391,6 +395,7 @@ export function ResourceDetailActions({
   );
 
   async function open(capability: ResourceActionCapability) {
+    if (disabledReason !== null) return;
     setFailed(false);
     setValues(defaultInputValues(capability, latestResult));
     setExecutionKey(capability.requestContext !== "simple"
