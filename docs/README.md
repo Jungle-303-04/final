@@ -210,6 +210,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [scenarios](scenarios.md)
 - [secrets](secrets.md)
 - [spec/remediation-bundle-v1alpha1](spec/remediation-bundle-v1alpha1.md)
+- [spec/domains/yaml-delivery](spec/domains/yaml-delivery.md)
 
 자동 조율 문서는 아래에 있다.
 
