@@ -63,6 +63,8 @@ describe("TrafficPage", () => {
     expect(await screen.findByRole("heading", { name: "트래픽" })).toBeTruthy();
     expect(screen.getByText("트래픽 소스")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Connect Hubble" })).toBeTruthy();
+    expect(document.getElementById("traffic-overview-title")?.parentElement?.className)
+      .toContain("relative");
   });
 
   it("does not query an unbounded scope while cluster authority is still resolving", () => {

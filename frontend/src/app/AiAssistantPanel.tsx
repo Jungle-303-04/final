@@ -158,7 +158,7 @@ export function AiAssistantPanel({
       <aside
         aria-label={t("shell.ai.title")}
         aria-hidden={!open}
-        className="motion-ai-panel relative h-full max-h-full min-h-0 max-w-dvw shrink-0 overflow-hidden border-l bg-background"
+        className="motion-ai-panel relative h-full max-h-full min-h-0 max-w-dvw shrink-0 overflow-hidden border-l-0 bg-background data-[open=true]:border-l"
         data-open={open || undefined}
         data-side="right"
         data-slot="ai-assistant-panel"

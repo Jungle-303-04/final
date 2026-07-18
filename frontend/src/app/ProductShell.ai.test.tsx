@@ -28,6 +28,9 @@ describe("ProductShell AI panel", () => {
     const closedPanel = container.querySelector('[data-slot="ai-assistant-panel"]');
     expect(closedPanel?.getAttribute("aria-hidden")).toBe("true");
     expect(closedPanel?.hasAttribute("inert")).toBe(true);
+    expect(closedPanel?.className).toContain("border-l-0");
+    expect(closedPanel?.className).toContain("data-[open=true]:border-l");
+    expect(closedPanel?.className).not.toMatch(/(?:^|\s)border-l(?:\s|$)/u);
     const trigger = screen.getByRole("button", { name: "Opsia AI 열기" });
     expect(trigger.className).toContain("fixed");
     expect(trigger.className).toContain("right-[var(--product-floating-action-inline-inset)]");

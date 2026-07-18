@@ -445,7 +445,7 @@ function TrafficContent({
   const overview = frame.data;
   return (
     <section aria-labelledby="traffic-overview-title" className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="sr-only" id="traffic-overview-title">{copy.title}</h2>
         <p className="min-w-0 break-words text-sm text-muted-foreground">{scopeDescription(overview, copy.notObserved)}</p>
         <Button onClick={onRefresh} size="sm" type="button" variant="outline">
