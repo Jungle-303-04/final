@@ -566,9 +566,40 @@ function AddClusterCard({ onClick, delay = 0 }: { onClick: () => void; delay?: n
   );
 }
 
+// 방금 등록한 클러스터 — 에이전트 부트스트랩 대기 상태(데이터가 아직 없으므로 드릴 불가가 사실)
+export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: number }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
+      style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 200, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(17,19,24,0.06)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <AwsIcon size={17} style={{ color: UI.ink3 }} />
+        </span>
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · 버전 확인 중</span>
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#0A6CFF", background: "rgba(10,132,255,0.08)", border: "1px solid rgba(10,132,255,0.25)", borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>
+          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />연결 중
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: UI.ink2 }}>에이전트 부트스트랩 · 첫 인벤토리 수집 대기</div>
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 7 }}>
+        {["CPU", "MEM"].map((l) => (
+          <div key={l} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 34, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{l}</span>
+            <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(17,19,24,0.05)" }} />
+            <span style={{ width: 38, textAlign: "right", fontSize: 12.5, fontFamily: MONO, color: UI.ink3 }}>—</span>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 // ── 홈 서피스용 클러스터 섹션 (D21 2층 — 보드 밖 고정) — 카드는 지도와 같은 ClusterRow 하나 ──
-export function HomeClusterSection({ meta, onOpen, onAddCluster }: {
-  meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; onAddCluster?: () => void;
+export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }: {
+  meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; onAddCluster?: () => void; pending?: string[];
 }) {
   const pods = useMemo(() => genPods(), []);
   // 벽시계 기반 tick — 홈 카드와 지도 카드가 같은 순간 같은 숫자를 말하게 한다(두 화면 숫자 불일치 = 버그)
@@ -580,7 +611,8 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster }: {
       {CLUSTERS.map((cl) => (
         <ClusterRow key={cl.id} cl={cl} pods={pods} tick={tick} related={none} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
       ))}
-      {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={CLUSTERS.length * 0.05} />}
+      {pending.map((n, i) => <PendingClusterCard key={n} name={n} delay={(CLUSTERS.length + i) * 0.05} />)}
+      {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={(CLUSTERS.length + pending.length) * 0.05} />}
     </div>
   );
 }
@@ -588,7 +620,7 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster }: {
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, belowContent, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -610,6 +642,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   onOpenKind?: (kindId: string) => void;
   /** 홈 카드 클릭 등 외부 진입 시 해당 클러스터 노드 뷰로 시작 (스코프 전달 — D21) */
   initialCluster?: string;
+  /** 세션 중 등록된 연결 대기 항목 — 목록에 실반영(등록의 결과가 보여야 한다) */
+  pendingClusters?: string[];
+  pendingRepos?: string[];
 } = {}) {
   const pods = useMemo(() => genPods(), []);
   // 벽시계 기반 tick — HomeClusterSection과 동일 위상(같은 순간 같은 숫자)
@@ -704,7 +739,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{CLUSTERS.length}</b></span>
+              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{CLUSTERS.length}</b>
+                {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: "#0A6CFF" }}>· 연결 중 {pendingClusters!.length}</span>}
+              </span>
               <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{NODES.length}</b>
                 {prov > 0 && <span style={{ color: "#0A6CFF" }}>· 예약 {prov}</span>}
                 {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
@@ -803,7 +840,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                           onKind={onOpenKind ? (kid) => { go({ level: "nodes", cluster: cl.id }, 1); onOpenKind(kid); } : undefined} />
                       </motion.div>
                     ))}
-                    {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={CLUSTERS.length * 0.05} />}
+                    {(pendingClusters ?? []).map((n, i) => <PendingClusterCard key={n} name={n} delay={(CLUSTERS.length + i) * 0.05} />)}
+                    {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={(CLUSTERS.length + (pendingClusters?.length ?? 0)) * 0.05} />}
                   </div>
                 )}
 
@@ -833,7 +871,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             {belowContent && <div style={{ marginTop: 18 }}>{belowContent}</div>}
           </div>
 
-          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} />
+          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} pendingRepos={pendingRepos} />
         </div>
       </div>
 
@@ -893,8 +931,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 }
 
 // ── 우측 패널 ─────────────────────────────
-function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled, onAddRepo, stickyTop }: {
-  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number;
+function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
+  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number; pendingRepos?: string[];
 }) {
   const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? (kindsTab ? "res" : "svc"));
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
@@ -945,6 +983,16 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
               {tab === "cfg" && CONFIGS.map((c) => <Row key={c.id} l={{ kind: "cfg", id: c.id }} icon={<FileCog size={14} style={{ color: c.kind === "Secret" ? "#8250DF" : BLUE, flexShrink: 0 }} />} label={c.id} sub={c.kind} />)}
               {tab === "git" && (<>
                 {REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
+                {(pendingRepos ?? []).map((r) => (
+                  <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: "rgba(10,132,255,0.05)" }}>
+                    <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
+                      <span style={{ display: "block", fontSize: 10.5, color: "#0A6CFF", marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
+                    </span>
+                    <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
+                  </div>
+                ))}
                 {onAddRepo && (
                   <button onClick={onAddRepo}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",

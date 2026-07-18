@@ -1212,10 +1212,11 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPickNs }: {
+function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPickNs, pendingCl = [], pendingRepo = [] }: {
   clusterMeta: Record<string, Record<string, number>>;
   onDrillCluster: (clId: string) => void; onConnect: () => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
+  pendingCl?: string[]; pendingRepo?: string[];
 }) {
   const pods = useMemo(() => podInventory(), []);
   const nodes = useMemo(() => nodeInventory(), []);
@@ -1274,7 +1275,12 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       case "W2": return crit.length
         ? <RankList onPick={onOpenPod} rows={crit.slice(0, 3).map((p) => ({ id: p.name, tone: "crit" as const, title: `${p.name} · ${p.status}`, sub: `${p.svc} · ${p.ns} · ${p.cluster}`, right: `재시작 ${p.restarts}` }))} />
         : <span style={{ fontSize: 12.5, color: UI.ink2 }}>활성 인시던트가 없습니다</span>;
-      case "W3": return <RatioBar a={repos.length - outSync.length} b={outSync.length} aLabel="Synced" bLabel="OutOfSync" />;
+      case "W3": return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <RatioBar a={repos.length - outSync.length} b={outSync.length} aLabel="Synced" bLabel="OutOfSync" />
+          {pendingRepo.length > 0 && <span style={{ fontSize: 11.5, color: "#0A6CFF" }}>연결 중 {pendingRepo.length} · 초기 동기화 대기</span>}
+        </div>
+      );
       case "W4": {
         // 마지막 점(=현재)은 합성 파형이 아니라 실측값 — 요약 줄·벨과 같은 숫자를 말해야 한다
         const nowAlerts = crit.length + nodes.filter((n) => n.state !== "Ready").length + outSync.length;
@@ -1312,7 +1318,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
           const pending = pods.filter((p) => p.status === "Pending").length;
           return (
             <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b></span>
+              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: "#0A6CFF" }}>· 연결 중 {pendingCl.length}</span>}</span>
               <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{nodes.length}</b>
                 {prov > 0 && <span style={{ color: "#0A6CFF" }}>· 예약 {prov}</span>}
                 {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
@@ -1351,7 +1357,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       </div>
 
       {/* ── 클러스터 섹션 (보드 밖 고정 — 홈의 본질) ── */}
-      <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} onAddCluster={onConnect} />
+      <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} onAddCluster={onConnect} pending={pendingCl} />
 
       {/* ── 위젯 보드 ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, alignItems: "start" }}>
@@ -1410,6 +1416,14 @@ function App() {
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
+  // 세션 중 등록한 연결 대기 항목 — 등록의 결과가 목록에 보여야 한다(로그아웃=세션 초기화로 함께 소멸)
+  const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-cl") || "[]"); } catch { return []; } });
+  const [pendingRepo, setPendingRepo] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-repo") || "[]"); } catch { return []; } });
+  const addPending = (scope: "cluster" | "repo", ref: string) => {
+    const key = scope === "cluster" ? "opsia-demo-pending-cl" : "opsia-demo-pending-repo";
+    const set = scope === "cluster" ? setPendingCl : setPendingRepo;
+    set((xs) => { const nx = xs.includes(ref) ? xs : [...xs, ref]; try { sessionStorage.setItem(key, JSON.stringify(nx)); } catch { /* 데모 */ } return nx; });
+  };
   const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
@@ -1502,7 +1516,10 @@ function App() {
     if (a.kind === "open_crit") { setSurface("resources"); setResView("list"); setKindId("Pod"); return; }
     setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
-    if (a.kind === "connect") window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
+    if (a.kind === "connect") {
+      if (a.scope && a.ref) addPending(a.scope, a.ref);
+      window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
+    }
   }), []);
   const openAlert = (p: (typeof alerts)[number]) => {
     setBellOpen(false);
@@ -1668,7 +1685,7 @@ function App() {
         </div>
       ) : surface === "home" ? (
         /* 홈 — 위젯 보드 (D21). 카드 클릭=지도 드릴, 위젯 액션=전부 실 목적지 */
-        <HomeSurface clusterMeta={clusterMeta}
+        <HomeSurface clusterMeta={clusterMeta} pendingCl={pendingCl} pendingRepo={pendingRepo}
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
           onConnect={() => setConnectModal("cluster")}
           onOpenPod={(name) => openRef("Pod", name)}
@@ -1695,7 +1712,7 @@ function App() {
 
           {resView === "map" && (
             /* 지도 — 드릴 전체 높이. 종류 선택은 목록 관점의 것: 패널·스트립에서 종류를 고르면 목록으로 전환 */
-            <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined}
+            <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo}
               embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
               onAddCluster={() => setConnectModal("cluster")}
               onAddRepo={() => setConnectModal("repo")}
