@@ -469,47 +469,15 @@ function clusterStats(clId: string, pods: Pod[], tick: number) {
   };
 }
 
-function SegRing({ size = 64, stroke = 7, segments, center, label, sub, subTone }: {
-  size?: number; stroke?: number; segments: [number, string][]; center: string; label: string; sub: string; subTone?: string;
-}) {
-  const r = (size - stroke) / 2, C = 2 * Math.PI * r;
-  const total = Math.max(1, segments.reduce((s, [n]) => s + n, 0));
-  const visibleSegments = segments.filter(([n]) => n > 0);
-  const gap = visibleSegments.length > 1 ? 0.012 : 0;
-  const ringSegments = visibleSegments.map(([n, c], i) => {
-    const start = visibleSegments.slice(0, i).reduce((s, [x]) => s + x / total, 0);
-    return { c, frac: n / total, i, start };
-  });
+function ClusterMiniUsage({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <div style={{ position: "relative", width: size, height: size }}>
-        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(17,19,24,0.06)" strokeWidth={stroke} />
-          {ringSegments.map(({ c, frac, i, start }) => (
-            <motion.circle key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={c} strokeWidth={stroke} strokeLinecap="round"
-              initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: -start * C }} transition={{ duration: 0.9, ease: "easeOut" }}
-              strokeDasharray={`${Math.max(0.01, frac - gap) * C} ${C}`} />
-          ))}
-        </svg>
-        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 17, fontWeight: 800, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{center}</span>
-      </div>
-      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", color: UI.ink3 }}>{label}</span>
-      <span style={{ fontSize: 11, fontWeight: 600, fontFamily: MONO, color: subTone ?? "#1F9D4D", marginTop: -3 }}>{sub}</span>
-    </div>
-  );
-}
-
-function ClusterUsageBar({ label, used, cap, unit }: { label: string; used: number; cap: number; unit: string }) {
-  const ratio = cap > 0 ? used / cap : 0;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ width: 96, fontSize: 11.5, color: UI.ink2, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexShrink: 0, width: 104 }}>{used.toFixed(1)} / {cap} {unit}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <span style={{ width: 34, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
       <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(17,19,24,0.07)", overflow: "hidden" }}>
-        <motion.span initial={false} animate={{ width: `${Math.round(ratio * 100)}%` }} transition={{ duration: 1.2, ease: "easeInOut" }}
-          style={{ display: "block", height: "100%", borderRadius: 999, background: ratio >= 0.9 ? HP.crit : ratio >= 0.75 ? HP.warn : HP.ok }} />
+        <motion.span initial={false} animate={{ width: `${value}%` }} transition={{ duration: 1.2, ease: "easeInOut" }}
+          style={{ display: "block", height: "100%", borderRadius: 999, background: value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok }} />
       </span>
-      <span style={{ width: 34, textAlign: "right", fontSize: 11.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{Math.round(ratio * 100)}%</span>
+      <span style={{ width: 38, textAlign: "right", fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{value}%</span>
     </div>
   );
 }
@@ -551,16 +519,6 @@ function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
   const st = clusterStats(cl.id, pods, tick);
   const rel = st.cp.filter((p) => related.has(p.id)).length;
   const healthy = st.chot === 0;
-  const Mini = ({ label, v }: { label: string; v: number }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-      <span style={{ width: 34, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
-      <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(17,19,24,0.07)", overflow: "hidden" }}>
-        <motion.span initial={false} animate={{ width: `${v}%` }} transition={{ duration: 1.2, ease: "easeInOut" }}
-          style={{ display: "block", height: "100%", borderRadius: 999, background: v >= 90 ? HP.crit : v >= 75 ? HP.warn : HP.ok }} />
-      </span>
-      <span style={{ width: 38, textAlign: "right", fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{v}%</span>
-    </div>
-  );
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
@@ -591,8 +549,8 @@ function ClusterRow({ cl, pods, tick, related, meta, onOpen, onKind }: {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: "auto" }}>
-        <Mini label="CPU" v={st.avgC} />
-        <Mini label="MEM" v={st.avgM} />
+        <ClusterMiniUsage label="CPU" value={st.avgC} />
+        <ClusterMiniUsage label="MEM" value={st.avgM} />
       </div>
       <span style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}>{rel}</span>
     </motion.button>

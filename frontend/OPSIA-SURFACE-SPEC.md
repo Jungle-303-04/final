@@ -1,6 +1,6 @@
 # Opsia 요소 단위 사양 — Surface Spec v1 (Master Spec 부속)
 
-> 지위: `OPSIA-MASTER-SPEC.md`(결정)·`DESIGN-RULES.md`(시각 규칙)의 **부속 바인딩 문서**.
+> 지위: `OPSIA-MASTER-SPEC.md`(프론트엔드 병합 결정)·`DESIGN-RULES.md`(시각 규칙)의 **부속 바인딩 문서**. 저장소 전체 문서 루트는 `docs/README.md`다.
 > 여기서는 아무것도 새로 결정하지 않는다 — 각 화면의 **요소 하나하나**를 [값 → API → 표현 → 모션 → 인터랙션]으로 바인딩만 한다.
 > 결정과 충돌하면 Master Spec 승리. D#·토큰명·컴포넌트 경로는 전부 그쪽 정의를 가리킨다.
 
@@ -12,7 +12,7 @@
 
 | 요소 | 값·지표 | 데이터 소스 | 표현 | 모션 | 인터랙션 |
 |---|---|---|---|---|---|
-| 좌측 내비 레일 | 8 항목(0장 표) + 활성 표시 | `productRoutes.ts` 카탈로그 | shadcn sidebar, 아이콘=lucide(카탈로그 `routeIcons`), 라벨 `text-label` `--muted-foreground`, 활성=`--primary` 틴트 배경+`--foreground` | 활성 인디케이터=`layoutId` SOFT | 클릭=라우트, 접기 토글(<1100px 자동 접힘), `g *` 단축키 |
+| 좌측 내비 레일 | 8 항목(0장 표) + 활성 표시 | `productRoutes.ts` 카탈로그 | 컴포넌트 sidebar, 아이콘=lucide(카탈로그 `routeIcons`), 라벨 `text-label` `--muted-foreground`, 활성=`--primary` 틴트 배경+`--foreground` | 활성 인디케이터=`layoutId` SOFT | 클릭=라우트, 접기 토글(<1100px 자동 접힘), `g *` 단축키 |
 | 워크스페이스 (헤더 맨 왼쪽, D20) | 현재 워크스페이스명 | 기존 `SidebarWorkspaceSwitcher` 데이터(헤더로 이동) | 아이콘+`text-bodyStrong` | — | 드롭다운: 워크스페이스 전환 |
 | 스코프 칩 | 클러스터명 · ns명 (활성 시만) | D14 스코프 저장소(`cluster-scope`/`namespace-scope`) | 칩: `--primary` TINT bg/bd, `text-label`, `×` 아이콘 | 등장/소멸 SOFT | 클릭=드롭다운(클러스터 목록=`cluster-summary`, ns 목록=`namespace` API), `×`=해제 |
 | ⌘K 검색 | placeholder "리소스, 서비스, 저장소 검색" | cmdk 인덱스: `inventory` + `application-catalog` + gitops repos | `ProductCommandPalette`, 인풋 `text-body`, 결과 그룹 헤더 `text-caption` `--caption-foreground` | 팔레트 개폐=프리미티브 토큰 모션(D17) | 선택: 리소스=D3 시트, 서비스/앱=`/deploy` 상세, 저장소=`/deploy` 저장소 탭. "전체 결과" 항목 금지(D6) |

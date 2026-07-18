@@ -1,6 +1,6 @@
 # Opsia 통합 기획서 — Master Spec v1
 
-> **문서의 지위**: 이 문서가 제품·데모·머지에 관한 **유일한 결정 문서**다.
+> **문서의 지위**: 이 문서는 프론트엔드 demo→dev 병합의 결정 문서다. 저장소 전체 문서 루트와 위키형 입구는 `docs/README.md`다.
 > - `DESIGN-RULES.md` = 시각·모션 **세부 규칙집** (이 문서의 4장이 위임하는 하위 문서. 충돌 시 본 문서 우선)
 > - `DEMO-MERGE-PLAN.md` = **폐기(superseded)**. 유효한 내용은 본 문서 7장에 전부 흡수됨. 참조 금지.
 > - 실행 주체: **코덱스(제품 코드, dev 브랜치)**. 데모(`devpreview-*`)는 사양 원본이며 **동결**된다.
@@ -35,11 +35,11 @@
 
 | 레퍼런스 | 관찰된 패턴 | 우리 채택 |
 |---|---|---|
-| **Rancher 홈/클러스터 목록** (extensions.rancher.io UI Walkthrough, oneuptime 멀티클러스터 가이드) | 홈=클러스터 목록. 행당 정보: 색상 상태 배지(Active 초록/Updating 파랑/Error 빨강) + 이름 + 프로바이더 + 버전 + 노드 수 + CPU/MEM. 인벤토리·차트는 클릭 후 Cluster Explorer 대시보드 | 클러스터 카드 v6 (2.3) + 드릴 후 개요 스트립 |
-| **GKE 콘솔 클러스터 목록** (Google Cloud docs "GKE in console") | 테이블: 이름·위치·플릿·노드·코어·메모리. 사용률 탭에서 CPU/MEM/디스크 정렬. 상세는 행 클릭 | 목록은 스캔용 최소 열 구성, 정렬 가능 사용률 |
-| **OpenShift 콘솔 Overview** (IBM App Runtimes lab 실캡처 9장, `outputs/` 보관) | Overview 상단 = 상태 체크(Cluster/Control Plane/Operators). Details 박스=버전·채널, Cluster inventory=노드/파드 카운트(+문제 파드 느낌표 링크), Utilization=CPU/MEM/FS/NET + Top consumers 드릴 | 상태 요약 줄, 개요 스트립의 인벤토리 링크(클릭=해당 종류 표로 전환), 임계 카운트에 배지 |
-| **Vercel Geist / shadcn / Tremor / AI SDK** | 의미 토큰 단일 소스, 정보 우선 차분한 표면, 차트 문법(점선 그리드+크로스헤어+펄스), 스트리밍 채팅 패턴 | `DESIGN-RULES.md` 전체 (토큰·차트·AI 채팅) |
-| **Apple HIG / 알림 센터** | 컬러는 데이터에만, 헤어라인 구분, 스프링 모션, 알림=반투명 블러 일시 표면 | 모션 3종 스프링, 알림 센터 시각, 상태색 장식 금지 |
+| **벤치마크 최소선 A: 클러스터 목록** | 홈=클러스터 목록. 행당 정보: 색상 상태 배지(Active 초록/Updating 파랑/Error 빨강) + 이름 + 프로바이더 + 버전 + 노드 수 + CPU/MEM. 인벤토리·차트는 클릭 후 상세 대시보드 | 클러스터 카드 v6 (2.3) + 드릴 후 개요 스트립 |
+| **벤치마크 최소선 B: 클러스터 사용률 목록** | 테이블: 이름·위치·플릿·노드·코어·메모리. 사용률 탭에서 CPU/MEM/디스크 정렬. 상세는 행 클릭 | 목록은 스캔용 최소 열 구성, 정렬 가능 사용률 |
+| **벤치마크 최소선 C: 운영 Overview** | Overview 상단 = 상태 체크(Cluster/Control Plane/Operators). Details 박스=버전·채널, Cluster inventory=노드/파드 카운트(+문제 파드 느낌표 링크), Utilization=CPU/MEM/FS/NET + Top consumers 드릴 | 상태 요약 줄, 개요 스트립의 인벤토리 링크(클릭=해당 종류 표로 전환), 임계 카운트에 배지 |
+| **벤치마크 최소선 D: 디자인 시스템·차트·AI 채팅** | 의미 토큰 단일 소스, 정보 우선 차분한 표면, 차트 문법(점선 그리드+크로스헤어+펄스), 스트리밍 채팅 패턴 | `DESIGN-RULES.md` 전체 (토큰·차트·AI 채팅) |
+| **벤치마크 최소선 E: HIG·알림 센터** | 컬러는 데이터에만, 헤어라인 구분, 스프링 모션, 알림=반투명 블러 일시 표면 | 모션 3종 스프링, 알림 센터 시각, 상태색 장식 금지 |
 
 ### 1.2 도출된 3원칙 (모든 화면 설계의 심사 기준)
 
@@ -64,7 +64,7 @@
 ### 2.2 제품(dev) 인프라 — 이식의 그릇
 
 - React 19 + Vite 6 + TS 5.7, `react-router-dom` v7. 라우트 단일 소스 `src/app/productRoutes.ts` (13 서피스 + `g h`~`g s` 단축키, 별칭·아이콘·라벨 전부 카탈로그 파생 — **페이지 안 하드코딩 없음. 이 원칙을 데모 이식에도 그대로 적용**).
-- 스타일: Tailwind v4 + shadcn + **`src/styles/tokens.css`(oklch) 단일 토큰**. `scripts/product-design-guard.mjs`(`npm run check:design`)가 하드코딩 hex를 차단(현재 제품 코드 위반 1건: `ResourceManifestCreateDialog.tsx:199` 에디터 크롬 — 7장 P1에서 토큰화).
+- 스타일: Tailwind v4 + 컴포넌트 프리미티브 + **`src/styles/tokens.css`(oklch) 단일 토큰**. `scripts/product-design-guard.mjs`(`npm run check:design`)가 하드코딩 hex를 차단(현재 제품 코드 위반 1건: `ResourceManifestCreateDialog.tsx:199` 에디터 크롬 — 7장 P1에서 토큰화).
 - 상태: ports+composition (`app/productComposition.ts`, `composition/surfaces/*`), `use*DataFrame` 훅 + `serverRefreshScheduler`. react-query 없음(도입하지 않는다).
 - API: `api/client.ts` fetch 래퍼, 전 응답 zod 검증, SSE(`alert-events`, `operation-events`, `diagnose`, `log-stream` 등) + WS(`live`, `pod-terminal`).
 - i18n: 자체 시스템(`shared/i18n/`), 기본 ko. **리터럴 금지 가드 존재** — 데모의 한국어 리터럴은 이식 시 전부 키 등록.
@@ -101,7 +101,7 @@
 | F8 | 제품 하드코딩 hex 1건(에디터 크롬) + demo hex ~140개 | P1·4장 |
 | F9 | dev 전용 10 피처가 main에 없음 — 머지 방향 착오 시 회귀 | 7.1 브랜치 규칙 |
 | F10 | 데모 `PRESENT_SCALE`(zoom 1.25) 좌표계 특례 — 제품에 새어들면 안 됨 | 4.5 |
-| F11 | **모션 2계보**: `motion` v12 + `tw-animate-css`(shadcn 개폐)가 각자 duration/ease 보유 | D17 |
+| F11 | **모션 2계보**: `motion` v12 + `tw-animate-css`(프리미티브 개폐)가 각자 duration/ease 보유 | D17 |
 | F12 | **차트 2계보**: 데모 수제 SVG(MetricChart) vs 제품 recharts 래퍼 | D13 |
 | F13 | **드릴 맵 2계보 위험**: 데모 맵 vs 기존 `ResourcesPhysicalTopologyScene` — 오너 미지정 시 병렬 구현 | D12 |
 | F14 | **스코프 2계보 위험**: 데모 헤더 스코프 칩·ns 드롭다운 vs 기존 `cluster-scope`+`namespace-scope` 피처 | D14 |
@@ -206,13 +206,13 @@
 - **오너**: **`motion` v12(motion/react) + `src/motion/tokens.css`**. 움직임의 종류별 소유:
   - 등장·전환·레이아웃·드릴·시트/모달 개폐·리스트 스태거·차트 드로잉 = **motion/react 스프링 3종(SOFT/SPRING/PAGE)+EASE_DRAW만**. 임의 duration·ease·keyframes 금지.
   - 색·보더·폭 등 미세 상태 변화만 CSS 전환 허용 — 단 duration·ease는 모션 토큰 변수(`var(--motion-*)`) 참조. 리터럴 `0.3s`, `ease-in-out` 금지.
-  - shadcn/radix 프리미티브(dialog·sheet·popover·toast)의 개폐 애니메이션: `tw-animate-css` 기본값을 쓰지 않고 모션 토큰 기반 클래스로 재정의한다. 재정의 완료 후 `tw-animate-css` 의존성 제거 검토(P5). `vaul`·`sonner` 내장 모션은 토큰과 시각적으로 동일한 파라미터로 설정.
+  - 컴포넌트 프리미티브(dialog·sheet·popover·toast)의 개폐 애니메이션: `tw-animate-css` 기본값을 쓰지 않고 모션 토큰 기반 클래스로 재정의한다. 재정의 완료 후 `tw-animate-css` 의존성 제거 검토(P5). `vaul`·`sonner` 내장 모션은 토큰과 시각적으로 동일한 파라미터로 설정.
   - `usePrefersReducedMotion` 전 모션 필수 적용.
 - **게이트**: `check:design`에 모션 리터럴 검사 추가(`duration-[0-9]`, `transition: .*[0-9]+m?s` grep — 토큰 변수 참조만 통과).
 
 ### D18. `/resources` 관점 모델 (IA 확정 — "지도 밑 표" 구조 폐지)
-- **문제**: 드릴 맵 아래에 리소스 표가 수직으로 붙는 구조는 통일성을 깨고(사용자 관찰), Lens/Rancher Explorer/OpenShift 어디에도 없는 배치다. 반면 "쿠버네티스 리소스" 사이드바 메뉴 신설은 메뉴 축소 원칙에 반한다 — 기각.
-- **결정**: `/resources`는 **한 서피스, 두 관점**이다. 상단 세그먼트 토글 `지도 | 목록`(OpenShift Topology↔List, ArgoCD Tree↔List 패턴).
+- **문제**: 드릴 맵 아래에 리소스 표가 수직으로 붙는 구조는 통일성을 깨고(사용자 관찰), 벤치마크 최소선의 Explorer/Topology 패턴에도 없는 배치다. 반면 "쿠버네티스 리소스" 사이드바 메뉴 신설은 메뉴 축소 원칙에 반한다 — 기각.
+- **결정**: `/resources`는 **한 서피스, 두 관점**이다. 상단 세그먼트 토글 `지도 | 목록`(벤치마크 최소선의 Topology↔List 패턴).
   - **지도 보기**: 드릴 맵이 전체 높이(클러스터 카드→노드+개요 스트립→파드). 표 없음. 우측 D16 패널의 렌즈(서비스/설정/배포)로 하이라이트.
   - **목록 보기**: 종류 선택(D16 패널)+D5 공용 표가 전체 높이. 맵 없음.
   - **관점 간 연속(정보 무손실 계약)**: 스코프(클러스터·노드·ns·검색어)는 하나의 저장소(D14)로 공유 — 지도에서 노드 드릴 후 목록으로 전환하면 표는 그 노드로 필터된 상태로 열린다. 개요 스트립의 종류 링크·"파드 N 보기" 류 액션=목록 보기로 전환+필터. 목록의 행 클릭=D3 시트(관점 무관 동일). 임계 칩 클릭=양 관점에서 동일 의미.
@@ -224,10 +224,10 @@
 
 | 병합 | 근거 레퍼런스 | 결과 |
 |---|---|---|
-| 클러스터 → 홈 | **Rancher**: 홈 = 클러스터 목록 그 자체. 별도 메뉴 없음 | `/home`이 플릿(D1 카드 그리드)의 유일한 표면. `ClustersPage` 은퇴, 카드 `⋯` 메뉴에 연결 해제(기존 `ClusterDisconnectDialog` 재사용), `+ 연결` 카드=D7 모달 |
-| 트래픽 → 리소스 흐름 관점 | **OpenShift** Developer Topology(토폴로지·목록 토글 한 화면), **ArgoCD** Tree↔List | D18 3관점. 내비에서 트래픽 삭제 |
-| 애플리케이션+GitOps+Helm → 배포 | **ArgoCD**: 애플리케이션이 중심 개체고 Git 동기화는 앱의 속성. **Argo/Flux 어디에도** "GitOps"라는 별도 메뉴 없음. Helm 릴리스=설치된 애플리케이션의 한 형태 | `/deploy` 단일 서피스, 탭 3: `애플리케이션(기본) | 저장소·동기화 | Helm 릴리스`. 상세 계약은 5.4·기존 상세 페이지 유지 |
-| 알림 → 인시던트 탭 | **OpenShift** Observe(Alerting이 관제의 탭), **Datadog** Monitors가 이벤트와 한 지붕 | `/issues` 탭 2: `인시던트(기본) | 알림 규칙`. 알림 **이벤트 스트림**은 페이지가 아니라 벨(D4)이 오너 — 이벤트 목록 페이지를 만들지 않는다 |
+| 클러스터 → 홈 | 벤치마크 최소선: 홈 = 클러스터 목록 그 자체. 별도 메뉴 없음 | `/home`이 플릿(D1 카드 그리드)의 유일한 표면. `ClustersPage` 은퇴, 카드 `⋯` 메뉴에 연결 해제(기존 `ClusterDisconnectDialog` 재사용), `+ 연결` 카드=D7 모달 |
+| 트래픽 → 리소스 흐름 관점 | 벤치마크 최소선: 토폴로지·목록 토글 한 화면, Tree↔List 관점 전환 | D18 3관점. 내비에서 트래픽 삭제 |
+| 애플리케이션+GitOps+Helm → 배포 | 벤치마크 최소선: 애플리케이션이 중심 개체고 Git 동기화는 앱의 속성. Helm 릴리스=설치된 애플리케이션의 한 형태 | `/deploy` 단일 서피스, 탭 3: `애플리케이션(기본) | 저장소·동기화 | Helm 릴리스`. 상세 계약은 5.4·기존 상세 페이지 유지 |
+| 알림 → 인시던트 탭 | 벤치마크 최소선: 관제 탭과 모니터링 규칙이 한 지붕 | `/issues` 탭 2: `인시던트(기본) | 알림 규칙`. 알림 **이벤트 스트림**은 페이지가 아니라 벨(D4)이 오너 — 이벤트 목록 페이지를 만들지 않는다 |
 
 - **원칙**: 내비 항목은 "사용자가 아침에 여는 질문" 단위다 — 무엇이 떠 있나(홈)/무엇이 돌고 있나(리소스)/무엇을 내보내나(배포)/무엇이 터졌나(인시던트)/무엇이 바뀌었나(타임라인)/규칙을 지키나(점검)/얼마 드나(비용). 이 질문에 안 걸리는 메뉴는 존재할 수 없다.
 - **구현**: `productRoutes.ts` 카탈로그에서 병합 라우트를 리다이렉트로 강등, 단축키 재배치(`g h/r/d/i/l/u/c/s`). 기존 페이지 컴포넌트는 탭 콘텐츠로 재사용(기능 삭제 아님 — **표면 병합**이다. 정보 손실 0).
@@ -302,11 +302,11 @@
 ### 5.6 AI (전역, D9)
 - FAB → 우측 도킹 패널(드래그 폭). 컨텍스트 줄(현재 화면·스코프) 표시. 스트리밍 파트: steps(진행)→result(임계/주의 요약 칩)→evidence(근거 카드)→links(딥링크)→action(알림 규칙 제안→생성=D4 발화). 인시던트 화면에서는 RCA 세션(`diagnose`)과 연결.
 
-### 5.7 배포 `/deploy` (D19 병합: 애플리케이션+GitOps+Helm — ArgoCD 패턴)
+### 5.7 배포 `/deploy` (D19 병합: 애플리케이션+GitOps+Helm — 애플리케이션 중심 배포 패턴)
 - 탭 3: **애플리케이션(기본)** — 카드/표(D5): 앱 이름·환경·동기화 상태(Synced/OutOfSync=상태 어휘 틴트)·마지막 배포·소스 저장소. 행 클릭=기존 `GitOpsApplicationDetailPage`를 D3 시트 계약으로(동기화 히스토리·리소스 트리·롤백). **저장소·동기화** — 연결된 저장소 목록(리비전·툴·sync 상태), `+ 저장소 연결`(D7 모달), 동기화 표(기존 `GitOpsSyncTableView`→D5 표), 워크플로 그래프·플랜 위저드(기존 유지). **Helm 릴리스** — 릴리스 표+차트 소스, 설치/업그레이드 다이얼로그(기존), diff는 D15 UnifiedDiff.
 - 한 앱의 "Git 소스↔클러스터 리소스↔Helm" 관계가 탭을 넘나들지 않도록: 앱 상세 시트 안에서 전부 도달 가능(탭은 진입 관점일 뿐).
 
-### 5.8 인시던트 `/issues` (D19 병합: +알림 규칙 — OpenShift Observe 패턴)
+### 5.8 인시던트 `/issues` (D19 병합: +알림 규칙 — 관제 탭 패턴)
 - 탭 2: **인시던트(기본)** — D5 표(심각도=상태 어휘·대상·시작 시각·상태 open/ack/resolved). 행 클릭=RCA 워크스페이스(기존 `rcaContext`+`diagnose` 연결): 타임라인 조각(원인 구간)+근거 리소스 링크(D3 시트)+AI RCA 세션(D9). **알림 규칙** — 기존 `AlertRulesPanel`(규칙 CRUD, AI 생성 규칙도 여기 나타남 — D4 발화의 착지점).
 - 알림 이벤트 스트림 페이지는 없다(벨이 오너, D4). 인시던트↔알림 규칙은 "규칙이 만든 인시던트" 역링크로 연결.
 
@@ -400,4 +400,4 @@
 `devpreview-unified.tsx`(셸·표·상세·벨·z계층) / `devpreview-opsia.tsx`(드릴 맵·카드 v6·개요 스트립·`clusterStats`·인벤토리 export) / `devpreview-ai.tsx`(파트 스트리밍·action 카드) / `devpreview-connect.tsx`(모달 위저드·`initialView`) / `devpreview-topology.tsx`(트래픽 사양) / `devpreview/theme.ts`(토큰 원본) / `devpreview/bus.ts`(발화 의미) / `devpreview/brandIcons.tsx`(브랜드 패스).
 
 ## 부록 B. 레퍼런스 근거 자료
-Rancher UI Walkthrough(extensions.rancher.io) 실캡처 4장, OpenShift 클러스터 헬스 랩(ibm.github.io) 실캡처 5장 — outputs 폴더 전달본. 텍스트 근거: oneuptime Rancher 멀티클러스터(상태 색 규칙), GKE 콘솔 문서(목록 컬럼·사용률 탭), Rancher built-in dashboards(사용률은 Grafana 상세로).
+외부 기준 저장소 실캡처 9장 — outputs 폴더 전달본. 텍스트 근거는 벤치마크 최소선의 클러스터 목록, 상태 색 규칙, 사용률 탭, 상세 대시보드 배치만 요약한다.

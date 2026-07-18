@@ -1,9 +1,9 @@
 # Opsia UI 디자인 규칙 v1
 
-> 상위 문서: `OPSIA-MASTER-SPEC.md` (기능·IA·이벤트·머지 결정은 전부 그쪽). 이 문서는 Master Spec 4장이 위임한 **시각·모션 세부 규칙만** 담는다. 충돌 시 Master Spec 우선.
+> 상위 문서: `OPSIA-MASTER-SPEC.md` (프론트엔드 demo→dev 병합의 기능·IA·이벤트 결정). 이 문서는 Master Spec 4장이 위임한 **시각·모션 세부 규칙만** 담는다. 저장소 전체 문서 루트는 `docs/README.md`다.
 
-기준: **Vercel Geist**(의미 토큰·정보 우선·차분한 표면) + **shadcn/Tremor 차트 문법** + **Vercel AI SDK 채팅 패턴**을
-**Apple HIG 감각**(컬러는 데이터에만·헤어라인·스프링 모션)으로 디벨롭한 팀 규칙.
+기준: **벤치마크 최소선**(의미 토큰·정보 우선·차분한 표면) + **컴포넌트/차트 문법** + **AI 채팅 패턴**을
+**시스템 HIG 감각**(컬러는 데이터에만·헤어라인·스프링 모션)으로 디벨롭한 팀 규칙.
 토큰 구현: 데모=`src/devpreview/theme.ts` / 제품=`src/styles/tokens.css`(+`motion/tokens.css`) — **각 세계에서 자기 토큰 파일만 가져온다. 컴포넌트 안 하드코딩 금지. 데모 hex를 제품에 복사 금지(매핑은 Master Spec 4.1).**
 
 ## 1. 컬러
@@ -12,7 +12,7 @@
 - `BLUE`는 선택·포커스·링크 전용. 상태는 `HP.ok/warn/crit`만. 상태색을 장식에 쓰지 않는다.
 - 틴트는 `TINT.*`의 fg/bg/bd 짝으로만 (Badge·칩·경고 박스 공용). 임의 rgba 조합 금지.
 
-## 2. 타이포 (Geist 스케일 × 애플 가독)
+## 2. 타이포 (제품 폰트 스케일 × 시스템 가독)
 - `TYPE`: caption 11 · label 12 · body 13 · bodyStrong 14 · title3 15.5 · title2 17 · title1 21.
 - 웨이트 400/600/700/800. **500 금지**(대비 부족). 숫자는 `MONO` + `tabular-nums`.
 - 레터스페이싱: 제목 -0.02em, 라벨(대문자) +0.05~0.07em.
@@ -39,7 +39,7 @@
   (헤더 = `offsetHeight`, 뷰포트 폭 = `documentElement.clientWidth / SCALE` + ResizeObserver, vh는 `calc(100vh / SCALE)`).
   `calc(100vw…)`·`getBoundingClientRect` 시각 픽셀을 fixed에 그대로 쓰면 스케일만큼 어긋난다.
 
-## 6. 차트 (Tremor/shadcn 문법)
+## 6. 차트 (벤치마크 최소선 차트 문법)
 - 구성: 점선 그리드(25/50/75) + 좌축 값 라벨 + 하단 시간 라벨 + 그라데이션 면 + 1.8px 선.
 - 인터랙션: hover 크로스헤어 + 값 칩, 현재점 펄스. 전환 시 pathLength 드로잉.
 - 상태 반영: 임계 리소스는 선·면 톤이 `HP.crit`.
