@@ -1744,3 +1744,258 @@ def test_secret_values_never_enter_core_pod_projection() -> None:
 
     assert detail is not None
     assert "must-not-leak" not in detail.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    ("api_version", "kind", "raw", "detail_type"),
+    [
+        (
+            "batch/v1",
+            "CronJob",
+            {
+                "spec": {
+                    "schedule": "*/5 * * * *",
+                    "timeZone": "Asia/Seoul",
+                    "suspend": False,
+                    "concurrencyPolicy": "Forbid",
+                    "successfulJobsHistoryLimit": 3,
+                    "failedJobsHistoryLimit": 1,
+                },
+                "status": {
+                    "lastScheduleTime": "2026-07-18T01:00:00Z",
+                    "lastSuccessfulTime": "2026-07-18T01:00:30Z",
+                    "active": [{"kind": "Job", "name": "backup-1"}],
+                },
+            },
+            "core-cron-job",
+        ),
+        (
+            "v1",
+            "ConfigMap",
+            {"data": {"app.yaml": "x" * 2_100}, "binaryData": {"logo": "YWJj"}},
+            "core-config-map",
+        ),
+        (
+            "autoscaling/v2",
+            "HorizontalPodAutoscaler",
+            {
+                "spec": {
+                    "scaleTargetRef": {
+                        "apiVersion": "apps/v1",
+                        "kind": "Deployment",
+                        "name": "api",
+                    },
+                    "minReplicas": 2,
+                    "maxReplicas": 10,
+                    "metrics": [
+                        {
+                            "type": "Resource",
+                            "resource": {"name": "cpu", "target": {"averageUtilization": 70}},
+                        }
+                    ],
+                },
+                "status": {
+                    "currentReplicas": 4,
+                    "desiredReplicas": 5,
+                    "currentMetrics": [
+                        {
+                            "type": "Resource",
+                            "resource": {"name": "cpu", "current": {"averageUtilization": 81}},
+                        }
+                    ],
+                },
+            },
+            "core-hpa",
+        ),
+        (
+            "v1",
+            "Node",
+            {
+                "ready": True,
+                "unschedulable": True,
+                "capacity": {"cpu": "8", "memory": "32Gi"},
+                "allocatable": {"cpu": "7800m", "memory": "30Gi"},
+                "cpu_mcores": 1200,
+                "mem_mib": 8192,
+                "managed_pod_count": 24,
+                "labels": {
+                    "topology.kubernetes.io/zone": "ap-northeast-2a",
+                    "eks.amazonaws.com/nodegroup": "workers",
+                },
+                "node_info": {"osImage": "Bottlerocket", "kubeletVersion": "v1.33.1"},
+                "addresses": [{"type": "InternalIP", "address": "10.0.0.10"}],
+                "taints": [{"key": "dedicated", "value": "gpu", "effect": "NoSchedule"}],
+            },
+            "core-node",
+        ),
+        (
+            "v1",
+            "Namespace",
+            {
+                "metadata": {
+                    "labels": {"istio-injection": "enabled"},
+                    "annotations": {"app.kubernetes.io/managed-by": "platform"},
+                },
+                "status": {"phase": "Active"},
+                "resource_quotas": [
+                    {
+                        "name": "compute",
+                        "hard": {"requests.cpu": "4"},
+                        "used": {"requests.cpu": "2"},
+                    }
+                ],
+                "service_account_count": 3,
+                "role_binding_count": 2,
+            },
+            "core-namespace",
+        ),
+        (
+            "v1",
+            "Event",
+            {
+                "type": "Warning",
+                "reason": "FailedScheduling",
+                "message": "0/3 nodes are available",
+                "count": 4,
+                "first_timestamp": "2026-07-18T01:00:00Z",
+                "last_occurrence_at": "2026-07-18T01:02:00Z",
+                "involvedObject": {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "namespace": "shop",
+                    "name": "api-0",
+                },
+            },
+            "core-event",
+        ),
+        (
+            "v1",
+            "ServiceAccount",
+            {
+                "kind": "ServiceAccount",
+                "automountServiceAccountToken": False,
+                "secrets": [{"name": "checkout-token"}],
+                "imagePullSecrets": [{"name": "registry"}],
+            },
+            "core-rbac",
+        ),
+        (
+            "rbac.authorization.k8s.io/v1",
+            "Role",
+            {
+                "kind": "Role",
+                "rules": [{"verbs": ["get"], "apiGroups": [""], "resources": ["pods"]}],
+            },
+            "core-rbac",
+        ),
+        (
+            "rbac.authorization.k8s.io/v1",
+            "ClusterRole",
+            {
+                "kind": "ClusterRole",
+                "rules": [{"verbs": ["*"], "apiGroups": ["*"], "resources": ["*"]}],
+            },
+            "core-rbac",
+        ),
+        (
+            "rbac.authorization.k8s.io/v1",
+            "RoleBinding",
+            {
+                "kind": "RoleBinding",
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "Role",
+                    "name": "reader",
+                },
+                "subjects": [{"kind": "ServiceAccount", "namespace": "shop", "name": "checkout"}],
+            },
+            "core-rbac",
+        ),
+        (
+            "rbac.authorization.k8s.io/v1",
+            "ClusterRoleBinding",
+            {
+                "kind": "ClusterRoleBinding",
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "ClusterRole",
+                    "name": "view",
+                },
+                "subjects": [{"kind": "Group", "name": "developers"}],
+            },
+            "core-rbac",
+        ),
+    ],
+)
+def test_core_operational_projection_matrix(
+    api_version: str,
+    kind: str,
+    raw: dict[str, Any],
+    detail_type: str,
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    assert detail.type == detail_type
+
+
+def test_config_map_projection_folds_large_text_and_never_exposes_binary_value() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "ConfigMap",
+            {"data": {"large": "x" * 2_100}, "binaryData": {"archive": "must-not-render"}},
+            api_version="v1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.entries[0].truncated is True
+    assert detail.entries[1].binary is True
+    assert detail.entries[1].preview is None
+    assert "must-not-render" not in detail.model_dump_json()
+
+
+def test_hpa_and_event_projection_preserve_calculation_and_duration_evidence() -> None:
+    hpa = provider_detail_projection(
+        resource(
+            "HorizontalPodAutoscaler",
+            {
+                "spec": {
+                    "scaleTargetRef": {"kind": "Deployment", "name": "api"},
+                    "maxReplicas": 5,
+                    "metrics": [
+                        {
+                            "type": "Resource",
+                            "resource": {"name": "cpu", "target": {"averageUtilization": 70}},
+                        }
+                    ],
+                },
+                "status": {
+                    "conditions": [
+                        {
+                            "type": "ScalingActive",
+                            "status": "False",
+                            "reason": "FailedGetResourceMetric",
+                        }
+                    ],
+                },
+            },
+            api_version="autoscaling/v2",
+        )
+    )
+    event = provider_detail_projection(
+        resource(
+            "Event",
+            {
+                "first_timestamp": "2026-07-18T01:00:00Z",
+                "last_occurrence_at": "2026-07-18T01:02:00Z",
+            },
+            api_version="v1",
+        )
+    )
+
+    assert hpa is not None
+    assert hpa.metrics[0].name == "cpu"
+    assert hpa.metrics[0].unavailable_reason == "FailedGetResourceMetric"
+    assert event is not None
+    assert event.duration_seconds == 120

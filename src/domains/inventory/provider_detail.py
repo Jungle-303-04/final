@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from math import isfinite
 from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit
@@ -32,10 +33,22 @@ from packages.contracts.inventory_provider import (
     CertificateRequestProviderDetail,
     ClusterComplianceReportProviderDetail,
     ComplianceControlDetail,
+    CoreConfigMapEntry,
+    CoreConfigMapProviderDetail,
+    CoreCronJobProviderDetail,
+    CoreEventProviderDetail,
+    CoreHpaMetric,
+    CoreHpaProviderDetail,
     CoreIngressProviderDetail,
     CoreIngressRoute,
     CoreIngressTls,
+    CoreNamespaceProviderDetail,
+    CoreNamespaceQuota,
+    CoreNodeProviderDetail,
     CorePodProviderDetail,
+    CoreRbacProviderDetail,
+    CoreRbacRule,
+    CoreRbacSubject,
     CoreServiceProviderDetail,
     CoreWorkloadProviderDetail,
     CronWorkflowProviderDetail,
@@ -114,6 +127,8 @@ GATEWAY_GROUP = "gateway.networking.k8s.io"
 BATCH_GROUP = "batch"
 APPS_GROUP = "apps"
 NETWORKING_GROUP = "networking.k8s.io"
+AUTOSCALING_GROUP = "autoscaling"
+RBAC_GROUP = "rbac.authorization.k8s.io"
 KARPENTER_GROUP = "karpenter.sh"
 KARPENTER_AWS_GROUP = "karpenter.k8s.aws"
 KEDA_GROUP = "keda.sh"
@@ -2254,6 +2269,359 @@ def _argo_application(raw: Mapping[str, Any]) -> ArgoApplicationProviderDetail:
     )
 
 
+def _core_cron_job(raw: Mapping[str, Any]) -> CoreCronJobProviderDetail:
+    spec = _mapping(raw.get("spec")) or raw
+    status = _mapping(raw.get("status")) or raw
+    schedule = _text(spec.get("schedule"))
+    return CoreCronJobProviderDetail(
+        schedule=schedule,
+        schedule_description=_cron_schedule_description(schedule),
+        timezone=_text(spec.get("timeZone") or spec.get("timezone")),
+        suspended=_bool(spec.get("suspend") or raw.get("suspended")) is True,
+        last_schedule_time=_text(status.get("lastScheduleTime") or raw.get("last_schedule_time")),
+        last_successful_time=_text(
+            status.get("lastSuccessfulTime") or raw.get("last_successful_time")
+        ),
+        active_jobs=[
+            ProviderNamedReference(
+                api_version=_text(item.get("apiVersion")),
+                kind=_text(item.get("kind")) or "Job",
+                namespace=_text(item.get("namespace")),
+                name=name,
+            )
+            for item in _mapping_items(status.get("active") or raw.get("active_jobs"))
+            if (name := _text(item.get("name"))) is not None
+        ],
+        concurrency_policy=_text(spec.get("concurrencyPolicy") or raw.get("concurrency_policy")),
+        starting_deadline_seconds=_int(
+            spec.get("startingDeadlineSeconds") or raw.get("starting_deadline_seconds")
+        ),
+        successful_history_limit=_int(
+            spec.get("successfulJobsHistoryLimit") or raw.get("successful_history_limit")
+        ),
+        failed_history_limit=_int(
+            spec.get("failedJobsHistoryLimit") or raw.get("failed_history_limit")
+        ),
+        conditions=_conditions(raw),
+    )
+
+
+def _cron_schedule_description(schedule: str | None) -> str | None:
+    if schedule is None:
+        return None
+    fields = schedule.split()
+    if len(fields) != 5:
+        return None
+    minute, hour, day, month, weekday = fields
+    if day == month == weekday == "*" and minute.startswith("*/") and hour == "*":
+        interval = minute.removeprefix("*/")
+        return f"every {interval} minutes" if interval.isdigit() else None
+    if day == month == weekday == "*" and minute.isdigit() and hour.isdigit():
+        return f"daily at {int(hour):02d}:{int(minute):02d}"
+    return None
+
+
+def _core_config_map(raw: Mapping[str, Any]) -> CoreConfigMapProviderDetail:
+    entries: list[CoreConfigMapEntry] = []
+    for key, value in sorted(_mapping(raw.get("data")).items())[:MAX_COLLECTION_ITEMS]:
+        name = _text(key)
+        if name is None or not isinstance(value, str):
+            continue
+        encoded = value.encode("utf-8")
+        entries.append(
+            CoreConfigMapEntry(
+                key=name,
+                size_bytes=len(encoded),
+                preview=value[:MAX_TEXT_LENGTH],
+                truncated=len(value) > MAX_TEXT_LENGTH,
+                binary=False,
+            )
+        )
+    for key, value in sorted(_mapping(raw.get("binaryData")).items())[:MAX_COLLECTION_ITEMS]:
+        name = _text(key)
+        if name is None or not isinstance(value, str):
+            continue
+        entries.append(
+            CoreConfigMapEntry(
+                key=name,
+                size_bytes=len(value.encode("ascii", errors="ignore")),
+                preview=None,
+                truncated=False,
+                binary=True,
+            )
+        )
+    return CoreConfigMapProviderDetail(
+        immutable=_bool(raw.get("immutable")) is True,
+        key_count=len(entries),
+        entries=entries[:MAX_COLLECTION_ITEMS],
+        conditions=[],
+    )
+
+
+def _core_hpa(raw: Mapping[str, Any]) -> CoreHpaProviderDetail:
+    spec = _mapping(raw.get("spec"))
+    status = _mapping(raw.get("status"))
+    target = _mapping(spec.get("scaleTargetRef"))
+    conditions = _conditions(raw)
+    unavailable = next(
+        (
+            condition.reason or condition.message
+            for condition in conditions
+            if condition.type in {"ScalingActive", "AbleToScale"} and condition.status != "True"
+        ),
+        None,
+    )
+    return CoreHpaProviderDetail(
+        target=ProviderNamedReference(
+            api_version=_text(target.get("apiVersion")),
+            kind=_text(target.get("kind")),
+            name=name,
+        )
+        if (name := _text(target.get("name"))) is not None
+        else None,
+        minimum_replicas=_int(spec.get("minReplicas")),
+        maximum_replicas=_int(spec.get("maxReplicas")),
+        current_replicas=_int(status.get("currentReplicas")),
+        desired_replicas=_int(status.get("desiredReplicas")),
+        last_scale_time=_text(status.get("lastScaleTime")),
+        metrics=_hpa_metrics(spec.get("metrics"), status.get("currentMetrics"), unavailable),
+        conditions=conditions,
+    )
+
+
+def _hpa_metrics(
+    spec_value: object, status_value: object, reason: str | None
+) -> list[CoreHpaMetric]:
+    desired = _mapping_items(spec_value)
+    current = _mapping_items(status_value)
+    result: list[CoreHpaMetric] = []
+    for index, item in enumerate(desired):
+        metric_type = _text(item.get("type")) or "Unknown"
+        desired_body = _mapping(item.get(metric_type[:1].lower() + metric_type[1:]))
+        current_item = current[index] if index < len(current) else {}
+        current_body = _mapping(current_item.get(metric_type[:1].lower() + metric_type[1:]))
+        name = (
+            _text(desired_body.get("name"))
+            or _text_at(desired_body, "metric", "name")
+            or metric_type
+        )
+        target = _mapping(desired_body.get("target"))
+        current_value = _mapping(current_body.get("current"))
+        result.append(
+            CoreHpaMetric(
+                type=metric_type,
+                name=name,
+                current=_metric_value(current_value),
+                target=_metric_value(target),
+                unavailable_reason=None
+                if current_value
+                else reason or "current_metric_unavailable",
+            )
+        )
+    return result
+
+
+def _metric_value(value: Mapping[str, Any]) -> str | None:
+    for key in ("averageUtilization", "averageValue", "value"):
+        raw = value.get(key)
+        if isinstance(raw, (str, int, float)) and not isinstance(raw, bool):
+            suffix = "%" if key == "averageUtilization" else ""
+            return f"{raw}{suffix}"
+    return None
+
+
+def _core_node(raw: Mapping[str, Any]) -> CoreNodeProviderDetail:
+    node_info = _mapping(raw.get("node_info")) or _mapping_at(raw, "status", "nodeInfo")
+    labels = _mapping(raw.get("labels")) or _mapping_at(raw, "metadata", "labels")
+    conditions = _condition_items(
+        _mapping_items(raw.get("conditions")) or _mapping_items_at(raw, "status", "conditions")
+    )
+    ready = _bool(raw.get("ready"))
+    if ready is None:
+        ready = _condition_truth_from(conditions, "Ready")
+    usage = {
+        "cpu": f"{cpu}m" if (cpu := raw.get("cpu_mcores")) is not None else None,
+        "memory": f"{memory}Mi" if (memory := raw.get("mem_mib")) is not None else None,
+    }
+    return CoreNodeProviderDetail(
+        ready=ready,
+        unschedulable=_bool(raw.get("unschedulable")) is True
+        or _bool_at(raw, "spec", "unschedulable") is True,
+        provider_id=_text(raw.get("provider_id")) or _text_at(raw, "spec", "providerID"),
+        os_image=_text(node_info.get("osImage")),
+        architecture=_text(node_info.get("architecture")),
+        kernel_version=_text(node_info.get("kernelVersion")),
+        container_runtime_version=_text(node_info.get("containerRuntimeVersion")),
+        kubelet_version=_text(node_info.get("kubeletVersion")),
+        capacity=_key_values_at(raw, "capacity") or _key_values_at(raw, "status", "capacity"),
+        allocatable=_key_values_at(raw, "allocatable")
+        or _key_values_at(raw, "status", "allocatable"),
+        usage=_key_values_at({"usage": usage}, "usage"),
+        addresses=[
+            ProviderAddress(type=address_type, address=address)
+            for item in (
+                _mapping_items(raw.get("addresses"))
+                or _mapping_items_at(raw, "status", "addresses")
+            )
+            if (address_type := _text(item.get("type"))) is not None
+            and (address := _text(item.get("address"))) is not None
+        ],
+        zone=_text(labels.get("topology.kubernetes.io/zone")),
+        region=_text(labels.get("topology.kubernetes.io/region")),
+        node_pool=_text(labels.get("node.kubernetes.io/instance-group"))
+        or _text(labels.get("eks.amazonaws.com/nodegroup"))
+        or _text(labels.get("cloud.google.com/gke-nodepool")),
+        taints=[
+            ProviderTaint(
+                key=key,
+                value=_text(item.get("value")),
+                effect=_text(item.get("effect")),
+            )
+            for item in (
+                _mapping_items(raw.get("taints")) or _mapping_items_at(raw, "spec", "taints")
+            )
+            if (key := _text(item.get("key"))) is not None
+        ],
+        managed_pod_count=_int(raw.get("managed_pod_count")),
+        metrics_observed_at=_text(raw.get("metrics_observed_at")),
+        conditions=conditions,
+    )
+
+
+def _core_namespace(raw: Mapping[str, Any]) -> CoreNamespaceProviderDetail:
+    labels = _mapping_at(raw, "metadata", "labels") or _mapping(raw.get("labels"))
+    annotations = _mapping_at(raw, "metadata", "annotations") or _mapping(raw.get("annotations"))
+    quotas = [
+        CoreNamespaceQuota(
+            name=_text(item.get("name")) or "quota",
+            hard=_key_values_at(item, "hard"),
+            used=_key_values_at(item, "used"),
+        )
+        for item in _mapping_items(raw.get("resource_quotas"))
+    ]
+    return CoreNamespaceProviderDetail(
+        phase=_text_at(raw, "status", "phase") or _text(raw.get("phase")),
+        manager=_text(annotations.get("app.kubernetes.io/managed-by"))
+        or _text(labels.get("app.kubernetes.io/managed-by")),
+        injection=_text(labels.get("istio-injection")) or _text(labels.get("linkerd.io/inject")),
+        quotas=quotas,
+        service_account_count=_int(raw.get("service_account_count")),
+        role_binding_count=_int(raw.get("role_binding_count")),
+        cluster_role_binding_count=_int(raw.get("cluster_role_binding_count")),
+        conditions=_conditions(raw),
+    )
+
+
+def _core_event(raw: Mapping[str, Any]) -> CoreEventProviderDetail:
+    involved = _mapping(raw.get("involvedObject"))
+    source = _mapping(raw.get("source"))
+    first = _text(raw.get("first_timestamp")) or _text(raw.get("firstTimestamp"))
+    last = (
+        _text(raw.get("last_occurrence_at"))
+        or _text(raw.get("last_timestamp"))
+        or _text(raw.get("lastTimestamp"))
+        or _text(raw.get("eventTime"))
+    )
+    involved_kind = _text(raw.get("involved_kind")) or _text(involved.get("kind"))
+    involved_name = _text(raw.get("involved_name")) or _text(involved.get("name"))
+    return CoreEventProviderDetail(
+        event_type=_text(raw.get("type")),
+        reason=_text(raw.get("reason")),
+        message=_text(raw.get("message")),
+        involved_object=ProviderReference(
+            api_version=_text(involved.get("apiVersion")),
+            kind=involved_kind,
+            namespace=_text(involved.get("namespace")),
+            name=involved_name,
+        )
+        if involved_kind is not None and involved_name is not None
+        else None,
+        count=_int(raw.get("count")),
+        first_observed_at=first,
+        last_observed_at=last,
+        duration_seconds=_duration_seconds(first, last),
+        source_component=_text(source.get("component")) or _text(raw.get("source_component")),
+        source_host=_text(source.get("host")) or _text(raw.get("source_host")),
+        reporting_controller=_text(raw.get("reporting_component"))
+        or _text(raw.get("reportingController")),
+        reporting_instance=_text(raw.get("reportingInstance")),
+        api_version=_text(raw.get("apiVersion")) or _text(raw.get("api_version")),
+        resource_version=_text(raw.get("resource_version"))
+        or _text_at(raw, "metadata", "resourceVersion"),
+        conditions=[],
+    )
+
+
+def _duration_seconds(first: str | None, last: str | None) -> int | None:
+    if first is None or last is None:
+        return None
+    try:
+        start = datetime.fromisoformat(first.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(last.replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    return max(0, int((end - start).total_seconds()))
+
+
+def _core_rbac(raw: Mapping[str, Any]) -> CoreRbacProviderDetail:
+    kind = _text(raw.get("kind")) or "RBAC"
+    role_ref = _mapping(raw.get("roleRef"))
+    rules = [_rbac_rule(item) for item in _mapping_items(raw.get("rules"))]
+    return CoreRbacProviderDetail(
+        kind=kind,
+        automount_service_account_token=_bool(raw.get("automountServiceAccountToken")),
+        secret_names=_reference_names(raw.get("secrets")),
+        image_pull_secret_names=_reference_names(raw.get("imagePullSecrets")),
+        role_ref=ProviderNamedReference(
+            api_version=_text(role_ref.get("apiGroup")),
+            kind=_text(role_ref.get("kind")),
+            name=name,
+        )
+        if (name := _text(role_ref.get("name"))) is not None
+        else None,
+        subjects=[
+            CoreRbacSubject(
+                kind=subject_kind,
+                namespace=_text(item.get("namespace")),
+                name=subject_name,
+            )
+            for item in _mapping_items(raw.get("subjects"))
+            if (subject_kind := _text(item.get("kind"))) is not None
+            and (subject_name := _text(item.get("name"))) is not None
+        ],
+        rules=rules,
+        wildcard_warning=any(rule.wildcard for rule in rules),
+        escalation_warning=any(rule.escalation for rule in rules),
+        conditions=[],
+    )
+
+
+def _reference_names(value: object) -> list[str]:
+    return [name for item in _mapping_items(value) if (name := _text(item.get("name"))) is not None]
+
+
+def _rbac_rule(item: Mapping[str, Any]) -> CoreRbacRule:
+    verbs = _text_items(item.get("verbs"))
+    api_groups = _text_items(item.get("apiGroups"))
+    resources = _text_items(item.get("resources"))
+    non_resource_urls = _text_items(item.get("nonResourceURLs"))
+    wildcard = "*" in {*verbs, *api_groups, *resources, *non_resource_urls}
+    escalation = wildcard or any(verb in {"bind", "escalate", "impersonate"} for verb in verbs)
+    return CoreRbacRule(
+        verbs=verbs,
+        api_groups=api_groups,
+        resources=resources,
+        resource_names=_text_items(item.get("resourceNames")),
+        non_resource_urls=non_resource_urls,
+        wildcard=wildcard,
+        escalation=escalation,
+    )
+
+
 def _container_projections(value: object) -> list[ProviderContainerProjection]:
     result: list[ProviderContainerProjection] = []
     for item in _mapping_items(value):
@@ -2299,6 +2667,18 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     ("", "Service"): _core_service,
     (NETWORKING_GROUP, "Ingress"): _core_ingress,
     (ARGO_GROUP, "Application"): _argo_application,
+    (BATCH_GROUP, "CronJob"): _core_cron_job,
+    ("", "ConfigMap"): _core_config_map,
+    (AUTOSCALING_GROUP, "HorizontalPodAutoscaler"): _core_hpa,
+    ("", "Node"): _core_node,
+    ("", "Namespace"): _core_namespace,
+    ("", "Event"): _core_event,
+    ("events.k8s.io", "Event"): _core_event,
+    ("", "ServiceAccount"): _core_rbac,
+    (RBAC_GROUP, "Role"): _core_rbac,
+    (RBAC_GROUP, "ClusterRole"): _core_rbac,
+    (RBAC_GROUP, "RoleBinding"): _core_rbac,
+    (RBAC_GROUP, "ClusterRoleBinding"): _core_rbac,
     (INFRASTRUCTURE_GROUP, "AWSMachine"): _aws_machine,
     (INFRASTRUCTURE_GROUP, "AWSManagedCluster"): _aws_managed_cluster,
     (CONTROL_PLANE_GROUP, "AWSManagedControlPlane"): _aws_managed_control_plane,

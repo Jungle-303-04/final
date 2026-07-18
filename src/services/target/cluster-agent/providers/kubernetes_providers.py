@@ -1138,8 +1138,17 @@ class KubernetesSnapshotProvider:
                 telemetry_query.label_selector,
             )
         ]
+        pod_counts_by_node: dict[str, int] = {}
+        for pod in raw_pods:
+            node_name = as_text(spec(pod).get("nodeName"))
+            if node_name:
+                pod_counts_by_node[node_name] = pod_counts_by_node.get(node_name, 0) + 1
         snapshot[K8S_SNAPSHOT_NODES_KEY] = [
-            node_summary(item, node_metrics.get(str(metadata(item).get("name") or "")))
+            node_summary(
+                item,
+                node_metrics.get(str(metadata(item).get("name") or "")),
+                managed_pod_count=pod_counts_by_node.get(str(metadata(item).get("name") or ""), 0),
+            )
             for item in raw_nodes
         ]
         snapshot[K8S_SNAPSHOT_WORKLOADS_KEY] = [
@@ -2411,6 +2420,10 @@ def event_summary(item: JsonObject) -> JsonObject:
         "last_timestamp": last_occurrence_at,
         "last_occurrence_at": last_occurrence_at,
         "reporting_component": item.get("reportingComponent") or source.get("component"),
+        "reporting_instance": item.get("reportingInstance"),
+        "source_component": source.get("component"),
+        "source_host": source.get("host"),
+        "api_version": item.get("apiVersion"),
         "involved_kind": involved.get("kind"),
         "involved_name": involved.get("name"),
         "involved_uid": involved.get("uid"),
@@ -2498,7 +2511,12 @@ def scheduling_causes(message_text: str) -> list[str]:
     return causes
 
 
-def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:
+def node_summary(
+    item: JsonObject,
+    metrics: JsonObject | None = None,
+    *,
+    managed_pod_count: int | None = None,
+) -> JsonObject:
     """Build a node summary with readiness, taints, and capacity data."""
     node_status = status(item)
     allocatable = node_status.get("allocatable", {}) if isinstance(node_status, dict) else {}
@@ -2527,8 +2545,10 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "name": meta.get("name"),
         **bounded_label_summary(item),
         "ready": ready_condition.get("status") == "True",
+        "unschedulable": spec(item).get("unschedulable") is True,
         "conditions": conditions,
         "taints": spec(item).get("taints", []),
+        "addresses": node_status.get("addresses", []),
         "provider_id": as_text(spec(item).get("providerID")),
         "capacity": node_status.get("capacity", {}),
         "allocatable": allocatable,
@@ -2536,6 +2556,7 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "mem_mib": mem_mib,
         "metrics_observed_at": measured.get("metrics_observed_at"),
         "metrics_window": measured.get("metrics_window"),
+        "managed_pod_count": managed_pod_count,
         "cpu_ratio": safe_ratio(cpu_mcores, allocatable_cpu),
         "mem_ratio": safe_ratio(mem_mib, allocatable_mem),
         "node_info": node_status.get("nodeInfo", {}),
@@ -2696,6 +2717,25 @@ def workload_summary(
         "completion_time": workload_status.get("completionTime"),
         "scheduled_run_kinds": ["Job"] if kind == "CronJob" else [],
     }
+    if kind == "CronJob":
+        summary.update(
+            {
+                "spec": {
+                    "schedule": workload_spec.get("schedule"),
+                    "timeZone": workload_spec.get("timeZone"),
+                    "suspend": workload_spec.get("suspend", False),
+                    "concurrencyPolicy": workload_spec.get("concurrencyPolicy"),
+                    "startingDeadlineSeconds": workload_spec.get("startingDeadlineSeconds"),
+                    "successfulJobsHistoryLimit": workload_spec.get("successfulJobsHistoryLimit"),
+                    "failedJobsHistoryLimit": workload_spec.get("failedJobsHistoryLimit"),
+                },
+                "status": {
+                    "lastScheduleTime": workload_status.get("lastScheduleTime"),
+                    "lastSuccessfulTime": workload_status.get("lastSuccessfulTime"),
+                    "active": workload_status.get("active", []),
+                },
+            }
+        )
     if kind in {K8S_KIND_DEPLOYMENT, "StatefulSet", "DaemonSet"}:
         owned = owned_workload_revisions(item, kind, revisions or [])
         summary.update(

@@ -476,4 +476,80 @@ describe("resource detail canonical mapping", () => {
       executionNodes: [{ id: "root", depth: 0 }],
     });
   });
+
+  it("maps ConfigMap text previews without manufacturing binary values", () => {
+    expect(toProviderResourceDetail({
+      type: "core-config-map",
+      immutable: false,
+      key_count: 2,
+      entries: [
+        { key: "app.yaml", size_bytes: 12, preview: "port: 8080", truncated: false, binary: false },
+        { key: "logo.png", size_bytes: 2048, preview: null, truncated: false, binary: true },
+      ],
+      conditions: [],
+    })).toEqual({
+      type: "core-config-map",
+      immutable: false,
+      keyCount: 2,
+      entries: [
+        { key: "app.yaml", sizeBytes: 12, preview: "port: 8080", truncated: false, binary: false },
+        { key: "logo.png", sizeBytes: 2048, preview: null, truncated: false, binary: true },
+      ],
+      conditions: [],
+    });
+  });
+
+  it("maps HPA evidence and its precise unavailable reason", () => {
+    expect(toProviderResourceDetail({
+      type: "core-hpa",
+      target: { api_version: "apps/v1", kind: "Deployment", namespace: "shop", name: "api" },
+      minimum_replicas: 2,
+      maximum_replicas: 10,
+      current_replicas: 2,
+      desired_replicas: 4,
+      last_scale_time: "2026-07-18T01:00:00Z",
+      metrics: [{
+        type: "Resource",
+        name: "cpu",
+        current: null,
+        target: "70%",
+        unavailable_reason: "metrics_api_unavailable",
+      }],
+      conditions: [],
+    })).toMatchObject({
+      type: "core-hpa",
+      target: { kind: "Deployment", name: "api" },
+      metrics: [{ name: "cpu", unavailableReason: "metrics_api_unavailable" }],
+    });
+  });
+
+  it("maps RBAC subjects and rules while retaining wildcard risk evidence", () => {
+    expect(toProviderResourceDetail({
+      type: "core-rbac",
+      kind: "ClusterRole",
+      automount_service_account_token: null,
+      secret_names: [],
+      image_pull_secret_names: [],
+      role_ref: null,
+      subjects: [],
+      rules: [{
+        verbs: ["*"],
+        api_groups: ["*"],
+        resources: ["*"],
+        resource_names: [],
+        non_resource_urls: [],
+        wildcard: true,
+        escalation: true,
+      }],
+      wildcard_warning: true,
+      escalation_warning: true,
+      conditions: [],
+    })).toMatchObject({
+      type: "core-rbac",
+      kind: "ClusterRole",
+      rules: [{ wildcard: true, escalation: true }],
+      wildcardWarning: true,
+      escalationWarning: true,
+    });
+  });
 });

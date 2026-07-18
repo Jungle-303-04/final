@@ -124,4 +124,29 @@ describe("Resources URL identity", () => {
         },
       });
   });
+
+  it.each([
+    ["cronjob", "workload", "CronJob", "ops", "nightly"],
+    ["configmap", "custom_resource", "ConfigMap", "ops", "settings"],
+    ["hpa", "custom_resource", "HorizontalPodAutoscaler", "ops", "api"],
+    ["node", "node", "Node", null, "worker-a"],
+    ["namespace", "custom_resource", "Namespace", null, "ops"],
+    ["event", "event", "Event", "ops", "event-1"],
+    ["serviceaccount", "custom_resource", "ServiceAccount", "ops", "api"],
+    ["role", "custom_resource", "Role", "ops", "reader"],
+    ["clusterrole", "custom_resource", "ClusterRole", null, "reader"],
+    ["rolebinding", "custom_resource", "RoleBinding", "ops", "reader"],
+    ["clusterrolebinding", "custom_resource", "ClusterRoleBinding", null, "reader"],
+  ] as const)(
+    "keeps the %s representative detail URL self-contained",
+    (legacyPath, resourceType, kind, namespace, name) => {
+      expect(resolveResourceType(legacyPath)).toEqual({ kind: "valid", value: resourceType });
+      const identity = { resourceType, kind, namespace, name };
+      const target = encodeResourceTarget("cluster-1", identity);
+      expect(decodeResourceTarget(null, null, target.kind, target.resource)).toEqual({
+        clusterId: "cluster-1",
+        identity,
+      });
+    },
+  );
 });

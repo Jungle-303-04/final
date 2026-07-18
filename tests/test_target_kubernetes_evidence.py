@@ -2669,3 +2669,59 @@ def test_workload_and_service_summaries_preserve_strategy_and_network_policy() -
     assert service["external_ips"] == ["203.0.113.10"]
     assert service["external_traffic_policy"] == "Local"
     assert service["ip_families"] == ["IPv4"]
+
+
+def test_cronjob_node_and_event_summaries_preserve_detail_projection_evidence() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    cronjob = kubernetes_module.workload_summary(
+        "CronJob",
+        {
+            "metadata": {"uid": "cron-1", "name": "backup", "namespace": "shop"},
+            "spec": {
+                "schedule": "*/5 * * * *",
+                "timeZone": "Asia/Seoul",
+                "concurrencyPolicy": "Forbid",
+                "successfulJobsHistoryLimit": 3,
+            },
+            "status": {
+                "lastScheduleTime": "2026-07-18T01:00:00Z",
+                "active": [{"kind": "Job", "name": "backup-1"}],
+            },
+        },
+    )
+    node = kubernetes_module.node_summary(
+        {
+            "metadata": {
+                "uid": "node-1",
+                "name": "worker-a",
+                "labels": {"topology.kubernetes.io/zone": "ap-northeast-2a"},
+            },
+            "spec": {"unschedulable": True},
+            "status": {
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "addresses": [{"type": "InternalIP", "address": "10.0.0.10"}],
+                "capacity": {"cpu": "8"},
+                "allocatable": {"cpu": "7800m"},
+            },
+        },
+        {"cpu_mcores": 800, "mem_mib": 4096, "metrics_observed_at": "2026-07-18T01:00:00Z"},
+        managed_pod_count=12,
+    )
+    event = kubernetes_module.event_summary(
+        {
+            "apiVersion": "v1",
+            "metadata": {"uid": "event-1", "resourceVersion": "9"},
+            "type": "Warning",
+            "reason": "FailedScheduling",
+            "source": {"component": "default-scheduler", "host": "control-plane"},
+            "reportingInstance": "scheduler-1",
+        }
+    )
+
+    assert cronjob["spec"]["schedule"] == "*/5 * * * *"
+    assert cronjob["status"]["active"][0]["name"] == "backup-1"
+    assert node["unschedulable"] is True
+    assert node["managed_pod_count"] == 12
+    assert node["addresses"][0]["address"] == "10.0.0.10"
+    assert event["source_host"] == "control-plane"
+    assert event["reporting_instance"] == "scheduler-1"

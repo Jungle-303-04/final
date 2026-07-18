@@ -163,6 +163,148 @@ class ArgoApplicationProviderDetail(StrictModel):
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
+class CoreCronJobProviderDetail(StrictModel):
+    type: Literal["core-cron-job"] = "core-cron-job"
+    schedule: str | None = None
+    schedule_description: str | None = None
+    timezone: str | None = None
+    suspended: bool
+    last_schedule_time: str | None = None
+    last_successful_time: str | None = None
+    active_jobs: list[ProviderNamedReference] = Field(default_factory=list)
+    concurrency_policy: str | None = None
+    starting_deadline_seconds: int | None = None
+    successful_history_limit: int | None = None
+    failed_history_limit: int | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreConfigMapEntry(StrictModel):
+    key: str
+    size_bytes: int = Field(ge=0)
+    preview: str | None = None
+    truncated: bool
+    binary: bool
+
+
+class CoreConfigMapProviderDetail(StrictModel):
+    type: Literal["core-config-map"] = "core-config-map"
+    immutable: bool
+    key_count: int = Field(ge=0)
+    entries: list[CoreConfigMapEntry] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreHpaMetric(StrictModel):
+    type: str
+    name: str
+    current: str | None = None
+    target: str | None = None
+    unavailable_reason: str | None = None
+
+
+class CoreHpaProviderDetail(StrictModel):
+    type: Literal["core-hpa"] = "core-hpa"
+    target: ProviderNamedReference | None = None
+    minimum_replicas: int | None = None
+    maximum_replicas: int | None = None
+    current_replicas: int | None = None
+    desired_replicas: int | None = None
+    last_scale_time: str | None = None
+    metrics: list[CoreHpaMetric] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreNodeProviderDetail(StrictModel):
+    type: Literal["core-node"] = "core-node"
+    ready: bool | None = None
+    unschedulable: bool
+    provider_id: str | None = None
+    os_image: str | None = None
+    architecture: str | None = None
+    kernel_version: str | None = None
+    container_runtime_version: str | None = None
+    kubelet_version: str | None = None
+    capacity: list[ProviderKeyValue] = Field(default_factory=list)
+    allocatable: list[ProviderKeyValue] = Field(default_factory=list)
+    usage: list[ProviderKeyValue] = Field(default_factory=list)
+    addresses: list[ProviderAddress] = Field(default_factory=list)
+    zone: str | None = None
+    region: str | None = None
+    node_pool: str | None = None
+    taints: list[ProviderTaint] = Field(default_factory=list)
+    managed_pod_count: int | None = None
+    metrics_observed_at: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreNamespaceQuota(StrictModel):
+    name: str
+    hard: list[ProviderKeyValue] = Field(default_factory=list)
+    used: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class CoreNamespaceProviderDetail(StrictModel):
+    type: Literal["core-namespace"] = "core-namespace"
+    phase: str | None = None
+    manager: str | None = None
+    injection: str | None = None
+    quotas: list[CoreNamespaceQuota] = Field(default_factory=list)
+    service_account_count: int | None = None
+    role_binding_count: int | None = None
+    cluster_role_binding_count: int | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreEventProviderDetail(StrictModel):
+    type: Literal["core-event"] = "core-event"
+    event_type: str | None = None
+    reason: str | None = None
+    message: str | None = None
+    involved_object: ProviderReference | None = None
+    count: int | None = None
+    first_observed_at: str | None = None
+    last_observed_at: str | None = None
+    duration_seconds: int | None = None
+    source_component: str | None = None
+    source_host: str | None = None
+    reporting_controller: str | None = None
+    reporting_instance: str | None = None
+    api_version: str | None = None
+    resource_version: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CoreRbacSubject(StrictModel):
+    kind: str
+    namespace: str | None = None
+    name: str
+
+
+class CoreRbacRule(StrictModel):
+    verbs: list[str] = Field(default_factory=list)
+    api_groups: list[str] = Field(default_factory=list)
+    resources: list[str] = Field(default_factory=list)
+    resource_names: list[str] = Field(default_factory=list)
+    non_resource_urls: list[str] = Field(default_factory=list)
+    wildcard: bool
+    escalation: bool
+
+
+class CoreRbacProviderDetail(StrictModel):
+    type: Literal["core-rbac"] = "core-rbac"
+    kind: str
+    automount_service_account_token: bool | None = None
+    secret_names: list[str] = Field(default_factory=list)
+    image_pull_secret_names: list[str] = Field(default_factory=list)
+    role_ref: ProviderNamedReference | None = None
+    subjects: list[CoreRbacSubject] = Field(default_factory=list)
+    rules: list[CoreRbacRule] = Field(default_factory=list)
+    wildcard_warning: bool
+    escalation_warning: bool
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 class CapiUnhealthyCondition(StrictModel):
     type: str
     status: str | None = None
@@ -1054,6 +1196,13 @@ ResourceProviderDetail = Annotated[
     | CoreServiceProviderDetail
     | CoreIngressProviderDetail
     | ArgoApplicationProviderDetail
+    | CoreCronJobProviderDetail
+    | CoreConfigMapProviderDetail
+    | CoreHpaProviderDetail
+    | CoreNodeProviderDetail
+    | CoreNamespaceProviderDetail
+    | CoreEventProviderDetail
+    | CoreRbacProviderDetail
     | AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
     | AwsManagedControlPlaneProviderDetail

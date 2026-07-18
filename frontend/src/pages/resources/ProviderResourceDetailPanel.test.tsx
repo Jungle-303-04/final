@@ -868,6 +868,70 @@ describe("ProviderResourceDetailPanel", () => {
     expect(screen.getByText("publish: image pull failed")).toBeTruthy();
     expect(document.querySelector("[data-workflow-node='publish']")).toBeTruthy();
   });
+  it("renders ConfigMap folding, HPA evidence, and RBAC risk without exposing hidden values", () => {
+    const { rerender } = renderPanel({
+      type: "core-config-map",
+      immutable: false,
+      keyCount: 2,
+      entries: [
+        { key: "app.yaml", sizeBytes: 12, preview: "port: 8080", truncated: false, binary: false },
+        { key: "certificate.bin", sizeBytes: 2048, preview: null, truncated: false, binary: true },
+      ],
+      conditions: [],
+    });
+
+    expect(screen.getByText("app.yaml")).toBeTruthy();
+    expect(screen.queryByText("port: 8080")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /app.yaml/u }));
+    expect(screen.getByText("port: 8080")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /certificate.bin/u }));
+    expect(screen.getByText("Binary values are not exposed in resource details.")).toBeTruthy();
+
+    rerender(panel({
+      type: "core-hpa",
+      target: { apiVersion: "apps/v1", kind: "Deployment", namespace: "shop", name: "api" },
+      minimumReplicas: 2,
+      maximumReplicas: 10,
+      currentReplicas: 2,
+      desiredReplicas: 4,
+      lastScaleTime: null,
+      metrics: [{
+        type: "Resource",
+        name: "cpu",
+        current: null,
+        target: "70%",
+        unavailableReason: "metrics_api_unavailable",
+      }],
+      conditions: [],
+    }));
+    expect(screen.getByText("metrics_api_unavailable")).toBeTruthy();
+    expect(screen.getByText("70%")).toBeTruthy();
+
+    rerender(panel({
+      type: "core-rbac",
+      kind: "ClusterRole",
+      automountServiceAccountToken: null,
+      secretNames: [],
+      imagePullSecretNames: [],
+      roleRef: null,
+      subjects: [],
+      rules: [{
+        verbs: ["*"],
+        apiGroups: ["*"],
+        resources: ["*"],
+        resourceNames: [],
+        nonResourceUrls: [],
+        wildcard: true,
+        escalation: true,
+      }],
+      wildcardWarning: true,
+      escalationWarning: true,
+      conditions: [],
+    }));
+    expect(screen.getByRole("heading", { name: "Effective rules" })).toBeTruthy();
+    expect(screen.getAllByText("Wildcard permission").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Privilege escalation possible").length).toBeGreaterThan(0);
+  });
 });
 
 function renderPanel(

@@ -248,6 +248,127 @@ export interface ArgoApplicationProviderDetailEndpoint extends ProviderDetailBas
   revision_history: string[];
 }
 
+export interface CoreCronJobProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-cron-job";
+  schedule: string | null;
+  schedule_description: string | null;
+  timezone: string | null;
+  suspended: boolean;
+  last_schedule_time: string | null;
+  last_successful_time: string | null;
+  active_jobs: ProviderNamedReferenceEndpoint[];
+  concurrency_policy: string | null;
+  starting_deadline_seconds: number | null;
+  successful_history_limit: number | null;
+  failed_history_limit: number | null;
+}
+
+export interface CoreConfigMapProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-config-map";
+  immutable: boolean;
+  key_count: number;
+  entries: Array<{
+    key: string;
+    size_bytes: number;
+    preview: string | null;
+    truncated: boolean;
+    binary: boolean;
+  }>;
+}
+
+export interface CoreHpaProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-hpa";
+  target: ProviderNamedReferenceEndpoint | null;
+  minimum_replicas: number | null;
+  maximum_replicas: number | null;
+  current_replicas: number | null;
+  desired_replicas: number | null;
+  last_scale_time: string | null;
+  metrics: Array<{
+    type: string;
+    name: string;
+    current: string | null;
+    target: string | null;
+    unavailable_reason: string | null;
+  }>;
+}
+
+export interface CoreNodeProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-node";
+  ready: boolean | null;
+  unschedulable: boolean;
+  provider_id: string | null;
+  os_image: string | null;
+  architecture: string | null;
+  kernel_version: string | null;
+  container_runtime_version: string | null;
+  kubelet_version: string | null;
+  capacity: ProviderKeyValueEndpoint[];
+  allocatable: ProviderKeyValueEndpoint[];
+  usage: ProviderKeyValueEndpoint[];
+  addresses: ProviderAddressEndpoint[];
+  zone: string | null;
+  region: string | null;
+  node_pool: string | null;
+  taints: Array<{ key: string; value: string | null; effect: string | null }>;
+  managed_pod_count: number | null;
+  metrics_observed_at: string | null;
+}
+
+export interface CoreNamespaceProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-namespace";
+  phase: string | null;
+  manager: string | null;
+  injection: string | null;
+  quotas: Array<{
+    name: string;
+    hard: ProviderKeyValueEndpoint[];
+    used: ProviderKeyValueEndpoint[];
+  }>;
+  service_account_count: number | null;
+  role_binding_count: number | null;
+  cluster_role_binding_count: number | null;
+}
+
+export interface CoreEventProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-event";
+  event_type: string | null;
+  reason: string | null;
+  message: string | null;
+  involved_object: ProviderReferenceEndpoint | null;
+  count: number | null;
+  first_observed_at: string | null;
+  last_observed_at: string | null;
+  duration_seconds: number | null;
+  source_component: string | null;
+  source_host: string | null;
+  reporting_controller: string | null;
+  reporting_instance: string | null;
+  api_version: string | null;
+  resource_version: string | null;
+}
+
+export interface CoreRbacProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "core-rbac";
+  kind: string;
+  automount_service_account_token: boolean | null;
+  secret_names: string[];
+  image_pull_secret_names: string[];
+  role_ref: ProviderNamedReferenceEndpoint | null;
+  subjects: Array<{ kind: string; namespace: string | null; name: string }>;
+  rules: Array<{
+    verbs: string[];
+    api_groups: string[];
+    resources: string[];
+    resource_names: string[];
+    non_resource_urls: string[];
+    wildcard: boolean;
+    escalation: boolean;
+  }>;
+  wildcard_warning: boolean;
+  escalation_warning: boolean;
+}
+
 export interface AwsMachineProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
   type: "aws-machine";
   instance_type: string | null;
@@ -945,6 +1066,13 @@ export type ProviderResourceDetailEndpoint =
   | CoreServiceProviderDetailEndpoint
   | CoreIngressProviderDetailEndpoint
   | ArgoApplicationProviderDetailEndpoint
+  | CoreCronJobProviderDetailEndpoint
+  | CoreConfigMapProviderDetailEndpoint
+  | CoreHpaProviderDetailEndpoint
+  | CoreNodeProviderDetailEndpoint
+  | CoreNamespaceProviderDetailEndpoint
+  | CoreEventProviderDetailEndpoint
+  | CoreRbacProviderDetailEndpoint
   | AwsMachineProviderDetailEndpoint
   | AwsManagedClusterProviderDetailEndpoint
   | AwsManagedControlPlaneProviderDetailEndpoint
