@@ -443,37 +443,46 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
 
 // ── 클러스터 로우 ─────────────────────────────
 
-// 듀얼 스파크 — CPU·MEM 한 차트 (게이지 2개+스파크 중복을 하나로)
-function DualSpark({ id, a, b, tick, h = 44 }: { id: string; a: number; b: number; tick: number; h?: number }) {
+// 듀얼 스파크 — CPU·MEM 한 차트 (Vercel/Tremor 문법: 데이터 범위 자동 스케일 · 완만한 곡선 · 시리즈별 면)
+function DualSpark({ id, a, b, tick, h = 56 }: { id: string; a: number; b: number; tick: number; h?: number }) {
   const hsh = id.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
-  const W = 100, N = 36;
+  const W = 320, N = 42, PT = 6, PB = 4;
   const series = (base: number, ph: number) => Array.from({ length: N }, (_, i) => {
-    const x = tick - (N - 1) + i;
-    return Math.max(3, Math.min(97, base + 8 * Math.sin(x * 0.42 + hsh + ph) + 4.5 * Math.sin(x * 0.19 + hsh * 1.7 + ph) + 2 * Math.sin(x * 0.83 + ph)));
+    const x = tick * 0.35 - (N - 1) + i; // 느린 이동 = 차분한 라이브
+    return base + 5.5 * Math.sin(x * 0.22 + hsh + ph) + 2.5 * Math.sin(x * 0.09 + hsh * 1.7 + ph) + 1.2 * Math.sin(x * 0.47 + ph);
   });
+  const va = series(a, 0), vb = series(b, 2.3);
+  const lo = Math.min(...va, ...vb), hi = Math.max(...va, ...vb);
+  const pad = Math.max(3, (hi - lo) * 0.25);
+  const Y = (v: number) => PT + (1 - (v - (lo - pad)) / ((hi + pad) - (lo - pad))) * (h - PT - PB);
   const mk = (vals: number[]) => {
-    const pts = vals.map((v, i) => ({ x: (i / (N - 1)) * W, y: 2.5 + (1 - v / 100) * (h - 5) }));
-    let d = `M ${pts[0].x} ${pts[0].y}`;
+    const pts = vals.map((v, i) => ({ x: (i / (N - 1)) * W, y: Y(v) }));
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
     for (let i = 0; i < pts.length - 1; i++) {
       const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-      d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`;
+      d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)} ${(p1.y + (p2.y - p0.y) / 6).toFixed(1)}, ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)} ${(p2.y - (p3.y - p1.y) / 6).toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
     }
     return { d, last: pts[pts.length - 1] };
   };
-  const A = mk(series(a, 0)), B = mk(series(b, 2.3));
+  const A = mk(va), B = mk(vb);
   const gid = `ds-${id.replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden>
       <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={BLUE} stopOpacity={0.14} /><stop offset="100%" stopColor={BLUE} stopOpacity={0.01} />
+        <linearGradient id={`${gid}a`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={BLUE} stopOpacity={0.18} /><stop offset="100%" stopColor={BLUE} stopOpacity={0} />
+        </linearGradient>
+        <linearGradient id={`${gid}b`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8250DF" stopOpacity={0.13} /><stop offset="100%" stopColor="#8250DF" stopOpacity={0} />
         </linearGradient>
       </defs>
-      <path d={`${A.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid})`} />
-      <path d={B.d} fill="none" stroke="#8250DF" strokeWidth={1.8} strokeOpacity={0.75} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <path d={A.d} fill="none" stroke={BLUE} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={A.last.x} cy={A.last.y} r={1.8} fill={BLUE} vectorEffect="non-scaling-stroke" />
-      <circle cx={B.last.x} cy={B.last.y} r={1.8} fill="#8250DF" vectorEffect="non-scaling-stroke" />
+      <line x1="0" x2={W} y1={h - 0.5} y2={h - 0.5} stroke={UI.line2} />
+      <path d={`${B.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid}b)`} />
+      <path d={`${A.d} L ${W} ${h} L 0 ${h} Z`} fill={`url(#${gid}a)`} />
+      <path d={B.d} fill="none" stroke="#8250DF" strokeWidth={1.6} strokeOpacity={0.8} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <path d={A.d} fill="none" stroke={BLUE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={B.last.x} cy={B.last.y} r={2.4} fill="#8250DF" stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+      <circle cx={A.last.x} cy={A.last.y} r={2.6} fill={BLUE} stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
