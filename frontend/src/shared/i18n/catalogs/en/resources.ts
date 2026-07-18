@@ -287,6 +287,8 @@ export const resourcesEn = {
   "resources.detail.metricsContainersPartial": "Partial",
   "resources.detail.metricsContainersUnavailable": "Container measurements are unavailable.",
   "resources.detail.metricsContainerValue": "{cpu} · {memory}",
+  "resources.detail.metricsRequest": "Request {value}",
+  "resources.detail.metricsLimit": "Limit {value}",
   "resources.detail.metricsPeak": "Peak",
   "resources.detail.metricsPartial": "Showing measurements for part of this range",
   "resources.detail.metricsRetryExhausted": "The metric source is still unavailable. Normal refresh cadence has resumed.",

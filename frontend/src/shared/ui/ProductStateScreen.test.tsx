@@ -46,9 +46,13 @@ describe("ProductStateScreen", () => {
   it("keeps the zero-approval release gate calm and non-interactive", () => {
     const { container } = render(<ProductStateScreen kind="release" />);
     const main = screen.getByRole("main");
+    const state = container.querySelector('[data-slot="empty"]');
 
     expect(main.getAttribute("aria-busy")).toBeNull();
     expect(main.getAttribute("data-product-state")).toBe("release");
+    expect(state?.className).toContain("border-0");
+    expect(state?.className).toContain("bg-transparent");
+    expect(state?.className).not.toContain("shadow");
     expect(container.querySelector("[aria-live]")).toBeNull();
     expect(container.querySelector('[data-slot="badge"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "서비스 연결을 확인하고 있습니다" })).toBeTruthy();

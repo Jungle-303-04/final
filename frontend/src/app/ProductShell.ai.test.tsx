@@ -114,6 +114,25 @@ describe("ProductShell AI panel", () => {
     expect(screen.queryByText("그 답을 뒷받침할 근거 데이터가 없습니다.")).toBeNull();
   });
 
+  it("renders request lifecycle as one flat turn without inventing token streaming", async () => {
+    const user = userEvent.setup();
+    const ask = vi.fn().mockRejectedValue(new Error("transport failed"));
+    const { container } = renderShell({ aiAssistantPort: assistantPort({ ask }) });
+    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
+
+    await user.type(input, "아주 긴 리소스 이름의 실패 원인을 분석해줘");
+    await user.click(screen.getByRole("button", { name: "질문" }));
+
+    const failure = await screen.findByText("이 요청에는 AI를 사용할 수 없습니다.");
+    const turn = failure.closest('[data-slot="ai-turn"]');
+    expect(turn?.getAttribute("data-delivery")).toBe("complete-response");
+    expect(turn?.getAttribute("data-state")).toBe("failed");
+    expect(turn?.className).not.toMatch(/rounded|shadow|bg-card/u);
+    expect(turn?.textContent).toContain("아주 긴 리소스 이름의 실패 원인을 분석해줘");
+    expect(container.querySelector('[data-response-transport="complete-response"]')).toBeTruthy();
+  });
+
   it("updates AI conversation and pending-action labels immediately with locale", async () => {
     const user = userEvent.setup();
     renderShell({

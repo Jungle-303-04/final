@@ -146,7 +146,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
   const action = "action" in props ? props.action : undefined;
   const issueKind = isIssueStateKind(kind) ? kind : null;
   const content = (
-    <Empty className="w-full max-w-lg items-start rounded-xl border border-solid bg-card p-8 text-left text-card-foreground shadow-sm">
+    <Empty className="w-full max-w-lg items-start rounded-none border-0 bg-transparent p-0 text-left text-foreground">
       <EmptyMedia variant="icon">
         <StateIcon kind={kind} />
       </EmptyMedia>

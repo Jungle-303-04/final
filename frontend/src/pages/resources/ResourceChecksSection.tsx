@@ -64,7 +64,7 @@ function ExactResourceChecks({
   return (
     <section
       aria-labelledby="resource-checks-title"
-      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 shadow-xs"
+      className="grid min-w-0 gap-3 border-t pt-4"
       data-slot="resource-checks"
     >
       <header className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -76,9 +76,9 @@ function ExactResourceChecks({
           <Badge variant="warning">{t("resources.detail.checks.partial")}</Badge>
         ) : null}
       </header>
-      <div className="grid gap-2">
+      <div className="divide-y border-y">
         {findings.map((finding) => (
-          <details className="group min-w-0 overflow-hidden rounded-lg border" key={finding.findingId}>
+          <details className="group min-w-0 overflow-hidden" key={finding.findingId}>
             <summary className="flex min-w-0 cursor-pointer list-none items-start gap-3 p-3 marker:content-none">
               <TriangleAlert
                 aria-hidden="true"
@@ -115,7 +115,7 @@ function ExactResourceChecks({
 function ChecksStatus({ text }: { text: string }) {
   const { t } = useI18n();
   return (
-    <section className="rounded-xl border border-status-warning/30 bg-status-warning/5 p-4" role="status">
+    <section className="border-l-2 border-status-warning py-1 pl-4" role="status">
       <h3 className="font-medium">{t("resources.detail.checks.title")}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{text}</p>
     </section>

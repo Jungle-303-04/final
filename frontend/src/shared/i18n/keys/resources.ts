@@ -285,6 +285,8 @@ export type ResourcesMessageKey =
   | "resources.detail.metricsContainersPartial"
   | "resources.detail.metricsContainersUnavailable"
   | "resources.detail.metricsContainerValue"
+  | "resources.detail.metricsRequest"
+  | "resources.detail.metricsLimit"
   | "resources.detail.metricsPeak"
   | "resources.detail.metricsPartial"
   | "resources.detail.metricsRetryExhausted"
