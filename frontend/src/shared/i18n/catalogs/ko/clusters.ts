@@ -91,6 +91,7 @@ export const clustersKo = {
   "clusters.connect.action.copied": "복사됨",
   "clusters.connect.command.title": "클러스터에서 이 명령을 실행하세요",
   "clusters.connect.command.description": "명령에는 일회용 자격증명이 들어 있습니다. 로그나 채팅에 붙여넣지 마세요.",
+  "clusters.connect.command.agentLabel": "{provider} · opsia-agent",
   "clusters.connect.waiting": "에이전트 연결을 기다리는 중",
   "clusters.connect.progress.aria": "클러스터 연결 진행 상태",
   "clusters.connect.progress.command": "명령 준비",

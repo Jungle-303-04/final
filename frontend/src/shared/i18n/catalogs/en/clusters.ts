@@ -91,6 +91,7 @@ export const clustersEn = {
   "clusters.connect.action.copied": "Copied",
   "clusters.connect.command.title": "Run this command in the cluster",
   "clusters.connect.command.description": "The command contains a one-time credential. Do not paste it into logs or chat.",
+  "clusters.connect.command.agentLabel": "{provider} · opsia-agent",
   "clusters.connect.waiting": "Waiting for the agent to connect",
   "clusters.connect.progress.aria": "Cluster connection progress",
   "clusters.connect.progress.command": "Command ready",

@@ -89,6 +89,7 @@ export type ClustersMessageKey =
   | "clusters.connect.action.copied"
   | "clusters.connect.command.title"
   | "clusters.connect.command.description"
+  | "clusters.connect.command.agentLabel"
   | "clusters.connect.waiting"
   | "clusters.connect.progress.aria"
   | "clusters.connect.progress.command"
