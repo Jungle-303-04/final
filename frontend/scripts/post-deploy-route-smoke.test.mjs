@@ -57,7 +57,7 @@ function createNetworkHarness(startedAt = 1_000) {
 }
 
 describe("post-deploy route smoke helpers", () => {
-  it("verifies the workspace in the product header and rejects a sidebar duplicate", async () => {
+  it("verifies the stable workspace id in the product header and rejects a sidebar duplicate", async () => {
     const calls = [];
     const page = {
       locator(selector) {
