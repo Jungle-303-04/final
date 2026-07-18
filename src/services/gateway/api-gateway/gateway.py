@@ -434,6 +434,9 @@ class ApiGateway:
         app.state.context_mcp_engine_factory = request_context_mcp_engine
         self._register_frontend_proxy(app)
         self._register_health_routes(app)
+        # Starlette는 라우트를 등록 순서대로 매칭한다. 운영 스크레이프가 수천 개의
+        # 제품 라우트를 동기 순회한 뒤 DB 스냅샷 스레드로 넘어가지 않게 앞에 둔다.
+        self._register_metrics_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         app.include_router(parity_router)  # 생성형 원본 기능 mapping catalog(세션 범위)
         app.include_router(alert_router)  # 알림 채널 라우팅 룰(admin)
@@ -500,7 +503,6 @@ class ApiGateway:
         app.include_router(release_flow_router)  # release plan/flow run 관리
         self._register_live_proxy_routes(app)
         self._register_dead_letter_routes(app)
-        self._register_metrics_routes(app)
         self._register_error_handler(app)
 
     def _register_frontend_proxy(self, app: FastAPI) -> None:
