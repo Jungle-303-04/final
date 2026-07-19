@@ -91,6 +91,7 @@ describe("ResourcesPage keyboard navigation", () => {
   it("cycles the server resource catalog with [ and ]", async () => {
     renderResources(resourcesPort(), "/resources?clusters=cluster-1&resources.types=pod");
     await screen.findByRole("table", { name: "리소스 목록" }, { timeout: 5_000 });
+    await screen.findByRole("list", { name: "리소스 유형 목록" }, { timeout: 5_000 });
 
     fireEvent.keyDown(document, { key: "]" });
     await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
