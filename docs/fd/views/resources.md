@@ -33,7 +33,7 @@ manifest      CodeBlock(yaml)  ← install command 가 있으면 수동 적용 �
 
 1. **카탈로그 설치**(runner 연결 후 활성화): /catalog 에서 항목 선택 → `GET /catalog/items/{item_id}` → 파라미터 Form → `POST /catalog/items/{item_id}/installs`
 2. **직접 연결**: /repos [+ 레포 연결] → Stepper 3단계
-   - 1. 레포: repo_ref(`owner/name`, HTTPS URL, SSH URL)를 `POST /repositories/discovery/probe` 로 정규화/접근 확인 → `GET /repositories/discovery/branches` 로 branch select → `GET /repositories/discovery/manifests` 로 manifest 후보 select → `POST /repositories/discovery/validate` 로 render/validation 결과 표시. manifest 후보 선택값은 `source_type:path` 이므로 같은 path 의 raw/kustomize/helm 후보를 섞지 않는다.
+   - 1. 레포: repo_ref(`owner/name`, HTTPS URL, SSH URL)를 `POST /repositories/discovery/probe` 로 정규화/접근 확인 → `GET /repositories/discovery/branches` 로 branch select → `POST /repositories/discovery/manifests` 로 manifest 후보 select → `POST /repositories/discovery/validate` 로 render/validation 결과 표시. manifest 후보 선택값은 `source_type:path` 이므로 같은 path 의 raw/kustomize/helm 후보를 섞지 않는다.
    - 2. 배포 대상: cluster Select(`GET /clusters`). cluster 가 없으면 admin 은 /clusters 등록 링크, non-admin 은 권한 요청 안내.
    - 3. 확인: KeyValue 요약 → `POST /applications` 후 `POST /applications/{application_id}/deployments` → 성공 시 /repos/:applicationId
 

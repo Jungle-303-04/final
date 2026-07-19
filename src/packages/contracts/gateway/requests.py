@@ -684,6 +684,11 @@ class RepositoryProbeRequest(StrictModel):
     )
 
 
+class RepositoryManifestDiscoveryRequest(StrictModel):
+    repo_ref: str = Field(min_length=1, max_length=240)
+    branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
+
+
 class RepositoryManifestValidationRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)

@@ -82,7 +82,7 @@ status: synced
 |---|---|---|---|---|
 | `POST /repositories/discovery/probe` (`REPOSITORY_DISCOVERY_PROBE_PATH`) | `probe_repository` | `RepositoryProbeRequest` | `RepositoryProbeResponse` | `require_session` |
 | `GET /repositories/discovery/branches` (`REPOSITORY_DISCOVERY_BRANCHES_PATH`) | `list_repository_branches` | query `repo_ref` | `RepositoryBranchListResponse` | `require_session` |
-| `GET /repositories/discovery/manifests` (`REPOSITORY_DISCOVERY_MANIFESTS_PATH`) | `list_repository_manifest_candidates` | query `repo_ref`, `branch` | `RepositoryManifestCandidateListResponse` | `require_session` |
+| `POST /repositories/discovery/manifests` (`REPOSITORY_DISCOVERY_MANIFESTS_PATH`) | `list_repository_manifest_candidates` | `RepositoryManifestDiscoveryRequest` | `RepositoryManifestCandidateListResponse` | `require_session` |
 | `POST /repositories/discovery/validate` (`REPOSITORY_DISCOVERY_VALIDATE_PATH`) | `validate_repository_manifest` | `RepositoryManifestValidationRequest` | `RepositoryManifestValidationResponse` | `require_session` |
 | `POST /repos/validate` (`REPOS_VALIDATE_PATH`) | `validate_repo_for_wizard` | `RepoValidateRequest` | `RepoValidateResponse` | `require_admin_session` |
 | `GET /repos/branches` (`REPOS_BRANCHES_PATH`) | `list_repo_branches_for_wizard` | query `repo` | `RepositoryBranchListResponse` | `require_admin_session` |

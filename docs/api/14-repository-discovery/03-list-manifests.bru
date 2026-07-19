@@ -5,8 +5,20 @@ meta {
   tags: [repository-discovery, read]
 }
 
-get {
-  url: {{base_url}}repositories/discovery/manifests?repo_ref={{repo_ref}}&branch={{default_branch}}
+post {
+  url: {{base_url}}repositories/discovery/manifests
+  body: json
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "repo_ref": "{{repo_ref}}",
+    "branch": "{{default_branch}}"
+  }
 }
 
 script:post-response {

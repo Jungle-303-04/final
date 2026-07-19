@@ -27,10 +27,14 @@ from domains.gitops.repository_discovery_router import discovery_service, probe_
 from domains.identity.dependencies import require_session
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
+    RepositoryManifestDiscoveryRequest,
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
 )
-from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
+from packages.contracts.gateway.responses import (
+    RepositoryManifestCandidateListResponse,
+    RepositoryManifestValidationResponse,
+)
 from packages.runtime.dependencies import get_db
 
 
@@ -90,6 +94,39 @@ class StubGitHubClient:
         return "a" * 40
 
 
+class StubManifestDiscoveryService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def list_manifest_candidates(
+        self, repo_ref: str, branch: str
+    ) -> RepositoryManifestCandidateListResponse:
+        self.calls.append((repo_ref, branch))
+        return RepositoryManifestCandidateListResponse(
+            repo_ref=repo_ref,
+            branch=branch,
+            candidates=[],
+            warnings=[],
+        )
+
+
+def manifest_discovery_app(service: StubManifestDiscoveryService) -> FastAPI:
+    class AllowedDb:
+        def accessible_resource_ids(self, *_args):
+            return {"cluster-a"}
+
+    app = FastAPI()
+    app.include_router(repository_discovery_router.router)
+    app.dependency_overrides[require_session] = lambda: type(
+        "Session",
+        (),
+        {"user_id": "user-1", "workspace_id": "workspace-1", "roles": ()},
+    )()
+    app.dependency_overrides[get_db] = AllowedDb
+    app.dependency_overrides[discovery_service] = lambda: service
+    return app
+
+
 def test_manifest_candidate_route_uses_post_contract() -> None:
     matching_routes = [
         route
@@ -99,6 +136,61 @@ def test_manifest_candidate_route_uses_post_contract() -> None:
 
     assert len(matching_routes) == 1
     assert matching_routes[0].methods == {"POST"}
+
+
+def test_manifest_candidate_post_body_drives_service_contract() -> None:
+    service = StubManifestDiscoveryService()
+    app = manifest_discovery_app(service)
+
+    with TestClient(app) as client:
+        response = client.post(
+            gateway_routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH,
+            json={"repo_ref": "owner/service", "branch": "trunk"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "repo_ref": "owner/service",
+        "branch": "trunk",
+        "candidates": [],
+        "warnings": [],
+    }
+    assert service.calls == [("owner/service", "trunk")]
+
+
+def test_manifest_candidate_route_rejects_legacy_query_and_extra_body() -> None:
+    service = StubManifestDiscoveryService()
+    app = manifest_discovery_app(service)
+
+    with TestClient(app) as client:
+        query_response = client.post(
+            gateway_routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH,
+            params={"repo_ref": "owner/service", "branch": "trunk"},
+        )
+        extra_response = client.post(
+            gateway_routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH,
+            json={"repo_ref": "owner/service", "branch": "trunk", "token": "secret"},
+        )
+        get_response = client.get(
+            gateway_routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH,
+            params={"repo_ref": "owner/service", "branch": "trunk"},
+        )
+
+    assert query_response.status_code == 422
+    assert extra_response.status_code == 422
+    assert get_response.status_code == 405
+    assert service.calls == []
+
+
+def test_manifest_discovery_request_defaults_branch_and_is_strict() -> None:
+    request = RepositoryManifestDiscoveryRequest(repo_ref="owner/service")
+
+    assert request.branch == "main"
+
+    with pytest.raises(ValueError):
+        RepositoryManifestDiscoveryRequest.model_validate(
+            {"repo_ref": "owner/service", "branch": "trunk", "token": "secret"}
+        )
 
 
 def test_manifest_candidates_filter_to_attachable_paths() -> None:
@@ -432,9 +524,9 @@ def test_all_repository_discovery_endpoints_fail_closed_without_deploy_permissio
             "/repositories/discovery/branches",
             params={"repo_ref": "owner/service"},
         ),
-        client.get(
+        client.post(
             "/repositories/discovery/manifests",
-            params={"repo_ref": "owner/service", "branch": "trunk"},
+            json={"repo_ref": "owner/service", "branch": "trunk"},
         ),
         client.post(
             "/repositories/discovery/validate",

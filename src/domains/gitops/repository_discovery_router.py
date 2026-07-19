@@ -16,6 +16,7 @@ from domains.gitops.repository_discovery import (
 from domains.identity.dependencies import require_session, resolve_allowed_cluster_ids
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
+    RepositoryManifestDiscoveryRequest,
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
 )
@@ -203,13 +204,12 @@ async def list_repository_branches(
         raise discovery_http_error(exc) from exc
 
 
-@router.get(
+@router.post(
     gateway_routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH,
     response_model=RepositoryManifestCandidateListResponse,
 )
 async def list_repository_manifest_candidates(
-    repo_ref: str = Query(min_length=1, max_length=240),
-    branch: str = Query(default="main", min_length=1, max_length=200),
+    payload: RepositoryManifestDiscoveryRequest,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     service: RepositoryDiscoveryService = Depends(discovery_service),
@@ -219,10 +219,10 @@ async def list_repository_manifest_candidates(
         scoped_service = wizard_discovery_service(
             db,
             current,
-            repo_ref,
+            payload.repo_ref,
             service,
         )
-        return await scoped_service.list_manifest_candidates(repo_ref, branch)
+        return await scoped_service.list_manifest_candidates(payload.repo_ref, payload.branch)
     except (RepositoryDiscoveryError, ValueError) as exc:
         raise discovery_http_error(exc) from exc
 

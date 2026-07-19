@@ -176,7 +176,7 @@ status: synced
 | POST | `/ai/conversations/{conversation_id}/messages` | 세션 | — |
 | POST | `/repositories/discovery/probe` | 세션 | — |
 | GET | `/repositories/discovery/branches` | 세션 | — |
-| GET | `/repositories/discovery/manifests` | 세션 | — |
+| POST | `/repositories/discovery/manifests` | 세션 | — |
 | POST | `/repositories/discovery/validate` | 세션 | — |
 | GET/POST | `/applications` | 세션 | GET은 application read + inventory read scope, POST는 기존 mutation 계약 |
 | POST | `/applications/connect` | 세션 | cluster `deploy.run` |

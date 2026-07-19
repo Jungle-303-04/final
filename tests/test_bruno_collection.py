@@ -140,7 +140,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         "/applications/{{application_id}}/runs",
         routes.REPOSITORY_DISCOVERY_PROBE_PATH,
         f"{routes.REPOSITORY_DISCOVERY_BRANCHES_PATH}?repo_ref=",
-        f"{routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH}?repo_ref=",
+        routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH,
         routes.REPOSITORY_DISCOVERY_VALIDATE_PATH,
         routes.AGENT_COMMAND_POLL_PATH,
         "/agent/commands/{{command_id}}/start",
