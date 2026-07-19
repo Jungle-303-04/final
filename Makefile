@@ -186,9 +186,9 @@ gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트
 		(cd frontend && npm run typecheck); \
 		(cd frontend && npm run lint); \
 		if grep -Eq '^frontend/(package.json|package-lock.json|vitest.config.[^/]+|vite.config.[^/]+|tsconfig[^/]*)$$' <<<"$$changed_files"; then \
-			(cd frontend && npm test); \
+			(cd frontend && npm test -- --maxWorkers=2); \
 		else \
-			(cd frontend && npm test -- --changed "$$base"); \
+			(cd frontend && npm test -- --maxWorkers=2 --changed "$$base"); \
 		fi; \
 	else \
 		echo "[gate-fast] frontend 변경 없음 — 프론트 검사 생략"; \
