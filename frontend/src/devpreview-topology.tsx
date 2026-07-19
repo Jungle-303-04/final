@@ -2,7 +2,7 @@
 // 분업: 맵 = 물리 · 토폴로지 = 호출 · 렌즈 = 의존 · 상세 = 전체 스펙. 설정 의존성은 통합 맵 렌즈가 주인.
 // 드래그 재배치 + 방향 화살표 + 선 호버 = 수치 + 선·노드 클릭 = 리소스 상세 고정.
 import ReactDOM from "react-dom/client";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { DoorOpen, Network, Globe, Braces, ShoppingCart, Search, KeyRound, CreditCard, Send } from "lucide-react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
@@ -102,11 +102,20 @@ const edgeMetrics = (e: TEdge) => {
   return { err, p99, st };
 };
 
-export function TopologyView({ embedded = false, onOpenService, focusId }: { embedded?: boolean; onOpenService?: (id: string) => void; focusId?: string | null } = {}) {
+export function TopologyView({ embedded = false, onOpenService, focusId, onFocusService }: {
+  embedded?: boolean;
+  onOpenService?: (id: string) => void;
+  focusId?: string | null;
+  onFocusService?: (id: string | null) => void;
+} = {}) {
   const [pos, setPos] = useState(INIT);
-  const [sel, setSel] = useState<string | null>(() => readDevpreviewTopologyFocus(SERVICES.map((s) => s.id)));
+  const [localSel, setLocalSel] = useState<string | null>(() => readDevpreviewTopologyFocus(SERVICES.map((s) => s.id)));
+  const sel = focusId !== undefined ? focusId : localSel;
   // 보조 패널(트래픽 뷰)에서 내려주는 외부 포커스 — 그래프 선택과 단일 상태로 동기화
-  useEffect(() => { if (focusId !== undefined && focusId !== null) setSel(focusId); if (focusId === null) setSel(null); }, [focusId]);
+  const setGraphSel = (id: string | null) => {
+    if (focusId !== undefined) onFocusService?.(id);
+    else setLocalSel(id);
+  };
   const [etip, setEtip] = useState<{ x: number; y: number; e: TEdge } | null>(null);
   const [pinEdge, setPinEdge] = useState<TEdge | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -203,7 +212,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId }: { emb
           })()}
 
           <svg ref={svgRef} viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display: "block", touchAction: "none" }}
-            onPointerMove={onMove} onPointerUp={endDrag} onPointerLeave={() => { if (!dragRef.current) { setSel(null); setEtip(null); } }}>
+            onPointerMove={onMove} onPointerUp={endDrag} onPointerLeave={() => { if (!dragRef.current) { setGraphSel(null); setEtip(null); } }}>
             <defs>
               {SERVICES.map((s) => {
                 const p = P(s.id);
@@ -232,7 +241,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId }: { emb
                   <path d={d} fill="none" stroke={col} strokeWidth={3} strokeLinecap="round" strokeDasharray="3 11" className="flow" style={{ animationDuration: `${dur}s` }} />
                   <path d={d} fill="none" stroke="transparent" strokeWidth={16} strokeLinecap="round" style={{ cursor: "pointer" }}
                     onClick={() => { if (onOpenService) { onOpenService(e.to); setEtip(null); } else { setPinEdge(pinned ? null : e); setEtip(null); } }}
-                    onMouseEnter={(ev) => { if (dragRef.current) return; const s = embedded ? PRESENT_SCALE : 1; setEtip({ x: ev.clientX / s, y: ev.clientY / s, e }); setSel(null); }}
+                    onMouseEnter={(ev) => { if (dragRef.current) return; const s = embedded ? PRESENT_SCALE : 1; setEtip({ x: ev.clientX / s, y: ev.clientY / s, e }); setGraphSel(null); }}
                     onMouseMove={(ev) => { if (dragRef.current) return; const s = embedded ? PRESENT_SCALE : 1; setEtip({ x: ev.clientX / s, y: ev.clientY / s, e }); }}
                     onMouseLeave={() => setEtip(null)} />
                 </g>
@@ -244,7 +253,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId }: { emb
               const p = P(s.id); const lit = svcLit(s.id); const on = ctx?.center === s.id;
               const rps = EDGES.filter((e) => e.from === s.id).reduce((t, e) => t + e.rps, 0);
               return (
-                <g key={s.id} onMouseEnter={() => { if (!dragRef.current) setSel(s.id); }} onPointerDown={startDrag(s.id)}
+                <g key={s.id} onMouseEnter={() => { if (!dragRef.current) setGraphSel(s.id); }} onPointerDown={startDrag(s.id)}
                   onClick={() => { if (movedRef.current) { movedRef.current = false; return; } if (!dragRef.current && onOpenService) onOpenService(s.id); }}
                   onDoubleClick={() => { if (!onOpenService) window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
                   style={{ cursor: dragId === s.id ? "grabbing" : "grab", opacity: lit ? 1 : 0.22, transition: "opacity .18s" }}>

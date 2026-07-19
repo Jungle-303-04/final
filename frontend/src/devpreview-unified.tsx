@@ -1856,7 +1856,7 @@ function App() {
             /* 트래픽 — 호출 그래프 + 보조 패널(서비스 상태·포커스, 세 관점 동일 문법). 서비스 클릭 = 상세 시트 */
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <TopologyView embedded focusId={trafficFocus} onOpenService={(id) => openRef("Service", id)} />
+                <TopologyView embedded focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={(id) => openRef("Service", id)} />
               </div>
               <TrafficPanel focus={trafficFocus} onFocus={setTrafficFocus} onOpen={(id) => openRef("Service", id)} stickyTop={topH + 12} />
             </div>
