@@ -7,3 +7,4 @@
 2026-07-19 · G4/G7 · final a4eb1d638 gate 2265 pass/15 fail + 2 worker timeout · 결정적 Alert/apiComposition/Filesystem 반송 · 상태 미해소
 2026-07-19 · G1/G7 · 870474c44 Dev Gate 29678856691은 main 계보 병합으로 push 범위에 유입된 기존 비준수 커밋을 commit-msg gate가 검사해 실패, Dev Deploy 29678871947은 skipped · 원격 dev 기준점 갱신 후 컨벤션 준수 체크포인트로 동일 검증 tree 재실행 · 해소 진행
 2026-07-19 · G4/G7 · 512f967d1 Dev Gate 29679510750은 Frontend 성공·Backend 3,774 pass/1 fail로 종료, 테스트 support 파일이 runtime source로 오인된 경계 1건; Dev Deploy 29679703660은 skipped · support를 명시적 tests 경계로 이동한 165f7f5c3으로 재검증 · 해소 진행
+2026-07-19 · STATUS §7 · 사람·오케스트레이터만 해결할 절대 블로커 0건; reference destination 17건·배포·화면 증거는 현재 권한으로 자체 해소 가능, 외부 CPU 포화는 직렬화·worker 2로 우선 회피 · 이관할 사람 필요 항목 없음
