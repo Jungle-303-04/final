@@ -25,11 +25,11 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `domains.command.models :: AgentCommand`, `domains.command.events :: CommandRequestedBody` | [command](./command.md) | 대기 중 명령 payload에서 워크플로 identity 복원, 승인 시 apply 명령 요청 body 구성 |
-| import | `domains.identity.dependencies :: require_admin_session, require_cluster_access, require_session` | [identity](./identity.md) | 승인 엔드포인트의 세션·클러스터 권한 검사, repository wizard API admin 보호 |
+| import | `domains.identity.dependencies :: require_cluster_access, require_session` | [identity](./identity.md) | 승인 엔드포인트의 세션·클러스터 권한 검사, repository discovery의 세션 보호 |
 | import | `packages.config` (`constants`, `logs`, `settings`) | [config](../packages/config.md) | `RiskLevel`/`Target`/`Command`/`Sandbox` 상수, 로거, `env()` |
 | import | `packages.contracts` (`event_bus`, `gitops`, `identity`, `gateway`, `auth`) | [contracts](../packages/contracts.md) | 이벤트 subject/registry/body 기반 클래스, gitops enum·기본값, 요청/응답 모델, `Actor` |
 | import | `packages.runtime.dependencies :: get_db, get_events` | [runtime](../packages/runtime.md) | FastAPI 의존성 주입(DB·이벤트 버스) |
-| import | `packages.security.credentials` | [security](../packages/security.md) | `/repos/validate`가 받은 GitHub token을 `credential_ref("github", "github")`로 참조 가능한 암호문으로 저장 |
+| import | `packages.security.credentials` | [security](../packages/security.md) | `/repositories/discovery/probe`의 선택적 write-only GitHub token을 workspace와 파생 repository ID로 한정된 credential scope에 암호화 저장하고 이후 discovery/connect에서 복호화 |
 | import | `packages.storage` (`base`, `engine`) | [storage](../packages/storage.md) | `Base`, 컬럼 헬퍼, `DatabaseConnection`, `unit_of_work_or_null`, `iso_or_none`, `row_dict` |
 | 소비자 | `src/services/gitops/*` (git-pull-worker, manifest-render-worker, diff-worker, diff-analyze-worker, workflow-controller), `src/services/gateway/api-gateway`, `src/services/target/drift-worker` | (services 스펙) | 이 도메인의 이벤트 body·repository·diffing 헬퍼를 사용 |
 
@@ -80,16 +80,15 @@ status: synced
 
 | 메서드+경로 | 핸들러 | 요청 모델 | 응답 모델 | 권한/의존성 |
 |---|---|---|---|---|
-| `POST /repositories/discovery/probe` (`REPOSITORY_DISCOVERY_PROBE_PATH`) | `probe_repository` | `RepositoryProbeRequest` | `RepositoryProbeResponse` | `require_session` |
-| `GET /repositories/discovery/branches` (`REPOSITORY_DISCOVERY_BRANCHES_PATH`) | `list_repository_branches` | query `repo_ref` | `RepositoryBranchListResponse` | `require_session` |
-| `POST /repositories/discovery/manifests` (`REPOSITORY_DISCOVERY_MANIFESTS_PATH`) | `list_repository_manifest_candidates` | `RepositoryManifestDiscoveryRequest` | `RepositoryManifestCandidateListResponse` | `require_session` |
-| `POST /repositories/discovery/validate` (`REPOSITORY_DISCOVERY_VALIDATE_PATH`) | `validate_repository_manifest` | `RepositoryManifestValidationRequest` | `RepositoryManifestValidationResponse` | `require_session` |
-| `POST /repos/validate` (`REPOS_VALIDATE_PATH`) | `validate_repo_for_wizard` | `RepoValidateRequest` | `RepoValidateResponse` | `require_admin_session` |
-| `GET /repos/branches` (`REPOS_BRANCHES_PATH`) | `list_repo_branches_for_wizard` | query `repo` | `RepositoryBranchListResponse` | `require_admin_session` |
-| `GET /repos/manifests` (`REPOS_MANIFESTS_PATH`) | `list_repo_manifests_for_wizard` | query `repo`, `branch` | `RepoManifestFileListResponse` | `require_admin_session` |
+| `POST /repositories/discovery/probe` (`REPOSITORY_DISCOVERY_PROBE_PATH`) | `probe_repository` | `RepositoryProbeRequest` | `RepositoryProbeResponse` | `require_session` + `require_repository_discovery_access`(하나 이상의 concrete target `DEPLOY_RUN`) |
+| `GET /repositories/discovery/branches` (`REPOSITORY_DISCOVERY_BRANCHES_PATH`) | `list_repository_branches` | query `repo_ref` | `RepositoryBranchListResponse` | `require_session` + `require_repository_discovery_access`(하나 이상의 concrete target `DEPLOY_RUN`) |
+| `POST /repositories/discovery/manifests` (`REPOSITORY_DISCOVERY_MANIFESTS_PATH`) | `list_repository_manifest_candidates` | `RepositoryManifestDiscoveryRequest` | `RepositoryManifestCandidateListResponse` | `require_session` + `require_repository_discovery_access`(하나 이상의 concrete target `DEPLOY_RUN`) |
+| `POST /repositories/discovery/validate` (`REPOSITORY_DISCOVERY_VALIDATE_PATH`) | `validate_repository_manifest` | `RepositoryManifestValidationRequest` | `RepositoryManifestValidationResponse` | `require_session` + `require_repository_discovery_access`(하나 이상의 concrete target `DEPLOY_RUN`) |
+| `POST /applications/connect` (`APPLICATION_CONNECT_PATH`) | `connect_application` | `ApplicationConnectRequest` | `ApplicationResponse` | `require_session` + target cluster `DEPLOY_RUN`; 등록된 repository는 `APPLICATION_MANAGE` |
+| `GET /repositories/connection-status` (`REPOSITORY_CONNECTION_STATUS_PATH`) | `get_repository_connection_status` | query `repo_ref` | `RepositoryConnectionStatusResponse` | `require_session`; 등록된 repository는 service admin 또는 연결 application 전체의 `APPLICATION_MANAGE` |
 
 `discovery_http_error`는 `RepositoryDiscoveryError`를 원래 status/detail로, `ValueError`를 422로, 그 외 예외를 502 `"repository discovery failed"`로 변환한다.
-위저드용 `/repos/*` 경로는 GitHub URL을 `owner/repo`로 정규화하고, `.yaml/.yml` 중 Kubernetes `kind`가 파싱되는 파일만 프론트 listbox 후보로 반환한다. token이 제공되면 workspace credential로 암호화 저장하고 원문은 응답하지 않는다.
+중복 관리자 전용 `/repos/validate|branches|manifests` 경로는 등록하지 않는다. repository discovery는 GitHub URL을 `owner/repo`로 정규화하며, probe의 선택적 token은 repository-scoped credential로 암호화하고 원문이나 암호문을 응답하지 않는다.
 후보 파일 본문 조회는 `GITHUB_MANIFEST_SCAN_CONCURRENCY`(기본 8, 최대 32)로 제한된 병렬 처리이며, `GITHUB_MANIFEST_SCAN_TIMEOUT_SECONDS`(기본 20초, 최대 60초)를 넘으면 완료된 실제 결과만 반환하고 warning에 부분 스캔임을 표시한다. 합성 후보를 만들거나 파일 내용을 추정하지 않는다.
 
 ### 인가 가드 — `src/domains/gitops/dependencies.py`

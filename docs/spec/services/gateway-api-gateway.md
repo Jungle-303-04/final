@@ -167,19 +167,17 @@ status: synced
 | POST | `/providers/validate` | admin | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
 | POST | `/catalog/items/{item_id}/installs` (202) | 세션 | `DEPLOY_RUN`; 필수 idempotency key, online target Agent, management readonly |
-| POST | `/repos/validate` | 세션 | admin |
-| GET | `/repos/branches` | 세션 | admin |
-| GET | `/repos/manifests` | 세션 | admin |
 | POST/GET | `/ai/conversations` | 세션 | — |
 | GET | `/ai/conversations/{conversation_id}` | 세션 | — |
 | DELETE | `/ai/conversations/{conversation_id}` (204) | 세션 | — |
 | POST | `/ai/conversations/{conversation_id}/messages` | 세션 | — |
-| POST | `/repositories/discovery/probe` | 세션 | — |
-| GET | `/repositories/discovery/branches` | 세션 | — |
-| POST | `/repositories/discovery/manifests` | 세션 | — |
-| POST | `/repositories/discovery/validate` | 세션 | — |
+| POST | `/repositories/discovery/probe` | 세션 | `require_repository_discovery_access`; 하나 이상의 concrete target `DEPLOY_RUN` |
+| GET | `/repositories/discovery/branches` | 세션 | `require_repository_discovery_access`; 하나 이상의 concrete target `DEPLOY_RUN` |
+| POST | `/repositories/discovery/manifests` | 세션 | `require_repository_discovery_access`; 하나 이상의 concrete target `DEPLOY_RUN` |
+| POST | `/repositories/discovery/validate` | 세션 | `require_repository_discovery_access`; 하나 이상의 concrete target `DEPLOY_RUN` |
 | GET/POST | `/applications` | 세션 | GET은 application read + inventory read scope, POST는 기존 mutation 계약 |
 | POST | `/applications/connect` | 세션 | cluster `deploy.run` |
+| GET | `/repositories/connection-status` | 세션 | 등록된 repository는 service admin 또는 연결 application 전체의 `APPLICATION_MANAGE` |
 | GET | `/applications/{application_id}` | 세션 | application read; cluster evidence는 inventory read scope |
 | GET/POST | `/applications/{application_id}/deployments` | 세션 | GET은 deployment read 배포 이력, POST는 application manage + cluster deploy binding |
 | GET | `/applications/{application_id}/drift` | 세션 | application read; visible cluster의 저장 diff evidence |

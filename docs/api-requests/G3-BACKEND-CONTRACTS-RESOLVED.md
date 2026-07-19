@@ -113,7 +113,9 @@ SSE가 없는 현재 계약에서는 **서버가 주는 상태와 polling interv
 
 모든 `/repositories/discovery/*` 호출은 세션 외에도 하나 이상의 concrete target에
 대한 `DEPLOY_RUN` 권한을 요구한다. private repository token은 첫 probe body의
-write-only `token`으로만 받고 Pydantic 표현·JSON에서 redacted된다. probe 성공 뒤
+선택적 write-only `token`으로만 받고 Pydantic 표현·JSON에서 redacted된다. 상위 D7
+Surface form(URL+branch+tool)은 브라우저 token 입력을 노출하지 않으며, 공개 repository
+또는 사전에 저장된 repository-scoped credential 경로를 사용한다. probe 성공 뒤
 workspace와 파생 repository ID에 한정된 credential scope로 즉시 암호화하며, 이후
 branches/manifests/validate/connect는 그 암호문을 복호화해 재사용한다. token 원문과
 credential 암호문은 어떤 응답에도 포함하지 않는다. 중복 관리자 전용
