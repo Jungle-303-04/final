@@ -1,6 +1,6 @@
 # 데모 대조 제품 결함 원장
 
-기준 화면은 읽기 전용 `demo/motion-animations`의 `demo-freeze-v2`이며, 제품 코드를 복사하지 않고 `OPSIA-SURFACE-SPEC.md`의 요소 계약과 제품 토큰·i18n·가드로 재구현한다. 항목은 동일 후보 SHA의 자동 테스트, 라이브 화면, 숫자 교차 대조, 클릭 경로가 모두 일치할 때만 제거한다.
+기준 화면은 읽기 전용 `demo/motion-animations`의 `demo-freeze-v3`이며, 제품 코드를 복사하지 않고 `OPSIA-SURFACE-SPEC.md`의 요소 계약과 제품 토큰·i18n·가드로 재구현한다. 항목은 동일 후보 SHA의 자동 테스트, 라이브 화면, 숫자 교차 대조, 클릭 경로가 모두 일치할 때만 제거한다.
 
 ## 미해소
 
