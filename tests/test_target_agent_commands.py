@@ -2754,10 +2754,16 @@ class PartialDrainKubernetesClient(ResourceMaintenanceKubernetesClient):
 
 
 class TimeoutDrainKubernetesClient(PartialDrainKubernetesClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.first_eviction_completed = asyncio.Event()
+
     async def create_namespaced_subresource(self, **kwargs: object) -> dict[str, object]:
         self.evictions.append(kwargs)
         if kwargs["name"] == "checkout-2":
             await asyncio.sleep(60)
+        else:
+            self.first_eviction_completed.set()
         return {"accepted": True}
 
 
@@ -2902,13 +2908,18 @@ def test_node_drain_timeout_preserves_completed_evictions_and_marks_only_pending
 ) -> None:
     module = load_agent_module()
     real_wait_for = asyncio.wait_for
-
-    async def expire_quickly(awaitable: object, timeout: float) -> object:
-        assert timeout == 10
-        return await real_wait_for(awaitable, timeout=0.01)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(module.asyncio, "wait_for", expire_quickly)
     client = TimeoutDrainKubernetesClient()
+
+    async def expire_after_completed_eviction(awaitable: object, timeout: float) -> object:
+        assert timeout == 10
+        task = asyncio.create_task(awaitable)  # type: ignore[arg-type]
+        await real_wait_for(client.first_eviction_completed.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        raise TimeoutError
+
+    monkeypatch.setattr(module.asyncio, "wait_for", expire_after_completed_eviction)
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
