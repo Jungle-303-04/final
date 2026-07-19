@@ -182,7 +182,6 @@ function ProductLegacyRedirect({
       }
     : {
         ...createEmptyProductDetailQuery(),
-        resourceSurfaceView: filter.detail.resourceSurfaceView,
         surfaceTab: routeDefinition.redirectSection ?? undefined,
       };
   return (

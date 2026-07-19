@@ -8,9 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  createEmptyProductDetailQuery,
-  type
+import type {
   DetailMutationIntent,
   FilterMutationIntent,
   ProductDetailQuery,
@@ -63,17 +61,9 @@ export function UnifiedFilterProvider({ children }: { children: ReactNode }) {
   const navigationHref = useCallback((
     path: `/${string}`,
     detail?: ProductDetailQuery,
-  ) => {
-    const navigationDetail = detail ?? (
-      latest.current.detail.resourceSurfaceView
-        ? {
-            ...createEmptyProductDetailQuery(),
-            resourceSurfaceView: latest.current.detail.resourceSurfaceView,
-          }
-        : undefined
-    );
-    return `${path}${serializeProductFilterUrl(latest.current.state, navigationDetail)}`;
-  }, []);
+  ) => (
+    `${path}${serializeProductFilterUrl(latest.current.state, detail)}`
+  ), []);
 
   const updateFilters = useCallback((
     update: UnifiedFilterUpdater,
