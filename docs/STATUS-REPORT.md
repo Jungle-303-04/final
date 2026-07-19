@@ -36,9 +36,9 @@
 
 `8866399f5` gate-fast의 2,204 pass/60 fail+3 unhandled는 host load 180~215에서 발생했다. 그중 반복 재현된 Helm 1건과 operation handoff 3건 외 다수는 worker 시작·테스트 timeout이었다. 당시 여러 서브에이전트가 각자 Vitest를 돌려 머신을 포화시켰고, 오케스트레이션이 게이트를 스스로 불안정하게 만든 책임이 있다.
 
-17:35 KST 관측 기준 에이전트는 3개가 실행 중이었다: root, 상태 보고, D 정리. E는 중단 상태였다. 로컬 `make gate`/Vitest/pytest/npm build 프로세스는 0개였다. 다만 저장소 밖 MuMu 약 74% CPU, mediaanalysisd 약 70%, Spotlight 약 62%가 실행 중이었다.
+17:35 KST 관측 기준 에이전트는 3개가 실행 중이었다: root, 상태 보고, D 정리. E는 중단 상태였다. 로컬 `make gate`/Vitest/pytest/npm build 프로세스는 0개였다. 저장소 밖 MuMu·mediaanalysisd·Spotlight는 상존 환경이며 지연 사유가 아니다. 과거 load 180~215의 원인은 병렬 Vitest 포화로 재확인됐다.
 
-신설 직렬화 규칙은 즉시 발효했다. `make gate-fast`, Vitest 또는 Dev Gate 중에는 다른 트랙의 build/test를 금지하고 게이트 1개만 실행한다. 로컬 Vitest worker도 `d45b1af76`에서 최대 2개로 제한했다. Dev Gate `29679811849` 실행 중 다른 에이전트는 읽기 전용 조사·문서화만 수행했다.
+신설 직렬화 규칙은 즉시 발효했다. `make gate-fast`, Vitest 또는 Dev Gate 중에는 다른 트랙의 build/test를 금지하고 게이트 1개만 실행한다. 로컬 Vitest worker도 `d45b1af76`에서 최대 2개로 제한했다. Dev Gate `29679811849` 실행 중 다른 에이전트는 읽기 전용 조사·문서화만 수행했다. `gate-fast`·`release-governance-web-patch`·배포 검증 시작 전 `uptime`의 1분 load average를 확인하며, 10코어 기준 30 초과일 때만 대기하고 30 이하면 즉시 실행한다.
 
 ## 3. 테스트 인플레이션
 
@@ -111,7 +111,7 @@ G6도 완전 미착수는 아니다. `b0bfa726c` 디자인 가드, `ec2e963e0` �
 | reference UI delta unknown destination 17건 | 저장소의 ledger/port 카탈로그 정합성 결함이다. 분류 수정과 release governance 재검증이 필요하다. | 불필요 |
 | GitHub Actions/AWS 배포 | Actions 권한과 배포 자격은 G0 성공으로 확인됐다. 이번 Deploy는 AWS 호출 전에 차단됐다. | 불필요 |
 | demo 5174와 live 인증 브라우저 | 로컬 demo 및 이전 live smoke 이력이 있다. 캡처·수치 대조를 아직 하지 못했을 뿐 접근 불가 근거는 없다. | 불필요 |
-| 머신 자원 | MuMu, mediaanalysisd, Spotlight가 합계 200% 이상 CPU를 썼다. 저장소 밖 프로세스를 임의 종료하지 않고 게이트 직렬화·worker 2로 회피한다. | 필수 아님. 계속 포화되면 사용자에게 해당 앱 종료를 요청할 수 있음 |
+| 머신 자원 | MuMu·mediaanalysisd·Spotlight는 상존 환경이다. 외부 프로세스를 부하 사유로 작업 지연하지 않고, 1분 load가 10코어×3인 30을 초과할 때만 대기한다. | 불필요 |
 | 원격 main/dev 정리 | force push 없이 검증 SHA fast-forward와 보존 태그로 처리할 계획이다. | 불필요 |
 
 보고 이후 우선순위는 (1) destination 17건 해소, (2) 배포 전용 governance의 저부하 단일 재검증, (3) Gate→Deploy 한 배치 완주, (4) live 발표 smoke와 demo 나란히 캡처·숫자 대조, (5) G4/G5 로그 갱신, (6) G6 판매 품질 스윕이다. 사람 필요 항목이 새로 확인되면 `docs/BLOCKERS.md`에 즉시 옮긴다. 다음 상태 보고는 배포 1회 완주 직후 또는 3시간 후 중 빠른 시점에 작성한다.
