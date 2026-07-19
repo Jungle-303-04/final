@@ -253,8 +253,8 @@ describe("HomePage three-layer board", () => {
     );
     const issues = await screen.findByRole("region", { name: "이슈" });
     const activity = await screen.findByRole("region", { name: "활동" });
-    expect(within(issues).getByRole("alert")).toBeTruthy();
-    expect(within(activity).getByRole("alert")).toBeTruthy();
+    expect(await within(issues).findByRole("alert")).toBeTruthy();
+    expect(await within(activity).findByRole("alert")).toBeTruthy();
     expect(unsupported.issues.listIssues).not.toHaveBeenCalled();
     expect(unsupported.activity.loadOverview).not.toHaveBeenCalled();
   });
