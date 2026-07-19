@@ -57,6 +57,7 @@ import {
 export function HomeWidgetBoard({
   clusters,
   editing,
+  onCriticalResourceCountChange,
   onOutOfSyncChange,
   period,
   ports,
@@ -64,6 +65,7 @@ export function HomeWidgetBoard({
 }: {
   clusters: readonly HomeClusterChoice[];
   editing: boolean;
+  onCriticalResourceCountChange: (count: number | null) => void;
   onOutOfSyncChange: (count: number | null) => void;
   period: HomeBoardPeriod;
   ports: HomeBoardPorts;
@@ -115,7 +117,6 @@ export function HomeWidgetBoard({
     refreshKey,
     scope,
     wantsCost: visibleIds.includes("W7"),
-    wantsCriticalResources: visibleIds.includes("W6"),
     wantsNamespaces: visibleIds.includes("W5"),
     wantsTimeline: visibleIds.includes("W8"),
   });
@@ -127,6 +128,14 @@ export function HomeWidgetBoard({
   useEffect(() => {
     onOutOfSyncChange(data.sync.phase === "ready" ? data.sync.data.outOfSync : null);
   }, [data.sync, onOutOfSyncChange]);
+
+  useEffect(() => {
+    const count = data.criticalResources.phase === "ready"
+      && data.criticalResources.data.filteredCountCompleteness === "exact"
+      ? data.criticalResources.data.filteredCount
+      : null;
+    onCriticalResourceCountChange(count);
+  }, [data.criticalResources, onCriticalResourceCountChange]);
 
   const toggleVisible = (id: HomeWidgetId) => {
     const visible = activePreferences.visible.includes(id)

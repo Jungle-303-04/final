@@ -44,7 +44,11 @@ export function HomePage({
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnectPhase, setDisconnectPhase] = useState<DisconnectPhase>("confirm");
   const [editingBoard, setEditingBoard] = useState(false);
+  const [criticalResourceCount, setCriticalResourceCount] = useState<number | null>(null);
   const [outOfSync, setOutOfSync] = useState<number | null>(null);
+  const updateCriticalResourceCount = useCallback((count: number | null) => {
+    setCriticalResourceCount((current) => current === count ? current : count);
+  }, []);
   const updateOutOfSync = useCallback((count: number | null) => {
     setOutOfSync((current) => current === count ? current : count);
   }, []);
@@ -74,7 +78,8 @@ export function HomePage({
   return (
     <ProductPageFrame>
       <HomeFleetHeader
-        clusters={state.choices.data.clusters}
+        clusters={boardClusters}
+        criticalCount={boardClusters.length === 0 ? null : criticalResourceCount}
         criticalHref={homeCriticalResourcesHref(filter)}
         editing={editingBoard}
         freshness={state.refreshIntervalSeconds === null ? null : (
@@ -125,6 +130,7 @@ export function HomePage({
             <HomeWidgetBoard
               clusters={boardClusters}
               editing={editingBoard}
+              onCriticalResourceCountChange={updateCriticalResourceCount}
               onOutOfSyncChange={updateOutOfSync}
               period={boardPeriod}
               ports={boardPorts}

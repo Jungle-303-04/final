@@ -18,6 +18,7 @@ import {
 
 export function HomeFleetHeader({
   clusters,
+  criticalCount,
   criticalHref,
   editing,
   freshness,
@@ -28,6 +29,7 @@ export function HomeFleetHeader({
   period,
 }: {
   clusters: readonly HomeClusterChoice[];
+  criticalCount?: number | null;
   criticalHref?: string;
   editing?: boolean;
   freshness?: ReactNode;
@@ -40,20 +42,17 @@ export function HomeFleetHeader({
   const { formatNumber, locale, t } = useI18n();
   const nodes = exactSum(clusters.map((cluster) => cluster.nodeCount));
   const pods = exactSum(clusters.map((cluster) => cluster.podCount));
-  const critical = exactSum(
-    clusters.map((cluster) => cluster.openIncidentCount ?? cluster.incidentCount),
-  );
   const criticalChip = (
     <TintChip
       label={(
         <>
           <span>{t("status.tone.critical")}</span>
           <span className="font-mono tabular-nums">
-            {critical === null ? "—" : formatNumber(critical)}
+            {criticalCount == null ? "—" : formatNumber(criticalCount)}
           </span>
         </>
       )}
-      tone={critical === null ? "neutral" : critical > 0 ? "critical" : "healthy"}
+      tone={criticalCount == null ? "neutral" : criticalCount > 0 ? "critical" : "healthy"}
     />
   );
 
@@ -122,7 +121,7 @@ export function HomeFleetHeader({
         {criticalHref ? (
           <Link
             aria-label={`${t("status.tone.critical")} ${
-              critical === null ? "—" : formatNumber(critical)
+              criticalCount == null ? "—" : formatNumber(criticalCount)
             }`}
             className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             to={criticalHref}

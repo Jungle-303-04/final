@@ -93,6 +93,7 @@ export function homeBoardPorts(
       listSyncTargets: vi.fn().mockResolvedValue([{
         id: "checkout/cluster-1",
         applicationId: "checkout",
+        applicationIds: [],
         applicationName: "checkout",
         clusterId: "cluster-1",
         namespace: "shop",

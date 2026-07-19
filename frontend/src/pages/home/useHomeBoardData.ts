@@ -22,6 +22,7 @@ import type {
   ResourcesEndpointInventorySummary,
 } from "../../features/resources/resourcesEndpointContract";
 import type {
+  ResourcesFilterCompleteness,
   ResourcesFilterPort,
   ResourcesFilterResourceItem,
 } from "../../features/resources/resourcesFilterContract";
@@ -83,6 +84,12 @@ export interface HomeCostProjection {
   values: readonly number[];
 }
 
+export interface HomeCriticalResourcesProjection {
+  filteredCount: number | null;
+  filteredCountCompleteness: ResourcesFilterCompleteness;
+  items: readonly ResourcesFilterResourceItem[];
+}
+
 export interface HomeBoardScope {
   applications: readonly string[];
   allAccessible: boolean;
@@ -94,7 +101,7 @@ export interface HomeBoardData {
   incidents: HomeBoardResource<IssueList>;
   namespaces: HomeBoardResource<HomeNamespacePodProjection>;
   cost: HomeBoardResource<HomeCostProjection | null>;
-  criticalResources: HomeBoardResource<readonly ResourcesFilterResourceItem[]>;
+  criticalResources: HomeBoardResource<HomeCriticalResourcesProjection>;
   sync: HomeBoardResource<HomeSyncSummary>;
   timeline: HomeBoardResource<TimelineSnapshot | null>;
 }
@@ -106,7 +113,6 @@ export function useHomeBoardData({
   refreshKey,
   scope,
   wantsCost,
-  wantsCriticalResources,
   wantsNamespaces,
   wantsTimeline,
 }: {
@@ -116,7 +122,6 @@ export function useHomeBoardData({
   refreshKey: number;
   scope: HomeBoardScope;
   wantsCost: boolean;
-  wantsCriticalResources: boolean;
   wantsNamespaces: boolean;
   wantsTimeline: boolean;
 }): HomeBoardData {
@@ -188,7 +193,11 @@ export function useHomeBoardData({
       const categories = targets.map((target) => gitOpsSyncCategory(target.syncStatus));
       const synced = categories.filter((category) => category === "synced").length;
       const outOfSync = categories.filter((category) => category === "out-of-sync").length;
-      const scopedApplicationIds = new Set(targets.map((target) => target.applicationId));
+      const scopedApplicationIds = new Set(targets.flatMap((target) =>
+        target.applicationIds && target.applicationIds.length > 0
+          ? target.applicationIds
+          : [target.applicationId]
+      ));
       return {
         known: synced + outOfSync,
         lastObservedAt: latestObservedAt(targets),
@@ -251,16 +260,19 @@ export function useHomeBoardData({
   );
   const criticalResources = useAsyncResource(
     async (signal) => {
-      if (!wantsCriticalResources) return [];
       requireClusterScope(clusterIds);
       const response = await ports.resources.listResourcePage(
         criticalResourceFilterState(filterState, clusterIds),
         { limit: 5 },
         signal,
       );
-      return response.items.slice(0, 5);
+      return {
+        filteredCount: response.counts.filteredCount,
+        filteredCountCompleteness: response.counts.filteredCountCompleteness,
+        items: response.items.slice(0, 5),
+      };
     },
-    [clusterIds, filterState, ports.resources, refreshKey, wantsCriticalResources],
+    [clusterIds, filterState, ports.resources, refreshKey],
   );
   const cost = useAsyncResource(
     async (signal) => {

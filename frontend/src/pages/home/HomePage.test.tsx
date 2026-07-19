@@ -5,6 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HomePortFailure } from "../../features/home/homeContract";
+import type {
+  ResourcesFilterCompleteness,
+  ResourcesFilterResourcePage,
+} from "../../features/resources/resourcesFilterContract";
 import {
   CLUSTERS,
   homeBoardPorts,
@@ -27,6 +31,11 @@ describe("HomePage three-layer board", () => {
 
     expect(await screen.findByRole("heading", { name: "조회 가능한 클러스터" }))
       .toBeTruthy();
+    expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
+      clusters: "1",
+      nodes: "2",
+      pods: "18",
+    });
     expect(screen.getByRole("heading", { name: "클러스터별 리소스 탐색" }))
       .toBeTruthy();
     expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
@@ -57,6 +66,11 @@ describe("HomePage three-layer board", () => {
     expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "동기화 상태" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "활동" })).toBeTruthy();
+    expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
+      clusters: "2",
+      nodes: "3",
+      pods: "22",
+    });
     await waitFor(() => {
       expect(ports.issues.listIssues).toHaveBeenCalledWith(
         null,
@@ -89,16 +103,108 @@ describe("HomePage three-layer board", () => {
     );
   });
 
-  it("links the fixed critical summary to the critical resource list", async () => {
-    renderHome(homePort());
+  it("uses the scoped resource total for the fixed critical summary even when W6 is hidden", async () => {
+    const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "exact", 5));
+    renderHome(
+      homePort(),
+      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop&applications=checkout"],
+      vi.fn(),
+      "ko",
+      homeBoardPorts({ resources: { listResourcePage } }),
+    );
 
     const summary = await screen.findByRole("group", {
       name: "클러스터 리소스 탐색",
     });
-    const critical = within(summary).getByRole("link");
+    const critical = await within(summary).findByRole("link", { name: "임계 17" });
     const href = new URL(critical.getAttribute("href")!, "https://product.test");
     expect(href.pathname).toBe("/resources");
     expect(href.searchParams.get("resources.health")).toBe("critical");
+    expect(href.searchParams.get("clusters")).toBe("cluster-1");
+    expect(href.searchParams.get("namespaces")).toBe("cluster-1/shop");
+    expect(href.searchParams.get("applications")).toBe("checkout");
+    expect(screen.queryByRole("heading", { name: "임계 · 리소스 종류" })).toBeNull();
+    expect(listResourcePage).toHaveBeenCalledTimes(1);
+    expect(listResourcePage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        common: expect.objectContaining({
+          applications: ["checkout"],
+          clusters: ["cluster-1"],
+          namespaces: [{ clusterId: "cluster-1", namespace: "shop" }],
+        }),
+        resources: expect.objectContaining({ health: ["critical"], includeDeleted: false }),
+      }),
+      { limit: 5 },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("does not present a partial resource total as an exact critical count", async () => {
+    const user = userEvent.setup();
+    const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "partial", 5));
+    renderHome(
+      homePort(),
+      ["/?clusters=cluster-1"],
+      vi.fn(),
+      "ko",
+      homeBoardPorts({ resources: { listResourcePage } }),
+    );
+
+    const summary = await screen.findByRole("group", {
+      name: "클러스터 리소스 탐색",
+    });
+    await waitFor(() => expect(listResourcePage).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "수정" }));
+    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
+    await user.click(within(catalog).getByRole("button", { name: "임계 · 리소스 종류" }));
+    const widgetHeading = await screen.findByRole("heading", { name: "임계 · 리소스 종류" });
+    const widget = widgetHeading.closest<HTMLElement>("[data-slot='widget-frame']")!;
+    expect(await within(widget).findByText("일부 데이터")).toBeTruthy();
+    expect(within(summary).getByRole("link", { name: "임계 —" })).toBeTruthy();
+    expect(listResourcePage).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts repositories through every application bound to one sync target", async () => {
+    const ports = homeBoardPorts({
+      gitops: {
+        listApplications: vi.fn().mockResolvedValue([
+          {
+            id: "checkout",
+            name: "checkout",
+            repository: "team/checkout",
+            branch: "main",
+            clusterId: "cluster-1",
+            manifestPath: "deploy",
+          },
+          {
+            id: "inventory",
+            name: "inventory",
+            repository: "team/inventory",
+            branch: "main",
+            clusterId: "cluster-1",
+            manifestPath: "deploy",
+          },
+        ]),
+        listSyncTargets: vi.fn().mockResolvedValue([{
+          id: "shared-target",
+          applicationId: "checkout",
+          applicationIds: ["checkout", "inventory", "checkout"],
+          applicationName: "shared-target",
+          clusterId: "cluster-1",
+          namespace: "shop",
+          environment: "production",
+          syncStatus: "OutOfSync",
+          revision: "abc123",
+          observedAt: "2026-07-19T01:00:00Z",
+        }]),
+      },
+    });
+    renderHome(homePort(), ["/?clusters=cluster-1"], vi.fn(), "ko", ports);
+
+    const sync = await screen.findByRole("region", { name: "동기화 상태" });
+    await waitFor(() => {
+      expect(within(sync).getByText("저장소·동기화").nextElementSibling?.textContent).toBe("2");
+    });
   });
 
   it("scopes W2-W4 to supported URL dimensions and refuses unsupported application aggregates", async () => {
@@ -290,3 +396,67 @@ describe("HomePage three-layer board", () => {
     expect(screen.queryByRole("heading", { name: "활동" })).toBeNull();
   });
 });
+
+function expectFleetMetrics(
+  summary: HTMLElement,
+  expected: { clusters: string; nodes: string; pods: string },
+): void {
+  expect(within(summary).getByText("클러스터").nextElementSibling?.textContent)
+    .toBe(expected.clusters);
+  expect(within(summary).getByText("Node").nextElementSibling?.textContent)
+    .toBe(expected.nodes);
+  expect(within(summary).getByText("Pod").nextElementSibling?.textContent)
+    .toBe(expected.pods);
+}
+
+function criticalResourcePage(
+  filteredCount: number | null,
+  filteredCountCompleteness: ResourcesFilterCompleteness,
+  returned: number,
+): ResourcesFilterResourcePage {
+  return {
+    items: Array.from({ length: returned }, (_, index) => ({
+      resource: {
+        id: `resource-${index}`,
+        identityStability: "uid",
+        inventoryKey: `inventory-${index}`,
+        uid: `uid-${index}`,
+        clusterId: "cluster-1",
+        resourceType: "pod",
+        apiVersion: "v1",
+        kind: "Pod",
+        namespace: "shop",
+        name: `checkout-api-${index}`,
+        status: "CrashLoopBackOff",
+        health: "critical",
+        healthStatus: "CrashLoopBackOff",
+        facts: { type: "generic" },
+        observedAt: "2026-07-19T01:00:00Z",
+        firstSeenAt: null,
+        lastSeenAt: "2026-07-19T01:00:00Z",
+        deletedAt: null,
+      },
+      cluster: { clusterId: "cluster-1", name: "prod", provider: "eks" },
+      applicationIds: [],
+      applicationBindingCompleteness: "exact",
+    })),
+    nextCursor: returned < (filteredCount ?? returned) ? "next" : null,
+    hasMore: returned < (filteredCount ?? returned),
+    counts: {
+      filteredCount,
+      unfilteredCount: 50,
+      filteredCountCompleteness,
+      unfilteredCountCompleteness: "exact",
+    },
+    snapshot: {
+      snapshotRevision: 1,
+      authorizationRevision: "auth-1",
+      filterFingerprint: "critical-1",
+      observedAt: "2026-07-19T01:00:00Z",
+      stale: false,
+      partialReasonCodes: filteredCountCompleteness === "partial" ? ["scope_partial"] : [],
+    },
+    excludedCount: 0,
+    dataQualityWarnings: [],
+  };
+}

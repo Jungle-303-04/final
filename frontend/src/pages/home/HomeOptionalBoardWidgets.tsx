@@ -10,6 +10,7 @@ import type { ResourcesFilterResourceItem } from "../../features/resources/resou
 import type { TimelineSnapshot } from "../../features/timeline/timelineContract";
 import type {
   HomeBoardResource,
+  HomeCriticalResourcesProjection,
   HomeCostProjection,
   HomeNamespacePodProjection,
 } from "./useHomeBoardData";
@@ -85,32 +86,46 @@ export function CriticalResourcesWidget({
   resource,
 }: {
   hrefForItem: (item: ResourcesFilterResourceItem) => string;
-  resource: HomeBoardResource<readonly ResourcesFilterResourceItem[]>;
+  resource: HomeBoardResource<HomeCriticalResourcesProjection>;
 }) {
   const { t } = useI18n();
   return (
     <WidgetResource resource={resource}>
-      {(items) => {
-        if (items.length === 0) return <WidgetEmpty />;
+      {(data) => {
+        const countStatus = data.filteredCountCompleteness === "partial"
+          ? t("common.state.partial")
+          : data.filteredCountCompleteness === "unavailable" || data.filteredCount === null
+          ? t("resources.list.unknownTotal")
+          : null;
+        if (data.items.length === 0 && countStatus === null) return <WidgetEmpty />;
         return (
-          <RankList
-            ariaLabel={`${t("status.tone.critical")} · ${t("resources.catalog.aria")}`}
-            items={items.slice(0, 5).map((item) => ({
-              ariaLabel: `${item.resource.kind} ${item.resource.name}`,
-              description: [
-                item.resource.namespace,
-                item.resource.healthStatus || item.resource.status,
-              ].filter(Boolean).join(" · "),
-              displayValue: item.resource.status,
-              href: hrefForItem(item),
-              id: item.resource.inventoryKey,
-              indicator: "dot",
-              label: item.resource.name,
-              max: 1,
-              tone: "critical",
-              value: null,
-            }))}
-          />
+          <div className="grid gap-2">
+            {countStatus ? (
+              <p className="text-caption text-muted-foreground" role="status">
+                {countStatus}
+              </p>
+            ) : null}
+            {data.items.length > 0 ? (
+              <RankList
+                ariaLabel={`${t("status.tone.critical")} · ${t("resources.catalog.aria")}`}
+                items={data.items.map((item) => ({
+                  ariaLabel: `${item.resource.kind} ${item.resource.name}`,
+                  description: [
+                    item.resource.namespace,
+                    item.resource.healthStatus || item.resource.status,
+                  ].filter(Boolean).join(" · "),
+                  displayValue: item.resource.status,
+                  href: hrefForItem(item),
+                  id: item.resource.inventoryKey,
+                  indicator: "dot",
+                  label: item.resource.name,
+                  max: 1,
+                  tone: "critical",
+                  value: null,
+                }))}
+              />
+            ) : <WidgetEmpty />}
+          </div>
         );
       }}
     </WidgetResource>
