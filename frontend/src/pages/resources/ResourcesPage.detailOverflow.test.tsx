@@ -25,10 +25,8 @@ describe("ResourcesPage detail overflow", () => {
   });
 
   it("keeps long related identities single-line and hover-recoverable", async () => {
-    const user = userEvent.setup();
     renderLongDetail();
     const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
-    await user.click(await within(dialog).findByRole("tab", { name: "관계 1" }));
     const related = await within(dialog).findByLabelText(
       `Service · ${LONG_NAMESPACE}/${LONG_RELATED_NAME}`,
     );

@@ -89,7 +89,12 @@ export function ResourceFilesystemBrowser({
         limit: 100,
         artifactId: nextMode === "image" ? artifactId : null,
       });
-      if (!("entries" in result) || result.operation !== `${nextMode}.list`) {
+      if (
+        typeof result !== "object" ||
+        result === null ||
+        !("entries" in result) ||
+        result.operation !== `${nextMode}.list`
+      ) {
         throw new Error("incompatible filesystem result");
       }
       setDirectory(result);
@@ -117,7 +122,13 @@ export function ResourceFilesystemBrowser({
     setLoading(true);
     try {
       const result = await port.run({ ...base, operation: "image.metadata" });
-      if (result.operation !== "image.metadata") throw new Error("incompatible image metadata result");
+      if (
+        typeof result !== "object" ||
+        result === null ||
+        result.operation !== "image.metadata"
+      ) {
+        throw new Error("incompatible image metadata result");
+      }
       setMetadata(result);
       if (result.cached && result.artifactId) await loadDirectory("image", "/", result.artifactId);
     } catch (cause) {

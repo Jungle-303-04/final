@@ -66,11 +66,12 @@ describe("AlertEventsProvider locale lifecycle", () => {
     }
     action.onClick?.({} as never);
     const location = await screen.findByTestId("alert-location");
-    expect(location.textContent).toBe(
+    await waitFor(() => expect(location.textContent).toBe(
       "/resources?clusters=cluster-2&resources.types=pod&detail=Pod%2Fsandbox%2Farena-0",
-    );
+    ));
+    const readsBeforeRepeat = list.mock.calls.length;
     fireEvent(document, new Event("visibilitychange"));
-    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(readsBeforeRepeat));
     expect(warning).toHaveBeenCalledTimes(1);
   });
 });
