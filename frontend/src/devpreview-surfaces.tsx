@@ -127,7 +127,7 @@ export function timelineItems(): TlItem[] {
   ];
 }
 
-// ── 배포 /deploy — 탭: 애플리케이션 | 저장소·동기화 | Helm 릴리스 (ArgoCD 패턴, 5.7) ──
+// ── 배포 /deploy — 탭: 애플리케이션 | GitOps | Helm 릴리스 (ArgoCD 패턴, 5.7) ──
 export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
   pendingRepos?: string[]; onOpenRef: (kind: string, name: string) => void; onAddRepo: () => void;
 }) {
@@ -148,8 +148,8 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
   const repoCols: [string, string][] = [["저장소", "minmax(180px,1.6fr)"], ["도구", "minmax(80px,0.7fr)"], ["리비전", "minmax(90px,0.8fr)"], ["동기화", "minmax(110px,1fr)"], ["앱", "48px"]];
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["앱 버전", "minmax(70px,0.7fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["상태", "minmax(90px,0.8fr)"]];
   return (
-    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "저장소·동기화", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab}
-      action={tab === "저장소·동기화"
+    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab}
+      action={tab === "GitOps"
         ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button>
         : null}>
       <ChipRow chips={[
@@ -173,7 +173,7 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
           ))}
         </Card>
       )}
-      {tab === "저장소·동기화" && (
+      {tab === "GitOps" && (
         <Card pad={0}>
           <THead cols={repoCols} />
           {repos.map((r, i) => (

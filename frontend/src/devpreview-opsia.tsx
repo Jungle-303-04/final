@@ -623,11 +623,7 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }:
           <PendingClusterCard name={n} delay={(CLUSTERS.length + i) * 0.05} />
         </div>
       ))}
-      {onAddCluster && (
-        <div style={{ gridColumn: "span 2", minWidth: 0 }}>
-          <AddClusterCard compact onClick={onAddCluster} delay={(CLUSTERS.length + pending.length) * 0.05} />
-        </div>
-      )}
+      {/* 홈에는 연결 카드 없음 — 고정 헤더의 "+ 클러스터 연결" 버튼이 유일한 진입(중복 금지). 카드는 지도 클러스터 뷰 전용 */}
     </div>
   );
 }
