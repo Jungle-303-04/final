@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { DoorOpen, Network, Globe, Braces, ShoppingCart, Search, KeyRound, CreditCard, Send } from "lucide-react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
-import { UI, BLUE, ST, TINT, MONO, TYPE, PRESENT_SCALE, DUR, inkA, blueA, INK4, BRAND as BRAND_MARK, cardA } from "./devpreview/theme";
+import { UI, BLUE, ST, TINT, MONO, TYPE, PRESENT_SCALE, DUR, inkA, blueA, INK4, cardA } from "./devpreview/theme";
 import { podInventory } from "./devpreview-opsia";
 import { BRAND, BRAND_COLOR } from "./devpreview/brandIcons";
 import "./styles/tokens.css";

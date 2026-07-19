@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Info, ChevronRight, ChevronDown } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, EASE_DRAW, DUR, inkA, blueA, critA, okA, warnA, IDENT } from "./theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, inkA, blueA, critA, okA, warnA, IDENT } from "./theme";
 
 // ── WidgetFrame — 유일한 위젯 껍데기: 제목 + ⓘ 툴팁 + `>` 딥링크(실 목적지만) + 접기 ──
 export function WidgetFrame({ title, info, onDeepLink, deepLabel, collapsed, onToggle, editing, onRemove, onMove, children }: {
