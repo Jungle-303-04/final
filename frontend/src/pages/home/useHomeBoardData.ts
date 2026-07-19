@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { InventorySummary } from "../../api";
 import type { CostPort } from "../../features/cost/costContract";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import type {
@@ -12,6 +11,9 @@ import { activityWindowForPeriod } from "../../features/home-activity/homeActivi
 import { gitOpsSyncCategory } from "../../features/gitops/gitOpsPresentation";
 import type { GitOpsPort, GitOpsSyncTarget } from "../../features/gitops/gitOpsContract";
 import type { IssueList, IssuesPort } from "../../features/issues/issuesContract";
+import type {
+  ResourcesEndpointInventorySummary,
+} from "../../features/resources/resourcesEndpointContract";
 import type {
   ResourcesFilterPort,
   ResourcesFilterResourceItem,
@@ -36,7 +38,7 @@ export interface HomeBoardPorts {
     clusterId: string,
     namespaces?: readonly string[],
     signal?: AbortSignal,
-  ) => Promise<InventorySummary>;
+  ) => Promise<ResourcesEndpointInventorySummary>;
   issues: Pick<IssuesPort, "listIssues">;
   resources: Pick<ResourcesFilterPort, "listResourcePage">;
   timeline: Pick<TimelinePort, "capabilities" | "readCapabilities" | "readTimeline">;

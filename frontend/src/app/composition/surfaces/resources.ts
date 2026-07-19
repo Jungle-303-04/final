@@ -10,7 +10,6 @@ import {
   getChangeTimeline,
   getKubernetesApiResources,
   getInventoryResourceDetail,
-  getInventorySummary,
   getResourceCapabilities,
   getResourceDeletionPreview,
   getWorkloadRollbackPreview,
@@ -31,6 +30,7 @@ import { createResourceCapabilitiesAdapter } from "../../../features/resources/c
 import { createResourceManifestAdapter } from "../../../features/resources/createResourceManifestAdapter";
 import { createResourceMetricsHistoryAdapter } from "../../../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourcesAdapter } from "../../../features/resources/createResourcesAdapter";
+import type { ResourcesEndpointDependencies } from "../../../features/resources/resourcesEndpointContract";
 import type { ResourcesFilterPort } from "../../../features/resources/resourcesFilterContract";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
 import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
@@ -54,6 +54,7 @@ export function loadResourcesSurface(
   resourceFilesPort: ResourceFilesPort,
   resourceIssuesPort: ResourceIssuesPort,
   resourcesFilterPort: ResourcesFilterPort,
+  getInventorySummary: ResourcesEndpointDependencies["getInventorySummary"],
 ): ComponentType {
   const topologyPorts = createTopologyPorts();
   return createResourcesSurface(

@@ -3,14 +3,15 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
-import { BottomDock } from "../../app/BottomDock";
+import { ProductNotificationCenter } from "../../app/ProductNotificationCenter";
 import { ProductSessionProvider } from "../../features/auth/ProductSessionContext";
 import { DiagnoseSessionProvider } from "../../features/diagnose/DiagnoseSessionContext";
-import type {
-  DiagnoseCapabilities,
-  DiagnosePort,
-} from "../../features/diagnose/diagnoseContract";
+import type { DiagnoseCapabilities, DiagnosePort } from "../../features/diagnose/diagnoseContract";
+import { AlertEventsProvider } from "../../features/alerts/AlertEventsProvider";
+import { EMPTY_ALERT_EVENTS_PORT } from "../../features/alerts/alertEventsContract";
+import { ProductNotificationsProvider } from "../../features/notifications/ProductNotificationsProvider";
 import { createOperationStatusStore, OperationStatusStoreProvider } from "../../features/operations/OperationStatusStore";
 import type { OperationEventsPort } from "../../features/operations/operationEventsContract";
 import type { ResourceActionCapability, ResourceActionsPort } from "../../features/resources/resourceCapabilitiesContract";
@@ -22,7 +23,7 @@ import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFra
 afterEach(cleanup);
 
 describe("ResourceDetailActions operation handoff", () => {
-  it("keeps receipts A and B exactly once in the root dock after the detail consumer closes", async () => {
+  it("keeps receipts A and B exactly once in the notification center after the detail consumer closes", async () => {
     const user = userEvent.setup();
     const actionsPort: ResourceActionsPort = {
       execute: vi.fn()
@@ -37,6 +38,7 @@ describe("ResourceDetailActions operation handoff", () => {
     await submitRestart(user);
     await submitRestart(user);
     await waitFor(() => expect(store.getSnapshot("command-b").status).toBe("completed"));
+    await user.click(screen.getByRole("button", { name: /Notifications/u }));
 
     expect(screen.getAllByText("command-a")).toHaveLength(1);
     expect(screen.getAllByText("command-b")).toHaveLength(1);
@@ -579,18 +581,16 @@ function renderSurfaceTree(
   detailsOpen: boolean,
 ) {
   return (
-    <I18nProvider navigatorLanguage="en-US" storage={null}>
-      <OperationStatusStoreProvider store={store}>
-        {detailsOpen ? (
-          <ResourceDetailActions
-            actionsPort={actionsPort}
-            capabilities={capabilities}
-            detail={detail}
-          />
-        ) : null}
-        <BottomDock onAskAi={() => undefined} />
-      </OperationStatusStoreProvider>
-    </I18nProvider>
+    <I18nProvider navigatorLanguage="en-US" storage={null}><MemoryRouter>
+      <AlertEventsProvider port={EMPTY_ALERT_EVENTS_PORT}><ProductNotificationsProvider>
+        <OperationStatusStoreProvider store={store}>
+          {detailsOpen
+            ? <ResourceDetailActions actionsPort={actionsPort} capabilities={capabilities} detail={detail} />
+            : null}
+          <ProductNotificationCenter />
+        </OperationStatusStoreProvider>
+      </ProductNotificationsProvider></AlertEventsProvider>
+    </MemoryRouter></I18nProvider>
   );
 }
 

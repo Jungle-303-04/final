@@ -201,6 +201,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           resourceFilesPort,
           resourceIssuesPort,
           resourcesFilterPort,
+          getInventorySummary,
         ),
       })),
     },

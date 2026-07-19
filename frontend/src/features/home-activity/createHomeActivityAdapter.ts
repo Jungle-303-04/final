@@ -1,10 +1,22 @@
-import type { ActivityOverviewEndpoint } from "../../api";
 import {
   HomeActivityPortFailure,
   type HomeActivityFailureCode,
   type HomeActivityOverview,
   type HomeActivityPort,
 } from "./homeActivityContract";
+
+interface ActivityOverviewEndpoint {
+  bucket_ms: number;
+  buckets: Array<{
+    alerts: number;
+    critical: number;
+    deployments: number;
+    from_ms: number;
+    to_ms: number;
+  }>;
+  from_ms: number;
+  to_ms: number;
+}
 
 export interface HomeActivityEndpointDependencies {
   getActivityOverview(
