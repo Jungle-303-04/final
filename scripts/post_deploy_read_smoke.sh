@@ -95,6 +95,11 @@ probe_read "traffic" "/traffic/flows?limit=1" object scope_coverage
 probe_read "traffic sources" "/traffic/sources" object clusters
 probe_read "helm" "/helm/releases" object releases
 probe_read "gitops" "/gitops/overview?limit=1" object items
+probe_read \
+  "activity overview" \
+  "/activity/overview?from=1784419200000&to=1784422800000&bucket=300000" \
+  object \
+  buckets
 probe_read "checks" "/checks/overview" object scope_coverage
 probe_read "cost overview" "/cost/overview?range=6h" object scope_coverage
 probe_read "cost nodes" "/cost/nodes?limit=1" object items

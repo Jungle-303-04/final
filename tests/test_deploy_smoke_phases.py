@@ -347,6 +347,7 @@ def _write_post_deploy_read_fakes(
             "  */traffic/sources*) printf '%s' '{\"clusters\":[]}' >\"${output}\" ;;\n"
             "  */helm/releases*) printf '%s' '{\"releases\":[]}' >\"${output}\" ;;\n"
             "  */gitops/overview*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
+            "  */activity/overview*) printf '%s' '{\"buckets\":[]}' >\"${output}\" ;;\n"
             "  */checks/overview*) printf '%s' '{\"scope_coverage\":{}}' >\"${output}\" ;;\n"
             "  */cost/overview*) printf '%s' '{\"scope_coverage\":{}}' >\"${output}\" ;;\n"
             "  */cost/nodes*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
@@ -413,7 +414,7 @@ def test_post_deploy_read_smoke_logs_in_and_reads_current_catalogs(tmp_path: Pat
     assert "post-deploy operational surface reads" in result.stdout
     assert not strict_log.exists()
     curl_calls = curl_log.read_text(encoding="utf-8").splitlines()
-    assert len(curl_calls) == 17
+    assert len(curl_calls) == 18
     assert "/auth/login" in curl_calls[0]
     assert any("/auth/session" in call for call in curl_calls[1:])
     assert any("/diagnostics" in call for call in curl_calls[1:])
@@ -429,6 +430,10 @@ def test_post_deploy_read_smoke_logs_in_and_reads_current_catalogs(tmp_path: Pat
     assert any("/traffic/sources" in call for call in curl_calls[1:])
     assert any("/helm/releases" in call for call in curl_calls[1:])
     assert any("/gitops/overview?limit=1" in call for call in curl_calls[1:])
+    assert any(
+        "/activity/overview?from=1784419200000&to=1784422800000&bucket=300000" in call
+        for call in curl_calls[1:]
+    )
     assert any("/checks/overview" in call for call in curl_calls[1:])
     assert any("/cost/overview?range=6h" in call for call in curl_calls[1:])
     assert any("/cost/nodes?limit=1" in call for call in curl_calls[1:])

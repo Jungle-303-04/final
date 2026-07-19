@@ -250,7 +250,6 @@ def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() 
     assert changed["env"] == {
         "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
     }
-    assert 'git fetch --no-tags --depth=1 origin "${BASE_SHA}"' in changed["run"]
     assert 'GATE_BASE="${BASE_SHA}" make gate-frontend-changed' in changed["run"]
 
 

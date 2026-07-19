@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy import BigInteger
 from sqlalchemy.dialects import postgresql
 
 from domains.activity.repository import ActivityOverviewRepository
@@ -20,6 +21,8 @@ from packages.contracts.gateway.responses import ActivityOverviewResponse
 from packages.runtime.dependencies import get_db
 
 DAY_MS = 24 * 60 * 60 * 1_000
+MAX_BUCKET_MS = 30 * DAY_MS
+CURRENT_EPOCH_MS = 1_784_419_200_000
 
 
 class _Rows:
@@ -115,6 +118,70 @@ def test_activity_repository_zero_fills_30_day_server_buckets_and_fences_sources
     assert "rca_timeline.cluster_id in ('cluster-a')" in critical_sql
     assert "rca_timeline.incident_namespace in ('shop')" in critical_sql
     assert "lower(rca_timeline.severity) = 'critical'" in critical_sql
+
+
+def test_activity_repository_handles_2026_window_with_empty_and_persisted_series() -> None:
+    empty_connection = _Connection([[], [], []])
+    empty_buckets = _repository(empty_connection).activity_overview(
+        workspace_id="workspace-a",
+        deployment_application_ids={"app-a"},
+        alert_cluster_ids={"cluster-a"},
+        incident_cluster_ids={"cluster-a"},
+        from_ms=CURRENT_EPOCH_MS,
+        to_ms=CURRENT_EPOCH_MS + MAX_BUCKET_MS,
+        bucket_ms=MAX_BUCKET_MS,
+    )
+    populated_connection = _Connection(
+        [
+            [{"bucket_index": 0, "count": 2}],
+            [{"bucket_index": 0, "count": 3}],
+            [{"bucket_index": 0, "count": 1}],
+        ]
+    )
+    populated_buckets = _repository(populated_connection).activity_overview(
+        workspace_id="workspace-a",
+        deployment_application_ids={"app-a"},
+        alert_cluster_ids={"cluster-a"},
+        incident_cluster_ids={"cluster-a"},
+        from_ms=CURRENT_EPOCH_MS,
+        to_ms=CURRENT_EPOCH_MS + MAX_BUCKET_MS,
+        bucket_ms=MAX_BUCKET_MS,
+    )
+
+    assert empty_buckets == [
+        {
+            "from_ms": CURRENT_EPOCH_MS,
+            "to_ms": CURRENT_EPOCH_MS + MAX_BUCKET_MS,
+            "deployments": 0,
+            "alerts": 0,
+            "critical": 0,
+        }
+    ]
+    assert populated_buckets == [
+        {
+            "from_ms": CURRENT_EPOCH_MS,
+            "to_ms": CURRENT_EPOCH_MS + MAX_BUCKET_MS,
+            "deployments": 2,
+            "alerts": 3,
+            "critical": 1,
+        }
+    ]
+
+    for statement in [*empty_connection.statements, *populated_connection.statements]:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        arithmetic_binds = {
+            id(binding): binding
+            for binding in compiled.binds.values()
+            if isinstance(binding.value, int)
+            and binding.value in {1_000, CURRENT_EPOCH_MS, MAX_BUCKET_MS}
+        }
+
+        assert {binding.value for binding in arithmetic_binds.values()} == {
+            1_000,
+            CURRENT_EPOCH_MS,
+            MAX_BUCKET_MS,
+        }
+        assert all(isinstance(binding.type, BigInteger) for binding in arithmetic_binds.values())
 
 
 def test_activity_response_is_strict_and_counted_per_series() -> None:

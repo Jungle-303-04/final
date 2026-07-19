@@ -6,7 +6,7 @@ from collections.abc import Collection
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, cast, func, select
+from sqlalchemy import BigInteger, cast, func, literal, select
 
 from domains.alert.models import AlertEvent
 from domains.dashboard.models import RcaTimeline
@@ -143,9 +143,15 @@ def _bucketed_count_statement(
     bucket_ms: int,
     predicates: tuple[Any, ...],
 ) -> Any:
-    occurred_ms = func.extract("epoch", timestamp) * 1_000
+    # PostgreSQL otherwise infers these Python integer binds as ``int4`` in
+    # this arithmetic expression.  Current epoch milliseconds already exceed
+    # that range, so keep the complete bucket calculation in the bigint domain.
+    millis_per_second = literal(1_000, type_=BigInteger())
+    window_from_ms = literal(from_ms, type_=BigInteger())
+    bucket_width_ms = literal(bucket_ms, type_=BigInteger())
+    occurred_ms = func.extract("epoch", timestamp) * millis_per_second
     bucket_index = cast(
-        func.floor((occurred_ms - from_ms) / bucket_ms),
+        func.floor((occurred_ms - window_from_ms) / bucket_width_ms),
         BigInteger,
     ).label("bucket_index")
     return (
