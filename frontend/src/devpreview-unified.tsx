@@ -1363,7 +1363,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       </div>
 
       {/* ── 클러스터 섹션 (보드 밖 고정 — 홈의 본질) ── */}
-      <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} onAddCluster={onConnect} pending={pendingCl} />
+      <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} pending={pendingCl} />
 
       {/* ── 위젯 보드 — 4칸 그리드 + 밀집 배치(dense): 숨김·이동으로 생긴 빈칸에 작은 위젯이 위로 올라와 채운다 ── */}
       {/* stretch 정렬 — 같은 행의 위젯은 세로 크기가 동일하다(가장 큰 위젯 기준) */}

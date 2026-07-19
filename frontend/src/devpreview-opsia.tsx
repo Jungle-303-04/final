@@ -603,8 +603,8 @@ export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: 
 }
 
 // ── 홈 서피스용 클러스터 섹션 (D21 2층 — 보드 밖 고정) — 카드는 지도와 같은 ClusterRow 하나 ──
-export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }: {
-  meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; onAddCluster?: () => void; pending?: string[];
+export function HomeClusterSection({ meta, onOpen, pending = [] }: {
+  meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; pending?: string[];
 }) {
   const pods = useMemo(() => genPods(), []);
   // 벽시계 기반 tick — 홈 카드와 지도 카드가 같은 순간 같은 숫자를 말하게 한다(두 화면 숫자 불일치 = 버그)
@@ -692,7 +692,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
   const crit = pods.filter(isCrit).length;
 
   // 임베드에서 상세는 셸 오버레이 하나로 일원화 — 내부 미니 상세(focusPod 패널)를 두 번째 상세로 쓰지 않는다
-  const gotoNode = (p: Pod) => { go({ level: "pods", cluster: p.cluster, node: p.node }, 1); if (embedded && onOpenResource) { selectPod(p); } else { setFocusPod(p); } };
   const openNodeById = (id: string) => { const n = NODES.find((x) => x.id === id); if (n) go({ level: "pods", cluster: n.cluster, node: n.id }, 1); };
   const selectPod = (p: Pod) => {
     // 임베드 모드에서는 상세를 셸의 최상위 오버레이 하나로 일원화한다 (내부 패널과 이원화 금지)
