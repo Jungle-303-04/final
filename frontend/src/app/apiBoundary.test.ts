@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -36,9 +35,9 @@ describe("product API consumption boundary", () => {
   it("allows product/api references only from authenticated composition boundaries", async () => {
     const violations: string[] = [];
 
-    for (const filePath of await collectScripts(productRoot, scriptExtensions)) {
+    const sources = await collectApiSources(await collectScripts(productRoot, scriptExtensions));
+    for (const { filePath, source } of sources) {
       if (isWithin(filePath, apiRoot) || isCompositionBoundary(filePath)) continue;
-      const source = await readFile(filePath, "utf8");
       violations.push(...internalImportEscapes(filePath, source).map((specifier) => (
         `${relative(productRoot, filePath)} -> outside-product:${specifier}`
       )));
