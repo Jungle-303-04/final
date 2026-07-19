@@ -10,7 +10,13 @@ import type {
 import { activityWindowForPeriod } from "../../features/home-activity/homeActivityWindow";
 import { gitOpsSyncCategory } from "../../features/gitops/gitOpsPresentation";
 import type { GitOpsPort, GitOpsSyncTarget } from "../../features/gitops/gitOpsContract";
-import type { IssueList, IssuesPort } from "../../features/issues/issuesContract";
+import type {
+  IssueList,
+  IssueQueueFacet,
+  IssueQueueFilters,
+  IssuesPort,
+} from "../../features/issues/issuesContract";
+import { sortIssuesForQueue } from "../../features/issues/issuePresentation";
 import type {
   ResourcesEndpointInventorySummary,
 } from "../../features/resources/resourcesEndpointContract";
@@ -23,6 +29,7 @@ import {
   type TimelinePort,
   type TimelineSnapshot,
 } from "../../features/timeline/timelineContract";
+import type { ClusterScope } from "../../shared/parity/referenceParity";
 import {
   costRangeForPeriod,
   criticalResourceFilterState,
@@ -63,6 +70,11 @@ export interface HomeNamespacePods {
   pods: number;
 }
 
+export interface HomeNamespacePodProjection {
+  incompleteClusterIds: readonly string[];
+  items: readonly HomeNamespacePods[];
+}
+
 export interface HomeCostProjection {
   changePercent: number | null;
   currency: string;
@@ -72,16 +84,14 @@ export interface HomeCostProjection {
 
 export interface HomeBoardScope {
   applications: readonly string[];
-  clusterId: string;
-  freshness: "live" | "stale" | "partial" | "disconnected";
-  namespaces: readonly string[];
-  workspaceId: string;
+  allAccessible: boolean;
+  clusters: readonly ClusterScope[];
 }
 
 export interface HomeBoardData {
   activity: HomeBoardResource<HomeActivityOverview>;
   incidents: HomeBoardResource<IssueList>;
-  namespaces: HomeBoardResource<readonly HomeNamespacePods[]>;
+  namespaces: HomeBoardResource<HomeNamespacePodProjection>;
   cost: HomeBoardResource<HomeCostProjection | null>;
   criticalResources: HomeBoardResource<readonly ResourcesFilterResourceItem[]>;
   sync: HomeBoardResource<HomeSyncSummary>;
@@ -89,7 +99,6 @@ export interface HomeBoardData {
 }
 
 export function useHomeBoardData({
-  clusterId,
   filterState,
   period,
   ports,
@@ -100,7 +109,6 @@ export function useHomeBoardData({
   wantsNamespaces,
   wantsTimeline,
 }: {
-  clusterId: string;
   filterState: UnifiedFilterState;
   period: HomeBoardPeriod;
   ports: HomeBoardPorts;
@@ -112,6 +120,15 @@ export function useHomeBoardData({
   wantsTimeline: boolean;
 }): HomeBoardData {
   const [mountedAtMs] = useState(() => Date.now());
+  const clusterIds = useMemo(
+    () => scope.clusters.map((cluster) => cluster.clusterId),
+    [scope.clusters],
+  );
+  const namespaceNames = useMemo(
+    () => [...new Set(scope.clusters.flatMap((cluster) => cluster.namespaces ?? []))]
+      .sort((left, right) => left.localeCompare(right)),
+    [scope.clusters],
+  );
   const activityQuery = useMemo(
     () => {
       const window = activityWindowForPeriod(
@@ -121,17 +138,17 @@ export function useHomeBoardData({
       return window === null ? null : {
         ...window,
         applications: scope.applications,
-        clusterIds: [clusterId],
-        namespaces: scope.namespaces,
+        clusterIds,
+        namespaces: namespaceNames,
       };
     },
     [
-      clusterId,
+      clusterIds,
       mountedAtMs,
+      namespaceNames,
       period,
       refreshKey,
       scope.applications,
-      scope.namespaces,
     ],
   );
   const incidents = useAsyncResource(
@@ -139,13 +156,13 @@ export function useHomeBoardData({
       if (scope.applications.length > 0) {
         return Promise.reject(new Error("issue application scope unavailable"));
       }
-      return ports.issues.listIssues(clusterId, 3, signal, {
-        namespaces: scope.namespaces,
+      return loadScopedIssues(ports.issues, scope, signal, {
+        namespaces: namespaceNames,
         severities: [],
         categories: [],
       });
     },
-    [clusterId, ports.issues, refreshKey, scope.applications, scope.namespaces],
+    [namespaceNames, ports.issues, refreshKey, scope],
   );
   const sync = useAsyncResource(
     async (signal) => {
@@ -153,8 +170,8 @@ export function useHomeBoardData({
         ports.gitops.listApplications(signal),
         ports.gitops.listSyncTargets(signal, {
           applications: scope.applications,
-          clusters: [clusterId],
-          namespaces: scope.namespaces,
+          clusters: clusterIds,
+          namespaces: namespaceNames,
         }),
       ]);
       const categories = targets.map((target) => gitOpsSyncCategory(target.syncStatus));
@@ -175,7 +192,7 @@ export function useHomeBoardData({
         targets,
       };
     },
-    [clusterId, ports.gitops, refreshKey, scope.applications, scope.namespaces],
+    [clusterIds, namespaceNames, ports.gitops, refreshKey, scope.applications],
   );
   const activity = useAsyncResource(
     (signal) => {
@@ -187,33 +204,50 @@ export function useHomeBoardData({
     },
     [activityQuery, ports.activity, refreshKey, scope.applications],
   );
-  const namespaces = useAsyncResource(
+  const namespacePods = useAsyncResource(
     async (signal) => {
-      if (!wantsNamespaces) return [];
-      const response = await ports.inventory(clusterId, scope.namespaces, signal);
-      return response.namespaces
-        .map((namespace) => ({
-          namespace: namespace.namespace,
-          pods: namespace.counts
+      if (!wantsNamespaces) return { incompleteClusterIds: [], items: [] };
+      const result = await fanOutClusters(scope.clusters, signal, (cluster, clusterSignal) =>
+        ports.inventory(cluster.clusterId, cluster.namespaces, clusterSignal)
+      );
+      if (result.successes.length === 0 && result.failures.length > 0) {
+        throw result.failures[0]!.error;
+      }
+      const podsByNamespace = new Map<string, number>();
+      for (const { value } of result.successes) {
+        for (const namespace of value.namespaces) {
+          const pods = namespace.counts
             .filter((count) => count.resource_type === "pod")
-            .reduce((sum, count) => sum + count.count, 0),
-        }))
-        .filter((namespace) => namespace.pods > 0)
-        .sort((left, right) => right.pods - left.pods || left.namespace.localeCompare(right.namespace));
+            .reduce((sum, count) => sum + count.count, 0);
+          if (pods <= 0) continue;
+          podsByNamespace.set(
+            namespace.namespace,
+            (podsByNamespace.get(namespace.namespace) ?? 0) + pods,
+          );
+        }
+      }
+      return {
+        incompleteClusterIds: result.failures.map((failure) => failure.clusterId),
+        items: [...podsByNamespace]
+          .map(([namespace, pods]) => ({ namespace, pods }))
+          .sort((left, right) =>
+            right.pods - left.pods || left.namespace.localeCompare(right.namespace)
+          ),
+      };
     },
-    [clusterId, ports.inventory, refreshKey, scope.namespaces, wantsNamespaces],
+    [ports.inventory, refreshKey, scope.clusters, wantsNamespaces],
   );
   const criticalResources = useAsyncResource(
     async (signal) => {
       if (!wantsCriticalResources) return [];
       const response = await ports.resources.listResourcePage(
-        criticalResourceFilterState(filterState, clusterId),
+        criticalResourceFilterState(filterState, clusterIds),
         { limit: 5 },
         signal,
       );
       return response.items.slice(0, 5);
     },
-    [clusterId, filterState, ports.resources, refreshKey, wantsCriticalResources],
+    [clusterIds, filterState, ports.resources, refreshKey, wantsCriticalResources],
   );
   const cost = useAsyncResource(
     async (signal) => {
@@ -223,19 +257,19 @@ export function useHomeBoardData({
         throw new Error("cost period unavailable");
       }
       const overview = await ports.cost.getOverview({
-        clusterIds: [clusterId],
-        namespaces: scope.namespaces,
+        clusterIds,
+        namespaces: namespaceNames,
         timeRange,
       }, signal);
       return projectHomeCost(overview, activityQuery.fromMs, activityQuery.toMs);
     },
     [
       activityQuery,
-      clusterId,
+      clusterIds,
+      namespaceNames,
       period,
       ports.cost,
       refreshKey,
-      scope.namespaces,
       wantsCost,
     ],
   );
@@ -244,7 +278,7 @@ export function useHomeBoardData({
       if (!wantsTimeline) return null;
       if (activityQuery === null) throw new TimelineFailure("invalid-request");
       const capabilities = ports.timeline.readCapabilities
-        ? await ports.timeline.readCapabilities(signal, scope.workspaceId)
+        ? await ports.timeline.readCapabilities(signal, timelineWorkspaceCacheKey(scope))
         : ports.timeline.capabilities;
       return ports.timeline.readTimeline(
         homeTimelineQuery(
@@ -263,7 +297,15 @@ export function useHomeBoardData({
       wantsTimeline,
     ],
   );
-  return { activity, cost, criticalResources, incidents, namespaces, sync, timeline };
+  return {
+    activity,
+    cost,
+    criticalResources,
+    incidents,
+    namespaces: namespacePods,
+    sync,
+    timeline,
+  };
 }
 
 function latestObservedAt(targets: readonly GitOpsSyncTarget[]): string | null {
@@ -278,4 +320,184 @@ function latestObservedAt(targets: readonly GitOpsSyncTarget[]): string | null {
     }
   }
   return latest;
+}
+
+async function loadScopedIssues(
+  port: Pick<IssuesPort, "listIssues">,
+  scope: HomeBoardScope,
+  signal: AbortSignal,
+  filters: IssueQueueFilters,
+): Promise<IssueList> {
+  if (scope.allAccessible) {
+    return port.listIssues(null, 3, signal, filters);
+  }
+  if (scope.clusters.length === 1) {
+    return port.listIssues(scope.clusters[0]!.clusterId, 3, signal, filters);
+  }
+  const result = await fanOutClusters(scope.clusters, signal, (cluster, clusterSignal) =>
+    port.listIssues(cluster.clusterId, 3, clusterSignal, filters)
+  );
+  if (result.successes.length === 0 && result.failures.length > 0) {
+    throw result.failures[0]!.error;
+  }
+  return mergeIssueLists(
+    result.successes.map((success) => success.value),
+    result.failures.map((failure) => failure.clusterId),
+    filters,
+  );
+}
+
+function mergeIssueLists(
+  lists: readonly IssueList[],
+  incompleteClusterIds: readonly string[],
+  filters: IssueQueueFilters,
+): IssueList {
+  const uniqueItems = new Map<string, IssueList["items"][number]>();
+  for (const list of lists) {
+    for (const item of list.items) {
+      if (!uniqueItems.has(item.id)) uniqueItems.set(item.id, item);
+    }
+  }
+  const candidates = sortIssuesForQueue([...uniqueItems.values()]);
+  const items = candidates.slice(0, 3);
+  const partial = incompleteClusterIds.length > 0 || lists.some(
+    (list) => list.completeness !== "exact" || list.visibility.completeness !== "exact",
+  );
+  const visibilityState = incompleteClusterIds.length > 0 || lists.some(
+    (list) => list.visibility.state === "partial",
+  )
+    ? "partial" as const
+    : lists.some((list) => list.visibility.state === "restricted")
+    ? "restricted" as const
+    : "complete" as const;
+  return {
+    clusterId: null,
+    completeness: partial ? "partial" : "exact",
+    dataQualityWarnings: lists.flatMap((list) => list.dataQualityWarnings),
+    excludedCount: sumNumbers(lists.map((list) => list.excludedCount)),
+    items,
+    limit: 3,
+    limitReached: candidates.length > items.length || lists.some((list) => list.limitReached),
+    returned: items.length,
+    total: sumNumbers(lists.map((list) => list.total)),
+    totalMatched: sumNumbers(lists.map((list) => list.totalMatched)),
+    filters,
+    visibility: {
+      state: visibilityState,
+      completeness: partial ? "partial" : "exact",
+      authorizedClusterCount: exactNullableSum(
+        lists.map((list) => list.visibility.authorizedClusterCount),
+      ),
+      requestedNamespaces: filters.namespaces,
+      reasonCodes: [
+        ...new Set([
+          ...lists.flatMap((list) => list.visibility.reasonCodes),
+          ...(incompleteClusterIds.length > 0 ? ["client-cluster-request-failed"] : []),
+        ]),
+      ],
+    },
+    facets: {
+      categories: mergeIssueFacets(lists.flatMap((list) => list.facets.categories)),
+      namespaces: mergeIssueFacets(lists.flatMap((list) => list.facets.namespaces)),
+      severities: mergeIssueFacets(lists.flatMap((list) => list.facets.severities)),
+    },
+    recentChanges: lists
+      .flatMap((list) => list.recentChanges)
+      .sort((left, right) => Date.parse(right.changed_at) - Date.parse(left.changed_at)),
+  };
+}
+
+function mergeIssueFacets(facets: readonly IssueQueueFacet[]): IssueQueueFacet[] {
+  const counts = new Map<string, number>();
+  for (const facet of facets) {
+    counts.set(facet.value, (counts.get(facet.value) ?? 0) + facet.count);
+  }
+  return [...counts]
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+}
+
+function sumNumbers(values: readonly number[]): number {
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
+function exactNullableSum(values: readonly (number | null)[]): number | null {
+  let total = 0;
+  for (const value of values) {
+    if (value === null) return null;
+    total += value;
+  }
+  return total;
+}
+
+const HOME_FLEET_FAN_OUT_CONCURRENCY = 3;
+
+interface FleetFanOutResult<T> {
+  failures: Array<{ clusterId: string; error: unknown }>;
+  successes: Array<{ clusterId: string; value: T }>;
+}
+
+async function fanOutClusters<T>(
+  clusters: readonly ClusterScope[],
+  signal: AbortSignal,
+  load: (cluster: ClusterScope, signal: AbortSignal) => Promise<T>,
+): Promise<FleetFanOutResult<T>> {
+  const ordered = [...clusters].sort((left, right) =>
+    left.clusterId.localeCompare(right.clusterId)
+  );
+  const records: Array<
+    | { kind: "success"; clusterId: string; value: T }
+    | { kind: "failure"; clusterId: string; error: unknown }
+    | undefined
+  > = new Array(ordered.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < ordered.length) {
+      throwIfAborted(signal);
+      const index = nextIndex;
+      nextIndex += 1;
+      const cluster = ordered[index]!;
+      try {
+        records[index] = {
+          clusterId: cluster.clusterId,
+          kind: "success",
+          value: await load(cluster, signal),
+        };
+      } catch (error) {
+        if (isAbortError(error) || signal.aborted) throw error;
+        records[index] = { clusterId: cluster.clusterId, error, kind: "failure" };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(HOME_FLEET_FAN_OUT_CONCURRENCY, ordered.length) },
+      () => worker(),
+    ),
+  );
+  const result: FleetFanOutResult<T> = { failures: [], successes: [] };
+  for (const record of records) {
+    if (!record) continue;
+    if (record.kind === "success") result.successes.push(record);
+    else result.failures.push(record);
+  }
+  return result;
+}
+
+function timelineWorkspaceCacheKey(scope: HomeBoardScope): string {
+  return [...new Set(scope.clusters.map((cluster) => cluster.workspaceId))]
+    .sort((left, right) => left.localeCompare(right))
+    .join("|");
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  throw signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException("Aborted", "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error &&
+    error.name === "AbortError";
 }

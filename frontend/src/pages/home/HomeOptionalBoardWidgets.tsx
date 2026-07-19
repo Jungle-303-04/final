@@ -11,22 +11,22 @@ import type { TimelineSnapshot } from "../../features/timeline/timelineContract"
 import type {
   HomeBoardResource,
   HomeCostProjection,
-  HomeNamespacePods,
+  HomeNamespacePodProjection,
 } from "./useHomeBoardData";
 import { Metric, WidgetEmpty, WidgetResource } from "./HomeBoardWidgets";
 
 export function NamespaceWidget({
   resource,
 }: {
-  resource: HomeBoardResource<readonly HomeNamespacePods[]>;
+  resource: HomeBoardResource<HomeNamespacePodProjection>;
 }) {
   const { formatNumber, t } = useI18n();
   return (
     <WidgetResource resource={resource}>
       {(data) => {
-        if (data.length === 0) return <WidgetEmpty />;
-        const top = data.slice(0, 5);
-        const other = data.slice(5).reduce((sum, item) => sum + item.pods, 0);
+        if (data.items.length === 0) return <WidgetEmpty />;
+        const top = data.items.slice(0, 5);
+        const other = data.items.slice(5).reduce((sum, item) => sum + item.pods, 0);
         const visible = other > 0
           ? [...top, { namespace: "…", pods: other }]
           : top;
@@ -39,33 +39,40 @@ export function NamespaceWidget({
           "unknown",
         ];
         return (
-          <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-4">
-            <Donut
-              ariaLabel={t("metrics.preset.namespacePodCount.name")}
-              centerLabel={formatNumber(visible.reduce((sum, item) => sum + item.pods, 0))}
-              segments={visible.map((item, index) => ({
-                id: item.namespace,
-                tone: tones[index] ?? "unknown",
-                value: item.pods,
-              }))}
-            />
-            <ul className="grid min-w-0 gap-1.5">
-              {visible.map((item, index) => (
-                <li
-                  className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-caption"
-                  key={item.namespace}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={toneDotClass(tones[index] ?? "unknown")}
-                  />
-                  <span className="truncate">{item.namespace}</span>
-                  <strong className="font-mono tabular-nums">
-                    {formatNumber(item.pods)}
-                  </strong>
-                </li>
-              ))}
-            </ul>
+          <div className="grid gap-2">
+            {data.incompleteClusterIds.length > 0 ? (
+              <p className="text-caption text-muted-foreground" role="status">
+                {t("common.state.partial")}
+              </p>
+            ) : null}
+            <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-4">
+              <Donut
+                ariaLabel={t("metrics.preset.namespacePodCount.name")}
+                centerLabel={formatNumber(visible.reduce((sum, item) => sum + item.pods, 0))}
+                segments={visible.map((item, index) => ({
+                  id: item.namespace,
+                  tone: tones[index] ?? "unknown",
+                  value: item.pods,
+                }))}
+              />
+              <ul className="grid min-w-0 gap-1.5">
+                {visible.map((item, index) => (
+                  <li
+                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-caption"
+                    key={item.namespace}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={toneDotClass(tones[index] ?? "unknown")}
+                    />
+                    <span className="truncate">{item.namespace}</span>
+                    <strong className="font-mono tabular-nums">
+                      {formatNumber(item.pods)}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         );
       }}

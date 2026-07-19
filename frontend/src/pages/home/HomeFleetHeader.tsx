@@ -1,5 +1,6 @@
 import { Plus, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
@@ -17,6 +18,7 @@ import {
 
 export function HomeFleetHeader({
   clusters,
+  criticalHref,
   editing,
   freshness,
   onEdit,
@@ -26,6 +28,7 @@ export function HomeFleetHeader({
   period,
 }: {
   clusters: readonly HomeClusterChoice[];
+  criticalHref?: string;
   editing?: boolean;
   freshness?: ReactNode;
   onEdit?: () => void;
@@ -39,6 +42,19 @@ export function HomeFleetHeader({
   const pods = exactSum(clusters.map((cluster) => cluster.podCount));
   const critical = exactSum(
     clusters.map((cluster) => cluster.openIncidentCount ?? cluster.incidentCount),
+  );
+  const criticalChip = (
+    <TintChip
+      label={(
+        <>
+          <span>{t("status.tone.critical")}</span>
+          <span className="font-mono tabular-nums">
+            {critical === null ? "—" : formatNumber(critical)}
+          </span>
+        </>
+      )}
+      tone={critical === null ? "neutral" : critical > 0 ? "critical" : "healthy"}
+    />
   );
 
   return (
@@ -103,17 +119,19 @@ export function HomeFleetHeader({
           label={t("workflows.sync.status.outOfSync")}
           value={outOfSync == null ? "—" : formatNumber(outOfSync)}
         />
-        <TintChip
-          label={(
-            <>
-              <span>{t("status.tone.critical")}</span>
-              <span className="font-mono tabular-nums">
-                {critical === null ? "—" : formatNumber(critical)}
-              </span>
-            </>
-          )}
-          tone={critical === null ? "neutral" : critical > 0 ? "critical" : "healthy"}
-        />
+        {criticalHref ? (
+          <Link
+            aria-label={`${t("status.tone.critical")} ${
+              critical === null ? "—" : formatNumber(critical)
+            }`}
+            className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            to={criticalHref}
+          >
+            {criticalChip}
+          </Link>
+        ) : (
+          criticalChip
+        )}
       </div>
     </Surface>
   );

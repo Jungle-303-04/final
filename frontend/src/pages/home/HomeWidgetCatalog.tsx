@@ -59,9 +59,7 @@ export function widgetDefinition(
   });
   const timeline = filter.navigationHref("/timeline");
   const resources = filter.navigationHref("/resources");
-  const criticalResources = `/resources${serializeProductFilterUrl(
-    criticalResourceState(filter.state),
-  )}`;
+  const criticalResources = homeCriticalResourcesHref(filter);
   const cost = filter.navigationHref("/cost");
   const definitions = {
     W2: {
@@ -108,6 +106,14 @@ export function widgetDefinition(
     },
   } as const;
   return definitions[id];
+}
+
+export function homeCriticalResourcesHref(
+  filter: Pick<UnifiedFilterController, "state">,
+): string {
+  return `/resources${serializeProductFilterUrl(
+    criticalResourceState(filter.state),
+  )}`;
 }
 
 export function criticalResourceDetailHref(

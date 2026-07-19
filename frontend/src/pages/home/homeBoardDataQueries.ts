@@ -17,11 +17,11 @@ import type {
 
 export function criticalResourceFilterState(
   state: UnifiedFilterState,
-  clusterId: string,
+  clusterIds: readonly string[],
 ): UnifiedFilterState {
   return {
     ...state,
-    common: { ...state.common, clusters: [clusterId] },
+    common: { ...state.common, clusters: clusterIds },
     resources: {
       ...state.resources,
       health: ["critical"],
@@ -123,7 +123,7 @@ export function homeTimelineQuery(
     throw new TimelineFailure("invalid-response");
   }
   return {
-    scopes: [scope],
+    scopes: scope.clusters,
     mode: { kind: "live", widthMs },
     control: {
       view: view as TimelineViewMode,

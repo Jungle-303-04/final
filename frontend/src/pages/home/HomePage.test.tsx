@@ -50,6 +50,57 @@ describe("HomePage three-layer board", () => {
     });
   });
 
+  it("renders the board for the unfiltered fleet without choosing a first cluster", async () => {
+    const ports = homeBoardPorts();
+    renderHome(homePort(), ["/"], vi.fn(), "ko", ports);
+
+    expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "동기화 상태" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "활동" })).toBeTruthy();
+    await waitFor(() => {
+      expect(ports.issues.listIssues).toHaveBeenCalledWith(
+        null,
+        3,
+        expect.any(AbortSignal),
+        { categories: [], namespaces: [], severities: [] },
+      );
+      expect(ports.gitops.listSyncTargets).toHaveBeenCalledWith(
+        expect.any(AbortSignal),
+        {
+          applications: [],
+          clusters: ["cluster-1", "kubernetes-ops"],
+          namespaces: [],
+        },
+      );
+      expect(ports.activity.loadOverview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applications: [],
+          clusterIds: ["cluster-1", "kubernetes-ops"],
+          namespaces: [],
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+    expect(ports.issues.listIssues).not.toHaveBeenCalledWith(
+      "cluster-1",
+      3,
+      expect.any(AbortSignal),
+      expect.anything(),
+    );
+  });
+
+  it("links the fixed critical summary to the critical resource list", async () => {
+    renderHome(homePort());
+
+    const summary = await screen.findByRole("group", {
+      name: "클러스터 리소스 탐색",
+    });
+    const critical = within(summary).getByRole("link");
+    const href = new URL(critical.getAttribute("href")!, "https://product.test");
+    expect(href.pathname).toBe("/resources");
+    expect(href.searchParams.get("resources.health")).toBe("critical");
+  });
+
   it("scopes W2-W4 to supported URL dimensions and refuses unsupported application aggregates", async () => {
     const ports = homeBoardPorts();
     renderHome(

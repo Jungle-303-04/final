@@ -1,5 +1,5 @@
 import { CircleAlert } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type {
   ClusterDisconnectPort,
@@ -24,6 +24,7 @@ import { ClusterConnectDialog } from "../clusters/ClusterConnectDialog";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { HomeWidgetBoard } from "./HomeWidgetBoard";
+import { homeCriticalResourcesHref } from "./HomeWidgetCatalog";
 import type { HomeBoardPorts } from "./useHomeBoardData";
 
 export function HomePage({
@@ -50,6 +51,13 @@ export function HomePage({
   const boardPeriod: HomeBoardPeriod = filter.detail.homePeriod ?? "today";
   const canManageClusters = clusterPort !== undefined &&
     (session?.roles.includes("service_admin") ?? false);
+  const boardClusters = useMemo(() => {
+    if (state.choices.phase !== "ready") return [];
+    const requestedClusterIds = new Set(filter.state.common.clusters);
+    return requestedClusterIds.size === 0
+      ? state.choices.data.clusters
+      : state.choices.data.clusters.filter((cluster) => requestedClusterIds.has(cluster.id));
+  }, [filter.state.common.clusters, state.choices]);
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -63,14 +71,11 @@ export function HomePage({
   const refreshing = [state.choices, state.overview, state.insights, state.nodes, state.pods].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
-  const boardCluster = state.choices.data.clusters.find(
-    (cluster) => cluster.id === state.selectedClusterId,
-  ) ?? null;
-
   return (
     <ProductPageFrame>
       <HomeFleetHeader
         clusters={state.choices.data.clusters}
+        criticalHref={homeCriticalResourcesHref(filter)}
         editing={editingBoard}
         freshness={state.refreshIntervalSeconds === null ? null : (
           <PollingFreshness
@@ -107,10 +112,8 @@ export function HomePage({
       />
       {state.choices.data.clusters.length === 0 ? (
         canManageClusters ? null : <HomeClusterBoundary variant="catalog-unconfirmed" />
-      ) : !state.selectedClusterExists ? (
-        state.clusterSelection.kind === "unfiltered" ? (
-          null
-        ) : state.clusterSelection.kind === "multiple" ? (
+      ) : boardClusters.length === 0 ? (
+        state.clusterSelection.kind === "multiple" ? (
           <HomeClusterBoundary variant="multiple" />
         ) : (
           <UnknownCluster clusterId={state.selectedClusterId} />
@@ -118,16 +121,14 @@ export function HomePage({
       ) : (
         <>
           <PartialFailureBanner state={state} />
-          {boardPorts && state.selectedClusterId && boardCluster ? (
+          {boardPorts ? (
             <HomeWidgetBoard
-              clusterId={state.selectedClusterId}
+              clusters={boardClusters}
               editing={editingBoard}
-              freshness={homeScopeFreshness(boardCluster.connectionState)}
               onOutOfSyncChange={updateOutOfSync}
               period={boardPeriod}
               ports={boardPorts}
               refreshKey={state.boardRefreshRevision}
-              workspaceId={boardCluster.workspaceId}
             />
           ) : null}
         </>
@@ -174,15 +175,6 @@ function homeConnectionState(state: ReturnType<typeof useHomePageState>) {
     resource.phase === "failed" ||
     (resource.phase === "ready" && resource.refreshFailure !== null)
   ) ? "disconnected" as const : "connected" as const;
-}
-
-function homeScopeFreshness(
-  connectionState: HomeClusterChoice["connectionState"],
-): "live" | "stale" | "partial" | "disconnected" {
-  if (connectionState === "online") return "live";
-  if (connectionState === "stale") return "stale";
-  if (connectionState === "offline") return "disconnected";
-  return "partial";
 }
 
 function HomeClusterBoundary({

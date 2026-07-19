@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,6 +24,97 @@ afterEach(() => {
 });
 
 describe("HomePage optional widgets", () => {
+  it("binds W5-W8 to the complete unfiltered fleet scope", async () => {
+    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
+      collapsed: [],
+      order: ["W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+      visible: ["W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+    }));
+    const ports = homeBoardPorts();
+    renderHome(homePort(), ["/"], vi.fn(), "ko", ports);
+
+    expect(await screen.findByRole("heading", { name: "Namespace별 Pod 수" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "임계 · 리소스 종류" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "비용 요약" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "최근 변경" })).toBeTruthy();
+    await waitFor(() => {
+      expect(ports.inventory).toHaveBeenCalledWith(
+        "cluster-1",
+        [],
+        expect.any(AbortSignal),
+      );
+      expect(ports.inventory).toHaveBeenCalledWith(
+        "kubernetes-ops",
+        [],
+        expect.any(AbortSignal),
+      );
+      expect(ports.resources.listResourcePage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          common: expect.objectContaining({
+            clusters: ["cluster-1", "kubernetes-ops"],
+          }),
+        }),
+        { limit: 5 },
+        expect.any(AbortSignal),
+      );
+      expect(ports.cost.getOverview).toHaveBeenCalledWith({
+        clusterIds: ["cluster-1", "kubernetes-ops"],
+        namespaces: [],
+        timeRange: "24h",
+      }, expect.any(AbortSignal));
+      expect(ports.timeline.readTimeline).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: [
+            expect.objectContaining({ clusterId: "cluster-1" }),
+            expect.objectContaining({ clusterId: "kubernetes-ops" }),
+          ],
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
+  it("keeps successful namespace totals and marks a partial fleet fan-out", async () => {
+    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
+      collapsed: [],
+      order: ["W5"],
+      visible: ["W5"],
+    }));
+    const inventory = vi.fn().mockImplementation(async (clusterId: string) => {
+      if (clusterId === "kubernetes-ops") throw new Error("offline");
+      return {
+        cluster_id: clusterId,
+        latest_snapshot: null,
+        counts: [],
+        counts_evidence: {
+          completeness: "observed",
+          observed_at: "2026-07-19T01:00:00Z",
+          namespace_scope: [],
+          reason_codes: [],
+          forbidden: [],
+        },
+        namespaces: [{
+          namespace: "shop",
+          total: 12,
+          counts: [{ resource_type: "pod", health: "healthy", count: 12 }],
+        }],
+      };
+    });
+    renderHome(
+      homePort(),
+      ["/"],
+      vi.fn(),
+      "ko",
+      homeBoardPorts({ inventory }),
+    );
+
+    const heading = await screen.findByRole("heading", { name: "Namespace별 Pod 수" });
+    const widget = heading.closest<HTMLElement>("[data-slot='widget-frame']")!;
+    expect(await within(widget).findByText("shop")).toBeTruthy();
+    expect(within(widget).getByText("일부 데이터")).toBeTruthy();
+    expect(inventory).toHaveBeenCalledTimes(2);
+  });
+
   it("adds W5 from the catalog and uses the inventory namespace projection", async () => {
     const user = userEvent.setup();
     const inventory = vi.fn().mockResolvedValue({

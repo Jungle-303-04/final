@@ -34,21 +34,28 @@ export function IncidentWidget({
         const items = sortIssuesForQueue(data.items).slice(0, 3);
         if (items.length === 0) return <WidgetEmpty />;
         return (
-          <RankList
-            ariaLabel={t("home.issue.list")}
-            items={items.map((issue) => ({
-              ariaLabel: issueTitle(issue),
-              description: issueResourceLabel(issue) ?? t("home.issue.resourceUnknown"),
-              displayValue: elapsedLabel(issue.updatedAt, locale),
-              href,
-              id: issue.id,
-              indicator: "dot",
-              label: issueTitle(issue),
-              max: 1,
-              tone: issueSeverityTone(issue.severity) ?? "unknown",
-              value: null,
-            }))}
-          />
+          <div className="grid gap-2">
+            {data.completeness === "exact" && data.visibility.completeness === "exact" ? null : (
+              <p className="text-caption text-muted-foreground" role="status">
+                {t("common.state.partial")}
+              </p>
+            )}
+            <RankList
+              ariaLabel={t("home.issue.list")}
+              items={items.map((issue) => ({
+                ariaLabel: issueTitle(issue),
+                description: issueResourceLabel(issue) ?? t("home.issue.resourceUnknown"),
+                displayValue: elapsedLabel(issue.updatedAt, locale),
+                href,
+                id: issue.id,
+                indicator: "dot",
+                label: issueTitle(issue),
+                max: 1,
+                tone: issueSeverityTone(issue.severity) ?? "unknown",
+                value: null,
+              }))}
+            />
+          </div>
         );
       }}
     </WidgetResource>

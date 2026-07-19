@@ -21,6 +21,7 @@ import { useOptionalProductSession } from "../../features/auth/ProductSessionCon
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { UnifiedFilterController } from "../../features/filters/filterContract";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import { WidgetFrame } from "../../shared/ui/widgets";
@@ -53,23 +54,19 @@ import {
   type HomeBoardPorts,
 } from "./useHomeBoardData";
 export function HomeWidgetBoard({
-  clusterId,
+  clusters,
   editing,
-  freshness,
   onOutOfSyncChange,
   period,
   ports,
   refreshKey,
-  workspaceId,
 }: {
-  clusterId: string;
+  clusters: readonly HomeClusterChoice[];
   editing: boolean;
-  freshness: "live" | "stale" | "partial" | "disconnected";
   onOutOfSyncChange: (count: number | null) => void;
   period: HomeBoardPeriod;
   ports: HomeBoardPorts;
   refreshKey: number;
-  workspaceId: string;
 }) {
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
@@ -86,21 +83,25 @@ export function HomeWidgetBoard({
   );
   const scope = useMemo(() => ({
     applications: filter.state.common.applications,
-    clusterId,
-    freshness,
-    namespaces: filter.state.common.namespaces
-      .filter((namespace) => namespace.clusterId === clusterId)
-      .map((namespace) => namespace.namespace),
-    workspaceId,
+    allAccessible: filter.state.common.clusters.length === 0,
+    clusters: [...clusters]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((cluster) => ({
+        clusterId: cluster.id,
+        freshness: clusterFreshness(cluster.connectionState),
+        namespaces: filter.state.common.namespaces
+          .filter((namespace) => namespace.clusterId === cluster.id)
+          .map((namespace) => namespace.namespace)
+          .sort((left, right) => left.localeCompare(right)),
+        workspaceId: cluster.workspaceId,
+      })),
   }), [
-    clusterId,
+    clusters,
     filter.state.common.applications,
+    filter.state.common.clusters.length,
     filter.state.common.namespaces,
-    freshness,
-    workspaceId,
   ]);
   const data = useHomeBoardData({
-    clusterId,
     filterState: filter.state,
     period,
     ports,
@@ -179,6 +180,15 @@ export function HomeWidgetBoard({
       </DndContext>
     </section>
   );
+}
+
+function clusterFreshness(
+  connectionState: HomeClusterChoice["connectionState"],
+): "live" | "stale" | "partial" | "disconnected" {
+  if (connectionState === "online") return "live";
+  if (connectionState === "stale") return "stale";
+  if (connectionState === "offline") return "disconnected";
+  return "partial";
 }
 function SortableWidget({
   data,
