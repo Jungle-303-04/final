@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  EASE_DRAW,
   LIST_STAGGER,
-  MOTION_SPRING,
   listStaggerDelay,
 } from "../transitions";
 import { MOTION_DURATION_MS, STAGGER_MS } from "../useStagger";
@@ -12,13 +10,15 @@ const tokens = readFileSync(new URL("../tokens.css", import.meta.url), "utf8");
 
 describe("motion CSS contract", () => {
   it.each([
-    ["instant", MOTION_DURATION_MS.instant],
-    ["quick", MOTION_DURATION_MS.quick],
-    ["pop", MOTION_DURATION_MS.pop],
-    ["layout", MOTION_DURATION_MS.layout],
-    ["camera", MOTION_DURATION_MS.camera],
-    ["value", MOTION_DURATION_MS.value],
-  ])("keeps the %s duration synchronized with TypeScript", (name, duration) => {
+    ["micro", MOTION_DURATION_MS.micro],
+    ["fade", MOTION_DURATION_MS.fade],
+    ["draw", MOTION_DURATION_MS.draw],
+    ["meter", MOTION_DURATION_MS.meter],
+    ["count", MOTION_DURATION_MS.count],
+    ["soft", MOTION_DURATION_MS.soft],
+    ["spring", MOTION_DURATION_MS.spring],
+    ["page", MOTION_DURATION_MS.page],
+  ])("keeps the v3 %s duration synchronized with TypeScript", (name, duration) => {
     expect(tokens).toContain(`--motion-${name}: ${duration}ms`);
   });
 
@@ -36,18 +36,6 @@ describe("motion CSS contract", () => {
     expect(tokens).toContain("@media (prefers-reduced-motion: reduce)");
     expect(tokens).toContain(`animation-delay: 0ms ${priority}`);
     expect(tokens).toContain(`transition-duration: 1ms ${priority}`);
-  });
-
-  it("publishes the D17 soft, spring, page, and draw presets", () => {
-    expect(tokens).toContain("--motion-soft: var(--motion-quick)");
-    expect(tokens).toContain("--motion-spring: var(--motion-layout)");
-    expect(tokens).toContain("--motion-page: var(--motion-camera)");
-    expect(tokens).toContain("--motion-draw: var(--motion-value)");
-    expect(tokens).toContain("--ease-draw: cubic-bezier");
-    expect(MOTION_SPRING.soft.type).toBe("spring");
-    expect(MOTION_SPRING.spring.type).toBe("spring");
-    expect(MOTION_SPRING.page.type).toBe("spring");
-    expect(EASE_DRAW).toHaveLength(4);
   });
 
   it("caps list staggering at eight items and removes it for reduced motion", () => {

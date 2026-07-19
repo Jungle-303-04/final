@@ -1,5 +1,6 @@
 import { Pie, PieChart } from "recharts";
 
+import { usePrefersReducedMotion } from "@/motion";
 import { cn } from "@/shared/lib/cn";
 import {
   ChartContainer,
@@ -7,6 +8,8 @@ import {
 } from "@/shared/ui/primitives/chart";
 import {
   normalizedRatio,
+  RECHARTS_DRAW_ANIMATION,
+  RECHARTS_METER_ANIMATION,
   type ChartTone,
 } from "./chartPrimitives";
 
@@ -67,6 +70,7 @@ export function Donut({
   className?: string;
   segments: readonly DonutSegment[];
 }) {
+  const reducedMotion = usePrefersReducedMotion();
   const data = segments.map((segment) => ({
     fill: toneFill(segment.tone),
     id: segment.id,
@@ -84,12 +88,13 @@ export function Donut({
     >
       <PieChart>
         <Pie
+          {...RECHARTS_DRAW_ANIMATION}
           data={TRACK_DATA}
           dataKey="value"
           endAngle={-270}
           fill="var(--color-radial-track)"
           innerRadius="64%"
-          isAnimationActive={false}
+          isAnimationActive={!reducedMotion}
           nameKey="id"
           outerRadius="88%"
           rootTabIndex={-1}
@@ -98,11 +103,12 @@ export function Donut({
         />
         {total > 0 ? (
           <Pie
+            {...RECHARTS_DRAW_ANIMATION}
             data={data}
             dataKey="value"
             endAngle={-270}
             innerRadius="64%"
-            isAnimationActive={false}
+            isAnimationActive={!reducedMotion}
             nameKey="id"
             outerRadius="88%"
             rootTabIndex={-1}
@@ -136,6 +142,7 @@ export function RingGauge({
   tone = "primary",
   value,
 }: RingGaugeProps) {
+  const reducedMotion = usePrefersReducedMotion();
   const ratio = normalizedRatio(value, max);
   const valueData = ratio == null
     ? []
@@ -155,12 +162,13 @@ export function RingGauge({
     >
       <PieChart>
         <Pie
+          {...RECHARTS_METER_ANIMATION}
           data={TRACK_DATA}
           dataKey="value"
           endAngle={-270}
           fill="var(--color-radial-track)"
           innerRadius="66%"
-          isAnimationActive={false}
+          isAnimationActive={!reducedMotion}
           nameKey="id"
           outerRadius="86%"
           rootTabIndex={-1}
@@ -169,11 +177,12 @@ export function RingGauge({
         />
         {ratio == null ? (
           <Pie
+            {...RECHARTS_METER_ANIMATION}
             data={UNKNOWN_RING_DATA}
             dataKey="value"
             endAngle={-270}
             innerRadius="66%"
-            isAnimationActive={false}
+            isAnimationActive={!reducedMotion}
             nameKey="id"
             outerRadius="86%"
             paddingAngle={4}
@@ -183,12 +192,13 @@ export function RingGauge({
           />
         ) : (
           <Pie
+            {...RECHARTS_METER_ANIMATION}
             cornerRadius="50%"
             data={valueData}
             dataKey="value"
             endAngle={-270}
             innerRadius="66%"
-            isAnimationActive={false}
+            isAnimationActive={!reducedMotion}
             nameKey="id"
             outerRadius="86%"
             rootTabIndex={-1}

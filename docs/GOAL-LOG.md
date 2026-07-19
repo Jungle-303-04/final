@@ -7,3 +7,5 @@ E · 라이브 smoke · fdd75a4f265eb5c7fd4dd769b475677c1f6830c8 · 2026-07-19 2
 G7 · 배포 완주 · 333c657345271e5d924fbb9e01983f9142335098 · Dev Gate 29689900163 + Dev Deploy 29690120559 success(10m08s), activity actual-DB read + 인증 canonical 8라우트(`/resources` 포함) smoke 통과, rollback 미실행
 E · 라이브 smoke · 333c657345271e5d924fbb9e01983f9142335098 · 2026-07-19 23:24 KST health/ready·bundle SHA·Home W2~W8·1920 overflow 0 확인; fleet/card 숫자 drift와 activity 30초 refresh 회귀를 `docs/evidence/g4/home-visual-comparison.md`에 고정, G4 Home 부분 유지
 G7 · 배포 완주 · 07527f0b89da4376fd55bfd549f0be1b0c343285 · Dev Gate 29691325987 + Dev Deploy 29691403364 success(10m52s), post-deploy·인증 browser route smoke 통과, rollback 미실행; 선행 동일 ESLint 실패 2회 해소
+G7 · 배포 완주 · 723ab27aa9e4e596cf76d21a5116d10f49b8beaf · Dev Gate 29692859664 + Dev Deploy 29692918077 success(5m50s), console·인증 browser smoke 통과, rollback 미실행; demo-freeze-v3 consumer cutover 감사 기준 G4 부분 유지
+G7 · 배포 완주 · fd58268d5210be92896a90f8ecd1a2ee4130fcb5 · Dev Gate 29693357340 + Dev Deploy 29693439823 success, 홈 W2~W8 내부 1:1 콘텐츠 문법 라이브 반영; 동일 SHA demo 1440 검수 전 G4 부분 유지

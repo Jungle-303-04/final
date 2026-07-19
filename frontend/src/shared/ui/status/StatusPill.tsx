@@ -3,15 +3,11 @@ import { useI18n } from "@/shared/i18n";
 import { statusLabelKeys, type StatusTone } from "./statusTone";
 
 const toneClasses: Readonly<Record<StatusTone, string>> = {
-  healthy:
-    "border-status-healthy/35 bg-status-healthy/10 text-status-healthy",
-  warning:
-    "border-status-warning/40 bg-status-warning/12 text-warning-foreground",
-  critical:
-    "border-status-critical/40 bg-status-critical/12 text-status-critical",
-  stale: "border-status-stale/35 bg-status-stale/10 text-status-stale",
-  unknown:
-    "border-status-unknown/35 bg-status-unknown/10 text-muted-foreground",
+  healthy: "border-tint-ok-border bg-tint-ok-bg text-tint-ok-fg",
+  warning: "border-tint-warn-border bg-tint-warn-bg text-tint-warn-fg",
+  critical: "border-tint-crit-border bg-tint-crit-bg text-tint-crit-fg",
+  stale: "border-tint-purple-border bg-tint-purple-bg text-tint-purple-fg",
+  unknown: "border-tint-gray-border bg-tint-gray-bg text-tint-gray-fg",
 };
 
 const dotClasses: Readonly<Record<StatusTone, string>> = {

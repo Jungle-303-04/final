@@ -16,7 +16,7 @@ describe("shared status presentation", () => {
 
     const pill = screen.getByText("임계").closest("[data-slot='status-pill']");
     expect(pill?.getAttribute("data-status")).toBe("critical");
-    expect(pill?.className).toContain("text-status-critical");
+    expect(pill?.className).toContain("text-tint-crit-fg");
   });
 
   it("announces only explicitly live status changes", () => {

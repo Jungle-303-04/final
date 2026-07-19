@@ -4,7 +4,7 @@ import {
   deleteAlertRule, executeGitOpsResourceAction, getActivityOverview,
   getAiSuggestions, getAuditTimeline, getClusterNodesSummary,
   getClusterSummary, getCompareCandidates, getCompareResourcePair,
-  getCostNodes, getCostOverview, getDiagnoseCapabilities,
+  getCostNodes, getCostOverview, getDiagnoseCapabilities, getFleetSummary,
   getGitOpsApplicationDetail, getGitOpsResourceInsights, getGitOpsResourceTree,
   getHomeInsights, getIncidentRecentChanges, getInventorySummary,
   getNamespaceScope, getNodePodsSummary, getPrometheusIntegration,
@@ -65,6 +65,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
+    getFleetSummary,
     getHomeInsights,
     getNodePodsSummary,
     listClusters,

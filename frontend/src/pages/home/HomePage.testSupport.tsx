@@ -286,6 +286,22 @@ export function homePort(overrides: Partial<HomePort> = {}): HomePort {
             },
           }
     ),
+    loadFleetSummary: vi.fn().mockResolvedValue({
+      clusters: CLUSTERS.clusters.map((cluster) => ({
+        clusterId: cluster.id,
+        name: cluster.name,
+        health: cluster.id === OVERVIEW.clusterId ? OVERVIEW.health : "healthy" as const,
+        podsRunning: cluster.id === OVERVIEW.clusterId ? 17 : 4,
+        podsTotal: cluster.id === OVERVIEW.clusterId ? 18 : 4,
+        nodesReady: cluster.id === OVERVIEW.clusterId ? 2 : 1,
+        nodesTotal: cluster.id === OVERVIEW.clusterId ? 2 : 1,
+        openIncidents: cluster.id === OVERVIEW.clusterId ? 1 : 0,
+        restartCount: cluster.id === OVERVIEW.clusterId ? 3 : 0,
+        cpuPercent: cluster.id === OVERVIEW.clusterId ? 42.5 : null,
+        memoryPercent: cluster.id === OVERVIEW.clusterId ? 61.25 : null,
+        observedAt: cluster.lastObservedAt,
+      })),
+    }),
     loadInsights: vi.fn().mockResolvedValue(INSIGHTS),
     loadNodes: vi.fn().mockResolvedValue(NODES),
     loadNodePods: vi.fn().mockResolvedValue(PODS),

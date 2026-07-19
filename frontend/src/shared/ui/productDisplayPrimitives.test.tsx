@@ -53,7 +53,7 @@ describe("product display primitives", () => {
       </Surface>,
     );
     expect(screen.getByTestId("surface").getAttribute("data-elevation")).toBe("overlay");
-    expect(screen.getByTestId("surface").className).toContain("shadow-lg");
+    expect(screen.getByTestId("surface").className).toContain("shadow-product-overlay");
   });
 
   it("fails fast when semantic surfaces have an empty accessible name", () => {

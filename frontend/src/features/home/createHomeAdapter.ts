@@ -2,6 +2,7 @@ import { HomePortFailure, type HomeFailureCode, type HomePort } from "./homeCont
 import {
   toClusterChoices,
   toClusterOverview,
+  toFleetSummary,
   toHomeInsights,
   toNodeCollection,
   toPodCollection,
@@ -54,6 +55,14 @@ export function createHomeAdapter(
           clusterId,
           await endpoints.getClusterSummary(clusterId, signal),
         )
+      );
+    },
+
+    async loadFleetSummary(signal) {
+      const getFleetSummary = endpoints.getFleetSummary;
+      if (!getFleetSummary) throw new HomePortFailure("error");
+      return withCanonicalFailure(async () =>
+        toFleetSummary(await getFleetSummary(signal))
       );
     },
 

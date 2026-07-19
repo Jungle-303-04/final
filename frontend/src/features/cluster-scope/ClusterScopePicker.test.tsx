@@ -115,14 +115,14 @@ function renderPicker(
   entry = "/?clusters=cluster-a",
   connectionStage: "ready" | null = "ready",
 ) {
-  const canonicalClusters = [
+  const canonicalClusters: HomeClusterChoice[] = [
     {
       ...cluster("cluster-a", "prod-cluster", "Production", "online", "eks", connectionStage),
-      health: "Critical",
+      health: "critical",
     },
     {
       ...cluster("cluster-b", "edge-cluster", "Edge", "offline", "onprem", connectionStage),
-      health: "Healthy",
+      health: "healthy",
     },
   ];
   const port: ClusterScopePort = {

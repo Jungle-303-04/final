@@ -8,12 +8,17 @@ import {
   YAxis,
 } from "recharts";
 
+import { usePrefersReducedMotion } from "@/motion";
 import { cn } from "@/shared/lib/cn";
 import {
   ChartContainer,
   type ChartConfig,
 } from "@/shared/ui/primitives/chart";
-import { chartToneColor, type ChartTone } from "./chartPrimitives";
+import {
+  chartToneColor,
+  RECHARTS_DRAW_ANIMATION,
+  type ChartTone,
+} from "./chartPrimitives";
 
 export interface MultiLineSeries {
   id: string;
@@ -35,6 +40,7 @@ export function MultiLine({
   labels: readonly string[];
   series: readonly MultiLineSeries[];
 }) {
+  const reducedMotion = usePrefersReducedMotion();
   const pointCount = labels.length;
   const annotationId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -105,9 +111,10 @@ export function MultiLine({
           <YAxis domain={[0, max]} hide />
           {chartSeries.map(({ dataKey }) => (
             <Line
+              {...RECHARTS_DRAW_ANIMATION}
               dataKey={dataKey}
               dot={false}
-              isAnimationActive={false}
+              isAnimationActive={!reducedMotion}
               key={dataKey}
               stroke={`var(--color-${dataKey})`}
               strokeLinecap="round"

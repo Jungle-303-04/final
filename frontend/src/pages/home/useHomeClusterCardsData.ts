@@ -5,6 +5,8 @@ import {
   HomePortFailure,
   type HomeClusterChoice,
   type HomeClusterOverview,
+  type HomeFleetClusterSummary,
+  type HomeFleetSummary,
   type HomePort,
 } from "../../features/home/homeContract";
 import {
@@ -18,8 +20,6 @@ import {
   type HomeResourceState,
 } from "./homePageStateModel";
 
-const MAX_CLUSTER_OVERVIEW_CONCURRENCY = 3;
-
 export interface HomeFleetUsageSummary {
   nodesReady: number;
   nodesTotal: number;
@@ -29,20 +29,17 @@ export interface HomeFleetUsageSummary {
 export interface HomeClusterCardsData {
   hasPartialData: boolean;
   overviews: Readonly<Record<string, HomeResourceState<HomeClusterOverview>>>;
+  summaries: Readonly<Record<string, HomeFleetClusterSummary>>;
 }
 
 export function useHomeClusterCardsData({
   clusters,
   port,
   refreshRevision,
-  selectedClusterId,
-  selectedOverview,
 }: {
   clusters: readonly HomeClusterChoice[];
   port: HomePort;
   refreshRevision: number;
-  selectedClusterId: string | null;
-  selectedOverview: HomeResourceState<HomeClusterOverview>;
 }): HomeClusterCardsData {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterIdsKey = JSON.stringify([...new Set(clusters.map((cluster) => cluster.id))]);
@@ -50,55 +47,44 @@ export function useHomeClusterCardsData({
     () => JSON.parse(clusterIdsKey) as string[],
     [clusterIdsKey],
   );
-  const [loaded, setLoaded] = useState<Record<string, HomeResourceState<HomeClusterOverview>>>({});
+  const [fleet, setFleet] = useState<HomeResourceState<HomeFleetSummary>>(HOME_IDLE);
 
   useEffect(() => {
-    const requestedIds = clusterIds.filter((clusterId) => clusterId !== selectedClusterId);
-    const requested = new Set(requestedIds);
     const controller = new AbortController();
     let active = true;
 
     queueMicrotask(() => {
-      if (!active) return;
-      setLoaded((current) => Object.fromEntries(requestedIds.map((clusterId) => [
-        clusterId,
-        startResource(current[clusterId] ?? HOME_IDLE),
-      ])));
+      if (active) setFleet((current) => startResource(current));
     });
 
-    void runBounded(requestedIds, MAX_CLUSTER_OVERVIEW_CONCURRENCY, async (clusterId) => {
+    void (async () => {
       try {
-        const overview = await port.loadClusterOverview(clusterId, controller.signal);
-        if (overview.clusterId !== clusterId) throw new HomePortFailure("invalid-response");
+        const loadFleetSummary = port.loadFleetSummary;
+        if (!loadFleetSummary) throw new HomePortFailure("error");
+        const summary = await loadFleetSummary(controller.signal);
         if (!active || controller.signal.aborted) return;
-        setLoaded((current) => requested.has(clusterId)
-          ? { ...current, [clusterId]: resourceSuccess(overview) }
-          : current);
+        setFleet(resourceSuccess(summary));
       } catch (error) {
         if (!active || isAbortError(error)) return;
         const failure = toHomeFailure(error);
         if (failure.code === "unauthorized") reportUnauthorized();
-        setLoaded((current) => requested.has(clusterId)
-          ? {
-              ...current,
-              [clusterId]: resourceFailure(current[clusterId] ?? HOME_LOADING, failure),
-            }
-          : current);
+        setFleet((current) => resourceFailure(current, failure));
       }
-    });
+    })();
 
     return () => {
       active = false;
       controller.abort();
     };
-  }, [clusterIds, port, refreshRevision, reportUnauthorized, selectedClusterId]);
+  }, [port, refreshRevision, reportUnauthorized]);
 
   return useMemo(() => {
+    const summaries: Record<string, HomeFleetClusterSummary> = fleet.phase === "ready"
+      ? Object.fromEntries(fleet.data.clusters.map((cluster) => [cluster.clusterId, cluster]))
+      : {};
     const overviews: Record<string, HomeResourceState<HomeClusterOverview>> = {};
     for (const clusterId of clusterIds) {
-      overviews[clusterId] = clusterId === selectedClusterId
-        ? selectedOverview
-        : loaded[clusterId] ?? HOME_LOADING;
+      overviews[clusterId] = fleetOverviewState(fleet, summaries[clusterId]);
     }
     return {
       hasPartialData: Object.values(overviews).some((state) =>
@@ -108,8 +94,27 @@ export function useHomeClusterCardsData({
         ))
       ),
       overviews,
+      summaries,
     };
-  }, [clusterIds, loaded, selectedClusterId, selectedOverview]);
+  }, [clusterIds, fleet]);
+}
+
+export function projectHomeFleetClusters(
+  clusters: readonly HomeClusterChoice[],
+  summaries: Readonly<Record<string, HomeFleetClusterSummary>>,
+): HomeClusterChoice[] {
+  return clusters.map((cluster) => {
+    const summary = summaries[cluster.id];
+    return {
+      ...cluster,
+      health: summary?.health ?? null,
+      incidentCount: summary?.openIncidents ?? null,
+      lastObservedAt: summary?.observedAt ?? null,
+      nodeCount: summary?.nodesTotal ?? null,
+      openIncidentCount: summary?.openIncidents ?? null,
+      podCount: summary?.podsTotal ?? null,
+    };
+  });
 }
 
 export function summarizeHomeFleetUsage(
@@ -134,20 +139,43 @@ export function summarizeHomeFleetUsage(
   return { nodesReady, nodesTotal, podsTotal };
 }
 
-async function runBounded<T>(
-  values: readonly T[],
-  concurrency: number,
-  operation: (value: T) => Promise<void>,
-): Promise<void> {
-  let nextIndex = 0;
-  const worker = async () => {
-    while (nextIndex < values.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      await operation(values[index]);
-    }
+function fleetOverviewState(
+  fleet: HomeResourceState<HomeFleetSummary>,
+  summary: HomeFleetClusterSummary | undefined,
+): HomeResourceState<HomeClusterOverview> {
+  if (fleet.phase === "idle" || fleet.phase === "loading") return HOME_LOADING;
+  if (fleet.phase === "failed") {
+    return resourceFailure<HomeClusterOverview>(HOME_LOADING, fleet.failure);
+  }
+  if (!summary) {
+    return resourceFailure<HomeClusterOverview>(
+      HOME_LOADING,
+      new HomePortFailure("invalid-response"),
+    );
+  }
+  return {
+    phase: "ready",
+    data: {
+      clusterId: summary.clusterId,
+      dataQualityWarnings: [],
+      health: summary.health,
+      incidents: [],
+      name: summary.name,
+      usage: {
+        cpuPercent: summary.cpuPercent,
+        memoryPercent: summary.memoryPercent,
+        nodesReady: summary.nodesReady,
+        nodesTotal: summary.nodesTotal,
+        observedAt: summary.observedAt,
+        podsRunning: summary.podsRunning,
+        podsTotal: summary.podsTotal,
+        restartCount: summary.restartCount,
+      },
+      warnings: [],
+      workloads: [],
+    },
+    failure: null,
+    refreshing: fleet.refreshing,
+    refreshFailure: fleet.refreshFailure,
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, values.length) }, () => worker()),
-  );
 }

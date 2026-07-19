@@ -34,6 +34,7 @@ export interface HomeClusterChoice {
   connectionStage: HomeConnectionStage | null;
   registrationState: HomeRegistrationState;
   connectionState: HomeConnectionState;
+  health?: HomeHealthTone | null;
   observationMode?: "agent" | "simulation";
   lastObservedAt: string | null;
   nodeCount: number | null;
@@ -61,6 +62,26 @@ export interface HomeUsageSnapshot {
   restartCount: number;
   cpuPercent: number | null;
   memoryPercent: number | null;
+}
+
+/** Canonical projection of the fleet summary used by the home cluster cards. */
+export interface HomeFleetClusterSummary {
+  clusterId: string;
+  name: string;
+  health: HomeHealthTone;
+  podsRunning: number;
+  podsTotal: number;
+  nodesReady: number;
+  nodesTotal: number;
+  openIncidents: number;
+  restartCount: number;
+  cpuPercent: number | null;
+  memoryPercent: number | null;
+  observedAt: string | null;
+}
+
+export interface HomeFleetSummary {
+  clusters: readonly HomeFleetClusterSummary[];
 }
 
 export interface HomeWorkloadSummary {
@@ -328,6 +349,7 @@ export interface HomePort {
   loadDashboardRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listClusterChoices(signal?: AbortSignal): Promise<HomeClusterChoices>;
   loadClusterOverview(clusterId: string, signal?: AbortSignal): Promise<HomeClusterOverview>;
+  loadFleetSummary?(signal?: AbortSignal): Promise<HomeFleetSummary>;
   loadInsights(clusterId: string, signal?: AbortSignal): Promise<HomeInsights>;
   loadNodes(clusterId: string, signal?: AbortSignal): Promise<HomeNodeCollection>;
   loadNodePods(

@@ -22,6 +22,7 @@ import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshSch
 export type { HomeResourceState } from "./homePageStateModel";
 
 export interface HomePageState {
+  boardWindowAnchorMs: number;
   boardRefreshRevision: number;
   clusterSelection: ClusterScopeSelection;
   choices: HomeResourceState<HomeClusterChoices>;
@@ -56,8 +57,12 @@ export function useHomePageState(port: HomePort): HomePageState {
   const selectedClusterId = clusterScope.requestedClusterId;
   const selectedNodeName = filter.detail.node;
   const [dashboardRevision, setDashboardRevision] = useState(0);
+  const [boardWindowAnchorMs, setBoardWindowAnchorMs] = useState(() => Date.now());
   const dashboardRefresh = useServerRefreshScheduler(
-    () => setDashboardRevision((current) => current + 1),
+    () => {
+      setBoardWindowAnchorMs(Date.now());
+      setDashboardRevision((current) => current + 1);
+    },
   );
   const observedDashboardRevision = useRef(dashboardRevision);
   const resumedFromBackground = useRef(false);
@@ -210,6 +215,7 @@ export function useHomePageState(port: HomePort): HomePageState {
   }, [dashboardRefresh, refreshInsights]);
 
   return useMemo(() => ({
+    boardWindowAnchorMs,
     boardRefreshRevision: dashboardRevision,
     choices,
     clusterSelection: clusterScope.selection,
@@ -228,7 +234,7 @@ export function useHomePageState(port: HomePort): HomePageState {
       else nodeButtons.current.delete(nodeName);
     },
   }), [
-    choices, closeNode, clusterFrame, dashboardRevision, dataUpdatedAt, refresh, refreshIntervalSeconds, selectNode, selectedClusterExists,
+    boardWindowAnchorMs, choices, closeNode, clusterFrame, dashboardRevision, dataUpdatedAt, refresh, refreshIntervalSeconds, selectNode, selectedClusterExists,
     clusterScope.selectCluster, clusterScope.selection,
     selectedClusterId, selectedNodeName,
   ]);

@@ -1,27 +1,45 @@
 import type { Transition } from "motion/react";
 
+import { MOTION_DURATION_SECONDS } from "./useStagger";
+
 export const MOTION_SPRING = Object.freeze({
   soft: Object.freeze({
     type: "spring",
-    stiffness: 360,
-    damping: 32,
-    mass: 0.8,
+    bounce: 0.12,
+    visualDuration: 0.32,
   }),
   spring: Object.freeze({
     type: "spring",
-    stiffness: 420,
-    damping: 30,
-    mass: 0.9,
+    bounce: 0.16,
+    visualDuration: 0.5,
   }),
   page: Object.freeze({
     type: "spring",
-    stiffness: 300,
-    damping: 34,
-    mass: 1,
+    bounce: 0.08,
+    visualDuration: 0.55,
   }),
 } satisfies Record<"page" | "soft" | "spring", Transition>);
 
-export const EASE_DRAW = Object.freeze([0.32, 0.72, 0, 1] as const);
+export const EASE_DRAW = Object.freeze([0.22, 1, 0.36, 1] as const);
+
+/** Tween-only exceptions from demo-freeze-v3; layout motion uses MOTION_SPRING. */
+export const MOTION_TWEEN = Object.freeze({
+  none: Object.freeze({ duration: MOTION_DURATION_SECONDS.none }),
+  micro: Object.freeze({ duration: MOTION_DURATION_SECONDS.micro }),
+  fade: Object.freeze({ duration: MOTION_DURATION_SECONDS.fade }),
+  draw: Object.freeze({
+    duration: MOTION_DURATION_SECONDS.draw,
+    ease: EASE_DRAW,
+  }),
+  meter: Object.freeze({
+    duration: MOTION_DURATION_SECONDS.meter,
+    ease: "easeInOut",
+  }),
+  count: Object.freeze({
+    duration: MOTION_DURATION_SECONDS.count,
+    ease: "easeInOut",
+  }),
+} satisfies Record<"count" | "draw" | "fade" | "meter" | "micro" | "none", Transition>);
 
 export const LIST_STAGGER = Object.freeze({
   maxItems: 8,

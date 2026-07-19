@@ -13,18 +13,38 @@ Vercel Geist(의미 토큰·차분한 표면·정보 우선) × Apple HIG(컬러
 | 데모 토큰 | 값 | 제품 CSS 변수 |
 |---|---|---|
 | UI.bg | #FAFAFC | --background |
-| UI.bg2 | #FBFBFD | (표 헤더·인셋: bg-muted/40 계열) |
+| UI.bg2 | #FBFBFD | --background-subtle |
 | UI.card | #FFFFFF | --card, --popover, --sidebar |
 | UI.line | #E9EAEE | --border, --input |
 | UI.line2 | #F1F2F5 | --border-subtle, --muted |
 | UI.ink / ink2 / ink3 | #111318 / #5F6570 / #9AA0AA | --foreground / --muted-foreground / --caption-foreground |
 | BLUE | #0A84FF | --primary, --ring, --sidebar-primary |
-| TINT.blue.bg/fg | #EDF4FF / #0A6CFF | --accent / --accent-foreground |
+| BLUE2 | #5AC8FA | --brand-accent |
+| LINE3 / INK4 | #DADDE3 / #C6CAD1 | --border-hover / --foreground-idle |
+| INSET / MARK | #EEF0F4 / #FFF1B8 | --surface-inset / --search-highlight |
+| GLASS | rgba(246,247,250,.86) | --glass-background |
 | HP.ok / warn / crit | #30D158 / #FFB340 / #FF5F55 | --status-healthy / --status-warning / --destructive |
-| TINT.warn.fg | #B25A00 | --warning-foreground |
 | 보라(구성) | #8250DF | --status-stale |
+| IDENT teal / indigo / jade / ruby | #0FA3B1 / #4C6EF5 / #12B5A5 / #DC382C | --identity-teal / --identity-indigo / --identity-jade / --identity-ruby |
 | CODE.bg/fg | #0F1219 / #D6DBE5 | --code-background / --code-foreground |
 | 차트 범주 | BLUE·ok·warn·보라·틸(#0FA3B1) | --chart-1~5 |
+
+TINT는 아래 7개 삼중항을 축약 없이 제품 토큰으로 보존한다. 상태 원색에 임의 alpha를
+합성하지 않고 공용 `StatusPill`·`TintChip`·`Badge`가 이 변수만 소비한다.
+
+| 데모 TINT | fg / bg / bd | 제품 CSS 변수 |
+|---|---|---|
+| ok | #1F9D4D / #EDFAF1 / #C9EAD4 | --tint-ok-fg / --tint-ok-bg / --tint-ok-border |
+| warn | #B25A00 / #FFF8EF / #F3D8B7 | --tint-warn-fg / --tint-warn-bg / --tint-warn-border |
+| crit | #C43028 / #FFF3F2 / #F5CFCC | --tint-crit-fg / --tint-crit-bg / --tint-crit-border |
+| blue | #0A6CFF / #EDF4FF / #CFE1FB | --tint-blue-fg / --tint-blue-bg / --tint-blue-border |
+| purple | #8250DF / #F6F1FE / #E3D5FA | --tint-purple-fg / --tint-purple-bg / --tint-purple-border |
+| gray | #5F6570 / #F4F5F7 / #E4E6EA | --tint-gray-fg / --tint-gray-bg / --tint-gray-border |
+| lime | #4D7C0F / #F3FAE7 / #DDF0BB | --tint-lime-fg / --tint-lime-bg / --tint-lime-border |
+
+외부 서비스 아이덴티티는 `shared/ui/brand/brand.css` 한 곳만 소유한다. GitHub는
+`#24292F`, AWS 타일은 `#FF9900 → #F76F00`이며 페이지 안에 다시 쓰지 않는다.
+
 - **금지**: 토큰 정의 파일 밖 hex·rgba 리터럴. 알파는 Tailwind 알파 문법(`foreground/[0.07]`)이나 토큰 파생만.
 
 ## 3. 타이포 — TYPE ↔ --type-*
@@ -39,8 +59,11 @@ tile 3 · chip/badge 5~6 · control 9 · card 14 · **클러스터/큰 카드 16
 
 ## 5. 모션 (D17)
 - 스프링 3종만: SOFT(등장·탭 인디케이터, bounce .12/vd .32) · SPRING(카드·레이아웃, .16/.5) · PAGE(뷰 전환, .08/.55).
-  제품 등가: --motion-quick/pop/layout/camera + --ease-spring 계열.
+  제품 등가: `MOTION_SPRING.soft/spring/page`와 --motion-soft/spring/page.
 - duration 리터럴은 DUR 화이트리스트만: micro .12 / fade .18 / draw .85 / **meter 1.2(게이지 충전)** / count 1.4.
+  제품 등가: `MOTION_TWEEN.micro/fade/draw/meter/count`와 --motion-micro/fade/draw/meter/count.
+- EASE_DRAW `[.22,1,.36,1]`은 `EASE_DRAW`와 --ease-draw만 소비한다. `motion/react` 직접 import는
+  `src/motion` 경계 안에 두고 페이지는 `MeterFill` 등 공용 모션 경계를 사용한다.
 - 리스트 등장 stagger: 행 0.04~0.05s, 최대 8항목까지만 지연.
 - 서피스 전환 시 스크롤 최상단 초기화 필수.
 
@@ -48,7 +71,7 @@ tile 3 · chip/badge 5~6 · control 9 · card 14 · **클러스터/큰 카드 16
 - **클러스터 카드**: 라운드16 · 헤더[30px 그라디언트 프로바이더 타일 + mono title3 이름 + prod 배지 + 우측 상태 pill] ·
   카운트 줄(라벨 muted + **bold mono 숫자**, 장애는 destructive, 0/미상은 표기 생략) ·
   CPU/MEM 게이지(34px micro 라벨 · 5px 트랙 foreground/7% · 임계 75 warn/90 crit · meter 1.2s 충전 · 38px % mono bold) ·
-  hover: border #DADDE3 + shadow `0 10px 26px -20px rgba(17,19,24,.16)`.
+  hover: --border-hover + --elevation-hover. 값은 #DADDE3 + `0 10px 26px -20px rgba(17,19,24,.16)`.
 - **상태 pill**: tint fg/bg/bd 3종 세트(ok·warn·crit·info)만. 장애 집계 pill은 crit 원색 배경+흰 글자.
 - **요약 칩 줄**: 집계까지만(클러스터·노드·파드·OutOfSync n·장애 n). 개별 리소스 나열 금지.
 - **WidgetFrame**: 제목 body bold + ⓘ툴팁 + 접기 + "전체 보기" 딥링크(실 목적지만). 편집=카드 전체 드래그(파란 점선 보더), 버튼식 이동 금지.

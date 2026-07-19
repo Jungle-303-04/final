@@ -1,3 +1,5 @@
+import { MOTION_DURATION_MS } from "@/motion";
+
 export type ChartTone =
   | "critical"
   | "healthy"
@@ -5,6 +7,19 @@ export type ChartTone =
   | "stale"
   | "unknown"
   | "warning";
+
+/** Recharts' closest supported named easing to demo-freeze-v3 EASE_DRAW. */
+const RECHARTS_EASE_DRAW = "ease-out" as const;
+
+export const RECHARTS_DRAW_ANIMATION = Object.freeze({
+  animationDuration: MOTION_DURATION_MS.draw,
+  animationEasing: RECHARTS_EASE_DRAW,
+});
+
+export const RECHARTS_METER_ANIMATION = Object.freeze({
+  animationDuration: MOTION_DURATION_MS.meter,
+  animationEasing: RECHARTS_EASE_DRAW,
+});
 
 export function finitePositive(value: number | undefined, fallback = 1) {
   return typeof value === "number" && Number.isFinite(value) && value > 0

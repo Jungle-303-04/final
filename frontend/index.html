@@ -17,7 +17,7 @@
           ? storedTheme
           : storedTheme === "system"
             ? storedTheme
-            : "system";
+            : "light";
         const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
         const isDark = selectedTheme === "dark" || (selectedTheme === "system" && systemDark);
         document.documentElement.classList.toggle("dark", isDark);
@@ -27,8 +27,8 @@
     </script>
     <style>
       :root {
-        --background: oklch(1 0 0);
-        --foreground: oklch(0.145 0 0);
+        --background: #fafafc;
+        --foreground: #111318;
       }
       :root.dark {
         --background: oklch(0.145 0 0);

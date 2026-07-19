@@ -1,5 +1,4 @@
 import { Ellipsis, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
-import { motion } from "motion/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router-dom";
 
@@ -10,6 +9,7 @@ import type {
   HomeUsageSnapshot,
 } from "../../features/home/homeContract";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
+import { MeterFill, type MeterTone } from "../../shared/ui/meter/MeterFill";
 import { STAGGER_MS, useStagger } from "../../motion/useStagger";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { StatusPill, type StatusTone } from "../../shared/ui/status";
@@ -17,6 +17,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { cn } from "@/shared/lib/cn";
 import type { DisconnectPhase } from "./ClusterDisconnectDialog";
+import "../../shared/ui/brand/brand.css";
 
 const connectionTones: Record<HomeConnectionState, StatusTone> = {
   online: "healthy",
@@ -57,7 +58,7 @@ export function ClusterCard({
   const incidents = cluster.openIncidentCount ?? cluster.incidentCount;
   const tone = incidents != null && incidents > 0
     ? "critical"
-    : connectionTones[cluster.connectionState];
+    : cluster.health ?? connectionTones[cluster.connectionState];
 
   useEffect(() => {
     const card = cardRef.current;
@@ -89,7 +90,7 @@ export function ClusterCard({
   return (
     <Card
       className={cn(
-        "motion-node-land relative gap-0 overflow-visible rounded-2xl border-border py-0 shadow-none transition-[box-shadow,border-color] duration-(--motion-quick) ease-(--ease-out) hover:border-[#dadde3] hover:shadow-[0_10px_26px_-20px_rgba(17,19,24,0.16)] motion-reduce:transition-none",
+        "motion-node-land relative gap-0 overflow-visible rounded-panel border-border py-0 shadow-none transition-[box-shadow,border-color] duration-(--motion-quick) ease-(--ease-out) hover:border-border-hover hover:shadow-product-hover motion-reduce:transition-none",
         variant === "map" ? "min-h-44" : "min-h-48",
       )}
       data-cluster-id={cluster.id}
@@ -98,17 +99,17 @@ export function ClusterCard({
     >
       <Link
         aria-label={t("clusters.card.openResources", { name: cluster.name })}
-        className="flex min-h-full flex-1 flex-col rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-h-full flex-1 flex-col rounded-panel outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() => captureRouteMorph(document)}
         to={href}
       >
         <CardHeader className={cn("gap-0 px-4 pt-4 pb-0", onDisconnect && "pr-12")}>
           <div className="flex min-w-0 items-start gap-2.5">
             <span
-              className="grid size-[30px] shrink-0 place-items-center rounded-[9px] text-white"
-              style={{ background: "linear-gradient(135deg, #FF9900, #F76F00)" }}
+              className="brand-provider-tile grid size-[30px] shrink-0 place-items-center rounded-md text-primary-foreground"
+              data-provider={cluster.provider}
             >
-              <ClusterProviderIcon appearance="compact" className="text-white [&_svg]:fill-current" provider={cluster.provider} />
+              <ClusterProviderIcon appearance="compact" className="text-primary-foreground [&_svg]:fill-current" provider={cluster.provider} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
@@ -119,7 +120,7 @@ export function ClusterCard({
                   {cluster.name}
                 </CardTitle>
                 {isProductionEnvironment(cluster.environment) ? (
-                  <span className="shrink-0 rounded-[5px] border border-status-warning/45 bg-status-warning/12 px-1.5 py-px text-micro font-semibold text-warning-foreground">
+                  <span className="shrink-0 rounded-sm border border-tint-warn-border bg-tint-warn-bg px-1.5 py-px text-micro font-semibold text-tint-warn-fg">
                     prod
                   </span>
                 ) : null}
@@ -131,7 +132,7 @@ export function ClusterCard({
               </p>
             </span>
             {incidents != null && incidents > 0 ? (
-              <span className="shrink-0 rounded-full bg-destructive px-2.5 py-1 text-caption font-bold tabular-nums text-white">
+              <span className="shrink-0 rounded-full bg-destructive px-2.5 py-1 text-caption font-bold tabular-nums text-primary-foreground">
                 {t("clusters.card.criticalLabel")} {formatNumber(incidents)}
               </span>
             ) : (
@@ -226,13 +227,13 @@ function UsageBar({
   unavailableLabel: string;
   value: number | null;
 }) {
-  const tone = value == null
-    ? "var(--status-unknown)"
+  const tone: MeterTone = value == null
+    ? "unknown"
     : value >= 90
-      ? "var(--destructive)"
+      ? "critical"
       : value >= 75
-        ? "var(--status-warning)"
-        : "var(--status-healthy)";
+        ? "warning"
+        : "healthy";
   return (
     <div
       aria-label={`${label} ${value == null ? unavailableLabel : `${value}%`}`}
@@ -243,13 +244,7 @@ function UsageBar({
         {label}
       </span>
       <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/[0.07]">
-        <motion.span
-          animate={{ width: `${value ?? 0}%` }}
-          className="block h-full rounded-full"
-          initial={false}
-          style={{ background: tone }}
-          transition={{ duration: 1.2, ease: "easeInOut" }}
-        />
+        <MeterFill className="block h-full rounded-full" tone={tone} value={value ?? 0} />
       </span>
       <span className="w-[38px] shrink-0 text-right font-mono text-label-2 font-bold tabular-nums text-foreground">
         {value == null ? "—" : `${value}%`}

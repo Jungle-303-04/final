@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { CostPort } from "../../features/cost/costContract";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
@@ -112,6 +112,7 @@ export function useHomeBoardData({
   ports,
   refreshKey,
   scope,
+  windowAnchorMs,
   wantsCost,
   wantsNamespaces,
   wantsTimeline,
@@ -121,11 +122,11 @@ export function useHomeBoardData({
   ports: HomeBoardPorts;
   refreshKey: number;
   scope: HomeBoardScope;
+  windowAnchorMs: number;
   wantsCost: boolean;
   wantsNamespaces: boolean;
   wantsTimeline: boolean;
 }): HomeBoardData {
-  const [mountedAtMs] = useState(() => Date.now());
   const clusterIds = useMemo(
     () => scope.clusters.map((cluster) => cluster.clusterId),
     [scope.clusters],
@@ -146,10 +147,7 @@ export function useHomeBoardData({
   );
   const activityQuery = useMemo(
     () => {
-      const window = activityWindowForPeriod(
-        period,
-        refreshKey > 0 ? refreshKey : mountedAtMs,
-      );
+      const window = activityWindowForPeriod(period, windowAnchorMs);
       return window === null || clusterIds.length === 0 ? null : {
         ...window,
         applications: scope.applications,
@@ -158,12 +156,11 @@ export function useHomeBoardData({
       };
     },
     [
-      clusterIds,
-      mountedAtMs,
       activityNamespaceNames,
+      clusterIds,
       period,
-      refreshKey,
       scope.applications,
+      windowAnchorMs,
     ],
   );
   const incidents = useAsyncResource(

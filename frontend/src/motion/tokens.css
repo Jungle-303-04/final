@@ -1,26 +1,33 @@
 :root {
-  --motion-instant: 120ms;
-  --motion-quick: 180ms;
-  --motion-pop: 340ms;
-  --motion-ai: 300ms;
-  --motion-dock: 240ms;
-  --motion-layout: 320ms;
-  --motion-camera: 420ms;
-  --motion-value: 500ms;
+  /* demo-freeze-v3 canonical duration tokens */
+  --motion-micro: 120ms;
+  --motion-fade: 180ms;
+  --motion-draw: 850ms;
+  --motion-meter: 1200ms;
+  --motion-count: 1400ms;
+  --motion-soft: 320ms;
+  --motion-spring: 500ms;
+  --motion-page: 550ms;
+
+  /* Compatibility aliases; new code consumes the semantic tokens above. */
+  --motion-instant: var(--motion-micro);
+  --motion-quick: var(--motion-fade);
+  --motion-pop: var(--motion-soft);
+  --motion-ai: var(--motion-soft);
+  --motion-dock: var(--motion-spring);
+  --motion-layout: var(--motion-spring);
+  --motion-camera: var(--motion-page);
+  --motion-value: var(--motion-draw);
   --motion-pulse: 1200ms;
   --motion-breathe: 1600ms;
   --motion-diagnose-cycle: 2400ms;
-  --motion-soft: var(--motion-quick);
-  --motion-spring: var(--motion-layout);
-  --motion-page: var(--motion-camera);
-  --motion-draw: var(--motion-value);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.2, 0.5, 1);
   --ease-pop: cubic-bezier(0.34, 1.4, 0.5, 1);
   --ease-soft: var(--ease-out);
   --ease-page: var(--ease-spring);
-  --ease-draw: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-draw: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-linear: linear;
   --stagger-node: 70ms;
   --stagger-pod: 32ms;

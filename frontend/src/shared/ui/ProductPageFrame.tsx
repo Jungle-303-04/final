@@ -13,7 +13,7 @@ export function ProductPageFrame({
     <div
       {...props}
       className={cn(
-        "grid w-full min-w-0 gap-4 p-4 pb-[var(--product-floating-action-clearance)] sm:p-6 sm:pb-[var(--product-floating-action-clearance)]",
+        "grid w-full min-w-0 gap-(--product-page-gap) px-(--product-page-inline) pt-(--product-page-block-start) pb-(--product-floating-action-clearance)",
         className,
       )}
       data-slot="product-page-frame"

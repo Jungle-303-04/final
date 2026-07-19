@@ -7,6 +7,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { usePrefersReducedMotion } from "@/motion";
 import { cn } from "@/shared/lib/cn";
 import {
   ChartContainer,
@@ -16,6 +17,7 @@ import {
   chartToneColor,
   finitePositive,
   normalizedRatio,
+  RECHARTS_DRAW_ANIMATION,
   type ChartTone,
 } from "./chartPrimitives";
 
@@ -45,6 +47,7 @@ export function MiniBar({
   tone = "primary",
   value,
 }: MiniBarProps) {
+  const reducedMotion = usePrefersReducedMotion();
   const ratio = normalizedRatio(value, max);
   return (
     <ChartContainer
@@ -74,9 +77,10 @@ export function MiniBar({
           />
         ) : null}
         <Bar
+          {...RECHARTS_DRAW_ANIMATION}
           dataKey="value"
           fill="var(--color-value)"
-          isAnimationActive={false}
+          isAnimationActive={!reducedMotion}
           radius={[3, 3, 3, 3]}
         />
       </BarChart>
@@ -109,6 +113,7 @@ export function RatioBar({
   className?: string;
   segments: readonly RatioBarSegment[];
 }) {
+  const reducedMotion = usePrefersReducedMotion();
   const positiveValues = segments.map((segment) => Number.isFinite(segment.value)
     ? Math.max(0, segment.value)
     : 0);
@@ -152,9 +157,10 @@ export function RatioBar({
         <YAxis dataKey="metric" hide type="category" />
         {segments.map((segment, index) => (
           <Bar
+            {...RECHARTS_DRAW_ANIMATION}
             dataKey={`segment${index}`}
             fill={`var(--color-segment${index})`}
-            isAnimationActive={false}
+            isAnimationActive={!reducedMotion}
             key={`${segment.id}-${index}`}
             radius={segmentRadius(index, firstVisible, lastVisible)}
             stackId="ratio"
@@ -178,6 +184,7 @@ export function MiniBars({
   tone?: ChartTone;
   values: readonly (null | number)[];
 }) {
+  const reducedMotion = usePrefersReducedMotion();
   const ceiling = finitePositive(
     max,
     Math.max(
@@ -208,9 +215,10 @@ export function MiniBars({
         <XAxis dataKey="index" hide type="category" />
         <YAxis domain={NORMALIZED_DOMAIN} hide type="number" />
         <Bar
+          {...RECHARTS_DRAW_ANIMATION}
           dataKey="value"
           fill="var(--color-value)"
-          isAnimationActive={false}
+          isAnimationActive={!reducedMotion}
           radius={[1, 1, 0, 0]}
         >
           {rows.map((row) => (

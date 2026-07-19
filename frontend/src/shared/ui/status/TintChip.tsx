@@ -6,17 +6,13 @@ import type { StatusTone } from "./statusTone";
 export type TintChipTone = "neutral" | "primary" | StatusTone;
 
 const toneClasses: Readonly<Record<TintChipTone, string>> = {
-  neutral: "border-border-subtle bg-muted/60 text-muted-foreground",
-  primary: "border-primary/25 bg-primary/8 text-primary",
-  healthy:
-    "border-status-healthy/30 bg-status-healthy/8 text-status-healthy",
-  warning:
-    "border-status-warning/35 bg-status-warning/10 text-warning-foreground",
-  critical:
-    "border-status-critical/35 bg-status-critical/10 text-status-critical",
-  stale: "border-status-stale/30 bg-status-stale/8 text-status-stale",
-  unknown:
-    "border-status-unknown/30 bg-status-unknown/8 text-muted-foreground",
+  neutral: "border-tint-gray-border bg-tint-gray-bg text-tint-gray-fg",
+  primary: "border-tint-blue-border bg-tint-blue-bg text-tint-blue-fg",
+  healthy: "border-tint-ok-border bg-tint-ok-bg text-tint-ok-fg",
+  warning: "border-tint-warn-border bg-tint-warn-bg text-tint-warn-fg",
+  critical: "border-tint-crit-border bg-tint-crit-bg text-tint-crit-fg",
+  stale: "border-tint-purple-border bg-tint-purple-bg text-tint-purple-fg",
+  unknown: "border-tint-gray-border bg-tint-gray-bg text-tint-gray-fg",
 };
 
 export interface TintChipProps {

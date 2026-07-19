@@ -2,6 +2,7 @@ import type {
   HomeClusterChoice,
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeFleetSummary,
   HomeCertificateResourceRef,
   HomeDataQualityWarning,
   HomeNodeCollection,
@@ -17,6 +18,7 @@ import type {
   HomeEndpointClusterList,
   HomeEndpointClusterOverview,
   HomeEndpointClusterSummary,
+  HomeEndpointFleetSummary,
   HomeEndpointInsightCoverage,
   HomeEndpointInsights,
   HomeEndpointResourceRef,
@@ -53,6 +55,31 @@ export function toClusterChoices(wire: HomeEndpointClusterList): HomeClusterChoi
   const clusters = wire.clusters.map(toClusterChoice);
   assertUnique(clusters.map(({ id }) => id));
   return { completeness: "exact", clusters };
+}
+
+export function toFleetSummary(wire: HomeEndpointFleetSummary): HomeFleetSummary {
+  const clusters = wire.clusters.map((cluster) => ({
+    clusterId: canonicalIdentity(cluster.cluster_id),
+    name: canonicalDisplayLabel(cluster.name, cluster.cluster_id),
+    health: healthTone(cluster.health),
+    podsRunning: nonNegativeInteger(cluster.pods_running),
+    podsTotal: nonNegativeInteger(cluster.pods_total),
+    nodesReady: nonNegativeInteger(cluster.nodes_ready),
+    nodesTotal: nonNegativeInteger(cluster.nodes_total),
+    openIncidents: nonNegativeInteger(cluster.open_incidents),
+    restartCount: nonNegativeInteger(cluster.restarts_recent),
+    cpuPercent: cluster.cpu_pct === null ? null : percentage(cluster.cpu_pct),
+    memoryPercent: cluster.mem_pct === null ? null : percentage(cluster.mem_pct),
+    observedAt: canonicalTimestamp(cluster.last_seen_at),
+  }));
+  assertUnique(clusters.map(({ clusterId }) => clusterId));
+  for (const cluster of clusters) {
+    if (
+      cluster.nodesReady > cluster.nodesTotal ||
+      cluster.podsRunning > cluster.podsTotal
+    ) invalidResponse();
+  }
+  return { clusters };
 }
 
 function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {

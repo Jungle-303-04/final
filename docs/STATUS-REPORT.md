@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-19 23:55 KST다. 원격 소스와 라이브 배포는 `07527f0b89da4376fd55bfd549f0be1b0c343285`이고, 이번 결함 판정의 완전한 홈 실브라우저 팩은 직전 성공 SHA `333c657345271e5d924fbb9e01983f9142335098`이다. 코드, 자동 게이트, API 계약, 라이브 상태와 브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 00:54 KST다. 원격 소스와 라이브 배포는 `fd58268d5210be92896a90f8ecd1a2ee4130fcb5`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이며, 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. activity bigint hotfix를 포함한 `333c65734`가 Dev Gate `29689900163`과 Dev Deploy `29690120559`를 모두 통과했다.
-2. Deploy의 2026년 실제 DB activity read, 인증 canonical 8라우트(`/resources` 포함) browser smoke가 성공했고 rollback은 실행되지 않았다.
-3. 라이브 bundle `index-BKNoNEP4.js`가 전체 SHA `333c657345271e5d924fbb9e01983f9142335098`을 포함해 배포·화면 계보가 일치한다.
-4. 라이브 홈에는 플릿 요약·클러스터 카드·W2~W8이 렌더되고 1920 viewport의 가로 overflow는 0이다. 상단과 하단 보드 캡처를 증거로 고정했다.
-5. `/api/activity/overview`는 2026년 12 bucket을 HTTP 200으로 반환하지만, 화면은 최초 로드 후 첫 30초 갱신에서 `사용할 수 없음`으로 회귀한다.
-6. 원인은 `boardRefreshRevision` 카운터 `1`을 `activityWindowForPeriod`의 epoch-ms로 전달하는 frontend 시간창 계산이며, 초기/갱신 후 캡처로 재현했다.
-7. 라이브 카드 `0/0·21`, `0/0·66`, `0/0·23`은 같은 SHA `/api/fleet/summary`의 `2/3·36`, `2/2·793`, `3/4·13`과 다르며 health도 일치하지 않는다.
-8. 따라서 activity backend P0와 배포 P0는 해소됐지만 G4 홈 D-4는 **부분**이다. 숫자 단일 원장과 refresh 시간창을 frontend 소유자에게 반송한다.
-9. 후속 `80e3244ad`/`6c46950d09` Gate는 같은 unused `container`로 연속 실패했지만 `07527f0b89`에서 제거되어 Gate `29691325987`·Deploy `29691403364`가 완주했다.
-10. 다음 3수는 검증된 증거·보고 rebase/push, 그 배포 창 완주, frontend D-4 수정 SHA의 동일 viewport demo/live 재대조다.
+1. `fd58268d5`가 Dev Gate `29693357340`와 Dev Deploy `29693439823`을 통과해 원격 dev와 라이브 digest가 다시 일치한다.
+2. 직전 `723ab27aa9` 배포에 이어 홈 위젯 내부 1:1 콘텐츠 문법이 반영됐고, 두 배포 모두 console·인증 browser smoke 성공 및 rollback 미실행이다.
+3. `demo-freeze-v3` 기준 `adcf92130`과 제품 `723ab27aa9`의 디자인 계보를 감사했다. 토큰 정의는 일부 이식됐지만 소비자 전환은 미완료다.
+4. P0 잔여는 TINT 21종 소비, 모션 토큰 소비, 카드 radius/elevation 통일, `ClusterCard`의 raw color 제거다.
+5. P1 잔여는 `font-medium` 300회/125파일과 named palette 79회/24파일이며, 페이지 로컬 visual ownership 후보는 31개다.
+6. 따라서 v3 디자인 가이드 병합과 G4는 **부분**이다. 토큰 파일 존재만으로 완료를 선언하지 않고 실제 consumer 0-잔여와 화면 대조를 요구한다.
+7. 직전 Home D-4의 fleet 숫자 단일 원장 및 activity 30초 refresh 결함도 완료 증거가 없어 기존 블로커를 유지한다.
+8. 새 외부 사람 필요 블로커는 0개다. 현 잔여는 저장소 코드·검증·배포 권한 안에서 자체 해소 가능하다.
+9. 다음 배치는 home foundation을 먼저 제품 소비자로 전환하고, 같은 SHA demo/live 대조 뒤 배포한다.
+10. 다음 3수는 home foundation → deploy/issues table → resources table 순서의 소배치 cutover·Gate→Deploy다.
 
 ## 현재 상세 근거
 
@@ -31,12 +31,15 @@
 | `f2774f10d` | Gate `29688414550`, Deploy `29688613147` | Backend 성공, Frontend `HomePage.test.tsx` 라벨 기대 1건 실패, Deploy skipped | D22 어휘 정합 결함 |
 | `0916099f9` | Gate `29688722835`, Deploy `29688782222` | Gate 성공. Deploy 인증 browser smoke `/resources`에서 activity API 500, 이전 release 롤백 성공 | PostgreSQL epoch-ms int4 overflow |
 | `9b022f2f1` | 로컬 검증 | activity 산술 3 bind bigint, 2026 빈/populated series, direct deploy read probe. 표적 33/33, Backend 3,776 pass/3 skip, gate-fast/governance 성공 | `333c65734` ancestry로 배포됨 |
-| `333c65734` | Gate `29689900163`, Deploy `29690120559` | Gate success. 실제 DB activity read와 인증 8라우트 browser smoke success, rollback skipped | 현재 라이브 기준점 |
+| `333c65734` | Gate `29689900163`, Deploy `29690120559` | Gate success. 실제 DB activity read와 인증 8라우트 browser smoke success, rollback skipped | 직전 완전 Home 증거 기준점 |
 | `80e3244ad` | Gate `29691097907`, Deploy `29691204415` | Backend success. Frontend ESLint가 `ClusterCard.test.tsx:80` 미사용 `container` 1건으로 실패, Deploy skipped | 원격 전용, 라이브 미반영 |
-| `6c46950d09` | Gate `29691225543`, Deploy `29691288392` | Backend success. 같은 unused `container`로 Frontend/Full gate 실패, Deploy skipped | 같은 원인 연속 재발, 현재 원격 |
-| `07527f0b89` | Gate `29691325987`, Deploy `29691403364` | proof/backend/frontend/full gate와 post-deploy/authenticated browser smoke success, rollback skipped | 현재 원격·라이브 기준점 |
+| `6c46950d09` | Gate `29691225543`, Deploy `29691288392` | Backend success. 같은 unused `container`로 Frontend/Full gate 실패, Deploy skipped | 같은 원인 연속 재발, 라이브 미반영 |
+| `07527f0b89` | Gate `29691325987`, Deploy `29691403364` | proof/backend/frontend/full gate와 post-deploy/authenticated browser smoke success, rollback skipped | 이전 성공 기준점 |
+| `fc94c6979` | Gate `29692135864`, Deploy `29692193340` | `HomeClusterGrid.test.tsx` 미사용 `userEvent`·`vi`로 Frontend lint 실패, Deploy skipped | 제품 실행 전 정적 게이트 실패 |
+| `723ab27aa9` | Gate `29692859664`, Deploy `29692918077` | Gate success, Deploy success(5m50s), console/authenticated browser smoke success, rollback skipped | 직전 디자인 배치 기준점 |
+| `fd58268d5` | Gate `29693357340`, Deploy `29693439823` | Gate/Deploy success, 홈 위젯 내부 1:1 콘텐츠 문법 반영 | 현재 원격·라이브 기준점 |
 
-현재 활성 Gate/Deploy는 0이다. 원격 `dev`와 라이브 성공 기준점은 `07527f0b89`로 다시 일치한다. 직전 완전 홈 증거 SHA `333c65734`의 activity backend 해소와 D-4 두 frontend 회귀 판정은 유효하며, `07527f0b89`는 해당 시간창/플릿 소비 로직을 수정하지 않았다. 문서 커밋을 최신 dev 위에 rebase한 뒤 push하고, 그 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 활성 Gate/Deploy는 0이다. 원격 `dev`와 라이브 성공 기준점은 `fd58268d5`로 일치한다. 직전 완전 홈 증거 SHA `333c65734`의 activity backend 해소와 D-4 두 frontend 회귀 판정은 후속 동일 SHA 화면 대조로 해소됐다는 증거가 없으므로 유지한다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
 
 ### G4 홈과 가시 변화
 
@@ -48,7 +51,21 @@
 - 숫자도 미해소다. UI는 legacy cluster overview의 workload 합계와 node 0/0을 표시하는 반면 `/api/fleet/summary`는 실제 node/pod fleet 값을 반환한다. 동일 화면 안의 카드·집계·API 단일 원장이 아니다.
 - demo 기준 캡처는 1440, 이번 live 캡처는 1920이므로 강화된 동일 viewport 나란히 대조 조건도 아직 충족하지 않는다. G4 홈 완료 선언은 금지한다.
 
-프론트 소유권은 클로드에게 있다. 코덱스는 `frontend/**`를 수정하지 않고 위 두 D-4 P0를 근거와 함께 반송한다. 후속 G4 순서는 **D-4 숫자/refresh → D-3 토큰 문법 통일 → D-1 저장소·동기화 정보 복원 → D-2 모든 GitOps 연결 행동의 단일 흐름 수렴**이다.
+직전 분할 소유 상태에서 반송했던 D-4 P0는 해소 증거가 없으므로 그대로 유지한다. 후속 G4는 demo-freeze-v3 소비자 전환과 함께 **Home foundation·D-4 숫자/refresh → Deploy/Issues table·D-1/D-2 → Resources table → D-3 전역 잔여 0** 순서로 진행한다.
+
+### demo-freeze-v3 디자인 계보 감사
+
+감사 기준은 read-only 견본 `demo-freeze-v3`의 `adcf92130`, 제품 기준은 라이브 SHA `723ab27aa9`다. 토큰 정의 자체는 제품에 일부 들어왔지만 각 페이지와 공용 부품의 실제 소비 전환은 끝나지 않았다. 따라서 디자인 가이드가 문서·토큰 파일에 존재한다는 사실만으로 병합 완료로 판정하지 않는다.
+
+| 우선순위 | 잔여 | 실측 | 완료 조건 |
+| --- | --- | --- | --- |
+| P0 | TINT·모션·카드 shape/elevation 소비 | TINT 21종 소비 불완전, motion consumer 리터럴 잔여, 카드 radius/elevation 혼재 | demo v3 토큰을 공용 consumer가 사용하고 페이지 로컬 대체 정의 0 |
+| P0 | `ClusterCard` raw visual 값 | raw color/gradient 및 motion duration 소비 잔여 | 서비스 identity 예외를 중앙 정의로 옮기고 raw color·duration 0 |
+| P1 | 서체 weight 문법 | `font-medium` 300회/125파일 | TYPE 토큰 기반 역할별 weight로 전환 후 비의도 잔여 0 |
+| P1 | named palette | 79회/24파일 | 의미 토큰으로 전환 후 서비스 identity 외 잔여 0 |
+| P1 | visual ownership | 페이지 로컬 후보 31개 | 카드·칩·표·게이지를 `shared/ui` 소유로 수렴하고 페이지는 조합만 담당 |
+
+현재 G4 판정은 **부분**이다. 다음 배치는 home foundation을 먼저 전환하고 demo/live 동일 viewport·클릭 경로·숫자 대조를 붙인 뒤, deploy/issues table과 resources table을 각각 별도 소배치로 완료한다.
 
 ### 클로드가 쓸 수 있는 홈 API 계약
 
@@ -72,11 +89,11 @@
 
 ### 현재 블로커와 다음 3수
 
-activity bigint 배포 블로커는 `333c65734`와 Deploy `29690120559`로 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. 현재 G4 홈을 막는 것은 같은 SHA에서 발견한 frontend 숫자 투영 불일치와 refresh counter 시간창 결함이다. 파일 소유권상 수정 주체는 클로드지만, 계약·배포·재검증은 코덱스가 계속 맡는다.
+activity bigint 배포 블로커는 `333c65734`와 Deploy `29690120559`로 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. 기존 D-1~D-4도 같은 SHA의 완료 증거가 생기기 전까지 유지한다. 이번 감사에서 새로 확인된 **외부 사람 필요 블로커는 0개**이며, 디자인 소비자 전환은 현재 저장소·검증·배포 권한 안에서 자체 해소한다.
 
-1. 같은 SHA의 demo/live 캡처, 숫자 표, 30초 전후 증거와 이번 상태 보고를 검증·push하고 그 Gate→Deploy 창을 완주한다.
-2. 클로드가 D-4 두 frontend P0를 반영하면 `/api/fleet/summary` 단일 원장과 activity 30초 refresh를 같은 SHA에서 재대조한다.
-3. G4 D-3/D-1/D-2 배치에 필요한 GitOps completeness와 alert-events 계약을 작게 제공하고 매 push의 Gate→Deploy를 지킨다.
+1. **Home foundation**: TINT·TYPE·motion·card shape/elevation과 `ClusterCard` raw visual 값을 공용 토큰 소비로 전환하고 D-4 숫자/refresh를 같은 SHA에서 재대조한다.
+2. **Deploy/Issues table**: 공용 표·칩·상태 문법으로 전환하고 D-1 저장소·동기화 정보와 D-2 연결 행동을 실동작 경로로 검증한다.
+3. **Resources table**: 같은 공용 table grammar로 수렴시키고 1280~1920 overflow·ellipsis·chip wrap·클릭 경로를 검증한 뒤 잔여 named palette/visual ownership을 재계수한다.
 
 ## 이전 보고 상세 — 2026-07-19 17:35 KST
 

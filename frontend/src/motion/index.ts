@@ -29,6 +29,7 @@ export {
 } from "./useRafDimensionPreview";
 export {
   MOTION_DURATION_MS,
+  MOTION_DURATION_SECONDS,
   STAGGER_MS,
   podWaveDelay,
   staggerDelay,
@@ -38,5 +39,6 @@ export {
   EASE_DRAW,
   LIST_STAGGER,
   MOTION_SPRING,
+  MOTION_TWEEN,
   listStaggerDelay,
 } from "./transitions";

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/motion", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/motion")>(),
+  usePrefersReducedMotion: () => true,
+}));
 
 import { MiniBar, MiniBars, ProgressFill, RatioBar } from "./Bars";
 import { SlotMatrix } from "./Lists";

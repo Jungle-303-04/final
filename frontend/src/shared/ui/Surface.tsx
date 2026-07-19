@@ -70,11 +70,11 @@ export function Surface({
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledby}
       className={cn(
-        "rounded-xl border bg-card text-card-foreground",
-        "[&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:bg-transparent",
+        "rounded-panel border bg-card text-card-foreground",
+        "[&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-transparent",
         "[&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:ring-0",
         "[&_[data-slot=card-footer]]:bg-transparent",
-        elevation === "overlay" && "shadow-lg",
+        elevation === "overlay" && "shadow-product-overlay",
         className,
       )}
       data-elevation={elevation}

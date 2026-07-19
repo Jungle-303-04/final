@@ -84,6 +84,37 @@ export interface HomeEndpointClusterOverview {
   usage: HomeEndpointUsage | null;
 }
 
+export interface HomeEndpointFleetClusterSummary {
+  cluster_id: string;
+  name: string;
+  health: string;
+  pods_running: number;
+  pods_total: number;
+  nodes_ready: number;
+  nodes_total: number;
+  open_incidents: number;
+  restarts_recent: number;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  last_seen_at: string | null;
+}
+
+export interface HomeEndpointFleetSummary {
+  clusters: HomeEndpointFleetClusterSummary[];
+  totals: {
+    clusters: number;
+    healthy: number;
+    warning: number;
+    critical: number;
+    stale: number;
+    unknown: number;
+    open_incidents: number;
+    pending_approvals: number;
+    running_workflows: number;
+    dead_letters: number;
+  };
+}
+
 export interface HomeEndpointNode {
   name: string;
   ready: boolean;
@@ -218,6 +249,7 @@ export interface HomeEndpointDependencies {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointClusterOverview>;
+  getFleetSummary?(signal?: AbortSignal): Promise<HomeEndpointFleetSummary>;
   getHomeInsights(
     clusterId: string,
     signal?: AbortSignal,

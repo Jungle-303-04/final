@@ -62,6 +62,7 @@ export function HomeWidgetBoard({
   period,
   ports,
   refreshKey,
+  windowAnchorMs,
 }: {
   clusters: readonly HomeClusterChoice[];
   editing: boolean;
@@ -70,6 +71,7 @@ export function HomeWidgetBoard({
   period: HomeBoardPeriod;
   ports: HomeBoardPorts;
   refreshKey: number;
+  windowAnchorMs: number;
 }) {
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
@@ -116,6 +118,7 @@ export function HomeWidgetBoard({
     ports,
     refreshKey,
     scope,
+    windowAnchorMs,
     wantsCost: visibleIds.includes("W7"),
     wantsNamespaces: visibleIds.includes("W5"),
     wantsTimeline: visibleIds.includes("W8"),

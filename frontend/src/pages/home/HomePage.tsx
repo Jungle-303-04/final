@@ -27,6 +27,7 @@ import { HomeWidgetBoard } from "./HomeWidgetBoard";
 import { homeCriticalResourcesHref } from "./HomeWidgetCatalog";
 import type { HomeBoardPorts } from "./useHomeBoardData";
 import {
+  projectHomeFleetClusters,
   summarizeHomeFleetUsage,
   useHomeClusterCardsData,
 } from "./useHomeClusterCardsData";
@@ -59,21 +60,25 @@ export function HomePage({
   const boardPeriod: HomeBoardPeriod = filter.detail.homePeriod ?? "today";
   const canManageClusters = clusterPort !== undefined &&
     (session?.roles.includes("service_admin") ?? false);
-  const boardClusters = useMemo(() => {
-    if (state.choices.phase !== "ready") return [];
-    const requestedClusterIds = new Set(filter.state.common.clusters);
-    return requestedClusterIds.size === 0
-      ? state.choices.data.clusters
-      : state.choices.data.clusters.filter((cluster) => requestedClusterIds.has(cluster.id));
-  }, [filter.state.common.clusters, state.choices]);
-  const allClusters = state.choices.phase === "ready" ? state.choices.data.clusters : [];
+  const allClusters = useMemo(
+    () => state.choices.phase === "ready" ? state.choices.data.clusters : [],
+    [state.choices],
+  );
   const clusterCards = useHomeClusterCardsData({
     clusters: allClusters,
     port,
     refreshRevision: state.boardRefreshRevision,
-    selectedClusterId: state.selectedClusterId,
-    selectedOverview: state.overview,
   });
+  const fleetClusters = useMemo(
+    () => projectHomeFleetClusters(allClusters, clusterCards.summaries),
+    [allClusters, clusterCards.summaries],
+  );
+  const boardClusters = useMemo(() => {
+    const requestedClusterIds = new Set(filter.state.common.clusters);
+    return requestedClusterIds.size === 0
+      ? fleetClusters
+      : fleetClusters.filter((cluster) => requestedClusterIds.has(cluster.id));
+  }, [filter.state.common.clusters, fleetClusters]);
   const fleetUsage = useMemo(
     () => summarizeHomeFleetUsage(boardClusters, clusterCards.overviews),
     [boardClusters, clusterCards.overviews],
@@ -120,7 +125,7 @@ export function HomePage({
         period={boardPorts ? boardPeriod : undefined}
       />
       <HomeClusterGrid
-        clusters={state.choices.data.clusters}
+        clusters={fleetClusters}
         disconnectClusterId={disconnectCluster?.id}
         disconnectPhase={disconnectPhase}
         onDisconnect={canManageClusters ? (cluster) => {
@@ -150,6 +155,7 @@ export function HomePage({
               period={boardPeriod}
               ports={boardPorts}
               refreshKey={state.boardRefreshRevision}
+              windowAnchorMs={state.boardWindowAnchorMs}
             />
           ) : null}
         </>

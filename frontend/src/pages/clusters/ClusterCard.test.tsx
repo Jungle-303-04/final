@@ -52,7 +52,7 @@ describe("ClusterCard", () => {
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
     const card = container.querySelector("[data-cluster-id='cluster-1']");
     expect(card?.className).not.toContain("hover:-translate");
-    expect(card?.className).toContain("hover:shadow-[0_10px_26px_-20px"); // 데모 ELEV.hover 문법
+    expect(card?.className).toContain("hover:shadow-product-hover");
     expect(card?.textContent).not.toContain("Apps 6");
   });
 
