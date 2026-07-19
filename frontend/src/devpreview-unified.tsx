@@ -19,7 +19,7 @@ import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
-import { UI, BLUE, HP, MONO, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE } from "./devpreview/theme";
+import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE, DUR, inkA, blueA, INSET, MARK, CODE, cardA, GLASS } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -345,8 +345,8 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     const c = m.pct >= 90 ? HP.crit : m.pct >= 60 ? HP.warn : HP.ok;
     return (
       <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-        <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
-        <span style={{ height: 3, borderRadius: 999, background: "rgba(17,19,24,0.07)", overflow: "hidden" }}>
+        <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
+        <span style={{ height: 3, borderRadius: 999, background: inkA(0.07), overflow: "hidden" }}>
           <span style={{ display: "block", height: "100%", width: `${m.pct}%`, background: c, borderRadius: 999 }} />
         </span>
       </span>
@@ -354,23 +354,23 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
   }
   if (cell.t === "dots") {
     const n = v as number;
-    return <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: n }).map((_, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: 999, background: bad && i === 0 ? HP.crit : i === 0 && n > 1 ? "#D6DAE1" : HP.ok }} />)}</span>;
+    return <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: n }).map((_, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: 999, background: bad && i === 0 ? HP.crit : i === 0 && n > 1 ? HP.pending : HP.ok }} />)}</span>;
   }
-  if (cell.t === "ready") return <span style={{ fontSize: 12, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : "#1F9D4D" }}>{String(v)}</span>;
+  if (cell.t === "ready") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : TINT.ok.fg }}>{String(v)}</span>;
   if (cell.t === "status") {
     const s = String(v);
     const tone = bad || /Crash|OOM|Fail|Error|Evict/.test(s) ? "red" : /Pending|Provisioning/.test(s) ? "blue" : /Cordoned|Suspend|Terminat/.test(s) ? "gray" : "green";
     return <Badge text={s} tone={tone} />;
   }
   if (cell.t === "badge") return <Badge text={String(v)} tone={bad ? "red" : cell.tone ?? "gray"} />;
-  if (cell.t === "num") return <span style={{ fontSize: 12.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
-  if (cell.t === "ns") return <span style={{ fontSize: 12.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
-  if (cell.t === "mono") return <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
-  return <span style={{ fontSize: 12.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  if (cell.t === "num") return <span style={{ fontSize: TYPE.label2, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
+  if (cell.t === "ns") return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  if (cell.t === "mono") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
 }
 function Badge({ text, tone }: { text: string; tone: "blue" | "green" | "gray" | "purple" | "red" }) {
-  const S = { blue: ["#0A6CFF", "#EDF4FF", "#CFE1FB"], green: ["#1F9D4D", "#EDFAF1", "#C9EAD4"], gray: ["#5F6570", "#F4F5F7", "#E4E6EA"], purple: ["#8250DF", "#F6F1FE", "#E3D5FA"], red: ["#C43028", "#FFF3F2", "#F5CFCC"] }[tone];
-  return <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, color: S[0], background: S[1], border: `1px solid ${S[2]}`, borderRadius: 5, padding: "1.5px 7px", whiteSpace: "nowrap" }}>{text}</span>;
+  const S = { blue: [TINT.blue.fg, TINT.blue.bg, TINT.blue.bd], green: [TINT.ok.fg, TINT.ok.bg, TINT.ok.bd], gray: [UI.ink2, TINT.gray.bg, TINT.gray.bd], purple: [TINT.purple.fg, TINT.purple.bg, TINT.purple.bd], red: [TINT.crit.fg, TINT.crit.bg, TINT.crit.bd] }[tone];
+  return <span style={{ display: "inline-block", fontSize: TYPE.caption, fontWeight: 600, color: S[0], background: S[1], border: `1px solid ${S[2]}`, borderRadius: 5, padding: "1.5px 7px", whiteSpace: "nowrap" }}>{text}</span>;
 }
 
 // ── 종류별 표 ─────────────────────────────
@@ -379,7 +379,7 @@ function Hi({ text, q }: { text: string; q: string }) {
   if (!q) return <>{text}</>;
   const i = text.toLowerCase().indexOf(q.toLowerCase());
   if (i < 0) return <>{text}</>;
-  return <>{text.slice(0, i)}<span style={{ background: "#FFF1B8", borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
+  return <>{text.slice(0, i)}<span style={{ background: MARK, borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
 }
 
 function ResourceTable({ kind, rows, q, dense, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; dense: boolean; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
@@ -393,19 +393,19 @@ function ResourceTable({ kind, rows, q, dense, filterDesc = "", onClearFilter, o
     /* 긴 표는 카드 안에서 세로 스크롤(헤더 고정) */
     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: "#FCFCFD", position: "sticky", top: 0, zIndex: 2 }}>
+      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, position: "sticky", top: 0, zIndex: 2 }}>
         {/* 정렬 미구현 — 동작 없는 정렬 셰브론을 그리지 않는다(가짜 컨트롤 금지) */}
         {spec.cols.map((c) => (
-          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
+          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
             {c.label}
           </span>
         ))}
       </div>
       {filtered.length === 0 ? (
-        <div style={{ padding: "40px 18px", textAlign: "center", fontSize: 13, color: UI.ink3 }}>
+        <div style={{ padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>
           <span>{q ? `"${q}" 검색 결과가 없습니다` : `${filterDesc} ${kind.label} 리소스가 없습니다`}</span>
           {onClearFilter && (q || filterDesc) ? (
-            <button onClick={onClearFilter} style={{ display: "block", margin: "10px auto 0", border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600, color: BLUE, cursor: "pointer" }}>필터 해제</button>
+            <button onClick={onClearFilter} style={{ display: "block", margin: "10px auto 0", border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600, color: BLUE, cursor: "pointer" }}>필터 해제</button>
           ) : null}
         </div>
       ) : filtered.map((row, i) => (
@@ -445,7 +445,7 @@ function Sec({ title, icon: I, right, children, defaultOpen = true }: { title: s
       <button onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", border: "none", background: "transparent", cursor: "pointer", padding: 0, marginBottom: open ? 10 : 0 }}>
         <ChevronDown size={12} style={{ color: UI.ink3, transform: open ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
         {I && <I size={12} style={{ color: UI.ink3 }} />}
-        <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>{title}</span>
+        <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{title}</span>
         <span style={{ marginLeft: "auto" }}>{right}</span>
       </button>
       {open && children}
@@ -453,15 +453,15 @@ function Sec({ title, icon: I, right, children, defaultOpen = true }: { title: s
   );
 }
 const Chip = ({ text, tone = "gray" }: { text: string; tone?: "gray" | "green" | "blue" | "purple" | "amber" | "lime" }) => {
-  const S = { gray: ["#5F6570", "#F4F5F7"], green: ["#1F9D4D", "#EDFAF1"], blue: ["#0A6CFF", "#EDF4FF"], purple: ["#8250DF", "#F6F1FE"], amber: ["#B25A00", "#FFF6EA"], lime: ["#4D7C0F", "#F3FAE7"] }[tone];
-  return <span style={{ display: "inline-block", fontSize: 11.5, fontFamily: MONO, color: S[0], background: S[1], borderRadius: 5, padding: "2px 7px", margin: "0 4px 4px 0", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
+  const S = { gray: [UI.ink2, TINT.gray.bg], green: [TINT.ok.fg, TINT.ok.bg], blue: [TINT.blue.fg, TINT.blue.bg], purple: [TINT.purple.fg, TINT.purple.bg], amber: [TINT.warn.fg, TINT.warn.bg], lime: [TINT.lime.fg, TINT.lime.bg] }[tone];
+  return <span style={{ display: "inline-block", fontSize: TYPE.caption2, fontFamily: MONO, color: S[0], background: S[1], borderRadius: 5, padding: "2px 7px", margin: "0 4px 4px 0", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
 };
 
 function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?: string }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", gap: 12, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-      <span style={{ fontSize: 12, color: UI.ink3 }}>{k}</span>
-      <span style={{ fontSize: 12.5, color: tone ?? UI.ink, fontFamily: mono ? MONO : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+      <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>{k}</span>
+      <span style={{ fontSize: TYPE.label2, color: tone ?? UI.ink, fontFamily: mono ? MONO : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
     </div>
   );
 }
@@ -479,9 +479,9 @@ function RelGraph({ center, centerIcon: CI, items, onOpenRef }: {
   return (
     <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 0 }}>
       {/* 중심 노드 */}
-      <div style={{ width: CW, flexShrink: 0, display: "flex", alignItems: "center", gap: 8, background: "rgba(10,132,255,0.07)", border: "1px solid rgba(10,132,255,0.28)", borderRadius: 11, padding: "10px 11px" }}>
+      <div style={{ width: CW, flexShrink: 0, display: "flex", alignItems: "center", gap: 8, background: blueA(0.07), border: `1px solid ${blueA(0.28)}`, borderRadius: 11, padding: "10px 11px" }}>
         <CI size={14} style={{ color: BLUE, flexShrink: 0 }} />
-        <span style={{ minWidth: 0, fontSize: 12, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{center}</span>
+        <span style={{ minWidth: 0, fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{center}</span>
       </div>
       {/* 연결선 */}
       <svg width={GAPX} height={H} style={{ flexShrink: 0, display: "block" }}>
@@ -502,8 +502,8 @@ function RelGraph({ center, centerIcon: CI, items, onOpenRef }: {
               onClick={clickable ? () => onOpenRef!(it.kindId!, it.name) : undefined} disabled={!clickable}
               style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", height: ROW - 6,
                 background: t.bg, border: `1px solid ${t.bd}`, borderRadius: 10, padding: "0 11px", cursor: clickable ? "pointer" : "default" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: t.fg, letterSpacing: "0.02em", flexShrink: 0 }}>{it.label}</span>
-              <span style={{ minWidth: 0, flex: 1, fontSize: 11.5, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.pfx}{it.name}</span>
+              <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: t.fg, letterSpacing: "0.02em", flexShrink: 0 }}>{it.label}</span>
+              <span style={{ minWidth: 0, flex: 1, fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.pfx}{it.name}</span>
               {clickable && <ChevronDown size={11} style={{ color: t.fg, transform: "rotate(-90deg)", flexShrink: 0 }} />}
             </motion.button>
           );
@@ -513,9 +513,9 @@ function RelGraph({ center, centerIcon: CI, items, onOpenRef }: {
   );
 }
 const TINT_G = {
-  green: { fg: "#1F9D4D", bg: "#EDFAF1", bd: "#C9EAD4" }, blue: { fg: "#0A6CFF", bg: "#EDF4FF", bd: "#CFE1FB" },
-  lime: { fg: "#4D7C0F", bg: "#F3FAE7", bd: "#DDF0BB" }, amber: { fg: "#B25A00", bg: "#FFF8EF", bd: "#F3D8B7" },
-  purple: { fg: "#8250DF", bg: "#F6F1FE", bd: "#E3D5FA" }, gray: { fg: "#5F6570", bg: "#F4F5F7", bd: "#E4E6EA" },
+  green: { fg: TINT.ok.fg, bg: TINT.ok.bg, bd: TINT.ok.bd }, blue: { fg: TINT.blue.fg, bg: TINT.blue.bg, bd: TINT.blue.bd },
+  lime: { fg: TINT.lime.fg, bg: TINT.lime.bg, bd: TINT.lime.bd }, amber: { fg: TINT.warn.fg, bg: TINT.warn.bg, bd: TINT.warn.bd },
+  purple: { fg: TINT.purple.fg, bg: TINT.purple.bg, bd: TINT.purple.bd }, gray: { fg: UI.ink2, bg: TINT.gray.bg, bd: TINT.gray.bd },
 } as const;
 
 const NS_OPTIONS = ["모든 네임스페이스", "argocd", "shop", "platform", "kube-system", "caretta", "sandbox"] as const;
@@ -558,21 +558,21 @@ function MetricChart({ name, bad }: { name: string; bad: boolean }) {
   return (
     <div>
       {/* 지표 선택 */}
-      <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.05)", borderRadius: 9, padding: 3, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 3, background: inkA(0.05), borderRadius: 9, padding: 3, marginBottom: 12 }}>
         {METS.map((mm, i) => (
           <button key={mm.id} onClick={() => { setMi(i); setHover(null); }}
-            style={{ flex: 1, textAlign: "center", fontSize: 11.5, fontWeight: 600, border: "none", cursor: "pointer", color: i === mi ? UI.ink : UI.ink3,
-              background: i === mi ? "#fff" : "transparent", borderRadius: 7, padding: "5px 0", boxShadow: i === mi ? "0 1px 3px rgba(17,19,24,0.1)" : "none" }}>{mm.label}</button>
+            style={{ flex: 1, textAlign: "center", fontSize: TYPE.caption2, fontWeight: 600, border: "none", cursor: "pointer", color: i === mi ? UI.ink : UI.ink3,
+              background: i === mi ? UI.card : "transparent", borderRadius: 7, padding: "5px 0", boxShadow: i === mi ? `0 1px 3px ${inkA(0.1)}` : "none" }}>{mm.label}</button>
         ))}
       </div>
       {/* 통계 행 */}
-      <div style={{ display: "flex", gap: 18, fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>
-        <span>현재 <b style={{ color: tone, fontSize: 14 }}>{fmt(hIdx !== null ? pts[hIdx] : cur)}</b></span>
+      <div style={{ display: "flex", gap: 18, fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>
+        <span>현재 <b style={{ color: tone, fontSize: TYPE.bodyStrong }}>{fmt(hIdx !== null ? pts[hIdx] : cur)}</b></span>
         <span>평균 <b style={{ color: UI.ink }}>{fmt(avg)}</b></span>
         <span>최대 <b style={{ color: UI.ink }}>{fmt(mx)}</b></span>
         {hIdx !== null && <span style={{ marginLeft: "auto", color: UI.ink3 }}>{Math.round((1 - hIdx / (pts.length - 1)) * 30)}분 전</span>}
       </div>
-      <div style={{ border: `1px solid ${UI.line2}`, borderRadius: 12, background: "#FBFBFD", padding: "6px 4px 2px" }}>
+      <div style={{ border: `1px solid ${UI.line2}`, borderRadius: 12, background: UI.bg2, padding: "6px 4px 2px" }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", cursor: "crosshair" }}
           onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHover(((e.clientX - r.left) / r.width) * W); }}
           onMouseLeave={() => setHover(null)}>
@@ -594,23 +594,23 @@ function MetricChart({ name, bad }: { name: string; bad: boolean }) {
             <text key={l} x={PL + (i / 3) * (W - PL - PR)} y={H - 7} textAnchor={i === 0 ? "start" : i === 3 ? "end" : "middle"} fontSize="9.5" fill={UI.ink3}>{l}</text>
           ))}
           {/* 면 + 선 — 지표 전환 시 왼→오 드로잉 (EASE_DRAW) */}
-          <motion.path key={`a-${m.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7, ease: "easeOut", delay: 0.25 }}
+          <motion.path key={`a-${m.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: DUR.draw, ease: "easeOut", delay: 0.25 }}
             d={`${d} L ${X(pts.length - 1)} ${H - PB} L ${X(0)} ${H - PB} Z`} fill={`url(#mg-${m.id})`} />
-          <motion.path key={`l-${m.id}`} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.85, ease: [...EASE_DRAW] }}
+          <motion.path key={`l-${m.id}`} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: DUR.draw, ease: [...EASE_DRAW] }}
             d={d} fill="none" stroke={tone} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           {/* 현재점 펄스 */}
           <circle cx={X(pts.length - 1)} cy={Y(cur)} r={6} fill={tone} opacity={0.18}>
             <animate attributeName="r" values="4;9;4" dur="2.2s" repeatCount="indefinite" />
           </circle>
-          <circle cx={X(pts.length - 1)} cy={Y(cur)} r={3} fill={tone} stroke="#fff" strokeWidth={1.4} />
+          <circle cx={X(pts.length - 1)} cy={Y(cur)} r={3} fill={tone} stroke={UI.card} strokeWidth={1.4} />
           {/* 호버 크로스헤어 */}
           {hIdx !== null && (
             <g>
               <line x1={X(hIdx)} x2={X(hIdx)} y1={PT} y2={H - PB} stroke={UI.ink3} strokeWidth={0.8} strokeDasharray="2 3" />
-              <circle cx={X(hIdx)} cy={Y(pts[hIdx])} r={3.5} fill="#fff" stroke={tone} strokeWidth={2} />
+              <circle cx={X(hIdx)} cy={Y(pts[hIdx])} r={3.5} fill={UI.card} stroke={tone} strokeWidth={2} />
               <g transform={`translate(${Math.min(W - PR - 62, Math.max(PL, X(hIdx) - 28))}, ${Math.max(2, Y(pts[hIdx]) - 26)})`}>
                 <rect width="56" height="18" rx="6" fill={UI.ink} opacity="0.92" />
-                <text x="28" y="12.5" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff" fontFamily={MONO}>{fmt(pts[hIdx])}</text>
+                <text x="28" y="12.5" textAnchor="middle" fontSize="10" fontWeight="700" fill={UI.card} fontFamily={MONO}>{fmt(pts[hIdx])}</text>
               </g>
             </g>
           )}
@@ -636,7 +636,7 @@ function hlYaml(src: string): string {
     return `${ind}<span class="y-k">${key}</span><span class="y-p">${colon}</span>${v}`;
   }).join("\n");
 }
-const YAML_FONT = { fontSize: 12.5, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
+const YAML_FONT = { fontSize: TYPE.label2, lineHeight: 1.65, fontFamily: MONO, padding: 14, whiteSpace: "pre" as const, wordBreak: "normal" as const };
 
 function DetailOverlay({ kind, row, onClose, onToast, onOpenRef, onShowPods, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H, viewportW = 1280 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; onShowPods?: (base: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number; viewportW?: number }) {
   const tabs = TABS_FOR(kind.id);
@@ -726,36 +726,36 @@ spec: {}`;
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: "rgba(17,19,24,0.07)", zIndex: 70 }} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
+        onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: inkA(0.07), zIndex: 70 }} />
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
         style={{ position: "fixed", top: topInset, right: 0, bottom: 0,
           /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
           width: full ? viewportW - leftInset : dw, maxWidth: viewportW - leftInset,
-          background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: "-24px 0 60px -30px rgba(17,19,24,0.3)", transition: dwDragging ? "none" : "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
+          background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, transition: dwDragging ? "none" : "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
         {/* 좌측 가장자리 리사이즈 핸들 */}
         {!full && (
           <div onPointerDown={onEdgeDown} title="드래그해서 폭 조절"
-            style={{ position: "absolute", left: -2, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 5, background: dwDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
+            style={{ position: "absolute", left: -2, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 5, background: dwDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
         )}
         {/* 헤더 */}
         <div style={{ padding: "16px 20px 0", borderBottom: `1px solid ${UI.line}` }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <span style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(10,132,255,0.09)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <span style={{ width: 30, height: 30, borderRadius: 9, background: blueA(0.09), display: "grid", placeItems: "center", flexShrink: 0 }}>
               <kind.icon size={15} style={{ color: BLUE }} />
             </span>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-              <div style={{ fontSize: 12, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
+              <div style={{ fontSize: TYPE.title3, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+              <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {([["비교", Copy, doDiff], ["재시작", Play, doRestart]] as const).map(([l, I, act]) => (
-                <button key={l} onClick={act} style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                <button key={l} onClick={act} style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
                   <I size={11} />{l}
                 </button>
               ))}
-              <button title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: 12, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
-              <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 13, lineHeight: 1 }}>✕</button>
+              <button title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: TYPE.label, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
+              <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: "pointer", fontSize: TYPE.body, lineHeight: 1 }}>✕</button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 2, marginTop: 14 }}>
@@ -763,7 +763,7 @@ spec: {}`;
               const on = tab === t;
               const label = DETAIL_TABS.find((d) => d.id === t)!.label;
               return (
-                <button key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: 13, fontWeight: on ? 700 : 500, color: on ? UI.ink : UI.ink3 }}>
+                <button key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: TYPE.body, fontWeight: on ? 700 : 500, color: on ? UI.ink : UI.ink3 }}>
                   {label}
                   {on && <motion.span layoutId="dtab" transition={SOFT} style={{ position: "absolute", left: 8, right: 8, bottom: 0, height: 2, borderRadius: 2, background: BLUE }} />}
                 </button>
@@ -780,10 +780,10 @@ spec: {}`;
               {/* 운영 이슈 */}
               {bad && (
                 <Sec title="운영 이슈 (1)" icon={Activity}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 9, border: "1px solid #F5CFCC", background: "#FFF7F6", borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 10, padding: "10px 12px" }}>
                     <Badge text="critical" tone="red" />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>{isPod ? phase : "워크로드 성능 저하"}</span>
-                    <span style={{ fontSize: 12, color: UI.ink2 }}>{isPod ? `컨테이너가 반복 종료됨 · 재시작 ${String(row.restarts ?? 3)}회` : "인스턴스 1개 사용 불가"}</span>
+                    <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{isPod ? phase : "워크로드 성능 저하"}</span>
+                    <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>{isPod ? `컨테이너가 반복 종료됨 · 재시작 ${String(row.restarts ?? 3)}회` : "인스턴스 1개 사용 불가"}</span>
                   </div>
                 </Sec>
               )}
@@ -799,13 +799,13 @@ spec: {}`;
                         <RingGauge label="MEM" value={Math.min(Number(row.mem) || 0, 100)} />
                       </div>
                     )}
-                    {([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? "#C43028" : phase === "Pending" ? "#B25A00" : "#1F9D4D") : undefined} />)}
+                    {([["Phase", phase], ["노드", `${nodeName}.ap-northeast-2.compute.internal`], ["파드 IP", podIp], ["호스트 IP", hostIp], ["QoS 클래스", qos], ["ServiceAccount", `${base}-sa`]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "Phase" ? (bad ? TINT.crit.fg : phase === "Pending" ? TINT.warn.fg : TINT.ok.fg) : undefined} />)}
                   </>)}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   {isWorkload && <button onClick={onShowPods ? () => onShowPods(base) : undefined}
-                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
+                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label2, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
                   {isWorkload && <button onClick={() => { const next = replicas + 1; setReplicas(next); setScaled(true); onToast?.({ title: `${base} 복제 수 조정`, sub: `kubectl scale — replicas ${replicas} → ${next}, 롤아웃 진행 중`, tone: "ok" }); }}
-                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 +1</button>}
+                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label2, fontWeight: 600, color: BLUE, cursor: "pointer" }}><MoveDiagonal size={12} />복제 수 +1</button>}
                 </div>
               </Sec>
 
@@ -819,13 +819,13 @@ spec: {}`;
               {/* 파드 템플릿 / 컨테이너 (워크로드·파드) */}
               {wp && (
               <Sec title={isWorkload ? "파드 템플릿" : "컨테이너"} icon={Boxes}>
-                <div style={{ border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 10, padding: "11px 13px" }}>
+                <div style={{ border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 10, padding: "11px 13px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{comp}</span>
+                    <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{comp}</span>
                     {isPod && <><Badge text="Ready" tone="green" /><Badge text="running" tone="gray" /></>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 4, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(row.img ?? imgFor(base))}</div>
-                  <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 3 }}>포트: metrics 9100/TCP · webhook 7000/TCP</div>
+                  <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 4, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(row.img ?? imgFor(base))}</div>
+                  <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 3 }}>포트: metrics 9100/TCP · webhook 7000/TCP</div>
                 </div>
               </Sec>
               )}
@@ -833,10 +833,10 @@ spec: {}`;
               {/* 환경 변수 (파드 전용) */}
               {isPod && (
                 <Sec title="환경 변수 (12)" defaultOpen={false}>
-                  <div style={{ fontSize: 11.5, fontFamily: MONO, lineHeight: 1.9, color: UI.ink2 }}>
+                  <div style={{ fontSize: TYPE.caption2, fontFamily: MONO, lineHeight: 1.9, color: UI.ink2 }}>
                     {["NAMESPACE = field:metadata.namespace", "LOG_LEVEL = configmap:argocd-cmd-params-cm", "LOG_FORMAT = configmap:argocd-cmd-params-cm", "REPO_SERVER = configmap:argocd-cmd-params-cm", "K8S_CLIENT_QPS = configmap:argocd-cmd-params-cm"].map((e) => {
                       const [k, v] = e.split(" = ");
-                      return <div key={k} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k} = <span style={{ color: BLUE, background: "#EDF4FF", borderRadius: 4, padding: "1px 5px" }}>{v}</span></div>;
+                      return <div key={k} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k} = <span style={{ color: BLUE, background: TINT.blue.bg, borderRadius: 4, padding: "1px 5px" }}>{v}</span></div>;
                     })}
                   </div>
                 </Sec>
@@ -847,9 +847,9 @@ spec: {}`;
               <Sec title="컨디션 (2)">
                 {(isWorkload ? [["Available", "MinimumReplicasAvailable", "1d 2h"], ["Progressing", "NewReplicaSetAvailable", "4d 2h"]] : [["Ready", "컨테이너 준비 완료", "1d 2h"], ["PodScheduled", "노드에 배정됨", "1d 2h"]]).map(([n, d, t]) => (
                   <div key={n} style={{ display: "grid", gridTemplateColumns: "56px 16px 1fr", gap: 9, alignItems: "start", padding: "7px 0" }}>
-                    <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3 }}>{t}</span>
-                    <span style={{ color: HP.ok, fontSize: 13 }}>✓</span>
-                    <span><span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: UI.ink }}>{n}</span><span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 1 }}>{d}</span></span>
+                    <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3 }}>{t}</span>
+                    <span style={{ color: HP.ok, fontSize: TYPE.body }}>✓</span>
+                    <span><span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 600, color: UI.ink }}>{n}</span><span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 1 }}>{d}</span></span>
                   </div>
                 ))}
               </Sec>
@@ -858,18 +858,18 @@ spec: {}`;
               {/* 권한 (워크로드·파드) */}
               {wp && (
               <Sec title={`ServiceAccount 권한: ${base}-sa`} icon={ShieldCheck}>
-                <div style={{ fontSize: 11.5, color: UI.ink3, marginBottom: 9 }}>직접 바인딩 1 · 그룹 상속 4 · 고유 규칙 6</div>
+                <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginBottom: 9 }}>직접 바인딩 1 · 그룹 상속 4 · 고유 규칙 6</div>
                 {[["create", ["selfsubjectaccessreviews", "selfsubjectrulesreviews"], "authorization.k8s.io"], ["create", ["selfsubjectreviews"], "authentication.k8s.io"], ["get, list", ["pods"], ""]].map(([v, res, grp], i) => (
                   <div key={i} style={{ marginBottom: 7 }}>
                     <Chip text={v as string} tone="amber" />
-                    <span style={{ fontSize: 11.5, color: UI.ink3, margin: "0 5px" }}>on</span>
+                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, margin: "0 5px" }}>on</span>
                     {(res as string[]).map((rr) => <Chip key={rr} text={rr} tone="purple" />)}
-                    {grp ? <><span style={{ fontSize: 11.5, color: UI.ink3, margin: "0 5px" }}>in</span><Chip text={grp as string} tone="gray" /></> : null}
+                    {grp ? <><span style={{ fontSize: TYPE.caption2, color: UI.ink3, margin: "0 5px" }}>in</span><Chip text={grp as string} tone="gray" /></> : null}
                   </div>
                 ))}
-                <div style={{ fontSize: 11.5, color: UI.ink3, marginTop: 4 }}>규칙 1개 더 있음 · 전체 목록은 ServiceAccount에서 확인</div>
+                <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 4 }}>규칙 1개 더 있음 · 전체 목록은 ServiceAccount에서 확인</div>
                 {tabs.includes("rbac") && (
-                  <button onClick={() => setTab("rbac")} style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>권한 탭에서 전체 보기 →</button>
+                  <button onClick={() => setTab("rbac")} style={{ border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label2, fontWeight: 600, cursor: "pointer", padding: "8px 0 0" }}>권한 탭에서 전체 보기 →</button>
                 )}
               </Sec>
               )}
@@ -893,8 +893,8 @@ spec: {}`;
                 <Sec title="데이터" icon={FileCog}>
                   {(kind.id === "Secret" ? [["username", "••••••••"], ["password", "••••••••"]] : [["feature.flags", "checkout=on, search=on"], ["api.base", "https://api.internal"]]).map(([k, v]) => (
                     <div key={k} style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-                      <span style={{ fontSize: 12, fontFamily: MONO, color: BLUE }}>{k}</span>
-                      <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+                      <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: BLUE }}>{k}</span>
+                      <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
                     </div>
                   ))}
                 </Sec>
@@ -921,16 +921,16 @@ spec: {}`;
                   ["SuccessfulCreate", `파드 생성: ${base}-5j5td`], ["SuccessfulDelete", `파드 삭제: ${base}-87g9q`], ["SuccessfulCreate", `파드 생성: ${base}-vzbd9`],
                   ...(bad ? [["BackOff", `실패한 컨테이너 재시작 대기 중 · 누적 ${String(row.restarts ?? 3)}회`]] : [])]
                   .map(([r, m], i) => (
-                    <div key={i} style={{ borderLeft: `2px solid ${r === "BackOff" ? HP.crit : BLUE}`, background: r === "BackOff" ? "#FFF7F6" : "#F7FAFF", borderRadius: "0 8px 8px 0", padding: "9px 12px", marginBottom: 7 }}>
+                    <div key={i} style={{ borderLeft: `2px solid ${r === "BackOff" ? HP.crit : BLUE}`, background: r === "BackOff" ? TINT.crit.bg : TINT.blue.bg, borderRadius: "0 8px 8px 0", padding: "9px 12px", marginBottom: 7 }}>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 700, color: r === "BackOff" ? "#C43028" : UI.ink }}>{r as string}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 11, color: UI.ink3, fontFamily: MONO }}>2026. 7. 17.</span>
+                        <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: r === "BackOff" ? TINT.crit.fg : UI.ink }}>{r as string}</span>
+                        <span style={{ marginLeft: "auto", fontSize: TYPE.caption, color: UI.ink3, fontFamily: MONO }}>2026. 7. 17.</span>
                       </div>
-                      <div style={{ fontSize: 12, color: UI.ink2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m as string}</div>
+                      <div style={{ fontSize: TYPE.label, color: UI.ink2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m as string}</div>
                     </div>
                   ))}
                 {tabs.includes("events") && (
-                  <button onClick={() => setTab("events")} style={{ border: "none", background: "transparent", color: BLUE, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 0 0" }}>이벤트 탭에서 모두 보기 →</button>
+                  <button onClick={() => setTab("events")} style={{ border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer", padding: "4px 0 0" }}>이벤트 탭에서 모두 보기 →</button>
                 )}
               </Sec>
 
@@ -939,7 +939,7 @@ spec: {}`;
                 {[`app.kubernetes.io/component=${comp}`, `app.kubernetes.io/name=${base}`, `app.kubernetes.io/part-of=${ns}`].map((l) => <Chip key={l} text={l} />)}
               </Sec>
               <Sec title="어노테이션 (1)" defaultOpen={false}>
-                <div style={{ fontSize: 12, fontFamily: MONO, color: UI.ink2 }}>deployment.kubernetes.io/revision: 1</div>
+                <div style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink2 }}>deployment.kubernetes.io/revision: 1</div>
               </Sec>
               <Sec title="메타데이터">
                 <KV k="UID" v="16057e00-404f-460b-afa4-13bb495f3c14" mono />
@@ -950,13 +950,13 @@ spec: {}`;
 
               {/* 감사 결과 (워크로드·파드) */}
               {wp && (
-              <Sec title="점검 결과" icon={ShieldCheck} right={<span style={{ display: "flex", gap: 8, fontSize: 11.5, fontWeight: 700 }}>{bad && <span style={{ color: "#C43028" }}>1 critical</span>}<span style={{ color: "#B25A00" }}>7 warning</span></span>}>
+              <Sec title="점검 결과" icon={ShieldCheck} right={<span style={{ display: "flex", gap: 8, fontSize: TYPE.caption2, fontWeight: 700 }}>{bad && <span style={{ color: TINT.crit.fg }}>1 critical</span>}<span style={{ color: TINT.warn.fg }}>7 warning</span></span>}>
                 {[["ServiceAccount 토큰이 자동 마운트됨", "Security"], ["컨테이너에 readiness probe 없음", "Reliability"], ["컨테이너에 liveness probe 없음", "Reliability"],
                   ["컨테이너에 CPU request 없음", "Efficiency"], ["컨테이너에 memory request 없음", "Efficiency"], ["컨테이너에 CPU limit 없음", "Efficiency"], ["복제본이 1개뿐임", "Reliability"]]
                   .map(([t, cat]) => (
                     <div key={t as string} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-                      <span style={{ color: "#B25A00", fontSize: 13 }}>⚠</span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t as string}</span>
+                      <span style={{ color: TINT.warn.fg, fontSize: TYPE.body }}>⚠</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t as string}</span>
                       <Badge text={cat as string} tone={cat === "Security" ? "purple" : cat === "Reliability" ? "blue" : "green"} />
                     </div>
                   ))}
@@ -973,26 +973,26 @@ spec: {}`;
             return (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
-                  <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3 }}>{name}.yaml</span>
+                  <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>{name}.yaml</span>
                   {yamlEditing && dirty && <Badge text="수정됨" tone="blue" />}
                   {diffMode && <><Badge text="비교 — 서버 원본 ↔ 적용본" tone="purple" />
-                    <span style={{ fontSize: 10.5, fontFamily: MONO }}><span className="y-del" style={{ padding: "1px 5px", borderRadius: 4 }}>− 원본</span> <span className="y-add" style={{ padding: "1px 5px", borderRadius: 4 }}>+ 적용본</span></span></>}
+                    <span style={{ fontSize: TYPE.micro, fontFamily: MONO }}><span className="y-del" style={{ padding: "1px 5px", borderRadius: 4 }}>− 원본</span> <span className="y-add" style={{ padding: "1px 5px", borderRadius: 4 }}>+ 적용본</span></span></>}
                   <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     {diffMode ? (
                       <button onClick={() => setDiffMode(false)}
-                        style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>비교 닫기</button>
+                        style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>비교 닫기</button>
                     ) : !yamlEditing ? (
                       <button onClick={() => { setYamlDraft(saved); setYamlEditing(true); }}
-                        style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                        style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
                         <Pencil size={11} />편집
                       </button>
                     ) : (
                       <>
                         <button onClick={() => { setYamlDraft(null); setYamlEditing(false); }}
-                          style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>취소</button>
+                          style={{ border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "5px 11px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>취소</button>
                         <button disabled={!dirty}
                           onClick={() => { setYamlSaved(draft); setYamlDraft(null); setYamlEditing(false); onToast?.({ title: `${name} 적용 완료`, sub: "kubectl apply — 변경 사항이 클러스터에 반영되었습니다", tone: "ok" }); }}
-                          style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: dirty ? BLUE : "rgba(17,19,24,0.12)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, color: "#fff", cursor: dirty ? "pointer" : "default" }}>
+                          style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: dirty ? BLUE : inkA(0.12), borderRadius: 8, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 700, color: UI.card, cursor: dirty ? "pointer" : "default" }}>
                           <Check size={11} strokeWidth={3} />적용
                         </button>
                       </>
@@ -1001,7 +1001,7 @@ spec: {}`;
                 </div>
                 {diffMode && yamlSaved ? (
                   /* 라인 diff — 제거는 빨강, 추가는 초록 (서버 원본 → 적용본) */
-                  <pre style={{ ...YAML_FONT, margin: 0, color: UI.ink2, background: "#FBFBFD", border: `1px solid ${UI.line2}`, borderRadius: 10, overflowX: "auto" }}
+                  <pre style={{ ...YAML_FONT, margin: 0, color: UI.ink2, background: UI.bg2, border: `1px solid ${UI.line2}`, borderRadius: 10, overflowX: "auto" }}
                     dangerouslySetInnerHTML={{ __html: (() => {
                       const A = yaml.split("\n"), B = (yamlSaved ?? "").split("\n"); const out: string[] = [];
                       const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1014,7 +1014,7 @@ spec: {}`;
                     })() }} />
                 ) : yamlEditing ? (
                   /* 하이라이트 레이어 위에 투명 텍스트 textarea — 편집 중에도 코드 에디터 색상 유지 */
-                  <div style={{ position: "relative", background: "#fff", border: "1px solid rgba(10,132,255,0.4)", boxShadow: "0 0 0 3px rgba(10,132,255,0.1)", borderRadius: 10, overflow: "auto" }}>
+                  <div style={{ position: "relative", background: UI.card, border: `1px solid ${blueA(0.4)}`, boxShadow: `0 0 0 3px ${blueA(0.1)}`, borderRadius: 10, overflow: "auto" }}>
                     <pre aria-hidden style={{ ...YAML_FONT, margin: 0, minHeight: 340, color: UI.ink, pointerEvents: "none" }}
                       dangerouslySetInnerHTML={{ __html: hlYaml(draft) + "\n" }} />
                     <textarea value={draft} onChange={(e) => setYamlDraft(e.currentTarget.value)} spellCheck={false} wrap="off"
@@ -1022,7 +1022,7 @@ spec: {}`;
                         color: "transparent", caretColor: UI.ink, background: "transparent", border: "none", outline: "none", boxSizing: "border-box" }} />
                   </div>
                 ) : (
-                  <pre style={{ ...YAML_FONT, margin: 0, color: UI.ink2, background: "#FBFBFD", border: `1px solid ${UI.line2}`, borderRadius: 10, overflowX: "auto" }}
+                  <pre style={{ ...YAML_FONT, margin: 0, color: UI.ink2, background: UI.bg2, border: `1px solid ${UI.line2}`, borderRadius: 10, overflowX: "auto" }}
                     dangerouslySetInnerHTML={{ __html: hlYaml(saved) }} />
                 )}
               </div>
@@ -1042,16 +1042,16 @@ spec: {}`;
                 .map(([t, r, m, a], i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "72px 110px 1fr 44px", gap: 10, alignItems: "baseline", padding: "9px 0", borderBottom: `1px solid ${UI.line2}` }}>
                     <Badge text={t as string} tone={t === "Warning" ? "red" : "green"} />
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: UI.ink }}>{r as string}</span>
-                    <span style={{ fontSize: 12, color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{m as string}</span>
-                    <span style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3, textAlign: "right" }}>{a as string}</span>
+                    <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink }}>{r as string}</span>
+                    <span style={{ fontSize: TYPE.label, color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{m as string}</span>
+                    <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, textAlign: "right" }}>{a as string}</span>
                   </div>
                 ))}
             </div>
           )}
 
           {tab === "logs" && (
-            <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.7, fontFamily: MONO, background: "#0F1219", color: "#D6DBE5", borderRadius: 10, padding: 14, overflowX: "auto" }}>
+            <pre style={{ margin: 0, fontSize: TYPE.label, lineHeight: 1.7, fontFamily: MONO, background: CODE.bg, color: CODE.fg, borderRadius: 10, padding: 14, overflowX: "auto" }}>
 {`2026-07-18T15:02:11Z INFO  server listening on :8080
 2026-07-18T15:02:11Z INFO  connected to redis://redis:6379
 2026-07-18T15:03:40Z INFO  GET /v1/items 200 12ms
@@ -1063,16 +1063,16 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
 
           {tab === "rbac" && (
             <div>
-              <div style={{ fontSize: 12, color: UI.ink2, lineHeight: 1.6, marginBottom: 12 }}>
+              <div style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.6, marginBottom: 12 }}>
                 이 리소스가 사용하는 ServiceAccount가 가진 권한입니다. 이 워크로드가 만드는 모든 파드가 아래 권한을 상속합니다.
               </div>
               <KV k="ServiceAccount" v={`${String(name).replace(/-\d+$/, "")}-sa`} mono />
               <KV k="바인딩" v="RoleBinding/app-reader · ClusterRoleBinding/metrics-view" mono />
-              <div style={{ marginTop: 16, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginBottom: 8 }}>유효 권한</div>
+              <div style={{ marginTop: 16, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginBottom: 8 }}>유효 권한</div>
               {[["get, list, watch", "pods, services, configmaps"], ["create, patch", "events"], ["get", "secrets (app-config만)"]].map(([verbs, res]) => (
                 <div key={verbs} style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 10, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
-                  <span style={{ fontSize: 12, fontFamily: MONO, color: BLUE }}>{verbs}</span>
-                  <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink2 }}>{res}</span>
+                  <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: BLUE }}>{verbs}</span>
+                  <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink2 }}>{res}</span>
                 </div>
               ))}
             </div>
@@ -1095,13 +1095,13 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
     const on = sel === k.id;
     return (
       <button onClick={() => onPick(k)} className="krow"
-        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", cursor: "pointer", background: on ? "rgba(10,132,255,0.09)" : "transparent", borderRadius: 8, padding: "6px 9px" }}>
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", cursor: "pointer", background: on ? blueA(0.09) : "transparent", borderRadius: 8, padding: "6px 9px" }}>
         <k.icon size={13} style={{ color: on ? BLUE : UI.ink3, flexShrink: 0 }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
         <span role="button" title="즐겨찾기" onClick={(e) => { e.stopPropagation(); togglePin(k.id); }} className="kpin" style={{ display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0 }}>
           <Pin size={10} style={{ color: pinned.includes(k.id) ? BLUE : UI.ink3 }} />
         </span>
-        <span style={{ fontSize: 11, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? "rgba(10,132,255,0.12)" : "rgba(17,19,24,0.05)", borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count}</span>
+        <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontFamily: MONO, color: k.count ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{k.count}</span>
       </button>
     );
   };
@@ -1109,7 +1109,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
     <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
       {pinned.length > 0 && (
       <div>
-        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
+        <div style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
         {KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
       </div>
       )}
@@ -1119,14 +1119,14 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
         return (
           <div key={g}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px 5px" }}>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
-              <span style={{ marginLeft: "auto", fontSize: 10.5, fontFamily: MONO, color: UI.ink3 }}>{GROUP_TOTAL(g)}</span>
+              <span style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
+              <span style={{ marginLeft: "auto", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3 }}>{GROUP_TOTAL(g)}</span>
             </div>
             {list.map((k) => <Row key={k.id} k={k} />)}
           </div>
         );
       })}
-      <button onClick={() => setShowEmpty(!showEmpty)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: 12, cursor: "pointer", padding: "9px", borderTop: `1px solid ${UI.line2}` }}>
+      <button onClick={() => setShowEmpty(!showEmpty)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: TYPE.label, cursor: "pointer", padding: "9px", borderTop: `1px solid ${UI.line2}` }}>
         <Eye size={12} />{showEmpty ? "비어 있는 종류 숨기기" : `비어 있는 종류 ${emptyCount}개 표시`}
       </button>
     </nav>
@@ -1167,10 +1167,10 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
       <span className={enabled ? "gnav" : undefined} title={collapsed ? it.label : undefined}
         onClick={sid ? () => onSurface(sid) : undefined}
         style={{ display: "flex", alignItems: "center", gap: 11, borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start",
-          background: active ? "rgba(10,132,255,0.09)" : "transparent", color: active ? BLUE : enabled ? UI.ink2 : UI.ink3,
+          background: active ? blueA(0.09) : "transparent", color: active ? BLUE : enabled ? UI.ink2 : UI.ink3,
           opacity: enabled ? 1 : 0.45, cursor: enabled ? "pointer" : "default", transition: "background .14s" }}>
         <it.icon size={16} style={{ flexShrink: 0 }} />
-        {!collapsed && <span style={{ fontSize: 13.5, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
+        {!collapsed && <span style={{ fontSize: TYPE.body, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
       </span>
     );
     return <div key={it.id}>{body}</div>;
@@ -1181,10 +1181,10 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
         padding: "14px 10px 12px", position: "sticky", top: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflow: "hidden" }}>
       {/* 브랜드 — Opsia 워드마크 */}
       <div style={{ display: "flex", alignItems: "center", gap: 9, padding: collapsed ? "0 0 16px" : "0 4px 16px", justifyContent: collapsed ? "center" : "flex-start" }}>
-        <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, #5AC8FA)`, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <span style={{ width: 9, height: 9, borderRadius: 999, border: "2px solid #fff" }} />
+        <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 999, border: `2px solid ${UI.card}` }} />
         </span>
-        {!collapsed && <span style={{ fontSize: 16.5, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>Opsia</span>}
+        {!collapsed && <span style={{ fontSize: TYPE.title3, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>Opsia</span>}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>{NAV_ITEMS.map((it) => <Item key={it.id} it={it} />)}</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 1, borderTop: `1px solid ${UI.line2}`, paddingTop: 8 }}>
@@ -1192,7 +1192,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
         <button onClick={() => setCollapsed(!collapsed)} className="gnav"
           style={{ display: "flex", alignItems: "center", gap: 11, border: "none", background: "transparent", borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start", color: UI.ink3, cursor: "pointer" }}>
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          {!collapsed && <span style={{ fontSize: 13.5, fontWeight: 600 }}>접기</span>}
+          {!collapsed && <span style={{ fontSize: TYPE.body, fontWeight: 600 }}>접기</span>}
         </button>
       </div>
     </motion.nav>
@@ -1210,9 +1210,9 @@ const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 }[] = [
   { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", span: 1 },
   { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", span: 2 },
 ];
-const BOARD_KEY = "opsia-demo-board-v1";
+const BOARD_KEY = "opsia-demo-board-v2"; // v2: W5~W8 기본 노출(D21 위젯 보드 전체가 기본값)
 type BoardState = { order: string[]; hidden: string[]; collapsed: string[] };
-const defaultBoard = (): BoardState => ({ order: W_DEFS.map((w) => w.id), hidden: ["W5", "W6", "W7", "W8"], collapsed: [] });
+const defaultBoard = (): BoardState => ({ order: W_DEFS.map((w) => w.id), hidden: [], collapsed: [] });
 const readBoard = (): BoardState => {
   try { const s = JSON.parse(localStorage.getItem(BOARD_KEY) || ""); if (Array.isArray(s.order)) return { ...defaultBoard(), ...s }; } catch { /* 기본값 */ }
   return defaultBoard();
@@ -1270,11 +1270,11 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
     switch (id) {
       case "W2": return crit.length
         ? <RankList onPick={onOpenPod} rows={crit.slice(0, 3).map((p) => ({ id: p.name, tone: "crit" as const, title: `${p.name} · ${p.status}`, sub: `${p.svc} · ${p.ns} · ${p.cluster}`, right: `재시작 ${p.restarts}` }))} />
-        : <span style={{ fontSize: 12.5, color: UI.ink2 }}>활성 인시던트가 없습니다</span>;
+        : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>활성 인시던트가 없습니다</span>;
       case "W3": return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <RatioBar a={repos.length - outSync.length} b={outSync.length} aLabel="Synced" bLabel="OutOfSync" />
-          {pendingRepo.length > 0 && <span style={{ fontSize: 11.5, color: "#0A6CFF" }}>연결 중 {pendingRepo.length} · 초기 동기화 대기</span>}
+          {pendingRepo.length > 0 && <span style={{ fontSize: TYPE.caption2, color: TINT.blue.fg }}>연결 중 {pendingRepo.length} · 초기 동기화 대기</span>}
         </div>
       );
       case "W4": {
@@ -1293,7 +1293,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
         const c = costModel();
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <KpiValue value={`$${c.total.toLocaleString()}`} delta={c.delta} deltaTone="warn" summary={<>지난달보다 <b style={{ color: "#B25A00" }}>${c.diff}</b> 증가 — 노드 {nodes.length}대 · 스팟 절감 ${c.spotSave}</>} />
+            <KpiValue value={`$${c.total.toLocaleString()}`} delta={c.delta} deltaTone="warn" summary={<>지난달보다 <b style={{ color: TINT.warn.fg }}>${c.diff}</b> 증가 — 노드 {nodes.length}대 · 스팟 절감 ${c.spotSave}</>} />
             <MiniBars values={c.monthly} labels={c.labels} currentIndex={c.monthly.length - 1} tone={HP.warn} />
           </div>
         );
@@ -1310,29 +1310,29 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       {/* ── 고정 헤더: 상태 요약 줄(지도 요약 줄과 같은 칩 문법·같은 표기 — 두 화면이 다른 형식으로 말하지 않는다) ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         {(() => {
-          const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
+          const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           const prov = nodes.filter((n) => n.state === "Provisioning").length;
           const cord = nodes.filter((n) => n.state === "Cordoned").length;
           const pending = pods.filter((p) => p.status === "Pending").length;
           return (
             <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: "#0A6CFF" }}>· 연결 중 {pendingCl.length}</span>}</span>
+              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}</span>
               <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{nodes.length}</b>
-                {prov > 0 && <span style={{ color: "#0A6CFF" }}>· 예약 {prov}</span>}
+                {prov > 0 && <span style={{ color: TINT.blue.fg }}>· 예약 {prov}</span>}
                 {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
               </span>
               <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{pods.length}</b>
-                {pending > 0 && <span style={{ color: "#0A6CFF" }}>· 대기 {pending}</span>}
+                {pending > 0 && <span style={{ color: TINT.blue.fg }}>· 대기 {pending}</span>}
               </span>
               {outSync.map((r) => (
-                <span key={r.repo} style={{ ...seg, borderColor: "#F3D8B7", background: "#FFF8EF", color: "#B25A00" }}>
+                <span key={r.repo} style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg }}>
                   <GithubIcon size={11} />OutOfSync · {r.repo.split("/")[1]}
                 </span>
               ))}
               {crit.length > 0 && (
                 <button onClick={() => onDrillCluster(crit[0].cluster)} title="지도에서 장애 위치 보기"
-                  style={{ ...seg, borderColor: "#F0B8B4", background: "#FFF7F6", color: HP.crit, fontWeight: 700, cursor: "pointer" }}>
+                  style={{ ...seg, borderColor: TINT.crit.bd, background: TINT.crit.bg, color: HP.crit, fontWeight: 700, cursor: "pointer" }}>
                   <Activity size={12} />장애 {crit.length}
                 </button>
               )}
@@ -1340,18 +1340,18 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
           );
         })()}
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
+          <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
             {(["오늘", "7일", "30일"] as const).map((p) => (
               <button key={p} onClick={() => setPeriod(p)}
-                style={{ border: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", background: period === p ? "#fff" : "transparent", color: period === p ? UI.ink : UI.ink3, boxShadow: period === p ? "0 1px 3px rgba(17,19,24,0.12)" : "none" }}>{p}</button>
+                style={{ border: "none", borderRadius: 6, padding: "3px 10px", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer", background: period === p ? UI.card : "transparent", color: period === p ? UI.ink : UI.ink3, boxShadow: period === p ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{p}</button>
             ))}
           </span>
           <button onClick={() => setEditing(!editing)}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${editing ? "rgba(10,132,255,0.45)" : UI.line}`, background: editing ? "rgba(10,132,255,0.07)" : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${editing ? blueA(0.45) : UI.line}`, background: editing ? blueA(0.07) : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>
             <Pencil size={12} />{editing ? "편집 완료" : "레이아웃 편집"}
           </button>
           <button onClick={onConnect}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: "#fff", borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>+ 클러스터 연결</button>
+            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 클러스터 연결</button>
         </span>
       </div>
 
@@ -1378,10 +1378,10 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
         })}
         {editing && hiddenDefs.length > 0 && (
           <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", border: `1.5px dashed ${UI.line}`, borderRadius: 14, padding: "11px 14px" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: UI.ink3 }}>위젯 추가</span>
+            <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>위젯 추가</span>
             {hiddenDefs.map((w) => (
               <button key={w.id} onClick={() => save({ ...board, hidden: board.hidden.filter((x) => x !== w.id) })}
-                style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ {w.title}</button>
+                style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: 999, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ {w.title}</button>
             ))}
           </div>
         )}
@@ -1445,6 +1445,8 @@ function App() {
     const ro = new ResizeObserver(() => setTopH(el.offsetHeight));
     ro.observe(el); return () => ro.disconnect();
   }, []);
+  // 서피스 전환 = 새 화면 — 이전 화면의 스크롤 위치를 승계하면 상단 잘림·하단 공백으로 깨져 보인다
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [surface]);
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
   const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
   useEffect(() => {
@@ -1550,28 +1552,28 @@ function App() {
       {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
-        <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
           <Building2 size={14} style={{ color: UI.ink3 }} />jungle-303
         </span>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
-        <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: UI.ink }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>
           <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
         </span>
         )}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
           <button onClick={() => setNsOpen(!nsOpen)}
-            style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? "rgba(10,132,255,0.45)" : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: 13, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
+            style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? blueA(0.45) : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
             <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3, transform: nsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
           </button>
           <AnimatePresence>
             {nsOpen && (
               <motion.div key="ns" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={SOFT}
-                style={{ position: "absolute", top: 40, left: 0, minWidth: 190, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", padding: 5, overflow: "hidden" }}>
+                style={{ position: "absolute", top: 40, left: 0, minWidth: 190, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 5, overflow: "hidden" }}>
                 {NS_OPTIONS.map((o) => (
                   <button key={o} className="rrow" onClick={() => { setNs(o); setNsOpen(false); }}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: ns === o ? "rgba(10,132,255,0.08)" : "transparent", borderRadius: 8, padding: "7px 10px", fontSize: 12.5, fontWeight: ns === o ? 700 : 500, color: ns === o ? BLUE : UI.ink, cursor: "pointer" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: ns === o ? blueA(0.08) : "transparent", borderRadius: 8, padding: "7px 10px", fontSize: TYPE.label2, fontWeight: ns === o ? 700 : 500, color: ns === o ? BLUE : UI.ink, cursor: "pointer" }}>
                     {o}{ns === o && <Check size={12} style={{ marginLeft: "auto" }} />}
                   </button>
                 ))}
@@ -1581,70 +1583,70 @@ function App() {
         </span>
         )}
         {surface === "resources" && <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />}
-        <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: "#FBFBFD", borderRadius: 9, padding: "6px 12px" }}>
+        <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
           <input ref={searchRef} value={q}
             onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface !== "resources") { setSurface("resources"); setResView("list"); } }}
-            placeholder="리소스 검색" style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: UI.ink, width: "100%" }} />
-          <span style={{ fontSize: 11, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
+            placeholder="리소스 검색" style={{ border: "none", outline: "none", background: "transparent", fontSize: TYPE.body, color: UI.ink, width: "100%" }} />
+          <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
-        <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: UI.ink2 }}>
+        <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label, color: UI.ink2 }}>
           <span className="livedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신
         </span>
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
         <span style={{ position: "relative" }}>
           <button className="gnav" onClick={() => setBellOpen(!bellOpen)}
-            style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? "rgba(10,132,255,0.1)" : "rgba(17,19,24,0.045)", color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
+            style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? blueA(0.1) : inkA(0.045), color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
             <Bell size={14} />
           </button>
           {alertTotal > 0 && (
-            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alerts.length ? HP.crit : HP.warn, color: "#fff", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: "2px solid #fff", boxSizing: "content-box" }}>{alertTotal}</span>
+            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alerts.length ? HP.crit : HP.warn, color: UI.card, fontSize: TYPE.micro, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertTotal}</span>
           )}
           <AnimatePresence>
             {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
             {bellOpen && (
               <motion.div key="bell" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -5, scale: 0.98 }} transition={SOFT}
-                style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: "rgba(246,247,250,0.86)", backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
-                  border: "1px solid rgba(17,19,24,0.08)", borderRadius: 18, boxShadow: "0 28px 70px -24px rgba(17,19,24,0.38)", padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
+                style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: GLASS, backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
+                  border: `1px solid ${inkA(0.08)}`, borderRadius: 18, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
                   <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
+                  <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
                 </div>
                 {(pendingCl.length + pendingRepo.length > 0) && (
                   <div style={{ padding: "0 8px 8px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, padding: "0 2px 6px" }}>진행 중</div>
+                    <div style={{ fontSize: TYPE.caption, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, padding: "0 2px 6px" }}>진행 중</div>
                     {[...pendingCl.map((n) => ({ id: `pc-${n}`, t: n, b: "에이전트 부트스트랩 · 첫 인벤토리 수집 대기" })), ...pendingRepo.map((n) => ({ id: `pr-${n}`, t: n, b: "초기 동기화 대기" }))].map((x) => (
-                      <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.85)", border: "1px solid rgba(17,19,24,0.05)", borderRadius: 14, padding: "10px 12px", marginBottom: 6 }}>
+                      <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, background: cardA(0.85), border: `1px solid ${inkA(0.05)}`, borderRadius: 14, padding: "10px 12px", marginBottom: 6 }}>
                         <span className="pulsedot" style={{ width: 8, height: 8, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t}</span>
-                          <span style={{ display: "block", fontSize: 11, color: UI.ink2, marginTop: 1 }}>{x.b}</span>
+                          <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t}</span>
+                          <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 1 }}>{x.b}</span>
                         </span>
-                        <span style={{ width: 34, height: 4, borderRadius: 999, background: "rgba(10,132,255,0.15)", overflow: "hidden", flexShrink: 0 }}>
-                          <motion.span initial={{ x: -20 }} animate={{ x: 34 }} transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }} style={{ display: "block", width: 20, height: "100%", borderRadius: 999, background: BLUE }} />
+                        <span style={{ width: 34, height: 4, borderRadius: 999, background: blueA(0.15), overflow: "hidden", flexShrink: 0 }}>
+                          <motion.span initial={{ x: -20 }} animate={{ x: 34 }} transition={{ repeat: Infinity, duration: DUR.meter, ease: "easeInOut" }} style={{ display: "block", width: 20, height: "100%", borderRadius: 999, background: BLUE }} />
                         </span>
                       </div>
                     ))}
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, padding: "6px 2px 0" }}>최근</div>
+                    <div style={{ fontSize: TYPE.caption, fontWeight: 700, letterSpacing: "0.05em", color: UI.ink3, padding: "6px 2px 0" }}>최근</div>
                   </div>
                 )}
                 {(() => {
                   const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => (
                     <button className="acard" onClick={onClick} disabled={!onClick}
-                      style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", background: "rgba(255,255,255,0.85)",
-                        border: "1px solid rgba(17,19,24,0.05)", borderRadius: 14, padding: "10px 12px", marginBottom: 6, cursor: onClick ? "pointer" : "default",
-                        boxShadow: "0 1px 2px rgba(17,19,24,0.05)" }}>
+                      style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", background: cardA(0.85),
+                        border: `1px solid ${inkA(0.05)}`, borderRadius: 14, padding: "10px 12px", marginBottom: 6, cursor: onClick ? "pointer" : "default",
+                        boxShadow: `0 1px 2px ${inkA(0.05)}` }}>
                       <span style={{ width: 28, height: 28, borderRadius: 8, background: tint, display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1 }}>
-                        <I size={14} color="#fff" strokeWidth={2.2} />
+                        <I size={14} color={UI.card} strokeWidth={2.2} />
                       </span>
                       <span style={{ minWidth: 0, flex: 1 }}>
                         <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-                          <span style={{ fontSize: 10.5, color: UI.ink3, flexShrink: 0 }}>{time}</span>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+                          <span style={{ fontSize: TYPE.micro, color: UI.ink3, flexShrink: 0 }}>{time}</span>
                         </span>
-                        <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 2, lineHeight: 1.45 }}>{body}</span>
-                        {right && <span style={{ display: "block", fontSize: 10.5, fontFamily: MONO, color: UI.ink3, marginTop: 3 }}>{right}</span>}
+                        <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink2, marginTop: 2, lineHeight: 1.45 }}>{body}</span>
+                        {right && <span style={{ display: "block", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, marginTop: 3 }}>{right}</span>}
                       </span>
                     </button>
                   );
@@ -1662,7 +1664,7 @@ function App() {
                           body={`OutOfSync · ${r.tool} · 리비전 ${r.rev}`} right="GitOps" />
                       ))}
                       {nodeAlerts.map((n) => (
-                        <Card key={n.id} icon={Server} tint={n.state === "Provisioning" ? BLUE : "#8E8E93"} title={n.id} time="34분 전"
+                        <Card key={n.id} icon={Server} tint={n.state === "Provisioning" ? BLUE : UI.ink3} title={n.id} time="34분 전"
                           body={`${n.state === "Provisioning" ? "예약됨 — 노드 준비 중" : "차단됨 — 스케줄링 제외"} · ${n.instance}`} right={n.cluster}
                           onClick={() => { setBellOpen(false); openRef("Node", n.id); }} />
                       ))}
@@ -1676,18 +1678,18 @@ function App() {
         {/* 계정 — 맨 오른쪽(D20). 로그아웃 = 데모 세션 초기화(실동작) */}
         <span style={{ position: "relative" }}>
           <button className="gnav" onClick={() => setMeOpen(!meOpen)}
-            style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: "rgba(10,132,255,0.12)", color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800 }}>우</button>
+            style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: blueA(0.12), color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800 }}>우</button>
           <AnimatePresence>
             {meOpen && (
               <motion.div key="me" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={SOFT}
-                style={{ position: "absolute", top: 38, right: 0, width: 224, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: "0 18px 50px -18px rgba(17,19,24,0.28)", padding: 6, overflow: "hidden" }}>
+                style={{ position: "absolute", top: 38, right: 0, width: 224, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 6, overflow: "hidden" }}>
                 <div style={{ padding: "8px 10px 9px", borderBottom: `1px solid ${UI.line2}` }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>우녕</div>
-                  <div style={{ fontSize: 11.5, fontFamily: MONO, color: UI.ink3, marginTop: 2 }}>woonyong.dev@gmail.com</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />jungle-303 워크스페이스</div>
+                  <div style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>우녕</div>
+                  <div style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, marginTop: 2 }}>woonyong.dev@gmail.com</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption2, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />jungle-303 워크스페이스</div>
                 </div>
                 <button className="rrow" onClick={() => { try { sessionStorage.clear(); localStorage.removeItem(BOARD_KEY); } catch { /* 데모 */ } window.location.reload(); }}
-                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", borderRadius: 8, padding: "8px 10px", marginTop: 3, fontSize: 12.5, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", borderRadius: 8, padding: "8px 10px", marginTop: 3, fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
                   <LogOut size={13} style={{ color: UI.ink3 }} />로그아웃
                 </button>
               </motion.div>
@@ -1732,18 +1734,18 @@ function App() {
           {/* ── D18 관점 세그먼트 — 한 서피스, 세 관점(지도·목록·흐름). "지도 밑 표" 구조 폐지.
                 스코프(클러스터·노드·ns·검색어)는 관점을 넘어 보존된다 ── */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 9, padding: 2 }}>
+            <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
               {([["map", "지도"], ["list", "목록"], ["flow", "흐름"]] as const).map(([v, l]) => (
                 <button key={v} onClick={() => setResView(v)}
-                  style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: 12.5, fontWeight: 700, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
-                  {resView === v && <motion.span layoutId="resview" transition={SOFT} style={{ position: "absolute", inset: 0, background: "#fff", borderRadius: 7, boxShadow: "0 1px 4px rgba(17,19,24,0.14)" }} />}
+                  style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label2, fontWeight: 700, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
+                  {resView === v && <motion.span layoutId="resview" transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
                   <span style={{ position: "relative" }}>{l}</span>
                 </button>
               ))}
             </span>
             {/* 스코프 표시는 한 곳씩만: 지도=브레드크럼, 목록=표 제목줄. 흐름은 서비스 수준이라 클러스터 스코프가 적용되지 않는다 */}
             {resView === "flow" && (
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: UI.ink3 }}>서비스 호출 관점 — 전체 클러스터</span>
+              <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: UI.ink3 }}>서비스 호출 관점 — 전체 클러스터</span>
             )}
           </div>
 
@@ -1765,16 +1767,16 @@ function App() {
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <kind.icon size={15} style={{ color: BLUE }} />
-                  <span style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
-                  <span style={{ fontSize: 12, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? "rgba(10,132,255,0.08)" : "rgba(17,19,24,0.045)", borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
+                  <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
+                  <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
+                  <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? blueA(0.08) : inkA(0.045), borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
                   {/* 밀도 토글 — 많은 행을 한 화면에 */}
-                  <span style={{ marginLeft: "auto", display: "flex", gap: 2, background: "rgba(17,19,24,0.05)", borderRadius: 8, padding: 2 }}>
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
                     {([["기본", false], ["촘촘", true]] as const).map(([l, v]) => (
                       <button key={l} onClick={() => setDense(v)}
-                        style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-                          background: dense === v ? "#fff" : "transparent", color: dense === v ? UI.ink : UI.ink3,
-                          boxShadow: dense === v ? "0 1px 3px rgba(17,19,24,0.12)" : "none" }}>{l}</button>
+                        style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer",
+                          background: dense === v ? UI.card : "transparent", color: dense === v ? UI.ink : UI.ink3,
+                          boxShadow: dense === v ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{l}</button>
                     ))}
                   </span>
                 </div>
@@ -1805,9 +1807,9 @@ function App() {
       <AnimatePresence>
         {aiOpen && (
           <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: "-28px 0 70px -32px rgba(17,19,24,0.3)" }}>
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}` }}>
             <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
-              style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? "rgba(10,132,255,0.35)" : "transparent", transition: "background .15s" }} />
+              style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "인시던트" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽 흐름" : resView === "list" ? "리소스 목록" : "리소스 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
@@ -1822,8 +1824,8 @@ function App() {
             initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
             title="AI 어시스턴트"
             style={{ position: "fixed", right: 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
-              background: `linear-gradient(135deg, ${BLUE}, #5AC8FA)`, color: "#fff", display: "grid", placeItems: "center",
-              boxShadow: "0 10px 26px -8px rgba(10,132,255,0.55), 0 2px 8px rgba(17,19,24,0.12)" }}>
+              background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, color: UI.card, display: "grid", placeItems: "center",
+              boxShadow: `0 10px 26px -8px ${blueA(0.55)}, 0 2px 8px ${inkA(0.12)}` }}>
             <Sparkles size={20} />
           </motion.button>
         )}
@@ -1833,15 +1835,15 @@ function App() {
       <AnimatePresence>
         {connectModal && (
           <>
-            <motion.div key="cmb" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
+            <motion.div key="cmb" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
               onClick={() => setConnectModal(null)}
-              style={{ position: "fixed", top: topH, right: 0, bottom: 0, left: navCollapsed ? 60 : 208, background: "rgba(17,19,24,0.18)", zIndex: 68 }} />
+              style={{ position: "fixed", top: topH, right: 0, bottom: 0, left: navCollapsed ? 60 : 208, background: inkA(0.18), zIndex: 68 }} />
             <motion.div key="cmw" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.99 }} transition={SOFT}
               style={{ position: "fixed", top: `calc(${topH}px + 5vh / ${PRESENT_SCALE})`, left: `calc(50% + ${(navCollapsed ? 60 : 208) / 2}px)`, transform: "translateX(-50%)",
                 width: 680, maxWidth: `calc(${"100%"} - ${(navCollapsed ? 60 : 208) + 48}px)`, height: `calc(78vh / ${PRESENT_SCALE})`, zIndex: 69,
-                background: "#EEF0F4", borderRadius: 18, boxShadow: "0 40px 90px -30px rgba(17,19,24,0.45)", overflow: "hidden" }}>
+                background: INSET, borderRadius: 18, boxShadow: `0 40px 90px -30px ${inkA(0.45)}`, overflow: "hidden" }}>
               <button onClick={() => setConnectModal(null)}
-                style={{ position: "absolute", top: 12, right: 12, zIndex: 5, width: 28, height: 28, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.08)", color: UI.ink2, cursor: "pointer", fontSize: 13 }}>✕</button>
+                style={{ position: "absolute", top: 12, right: 12, zIndex: 5, width: 28, height: 28, borderRadius: 999, border: "none", background: inkA(0.08), color: UI.ink2, cursor: "pointer", fontSize: TYPE.body }}>✕</button>
               <div style={{ position: "relative", width: "100%", height: "100%" }}>
                 <ConnectWizard key={connectModal} embedded initialView={connectModal} />
               </div>
@@ -1860,13 +1862,13 @@ function App() {
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div key={t.id} layout initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={SOFT}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: 340, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 13, padding: "11px 13px", boxShadow: "0 16px 44px -16px rgba(17,19,24,0.3)", pointerEvents: "auto" }}>
+              style={{ display: "flex", alignItems: "center", gap: 10, width: 340, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 13, padding: "11px 13px", boxShadow: `0 16px 44px -16px ${inkA(0.3)}`, pointerEvents: "auto" }}>
               <span style={{ width: 26, height: 26, borderRadius: 9, background: t.tone === "ok" ? HP.ok : HP.crit, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                {t.tone === "ok" ? <Check size={14} color="#fff" strokeWidth={3} /> : <AlertTriangle size={13} color="#fff" />}
+                {t.tone === "ok" ? <Check size={14} color={UI.card} strokeWidth={3} /> : <AlertTriangle size={13} color={UI.card} />}
               </span>
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ display: "block", fontSize: 11.5, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
+                <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
               </span>
             </motion.div>
           ))}
@@ -1876,25 +1878,25 @@ function App() {
       <style>{`
         .uni { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .uni .krow { transition: background .14s ease; }
-        .uni .krow:hover { background: rgba(17,19,24,0.045); }
+        .uni .krow:hover { background: ${inkA(0.045)}; }
         .uni .krow:hover .kpin { opacity: .5 !important; }
         .uni .rrow { transition: background .12s ease; }
-        .uni .rrow:hover { background: rgba(17,19,24,0.028); }
-        .uni .gnav:hover { background: rgba(17,19,24,0.05) !important; }
+        .uni .rrow:hover { background: ${inkA(0.028)}; }
+        .uni .gnav:hover { background: ${inkA(0.05)} !important; }
         .uni .acard { transition: transform .12s ease, background .12s ease; }
-        .uni .acard:not(:disabled):hover { background: #fff !important; transform: translateY(-1px); }
+        .uni .acard:not(:disabled):hover { background: ${UI.card} !important; transform: translateY(-1px); }
         /* YAML 구문 색상 — 라이트 코드 에디터 팔레트 (Badge 텍스트 톤과 동일 계열) */
-        .uni .y-k { color: #0A6CFF; }
-        .uni .y-s { color: #1F9D4D; }
-        .uni .y-n { color: #B25A00; }
-        .uni .y-b { color: #8250DF; }
-        .uni .y-p { color: #9AA0AA; }
-        .uni .y-c { color: #9AA0AA; font-style: italic; }
-        .uni .y-del { color: #C43028; background: #FFF3F2; }
-        .uni .y-add { color: #1F9D4D; background: #EDFAF1; }
+        .uni .y-k { color: ${TINT.blue.fg}; }
+        .uni .y-s { color: ${TINT.ok.fg}; }
+        .uni .y-n { color: ${TINT.warn.fg}; }
+        .uni .y-b { color: ${TINT.purple.fg}; }
+        .uni .y-p { color: ${UI.ink3}; }
+        .uni .y-c { color: ${UI.ink3}; font-style: italic; }
+        .uni .y-del { color: ${TINT.crit.fg}; background: ${TINT.crit.bg}; }
+        .uni .y-add { color: ${TINT.ok.fg}; background: ${TINT.ok.bg}; }
         .uni .livedot { animation: lv 1.6s ease-in-out infinite; }
         @keyframes lv { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-        .uni ::-webkit-scrollbar { width: 8px; } .uni ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }
+        .uni ::-webkit-scrollbar { width: 8px; } .uni ::-webkit-scrollbar-thumb { background: ${inkA(0.12)}; border-radius: 99px; }
         @media (prefers-reduced-motion: reduce) { .uni .livedot { animation: none !important; } }
         /* 좁은 화면(200% 확대 등): 부가 요소를 접어 핵심만 남긴다 */
         @media (max-width: 980px) { .uni .hide-narrow { display: none !important; } }

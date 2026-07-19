@@ -5,6 +5,7 @@
 // 표면·잉크 (Geist: background / surface / border, 3단 잉크)
 export const UI = {
   bg: "#FAFAFC",     // 페이지 배경
+  bg2: "#FBFBFD",    // 표면 안 보조 배경 (표 헤더·인셋)
   card: "#FFFFFF",   // 표면
   line: "#E9EAEE",   // 헤어라인 (구분 1순위 — 그림자보다 먼저)
   line2: "#F1F2F5",  // 보조 헤어라인
@@ -13,8 +14,30 @@ export const UI = {
   ink3: "#9AA0AA",   // 라벨·자리표시
 } as const;
 
+// 알파 잉크·액센트 — rgba 리터럴 금지, 반드시 이 헬퍼로 파생
+export const inkA = (a: number) => `rgba(17,19,24,${a})`;
+export const cardA = (a: number) => `rgba(255,255,255,${a})`; // 글래스 표면(블러 위)
+export const GLASS = "rgba(246,247,250,0.86)";                // 프로스트 시트 배경
+export const blueA = (a: number) => `rgba(10,132,255,${a})`;
+export const critA = (a: number) => `rgba(255,95,85,${a})`;
+export const okA = (a: number) => `rgba(48,209,88,${a})`;
+export const warnA = (a: number) => `rgba(255,179,64,${a})`;
+
 // 액센트 — 선택·포커스·링크 전용 (상태 표현에 쓰지 않는다)
 export const BLUE = "#0A84FF";
+export const BLUE2 = "#5AC8FA"; // 브랜드 그라디언트 종점 전용
+
+// 보조 중립 — 호버 헤어라인·어포던스·인셋 (회색 리터럴 난립 금지)
+export const LINE3 = "#DADDE3";  // 호버·점선 보더
+export const INK4 = "#C6CAD1";   // 셰브런·유휴 스트로크 어포던스
+export const INSET = "#EEF0F4";  // 창·레일 인셋 배경
+export const MARK = "#FFF1B8";   // 검색 하이라이트
+
+// 코드 표면 (다크 인셋)
+export const CODE = { bg: "#0F1219", fg: "#D6DBE5" } as const;
+
+// 범주·아이덴티티 컬러 — 차트 카테고리·서비스 아바타 전용 (상태 의미 금지)
+export const IDENT = { teal: "#0FA3B1", indigo: "#4C6EF5", jade: "#12B5A5", ruby: "#DC382C" } as const;
 
 // 상태 팔레트 (Apple 시스템 컬러 계열) — 상태 외 용도 금지
 export const HP = {
@@ -35,14 +58,19 @@ export const TINT = {
   blue: { fg: "#0A6CFF", bg: "#EDF4FF", bd: "#CFE1FB" },
   purple: { fg: "#8250DF", bg: "#F6F1FE", bd: "#E3D5FA" },
   gray: { fg: "#5F6570", bg: "#F4F5F7", bd: "#E4E6EA" },
+  lime: { fg: "#4D7C0F", bg: "#F3FAE7", bd: "#DDF0BB" },
 } as const;
+
+// 외부 브랜드 표식 (로고 옆 고정색)
+export const BRAND = { github: "#24292F", awsA: "#FF9900", awsB: "#F76F00" } as const;
 
 // 타이포 — 한 단계 큰 애플 스케일 (500 웨이트 금지 → 600)
 export const SANS = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif`;
 export const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 export const TYPE = {
-  caption: 11, label: 12, body: 13, bodyStrong: 14,
-  title3: 15.5, title2: 17, title1: 21,
+  micro: 10.5, caption: 11, caption2: 11.5, label: 12, label2: 12.5,
+  body: 13, bodyStrong: 14,
+  title3: 15.5, title2: 17, heading: 18, title1: 21, kpi: 25,
 } as const;
 
 // 모션 — 용도별 스프링 3종 (임의 duration 금지)
@@ -50,6 +78,14 @@ export const SOFT = { type: "spring", bounce: 0.12, visualDuration: 0.32 } as co
 export const SPRING = { type: "spring", bounce: 0.16, visualDuration: 0.5 } as const;  // 카드·위젯 레이아웃
 export const PAGE = { type: "spring", bounce: 0.08, visualDuration: 0.55 } as const;   // 뷰(페이지) 전환
 export const EASE_DRAW = [0.22, 1, 0.36, 1] as const;                                   // 차트 선 드로잉
+// 스프링이 부적합한 곳(차트 드로잉·게이지 충전·카운트업·마이크로 페이드)만 허용되는 duration
+export const DUR = {
+  micro: 0.12,  // 툴팁·팝오버 마이크로 페이드
+  fade: 0.18,   // 오버레이·모드 전환 페이드
+  draw: 0.85,   // 차트 선·도넛 드로잉
+  meter: 1.2,   // 게이지·비율 바 충전
+  count: 1.4,   // 숫자 카운트업
+} as const;
 
 // 엘리베이션 — 헤어라인 우선, 그림자는 떠 있는 것(팝오버·오버레이)에만
 export const ELEV = {

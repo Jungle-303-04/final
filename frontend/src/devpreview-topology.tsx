@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { DoorOpen, Network, Globe, Braces, ShoppingCart, Search, KeyRound, CreditCard, Send } from "lucide-react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
-import { UI, BLUE, ST, MONO, PRESENT_SCALE } from "./devpreview/theme";
+import { UI, BLUE, ST, TINT, MONO, TYPE, PRESENT_SCALE, DUR, inkA, blueA, INK4, BRAND as BRAND_MARK, cardA } from "./devpreview/theme";
 import { podInventory } from "./devpreview-opsia";
 import { BRAND, BRAND_COLOR } from "./devpreview/brandIcons";
 import "./styles/tokens.css";
@@ -143,14 +143,14 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
     <div className="tp" style={{ minHeight: embedded ? undefined : "100vh", padding: embedded ? 0 : "44px 24px", display: "flex", justifyContent: "center" }}>
       <div style={{ width: embedded ? "100%" : 992, maxWidth: "100%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
-          {!embedded && <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
+          {!embedded && <div style={{ fontSize: TYPE.title1, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
           {/* 임베드(흐름 관점)에서는 셸이 관점 라벨을 담당 — 여기서는 스코프를 사칭하지도, 조작법을 설명하지도 않는다 */}
-          {!embedded && <div style={{ fontSize: 13, color: UI.ink3 }}>서비스 호출 흐름 — 전체 클러스터</div>}
+          {!embedded && <div style={{ fontSize: TYPE.body, color: UI.ink3 }}>서비스 호출 흐름 — 전체 클러스터</div>}
           {/* 뷰 내비게이션 — 셸에 통합되면 셸 내비가 대신한다 */}
           {!embedded && (
           <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
             {([["맵", "devpreview-opsia.html", false], ["토폴로지", "devpreview-topology.html", true], ["연결", "devpreview-connect.html", false], ["AI", "devpreview-ai.html", false]] as const).map(([l, href, act]) => (
-              <a key={l} href={`/${href}`} style={{ fontSize: 12.5, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? "rgba(17,19,24,0.05)" : "transparent" }}>{l}</a>
+              <a key={l} href={`/${href}`} style={{ fontSize: TYPE.label2, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? inkA(0.05) : "transparent" }}>{l}</a>
             ))}
           </nav>
           )}
@@ -169,30 +169,30 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
             ] : [];
             return (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0.12, visualDuration: 0.3 }}
-                style={{ position: "absolute", top: 14, right: 14, width: 268, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(10px)", border: `1px solid ${bad ? "#F0B8B4" : UI.line}`, borderRadius: 13, padding: 14, boxShadow: "0 16px 40px -18px rgba(17,19,24,0.25)", zIndex: 5 }}>
+                style={{ position: "absolute", top: 14, right: 14, width: 268, background: cardA(0.97), backdropFilter: "blur(10px)", border: `1px solid ${bad ? TINT.crit.bd : UI.line}`, borderRadius: 13, padding: 14, boxShadow: `0 16px 40px -18px ${inkA(0.25)}`, zIndex: 5 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {pinEdge.from} <span style={{ color: UI.ink3, fontWeight: 600 }}>→</span> {pinEdge.to}
                   </span>
-                  <button onClick={() => setPinEdge(null)} style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.06)", color: UI.ink3, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>✕</button>
+                  <button onClick={() => setPinEdge(null)} style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: "pointer", fontSize: TYPE.caption, lineHeight: 1 }}>✕</button>
                 </div>
-                <div style={{ display: "flex", gap: 12, marginTop: 9, fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                <div style={{ display: "flex", gap: 12, marginTop: 9, fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                   <span style={{ color: UI.ink2 }}>rps <b style={{ color: UI.ink }}>{pinEdge.rps.toLocaleString()}</b></span>
                   <span style={{ color: UI.ink2 }}>p99 <b style={{ color: m.p99 > 200 ? ST.crit : UI.ink }}>{m.p99}ms</b></span>
                   <span style={{ color: UI.ink2 }}>5xx <b style={{ color: m.err >= 1 ? ST.crit : UI.ink }}>{m.err}%</b></span>
                 </div>
                 {bad ? (
                   <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: ST[m.st], marginBottom: 7 }}>최근 오류</div>
+                    <div style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.06em", color: ST[m.st], marginBottom: 7 }}>최근 오류</div>
                     {errs.map((er, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "3px 0", fontSize: 11, fontFamily: MONO }}>
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "3px 0", fontSize: TYPE.caption, fontFamily: MONO }}>
                         <span style={{ color: UI.ink3, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{er.t}</span>
                         <span style={{ color: UI.ink2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{er.msg}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={{ marginTop: 11, display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: ST.ok, fontWeight: 600 }}>
+                  <div style={{ marginTop: 11, display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption2, color: ST.ok, fontWeight: 600 }}>
                     <span style={{ width: 6, height: 6, borderRadius: 999, background: ST.ok }} />오류 없음 · 정상 흐름
                   </div>
                 )}
@@ -210,7 +210,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
             </defs>
 
             {/* 데이터 계층 배경 밴드 */}
-            <rect x={LX[5] - 12} y={20} width={NW + 24} height={VH - 60} rx={14} fill="rgba(17,19,24,0.025)" />
+            <rect x={LX[5] - 12} y={20} width={NW + 24} height={VH - 60} rx={14} fill={inkA(0.025)} />
             <text x={LX[5] + NW / 2} y={14} textAnchor="middle" fontSize="9.5" fill={UI.ink3} fontWeight="600" letterSpacing="0.08em">DATA</text>
 
             {/* 트래픽 엣지 — 두께 균일 + 방향 화살표 + 호버 수치 + 클릭 고정 */}
@@ -221,7 +221,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
               const hovered = (etip && ekey(etip.e) === ekey(e)) || pinned;
               const on = pinEdge ? pinned : hovered || (!etip && (!ctx || ctx.center === e.from || ctx.center === e.to));
               const toSt = SVC(e.to).status;
-              const col = toSt === "crit" ? ST.crit : toSt === "warn" ? ST.warn : hovered ? BLUE : "#C3CAD6";
+              const col = toSt === "crit" ? ST.crit : toSt === "warn" ? ST.warn : hovered ? BLUE : INK4;
               const dur = Math.max(0.55, 1.9 - e.rps / 800);
               const d = curve(an.x1, an.y1, an.x2, an.y2, an.horiz);
               return (
@@ -247,7 +247,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
                   onDoubleClick={() => { if (!onOpenService) window.location.href = `/devpreview-opsia.html?svc=${s.id}`; }}
                   style={{ cursor: dragId === s.id ? "grabbing" : "grab", opacity: lit ? 1 : 0.22, transition: "opacity .18s" }}>
                   <rect x={p.x} y={p.y} width={NW} height={NH} rx={12} fill={UI.card} stroke={dragId === s.id || on ? BLUE : UI.line} strokeWidth={on || dragId === s.id ? 1.5 : 1}
-                    style={{ filter: dragId === s.id ? "drop-shadow(0 16px 30px rgba(10,132,255,0.22))" : on ? "drop-shadow(0 8px 18px rgba(10,132,255,0.16))" : "drop-shadow(0 1px 2px rgba(17,19,24,0.05))" }} />
+                    style={{ filter: dragId === s.id ? `drop-shadow(0 16px 30px ${blueA(0.22)})` : on ? `drop-shadow(0 8px 18px ${blueA(0.16)})` : `drop-shadow(0 1px 2px ${inkA(0.05)})` }} />
                   <g clipPath={`url(#clip-${s.id})`} style={{ pointerEvents: "none" }}>
                     {(s.id === "redis" || s.id === "postgres") ? (
                       <g transform={`translate(${p.x + 9}, ${p.y + 10}) scale(${14 / 24})`}><path d={BRAND[s.id as "redis" | "postgres"]} fill={BRAND_COLOR[s.id as "redis" | "postgres"]} /></g>
@@ -259,7 +259,7 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
                     <text x={p.x + 26} y={p.y + 20.5} fontSize="11" fontWeight="600" fill={UI.ink} fontFamily={MONO} letterSpacing="-0.01em">{s.name}</text>
                     <text x={p.x + 13} y={p.y + 34} fontSize="8.5" fill={UI.ink3}>{on ? `${rps.toLocaleString()} req/s` : `${s.kind} · ×${s.replicas}`}</text>
                     {Array.from({ length: Math.min(s.replicas, 8) }).map((_, k) => (
-                      <circle key={k} cx={p.x + 16 + k * 11} cy={p.y + 46} r={3} fill={s.status === "crit" && k === 0 ? ST.crit : "rgba(10,132,255,0.4)"} />
+                      <circle key={k} cx={p.x + 16 + k * 11} cy={p.y + 46} r={3} fill={s.status === "crit" && k === 0 ? ST.crit : blueA(0.4)} />
                     ))}
                   </g>
                 </g>
@@ -268,10 +268,10 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
           </svg>
 
           {/* 레전드 */}
-          <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: UI.ink2, alignItems: "center" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="29" y2="4" stroke="#C3CAD6" strokeWidth="3" strokeLinecap="round" strokeDasharray="3 6" /></svg>호출(흐름 속도 = req/s)</span>
+          <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: TYPE.label, color: UI.ink2, alignItems: "center" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="29" y2="4" stroke={INK4} strokeWidth="3" strokeLinecap="round" strokeDasharray="3 6" /></svg>호출(흐름 속도 = req/s)</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: ST.ok }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.warn, marginLeft: 6 }} />경고<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.crit, marginLeft: 6 }} />임계</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: "rgba(10,132,255,0.4)" }} />파드(소유)</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: blueA(0.4) }} />파드(소유)</span>
           </div>
         </div>
       </div>
@@ -281,22 +281,22 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
         const m = edgeMetrics(etip.e);
         const bad = m.st !== "ok";
         return (
-          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.12 }}
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: DUR.micro }}
             style={{
               position: "fixed", left: Math.min(etip.x + 14, window.innerWidth - 210), top: Math.min(etip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
-              background: "rgba(255,255,255,0.96)", backdropFilter: "blur(10px)", border: `1px solid ${bad ? "#F0B8B4" : UI.line}`, borderRadius: 11, padding: "10px 12px",
-              boxShadow: "0 10px 30px -12px rgba(17,19,24,0.22)", minWidth: 176,
+              background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${bad ? TINT.crit.bd : UI.line}`, borderRadius: 11, padding: "10px 12px",
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, minWidth: 176,
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>
               {etip.e.from}<span style={{ color: UI.ink3, fontWeight: 600 }}>→</span>{etip.e.to}
             </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
               <span style={{ color: UI.ink2 }}>rps <b style={{ color: UI.ink }}>{etip.e.rps.toLocaleString()}</b></span>
               <span style={{ color: UI.ink2 }}>p99 <b style={{ color: m.p99 > 200 ? ST.crit : UI.ink }}>{m.p99}ms</b></span>
               <span style={{ color: UI.ink2 }}>5xx <b style={{ color: m.err >= 1 ? ST.crit : UI.ink }}>{m.err}%</b></span>
             </div>
             {bad && (
-              <div style={{ marginTop: 7, fontSize: 11, fontWeight: 600, color: ST[m.st], display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ marginTop: 7, fontSize: TYPE.caption, fontWeight: 600, color: ST[m.st], display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 6, height: 6, borderRadius: 999, background: ST[m.st] }} />
                 {m.st === "crit" ? `${etip.e.to} 임계 — 오류율 상승` : `${etip.e.to} 경고 — 지연 증가`}
               </div>
@@ -319,6 +319,6 @@ export function TopologyView({ embedded = false, onOpenService }: { embedded?: b
 // 단독 페이지에서만 마운트 — 통합 셸에서는 TopologyView를 import해 서피스로 쓴다
 if (window.location.pathname.includes("devpreview-topology")) {
   ReactDOM.createRoot(document.getElementById("root")!).render(
-    <div style={{ minHeight: "100vh", background: "#FAFAFC" }}><TopologyView /></div>,
+    <div style={{ minHeight: "100vh", background: UI.bg }}><TopologyView /></div>,
   );
 }

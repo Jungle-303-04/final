@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server, Globe, Braces, ShoppingCart, CreditCard, Search, KeyRound, Network } from "lucide-react";
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
-import { UI, BLUE, HP, MONO, SOFT, SPRING, PAGE, PRESENT_SCALE } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, INSET, IDENT, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, RedisIcon, GithubIcon } from "./devpreview/brandIcons";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -39,15 +39,15 @@ const NODES: { id: string; cluster: string; zone: string; instance: string; cap:
 const nodeRank = (n: { state: NodeState }) => (n.state === "Ready" ? 0 : n.state === "Provisioning" ? 1 : 2);
 const nodeIdle = (n: { state: NodeState }) => n.state !== "Ready";
 const SERVICES = [
-  { id: "shop-api", color: "#0A84FF", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "shop-web", color: "#30D158", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "checkout", color: "#FFB340", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "payments", color: "#FF5F55", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "search", color: "#0FA3B1", repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
-  { id: "auth", color: "#8250DF", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
-  { id: "redis", color: "#DC382C", repo: "opsia/platform", ns: "platform", kind: "StatefulSet" },
-  { id: "gateway", color: "#4C6EF5", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
-  { id: "worker", color: "#12B5A5", repo: "opsia/platform", ns: "platform", kind: "Deployment" },
+  { id: "shop-api", color: BLUE, repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "shop-web", color: HP.ok, repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "checkout", color: HP.warn, repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "payments", color: HP.crit, repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "search", color: IDENT.teal, repo: "Jungle-303-04/final", ns: "shop", kind: "Deployment" },
+  { id: "auth", color: TINT.purple.fg, repo: "opsia/platform", ns: "platform", kind: "Deployment" },
+  { id: "redis", color: IDENT.ruby, repo: "opsia/platform", ns: "platform", kind: "StatefulSet" },
+  { id: "gateway", color: IDENT.indigo, repo: "opsia/platform", ns: "platform", kind: "Deployment" },
+  { id: "worker", color: IDENT.jade, repo: "opsia/platform", ns: "platform", kind: "Deployment" },
 ];
 const SVC = Object.fromEntries(SERVICES.map((s) => [s.id, s])) as Record<string, (typeof SERVICES)[number]>;
 type SvcIconT = React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
@@ -138,7 +138,7 @@ function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: bool
   const c = healthColor(p);
   // 강도 램프: 뉴트럴 → 상태색. 플릿 뷰와 같은 구간(22~88%)으로 저부하도 또렷하게.
   const mix = p.status === "Pending" ? 0 : isCrit(p) ? 100 : Math.round(22 + (cpuV / 100) * 66);
-  const bg = p.status === "Pending" ? "#EDEFF3" : `color-mix(in srgb, ${c} ${mix}%, #EFF1F4)`;
+  const bg = p.status === "Pending" ? INSET : `color-mix(in srgb, ${c} ${mix}%, ${INSET})`;
   return (
     <motion.button layout data-pod={p.id} onClick={(e) => { e.stopPropagation(); onClick(); }}
       initial={false}
@@ -148,12 +148,12 @@ function PodTile({ p, big, dim, lit, live, onClick, onTip }: { p: Pod; big: bool
       style={{
         aspectRatio: "1", border: "none", borderRadius: big ? 5 : 3, cursor: "pointer", position: "relative", overflow: "hidden",
         background: bg, transition: "background 1.2s ease",
-        boxShadow: lit ? `0 0 0 1.5px #fff, 0 0 0 2.5px ${BLUE}` : p.status === "Pending" ? "inset 0 0 0 1px rgba(17,19,24,0.07)" : "none",
+        boxShadow: lit ? `0 0 0 1.5px ${UI.card}, 0 0 0 2.5px ${BLUE}` : p.status === "Pending" ? `inset 0 0 0 1px ${inkA(0.07)}` : "none",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0,
       }}>
       {/* 이름은 그룹 헤더가 전담. 예외: 대기(생성 중)는 스피너로 진행 중임을 표기 */}
       {p.status === "Pending" && (
-        <span className="podspin" style={{ width: big ? 13 : 8, height: big ? 13 : 8, borderRadius: 999, border: `1.5px solid rgba(17,19,24,0.14)`, borderTopColor: UI.ink3, boxSizing: "border-box" }} />
+        <span className="podspin" style={{ width: big ? 13 : 8, height: big ? 13 : 8, borderRadius: 999, border: `1.5px solid ${inkA(0.14)}`, borderTopColor: UI.ink3, boxSizing: "border-box" }} />
       )}
     </motion.button>
   );
@@ -164,7 +164,7 @@ function Num({ v }: { v: number }) {
   const mv = useMotionValue(v);
   const [disp, setDisp] = useState(v);
   useEffect(() => {
-    const ctl = animate(mv, v, { duration: 1.4, ease: "easeInOut", onUpdate: (x) => setDisp(Math.round(x)) });
+    const ctl = animate(mv, v, { duration: DUR.count, ease: "easeInOut", onUpdate: (x) => setDisp(Math.round(x)) });
     return () => ctl.stop();
   }, [v]);
   return <>{disp}</>;
@@ -176,14 +176,14 @@ function Gauge({ label, v }: { label: string; v: number }) {
   const c = value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
-      <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, width: 30, flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
+      <span style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, width: 30, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
         <motion.div initial={{ width: 0 }} animate={{ width: `${value}%` }}
-          transition={{ duration: 1.4, ease: "easeInOut" }}
+          transition={{ duration: DUR.count, ease: "easeInOut" }}
           style={{ height: "100%", borderRadius: 999, background: c, transition: "background .6s ease" }} />
       </div>
-      <span style={{ width: 34, textAlign: "right", flexShrink: 0, fontSize: 12, fontWeight: 600, color: UI.ink, fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>
-        <Num v={value} /><span style={{ color: UI.ink3, fontSize: 10 }}>%</span>
+      <span style={{ width: 34, textAlign: "right", flexShrink: 0, fontSize: TYPE.label, fontWeight: 600, color: UI.ink, fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>
+        <Num v={value} /><span style={{ color: UI.ink3, fontSize: TYPE.micro }}>%</span>
       </span>
     </div>
   );
@@ -250,31 +250,31 @@ function PodRow({ p, live, dim, lit, onClick, onTip }: { p: Pod; live: number; d
       className="podrow"
       style={{
         display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, width: "100%", textAlign: "left",
-        border: "none", background: lit ? "rgba(17,19,24,0.04)" : "transparent", borderRadius: 9, padding: "8px 10px", cursor: "pointer",
+        border: "none", background: lit ? inkA(0.04) : "transparent", borderRadius: 9, padding: "8px 10px", cursor: "pointer",
       }}>
       {/* 상태 사각형 */}
       {p.status === "Pending" ? (
-        <span title="생성 중" className="podspin" style={{ width: 12, height: 12, borderRadius: 999, border: "1.5px solid rgba(17,19,24,0.14)", borderTopColor: UI.ink3, boxSizing: "border-box" }} />
+        <span title="생성 중" className="podspin" style={{ width: 12, height: 12, borderRadius: 999, border: `1.5px solid ${inkA(0.14)}`, borderTopColor: UI.ink3, boxSizing: "border-box" }} />
       ) : (
         <span title={stLabel} className={isCrit(p) ? "stchip crit" : "stchip"} style={{ width: 12, height: 12, borderRadius: 4, background: c }} />
       )}
       {/* 이름 + 상태 라벨 */}
       <span style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-        {p.status !== "Running" && <span style={{ fontSize: 10.5, fontWeight: 600, color: isCrit(p) ? HP.crit : UI.ink3, flexShrink: 0 }}>{stLabel}</span>}
+        <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+        {p.status !== "Running" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: isCrit(p) ? HP.crit : UI.ink3, flexShrink: 0 }}>{stLabel}</span>}
       </span>
       {/* Ready 컨테이너 */}
-      <span style={{ fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: p.status === "Running" ? UI.ink2 : HP.crit, fontWeight: p.status === "Running" ? 500 : 700 }}>{readyOf(p)}</span>
+      <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: p.status === "Running" ? UI.ink2 : HP.crit, fontWeight: p.status === "Running" ? 500 : 700 }}>{readyOf(p)}</span>
       {/* QoS 클래스 */}
-      <span style={{ fontSize: 10.5, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", justifySelf: "start", whiteSpace: "nowrap" }}>{qosOf(p)}</span>
+      <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", justifySelf: "start", whiteSpace: "nowrap" }}>{qosOf(p)}</span>
       <MiniBar v={cpuV} />
       <MiniBar v={memV} />
-      <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: p.restarts > 0 ? HP.crit : UI.ink3, fontWeight: p.restarts > 0 ? 700 : 500 }}>{p.restarts}</span>
-      <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: UI.ink3 }}>{ageOf(p)}</span>
+      <span style={{ fontSize: TYPE.label, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: p.restarts > 0 ? HP.crit : UI.ink3, fontWeight: p.restarts > 0 ? 700 : 500 }}>{p.restarts}</span>
+      <span style={{ fontSize: TYPE.label, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", color: UI.ink3 }}>{ageOf(p)}</span>
       {/* 행 호버 표시 — 액션은 상세 시트가 오너(로그·이벤트·재시작 탭). 동작 없는 버튼을 두지 않는다 */}
-      <span className="pacts" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, padding: "2px 6px", boxShadow: "0 6px 16px -8px rgba(17,19,24,0.25)" }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: UI.ink3 }}>상세</span>
-        <ChevronRight size={12} style={{ color: "#C6CAD1", marginLeft: 2 }} />
+      <span className="pacts" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, padding: "2px 6px", boxShadow: `0 6px 16px -8px ${inkA(0.25)}` }}>
+        <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>상세</span>
+        <ChevronRight size={12} style={{ color: INK4, marginLeft: 2 }} />
       </span>
     </motion.button>
   );
@@ -284,10 +284,10 @@ function MiniBar({ v }: { v: number }) {
   const c = v >= 90 ? HP.crit : v >= 75 ? HP.warn : HP.ok;
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-      <span style={{ flex: 1, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
-        <motion.span animate={{ width: `${v}%` }} transition={{ duration: 1.4, ease: "easeInOut" }} style={{ display: "block", height: "100%", borderRadius: 999, background: c }} />
+      <span style={{ flex: 1, height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
+        <motion.span animate={{ width: `${v}%` }} transition={{ duration: DUR.count, ease: "easeInOut" }} style={{ display: "block", height: "100%", borderRadius: 999, background: c }} />
       </span>
-      <span style={{ width: 26, textAlign: "right", fontSize: 11.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}><Num v={v} /></span>
+      <span style={{ width: 26, textAlign: "right", fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}><Num v={v} /></span>
     </span>
   );
 }
@@ -299,17 +299,17 @@ function MetricCell({ label, value, unit, tone, sub, spark, bar }: {
 }) {
   return (
     <div style={{ padding: "0 18px", borderLeft: `1px solid ${UI.line2}`, display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
-      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, textTransform: "uppercase" }}>{label}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-        <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><Num v={value} /></span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: UI.ink3 }}>{unit}</span>
-        {sub && <span style={{ marginLeft: "auto", fontSize: 10.5, color: UI.ink3, fontFamily: MONO, whiteSpace: "nowrap", alignSelf: "center" }}>{sub}</span>}
+        <span style={{ fontSize: TYPE.title1, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><Num v={value} /></span>
+        <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>{unit}</span>
+        {sub && <span style={{ marginLeft: "auto", fontSize: TYPE.micro, color: UI.ink3, fontFamily: MONO, whiteSpace: "nowrap", alignSelf: "center" }}>{sub}</span>}
       </div>
       <div style={{ height: 22 }}>
         {spark && <Spark id={spark.id} base={spark.base} tick={spark.tick} h={22} color={tone} />}
         {bar !== undefined && (
-          <div style={{ marginTop: 9, height: 4, borderRadius: 999, background: "rgba(17,19,24,0.06)", overflow: "hidden" }}>
-            <motion.div animate={{ width: `${Math.min(100, bar * 100)}%` }} transition={{ duration: 1.2, ease: "easeInOut" }} style={{ height: "100%", borderRadius: 999, background: tone }} />
+          <div style={{ marginTop: 9, height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
+            <motion.div animate={{ width: `${Math.min(100, bar * 100)}%` }} transition={{ duration: DUR.meter, ease: "easeInOut" }} style={{ height: "100%", borderRadius: 999, background: tone }} />
           </div>
         )}
       </div>
@@ -339,11 +339,11 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
   return (
     <motion.div transition={SPRING} onClick={expanded ? undefined : onOpen}
       style={{
-        background: nodeIdle(node) ? "#FBFBFD" : UI.card, borderRadius: 16, padding: expanded ? 24 : 16,
-        border: nodeIdle(node) ? "1px dashed #DFE1E7" : `1px solid ${UI.line}`, opacity: nodeIdle(node) ? 0.82 : 1,
+        background: nodeIdle(node) ? UI.bg2 : UI.card, borderRadius: 16, padding: expanded ? 24 : 16,
+        border: nodeIdle(node) ? `1px dashed ${LINE3}` : `1px solid ${UI.line}`, opacity: nodeIdle(node) ? 0.82 : 1,
         boxShadow: "none", cursor: expanded ? "default" : "pointer", display: "flex", flexDirection: "column", gap: expanded ? 16 : 12, minWidth: 0, height: "100%", boxSizing: "border-box",
       }}
-      whileHover={expanded ? undefined : { boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
+      whileHover={expanded ? undefined : { boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
       className="widget">
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -352,7 +352,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
             <span style={{ fontSize: expanded ? 17 : 12.5, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.id}</span>
           </div>
           <div style={{ fontSize: expanded ? 11.5 : 9.5, color: UI.ink3, marginTop: 2, marginLeft: expanded ? 21 : 18, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {node.instance} · {node.zone} · <span style={{ color: nodeIdle(node) ? "#B25A00" : UI.ink3, fontWeight: nodeIdle(node) ? 600 : 400 }}>{node.state === "Ready" ? "Ready" : node.state === "Provisioning" ? "예약됨" : "비활성"}</span>
+            {node.instance} · {node.zone} · <span style={{ color: nodeIdle(node) ? TINT.warn.fg : UI.ink3, fontWeight: nodeIdle(node) ? 600 : 400 }}>{node.state === "Ready" ? "Ready" : node.state === "Provisioning" ? "예약됨" : "비활성"}</span>
           </div>
         </div>
         <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginTop: 1 }}>
@@ -363,7 +363,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
               onMouseEnter={(e) => { e.stopPropagation(); onTip(e.clientX, e.clientY, np.filter(isCrit)); onCritEnter(); }}
               onMouseMove={(e) => onTip(e.clientX, e.clientY, np.filter(isCrit))}
               onMouseLeave={() => { onTip(0, 0, null); onCritLeave(); }}
-              style={{ cursor: "pointer", fontSize: expanded ? 11 : 10, fontWeight: 700, color: HP.crit, background: "#FFF7F6", border: "1px solid #F0B8B4", borderRadius: 6, padding: "1px 6px", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+              style={{ cursor: "pointer", fontSize: expanded ? 11 : 10, fontWeight: 700, color: HP.crit, background: TINT.crit.bg, border: `1px solid ${TINT.crit.bd}`, borderRadius: 6, padding: "1px 6px", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
               {hot}⚠
             </span>
           )}
@@ -388,12 +388,12 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
         // 렌즈 선택 중엔 일치하는 파드만 남긴다 — 노드 지표(위)는 전체 기준 유지.
         (() => { const vis = hideFn ? np.filter((p) => !hideFn(p)) : np; return (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: UI.ink }}>
+          <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>
             파드 {vis.length}{vis.length !== np.length && <span style={{ fontWeight: 600, color: UI.ink3 }}> / {np.length} · 필터 적용됨</span>}
           </span>
 
           {/* 표 헤더 */}
-          <div style={{ display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
+          <div style={{ display: "grid", gridTemplateColumns: PODCOLS, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
             <span>상태</span><span>파드</span><span>READY</span><span>QOS</span><span>CPU</span><span>MEM</span><span style={{ textAlign: "right" }}>재시작</span><span style={{ textAlign: "right" }}>나이</span><span />
           </div>
 
@@ -402,7 +402,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
             vis.forEach((p) => { const arr = bySvc.get(p.svc) ?? []; arr.push(p); bySvc.set(p.svc, arr); });
             const gRank = (list: Pod[]) => (list.some(isCrit) ? 0 : list.every((p) => p.status === "Pending") ? 2 : 1);
             const groups = [...bySvc.entries()].sort((a, b) => gRank(a[1]) - gRank(b[1]) || a[0].localeCompare(b[0]));
-            if (!groups.length) return <div style={{ fontSize: 12, color: UI.ink3, padding: "14px 10px" }}>이 노드에는 필터와 일치하는 파드가 없습니다</div>;
+            if (!groups.length) return <div style={{ fontSize: TYPE.label, color: UI.ink3, padding: "14px 10px" }}>이 노드에는 필터와 일치하는 파드가 없습니다</div>;
             return groups.map(([svc, list]) => {
               const meta = SVC[svc];
               const worst = list.some(isCrit) ? HP.crit : list.some((p) => p.status === "Running" && health(p) >= 75) ? HP.warn : HP.ok;
@@ -411,9 +411,9 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
                   {/* 워크로드 그룹 헤더 */}
                   <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 10px 6px", minWidth: 0 }}>
                     <span style={{ width: 6, height: 6, borderRadius: 999, background: worst, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{svc}</span>
-                    <span style={{ fontSize: 11, color: UI.ink3 }}>{meta.kind} · 복제본 {list.length}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 10.5, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 7px", fontFamily: MONO }}>{meta.ns}</span>
+                    <span style={{ fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{svc}</span>
+                    <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{meta.kind} · 복제본 {list.length}</span>
+                    <span style={{ marginLeft: "auto", fontSize: TYPE.micro, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 7px", fontFamily: MONO }}>{meta.ns}</span>
                   </div>
                   {[...list].sort((a, b) => rank(a) - rank(b) || health(b) - health(a)).map((p) => (
                     <PodRow key={p.id} p={p} live={live(p)} dim={dimFn(p)} lit={litFn(p)} onClick={() => onPod(p)} onTip={onTip} />
@@ -424,7 +424,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
           })()}
 
           {node.cap - np.length > 0 && (
-            <div style={{ fontSize: 11, color: UI.ink3, padding: "8px 10px 0", borderTop: `1px solid ${UI.line2}` }}>남은 슬롯 {node.cap - np.length}</div>
+            <div style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "8px 10px 0", borderTop: `1px solid ${UI.line2}` }}>남은 슬롯 {node.cap - np.length}</div>
           )}
         </div>
         ); })()
@@ -432,7 +432,7 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
         <motion.div layout style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4 }}>
           {np.map((p) => <PodTile key={p.id} p={p} big={false} dim={dimFn(p)} lit={litFn(p)} live={live(p)} onClick={() => onPod(p)} onTip={onTip} />)}
           {Array.from({ length: node.cap - np.length }).map((_, i) => (
-            <div key={`g${i}`} style={{ aspectRatio: "1", borderRadius: 3, background: "rgba(17,19,24,0.045)" }} />
+            <div key={`g${i}`} style={{ aspectRatio: "1", borderRadius: 3, background: inkA(0.045) }} />
           ))}
         </motion.div>
       )}
@@ -471,12 +471,12 @@ function clusterStats(clId: string, pods: Pod[], tick: number) {
 function ClusterMiniUsage({ label, value }: { label: string; value: number }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-      <span style={{ width: 34, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
-      <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(17,19,24,0.07)", overflow: "hidden" }}>
-        <motion.span initial={false} animate={{ width: `${value}%` }} transition={{ duration: 1.2, ease: "easeInOut" }}
+      <span style={{ width: 34, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
+      <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(0.07), overflow: "hidden" }}>
+        <motion.span initial={false} animate={{ width: `${value}%` }} transition={{ duration: DUR.meter, ease: "easeInOut" }}
           style={{ display: "block", height: "100%", borderRadius: 999, background: value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok }} />
       </span>
-      <span style={{ width: 38, textAlign: "right", fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{value}%</span>
+      <span style={{ width: 38, textAlign: "right", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{value}%</span>
     </div>
   );
 }
@@ -490,18 +490,18 @@ function ClusterOverview({ clId, pods, tick, meta, onKind }: {
   const KIND_LINKS: [string, string][] = [["StatefulSet", "StatefulSets"], ["DaemonSet", "DaemonSets"], ["Service", "Services"], ["Ingress", "Ingresses"], ["Job", "Jobs"], ["CronJob", "CronJobs"]];
   return (
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "12px 16px", marginBottom: 14 }}>
-      <div style={{ minWidth: 0, flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: 11, color: UI.ink2 }}>
+      <div style={{ minWidth: 0, flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink2 }}>
         <span>183548421506 · Kubernetes {st.ver} · {meta?.Namespace ?? "-"}개의 네임스페이스</span>
         <span>CPU {st.usedCores.toFixed(1)}/{st.cores} cores · MEM {st.usedMem.toFixed(1)}/{st.memGi} GiB · NET {st.net}KB/s · DISK {st.disk}%</span>
-        <span style={{ color: UI.ink3, fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>arn:aws:eks:ap-northeast-2:183548421506:cluster/{clId}</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: UI.ink3 }}>
+        <span style={{ color: UI.ink3, fontSize: TYPE.micro, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>arn:aws:eks:ap-northeast-2:183548421506:cluster/{clId}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
           <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신 · 방금 전
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 18px", alignContent: "center" }}>
         {KIND_LINKS.map(([kid, lb]) => (
           <span key={kid} role="link" className="kindlink" onClick={onKind ? () => onKind(kid) : undefined}
-            style={{ display: "flex", alignItems: "baseline", gap: 5, fontSize: 12, color: UI.ink2, cursor: onKind ? "pointer" : "default" }}>
+            style={{ display: "flex", alignItems: "baseline", gap: 5, fontSize: TYPE.label, color: UI.ink2, cursor: onKind ? "pointer" : "default" }}>
             <b style={{ fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{meta?.[kid] ?? 0}</b>{lb}
           </span>
         ))}
@@ -518,30 +518,30 @@ function ClusterRow({ cl, pods, tick, meta, onOpen }: {
   const healthy = st.chot === 0;
   return (
     <motion.button transition={SPRING} onClick={onOpen}
-      whileHover={{ boxShadow: "0 10px 26px -20px rgba(17,19,24,0.16)", borderColor: "#DCDFE5" }}
+      whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
       style={{
         display: "flex", flexDirection: "column", gap: 12, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box",
       }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg, #FF9900, #F76F00)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <AwsIcon size={17} style={{ color: "#fff" }} />
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <AwsIcon size={17} style={{ color: UI.card }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
-            {cl.env === "prod" && <span style={{ fontSize: 10.5, fontWeight: 600, color: "#B25A00", border: "1px solid #F3D8B7", background: "#FFF8EF", borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
+            <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
+            {cl.env === "prod" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
           </span>
-          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · {st.ver}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · {st.ver}</span>
         </span>
         {healthy
-          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#1F9D4D", background: "#EDFAF1", border: "1px solid #C9EAD4", borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
-          : <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {st.chot}</span>}
+          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
+          : <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {st.chot}</span>}
       </div>
 
-      <div style={{ display: "flex", gap: 14, fontSize: 12, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
         <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.ready.length}/{st.nodes.length}</b> ready</span>
-        <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.cp.length}</b>{st.chot > 0 && <b style={{ color: "#C43028", fontFamily: MONO }}> · 장애 {st.chot}</b>}</span>
+        <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{st.cp.length}</b>{st.chot > 0 && <b style={{ color: TINT.crit.fg, fontFamily: MONO }}> · 장애 {st.chot}</b>}</span>
         <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{meta?.Namespace ?? "-"}</b></span>
       </div>
 
@@ -557,12 +557,12 @@ function ClusterRow({ cl, pods, tick, meta, onOpen }: {
 function AddClusterCard({ onClick, delay = 0 }: { onClick: () => void; delay?: number }) {
   return (
     <motion.button initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
-      onClick={onClick} whileHover={{ borderColor: "#B9D6FB", background: "rgba(10,132,255,0.03)" }}
+      onClick={onClick} whileHover={{ borderColor: TINT.blue.bd, background: blueA(0.03) }}
       style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
-        border: "1.5px dashed #D5D9E0", borderRadius: 16, background: "transparent", cursor: "pointer" }}>
-      <span style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(10,132,255,0.09)", display: "grid", placeItems: "center", color: BLUE, fontSize: 19, fontWeight: 600, lineHeight: 1 }}>+</span>
-      <span style={{ fontSize: 13.5, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
-      <span style={{ fontSize: 11.5, color: UI.ink3 }}>에이전트 설치로 등록</span>
+        border: `1.5px dashed ${LINE3}`, borderRadius: 16, background: "transparent", cursor: "pointer" }}>
+      <span style={{ width: 34, height: 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: TYPE.heading, fontWeight: 600, lineHeight: 1 }}>+</span>
+      <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
+      <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>에이전트 설치로 등록</span>
     </motion.button>
   );
 }
@@ -573,24 +573,24 @@ export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: 
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
       style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 200, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(17,19,24,0.06)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: inkA(0.06), display: "grid", placeItems: "center", flexShrink: 0 }}>
           <AwsIcon size={17} style={{ color: UI.ink3 }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-          <span style={{ display: "block", fontSize: 11.5, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · 버전 확인 중</span>
+          <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · 버전 확인 중</span>
         </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#0A6CFF", background: "rgba(10,132,255,0.08)", border: "1px solid rgba(10,132,255,0.25)", borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>
           <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />연결 중
         </span>
       </div>
-      <div style={{ fontSize: 12, color: UI.ink2 }}>에이전트 부트스트랩 · 첫 인벤토리 수집 대기</div>
+      <div style={{ fontSize: TYPE.label, color: UI.ink2 }}>에이전트 부트스트랩 · 첫 인벤토리 수집 대기</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 7 }}>
         {["CPU", "MEM"].map((l) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 34, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{l}</span>
-            <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(17,19,24,0.05)" }} />
-            <span style={{ width: 38, textAlign: "right", fontSize: 12.5, fontFamily: MONO, color: UI.ink3 }}>—</span>
+            <span style={{ width: 34, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{l}</span>
+            <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(0.05) }} />
+            <span style={{ width: 38, textAlign: "right", fontSize: TYPE.label2, fontFamily: MONO, color: UI.ink3 }}>—</span>
           </div>
         ))}
       </div>
@@ -707,19 +707,19 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
         {!embedded && (
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: UI.ink2 }}>
+            <h1 style={{ margin: 0, fontSize: TYPE.title1, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />
               실시간 · {CLUSTERS.length} 클러스터 · {NODES.length} 노드 · {pods.length} 파드 · 장애 <b style={{ color: crit ? HP.crit : UI.ink, fontFamily: MONO }}>{crit}</b>
             </div>
             {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
             <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: 8, paddingLeft: 14, borderLeft: `1px solid ${UI.line}` }}>
               {([["맵", "devpreview-opsia.html", true], ["토폴로지", "devpreview-topology.html", false], ["연결", "devpreview-connect.html", false], ["AI", "devpreview-ai.html", false]] as const).map(([l, href, act]) => (
-                <a key={l} href={`/${href}`} style={{ fontSize: 12.5, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? "rgba(17,19,24,0.05)" : "transparent" }}>{l}</a>
+                <a key={l} href={`/${href}`} style={{ fontSize: TYPE.label2, fontWeight: act ? 700 : 500, color: act ? UI.ink : UI.ink3, textDecoration: "none", padding: "3px 9px", borderRadius: 7, background: act ? inkA(0.05) : "transparent" }}>{l}</a>
               ))}
             </nav>
           </div>
-          <div style={{ display: "flex", gap: 14, fontSize: 12, fontWeight: 600, color: UI.ink2 }}>
+          <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>
             {([["정상", HP.ok], ["주의", HP.warn], ["장애", HP.crit], ["대기", HP.pending]] as const).map(([k, c]) => (
               <span key={k} style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: c }} />{k}</span>
             ))}
@@ -733,22 +733,22 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
           const cord = NODES.filter((n) => n.state === "Cordoned").length;
           const pending = pods.filter((p) => p.status === "Pending").length;
           const outSync = REPOS.filter((r) => REPO_META[r].sync === "OutOfSync");
-          const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
+          const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
               <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{CLUSTERS.length}</b>
-                {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: "#0A6CFF" }}>· 연결 중 {pendingClusters!.length}</span>}
+                {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingClusters!.length}</span>}
               </span>
               <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{NODES.length}</b>
-                {prov > 0 && <span style={{ color: "#0A6CFF" }}>· 예약 {prov}</span>}
+                {prov > 0 && <span style={{ color: TINT.blue.fg }}>· 예약 {prov}</span>}
                 {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
               </span>
               <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{pods.length}</b>
-                {pending > 0 && <span style={{ color: "#0A6CFF" }}>· 대기 {pending}</span>}
+                {pending > 0 && <span style={{ color: TINT.blue.fg }}>· 대기 {pending}</span>}
               </span>
               {outSync.map((r) => (
-                <span key={r} style={{ ...seg, borderColor: "#F3D8B7", background: "#FFF8EF", color: "#B25A00", cursor: "default" }}
+                <span key={r} style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg, cursor: "default" }}
                   onMouseEnter={() => setLens({ kind: "git", id: r })} onMouseLeave={() => setLens(null)}>
                   <GithubIcon size={11} />OutOfSync · {r.split("/")[1]}
                 </span>
@@ -760,19 +760,19 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
               onMouseEnter={() => setLens({ kind: "crit", id: "all" })} onMouseLeave={() => setLens(null)}
               onClick={() => setPin(pin?.kind === "crit" ? null : { kind: "crit", id: "all" })}
               style={{
-                fontSize: 12, fontWeight: 700, color: pin?.kind === "crit" ? "#fff" : HP.crit, display: "flex", alignItems: "center", gap: 5, marginRight: 2,
-                border: `1px solid ${pin?.kind === "crit" ? HP.crit : "#F0B8B4"}`, background: pin?.kind === "crit" ? HP.crit : "#FFF7F6",
+                fontSize: TYPE.label, fontWeight: 700, color: pin?.kind === "crit" ? UI.card : HP.crit, display: "flex", alignItems: "center", gap: 5, marginRight: 2,
+                border: `1px solid ${pin?.kind === "crit" ? HP.crit : TINT.crit.bd}`, background: pin?.kind === "crit" ? HP.crit : TINT.crit.bg,
                 borderRadius: 999, padding: "5px 12px", cursor: "pointer", transition: "background .2s ease, color .2s ease",
               }}>
               <Activity size={12} />장애 {crit}
             </motion.button>
             {pods.filter(isCrit).map((p, i) => (
               <motion.button key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }}
-                whileHover={{ borderColor: "#F0B8B4" }} whileTap={{ scale: 0.97 }} onClick={() => gotoNode(p)}
+                whileHover={{ borderColor: TINT.crit.bd }} whileTap={{ scale: 0.97 }} onClick={() => gotoNode(p)}
                 onMouseEnter={(e) => { onTip(e.clientX, e.clientY, [p]); setLens({ kind: "crit", id: "all" }); }}
                 onMouseMove={(e) => onTip(e.clientX, e.clientY, [p])}
                 onMouseLeave={() => { onTip(0, 0, null); setLens(null); }}
-                style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, cursor: "pointer", background: UI.card, borderRadius: 999, padding: "5px 12px", fontSize: 12, fontWeight: 600, color: UI.ink }}>
+                style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, cursor: "pointer", background: UI.card, borderRadius: 999, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>
                 <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 99, background: HP.crit }} />
                 <span style={{ fontFamily: MONO }}>{p.name}</span>
                 <span style={{ fontWeight: 600, color: UI.ink3 }}>{p.status} · {p.node}</span>
@@ -787,7 +787,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
         {/* 브레드크럼 */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, minHeight: 28 }}>
           {view.level !== "clusters" && (
-            <motion.button whileTap={{ scale: 0.92 }} whileHover={{ borderColor: "#D8DBE1" }}
+            <motion.button whileTap={{ scale: 0.92 }} whileHover={{ borderColor: LINE3 }}
               onClick={() => go(view.level === "pods" ? { level: "nodes", cluster: view.cluster } : { level: "clusters" }, -1)}
               style={{ width: 26, height: 26, borderRadius: 999, border: `1px solid ${UI.line}`, background: UI.card, cursor: "pointer", display: "grid", placeItems: "center", marginRight: 6 }}>
               <ChevronLeft size={14} style={{ color: UI.ink2 }} />
@@ -795,9 +795,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
           )}
           {crumbs.map((c, i) => (
             <span key={c.label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {i > 0 && <ChevronRight size={11} style={{ color: "#C6CAD1" }} />}
+              {i > 0 && <ChevronRight size={11} style={{ color: INK4 }} />}
               <button onClick={c.onClick} disabled={!c.onClick}
-                style={{ border: "none", background: "transparent", cursor: c.onClick ? "pointer" : "default", fontSize: 13, fontWeight: 600, color: i === crumbs.length - 1 ? UI.ink : UI.ink3, padding: "2px 4px", fontFamily: i > 0 ? MONO : undefined, letterSpacing: "-0.01em" }}>
+                style={{ border: "none", background: "transparent", cursor: c.onClick ? "pointer" : "default", fontSize: TYPE.body, fontWeight: 600, color: i === crumbs.length - 1 ? UI.ink : UI.ink3, padding: "2px 4px", fontFamily: i > 0 ? MONO : undefined, letterSpacing: "-0.01em" }}>
                 {c.label}
               </button>
             </span>
@@ -810,11 +810,11 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             <AnimatePresence>
               {effLens && (
                 <motion.div key="chip" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={SOFT}
-                  style={{ position: "absolute", top: -46, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 7, background: UI.card, border: `1px solid ${(incident && !lens && !pin) || effLens.kind === "crit" ? "#F0B8B4" : "#BFD8FB"}`, borderRadius: 999, padding: "5px 13px", fontSize: 12.5, fontWeight: 600, color: (incident && !lens && !pin) || effLens.kind === "crit" ? HP.crit : BLUE }}>
+                  style={{ position: "absolute", top: -46, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 7, background: UI.card, border: `1px solid ${(incident && !lens && !pin) || effLens.kind === "crit" ? TINT.crit.bd : TINT.blue.bd}`, borderRadius: 999, padding: "5px 13px", fontSize: TYPE.label2, fontWeight: 600, color: (incident && !lens && !pin) || effLens.kind === "crit" ? HP.crit : BLUE }}>
                   {(incident && !lens && !pin) || effLens.kind === "crit" ? <Activity size={12} /> : effLens.kind === "svc" ? <Plug size={12} /> : effLens.kind === "cfg" ? <FileCog size={12} /> : <GithubIcon size={12} />}
                   <span style={{ fontFamily: MONO }}>{effLens.kind === "crit" ? "장애 필터" : incident && !lens && !pin ? `장애 조사 · ${incident.name}` : effLens.id}</span>
                   <span style={{ fontWeight: 600, opacity: 0.6 }}>{related.size} 파드</span>
-                  {pin && <button onClick={() => setPin(null)} style={{ border: "none", background: "rgba(17,19,24,0.06)", borderRadius: 999, width: 15, height: 15, cursor: "pointer", fontSize: 10, lineHeight: 1, color: "inherit" }}>✕</button>}
+                  {pin && <button onClick={() => setPin(null)} style={{ border: "none", background: inkA(0.06), borderRadius: 999, width: 15, height: 15, cursor: "pointer", fontSize: TYPE.micro, lineHeight: 1, color: "inherit" }}>✕</button>}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -824,7 +824,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
                 variants={{
                   initial: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, scale: c.dir === 1 ? 0.96 : 1.02, y: c.dir === 1 ? 10 : -6 } : { opacity: 0, x: 46 * c.dir, scale: 0.985, filter: "blur(7px)" }),
                   animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
-                  exit: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, scale: c.dir === 1 ? 1.02 : 0.97, transition: { duration: 0.18 } } : { opacity: 0, x: -42 * c.dir, scale: 0.99, filter: "blur(7px)" }),
+                  exit: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, scale: c.dir === 1 ? 1.02 : 0.97, transition: { duration: DUR.fade } } : { opacity: 0, x: -42 * c.dir, scale: 0.99, filter: "blur(7px)" }),
                 }}
                 initial="initial" animate="animate" exit="exit" transition={PAGE}>
 
@@ -873,14 +873,14 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
       {/* 커서 추적 툴팁 — 포커싱된 파드의 핵심 정보 */}
       <AnimatePresence>
         {tip && (
-          <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.12 }}
+          <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: DUR.micro }}
             style={{
               position: "fixed", left: Math.min(tip.x + 14, window.innerWidth - 190), top: Math.min(tip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
-              background: "rgba(255,255,255,0.96)", backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 11px",
-              boxShadow: "0 10px 30px -12px rgba(17,19,24,0.22)", minWidth: 158,
+              background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 11px",
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, minWidth: 158,
             }}>
             {tip.list.length > 1 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: HP.crit, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: HP.crit, marginBottom: 6 }}>
                 <Activity size={11} />장애 {tip.list.length}
               </div>
             )}
@@ -888,11 +888,11 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
               <div key={p.id} style={{ marginBottom: tip.list.length > 1 ? 6 : 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 999, background: healthColor(p), flexShrink: 0 }} />
-                  <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{p.name}</span>
+                  <span style={{ fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em" }}>{p.name}</span>
                 </div>
-                <div style={{ fontSize: 11, color: UI.ink3, marginTop: 2, marginLeft: 13 }}>{p.svc} · {p.status}{p.restarts > 0 ? ` · 재시작 ${p.restarts}` : ""} · {imageOf(p)} · {qosOf(p)}</div>
+                <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2, marginLeft: 13 }}>{p.svc} · {p.status}{p.restarts > 0 ? ` · 재시작 ${p.restarts}` : ""} · {imageOf(p)} · {qosOf(p)}</div>
                 {tip.list.length === 1 && (
-                  <div style={{ display: "flex", gap: 10, marginTop: 5, marginLeft: 13, fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                  <div style={{ display: "flex", gap: 10, marginTop: 5, marginLeft: 13, fontSize: TYPE.caption, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                     <span style={{ color: UI.ink2 }}>CPU <b style={{ color: UI.ink }}>{p.cpu}%</b></span>
                     <span style={{ color: UI.ink2 }}>MEM <b style={{ color: UI.ink }}>{p.mem}%</b></span>
                   </div>
@@ -908,17 +908,17 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
         .op { min-height: 100vh; background: ${UI.bg}; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .op .tile.crit, .op .stchip.crit { animation: critp 1.3s ease-in-out infinite; }
         .op .podrow { position: relative; transition: background .15s ease; }
-        .op .podrow:hover { background: rgba(17,19,24,0.035) !important; }
+        .op .podrow:hover { background: ${inkA(0.035)} !important; }
         .op .pacts { opacity: 0; transition: opacity .15s ease; }
         .op .podrow:hover .pacts { opacity: 1; }
-        .op .pact:hover { background: rgba(17,19,24,0.07); color: ${UI.ink} !important; }
+        .op .pact:hover { background: ${inkA(0.07)}; color: ${UI.ink} !important; }
         .op .kindlink:hover { color: ${BLUE} !important; } .op .kindlink:hover b { color: ${BLUE}; }
         .op .podspin { animation: podspin 0.9s linear infinite; }
         @keyframes podspin { to { transform: rotate(360deg); } }
         @keyframes critp { 0%,100% { filter: none; } 50% { filter: brightness(1.12) saturate(1.15); } }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
-        .op ::-webkit-scrollbar { width: 8px; } .op ::-webkit-scrollbar-thumb { background: rgba(17,19,24,0.12); border-radius: 99px; }
+        .op ::-webkit-scrollbar { width: 8px; } .op ::-webkit-scrollbar-thumb { background: ${inkA(0.12)}; border-radius: 99px; }
         @media (prefers-reduced-motion: reduce) { .tile.crit, .pulsedot, .podspin { animation: none !important; } }
       `}</style>
     </div>
@@ -937,13 +937,13 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
     return (
       <motion.button whileTap={{ scale: 0.985 }} onMouseEnter={() => setLens(l)} onMouseLeave={() => setLens(null)}
         onClick={() => setPin(pin && pin.id === l!.id && pin.kind === l!.kind ? null : l)}
-        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", background: active ? "rgba(10,132,255,0.07)" : "transparent", borderRadius: 10, padding: "8px 10px", cursor: "pointer", transition: "background .15s" }}>
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", background: active ? blueA(0.07) : "transparent", borderRadius: 10, padding: "8px 10px", cursor: "pointer", transition: "background .15s" }}>
         {icon}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{label}</div>
-          <div style={{ fontSize: 11.5, color: warn ? "#B25A00" : UI.ink3, marginTop: 1 }}>{sub}</div>
+          <div style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{label}</div>
+          <div style={{ fontSize: TYPE.caption2, color: warn ? TINT.warn.fg : UI.ink3, marginTop: 1 }}>{sub}</div>
         </div>
-        <span style={{ fontSize: 12, fontWeight: 600, color: active ? BLUE : UI.ink3, fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>{count(l)}</span>
+        <span style={{ fontSize: TYPE.label, fontWeight: 600, color: active ? BLUE : UI.ink3, fontVariantNumeric: "tabular-nums", fontFamily: MONO }}>{count(l)}</span>
       </motion.button>
     );
   };
@@ -959,14 +959,14 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
           </motion.div>
         ) : (
           <motion.div key="lens" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={SOFT} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>{kindsTab ? "탐색" : "연결 보기"}</div>
-            <div style={{ display: "flex", gap: 3, background: "rgba(17,19,24,0.04)", borderRadius: 10, padding: 3 }}>
+            <div style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>{kindsTab ? "탐색" : "연결 보기"}</div>
+            <div style={{ display: "flex", gap: 3, background: inkA(0.04), borderRadius: 10, padding: 3 }}>
               {/* 아이콘 통일: 서비스=Plug (셸 사이드바 Service와 동일) · 리소스 탭 = 종류 탐색(보조 사이드바 통합) */}
               {([...(kindsTab ? [["res", "리소스", Box] as const] : []), ["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
                 const on = tab === id;
                 return (
-                  <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
-                    {on && <motion.span layoutId="ptab" transition={SOFT} style={{ position: "absolute", inset: 0, borderRadius: 8, background: "#fff", boxShadow: "0 1px 3px rgba(17,19,24,0.12)" }} />}
+                  <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
+                    {on && <motion.span layoutId="ptab" transition={SOFT} style={{ position: "absolute", inset: 0, borderRadius: 8, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.12)}` }} />}
                     <span style={{ position: "relative", display: "flex", alignItems: "center", gap: 5 }}><I size={12} />{label}</span>
                   </button>
                 );
@@ -975,15 +975,15 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
               {tab === "res" && kindsTab}
               {tab === "svc" && SERVICES.map((s) => <Row key={s.id} l={{ kind: "svc", id: s.id }} icon={<ServiceIcon id={s.id} size={14} style={{ color: s.color, flexShrink: 0 }} />} label={s.id} sub={s.repo} />)}
-              {tab === "cfg" && CONFIGS.map((c) => <Row key={c.id} l={{ kind: "cfg", id: c.id }} icon={<FileCog size={14} style={{ color: c.kind === "Secret" ? "#8250DF" : BLUE, flexShrink: 0 }} />} label={c.id} sub={c.kind} />)}
+              {tab === "cfg" && CONFIGS.map((c) => <Row key={c.id} l={{ kind: "cfg", id: c.id }} icon={<FileCog size={14} style={{ color: c.kind === "Secret" ? TINT.purple.fg : BLUE, flexShrink: 0 }} />} label={c.id} sub={c.kind} />)}
               {tab === "git" && (<>
-                {REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
+                {REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: BRAND.github, flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}
                 {(pendingRepos ?? []).map((r) => (
-                  <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: "rgba(10,132,255,0.05)" }}>
+                  <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: blueA(0.05) }}>
                     <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
                     <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                      <span style={{ display: "block", fontSize: 10.5, color: "#0A6CFF", marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
+                      <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
+                      <span style={{ display: "block", fontSize: TYPE.micro, color: TINT.blue.fg, marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
                     </span>
                     <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
                   </div>
@@ -991,7 +991,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
                 {onAddRepo && (
                   <button onClick={onAddRepo}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",
-                      border: "1.5px dashed #D5D9E0", borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: BLUE }}>
+                      border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 700, color: BLUE }}>
                     + 저장소 연결
                   </button>
                 )}
@@ -1010,13 +1010,13 @@ function PodDetailLink({ l, icon, label, sub, onClick, setLens, setPin }: { l?: 
     <motion.button whileTap={{ scale: 0.985 }}
       onMouseEnter={l ? () => setLens(l) : undefined} onMouseLeave={l ? () => setLens(null) : undefined}
       onClick={onClick ?? (l ? () => setPin(l) : undefined)}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 11, padding: "9px 11px", cursor: "pointer" }}>
+      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 11, padding: "9px 11px", cursor: "pointer" }}>
       {icon}
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
-        <div style={{ fontSize: 11, color: UI.ink3, marginTop: 1 }}>{sub}</div>
+        <div style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+        <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 1 }}>{sub}</div>
       </div>
-      <ChevronRight size={13} style={{ color: "#C6CAD1", flexShrink: 0 }} />
+      <ChevronRight size={13} style={{ color: INK4, flexShrink: 0 }} />
     </motion.button>
   );
 }
@@ -1029,28 +1029,28 @@ function PodDetail({ pod, setLens, setPin, clearPod, openNode }: { pod: Pod; set
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ width: 34, height: 34, borderRadius: 10, background: `${SVC[pod.svc].color}14`, display: "grid", placeItems: "center", flexShrink: 0 }}><ServiceIcon id={pod.svc} size={16} style={{ color: SVC[pod.svc].color }} /></span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: MONO, letterSpacing: "-0.01em", color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.name}</div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: stColor, marginTop: 1 }}>{pod.status}{pod.restarts > 0 ? ` · 재시작 ${pod.restarts}` : ""}</div>
+          <div style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, fontFamily: MONO, letterSpacing: "-0.01em", color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.name}</div>
+          <div style={{ fontSize: TYPE.caption2, fontWeight: 600, color: stColor, marginTop: 1 }}>{pod.status}{pod.restarts > 0 ? ` · 재시작 ${pod.restarts}` : ""}</div>
         </div>
-        <button onClick={clearPod} style={{ width: 24, height: 24, borderRadius: 999, border: "none", background: "rgba(17,19,24,0.05)", color: UI.ink3, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={12} /></button>
+        <button onClick={clearPod} style={{ width: 24, height: 24, borderRadius: 999, border: "none", background: inkA(0.05), color: UI.ink3, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={12} /></button>
       </div>
       {crit && (
-        <div style={{ display: "flex", alignItems: "center", gap: 7, border: "1px solid #F0B8B4", background: "#FFF7F6", borderRadius: 10, padding: "7px 11px", fontSize: 11.5, fontWeight: 600, color: HP.crit }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 10, padding: "7px 11px", fontSize: TYPE.caption2, fontWeight: 600, color: HP.crit }}>
           <Activity size={12} /> 장애 조사 — 이 파드의 연결이 표시됩니다
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 9, border: `1px solid ${UI.line2}`, background: "#FBFBFD", borderRadius: 11, padding: "11px 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3 }}><Cpu size={11} style={{ color: BLUE }} />한도 대비</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 11, padding: "11px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3 }}><Cpu size={11} style={{ color: BLUE }} />한도 대비</div>
         <Gauge label="CPU" v={pod.cpu} /><Gauge label="MEM" v={pod.mem} />
       </div>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginTop: 2 }}>연결된 것들</div>
+      <div style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.06em", color: UI.ink3, marginTop: 2 }}>연결된 것들</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <PodDetailLink l={{ kind: "svc", id: pod.svc }} icon={<ServiceIcon id={pod.svc} size={14} style={{ color: SVC[pod.svc].color, flexShrink: 0 }} />} label={pod.svc} sub="서비스 · 형제 파드" setLens={setLens} setPin={setPin} />
         {(SVC_CFG[pod.svc] || []).map((c) => {
           const cfg = CONFIGS.find((x) => x.id === c)!;
-          return <PodDetailLink key={c} l={{ kind: "cfg", id: c }} icon={<FileCog size={14} style={{ color: cfg.kind === "Secret" ? "#8250DF" : BLUE, flexShrink: 0 }} />} label={c} sub={cfg.kind} setLens={setLens} setPin={setPin} />;
+          return <PodDetailLink key={c} l={{ kind: "cfg", id: c }} icon={<FileCog size={14} style={{ color: cfg.kind === "Secret" ? TINT.purple.fg : BLUE, flexShrink: 0 }} />} label={c} sub={cfg.kind} setLens={setLens} setPin={setPin} />;
         })}
-        <PodDetailLink l={{ kind: "git", id: SVC[pod.svc].repo }} icon={<GithubIcon size={14} style={{ color: "#24292F", flexShrink: 0 }} />} label={SVC[pod.svc].repo} sub={`${REPO_META[SVC[pod.svc].repo].rev} · ${REPO_META[SVC[pod.svc].repo].sync}`} setLens={setLens} setPin={setPin} />
+        <PodDetailLink l={{ kind: "git", id: SVC[pod.svc].repo }} icon={<GithubIcon size={14} style={{ color: BRAND.github, flexShrink: 0 }} />} label={SVC[pod.svc].repo} sub={`${REPO_META[SVC[pod.svc].repo].rev} · ${REPO_META[SVC[pod.svc].repo].sync}`} setLens={setLens} setPin={setPin} />
         <PodDetailLink icon={<Server size={14} style={{ color: UI.ink2, flexShrink: 0 }} />} label={pod.node} sub={`물리 노드 · ${pod.cluster}`} onClick={() => openNode(pod.node)} setLens={setLens} setPin={setPin} />
       </div>
     </>
