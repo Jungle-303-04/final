@@ -21,6 +21,7 @@ import { useOptionalProductSession } from "../../features/auth/ProductSessionCon
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { UnifiedFilterController } from "../../features/filters/filterContract";
+import { normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
@@ -81,21 +82,27 @@ export function HomeWidgetBoard({
   const visibleIds = activePreferences.order.filter(
     (id) => activePreferences.visible.includes(id),
   );
-  const scope = useMemo(() => ({
-    applications: filter.state.common.applications,
-    allAccessible: filter.state.common.clusters.length === 0,
-    clusters: [...clusters]
-      .sort((left, right) => left.id.localeCompare(right.id))
-      .map((cluster) => ({
-        clusterId: cluster.id,
-        freshness: clusterFreshness(cluster.connectionState),
-        namespaces: filter.state.common.namespaces
-          .filter((namespace) => namespace.clusterId === cluster.id)
-          .map((namespace) => namespace.namespace)
-          .sort((left, right) => left.localeCompare(right)),
-        workspaceId: cluster.workspaceId,
-      })),
-  }), [
+  const scope = useMemo(() => {
+    const namespaceRefs = normalizeNamespaceRefs(filter.state.common.namespaces);
+    const namespaceScopeActive = namespaceRefs.length > 0;
+    return {
+      applications: filter.state.common.applications,
+      allAccessible: filter.state.common.clusters.length === 0 && !namespaceScopeActive,
+      clusters: [...clusters]
+        .filter((cluster) => !namespaceScopeActive || namespaceRefs.some(
+          (namespace) => namespace.clusterId === cluster.id,
+        ))
+        .sort((left, right) => left.id.localeCompare(right.id))
+        .map((cluster) => ({
+          clusterId: cluster.id,
+          freshness: clusterFreshness(cluster.connectionState),
+          namespaces: namespaceRefs
+            .filter((namespace) => namespace.clusterId === cluster.id)
+            .map((namespace) => namespace.namespace),
+          workspaceId: cluster.workspaceId,
+        })),
+    };
+  }, [
     clusters,
     filter.state.common.applications,
     filter.state.common.clusters.length,

@@ -74,6 +74,58 @@ describe("HomePage optional widgets", () => {
     });
   });
 
+  it("keeps equal namespace names cluster-qualified for W2, W3, and W7", async () => {
+    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
+      collapsed: [],
+      order: ["W2", "W3", "W7"],
+      visible: ["W2", "W3", "W7"],
+    }));
+    const ports = homeBoardPorts();
+    renderHome(
+      homePort(),
+      ["/?namespaces=cluster-1%2Fshop,kubernetes-ops%2Fshop"],
+      vi.fn(),
+      "ko",
+      ports,
+    );
+
+    await waitFor(() => {
+      expect(ports.issues.listIssues).toHaveBeenCalledWith(
+        "cluster-1",
+        3,
+        expect.any(AbortSignal),
+        { categories: [], namespaces: ["cluster-1/shop"], severities: [] },
+      );
+      expect(ports.issues.listIssues).toHaveBeenCalledWith(
+        "kubernetes-ops",
+        3,
+        expect.any(AbortSignal),
+        { categories: [], namespaces: ["kubernetes-ops/shop"], severities: [] },
+      );
+      expect(ports.gitops.listSyncTargets).toHaveBeenCalledWith(
+        expect.any(AbortSignal),
+        {
+          applications: [],
+          clusters: ["cluster-1", "kubernetes-ops"],
+          namespaces: ["cluster-1/shop", "kubernetes-ops/shop"],
+        },
+      );
+      expect(ports.cost.getOverview).toHaveBeenCalledWith({
+        clusterIds: ["cluster-1", "kubernetes-ops"],
+        namespaces: ["cluster-1/shop", "kubernetes-ops/shop"],
+        timeRange: "24h",
+      }, expect.any(AbortSignal));
+      expect(ports.activity.loadOverview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterIds: ["cluster-1", "kubernetes-ops"],
+          namespaces: ["shop"],
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+    expect(ports.inventory).not.toHaveBeenCalled();
+  });
+
   it("keeps successful namespace totals and marks a partial fleet fan-out", async () => {
     window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
       collapsed: [],
@@ -245,7 +297,7 @@ describe("HomePage optional widgets", () => {
     expect(bars.querySelector("rect")?.getAttribute("fill")).toBe("var(--color-status-warning)");
     expect(getOverview).toHaveBeenCalledWith({
       clusterIds: ["cluster-1"],
-      namespaces: ["shop"],
+      namespaces: ["cluster-1/shop"],
       timeRange: "7d",
     }, expect.any(AbortSignal));
   });

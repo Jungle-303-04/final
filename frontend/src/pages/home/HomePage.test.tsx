@@ -116,11 +116,15 @@ describe("HomePage three-layer board", () => {
         "cluster-1",
         3,
         expect.any(AbortSignal),
-        { categories: [], namespaces: ["shop"], severities: [] },
+        { categories: [], namespaces: ["cluster-1/shop"], severities: [] },
       );
       expect(ports.gitops.listSyncTargets).toHaveBeenCalledWith(
         expect.any(AbortSignal),
-        { applications: [], clusters: ["cluster-1"], namespaces: ["shop"] },
+        {
+          applications: [],
+          clusters: ["cluster-1"],
+          namespaces: ["cluster-1/shop"],
+        },
       );
       expect(ports.activity.loadOverview).toHaveBeenCalledWith(
         expect.objectContaining({

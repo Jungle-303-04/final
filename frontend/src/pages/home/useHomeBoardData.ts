@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import type { CostPort } from "../../features/cost/costContract";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
+import { namespaceSelector } from "../../features/filters/filterUrlSyntax";
 import type {
   HomeActivityOverview,
   HomeActivityPort,
@@ -124,9 +125,18 @@ export function useHomeBoardData({
     () => scope.clusters.map((cluster) => cluster.clusterId),
     [scope.clusters],
   );
-  const namespaceNames = useMemo(
+  const activityNamespaceNames = useMemo(
     () => [...new Set(scope.clusters.flatMap((cluster) => cluster.namespaces ?? []))]
       .sort((left, right) => left.localeCompare(right)),
+    [scope.clusters],
+  );
+  const namespaceReferences = useMemo(
+    () => [...new Set(scope.clusters.flatMap((cluster) =>
+      (cluster.namespaces ?? []).map((namespace) => namespaceSelector({
+        clusterId: cluster.clusterId,
+        namespace,
+      }))
+    ))].sort((left, right) => left.localeCompare(right)),
     [scope.clusters],
   );
   const activityQuery = useMemo(
@@ -135,17 +145,17 @@ export function useHomeBoardData({
         period,
         refreshKey > 0 ? refreshKey : mountedAtMs,
       );
-      return window === null ? null : {
+      return window === null || clusterIds.length === 0 ? null : {
         ...window,
         applications: scope.applications,
         clusterIds,
-        namespaces: namespaceNames,
+        namespaces: activityNamespaceNames,
       };
     },
     [
       clusterIds,
       mountedAtMs,
-      namespaceNames,
+      activityNamespaceNames,
       period,
       refreshKey,
       scope.applications,
@@ -157,21 +167,22 @@ export function useHomeBoardData({
         return Promise.reject(new Error("issue application scope unavailable"));
       }
       return loadScopedIssues(ports.issues, scope, signal, {
-        namespaces: namespaceNames,
+        namespaces: namespaceReferences,
         severities: [],
         categories: [],
       });
     },
-    [namespaceNames, ports.issues, refreshKey, scope],
+    [namespaceReferences, ports.issues, refreshKey, scope],
   );
   const sync = useAsyncResource(
     async (signal) => {
+      requireClusterScope(clusterIds);
       const [applications, targets] = await Promise.all([
         ports.gitops.listApplications(signal),
         ports.gitops.listSyncTargets(signal, {
           applications: scope.applications,
           clusters: clusterIds,
-          namespaces: namespaceNames,
+          namespaces: namespaceReferences,
         }),
       ]);
       const categories = targets.map((target) => gitOpsSyncCategory(target.syncStatus));
@@ -192,7 +203,7 @@ export function useHomeBoardData({
         targets,
       };
     },
-    [clusterIds, namespaceNames, ports.gitops, refreshKey, scope.applications],
+    [clusterIds, namespaceReferences, ports.gitops, refreshKey, scope.applications],
   );
   const activity = useAsyncResource(
     (signal) => {
@@ -207,6 +218,7 @@ export function useHomeBoardData({
   const namespacePods = useAsyncResource(
     async (signal) => {
       if (!wantsNamespaces) return { incompleteClusterIds: [], items: [] };
+      requireClusterScope(clusterIds);
       const result = await fanOutClusters(scope.clusters, signal, (cluster, clusterSignal) =>
         ports.inventory(cluster.clusterId, cluster.namespaces, clusterSignal)
       );
@@ -235,11 +247,12 @@ export function useHomeBoardData({
           ),
       };
     },
-    [ports.inventory, refreshKey, scope.clusters, wantsNamespaces],
+    [clusterIds, ports.inventory, refreshKey, scope.clusters, wantsNamespaces],
   );
   const criticalResources = useAsyncResource(
     async (signal) => {
       if (!wantsCriticalResources) return [];
+      requireClusterScope(clusterIds);
       const response = await ports.resources.listResourcePage(
         criticalResourceFilterState(filterState, clusterIds),
         { limit: 5 },
@@ -258,7 +271,7 @@ export function useHomeBoardData({
       }
       const overview = await ports.cost.getOverview({
         clusterIds,
-        namespaces: namespaceNames,
+        namespaces: namespaceReferences,
         timeRange,
       }, signal);
       return projectHomeCost(overview, activityQuery.fromMs, activityQuery.toMs);
@@ -266,7 +279,7 @@ export function useHomeBoardData({
     [
       activityQuery,
       clusterIds,
-      namespaceNames,
+      namespaceReferences,
       period,
       ports.cost,
       refreshKey,
@@ -328,14 +341,22 @@ async function loadScopedIssues(
   signal: AbortSignal,
   filters: IssueQueueFilters,
 ): Promise<IssueList> {
+  requireClusterScope(scope.clusters.map((cluster) => cluster.clusterId));
   if (scope.allAccessible) {
     return port.listIssues(null, 3, signal, filters);
   }
   if (scope.clusters.length === 1) {
-    return port.listIssues(scope.clusters[0]!.clusterId, 3, signal, filters);
+    const cluster = scope.clusters[0]!;
+    return port.listIssues(cluster.clusterId, 3, signal, {
+      ...filters,
+      namespaces: namespaceReferencesForCluster(cluster),
+    });
   }
   const result = await fanOutClusters(scope.clusters, signal, (cluster, clusterSignal) =>
-    port.listIssues(cluster.clusterId, 3, clusterSignal, filters)
+    port.listIssues(cluster.clusterId, 3, clusterSignal, {
+      ...filters,
+      namespaces: namespaceReferencesForCluster(cluster),
+    })
   );
   if (result.successes.length === 0 && result.failures.length > 0) {
     throw result.failures[0]!.error;
@@ -345,6 +366,13 @@ async function loadScopedIssues(
     result.failures.map((failure) => failure.clusterId),
     filters,
   );
+}
+
+function namespaceReferencesForCluster(cluster: ClusterScope): string[] {
+  return [...new Set((cluster.namespaces ?? []).map((namespace) => namespaceSelector({
+    clusterId: cluster.clusterId,
+    namespace,
+  })))].sort((left, right) => left.localeCompare(right));
 }
 
 function mergeIssueLists(
@@ -488,6 +516,10 @@ function timelineWorkspaceCacheKey(scope: HomeBoardScope): string {
   return [...new Set(scope.clusters.map((cluster) => cluster.workspaceId))]
     .sort((left, right) => left.localeCompare(right))
     .join("|");
+}
+
+function requireClusterScope(clusterIds: readonly string[]): void {
+  if (clusterIds.length === 0) throw new Error("home fleet scope unavailable");
 }
 
 function throwIfAborted(signal: AbortSignal): void {
