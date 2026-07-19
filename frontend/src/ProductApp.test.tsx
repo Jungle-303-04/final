@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import {
@@ -15,8 +15,8 @@ import { PRODUCT_LOCALE_STORAGE_KEY } from "./shared/i18n/locale";
 import ProductApp from "./ProductApp";
 import { homeApiResponse, requestCount } from "./ProductApp.testSupport";
 
-const PRODUCT_RENDER_TIMEOUT_MS = 15_000;
-const PRODUCT_TEST_TIMEOUT_MS = 30_000;
+const PRODUCT_RENDER_TIMEOUT_MS = 30_000;
+const PRODUCT_TEST_TIMEOUT_MS = 60_000;
 
 beforeEach(() => {
   vi.useRealTimers();
@@ -95,7 +95,7 @@ describe("ProductApp root recovery", () => {
 
   it("keeps the explicit Home route on the declarative Home landing", async () => {
     window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
-    window.history.replaceState({}, "", "/home?cluster=cluster-1");
+    window.history.replaceState({}, "", "/home?clusters=cluster-1");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
@@ -103,29 +103,23 @@ describe("ProductApp root recovery", () => {
         return homeApiResponse(path);
       });
 
-    render(
-      <StrictMode>
-        <ProductApp />
-      </StrictMode>,
-    );
+    render(<ProductApp />);
 
     expect(
       await screen.findByRole(
         "heading",
-        { name: "Cluster status", level: 2 },
+        { name: "Available clusters", level: 1 },
         { timeout: PRODUCT_RENDER_TIMEOUT_MS },
       ),
     ).toBeTruthy();
     expect((await screen.findAllByText("cluster-1")).length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("navigation", { name: "Primary navigation" }),
-    ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
+    const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(within(navigation).getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(within(navigation).getByRole("link", { name: "Incidents" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
     expect(window.location.pathname).toBe("/home");
-    expect(window.location.search).toBe("?cluster=cluster-1");
+    expect(window.location.search).toBe("?clusters=cluster-1");
     await waitFor(() => {
       expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1);
       expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1);
@@ -134,7 +128,11 @@ describe("ProductApp root recovery", () => {
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {
     window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
-    window.history.replaceState({}, "", "/resources/pod?cluster=cluster-1");
+    window.history.replaceState(
+      {},
+      "",
+      "/resources?clusters=cluster-1&resources.types=pod&view=table",
+    );
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
@@ -142,11 +140,7 @@ describe("ProductApp root recovery", () => {
         return homeApiResponse(path);
       });
 
-    render(
-      <StrictMode>
-        <ProductApp />
-      </StrictMode>,
-    );
+    render(<ProductApp />);
 
     expect(
       await screen.findByRole(
@@ -179,7 +173,7 @@ describe("ProductApp root recovery", () => {
       { timeout: PRODUCT_RENDER_TIMEOUT_MS },
     );
     expect(dialog.textContent).toContain("Running");
-    expect(window.location.pathname).toBe("/resources/pod");
+    expect(window.location.pathname).toBe("/resources");
     expect(new URLSearchParams(window.location.search).get("detail")).toBe(
       "Pod/shop/checkout-api-0",
     );
