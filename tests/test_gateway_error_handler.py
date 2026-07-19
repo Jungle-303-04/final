@@ -399,8 +399,18 @@ def test_gateway_metrics_snapshot_does_not_block_agent_event_loop(monkeypatch) -
     service = gateway.ApiGateway()
 
     async def run() -> None:
-        timer = threading.Timer(1, release.set)
-        timer.start()
+        watchdog_released = threading.Event()
+
+        def release_blocked_scrape() -> None:
+            if not started.wait(timeout=5):
+                return
+            if release.wait(timeout=5):
+                return
+            watchdog_released.set()
+            release.set()
+
+        watchdog = threading.Thread(target=release_blocked_scrape, daemon=True)
+        watchdog.start()
         try:
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=service.app),
@@ -412,17 +422,16 @@ def test_gateway_metrics_snapshot_does_not_block_agent_event_loop(monkeypatch) -
                         headers={"authorization": "Bearer metrics-secret"},
                     )
                 )
-                assert await asyncio.to_thread(started.wait, 1)
-                before = time.perf_counter()
-                health = await client.get("/healthz")
-                elapsed = time.perf_counter() - before
+                health_request = asyncio.create_task(client.get("/healthz"))
+                assert await asyncio.to_thread(started.wait, 5)
+                health = await asyncio.wait_for(health_request, timeout=5)
                 assert health.status_code == 200
-                assert elapsed < 0.25
+                assert not watchdog_released.is_set()
                 release.set()
                 assert (await scrape).status_code == 200
         finally:
             release.set()
-            timer.cancel()
+            watchdog.join(timeout=1)
 
     asyncio.run(run())
 
