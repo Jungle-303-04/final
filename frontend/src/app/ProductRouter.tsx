@@ -5,6 +5,7 @@ import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
 import { UnifiedFilterProvider, useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
+import { createEmptyProductDetailQuery } from "../features/filters/filterContract";
 import { OperationStatusStoreProvider } from "../features/operations/OperationStatusStore";
 import { ProductShell } from "./ProductShell";
 import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
@@ -71,9 +72,8 @@ export function ProductRouter({
             {composition.surfaces.flatMap((registration) => {
               const { id } = registration;
               const routeDefinition = routeDefinitionForSurface(id);
-              const routeElement = routeDefinition.redirectTo === null
-                ? <RouteSurface key={id} registration={registration} />
-                : <ProductLegacyRedirect routeDefinition={routeDefinition} />;
+              if (routeDefinition.redirectTo !== null) return [];
+              const routeElement = <RouteSurface key={id} registration={registration} />;
               return [
                 <Route
                   element={routeElement}
@@ -90,7 +90,19 @@ export function ProductRouter({
               ];
             })}
             {PRODUCT_ROUTE_CATALOG
-              .filter((routeDefinition) => !composition.releasedSurfaceIds.has(routeDefinition.id))
+              .filter((routeDefinition) => routeDefinition.redirectTo !== null)
+              .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
+                <Route
+                  element={<ProductLegacyRedirect routeDefinition={routeDefinition} />}
+                  key={`redirect:${routeDefinition.id}:${routePath}`}
+                  path={routePathForDefinition(routeDefinition, routePath)}
+                />
+              )))}
+            {PRODUCT_ROUTE_CATALOG
+              .filter((routeDefinition) =>
+                routeDefinition.redirectTo === null &&
+                !composition.releasedSurfaceIds.has(routeDefinition.id)
+              )
               .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
                 <Route
                   element={<ProductUnavailableRoute routeDefinition={routeDefinition} />}
@@ -160,13 +172,23 @@ function ProductLegacyRedirect({
   const target = routeDefinition.redirectTo;
   if (target === null) return <ProductFallbackRedirect path="/home" />;
   const targetRoute = routeDefinitionForSurface(target);
+  const targetDetail = routeDefinition.id === "traffic"
+    ? {
+        ...filter.detail,
+        detail: filter.detail.detail ?? filter.detail.resource,
+        resource: null,
+        resourceKind: null,
+        resourceSurfaceView: "flow" as const,
+      }
+    : {
+        ...createEmptyProductDetailQuery(),
+        resourceSurfaceView: filter.detail.resourceSurfaceView,
+        surfaceTab: routeDefinition.redirectSection ?? undefined,
+      };
   return (
     <Navigate
       replace
-      to={filter.navigationHref(targetRoute.path, {
-        ...filter.detail,
-        surfaceTab: routeDefinition.redirectSection ?? undefined,
-      })}
+      to={filter.navigationHref(targetRoute.path, targetDetail)}
     />
   );
 }

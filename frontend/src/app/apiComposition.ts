@@ -168,12 +168,6 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
 
   return createProductComposition([
     {
-      id: "clusters",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/clusters")).loadClustersSurface(),
-      })),
-    },
-    {
       id: "home",
       loader: registry.createSurfaceLoader(async () => ({
         default: (await import("./composition/surfaces/home")).loadHomeSurface(
@@ -231,40 +225,6 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           timelinePort,
           rcaContextPort,
         ),
-      })),
-    },
-    {
-      id: "alerts",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/alerts")).loadAlertsSurface(alertRulesPort),
-      })),
-    },
-    {
-      id: "applications",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(refreshPolicies),
-      })),
-    },
-    {
-      id: "gitops",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(
-          refreshPolicies,
-          rcaContextPort,
-          gitOpsPort,
-        ),
-      })),
-    },
-    {
-      id: "helm",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/helm")).loadHelmSurface(),
-      })),
-    },
-    {
-      id: "traffic",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/traffic")).loadTrafficSurface(),
       })),
     },
     {

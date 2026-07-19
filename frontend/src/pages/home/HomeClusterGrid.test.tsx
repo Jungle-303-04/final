@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
@@ -39,5 +40,22 @@ describe("HomeClusterGrid", () => {
     expect(screen.getByText("Choose a cluster to explore its resources.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open resources for Production" })
       .getAttribute("href")).toBe("/resources?clusters=cluster-production");
+  });
+
+  it("keeps cluster connection as a named Home action", async () => {
+    const connect = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <MemoryRouter initialEntries={["/home"]}>
+          <UnifiedFilterProvider>
+            <HomeClusterGrid clusters={clusters} onConnect={connect} />
+          </UnifiedFilterProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Connect cluster" }));
+    expect(connect).toHaveBeenCalledOnce();
   });
 });

@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 import {
   connectCluster,
   getClusterConnectionStatus,
@@ -7,7 +6,6 @@ import {
   unregisterCluster,
 } from "../../../api";
 import { createClustersAdapter } from "../../../features/clusters/createClustersAdapter";
-import { createClustersSurface } from "../../../pages/clusters/createClustersSurface";
 
 export function createClustersProductPort() {
   return createClustersAdapter({
@@ -17,8 +15,4 @@ export function createClustersProductPort() {
     reissueClusterConnectCommand,
     unregisterCluster,
   });
-}
-
-export function loadClustersSurface(): ComponentType {
-  return createClustersSurface(createClustersProductPort());
 }
