@@ -33,7 +33,7 @@ export function HomeClusterGrid({
       className="min-w-0"
     >
       <div
-        className="grid max-w-6xl gap-4 md:grid-cols-2"
+        className="grid gap-3.5 md:grid-cols-2"
         data-slot="home-cluster-grid"
       >
         {clusters.map((cluster, index) => (

@@ -18,13 +18,14 @@ import type {
 export function criticalResourceFilterState(
   state: UnifiedFilterState,
   clusterIds: readonly string[],
+  health: readonly ("critical" | "warning")[] = ["critical", "warning"],
 ): UnifiedFilterState {
   return {
     ...state,
     common: { ...state.common, clusters: clusterIds },
     resources: {
       ...state.resources,
-      health: ["critical"],
+      health,
       includeDeleted: false,
       query: "",
     },
@@ -43,11 +44,25 @@ export function projectHomeCost(
 ): HomeCostProjection {
   if (
     overview.observation.availability === "unavailable"
-    || overview.trend.availability === "unavailable"
+    || overview.summary.availability === "unavailable"
+  ) {
+    throw new Error("cost observation unavailable");
+  }
+  const periodTotalMicros = overview.summary.monthlyProjection;
+  if (!Number.isSafeInteger(periodTotalMicros) || periodTotalMicros < 0) {
+    throw new Error("cost total unavailable");
+  }
+  if (
+    overview.trend.availability === "unavailable"
     || overview.trend.series.length === 0
     || overview.trend.currency !== overview.observation.currency
   ) {
-    throw new Error("cost observation unavailable");
+    return {
+      changePercent: null,
+      currency: overview.observation.currency,
+      periodTotalMicros,
+      values: [],
+    };
   }
   const fromSeconds = fromMs / 1_000;
   const toSeconds = toMs / 1_000;
@@ -64,26 +79,20 @@ export function projectHomeCost(
     }
   }
   const points = [...rates.entries()].sort(([left], [right]) => left - right);
-  if (points.length < 2) throw new Error("cost trend unavailable");
-  let observedTotalMicros = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1]!;
-    const current = points[index]!;
-    observedTotalMicros += ((previous[1] + current[1]) / 2)
-      * ((current[0] - previous[0]) / 3_600);
-  }
-  const observedHours = (points[points.length - 1]![0] - points[0]![0]) / 3_600;
-  const requestedHours = (toMs - fromMs) / 3_600_000;
-  const periodTotalMicros = Math.round(
-    observedHours > 0 ? (observedTotalMicros / observedHours) * requestedHours : 0,
-  );
-  if (!Number.isSafeInteger(periodTotalMicros) || periodTotalMicros < 0) {
-    throw new Error("cost total unavailable");
+  if (points.length === 0) {
+    return {
+      changePercent: null,
+      currency: overview.trend.currency,
+      periodTotalMicros,
+      values: [],
+    };
   }
   const first = points[0]![1];
   const last = points[points.length - 1]![1];
   return {
-    changePercent: first === 0 ? null : ((last - first) / first) * 100,
+    changePercent: points.length < 2 || first === 0
+      ? null
+      : ((last - first) / first) * 100,
     currency: overview.trend.currency,
     periodTotalMicros,
     values: points.map(([, rateMicros]) => rateMicros / 1_000_000),

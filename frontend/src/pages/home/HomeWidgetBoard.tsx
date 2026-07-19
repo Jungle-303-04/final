@@ -9,14 +9,22 @@ import {
 } from "@dnd-kit/core";
 import {
   arrayMove,
+  rectSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Plus, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
@@ -25,8 +33,10 @@ import { normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
+import { Button } from "../../shared/ui/primitives/button";
 import { WidgetFrame } from "../../shared/ui/widgets";
 import {
+  HOME_WIDGET_IDS,
   homeBoardPreferenceKey,
   useHomeBoardPreferenceDraft,
   type HomeBoardPreferences,
@@ -46,7 +56,6 @@ import {
 import {
   criticalResourceDetailHref,
   timelineEventHref,
-  WidgetCatalog,
   widgetDefinition,
 } from "./HomeWidgetCatalog";
 import {
@@ -57,7 +66,6 @@ import {
 export function HomeWidgetBoard({
   clusters,
   editing,
-  onCriticalResourceCountChange,
   onOutOfSyncChange,
   period,
   ports,
@@ -66,7 +74,6 @@ export function HomeWidgetBoard({
 }: {
   clusters: readonly HomeClusterChoice[];
   editing: boolean;
-  onCriticalResourceCountChange: (count: number | null) => void;
   onOutOfSyncChange: (count: number | null) => void;
   period: HomeBoardPeriod;
   ports: HomeBoardPorts;
@@ -75,6 +82,7 @@ export function HomeWidgetBoard({
 }) {
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
+  const { t } = useI18n();
   const preferenceKey = homeBoardPreferenceKey(
     session?.workspaceId ?? null,
     session?.userId ?? null,
@@ -85,6 +93,9 @@ export function HomeWidgetBoard({
   );
   const visibleIds = activePreferences.order.filter(
     (id) => activePreferences.visible.includes(id),
+  );
+  const hiddenIds = HOME_WIDGET_IDS.filter(
+    (id) => !activePreferences.visible.includes(id),
   );
   const scope = useMemo(() => {
     const namespaceRefs = normalizeNamespaceRefs(filter.state.common.namespaces);
@@ -132,19 +143,10 @@ export function HomeWidgetBoard({
     onOutOfSyncChange(data.sync.phase === "ready" ? data.sync.data.outOfSync : null);
   }, [data.sync, onOutOfSyncChange]);
 
-  useEffect(() => {
-    const count = data.criticalResources.phase === "ready"
-      && data.criticalResources.data.filteredCountCompleteness === "exact"
-      ? data.criticalResources.data.filteredCount
-      : null;
-    onCriticalResourceCountChange(count);
-  }, [data.criticalResources, onCriticalResourceCountChange]);
-
   const toggleVisible = (id: HomeWidgetId) => {
     const visible = activePreferences.visible.includes(id)
       ? activePreferences.visible.filter((candidate) => candidate !== id)
       : [...activePreferences.visible, id];
-    if (visible.length === 0) return;
     update({
       ...activePreferences,
       collapsed: activePreferences.collapsed.filter((candidate) => visible.includes(candidate)),
@@ -164,18 +166,12 @@ export function HomeWidgetBoard({
 
   return (
     <section className="grid min-w-0 gap-4">
-      {editing ? (
-        <WidgetCatalog
-          onToggle={toggleVisible}
-          preferences={activePreferences}
-        />
-      ) : null}
       <DndContext
         collisionDetection={closestCenter}
         onDragEnd={dragEnd}
         sensors={sensors}
       >
-        <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={visibleIds} strategy={rectSortingStrategy}>
           <div className="grid min-w-0 grid-cols-6 gap-3.5 [grid-auto-flow:row_dense] min-[1024px]:grid-cols-12">
             {visibleIds.map((id) => (
               <SortableWidget
@@ -194,6 +190,30 @@ export function HomeWidgetBoard({
                 period={period}
               />
             ))}
+            {editing && hiddenIds.length > 0 ? (
+              <div className="col-span-full flex min-w-0 flex-wrap items-center gap-2 rounded-card border-[1.5px] border-dashed border-border px-3.5 py-[11px]">
+                <span className="text-label font-bold text-muted-foreground">
+                  {t("shell.home.widget.add")}
+                </span>
+                {hiddenIds.map((id) => {
+                  const definition = widgetDefinition(id, t, filter);
+                  return (
+                    <Button
+                      aria-label={`${t("shell.home.widget.add")} · ${definition.title}`}
+                      className="rounded-full"
+                      key={id}
+                      onClick={() => toggleVisible(id)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus aria-hidden="true" className="size-3.5" />
+                      {definition.title}
+                    </Button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </SortableContext>
       </DndContext>
@@ -226,15 +246,29 @@ function SortableWidget({
   preferences: HomeBoardPreferences;
   period: HomeBoardPeriod;
 }) {
-  const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
+  const filter = useUnifiedFilter();
+  const { t } = useI18n();
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+  } = useSortable({
+    attributes: {
+      role: "group",
+      roleDescription: t("shell.home.widget.sortable"),
+    },
     disabled: !editing,
     id,
   });
   const widgetRef = useRef<HTMLDivElement | null>(null);
   const attachWidget = useCallback((node: HTMLDivElement | null) => {
     widgetRef.current = node;
+    setActivatorNodeRef(node);
     setNodeRef(node);
-  }, [setNodeRef]);
+  }, [setActivatorNodeRef, setNodeRef]);
   useLayoutEffect(() => {
     const node = widgetRef.current;
     if (!node) return;
@@ -242,49 +276,50 @@ function SortableWidget({
     if (value) node.style.transform = value;
     else node.style.removeProperty("transform");
   }, [transform]);
-  const filter = useUnifiedFilter();
-  const { t } = useI18n();
   const definition = widgetDefinition(id, t, filter);
+  const startKeyboardDrag = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    listeners?.onKeyDown?.(event);
+  };
+  const startPointerDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (isInteractiveDragTarget(event.target)) return;
+    listeners?.onPointerDown?.(event);
+  };
   return (
     <div
+      {...(editing ? attributes : {})}
+      aria-label={editing
+        ? t("shell.home.widget.reorder", { title: definition.title })
+        : undefined}
       className={cn(
         definition.span,
         "transition-transform duration-(--motion-layout) ease-(--ease-soft) motion-reduce:transition-none",
+        editing && "cursor-grab touch-none select-none active:cursor-grabbing",
         isDragging && "z-10 opacity-70",
       )}
+      data-widget-id={id}
+      onKeyDown={editing ? startKeyboardDrag : undefined}
+      onPointerDown={editing ? startPointerDrag : undefined}
       ref={attachWidget}
     >
       <WidgetFrame
         className="h-full"
-        collapseLabel={t("shell.sidebar.collapse")}
+        collapseLabel={t("shell.home.widget.collapse", { title: definition.title })}
         collapsed={preferences.collapsed.includes(id)}
         collapsible
-        deepLink={{ href: definition.href, label: definition.title }}
+        deepLink={{ href: definition.href, label: t("shell.home.widget.viewAll") }}
         description={definition.description}
-        expandLabel={t("shell.sidebar.expand")}
+        editing={editing}
+        expandLabel={t("shell.home.widget.expand", { title: definition.title })}
         headerActions={editing ? (
-          <>
-            <button
-              {...attributes}
-              {...listeners}
-              aria-label={`${definition.title} · ${t("shell.ai.action.edit")}`}
-              className="grid size-7 touch-none place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
-              type="button"
-            >
-              <GripVertical aria-hidden="true" className="size-4" />
-            </button>
-            <button
-              aria-label={t("shell.filter.remove", {
-                type: t("resources.catalog.title"),
-                label: definition.title,
-              })}
-              className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
-              onClick={onRemove}
-              type="button"
-            >
-              <X aria-hidden="true" className="size-4" />
-            </button>
-          </>
+          <button
+            aria-label={t("shell.home.widget.hide", { title: definition.title })}
+            className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
+            onClick={onRemove}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
         ) : undefined}
         onCollapsedChange={onCollapse}
         title={definition.title}
@@ -294,6 +329,22 @@ function SortableWidget({
     </div>
   );
 }
+
+const INTERACTIVE_DRAG_TARGET = [
+  "a",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "[contenteditable='true']",
+  "[role='button']",
+  "[role='link']",
+].join(",");
+
+function isInteractiveDragTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(INTERACTIVE_DRAG_TARGET) !== null;
+}
+
 function WidgetBody({
   data,
   filter,

@@ -38,9 +38,11 @@ describe("HomePage three-layer board", () => {
         pods: "18",
       });
     });
+    expect(screen.getByRole("link", { name: "cluster-1 리소스 열기" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "kubernetes-ops 리소스 열기" })).toBeNull();
     expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "동기화 상태" })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "활동" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "저장소 동기화" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "활동 추이" })).toBeTruthy();
 
     expect(screen.queryByRole("region", { name: "클러스터 상태" })).toBeNull();
     expect(screen.queryByRole("region", { name: "클러스터 인사이트" })).toBeNull();
@@ -59,13 +61,57 @@ describe("HomePage three-layer board", () => {
     });
   });
 
+  it("keeps all five summary chips visible when GitOps and incident counts are zero", async () => {
+    const zeroIncidentClusters = {
+      ...CLUSTERS,
+      clusters: CLUSTERS.clusters.map((cluster) => ({
+        ...cluster,
+        incidentCount: 0,
+        openIncidentCount: 0,
+      })),
+    };
+    const zeroIncidentPort = homePort();
+    const loadFleetSummary = zeroIncidentPort.loadFleetSummary;
+    if (!loadFleetSummary) throw new Error("fleet summary is required by the home contract");
+    const fleet = await loadFleetSummary();
+    vi.mocked(zeroIncidentPort.listClusterChoices).mockResolvedValue(zeroIncidentClusters);
+    vi.mocked(loadFleetSummary).mockResolvedValue({
+      ...fleet,
+      clusters: fleet.clusters.map((cluster) => ({
+        ...cluster,
+        openIncidents: 0,
+      })),
+    });
+    renderHome(
+      zeroIncidentPort,
+      ["/?clusters=cluster-1"],
+      vi.fn(),
+      "ko",
+      homeBoardPorts({
+        gitops: {
+          listApplications: vi.fn().mockResolvedValue([]),
+          listSyncTargets: vi.fn().mockResolvedValue([]),
+        },
+      }),
+    );
+
+    const summary = await screen.findByRole("group", {
+      name: "클러스터 리소스 탐색",
+    });
+    await waitFor(() => {
+      expectFleetMetrics(summary, { clusters: "1", nodes: "2/2", pods: "18" });
+      expect(within(summary).getByText("OutOfSync").parentElement?.textContent).toContain("0");
+      expect(within(summary).getByRole("link", { name: "장애 0" })).toBeTruthy();
+    });
+  });
+
   it("renders the board for the unfiltered fleet without choosing a first cluster", async () => {
     const ports = homeBoardPorts();
     renderHome(homePort(), ["/"], vi.fn(), "ko", ports);
 
     expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "동기화 상태" })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "활동" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "저장소 동기화" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "활동 추이" })).toBeTruthy();
     await waitFor(() => {
       expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
         clusters: "2",
@@ -105,48 +151,25 @@ describe("HomePage three-layer board", () => {
     );
   });
 
-  it("uses the scoped resource total for the fixed critical summary even when W6 is hidden", async () => {
-    seedMinimalHomeBoard();
-    const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "exact", 5));
-    renderHome(
-      homePort(),
-      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop&applications=checkout"],
-      vi.fn(),
-      "ko",
-      homeBoardPorts({ resources: { listResourcePage } }),
-    );
+  it("uses namespace cluster identities for the fixed summary and cluster cards", async () => {
+    renderHome(homePort(), ["/?namespaces=kubernetes-ops%2Fsystem"]);
 
-    const summary = await screen.findByRole("group", {
-      name: "클러스터 리소스 탐색",
+    await waitFor(() => {
+      expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
+        clusters: "1",
+        nodes: "1/1",
+        pods: "4",
+      });
     });
-    const critical = await within(summary).findByRole("link", { name: "임계 17" });
-    const href = new URL(critical.getAttribute("href")!, "https://product.test");
-    expect(href.pathname).toBe("/resources");
-    expect(href.searchParams.get("resources.health")).toBe("critical");
-    expect(href.searchParams.get("clusters")).toBe("cluster-1");
-    expect(href.searchParams.get("namespaces")).toBe("cluster-1/shop");
-    expect(href.searchParams.get("applications")).toBe("checkout");
-    expect(screen.queryByRole("heading", { name: "임계 · 리소스 종류" })).toBeNull();
-    expect(listResourcePage).toHaveBeenCalledTimes(1);
-    expect(listResourcePage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        common: expect.objectContaining({
-          applications: ["checkout"],
-          clusters: ["cluster-1"],
-          namespaces: [{ clusterId: "cluster-1", namespace: "shop" }],
-        }),
-        resources: expect.objectContaining({ health: ["critical"], includeDeleted: false }),
-      }),
-      { limit: 5 },
-      expect.any(AbortSignal),
-    );
+    expect(screen.getByRole("link", { name: "kubernetes-ops 리소스 열기" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "cluster-1 리소스 열기" })).toBeNull();
   });
 
-  it("does not present a partial resource total as an exact critical count", async () => {
+  it("routes the incident-backed critical count to the same scoped issue surface", async () => {
     const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "partial", 5));
     renderHome(
       homePort(),
-      ["/?clusters=cluster-1"],
+      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop"],
       vi.fn(),
       "ko",
       homeBoardPorts({ resources: { listResourcePage } }),
@@ -156,14 +179,19 @@ describe("HomePage three-layer board", () => {
       name: "클러스터 리소스 탐색",
     });
     await waitFor(() => expect(listResourcePage).toHaveBeenCalledTimes(1));
-    const widgetHeading = await screen.findByRole("heading", { name: "임계 · 리소스 종류" });
+    const widgetHeading = await screen.findByRole("heading", { name: "장애·주의 리소스" });
     const widget = widgetHeading.closest<HTMLElement>("[data-slot='widget-frame']")!;
     expect(await within(widget).findByText("일부 데이터")).toBeTruthy();
-    expect(within(summary).getByRole("link", { name: "임계 —" })).toBeTruthy();
+    const critical = within(summary).getByRole("link", { name: "장애 1" });
+    const href = new URL(critical.getAttribute("href")!, "https://product.test");
+    expect(href.pathname).toBe("/issues");
+    expect(href.searchParams.get("resources.health")).toBeNull();
+    expect(href.searchParams.get("clusters")).toBe("cluster-1");
+    expect(href.searchParams.get("namespaces")).toBe("cluster-1/shop");
     expect(listResourcePage).toHaveBeenCalledTimes(1);
   });
 
-  it("counts repositories through every application bound to one sync target", async () => {
+  it("aggregates sync state per repository and lets OutOfSync dominate", async () => {
     const ports = homeBoardPorts({
       gitops: {
         listApplications: vi.fn().mockResolvedValue([
@@ -183,34 +211,76 @@ describe("HomePage three-layer board", () => {
             clusterId: "cluster-1",
             manifestPath: "deploy",
           },
+          {
+            id: "checkout-canary",
+            name: "checkout-canary",
+            repository: "team/checkout",
+            branch: "canary",
+            clusterId: "cluster-1",
+            manifestPath: "deploy/canary",
+          },
+          {
+            id: "payments",
+            name: "payments",
+            repository: "team/payments",
+            branch: "main",
+            clusterId: "cluster-1",
+            manifestPath: "deploy",
+          },
+          {
+            id: "other-cluster",
+            name: "other-cluster",
+            repository: "team/other-cluster",
+            branch: "main",
+            clusterId: "kubernetes-ops",
+            manifestPath: "deploy",
+          },
         ]),
-        listSyncTargets: vi.fn().mockResolvedValue([{
-          id: "shared-target",
-          applicationId: "checkout",
-          applicationIds: ["checkout", "inventory", "checkout"],
-          applicationName: "shared-target",
-          clusterId: "cluster-1",
-          namespace: "shop",
-          environment: "production",
-          syncStatus: "OutOfSync",
-          revision: "abc123",
-          observedAt: "2026-07-19T01:00:00Z",
-        }]),
+        listSyncTargets: vi.fn().mockResolvedValue([
+          {
+            id: "shared-target",
+            applicationId: "checkout",
+            applicationIds: ["checkout", "inventory", "checkout"],
+            applicationName: "shared-target",
+            clusterId: "cluster-1",
+            namespace: "shop",
+            environment: "production",
+            syncStatus: "OutOfSync",
+            revision: "abc123",
+            observedAt: "2026-07-19T01:00:00Z",
+          },
+          {
+            id: "checkout-canary",
+            applicationId: "checkout-canary",
+            applicationIds: [],
+            applicationName: "checkout-canary",
+            clusterId: "cluster-1",
+            namespace: "shop",
+            environment: "production",
+            syncStatus: "Synced",
+            revision: "def456",
+            observedAt: "2026-07-19T01:01:00Z",
+          },
+        ]),
       },
     });
     renderHome(homePort(), ["/?clusters=cluster-1"], vi.fn(), "ko", ports);
 
-    const sync = await screen.findByRole("region", { name: "동기화 상태" });
+    const sync = await screen.findByRole("region", { name: "저장소 동기화" });
     await waitFor(() => {
-      // 데모 W3 문법: 저장소 수 대신 Synced/OutOfSync 범례 — 두 저장소가 하나의 동기 대상으로 집계된다
       const outOfSync = within(sync).getByText("OutOfSync");
-      expect(outOfSync.querySelector("b")?.textContent).toBe("1");
+      expect(outOfSync.querySelector("b")?.textContent).toBe("2");
+      expect(outOfSync.textContent).toContain("67%");
       const synced = within(sync).getByText("Synced");
       expect(synced.querySelector("b")?.textContent).toBe("0");
+      expect(synced.textContent).toContain("0%");
+      expect(within(sync).getByRole("status").textContent)
+        .toContain("일부 데이터 · 알 수 없음 1");
+      expect(within(sync).queryByText("저장소")).toBeNull();
     });
   });
 
-  it("scopes W2-W4 to supported URL dimensions and refuses unsupported application aggregates", async () => {
+  it("scopes W2-W4 to URL dimensions and rejects application scope uniformly across W2-W8", async () => {
     const ports = homeBoardPorts();
     renderHome(
       homePort(),
@@ -254,24 +324,45 @@ describe("HomePage three-layer board", () => {
       "ko",
       unsupported,
     );
-    const issues = await screen.findByRole("region", { name: "이슈" });
-    const activity = await screen.findByRole("region", { name: "활동" });
-    expect(await within(issues).findByRole("alert")).toBeTruthy();
-    expect(await within(activity).findByRole("alert")).toBeTruthy();
+    for (const title of [
+      "이슈",
+      "저장소 동기화",
+      "활동 추이",
+      "네임스페이스 파드 분포",
+      "장애·주의 리소스",
+      "비용",
+      "최근 변경",
+    ]) {
+      const widget = await screen.findByRole("region", { name: title });
+      expect(await within(widget).findByRole("alert")).toBeTruthy();
+    }
     expect(unsupported.issues.listIssues).not.toHaveBeenCalled();
+    expect(unsupported.gitops.listApplications).not.toHaveBeenCalled();
+    expect(unsupported.gitops.listSyncTargets).not.toHaveBeenCalled();
     expect(unsupported.activity.loadOverview).not.toHaveBeenCalled();
+    expect(unsupported.inventory).not.toHaveBeenCalled();
+    expect(unsupported.resources.listResourcePage).not.toHaveBeenCalled();
+    expect(unsupported.cost.getOverview).not.toHaveBeenCalled();
+    expect(unsupported.timeline.readCapabilities).not.toHaveBeenCalled();
+    expect(unsupported.timeline.readTimeline).not.toHaveBeenCalled();
   });
 
   it("keeps widget landmarks, labels, links, and editor controls semantic", async () => {
     const user = userEvent.setup();
     renderHome(homePort(), [
-      "/?clusters=cluster-1&namespaces=cluster-1%2Fshop&applications=checkout",
+      "/?clusters=cluster-1&namespaces=cluster-1%2Fshop",
     ]);
 
     const issues = await screen.findByRole("region", { name: "이슈" });
-    const deepLink = within(issues).getByRole("link", { name: "이슈" });
+    const deepLink = within(issues).getByRole("link", { name: "전체 보기" });
     expect(deepLink.tagName).toBe("A");
     expect(deepLink.getAttribute("href")).toContain("clusters=cluster-1");
+    const issueRow = await within(issues).findByRole("link", { name: /Restart loop/u });
+    const issueHref = new URL(issueRow.getAttribute("href")!, "https://product.test");
+    expect(issueHref.pathname).toBe("/issues");
+    expect(issueHref.searchParams.get("detail")).toBe("issue:cluster-1/incident-1");
+    expect(issueHref.searchParams.get("clusters")).toBe("cluster-1");
+    expect(issueHref.searchParams.get("namespaces")).toBe("cluster-1/shop");
     const collapse = within(issues).getByRole("button", { name: /접기/u });
     expect(collapse.tagName).toBe("BUTTON");
     expect(collapse.getAttribute("aria-expanded")).toBe("true");
@@ -281,13 +372,11 @@ describe("HomePage three-layer board", () => {
     const period = screen.getByRole("group", { name: "시간 범위" });
     expect(within(period).getByRole("button", { name: "오늘" }).getAttribute("aria-pressed"))
       .toBe("true");
-    await user.click(screen.getByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    const namespaceToggle = within(catalog).getByRole("button", {
-      name: "Namespace별 Pod 수",
-    });
-    expect(namespaceToggle.tagName).toBe("BUTTON");
-    expect(namespaceToggle.getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByRole("button", { name: "레이아웃 편집" }));
+    const removeIssue = within(issues).getByRole("button", { name: "이슈 위젯 숨기기" });
+    expect(removeIssue.tagName).toBe("BUTTON");
+    await user.click(removeIssue);
+    expect(screen.getByRole("button", { name: "위젯 추가 · 이슈" })).toBeTruthy();
   });
 
   it("shares one URL period across W4 and preserves unrelated filters", async () => {
@@ -333,7 +422,7 @@ describe("HomePage three-layer board", () => {
       ports,
     );
 
-    const activity = await screen.findByRole("heading", { name: "활동" });
+    const activity = await screen.findByRole("heading", { name: "활동 추이" });
     const widget = activity.closest<HTMLElement>("[data-slot='widget-frame']")!;
     await waitFor(() => {
       expect(ports.issues.listIssues).toHaveBeenCalledTimes(1);
@@ -344,7 +433,7 @@ describe("HomePage three-layer board", () => {
     const listSyncTargets = vi.mocked(ports.gitops.listSyncTargets);
     const issueCalls = listIssues.mock.calls.length;
     const gitopsCalls = listSyncTargets.mock.calls.length;
-    expect(within(widget).getByRole("alert")).toBeTruthy();
+    expect(await within(widget).findByRole("alert")).toBeTruthy();
     await user.click(await within(widget).findByRole("button", { name: "다시 시도" }));
     expect(await within(widget).findByRole("img", { name: "활동" })).toBeTruthy();
     expect(loadOverview.mock.calls.length - activityCalls).toBe(1);
@@ -360,23 +449,26 @@ describe("HomePage three-layer board", () => {
     renderHome(homePort());
     await screen.findByRole("heading", { name: "이슈" });
 
-    await user.click(screen.getByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(catalog).getByRole("button", { name: "Namespace별 Pod 수" }));
+    await user.click(screen.getByRole("button", { name: "레이아웃 편집" }));
+    await user.click(screen.getByRole("button", {
+      name: "위젯 추가 · 네임스페이스 파드 분포",
+    }));
     const issues = screen.getByRole("region", { name: "이슈" });
     await user.click(within(issues).getByRole("button", { name: /접기/u }));
 
     expect(window.localStorage.getItem(key)).toBe(preferencesBeforeEditing);
-    await user.click(screen.getByRole("button", { name: "변경 저장" }));
+    await user.click(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(window.localStorage.getItem(key)).not.toBe(preferencesBeforeEditing));
     const committed = JSON.parse(window.localStorage.getItem(key)!);
     expect(committed.visible).toContain("W5");
     expect(committed.collapsed).toContain("W2");
     const preferencesAfterSaving = window.localStorage.getItem(key);
 
-    await user.click(screen.getByRole("button", { name: "수정" }));
-    const reopenedCatalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(reopenedCatalog).getByRole("button", { name: "Namespace별 Pod 수" }));
+    await user.click(screen.getByRole("button", { name: "레이아웃 편집" }));
+    const namespaceWidget = screen.getByRole("region", { name: "네임스페이스 파드 분포" });
+    await user.click(within(namespaceWidget).getByRole("button", {
+      name: "네임스페이스 파드 분포 위젯 숨기기",
+    }));
     expect(window.localStorage.getItem(key)).toBe(preferencesAfterSaving);
   });
 
@@ -387,7 +479,7 @@ describe("HomePage three-layer board", () => {
 
     expect(await screen.findByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "활동" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "활동 추이" })).toBeNull();
   });
 
   it("does not turn an unconfirmed empty cluster catalog into zero-valued widgets", async () => {
@@ -400,7 +492,7 @@ describe("HomePage three-layer board", () => {
 
     expect(await screen.findByRole("heading", { name: "연결된 클러스터가 없습니다" }))
       .toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "활동" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "활동 추이" })).toBeNull();
   });
 });
 
@@ -410,9 +502,9 @@ function expectFleetMetrics(
 ): void {
   expect(within(summary).getByText("클러스터").nextElementSibling?.textContent)
     .toBe(expected.clusters);
-  expect(within(summary).getByText("Node").nextElementSibling?.textContent)
+  expect(within(summary).getByText("노드").nextElementSibling?.textContent)
     .toBe(expected.nodes);
-  expect(within(summary).getByText("Pod").nextElementSibling?.textContent)
+  expect(within(summary).getByText("파드").nextElementSibling?.textContent)
     .toBe(expected.pods);
 }
 

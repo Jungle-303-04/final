@@ -35,6 +35,7 @@ export type WidgetFrameProps = WidgetCollapseProps & {
     label: string;
   };
   description?: string;
+  editing?: boolean;
   headerActions?: ReactNode;
   title: ReactNode;
 };
@@ -48,6 +49,7 @@ export function WidgetFrame({
   deepLink,
   defaultCollapsed = false,
   description,
+  editing = false,
   expandLabel,
   headerActions,
   onCollapsedChange,
@@ -62,10 +64,14 @@ export function WidgetFrame({
     <section
       aria-labelledby={titleId}
       className={cn(
-        "grid min-h-0 overflow-hidden rounded-card border border-border bg-card",
+        "grid min-h-0 overflow-hidden rounded-card bg-card transition-[border-color] duration-(--motion-fade) ease-(--ease-soft) motion-reduce:transition-none",
+        editing
+          ? "border-[1.5px] border-dashed border-primary/50"
+          : "border border-border",
         className,
       )}
       data-collapsed={collapsed || undefined}
+      data-editing={editing || undefined}
       data-slot="widget-frame"
     >
       <header className="flex min-w-0 items-center gap-[7px] px-[15px] pt-[13px]">

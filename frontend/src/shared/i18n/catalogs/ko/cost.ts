@@ -56,6 +56,7 @@ export const costKo = {
   "cost.trend.range.6h": "6시간",
   "cost.trend.range.24h": "24시간",
   "cost.trend.range.7d": "7일",
+  "cost.trend.range.home30d": "30일 선택 · 최근 7일 관측",
   "cost.workload.title": "비용",
   "cost.workload.current.title": "현재 할당 및 사용량",
   "cost.workload.current.description": "서버가 관측한 이 워크로드의 할당 비용과 사용량입니다.",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -72,6 +72,7 @@ class FleetApiDb:
         has_access: bool = True,
         registrations: list[dict[str, Any]] | None = None,
         rollup: dict[str, dict[str, Any]] | None = None,
+        fleet_nodes: dict[str, list[dict[str, Any]]] | None = None,
         usage: dict[str, list[dict[str, Any]]] | None = None,
         open_counts: dict[str, int] | None = None,
         agents: dict[str, dict[str, Any]] | None = None,
@@ -95,6 +96,7 @@ class FleetApiDb:
         self.has_access = has_access
         self.registrations = registrations or []
         self.rollup = rollup or {}
+        self.fleet_nodes = fleet_nodes or {}
         self.usage = usage or {}
         self.open_counts = open_counts or {}
         self.agents = agents or {}
@@ -157,6 +159,12 @@ class FleetApiDb:
     ) -> dict[str, dict[str, Any]]:
         self.calls.append(("rollup", workspace_id, cluster_ids))
         return self.rollup
+
+    def fleet_inventory_nodes(
+        self, workspace_id: str, cluster_ids: set[str] | None = None
+    ) -> dict[str, list[dict[str, Any]]]:
+        self.calls.append(("fleet_nodes", workspace_id, cluster_ids))
+        return self.fleet_nodes
 
     def latest_cluster_usage_rollups(
         self, workspace_id: str, cluster_ids: set[str] | None = None, **_: Any
@@ -653,6 +661,114 @@ def test_fleet_summary_falls_back_to_usage_sample_when_inventory_empty() -> None
     assert item["last_seen_at"] == "2026-07-07T10:00:00+00:00"
 
 
+def test_fleet_summary_does_not_hide_inventory_health_with_a_partial_usage_cut() -> None:
+    db = FleetApiDb(
+        allowed={CLUSTER_ID},
+        registrations=[_registration()],
+        rollup={
+            CLUSTER_ID: {
+                "pods_running": 41,
+                "pods_total": 41,
+                "nodes_ready": 2,
+                "nodes_total": 3,
+                "workloads_degraded": 0,
+            }
+        },
+        usage={
+            CLUSTER_ID: [
+                {
+                    "sampled_at": "2026-07-20T08:00:00+00:00",
+                    "usage": {
+                        "pod_running": 6,
+                        "pod_total": 9,
+                        "node_ready": 2,
+                        "node_total": 2,
+                        "restart_total": 0,
+                    },
+                }
+            ]
+        },
+        agents={CLUSTER_ID: {"last_seen_at": datetime.now(UTC).isoformat()}},
+    )
+
+    response = make_client(db, session=_session()).get("/fleet/summary")
+
+    assert response.status_code == 200
+    item = response.json()["clusters"][0]
+    assert (item["pods_running"], item["pods_total"]) == (41, 41)
+    assert (item["nodes_ready"], item["nodes_total"]) == (2, 3)
+    assert item["health"] == "critical"
+
+
+def test_fleet_summary_falls_back_to_observed_inventory_node_usage() -> None:
+    metrics_observed_at = datetime.now(UTC).isoformat()
+    db = FleetApiDb(
+        allowed={CLUSTER_ID},
+        registrations=[_registration()],
+        rollup={
+            CLUSTER_ID: {
+                "pods_running": 8,
+                "pods_total": 10,
+                "nodes_ready": 2,
+                "nodes_total": 2,
+                "workloads_degraded": 0,
+            }
+        },
+        fleet_nodes={
+            CLUSTER_ID: [
+                {
+                    "summary": {"cpu_ratio": 0.2, "mem_ratio": 0.4},
+                    "metrics_observed_at": metrics_observed_at,
+                },
+                {
+                    "summary": {
+                        "cpu_ratio": 0.4,
+                        "mem_ratio": 0.6,
+                        "metrics_observed_at": metrics_observed_at,
+                    }
+                },
+            ]
+        },
+        usage={CLUSTER_ID: [_usage_sample("2026-07-07T10:00:00+00:00", 4)]},
+    )
+
+    response = make_client(db, session=_session()).get("/fleet/summary")
+
+    assert response.status_code == 200
+    item = response.json()["clusters"][0]
+    assert item["cpu_pct"] == 30.0
+    assert item["mem_pct"] == 50.0
+    assert ("fleet_nodes", WORKSPACE_ID, {CLUSTER_ID}) in db.calls
+
+
+def test_fleet_summary_rejects_stale_inventory_node_usage() -> None:
+    stale_observed_at = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    db = FleetApiDb(
+        allowed={CLUSTER_ID},
+        registrations=[_registration()],
+        rollup={CLUSTER_ID: {"nodes_ready": 1, "nodes_total": 1}},
+        fleet_nodes={
+            CLUSTER_ID: [
+                {
+                    "summary": {
+                        "cpu_ratio": 0.91,
+                        "mem_ratio": 0.87,
+                        "metrics_observed_at": stale_observed_at,
+                    }
+                }
+            ]
+        },
+        usage={CLUSTER_ID: [_usage_sample("2026-07-07T10:00:00+00:00", 4)]},
+    )
+
+    response = make_client(db, session=_session()).get("/fleet/summary")
+
+    assert response.status_code == 200
+    item = response.json()["clusters"][0]
+    assert item["cpu_pct"] is None
+    assert item["mem_pct"] is None
+
+
 def test_rollup_health_rules_are_deterministic() -> None:
     healthy = {
         "workloads_degraded": 0,
@@ -1053,6 +1169,65 @@ def test_nodes_summary_aggregates_node_tiles_from_inventory() -> None:
             "kubernetes_version": "v1.30.7",
         }
     ]
+
+
+def test_nodes_summary_uses_inventory_usage_without_relabeling_scheduled_pods() -> None:
+    metrics_observed_at = datetime.now(UTC).isoformat()
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {
+                    "ready": True,
+                    "pod_count": 17,
+                    "cpu_ratio": 0.425,
+                    "mem_ratio": 0.613,
+                    "metrics_observed_at": metrics_observed_at,
+                },
+            }
+        ],
+        pods=[],
+        usage={},
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    node = response.json()["nodes"][0]
+    # node summary pod_count is scheduled non-terminal Pods, not the Running phase count.
+    assert node["pods_running"] == 0
+    assert node["cpu_pct"] == 42.5
+    assert node["mem_pct"] == 61.3
+
+
+def test_nodes_summary_rejects_inventory_usage_without_freshness_evidence() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {
+                    "ready": True,
+                    "cpu_ratio": 0.425,
+                    "mem_ratio": 0.613,
+                },
+            }
+        ],
+        pods=[],
+        usage={},
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    node = response.json()["nodes"][0]
+    assert node["cpu_pct"] is None
+    assert node["mem_pct"] is None
 
 
 def test_node_pods_summary_filters_node_and_links_incident() -> None:

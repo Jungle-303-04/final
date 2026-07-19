@@ -4,7 +4,7 @@ import type { CostOverview } from "../../features/cost/costContract";
 import { projectHomeCost } from "./homeBoardDataQueries";
 
 describe("projectHomeCost", () => {
-  it("projects the observed hourly rate across the requested 30-day period", () => {
+  it("uses the contract monthly projection instead of presenting rate samples as a month total", () => {
     const hourMs = 3_600_000;
     const overview: CostOverview = {
       scopeCoverage: {
@@ -22,8 +22,8 @@ describe("projectHomeCost", () => {
       },
       summary: {
         availability: "available",
-        hourlyCost: 1,
-        monthlyProjection: 720,
+        hourlyCost: 1_000_000,
+        monthlyProjection: 730_000_000,
         storageCost: null,
         idleCost: null,
         efficiency: null,
@@ -48,7 +48,23 @@ describe("projectHomeCost", () => {
 
     const projection = projectHomeCost(overview, 0, 30 * 24 * hourMs);
 
-    expect(projection.periodTotalMicros).toBe(720_000_000);
+    expect(projection.periodTotalMicros).toBe(730_000_000);
+    expect(projection.periodTotalMicros).toBe(overview.summary.monthlyProjection);
     expect(projection.periodTotalMicros).not.toBe(168_000_000);
+    expect(projection.values).toEqual([1, 1]);
+
+    const summaryOnly = projectHomeCost({
+      ...overview,
+      trend: {
+        availability: "unavailable",
+        timeRange: "7d",
+        currency: null,
+        series: [],
+        reasonCodes: ["cost_trend_history_insufficient"],
+      },
+    }, 0, 30 * 24 * hourMs);
+    expect(summaryOnly.periodTotalMicros).toBe(730_000_000);
+    expect(summaryOnly.changePercent).toBeNull();
+    expect(summaryOnly.values).toEqual([]);
   });
 });

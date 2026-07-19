@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { ClusterProviderIcon } from "../../features/cluster-scope/ClusterProviderIcon";
 import type {
   HomeClusterChoice,
+  HomeClusterProvider,
   HomeConnectionState,
   HomeUsageSnapshot,
 } from "../../features/home/homeContract";
@@ -59,6 +60,7 @@ export function ClusterCard({
   const tone = incidents != null && incidents > 0
     ? "critical"
     : cluster.health ?? connectionTones[cluster.connectionState];
+  const platform = clusterPlatformLabel(cluster.provider);
 
   useEffect(() => {
     const card = cardRef.current;
@@ -121,14 +123,12 @@ export function ClusterCard({
                 </CardTitle>
                 {isProductionEnvironment(cluster.environment) ? (
                   <span className="shrink-0 rounded-sm border border-tint-warn-border bg-tint-warn-bg px-1.5 py-px text-micro font-semibold text-tint-warn-fg">
-                    prod
+                    {t("clusters.card.environment.productionShort")}
                   </span>
                 ) : null}
               </span>
               <p className="mt-0.5 truncate font-mono text-caption-2 text-caption-foreground">
-                {cluster.kubernetesVersion
-                  ? t("clusters.card.kubernetesVersion", { version: cluster.kubernetesVersion })
-                  : t("clusters.card.kubernetesVersionUnavailable")}
+                {platform} · {cluster.kubernetesVersion ?? t("clusters.card.kubernetesVersionUnavailable")}
               </p>
             </span>
             {incidents != null && incidents > 0 ? (
@@ -136,7 +136,7 @@ export function ClusterCard({
                 {t("clusters.card.criticalLabel")} {formatNumber(incidents)}
               </span>
             ) : (
-              <StatusPill pulse={tone === "healthy"} tone={tone} />
+              <StatusPill label={tone === "healthy" ? t("clusters.card.active") : undefined} pulse={tone === "healthy"} tone={tone} />
             )}
           </div>
         </CardHeader>
@@ -168,7 +168,7 @@ export function ClusterCard({
               value={usage?.cpuPercent ?? null}
             />
             <UsageBar
-              label={t("home.metric.memory")}
+              label={t("clusters.card.memoryShort")}
               unavailableLabel={t("common.value.unavailable")}
               value={usage?.memoryPercent ?? null}
             />
@@ -216,6 +216,15 @@ export function ClusterCard({
       ) : null}
     </Card>
   );
+}
+
+function clusterPlatformLabel(provider: HomeClusterProvider): string {
+  if (provider === "eks") return "Amazon EKS";
+  if (provider === "aks") return "Azure AKS";
+  if (provider === "gke") return "Google GKE";
+  if (provider === "kind") return "kind";
+  if (provider === "onprem") return "On-premises Kubernetes";
+  return "Kubernetes";
 }
 
 function UsageBar({

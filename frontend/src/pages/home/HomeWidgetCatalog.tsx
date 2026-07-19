@@ -2,50 +2,8 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { UnifiedFilterController, UnifiedFilterState } from "../../features/filters/filterContract";
 import { serializeProductFilterUrl } from "../../features/filters/filterUrl";
 import type { ResourcesFilterResourceItem } from "../../features/resources/resourcesFilterContract";
-import { useI18n, type TranslationFunction } from "../../shared/i18n";
-import { Button } from "../../shared/ui/primitives/button";
-import { Surface } from "../../shared/ui/Surface";
-import {
-  HOME_WIDGET_IDS,
-  type HomeBoardPreferences,
-  type HomeWidgetId,
-} from "./homeBoardPreferences";
-
-export function WidgetCatalog({
-  onToggle,
-  preferences,
-}: {
-  onToggle: (id: HomeWidgetId) => void;
-  preferences: HomeBoardPreferences;
-}) {
-  const filter = useUnifiedFilter();
-  const { t } = useI18n();
-  return (
-    <Surface aria-labelledby="home-widget-catalog" className="grid gap-3 p-4">
-      <h2 className="text-body-strong" id="home-widget-catalog">
-        {t("resources.catalog.title")}
-      </h2>
-      <div className="flex flex-wrap gap-2">
-        {HOME_WIDGET_IDS.map((id) => {
-          const definition = widgetDefinition(id, t, filter);
-          const selected = preferences.visible.includes(id);
-          return (
-            <Button
-              aria-pressed={selected}
-              key={id}
-              onClick={() => onToggle(id)}
-              size="sm"
-              type="button"
-              variant={selected ? "default" : "outline"}
-            >
-              {definition.title}
-            </Button>
-          );
-        })}
-      </div>
-    </Surface>
-  );
-}
+import type { TranslationFunction } from "../../shared/i18n";
+import type { HomeWidgetId } from "./homeBoardPreferences";
 
 export function widgetDefinition(
   id: HomeWidgetId,
@@ -63,46 +21,46 @@ export function widgetDefinition(
   const cost = filter.navigationHref("/cost");
   const definitions = {
     W2: {
-      description: t("issues.surface.visibility.label"),
+      description: t("shell.home.widget.issues.description"),
       href: issues,
       span: "col-span-6 min-[1024px]:col-span-3",
-      title: t("issues.surface.list"),
+      title: t("shell.home.widget.issues"),
     },
     W3: {
-      description: t("workflows.sync.description"),
+      description: t("shell.home.widget.repositorySync.description"),
       href: deploy,
       span: "col-span-6 min-[1024px]:col-span-3",
-      title: t("workflows.sync.table.status"),
+      title: t("shell.home.widget.repositorySync"),
     },
     W4: {
-      description: t("timeline.description"),
+      description: t("shell.home.widget.activityTrend.description"),
       href: timeline,
       span: "col-span-6 min-[1024px]:col-span-6",
-      title: t("timeline.toolbar.activity"),
+      title: t("shell.home.widget.activityTrend"),
     },
     W5: {
-      description: t("metrics.preset.namespacePodCount.description"),
+      description: t("shell.home.widget.namespacePods.description"),
       href: resources,
       span: "col-span-6 min-[1024px]:col-span-3",
-      title: t("metrics.preset.namespacePodCount.name"),
+      title: t("shell.home.widget.namespacePods"),
     },
     W6: {
-      description: t("resources.catalog.description"),
+      description: t("shell.home.widget.attentionResources.description"),
       href: criticalResources,
       span: "col-span-6 min-[1024px]:col-span-6",
-      title: `${t("status.tone.critical")} · ${t("resources.catalog.title")}`,
+      title: t("shell.home.widget.attentionResources"),
     },
     W7: {
-      description: t("cost.description"),
+      description: t("shell.home.widget.cost.description"),
       href: cost,
       span: "col-span-6 min-[1024px]:col-span-3",
-      title: t("cost.summary.title"),
+      title: t("shell.home.widget.cost"),
     },
     W8: {
-      description: t("timeline.description"),
+      description: t("shell.home.widget.recentChanges.description"),
       href: timeline,
       span: "col-span-6 min-[1024px]:col-span-12",
-      title: t("issues.recentChanges.title"),
+      title: t("shell.home.widget.recentChanges"),
     },
   } as const;
   return definitions[id];
@@ -144,7 +102,7 @@ function criticalResourceState(state: UnifiedFilterState): UnifiedFilterState {
     ...state,
     resources: {
       ...state.resources,
-      health: ["critical"],
+      health: ["critical", "warning"],
       includeDeleted: false,
       query: "",
     },

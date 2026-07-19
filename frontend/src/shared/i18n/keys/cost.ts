@@ -54,6 +54,7 @@ export type CostMessageKey =
   | "cost.trend.range.6h"
   | "cost.trend.range.24h"
   | "cost.trend.range.7d"
+  | "cost.trend.range.home30d"
   | "cost.workload.title"
   | "cost.workload.current.title"
   | "cost.workload.current.description"

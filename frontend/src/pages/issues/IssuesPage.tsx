@@ -152,6 +152,7 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
         clusterId={clusterId}
         copy={copy}
         filters={issueFilters}
+        initialIssueId={filters.detail.detail}
         port={port}
         recoverySelection={{ state: "enabled" }}
       />

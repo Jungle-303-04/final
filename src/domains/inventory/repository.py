@@ -2199,6 +2199,56 @@ class InventoryRepository(DatabaseConnection):
                 entry["last_seen_at"] = seen
         return rollup
 
+    def fleet_inventory_nodes(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str] | None = None,
+    ) -> dict[str, list[JsonObject]]:
+        """Return node summaries from each cluster's latest committed inventory cut."""
+
+        if cluster_ids is not None and not cluster_ids:
+            return {}
+        table = ClusterInventoryResourceRecord.__table__
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        latest_snapshot_id = (
+            select(snapshots.c.snapshot_id)
+            .where(
+                snapshots.c.workspace_id == workspace_id,
+                snapshots.c.cluster_id == table.c.cluster_id,
+                snapshots.c.status != "ignored_stale",
+                live_inventory_snapshot_clause(snapshots),
+            )
+            .order_by(snapshots.c.collected_at.desc(), snapshots.c.created_at.desc())
+            .limit(1)
+            .correlate(table)
+            .scalar_subquery()
+        )
+        statement = select(table.c.cluster_id, table.c.summary).where(
+            table.c.workspace_id == workspace_id,
+            table.c.resource_type == NODE_RESOURCE_TYPE,
+            table.c.deleted_at.is_(None),
+            table.c.snapshot_id == latest_snapshot_id,
+        )
+        if cluster_ids is not None:
+            statement = statement.where(table.c.cluster_id.in_(cluster_ids))
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        result: dict[str, list[JsonObject]] = {}
+        for row in rows:
+            summary = row.get("summary")
+            if not isinstance(summary, dict):
+                continue
+            # Keep the metric observation proof adjacent to the fallback value. Consumers
+            # must fail closed when this timestamp is absent or outside their freshness
+            # policy; the inventory resource's generic observed_at is not metric evidence.
+            result.setdefault(str(row["cluster_id"]), []).append(
+                {
+                    "summary": dict(summary),
+                    "metrics_observed_at": summary.get("metrics_observed_at"),
+                }
+            )
+        return result
+
     def latest_cluster_usage_rollups(
         self,
         workspace_id: str,

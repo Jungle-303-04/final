@@ -28,7 +28,10 @@ describe("MultiLine", () => {
 
     fireEvent.keyDown(chart, { key: "ArrowLeft" });
     expect(screen.getByText("bucket-0")).toBeTruthy();
-    expect(screen.getByText("1")).toBeTruthy();
+    const annotationId = chart.getAttribute("aria-describedby");
+    expect(annotationId).toBeTruthy();
+    expect(document.getElementById(annotationId!)?.textContent).toContain("임계 1");
+    expect(screen.getByText("2")).toBeTruthy();
     expect(chart.hasAttribute("aria-describedby")).toBe(true);
     expect(container.querySelector("[data-slot='chart'] > style")?.textContent)
       .toContain("--color-series0: var(--color-primary)");

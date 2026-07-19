@@ -32,9 +32,9 @@ describe("HomePage optional widgets", () => {
     const ports = homeBoardPorts();
     renderHome(homePort(), ["/"], vi.fn(), "ko", ports);
 
-    expect(await screen.findByRole("heading", { name: "Namespace별 Pod 수" })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "임계 · 리소스 종류" })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "비용 요약" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "네임스페이스 파드 분포" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "장애·주의 리소스" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "비용" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "최근 변경" })).toBeTruthy();
     await waitFor(() => {
       expect(ports.inventory).toHaveBeenCalledWith(
@@ -159,10 +159,15 @@ describe("HomePage optional widgets", () => {
       homeBoardPorts({ inventory }),
     );
 
-    const heading = await screen.findByRole("heading", { name: "Namespace별 Pod 수" });
+    const heading = await screen.findByRole("heading", { name: "네임스페이스 파드 분포" });
     const widget = heading.closest<HTMLElement>("[data-slot='widget-frame']")!;
     expect(await within(widget).findByText("shop")).toBeTruthy();
     expect(within(widget).getByText("일부 데이터")).toBeTruthy();
+    const namespaceLink = within(widget).getByRole("link", { name: "shop · 12 · 100%" });
+    const namespaceHref = new URL(namespaceLink.getAttribute("href")!, "https://product.test");
+    expect(namespaceHref.searchParams.get("clusters")).toBe("cluster-1");
+    expect(namespaceHref.searchParams.get("namespaces")).toBe("cluster-1/shop");
+    expect(namespaceHref.searchParams.get("namespaces")).not.toContain("kubernetes-ops/shop");
     expect(inventory).toHaveBeenCalledTimes(2);
   });
 
@@ -193,13 +198,41 @@ describe("HomePage optional widgets", () => {
     );
 
     expect(await screen.findByRole("img", { name: "Namespace별 Pod 수" })).toBeTruthy();
-    expect(screen.getByText("shop")).toBeTruthy();
+    const namespaceLink = screen.getByRole("link", { name: "shop · 12 · 100%" });
+    const namespaceHref = new URL(namespaceLink.getAttribute("href")!, "https://product.test");
+    expect(namespaceHref.pathname).toBe("/resources");
+    expect(namespaceHref.searchParams.get("clusters")).toBe("cluster-1");
+    expect(namespaceHref.searchParams.get("namespaces")).toBe("cluster-1/shop");
     expect(inventory).toHaveBeenCalledWith("cluster-1", ["shop"], expect.any(AbortSignal));
   });
 
-  it("loads default-visible W6 from the scoped critical resource adapter and opens the D3 detail", async () => {
+  it("prioritizes critical before warning resources and keeps each D3 detail filter truthful", async () => {
     const listResourcePage = vi.fn().mockResolvedValue({
       items: [{
+        resource: {
+          id: "resource-2",
+          identityStability: "uid",
+          inventoryKey: "inventory-2",
+          uid: "uid-2",
+          clusterId: "cluster-1",
+          resourceType: "pod",
+          apiVersion: "v1",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-1",
+          status: "Pending",
+          health: "warning",
+          healthStatus: "Pending",
+          facts: { type: "generic" },
+          observedAt: "2026-07-19T01:01:00Z",
+          firstSeenAt: null,
+          lastSeenAt: "2026-07-19T01:01:00Z",
+          deletedAt: null,
+        },
+        cluster: { clusterId: "cluster-1", name: "prod", provider: "eks" },
+        applicationIds: ["checkout"],
+        applicationBindingCompleteness: "exact",
+      }, {
         resource: {
           id: "resource-1",
           identityStability: "uid",
@@ -227,7 +260,7 @@ describe("HomePage optional widgets", () => {
       nextCursor: null,
       hasMore: false,
       counts: {
-        filteredCount: 1,
+        filteredCount: 2,
         unfilteredCount: 10,
         filteredCountCompleteness: "exact",
         unfilteredCountCompleteness: "exact",
@@ -245,7 +278,7 @@ describe("HomePage optional widgets", () => {
     });
     renderHome(
       homePort(),
-      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop&applications=checkout"],
+      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop"],
       vi.fn(),
       "ko",
       homeBoardPorts({ resources: { listResourcePage } }),
@@ -256,17 +289,35 @@ describe("HomePage optional widgets", () => {
     expect(href.searchParams.get("resources.health")).toBe("critical");
     expect(href.searchParams.get("detail")).toBe("Pod/shop/checkout-api-0");
     expect(href.searchParams.get("namespaces")).toBe("cluster-1/shop");
+    const warningRow = screen.getByRole("link", { name: "Pod checkout-api-1" });
+    const warningHref = new URL(warningRow.getAttribute("href")!, "https://product.test");
+    expect(warningHref.searchParams.get("resources.health")).toBe("warning");
+    expect(warningRow.querySelector(".bg-status-warning")).toBeTruthy();
+    const attentionList = screen.getByRole("list", { name: "장애·주의 리소스" });
+    expect(within(attentionList).getAllByRole("link").map((link) => link.textContent))
+      .toEqual(expect.arrayContaining([expect.stringContaining("checkout-api-0"), expect.stringContaining("checkout-api-1")]));
+    expect(within(attentionList).getAllByRole("link")[0]?.textContent).toContain("checkout-api-0");
+    const attentionWidget = screen.getByRole("region", { name: "장애·주의 리소스" });
+    const viewAll = new URL(
+      within(attentionWidget).getByRole("link", { name: "전체 보기" }).getAttribute("href")!,
+      "https://product.test",
+    );
+    expect(viewAll.searchParams.get("resources.health")).toBe("critical,warning");
+    expect(listResourcePage).toHaveBeenCalledTimes(1);
     expect(listResourcePage).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ clusters: ["cluster-1"] }),
-        resources: expect.objectContaining({ health: ["critical"], includeDeleted: false }),
+        resources: expect.objectContaining({
+          health: ["critical", "warning"],
+          includeDeleted: false,
+        }),
       }),
       { limit: 5 },
       expect.any(AbortSignal),
     );
   });
 
-  it("renders default-visible W7 for 30d from a bounded 7d source projection and scoped namespaces", async () => {
+  it("labels W7 as a monthly projection and discloses the bounded 7d observation behind a 30d selection", async () => {
     const ports = homeBoardPorts();
     const getOverview = vi.mocked(ports.cost.getOverview);
     renderHome(
@@ -282,6 +333,9 @@ describe("HomePage optional widgets", () => {
     expect(bars.querySelector(":scope > style")?.textContent).toContain(
       "--color-value: var(--color-status-warning)",
     );
+    expect(screen.getByText("월간 예상 비용")).toBeTruthy();
+    expect(screen.getByText("비용률 추세 · 30일 선택 · 최근 7일 관측")).toBeTruthy();
+    expect(bars.closest("[data-slot='mini-bars']")?.children).toHaveLength(1);
     expect(getOverview).toHaveBeenCalledWith({
       clusterIds: ["cluster-1"],
       namespaces: ["cluster-1/shop"],

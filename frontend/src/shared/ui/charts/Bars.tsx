@@ -27,6 +27,7 @@ const MINI_BAR_FLOOR = 1 / 16;
 
 function compactBarConfig(tone: ChartTone): ChartConfig {
   return {
+    inactive: { color: "var(--color-muted)" },
     unavailable: { color: "var(--color-caption-foreground)" },
     value: { color: chartToneColor(tone) },
   };
@@ -174,17 +175,27 @@ export function RatioBar({
 export function MiniBars({
   ariaLabel,
   className,
+  currentIndex,
+  labels,
   max,
   tone = "primary",
   values,
 }: {
   ariaLabel: string;
   className?: string;
+  currentIndex?: number;
+  labels?: readonly string[];
   max?: number;
   tone?: ChartTone;
   values: readonly (null | number)[];
 }) {
   const reducedMotion = usePrefersReducedMotion();
+  const effectiveCurrentIndex = currentIndex !== undefined &&
+      Number.isInteger(currentIndex) &&
+      currentIndex >= 0 &&
+      currentIndex < values.length
+    ? currentIndex
+    : null;
   const ceiling = finitePositive(
     max,
     Math.max(
@@ -197,6 +208,7 @@ export function MiniBars({
   const rows = values.map((value, index) => {
     const ratio = normalizedRatio(value, ceiling);
     return {
+      current: index === effectiveCurrentIndex,
       index,
       unavailable: ratio == null,
       value: ratio == null ? MINI_BAR_FLOOR : Math.max(MINI_BAR_FLOOR, ratio),
@@ -204,35 +216,54 @@ export function MiniBars({
   });
 
   return (
-    <ChartContainer
-      aria-label={ariaLabel}
-      className={cn("h-14 w-full aspect-auto", className)}
-      config={compactBarConfig(tone)}
-      data-state={rows.some((row) => row.unavailable) ? "partial" : "measured"}
-      role="img"
-    >
-      <BarChart barCategoryGap={2} data={rows} margin={CHART_MARGIN}>
-        <XAxis dataKey="index" hide type="category" />
-        <YAxis domain={NORMALIZED_DOMAIN} hide type="number" />
-        <Bar
-          {...RECHARTS_DRAW_ANIMATION}
-          dataKey="value"
-          fill="var(--color-value)"
-          isAnimationActive={!reducedMotion}
-          radius={[1, 1, 0, 0]}
-        >
+    <div className={cn("grid min-w-0 gap-1", className)} data-slot="mini-bars">
+      <ChartContainer
+        aria-label={ariaLabel}
+        className={cn(labels ? "h-11" : "h-14", "w-full aspect-auto")}
+        config={compactBarConfig(tone)}
+        data-state={rows.some((row) => row.unavailable) ? "partial" : "measured"}
+        role="img"
+      >
+        <BarChart barCategoryGap={2} data={rows} margin={CHART_MARGIN}>
+          <XAxis dataKey="index" hide type="category" />
+          <YAxis domain={NORMALIZED_DOMAIN} hide type="number" />
+          <Bar
+            {...RECHARTS_DRAW_ANIMATION}
+            dataKey="value"
+            fill="var(--color-value)"
+            isAnimationActive={!reducedMotion}
+            radius={[1, 1, 0, 0]}
+          >
+            {rows.map((row) => (
+              <Cell
+                fill={row.unavailable
+                  ? "var(--color-unavailable)"
+                  : effectiveCurrentIndex === null || row.current
+                    ? "var(--color-value)"
+                    : "var(--color-inactive)"}
+                fillOpacity={row.unavailable ? 0.45 : 1}
+                key={`${row.index}-${String(values[row.index])}`}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ChartContainer>
+      {labels ? (
+        <div aria-hidden="true" className="flex min-w-0 gap-0.5">
           {rows.map((row) => (
-            <Cell
-              fill={row.unavailable
-                ? "var(--color-unavailable)"
-                : "var(--color-value)"}
-              fillOpacity={row.unavailable ? 0.45 : 1}
-              key={`${row.index}-${String(values[row.index])}`}
-            />
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-center font-mono text-micro text-caption-foreground",
+                row.current && "font-bold text-foreground",
+              )}
+              key={row.index}
+            >
+              {labels[row.index] ?? ""}
+            </span>
           ))}
-        </Bar>
-      </BarChart>
-    </ChartContainer>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

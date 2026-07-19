@@ -56,6 +56,7 @@ export const costEn = {
   "cost.trend.range.6h": "6 hours",
   "cost.trend.range.24h": "24 hours",
   "cost.trend.range.7d": "7 days",
+  "cost.trend.range.home30d": "30-day view · latest 7 days observed",
   "cost.workload.title": "Cost",
   "cost.workload.current.title": "Current allocation and use",
   "cost.workload.current.description": "Server-observed allocation and usage for this workload.",

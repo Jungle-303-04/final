@@ -11,7 +11,7 @@ health 판정 규칙(결정적, 단위 테스트로 고정):
 - pod/node/workload 상태 — inventory read model(cluster_inventory_resources) 롤업.
   inventory 에 pod/node 행이 없으면 최신 usage 샘플(pod_running 등)로 대체.
 - restarts_recent — 최신 usage 샘플 2개의 restart_total 델타(음수는 0, 샘플<2 이면 0).
-- cpu_pct/mem_pct — usage 샘플에 실측 값이 있을 때만(없으면 None, 합성 금지).
+- cpu_pct/mem_pct — usage 샘플 우선, 없으면 inventory node 실측 비율 평균(둘 다 없으면 None).
 - open_incidents — rca_timeline 에서 실제 탐지 이후 OPEN_INCIDENT_STATUSES logical incident 수.
 - last_seen_at — agent 상태 → inventory 최근 관측 → usage 샘플 순으로 첫 값.
 """
@@ -22,6 +22,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -61,7 +62,7 @@ from domains.target.router import (
 )
 from domains.traffic.observation_projection import traffic_overview
 from packages.config.certificate_expiry import certificate_expiry_warning_seconds
-from packages.config.refresh_policies import integral_refresh_after_seconds
+from packages.config.refresh_policies import browser_refresh_policy, integral_refresh_after_seconds
 from packages.config.settings import env
 from packages.contracts.checks.settings import ChecksSettingsPolicy
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -486,6 +487,12 @@ def build_fleet_summary(
     ]
     cluster_ids = {str(cluster["cluster_id"]) for cluster in registrations}
     inventory = db.fleet_inventory_rollup(workspace_id, cluster_ids) if cluster_ids else {}
+    fleet_node_reader = getattr(db, "fleet_inventory_nodes", None)
+    inventory_nodes = (
+        fleet_node_reader(workspace_id, cluster_ids)
+        if cluster_ids and callable(fleet_node_reader)
+        else {}
+    )
     usage = db.latest_cluster_usage_rollups(workspace_id, cluster_ids) if cluster_ids else {}
     open_counts = db.count_open_rca_incidents(workspace_id, cluster_ids) if cluster_ids else {}
     agents = db.latest_cluster_agent_statuses(workspace_id, cluster_ids) if cluster_ids else {}
@@ -497,6 +504,7 @@ def build_fleet_summary(
             usage.get(str(cluster["cluster_id"]), []),
             open_counts.get(str(cluster["cluster_id"]), 0),
             agents.get(str(cluster["cluster_id"])),
+            inventory_nodes.get(str(cluster["cluster_id"]), []),
         )
         for cluster in registrations
     ]
@@ -1055,6 +1063,7 @@ def fleet_cluster_item(
     samples: list[JsonObject],
     open_incidents: int,
     agent: JsonObject | None,
+    inventory_nodes: list[JsonObject] | None = None,
 ) -> FleetClusterSummaryItem:
     latest_usage = _latest_usage(samples)
     pods_running, pods_total = _pod_counts(rollup, latest_usage)
@@ -1079,8 +1088,18 @@ def fleet_cluster_item(
         nodes_total=nodes_total,
         open_incidents=open_incidents,
         restarts_recent=restarts_recent,
-        cpu_pct=usage_pct(latest_usage, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)),
-        mem_pct=usage_pct(latest_usage, ("mem_pct", "memory_pct"), ("mem_ratio", "memory_ratio")),
+        cpu_pct=preferred_usage_pct(
+            latest_usage,
+            inventory_nodes or [],
+            ("cpu_pct", "cpu_percent"),
+            ("cpu_ratio",),
+        ),
+        mem_pct=preferred_usage_pct(
+            latest_usage,
+            inventory_nodes or [],
+            ("mem_pct", "memory_pct"),
+            ("mem_ratio", "memory_ratio"),
+        ),
         last_seen_at=_last_seen_at(rollup, samples, agent),
     )
 
@@ -1116,6 +1135,68 @@ def usage_pct(
         if value is not None:
             return round(value * 100.0, 1)
     return None
+
+
+def preferred_usage_pct(
+    latest_usage: JsonObject,
+    inventory_nodes: list[JsonObject],
+    pct_keys: tuple[str, ...],
+    ratio_keys: tuple[str, ...],
+) -> float | None:
+    """Prefer the usage rollup, then average observed inventory node measurements."""
+
+    measured = usage_pct(latest_usage, pct_keys, ratio_keys)
+    if measured is not None:
+        return measured
+    values = [
+        value
+        for node in inventory_nodes
+        if (value := inventory_usage_pct(node, pct_keys, ratio_keys)) is not None
+    ]
+    return round(sum(values) / len(values), 1) if values else None
+
+
+def inventory_usage_pct(
+    evidence: JsonObject,
+    pct_keys: tuple[str, ...],
+    ratio_keys: tuple[str, ...],
+) -> float | None:
+    """Accept only fresh, timestamped inventory collector measurements."""
+
+    summary_value = evidence.get("summary")
+    summary = summary_value if isinstance(summary_value, dict) else evidence
+    observed_at = _optional_text(
+        evidence.get("metrics_observed_at") or summary.get("metrics_observed_at")
+    )
+    if not inventory_metrics_are_fresh(observed_at):
+        return None
+    value = usage_pct(summary, pct_keys, ratio_keys)
+    return value if value is not None and isfinite(value) and value >= 0 else None
+
+
+def inventory_metrics_are_fresh(
+    observed_at: str | None,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Apply the canonical Kubernetes-metrics staleness window, failing closed."""
+
+    if observed_at is None:
+        return False
+    try:
+        parsed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    else:
+        parsed = parsed.astimezone(UTC)
+    current = now or datetime.now(UTC)
+    stale_after = browser_refresh_policy("metrics_kubernetes").stale_after_seconds
+    if stale_after is None:
+        return False
+    age_seconds = (current - parsed).total_seconds()
+    return -stale_after <= age_seconds <= stale_after
 
 
 def workload_health_item(row: JsonObject) -> ClusterWorkloadHealthItem:
@@ -1383,6 +1464,16 @@ def node_summary_item(
     node_info = summary.get("node_info")
     name = str(node.get("name") or "")
     running = sum(1 for pod in pods if str(pod.get("status") or "") == "Running")
+    cpu_pct = resource_usage_pct(
+        latest_usage, "nodes", name, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)
+    )
+    mem_pct = resource_usage_pct(
+        latest_usage,
+        "nodes",
+        name,
+        ("mem_pct", "memory_pct"),
+        ("mem_ratio", "memory_ratio"),
+    )
     return NodeSummaryItem(
         name=name,
         ready=bool(summary.get("ready")) or str(node.get("status") or "") == "Ready",
@@ -1392,13 +1483,13 @@ def node_summary_item(
         ),
         pods_running=running,
         pods_capacity=pod_capacity(summary),
-        cpu_pct=resource_usage_pct(
-            latest_usage, "nodes", name, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)
-        ),
-        mem_pct=resource_usage_pct(
-            latest_usage,
-            "nodes",
-            name,
+        cpu_pct=cpu_pct
+        if cpu_pct is not None
+        else inventory_usage_pct(node, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)),
+        mem_pct=mem_pct
+        if mem_pct is not None
+        else inventory_usage_pct(
+            node,
             ("mem_pct", "memory_pct"),
             ("mem_ratio", "memory_ratio"),
         ),
@@ -1619,7 +1710,8 @@ def incident_matches_pod(incident: JsonObject, pod: JsonObject) -> bool:
 
 
 def _pod_counts(rollup: JsonObject, latest_usage: JsonObject) -> tuple[int, int]:
-    """inventory 롤업 우선, pod 행이 하나도 없으면 usage 샘플 대체."""
+    """Prefer the conservative live read model; use a sample only without inventory rows."""
+
     total = _int_or_zero(rollup.get("pods_total"))
     if total > 0:
         return _int_or_zero(rollup.get("pods_running")), total

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_HOME_BOARD_PREFERENCES,
+  HOME_WIDGET_IDS,
   homeBoardPreferenceKey,
   loadHomeBoardPreferences,
   saveHomeBoardPreferences,
@@ -45,5 +46,17 @@ describe("home board preferences", () => {
       collapsed: [],
     });
     expect(JSON.parse(saved).order).toEqual(["W2", "W3", "W4", "W5", "W6", "W7", "W8"]);
+  });
+
+  it("preserves an explicitly empty board while defaulting a missing visibility field", () => {
+    const empty = {
+      getItem: () => JSON.stringify({ collapsed: [], order: HOME_WIDGET_IDS, visible: [] }),
+    };
+    const legacy = {
+      getItem: () => JSON.stringify({ collapsed: [], order: HOME_WIDGET_IDS }),
+    };
+
+    expect(loadHomeBoardPreferences(empty, "key").visible).toEqual([]);
+    expect(loadHomeBoardPreferences(legacy, "key").visible).toEqual(HOME_WIDGET_IDS);
   });
 });

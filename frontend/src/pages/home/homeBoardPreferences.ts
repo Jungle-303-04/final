@@ -72,11 +72,13 @@ export function useHomeBoardPreferenceDraft(
 function normalizeHomeBoardPreferences(value: unknown): HomeBoardPreferences {
   if (!isRecord(value)) return DEFAULT_HOME_BOARD_PREFERENCES;
   const order = uniqueWidgetIds(value.order);
-  const visible = uniqueWidgetIds(value.visible);
+  const visible = Array.isArray(value.visible)
+    ? uniqueWidgetIds(value.visible)
+    : [...DEFAULT_HOME_BOARD_PREFERENCES.visible];
   const collapsed = uniqueWidgetIds(value.collapsed);
   return {
     order: [...order, ...HOME_WIDGET_IDS.filter((id) => !order.includes(id))],
-    visible: visible.length > 0 ? visible : DEFAULT_HOME_BOARD_PREFERENCES.visible,
+    visible,
     collapsed: collapsed.filter((id) => visible.includes(id)),
   };
 }

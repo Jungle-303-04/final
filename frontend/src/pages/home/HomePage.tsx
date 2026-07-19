@@ -6,6 +6,7 @@ import type {
   ClustersPort,
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import { normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
@@ -24,7 +25,6 @@ import { ClusterConnectDialog } from "../clusters/ClusterConnectDialog";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { HomeWidgetBoard } from "./HomeWidgetBoard";
-import { homeCriticalResourcesHref } from "./HomeWidgetCatalog";
 import type { HomeBoardPorts } from "./useHomeBoardData";
 import {
   projectHomeFleetClusters,
@@ -49,11 +49,7 @@ export function HomePage({
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnectPhase, setDisconnectPhase] = useState<DisconnectPhase>("confirm");
   const [editingBoard, setEditingBoard] = useState(false);
-  const [criticalResourceCount, setCriticalResourceCount] = useState<number | null>(null);
   const [outOfSync, setOutOfSync] = useState<number | null>(null);
-  const updateCriticalResourceCount = useCallback((count: number | null) => {
-    setCriticalResourceCount((current) => current === count ? current : count);
-  }, []);
   const updateOutOfSync = useCallback((count: number | null) => {
     setOutOfSync((current) => current === count ? current : count);
   }, []);
@@ -74,14 +70,23 @@ export function HomePage({
     [allClusters, clusterCards.summaries],
   );
   const boardClusters = useMemo(() => {
-    const requestedClusterIds = new Set(filter.state.common.clusters);
+    const namespaceRefs = normalizeNamespaceRefs(filter.state.common.namespaces);
+    const requestedClusterIds = new Set(
+      namespaceRefs.length > 0
+        ? namespaceRefs.map((namespace) => namespace.clusterId)
+        : filter.state.common.clusters,
+    );
     return requestedClusterIds.size === 0
       ? fleetClusters
       : fleetClusters.filter((cluster) => requestedClusterIds.has(cluster.id));
-  }, [filter.state.common.clusters, fleetClusters]);
+  }, [filter.state.common.clusters, filter.state.common.namespaces, fleetClusters]);
   const fleetUsage = useMemo(
     () => summarizeHomeFleetUsage(boardClusters, clusterCards.overviews),
     [boardClusters, clusterCards.overviews],
+  );
+  const fleetCriticalCount = useMemo(
+    () => exactIncidentSum(boardClusters),
+    [boardClusters],
   );
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
@@ -100,8 +105,8 @@ export function HomePage({
     <ProductPageFrame>
       <HomeFleetHeader
         clusters={boardClusters}
-        criticalCount={boardClusters.length === 0 ? null : criticalResourceCount}
-        criticalHref={homeCriticalResourcesHref(filter)}
+        criticalCount={fleetCriticalCount}
+        criticalHref={filter.navigationHref("/issues")}
         editing={editingBoard}
         fleetUsage={fleetUsage}
         freshness={state.refreshIntervalSeconds === null ? null : (
@@ -125,7 +130,7 @@ export function HomePage({
         period={boardPorts ? boardPeriod : undefined}
       />
       <HomeClusterGrid
-        clusters={fleetClusters}
+        clusters={boardClusters}
         disconnectClusterId={disconnectCluster?.id}
         disconnectPhase={disconnectPhase}
         onDisconnect={canManageClusters ? (cluster) => {
@@ -150,7 +155,6 @@ export function HomePage({
             <HomeWidgetBoard
               clusters={boardClusters}
               editing={editingBoard}
-              onCriticalResourceCountChange={updateCriticalResourceCount}
               onOutOfSyncChange={updateOutOfSync}
               period={boardPeriod}
               ports={boardPorts}
@@ -190,6 +194,17 @@ export function HomePage({
       ) : null}
     </ProductPageFrame>
   );
+}
+
+function exactIncidentSum(clusters: readonly HomeClusterChoice[]): number | null {
+  if (clusters.length === 0) return null;
+  let total = 0;
+  for (const cluster of clusters) {
+    const count = cluster.openIncidentCount ?? cluster.incidentCount;
+    if (count == null) return null;
+    total += count;
+  }
+  return total;
 }
 
 function isResumableDisconnectPhase(phase: DisconnectPhase): boolean {

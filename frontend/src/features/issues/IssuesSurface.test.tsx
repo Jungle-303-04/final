@@ -13,6 +13,22 @@ afterEach(() => {
   });
 });
 describe("IssuesSurface", () => {
+  it("opens the canonical URL-selected issue after the list arrives", async () => {
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        initialIssueId="issue:workspace-1/correlation-1"
+        port={issuesPort()}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    const issue = await screen.findByRole("button", { name: "Elevated response latency" });
+    await screen.findByRole("region", { name: "Incident detail" });
+    expect(issue.getAttribute("aria-current")).toBe("true");
+  });
+
   it("refreshes the incident queue on the exact issues audit cadence only while visible", async () => {
     vi.useFakeTimers();
     const baseline = issuesPort();

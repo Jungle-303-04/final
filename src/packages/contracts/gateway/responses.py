@@ -2234,7 +2234,7 @@ class FleetClusterSummaryItem(StrictModel):
     nodes_total: int = 0
     open_incidents: int = 0
     restarts_recent: int = 0
-    # 실측 활용률(%) — agent usage 롤업에 값이 없으면 None(합성 값 금지).
+    # 실측 활용률(%) — usage 롤업 우선, 최신 inventory node 실측 대체; 둘 다 없으면 None.
     cpu_pct: float | None = None
     mem_pct: float | None = None
     last_seen_at: str | None = None

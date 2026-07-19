@@ -10,7 +10,11 @@ import type {
 } from "../../features/home-activity/homeActivityContract";
 import { activityWindowForPeriod } from "../../features/home-activity/homeActivityWindow";
 import { gitOpsSyncCategory } from "../../features/gitops/gitOpsPresentation";
-import type { GitOpsPort, GitOpsSyncTarget } from "../../features/gitops/gitOpsContract";
+import type {
+  GitOpsPort,
+  GitOpsSyncTarget,
+  ReleaseApplication,
+} from "../../features/gitops/gitOpsContract";
 import type {
   IssueList,
   IssueQueueFacet,
@@ -59,15 +63,18 @@ export interface HomeBoardPorts {
 }
 
 export interface HomeSyncSummary {
+  completeness: "exact" | "partial";
   known: number;
   lastObservedAt: string | null;
   outOfSync: number;
   repositories: number;
   synced: number;
   targets: readonly GitOpsSyncTarget[];
+  unknown: number;
 }
 
 export interface HomeNamespacePods {
+  clusterIds: readonly string[];
   namespace: string;
   pods: number;
 }
@@ -164,10 +171,8 @@ export function useHomeBoardData({
     ],
   );
   const incidents = useAsyncResource(
-    (signal) => {
-      if (scope.applications.length > 0) {
-        return Promise.reject(new Error("issue application scope unavailable"));
-      }
+    async (signal) => {
+      requireSupportedApplicationScope(scope);
       return loadScopedIssues(ports.issues, scope, signal, {
         namespaces: namespaceReferences,
         severities: [],
@@ -178,6 +183,7 @@ export function useHomeBoardData({
   );
   const sync = useAsyncResource(
     async (signal) => {
+      requireSupportedApplicationScope(scope);
       requireClusterScope(clusterIds);
       const [applications, targets] = await Promise.all([
         ports.gitops.listApplications(signal),
@@ -187,36 +193,27 @@ export function useHomeBoardData({
           namespaces: namespaceReferences,
         }),
       ]);
-      const categories = targets.map((target) => gitOpsSyncCategory(target.syncStatus));
-      const synced = categories.filter((category) => category === "synced").length;
-      const outOfSync = categories.filter((category) => category === "out-of-sync").length;
-      const scopedApplicationIds = new Set(targets.flatMap((target) =>
-        target.applicationIds && target.applicationIds.length > 0
-          ? target.applicationIds
-          : [target.applicationId]
-      ));
-      return {
-        known: synced + outOfSync,
-        lastObservedAt: latestObservedAt(targets),
-        outOfSync,
-        repositories: new Set(
-          applications
-            .filter((application) => scopedApplicationIds.has(application.id))
-            .map((application) => application.repository)
-            .filter(Boolean),
-        ).size,
-        synced,
+      const repositorySummary = summarizeRepositorySync(
+        applications.filter((application) => clusterIds.includes(application.clusterId)),
         targets,
+      );
+      return {
+        completeness: repositorySummary.unknown > 0 ? "partial" as const : "exact" as const,
+        known: repositorySummary.synced + repositorySummary.outOfSync,
+        lastObservedAt: latestObservedAt(targets),
+        outOfSync: repositorySummary.outOfSync,
+        repositories: repositorySummary.repositories,
+        synced: repositorySummary.synced,
+        targets,
+        unknown: repositorySummary.unknown,
       };
     },
     [clusterIds, namespaceReferences, ports.gitops, refreshKey, scope.applications],
   );
   const activity = useAsyncResource(
-    (signal) => {
-      if (scope.applications.length > 0) {
-        return Promise.reject(new Error("activity application scope unavailable"));
-      }
-      if (activityQuery === null) return Promise.reject(new Error("activity window unavailable"));
+    async (signal) => {
+      requireSupportedApplicationScope(scope);
+      if (activityQuery === null) throw new Error("activity window unavailable");
       return ports.activity.loadOverview(activityQuery, signal);
     },
     [activityQuery, ports.activity, refreshKey, scope.applications],
@@ -224,6 +221,7 @@ export function useHomeBoardData({
   const namespacePods = useAsyncResource(
     async (signal) => {
       if (!wantsNamespaces) return { incompleteClusterIds: [], items: [] };
+      requireSupportedApplicationScope(scope);
       requireClusterScope(clusterIds);
       const result = await fanOutClusters(scope.clusters, signal, (cluster, clusterSignal) =>
         ports.inventory(cluster.clusterId, cluster.namespaces, clusterSignal)
@@ -231,32 +229,40 @@ export function useHomeBoardData({
       if (result.successes.length === 0 && result.failures.length > 0) {
         throw result.failures[0]!.error;
       }
-      const podsByNamespace = new Map<string, number>();
-      for (const { value } of result.successes) {
+      const podsByNamespace = new Map<string, { clusterIds: Set<string>; pods: number }>();
+      for (const { clusterId, value } of result.successes) {
         for (const namespace of value.namespaces) {
           const pods = namespace.counts
             .filter((count) => count.resource_type === "pod")
             .reduce((sum, count) => sum + count.count, 0);
           if (pods <= 0) continue;
-          podsByNamespace.set(
-            namespace.namespace,
-            (podsByNamespace.get(namespace.namespace) ?? 0) + pods,
-          );
+          const aggregate = podsByNamespace.get(namespace.namespace) ?? {
+            clusterIds: new Set<string>(),
+            pods: 0,
+          };
+          aggregate.clusterIds.add(clusterId);
+          aggregate.pods += pods;
+          podsByNamespace.set(namespace.namespace, aggregate);
         }
       }
       return {
         incompleteClusterIds: result.failures.map((failure) => failure.clusterId),
         items: [...podsByNamespace]
-          .map(([namespace, pods]) => ({ namespace, pods }))
+          .map(([namespace, aggregate]) => ({
+            clusterIds: [...aggregate.clusterIds].sort((left, right) => left.localeCompare(right)),
+            namespace,
+            pods: aggregate.pods,
+          }))
           .sort((left, right) =>
             right.pods - left.pods || left.namespace.localeCompare(right.namespace)
           ),
       };
     },
-    [clusterIds, ports.inventory, refreshKey, scope.clusters, wantsNamespaces],
+    [clusterIds, ports.inventory, refreshKey, scope.applications, scope.clusters, wantsNamespaces],
   );
   const criticalResources = useAsyncResource(
     async (signal) => {
+      requireSupportedApplicationScope(scope);
       requireClusterScope(clusterIds);
       const response = await ports.resources.listResourcePage(
         criticalResourceFilterState(filterState, clusterIds),
@@ -266,14 +272,15 @@ export function useHomeBoardData({
       return {
         filteredCount: response.counts.filteredCount,
         filteredCountCompleteness: response.counts.filteredCountCompleteness,
-        items: response.items.slice(0, 5),
+        items: [...response.items].sort(compareAttentionResourceHealth).slice(0, 5),
       };
     },
-    [clusterIds, filterState, ports.resources, refreshKey],
+    [clusterIds, filterState, ports.resources, refreshKey, scope.applications],
   );
   const cost = useAsyncResource(
     async (signal) => {
       if (!wantsCost) return null;
+      requireSupportedApplicationScope(scope);
       const timeRange = costRangeForPeriod(period);
       if (activityQuery === null) {
         throw new Error("cost period unavailable");
@@ -292,12 +299,14 @@ export function useHomeBoardData({
       period,
       ports.cost,
       refreshKey,
+      scope.applications,
       wantsCost,
     ],
   );
   const timeline = useAsyncResource(
     async (signal) => {
       if (!wantsTimeline) return null;
+      requireSupportedApplicationScope(scope);
       if (activityQuery === null) throw new TimelineFailure("invalid-request");
       const capabilities = ports.timeline.readCapabilities
         ? await ports.timeline.readCapabilities(signal, timelineWorkspaceCacheKey(scope))
@@ -327,6 +336,60 @@ export function useHomeBoardData({
     namespaces: namespacePods,
     sync,
     timeline,
+  };
+}
+
+function compareAttentionResourceHealth(
+  left: ResourcesFilterResourceItem,
+  right: ResourcesFilterResourceItem,
+): number {
+  const rank = (item: ResourcesFilterResourceItem) =>
+    item.resource.health === "critical" ? 0 : item.resource.health === "warning" ? 1 : 2;
+  return rank(left) - rank(right)
+    || left.resource.inventoryKey.localeCompare(right.resource.inventoryKey);
+}
+
+function summarizeRepositorySync(
+  applications: readonly ReleaseApplication[],
+  targets: readonly GitOpsSyncTarget[],
+): { outOfSync: number; repositories: number; synced: number; unknown: number } {
+  const repositoryByApplicationId = new Map(
+    applications
+      .map((application) => [application.id, application.repository.trim()] as const)
+      .filter(([, repository]) => repository.length > 0),
+  );
+  const states = new Map<string, "out-of-sync" | "synced" | "unknown" | "unobserved">(
+    [...new Set(repositoryByApplicationId.values())].map((repository) => [
+      repository,
+      "unobserved",
+    ]),
+  );
+  for (const target of targets) {
+    const category = gitOpsSyncCategory(target.syncStatus);
+    const applicationIds = new Set(
+      target.applicationIds && target.applicationIds.length > 0
+        ? target.applicationIds
+        : [target.applicationId],
+    );
+    for (const applicationId of applicationIds) {
+      const repository = repositoryByApplicationId.get(applicationId);
+      if (!repository) continue;
+      const current = states.get(repository);
+      if (category === "out-of-sync") {
+        states.set(repository, "out-of-sync");
+      } else if (category === "synced") {
+        if (current === "unobserved") states.set(repository, "synced");
+      } else if (current !== "out-of-sync") {
+        states.set(repository, "unknown");
+      }
+    }
+  }
+  const values = [...states.values()];
+  return {
+    outOfSync: values.filter((state) => state === "out-of-sync").length,
+    repositories: states.size,
+    synced: values.filter((state) => state === "synced").length,
+    unknown: values.filter((state) => state === "unknown" || state === "unobserved").length,
   };
 }
 
@@ -529,6 +592,12 @@ function timelineWorkspaceCacheKey(scope: HomeBoardScope): string {
 
 function requireClusterScope(clusterIds: readonly string[]): void {
   if (clusterIds.length === 0) throw new Error("home fleet scope unavailable");
+}
+
+function requireSupportedApplicationScope(scope: HomeBoardScope): void {
+  if (scope.applications.length > 0) {
+    throw new Error("home application scope unavailable");
+  }
 }
 
 function throwIfAborted(signal: AbortSignal): void {

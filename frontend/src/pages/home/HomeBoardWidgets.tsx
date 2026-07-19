@@ -47,7 +47,7 @@ export function IncidentWidget({
                 ariaLabel: issueTitle(issue),
                 description: issueResourceLabel(issue) ?? t("home.issue.resourceUnknown"),
                 displayValue: elapsedLabel(issue.updatedAt, locale),
-                href,
+                href: issueDetailHref(href, issue.id),
                 id: issue.id,
                 indicator: "dot",
                 label: issueTitle(issue),
@@ -77,11 +77,17 @@ export function SyncWidget({
         if (data.known === 0 && data.repositories === 0) return <WidgetEmpty href={href} />;
         return (
           <div className="grid gap-2.5">
+            {data.completeness === "partial" ? (
+              <p className="text-caption text-muted-foreground" role="status">
+                {t("common.state.partial")} · {t("common.state.unknown")} {formatNumber(data.unknown)}
+              </p>
+            ) : null}
             <RatioBar
               ariaLabel={t("workflows.sync.table.status")}
               segments={[
                 { id: "synced", tone: "healthy", value: data.synced },
                 { id: "out-of-sync", tone: "warning", value: data.outOfSync },
+                { id: "unknown", tone: "unknown", value: data.unknown },
               ]}
             />
             {([
@@ -93,7 +99,9 @@ export function SyncWidget({
                 <b className="font-mono tabular-nums text-foreground">{formatNumber(row.count)}</b>
                 {row.label}
                 <span className="ml-auto font-mono text-caption-2 tabular-nums text-caption-foreground">
-                  {data.known > 0 ? `${formatNumber(Math.round((row.count / data.known) * 100))}%` : "—"}
+                  {data.repositories > 0
+                    ? `${formatNumber(Math.round((row.count / data.repositories) * 100))}%`
+                    : "—"}
                 </span>
               </span>
             ))}
@@ -139,7 +147,7 @@ export function ActivityWidget({
             },
             {
               id: "critical",
-              label: t("status.tone.critical"),
+              label: t("clusters.card.criticalLabel"),
               tone: "critical",
               values: data.buckets.map((bucket) => bucket.critical),
             },
@@ -204,15 +212,6 @@ export function WidgetEmpty({ href }: { href: string }) {
   );
 }
 
-export function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="grid min-w-0 gap-1">
-      <span className="text-caption text-caption-foreground">{label}</span>
-      <strong className="truncate font-mono text-body-strong tabular-nums">{value}</strong>
-    </span>
-  );
-}
-
 function elapsedLabel(value: string | null, locale: string): string {
   if (!value) return "—";
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1_000));
@@ -221,4 +220,9 @@ function elapsedLabel(value: string | null, locale: string): string {
   if (elapsedSeconds < 3_600) return formatter.format(-Math.floor(elapsedSeconds / 60), "minute");
   if (elapsedSeconds < 86_400) return formatter.format(-Math.floor(elapsedSeconds / 3_600), "hour");
   return formatter.format(-Math.floor(elapsedSeconds / 86_400), "day");
+}
+
+function issueDetailHref(baseHref: string, issueId: string): string {
+  const separator = baseHref.includes("?") ? "&" : "?";
+  return `${baseHref}${separator}detail=${encodeURIComponent(issueId)}`;
 }

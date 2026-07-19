@@ -1,4 +1,4 @@
-import { Box, CircleAlert, Cpu, GitBranch, Plus, Server, SlidersHorizontal } from "lucide-react";
+import { Activity, Box, Cpu, Pencil, Plus, Server } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityC
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import type { HomeFleetUsageSummary } from "./useHomeClusterCardsData";
 import { useI18n } from "../../shared/i18n";
+import { GitHubBrandIcon } from "../../shared/ui/brand/BrandIcon";
 import { TintChip } from "../../shared/ui/status";
 import { Button } from "../../shared/ui/primitives/button";
 import { ButtonGroup } from "../../shared/ui/primitives/button-group";
@@ -48,19 +49,19 @@ export function HomeFleetHeader({
       : formatNumber(fleetUsage.podsTotal);
   const criticalChip = (
     <FleetMetric
-      icon={<CircleAlert />}
-      label={t("status.tone.critical")}
+      icon={<Activity />}
+      label={t("clusters.card.criticalLabel")}
       tone={criticalCount == null ? "neutral" : criticalCount > 0 ? "critical" : "healthy"}
       value={criticalCount == null ? "—" : formatNumber(criticalCount)}
     />
   );
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-3">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 xl:flex-nowrap">
       <h1 className="sr-only">{t("home.cluster.available")}</h1>
       <div
         aria-label={t("home.cluster.grid.aria")}
-        className="flex min-w-0 flex-wrap items-center gap-2"
+        className="flex min-w-0 flex-wrap items-center gap-2 xl:flex-nowrap"
         role="group"
       >
         <FleetMetric
@@ -70,23 +71,23 @@ export function HomeFleetHeader({
         />
         <FleetMetric
           icon={<Cpu />}
-          label={t("home.metric.nodes")}
+          label={t("clusters.card.nodesLabel")}
           value={nodes}
         />
         <FleetMetric
           icon={<Box />}
-          label={t("home.metric.pods")}
+          label={t("clusters.card.podsLabel")}
           value={pods}
         />
         <FleetMetric
-          icon={<GitBranch />}
+          icon={<GitHubBrandIcon label={t("shell.brand.github")} />}
           label={t("workflows.sync.status.outOfSync")}
           tone={outOfSync == null ? "neutral" : outOfSync > 0 ? "warning" : "healthy"}
           value={outOfSync == null ? "—" : formatNumber(outOfSync)}
         />
         {criticalHref ? (
           <Link
-            aria-label={`${t("status.tone.critical")} ${
+            aria-label={`${t("clusters.card.criticalLabel")} ${
               criticalCount == null ? "—" : formatNumber(criticalCount)
             }`}
             className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -98,8 +99,8 @@ export function HomeFleetHeader({
           criticalChip
         )}
       </div>
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-        {freshness}
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
+        {freshness ? <div className="shrink-0">{freshness}</div> : null}
         {period && onPeriodChange ? (
           <ButtonGroup aria-label={t("timeline.strip.range")} className="rounded-lg bg-muted p-0.5">
             {(["today", "7d", "30d"] as const).map((value) => (
@@ -119,8 +120,8 @@ export function HomeFleetHeader({
         ) : null}
         {onEdit ? (
           <Button onClick={onEdit} size="sm" type="button" variant="outline">
-            <SlidersHorizontal aria-hidden="true" />
-            {editing ? t("workflows.editor.save") : t("shell.ai.action.edit")}
+            <Pencil aria-hidden="true" />
+            {editing ? t("shell.home.layout.done") : t("shell.home.layout.edit")}
           </Button>
         ) : null}
         {onConnect ? (

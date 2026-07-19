@@ -32,12 +32,14 @@ import { EMPTY_ISSUE_QUEUE_FILTERS } from "./issuesValidation";
 export function IssuesSurface({
   clusterId,
   copy,
+  initialIssueId = null,
   port,
   recoverySelection,
   filters = EMPTY_ISSUE_QUEUE_FILTERS,
 }: {
   clusterId: string | null;
   copy: IssuesSurfaceCopy;
+  initialIssueId?: string | null;
   port: IssuesPort;
   recoverySelection: RecoverySelectionCapability;
   filters?: IssueQueueFilters;
@@ -55,6 +57,7 @@ export function IssuesSurface({
   const [revision, setRevision] = useState(0);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const mutationRef = useRef<AbortController | null>(null);
+  const hydratedInitialIssueRef = useRef<string | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
   const selected = selectedRecord?.scope === clusterId ? selectedRecord.issue : null;
   const selectedCorrelationId = selected?.correlationId ?? null;
@@ -80,6 +83,14 @@ export function IssuesSurface({
     setPanels,
   });
 
+  const selectIssue = useCallback((issue: IssueSummary) => {
+    abortAuditPage();
+    requestDetailFocus(issue.id);
+    setDetailFull(false);
+    setPanels(loadingPanels(issue.incidentId !== null));
+    setSelectedRecord({ scope: clusterId, issue });
+  }, [abortAuditPage, clusterId, requestDetailFocus]);
+
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
@@ -93,6 +104,20 @@ export function IssuesSurface({
         });
         setLastRefreshedAt(Date.now());
         refreshController.acceptSuccess(refreshPolicy);
+        const hydrationKey = initialIssueId === null
+          ? null
+          : `${clusterId ?? ""}\u0000${initialIssueId}`;
+        const initialIssue = initialIssueId === null
+          ? undefined
+          : data.items.find((issue) => issue.id === initialIssueId);
+        if (
+          hydrationKey !== null
+          && initialIssue !== undefined
+          && hydratedInitialIssueRef.current !== hydrationKey
+        ) {
+          hydratedInitialIssueRef.current = hydrationKey;
+          selectIssue(initialIssue);
+        }
         setSelectedRecord((current) => {
           if (current?.scope !== clusterId) return current;
           const latest = data.items.find((issue) => issue.id === current.issue.id);
@@ -116,7 +141,7 @@ export function IssuesSurface({
       },
     );
     return () => controller.abort();
-  }, [clusterId, filters, port, refreshController, revision]);
+  }, [clusterId, filters, initialIssueId, port, refreshController, revision, selectIssue]);
 
   useEffect(() => {
     if (selectedCorrelationId === null) return;
@@ -287,14 +312,6 @@ export function IssuesSurface({
       if (mutationRef.current === controller) mutationRef.current = null;
     });
   }, [panels.recovery.data, port, recoverySelection.state, refreshController, selected]);
-
-  const selectIssue = useCallback((issue: IssueSummary) => {
-    abortAuditPage();
-    requestDetailFocus(issue.id);
-    setDetailFull(false);
-    setPanels(loadingPanels(issue.incidentId !== null));
-    setSelectedRecord({ scope: clusterId, issue });
-  }, [abortAuditPage, clusterId, requestDetailFocus]);
 
   const closeIssue = useCallback(() => {
     const trigger = typeof document === "undefined"

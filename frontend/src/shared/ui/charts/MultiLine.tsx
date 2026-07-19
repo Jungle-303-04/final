@@ -53,6 +53,7 @@ export function MultiLine({
   const selected = activeIndex === null || pointCount === 0
     ? null
     : Math.min(pointCount - 1, Math.max(0, activeIndex));
+  const latestIndex = pointCount > 0 ? pointCount - 1 : null;
   const chartSeries = useMemo(() => series.map((item, index) => ({
     dataKey: `series${index}`,
     item,
@@ -73,11 +74,11 @@ export function MultiLine({
   ])), [chartSeries, labels]);
 
   return (
-    <div className={cn("grid min-w-0 gap-3", className)} data-slot="multi-line">
+    <div className={cn("grid min-w-0 gap-2", className)} data-slot="multi-line">
       <ChartContainer
         aria-describedby={selected === null ? undefined : annotationId}
         aria-label={ariaLabel}
-        className="h-44 w-full aspect-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        className="h-[92px] w-full aspect-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
         config={config}
         onBlur={() => setActiveIndex(null)}
         onFocus={() => setActiveIndex(pointCount === 0 ? null : pointCount - 1)}
@@ -137,9 +138,9 @@ export function MultiLine({
           <span className="inline-flex items-center gap-1.5 text-caption text-caption-foreground" key={item.id}>
             <span aria-hidden="true" className={toneDotClass(item.tone)} />
             <span>{item.label}</span>
-            {selected !== null ? (
+            {latestIndex !== null ? (
               <strong className="font-mono tabular-nums text-foreground">
-                {finiteChartValue(item.values[selected])}
+                {finiteChartValue(item.values[latestIndex])}
               </strong>
             ) : null}
           </span>

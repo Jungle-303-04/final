@@ -46,7 +46,7 @@ describe("ClusterCard", () => {
     expect(counts).toContain("Pods 47 · Critical 1");
     expect(counts).toContain("Namespaces —");
     expect(screen.getByRole("img", { name: "CPU —" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Memory —" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "MEM —" })).toBeTruthy();
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
@@ -117,7 +117,7 @@ describe("ClusterCard", () => {
     expect(counts).toContain("Nodes 7/8 ready");
     expect(counts).toContain("Pods 47 · Critical 1");
     expect(screen.getByRole("img", { name: "CPU 42.5%" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Memory 61.25%" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "MEM 61.25%" })).toBeTruthy();
   });
 
   it("links the whole card to the canonical Resources URL", () => {
