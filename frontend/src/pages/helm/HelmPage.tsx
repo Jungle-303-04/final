@@ -66,7 +66,7 @@ import { HelmArtifactHubPanel } from "./HelmArtifactHubPanel";
 import { HelmReleaseInstallDialog } from "./HelmReleaseInstallDialog";
 import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
 import { HelmReleaseOperationDialogs } from "./HelmReleaseOperationDialogs";
-import { HelmResourcesDiffView, StructuredParseNotice } from "./HelmResourcesDiffView";
+import { HelmResourcesDiff, StructuredParseNotice } from "./HelmResourcesDiff";
 import {
   useHelmReleaseDetail,
   useHelmReleaseList,
@@ -897,7 +897,7 @@ function HelmResourcesDiffResult({
     { artifact: "resources_diff" }
   >;
 }) {
-  return <HelmResourcesDiffView diff={artifact.resourcesDiff} />;
+  return <HelmResourcesDiff diff={artifact.resourcesDiff} />;
 }
 
 function StructuredFact({ label, value }: { label: string; value: string }) {

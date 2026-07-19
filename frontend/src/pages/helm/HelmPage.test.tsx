@@ -470,6 +470,8 @@ describe("HelmPage", () => {
     expect(await screen.findByRole("heading", { name: "Rendered resource changes" })).toBeTruthy();
     expect(screen.getByText("Service/storefront")).toBeTruthy();
     expect(screen.getByText("spec.replicas")).toBeTruthy();
+    expect(screen.getByLabelText("Deployment/storefront Changed fields").dataset.slot)
+      .toBe("unified-diff");
 
     fireEvent.change(input, { target: { value: "standard" } });
     expect(screen.queryByRole("heading", { name: "Rendered resource changes" })).toBeNull();
@@ -781,6 +783,8 @@ describe("HelmPage", () => {
     expect(await screen.findByRole("heading", { name: "Modified resources" })).toBeTruthy();
     expect(screen.getByText("Deployment/storefront")).toBeTruthy();
     expect(screen.getByText("spec.replicas")).toBeTruthy();
+    expect(screen.getByLabelText("Deployment/storefront Changed fields").dataset.slot)
+      .toBe("unified-diff");
     expect(screen.getByText("1 resource document could not be parsed.")).toBeTruthy();
   });
 });

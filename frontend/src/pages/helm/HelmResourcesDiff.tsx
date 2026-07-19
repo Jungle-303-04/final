@@ -1,19 +1,13 @@
 import type {
   HelmRenderedResourceChange,
+  HelmResourceFieldChange,
   HelmRenderedResourceRef,
   HelmValuesPreviewResources,
 } from "../../features/helm/helmContract";
 import { useHelmCopy, type HelmCopy } from "../../features/helm/helmCopy";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../shared/ui/primitives/table";
+import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 
-export function HelmResourcesDiffView({
+export function HelmResourcesDiff({
   diff,
 }: {
   diff: HelmValuesPreviewResources;
@@ -118,24 +112,13 @@ function HelmResourceChangeCard({
         <span className="text-muted-foreground">{resource.summary}</span>
       </div>
       {resource.fields.length > 0 ? (
-        <Table scrollAreaLabel={`${resource.kind}/${resource.name} ${copy.changedFields}`}>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{copy.changedFields}</TableHead>
-              <TableHead>{copy.previousValue}</TableHead>
-              <TableHead>{copy.currentValue}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {resource.fields.map((field) => (
-              <TableRow key={field.path}>
-                <TableCell><code className="break-all">{field.path}</code></TableCell>
-                <TableCell className="break-all">{formatStructuredValue(field.oldValue, copy.unavailableValue)}</TableCell>
-                <TableCell className="break-all">{formatStructuredValue(field.newValue, copy.unavailableValue)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <UnifiedDiff
+          aria-label={`${resource.kind}/${resource.name} ${copy.changedFields}`}
+          className="max-h-72 rounded-md border bg-background"
+          diff={resourceFieldsDiff(resource.fields, copy.unavailableValue)}
+          numbered
+          wrap
+        />
       ) : (
         <p className="text-muted-foreground">
           {copy.changedFields}: {resource.fieldCount}
@@ -143,6 +126,18 @@ function HelmResourceChangeCard({
       )}
     </li>
   );
+}
+
+function resourceFieldsDiff(
+  fields: readonly HelmResourceFieldChange[],
+  unavailableValue: string,
+): string {
+  return fields.flatMap((field) => [
+    `@@ ${field.path} @@`,
+    ` ${field.path}`,
+    `-${formatStructuredValue(field.oldValue, unavailableValue)}`,
+    `+${formatStructuredValue(field.newValue, unavailableValue)}`,
+  ]).join("\n");
 }
 
 function formatStructuredValue(

@@ -17,7 +17,7 @@ import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { ConfirmationDialog } from "../../shared/ui/primitives/confirmation-dialog";
 import { Input } from "../../shared/ui/primitives/input";
-import { HelmResourcesDiffView } from "./HelmResourcesDiffView";
+import { HelmResourcesDiff } from "./HelmResourcesDiff";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import type { TranslationFunction } from "../../shared/i18n/types";
 
@@ -256,7 +256,7 @@ export function HelmReleaseUpgradeDialog({
                   {previewResult.chartName} {previewResult.chartVersion}
                 </span>
               </div>
-              <HelmResourcesDiffView diff={previewResult.resources} />
+              <HelmResourcesDiff diff={previewResult.resources} />
             </section>
           ) : null}
           {previewFailure ?? previewStatusFailure ? (
