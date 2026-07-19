@@ -70,16 +70,13 @@ export function SyncWidget({
   href: string;
   resource: HomeBoardResource<HomeSyncSummary>;
 }) {
-  const { formatDate, formatNumber, t } = useI18n();
+  const { formatNumber, t } = useI18n();
   return (
     <WidgetResource resource={resource}>
       {(data) => {
         if (data.known === 0 && data.repositories === 0) return <WidgetEmpty href={href} />;
-        const syncedPercent = data.known > 0
-          ? Math.round((data.synced / data.known) * 100)
-          : null;
         return (
-          <div className="grid gap-4">
+          <div className="grid gap-2.5">
             <RatioBar
               ariaLabel={t("workflows.sync.table.status")}
               segments={[
@@ -87,29 +84,19 @@ export function SyncWidget({
                 { id: "out-of-sync", tone: "warning", value: data.outOfSync },
               ]}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <Metric
-                label={t("workflows.sync.status.synced")}
-                value={syncedPercent === null ? "—" : `${formatNumber(syncedPercent)}%`}
-              />
-              <Metric
-                label={t("workflows.sync.status.outOfSync")}
-                value={formatNumber(data.outOfSync)}
-              />
-              <Metric
-                label={t("shell.deploy.repositories")}
-                value={formatNumber(data.repositories)}
-              />
-              <Metric
-                label={t("common.freshness.updatedAt", { time: "" }).trim()}
-                value={data.lastObservedAt
-                  ? formatDate(new Date(data.lastObservedAt), {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  })
-                  : "—"}
-              />
-            </div>
+            {([
+              { count: data.synced, label: t("workflows.sync.status.synced"), toneClass: "bg-status-healthy" },
+              { count: data.outOfSync, label: t("workflows.sync.status.outOfSync"), toneClass: "bg-status-warning" },
+            ] as const).map((row) => (
+              <span className="flex items-center gap-[7px] text-label text-muted-foreground" key={row.label}>
+                <span aria-hidden="true" className={`h-[13px] w-1 rounded-[2px] ${row.toneClass}`} />
+                <b className="font-mono tabular-nums text-foreground">{formatNumber(row.count)}</b>
+                {row.label}
+                <span className="ml-auto font-mono text-caption-2 tabular-nums text-caption-foreground">
+                  {data.known > 0 ? `${formatNumber(Math.round((row.count / data.known) * 100))}%` : "—"}
+                </span>
+              </span>
+            ))}
           </div>
         );
       }}

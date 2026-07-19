@@ -199,7 +199,7 @@ export function MiniBars({
   return (
     <ChartContainer
       aria-label={ariaLabel}
-      className={cn("h-8 w-full aspect-auto", className)}
+      className={cn("h-14 w-full aspect-auto", className)}
       config={compactBarConfig(tone)}
       data-state={rows.some((row) => row.unavailable) ? "partial" : "measured"}
       role="img"

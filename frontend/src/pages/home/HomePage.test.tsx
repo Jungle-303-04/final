@@ -54,7 +54,7 @@ describe("HomePage three-layer board", () => {
       name: "클러스터 리소스 탐색",
     });
     await waitFor(() => {
-      const label = within(summary).getByText("동기화 필요");
+      const label = within(summary).getByText("OutOfSync");
       expect(label.parentElement?.textContent).toContain("1");
     });
   });
@@ -202,7 +202,11 @@ describe("HomePage three-layer board", () => {
 
     const sync = await screen.findByRole("region", { name: "동기화 상태" });
     await waitFor(() => {
-      expect(within(sync).getByText("GitOps").nextElementSibling?.textContent).toBe("2");
+      // 데모 W3 문법: 저장소 수 대신 Synced/OutOfSync 범례 — 두 저장소가 하나의 동기 대상으로 집계된다
+      const outOfSync = within(sync).getByText("OutOfSync");
+      expect(outOfSync.querySelector("b")?.textContent).toBe("1");
+      const synced = within(sync).getByText("Synced");
+      expect(synced.querySelector("b")?.textContent).toBe("0");
     });
   });
 

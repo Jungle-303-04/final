@@ -4,6 +4,7 @@ import {
   RankList,
   type ChartTone,
 } from "../../shared/ui/charts";
+import { cn } from "@/shared/lib/cn";
 import { useI18n } from "../../shared/i18n";
 import { formatCostMicros } from "../../features/cost/costFormat";
 import type { ResourcesFilterResourceItem } from "../../features/resources/resourcesFilterContract";
@@ -14,7 +15,7 @@ import type {
   HomeCostProjection,
   HomeNamespacePodProjection,
 } from "./useHomeBoardData";
-import { Metric, WidgetEmpty, WidgetResource } from "./HomeBoardWidgets";
+import { WidgetEmpty, WidgetResource } from "./HomeBoardWidgets";
 
 export function NamespaceWidget({
   href,
@@ -152,19 +153,26 @@ export function CostOverviewWidget({
         if (data === null || data.values.length === 0) return <WidgetEmpty href={href} />;
         return (
           <div className="grid gap-3">
-            <div className="flex items-end justify-between gap-3">
-              <Metric
-                label={`${t("timeline.strip.range")} · ${period}`}
-                value={formatCostMicros(data.periodTotalMicros, data.currency, formatNumber)}
-              />
-              <Metric
-                label={t("cost.trend.title")}
-                value={data.changePercent === null
-                  ? "—"
-                  : `${data.changePercent > 0 ? "+" : ""}${formatNumber(data.changePercent, {
-                    maximumFractionDigits: 1,
-                  })}%`}
-              />
+            <div className="grid gap-1.5">
+              <span className="flex items-baseline gap-[7px]">
+                <span className="font-mono text-kpi font-extrabold tracking-[-0.02em] tabular-nums text-foreground">
+                  {formatCostMicros(data.periodTotalMicros, data.currency, formatNumber)}
+                </span>
+                {data.changePercent !== null ? (
+                  <span
+                    className={
+                      data.changePercent > 0
+                        ? "rounded-full bg-status-warning/15 px-2 py-0.5 font-mono text-caption-2 font-bold tabular-nums text-warning-foreground"
+                        : "rounded-full bg-status-healthy/12 px-2 py-0.5 font-mono text-caption-2 font-bold tabular-nums text-status-healthy"
+                    }
+                  >
+                    {`${data.changePercent > 0 ? "+" : ""}${formatNumber(data.changePercent, { maximumFractionDigits: 1 })}%`}
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-label text-muted-foreground">
+                {`${t("timeline.strip.range")} · ${period}`}
+              </span>
             </div>
             <MiniBars
               ariaLabel={t("cost.trend.title")}
@@ -195,28 +203,51 @@ export function RecentTimelineWidget({
         const events = [...snapshot.events]
           .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
           .slice(0, 5);
+        const stacks = [events.slice(0, Math.ceil(events.length / 2)), events.slice(Math.ceil(events.length / 2))]
+          .filter((stack) => stack.length > 0);
         return (
-          <RankList
-            ariaLabel={t("timeline.list.label")}
-            items={events.map((event) => ({
-              ariaLabel: event.title,
-              description: [
-                event.resource?.kind ?? event.source,
-                event.resource?.name ?? event.scope.clusterId,
-              ].join(" · "),
-              displayValue: formatDate(new Date(event.occurredAt), {
-                dateStyle: "short",
-                timeStyle: "short",
-              }),
-              href: hrefForEvent(event.sourceKey),
-              id: event.sourceKey,
-              indicator: "dot",
-              label: event.title,
-              max: 1,
-              tone: timelineSeverityTone(event.severity),
-              value: null,
-            }))}
-          />
+          <div
+            aria-label={t("timeline.list.label")}
+            className="grid min-w-0 grid-cols-1 gap-x-7 min-[1024px]:grid-cols-2"
+            role="list"
+          >
+            {stacks.map((stack, stackIndex) => (
+              <div className="grid min-w-0 content-start" key={stackIndex}>
+                {stack.map((event, index) => {
+                  const tone = timelineSeverityTone(event.severity);
+                  return (
+                    <div className="flex min-w-0 items-start gap-2.5" key={event.sourceKey} role="listitem">
+                      <span className="w-[52px] shrink-0 pt-0.5 text-right font-mono text-micro tabular-nums text-caption-foreground">
+                        {formatDate(new Date(event.occurredAt), { timeStyle: "short" })}
+                      </span>
+                      <span className="flex shrink-0 flex-col items-center self-stretch">
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "mt-[3px] size-[9px] rounded-full border-2",
+                            tone === "critical" && "border-status-critical bg-status-critical",
+                            tone === "warning" && "border-status-warning bg-transparent",
+                            tone === "primary" && "border-primary bg-transparent",
+                            tone === "unknown" && "border-status-unknown bg-transparent",
+                          )}
+                        />
+                        {index < stack.length - 1 ? (
+                          <span aria-hidden="true" className="min-h-3.5 w-px flex-1 border-l-[1.5px] border-dashed border-border" />
+                        ) : null}
+                      </span>
+                      <a
+                        className="min-w-0 truncate rounded-md pb-3 pr-1 text-label-2 font-semibold text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/60"
+                        href={hrefForEvent(event.sourceKey)}
+                        title={event.title}
+                      >
+                        {event.title}
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         );
       }}
     </WidgetResource>
