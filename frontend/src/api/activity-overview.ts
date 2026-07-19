@@ -10,8 +10,11 @@ const MAX_RANGE_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_BUCKETS = 366;
 
 export interface ActivityOverviewQuery {
+  applications?: readonly string[];
   bucketMs: number;
+  clusterIds?: readonly string[];
   fromMs: number;
+  namespaces?: readonly string[];
   toMs: number;
 }
 
@@ -24,6 +27,9 @@ export function getActivityOverview(
     ["from", query.fromMs],
     ["to", query.toMs],
     ["bucket", query.bucketMs],
+    ...(query.clusterIds ?? []).map((value) => ["clusters", value] as const),
+    ...(query.namespaces ?? []).map((value) => ["namespaces", value] as const),
+    ...(query.applications ?? []).map((value) => ["applications", value] as const),
   ]), activityOverviewSchema, { signal });
 }
 

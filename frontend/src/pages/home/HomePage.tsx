@@ -126,7 +126,7 @@ export function HomePage({
               onOutOfSyncChange={updateOutOfSync}
               period={boardPeriod}
               ports={boardPorts}
-              refreshKey={state.dataUpdatedAt}
+              refreshKey={state.boardRefreshRevision}
               workspaceId={boardCluster.workspaceId}
             />
           ) : null}

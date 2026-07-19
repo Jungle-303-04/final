@@ -20,7 +20,14 @@ interface ActivityOverviewEndpoint {
 
 export interface HomeActivityEndpointDependencies {
   getActivityOverview(
-    query: { bucketMs: number; fromMs: number; toMs: number },
+    query: {
+      applications?: readonly string[];
+      bucketMs: number;
+      clusterIds?: readonly string[];
+      fromMs: number;
+      namespaces?: readonly string[];
+      toMs: number;
+    },
     signal?: AbortSignal,
   ): Promise<ActivityOverviewEndpoint>;
 }

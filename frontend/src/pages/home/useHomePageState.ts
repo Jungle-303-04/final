@@ -22,6 +22,7 @@ import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshSch
 export type { HomeResourceState } from "./homePageStateModel";
 
 export interface HomePageState {
+  boardRefreshRevision: number;
   clusterSelection: ClusterScopeSelection;
   choices: HomeResourceState<HomeClusterChoices>;
   clusterAccess: HomeClusterAccess;
@@ -209,6 +210,7 @@ export function useHomePageState(port: HomePort): HomePageState {
   }, [dashboardRefresh, refreshInsights]);
 
   return useMemo(() => ({
+    boardRefreshRevision: dashboardRevision,
     choices,
     clusterSelection: clusterScope.selection,
     ...clusterFrame,
@@ -226,7 +228,7 @@ export function useHomePageState(port: HomePort): HomePageState {
       else nodeButtons.current.delete(nodeName);
     },
   }), [
-    choices, closeNode, clusterFrame, dataUpdatedAt, refresh, refreshIntervalSeconds, selectNode, selectedClusterExists,
+    choices, closeNode, clusterFrame, dashboardRevision, dataUpdatedAt, refresh, refreshIntervalSeconds, selectNode, selectedClusterExists,
     clusterScope.selectCluster, clusterScope.selection,
     selectedClusterId, selectedNodeName,
   ]);

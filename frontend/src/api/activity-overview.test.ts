@@ -28,12 +28,15 @@ describe("activity overview API", () => {
     );
 
     await expect(getActivityOverview({
+      applications: ["checkout"],
       fromMs: 0,
       toMs: 86_400_000,
       bucketMs: 86_400_000,
+      clusterIds: ["cluster-1"],
+      namespaces: ["shop"],
     })).resolves.toEqual(payload);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/activity/overview?from=0&to=86400000&bucket=86400000",
+      "/api/activity/overview?from=0&to=86400000&bucket=86400000&clusters=cluster-1&namespaces=shop&applications=checkout",
       expect.objectContaining({ credentials: "include", method: "GET" }),
     );
   });

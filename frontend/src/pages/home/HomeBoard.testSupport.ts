@@ -22,6 +22,7 @@ const timelinePolicy = {
 export function homeBoardPorts(
   overrides: Partial<HomeBoardPorts> = {},
 ): HomeBoardPorts {
+  const costObservedAtSeconds = Math.floor(Date.now() / 1_000);
   return {
     activity: {
       loadOverview: vi.fn().mockResolvedValue({
@@ -39,7 +40,6 @@ export function homeBoardPorts(
     },
     cost: {
       getOverview: vi.fn().mockImplementation(async ({ timeRange }) => {
-        const nowSeconds = Math.floor(Date.now() / 1_000);
         return {
           scopeCoverage: {
             availability: "available",
@@ -72,8 +72,8 @@ export function homeBoardPorts(
               key: "compute",
               label: "Compute",
               points: [
-                { timestamp: nowSeconds - 3_600, rateMicros: 1_000_000 },
-                { timestamp: nowSeconds, rateMicros: 2_000_000 },
+                { timestamp: costObservedAtSeconds - 3_600, rateMicros: 1_000_000 },
+                { timestamp: costObservedAtSeconds, rateMicros: 2_000_000 },
               ],
             }],
             reasonCodes: [],

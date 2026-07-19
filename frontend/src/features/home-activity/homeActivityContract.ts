@@ -16,8 +16,11 @@ export interface HomeActivityOverview {
 }
 
 export interface HomeActivityQuery {
+  applications?: readonly string[];
   bucketMs: number;
+  clusterIds?: readonly string[];
   fromMs: number;
+  namespaces?: readonly string[];
   toMs: number;
 }
 

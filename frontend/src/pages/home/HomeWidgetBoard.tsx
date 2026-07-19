@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
@@ -26,8 +26,7 @@ import { cn } from "../../shared/lib/cn";
 import { WidgetFrame } from "../../shared/ui/widgets";
 import {
   homeBoardPreferenceKey,
-  loadHomeBoardPreferences,
-  saveHomeBoardPreferences,
+  useHomeBoardPreferenceDraft,
   type HomeBoardPreferences,
   type HomeWidgetId,
 } from "./homeBoardPreferences";
@@ -78,19 +77,28 @@ export function HomeWidgetBoard({
     session?.workspaceId ?? null,
     session?.userId ?? null,
   );
-  const storage = browserStorage();
-  const [preferences, setPreferences] = useState<HomeBoardPreferences>(() =>
-    loadHomeBoardPreferences(storage, preferenceKey)
+  const { preferences: activePreferences, update } = useHomeBoardPreferenceDraft(
+    editing,
+    preferenceKey,
   );
-  const visibleIds = preferences.order.filter((id) => preferences.visible.includes(id));
+  const visibleIds = activePreferences.order.filter(
+    (id) => activePreferences.visible.includes(id),
+  );
   const scope = useMemo(() => ({
+    applications: filter.state.common.applications,
     clusterId,
     freshness,
     namespaces: filter.state.common.namespaces
       .filter((namespace) => namespace.clusterId === clusterId)
       .map((namespace) => namespace.namespace),
     workspaceId,
-  }), [clusterId, filter.state.common.namespaces, freshness, workspaceId]);
+  }), [
+    clusterId,
+    filter.state.common.applications,
+    filter.state.common.namespaces,
+    freshness,
+    workspaceId,
+  ]);
   const data = useHomeBoardData({
     clusterId,
     filterState: filter.state,
@@ -109,30 +117,29 @@ export function HomeWidgetBoard({
   );
 
   useEffect(() => {
-    saveHomeBoardPreferences(storage, preferenceKey, preferences);
-  }, [preferenceKey, preferences, storage]);
-  useEffect(() => {
     onOutOfSyncChange(data.sync.phase === "ready" ? data.sync.data.outOfSync : null);
   }, [data.sync, onOutOfSyncChange]);
 
-  const update = (next: HomeBoardPreferences) => setPreferences(next);
   const toggleVisible = (id: HomeWidgetId) => {
-    const visible = preferences.visible.includes(id)
-      ? preferences.visible.filter((candidate) => candidate !== id)
-      : [...preferences.visible, id];
+    const visible = activePreferences.visible.includes(id)
+      ? activePreferences.visible.filter((candidate) => candidate !== id)
+      : [...activePreferences.visible, id];
     if (visible.length === 0) return;
     update({
-      ...preferences,
-      collapsed: preferences.collapsed.filter((candidate) => visible.includes(candidate)),
+      ...activePreferences,
+      collapsed: activePreferences.collapsed.filter((candidate) => visible.includes(candidate)),
       visible,
     });
   };
   const dragEnd = (event: DragEndEvent) => {
     if (!event.over || event.active.id === event.over.id) return;
-    const from = preferences.order.indexOf(event.active.id as HomeWidgetId);
-    const to = preferences.order.indexOf(event.over.id as HomeWidgetId);
+    const from = activePreferences.order.indexOf(event.active.id as HomeWidgetId);
+    const to = activePreferences.order.indexOf(event.over.id as HomeWidgetId);
     if (from < 0 || to < 0) return;
-    update({ ...preferences, order: arrayMove([...preferences.order], from, to) });
+    update({
+      ...activePreferences,
+      order: arrayMove([...activePreferences.order], from, to),
+    });
   };
 
   return (
@@ -140,7 +147,7 @@ export function HomeWidgetBoard({
       {editing ? (
         <WidgetCatalog
           onToggle={toggleVisible}
-          preferences={preferences}
+          preferences={activePreferences}
         />
       ) : null}
       <DndContext
@@ -157,13 +164,13 @@ export function HomeWidgetBoard({
                 id={id}
                 key={id}
                 onCollapse={(collapsed) => update({
-                  ...preferences,
+                  ...activePreferences,
                   collapsed: collapsed
-                    ? [...preferences.collapsed, id]
-                    : preferences.collapsed.filter((candidate) => candidate !== id),
+                    ? [...activePreferences.collapsed, id]
+                    : activePreferences.collapsed.filter((candidate) => candidate !== id),
                 })}
                 onRemove={() => toggleVisible(id)}
-                preferences={preferences}
+                preferences={activePreferences}
                 period={period}
               />
             ))}
@@ -290,11 +297,4 @@ function WidgetBody({
       resource={data.timeline}
     />
   );
-}
-function browserStorage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
 }

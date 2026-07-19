@@ -160,7 +160,13 @@ export function WidgetResource<T>({
   const { t } = useI18n();
   if (resource.phase === "loading") {
     return (
-      <div aria-label={t("common.state.loading")} className="grid gap-3">
+      <div
+        aria-busy="true"
+        aria-label={t("common.state.loading")}
+        aria-live="polite"
+        className="grid gap-3"
+        role="status"
+      >
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-4/5" />
         <Skeleton className="h-3 w-3/5" />
@@ -169,7 +175,11 @@ export function WidgetResource<T>({
   }
   if (resource.phase === "failed") {
     return (
-      <div className="grid min-h-28 place-items-center gap-3 text-center">
+      <div
+        aria-live="assertive"
+        className="grid min-h-28 place-items-center gap-3 text-center"
+        role="alert"
+      >
         <p className="text-body text-muted-foreground">{t("common.state.unavailable")}</p>
         <Button onClick={resource.retry} size="sm" type="button" variant="outline">
           {t("common.action.retry")}
@@ -183,7 +193,11 @@ export function WidgetResource<T>({
 export function WidgetEmpty() {
   const { t } = useI18n();
   return (
-    <div className="grid min-h-28 place-items-center text-body text-muted-foreground">
+    <div
+      aria-live="polite"
+      className="grid min-h-28 place-items-center text-body text-muted-foreground"
+      role="status"
+    >
       {t("common.state.empty")}
     </div>
   );

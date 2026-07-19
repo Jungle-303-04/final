@@ -31,10 +31,9 @@ export function criticalResourceFilterState(
   };
 }
 
-export function costRangeForPeriod(period: HomeBoardPeriod): CostTimeRange | null {
+export function costRangeForPeriod(period: HomeBoardPeriod): CostTimeRange {
   if (period === "today") return "24h";
-  if (period === "7d") return "7d";
-  return null;
+  return "7d";
 }
 
 export function projectHomeCost(
@@ -66,14 +65,18 @@ export function projectHomeCost(
   }
   const points = [...rates.entries()].sort(([left], [right]) => left - right);
   if (points.length < 2) throw new Error("cost trend unavailable");
-  let periodTotalMicros = 0;
+  let observedTotalMicros = 0;
   for (let index = 1; index < points.length; index += 1) {
     const previous = points[index - 1]!;
     const current = points[index]!;
-    periodTotalMicros += ((previous[1] + current[1]) / 2)
+    observedTotalMicros += ((previous[1] + current[1]) / 2)
       * ((current[0] - previous[0]) / 3_600);
   }
-  periodTotalMicros = Math.round(periodTotalMicros);
+  const observedHours = (points[points.length - 1]![0] - points[0]![0]) / 3_600;
+  const requestedHours = (toMs - fromMs) / 3_600_000;
+  const periodTotalMicros = Math.round(
+    observedHours > 0 ? (observedTotalMicros / observedHours) * requestedHours : 0,
+  );
   if (!Number.isSafeInteger(periodTotalMicros) || periodTotalMicros < 0) {
     throw new Error("cost total unavailable");
   }

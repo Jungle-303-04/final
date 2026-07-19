@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 export const HOME_WIDGET_IDS = ["W2", "W3", "W4", "W5", "W6", "W7", "W8"] as const;
 export type HomeWidgetId = typeof HOME_WIDGET_IDS[number];
 
@@ -43,6 +45,30 @@ export function homeBoardPreferenceKey(
     : null;
 }
 
+export function useHomeBoardPreferenceDraft(
+  editing: boolean,
+  key: string | null,
+) {
+  const storage = browserStorage();
+  const [preferences, setPreferences] = useState<HomeBoardPreferences>(() =>
+    loadHomeBoardPreferences(storage, key)
+  );
+  const [draft, setDraft] = useState(preferences);
+  const wasEditing = useRef(editing);
+  useEffect(() => {
+    if (!wasEditing.current && editing) setDraft(preferences);
+    if (wasEditing.current && !editing) {
+      setPreferences(draft);
+      saveHomeBoardPreferences(storage, key, draft);
+    }
+    wasEditing.current = editing;
+  }, [draft, editing, key, preferences, storage]);
+  return {
+    preferences: editing ? draft : preferences,
+    update: editing ? setDraft : setPreferences,
+  };
+}
+
 function normalizeHomeBoardPreferences(value: unknown): HomeBoardPreferences {
   if (!isRecord(value)) return DEFAULT_HOME_BOARD_PREFERENCES;
   const order = uniqueWidgetIds(value.order);
@@ -67,4 +93,12 @@ function isHomeWidgetId(value: unknown): value is HomeWidgetId {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
 }

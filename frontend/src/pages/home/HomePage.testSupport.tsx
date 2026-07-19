@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
+import { ProductSessionProvider } from "../../features/auth/ProductSessionContext";
 import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type {
@@ -15,9 +16,7 @@ import type { SupportedLocale } from "../../shared/i18n/types";
 import { homeBoardPorts } from "./HomeBoard.testSupport";
 import { CLUSTERS, PODS } from "./HomePage.testFixtures";
 import { HomePage } from "./HomePage";
-
 export { homeBoardPorts, CLUSTERS, PODS };
-
 export const OVERVIEW: HomeClusterOverview = {
   clusterId: "cluster-1",
   name: "cluster-1",
@@ -59,7 +58,6 @@ export const OVERVIEW: HomeClusterOverview = {
   }],
   dataQualityWarnings: [],
 };
-
 export const NODES: HomeNodeCollection = {
   clusterId: "cluster-1",
   completeness: "unknown",
@@ -94,7 +92,6 @@ export const NODES: HomeNodeCollection = {
     },
   ],
 };
-
 export const INSIGHTS: HomeInsights = {
   clusterId: "cluster-1",
   topology: {
@@ -220,7 +217,6 @@ export const INSIGHTS: HomeInsights = {
   },
   refreshAfterSeconds: 30,
 };
-
 export function renderHome(
   port: HomePort,
   initialEntries = ["/?clusters=cluster-1"],
@@ -231,22 +227,36 @@ export function renderHome(
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-        <I18nProvider
-          navigatorLanguage={locale === "ko" ? "ko-KR" : locale === "en" ? "en-US" : null}
-          storage={null}
-        >
-          <UnifiedFilterProvider>
-            <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
-              <HomePage boardPorts={board} port={port} />
-              <LocationProbe />
-            </ClusterScopeProvider>
-          </UnifiedFilterProvider>
-        </I18nProvider>
+        <ProductSessionProvider session={TEST_SESSION}>
+          <I18nProvider
+            navigatorLanguage={locale === "ko" ? "ko-KR" : locale === "en" ? "en-US" : null}
+            storage={null}
+          >
+            <UnifiedFilterProvider>
+              <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
+                <HomePage boardPorts={board} port={port} />
+                <LocationProbe />
+              </ClusterScopeProvider>
+            </UnifiedFilterProvider>
+          </I18nProvider>
+        </ProductSessionProvider>
       </AuthSessionGateProvider>
     </MemoryRouter>,
   );
 }
-
+const TEST_SESSION = {
+  authEnabled: true as const,
+  authMode: "password" as const,
+  groups: [],
+  logout: {
+    action: "end_session" as const,
+    supported: true,
+    reauthenticationExpected: false,
+  },
+  roles: [],
+  userId: "test-user",
+  workspaceId: "test-workspace",
+};
 export function homePort(overrides: Partial<HomePort> = {}): HomePort {
   return {
     loadDashboardRefreshPolicy: vi.fn().mockResolvedValue({
@@ -272,13 +282,11 @@ export function homePort(overrides: Partial<HomePort> = {}): HomePort {
     ...overrides,
   };
 }
-
 export function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((next) => { resolve = next; });
   return { promise, resolve };
 }
-
 function LocationProbe() {
   const location = useLocation();
   return (

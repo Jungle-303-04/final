@@ -45,7 +45,7 @@ describe("HomePage optional widgets", () => {
     });
     renderHome(
       homePort(),
-      ["/?clusters=cluster-1"],
+      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop"],
       vi.fn(),
       "ko",
       homeBoardPorts({ inventory }),
@@ -57,7 +57,7 @@ describe("HomePage optional widgets", () => {
 
     expect(await screen.findByRole("img", { name: "Namespace별 Pod 수" })).toBeTruthy();
     expect(screen.getByText("shop")).toBeTruthy();
-    expect(inventory).toHaveBeenCalledWith("cluster-1", [], expect.any(AbortSignal));
+    expect(inventory).toHaveBeenCalledWith("cluster-1", ["shop"], expect.any(AbortSignal));
   });
 
   it("loads W6 from the scoped critical resource adapter and opens the D3 detail", async () => {
@@ -134,11 +134,17 @@ describe("HomePage optional widgets", () => {
     );
   });
 
-  it("renders W7 increasing observed cost as warning MiniBars", async () => {
+  it("renders W7 for 30d from a bounded 7d source projection and scoped namespaces", async () => {
     const ports = homeBoardPorts();
     const getOverview = vi.mocked(ports.cost.getOverview);
     const user = userEvent.setup();
-    renderHome(homePort(), ["/?clusters=cluster-1"], vi.fn(), "ko", ports);
+    renderHome(
+      homePort(),
+      ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop&home.period=30d"],
+      vi.fn(),
+      "ko",
+      ports,
+    );
 
     await user.click(await screen.findByRole("button", { name: "수정" }));
     const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
@@ -148,8 +154,8 @@ describe("HomePage optional widgets", () => {
     expect(bars.querySelector("rect")?.getAttribute("fill")).toBe("var(--color-status-warning)");
     expect(getOverview).toHaveBeenCalledWith({
       clusterIds: ["cluster-1"],
-      namespaces: [],
-      timeRange: "24h",
+      namespaces: ["shop"],
+      timeRange: "7d",
     }, expect.any(AbortSignal));
   });
 

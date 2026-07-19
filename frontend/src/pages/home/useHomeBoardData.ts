@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { CostPort } from "../../features/cost/costContract";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
@@ -29,6 +29,11 @@ import {
   homeTimelineQuery,
   projectHomeCost,
 } from "./homeBoardDataQueries";
+import {
+  useHomeBoardResource as useAsyncResource,
+  type HomeBoardResource,
+} from "./useHomeBoardResource";
+export type { HomeBoardResource } from "./useHomeBoardResource";
 
 export interface HomeBoardPorts {
   activity: HomeActivityPort;
@@ -66,16 +71,12 @@ export interface HomeCostProjection {
 }
 
 export interface HomeBoardScope {
+  applications: readonly string[];
   clusterId: string;
   freshness: "live" | "stale" | "partial" | "disconnected";
   namespaces: readonly string[];
   workspaceId: string;
 }
-
-export type HomeBoardResource<T> =
-  | { phase: "loading" }
-  | { phase: "failed"; retry: () => void }
-  | { data: T; phase: "ready"; retry: () => void };
 
 export interface HomeBoardData {
   activity: HomeBoardResource<HomeActivityOverview>;
@@ -111,52 +112,85 @@ export function useHomeBoardData({
   wantsTimeline: boolean;
 }): HomeBoardData {
   const [mountedAtMs] = useState(() => Date.now());
-  const [revision, setRevision] = useState(0);
-  const retry = useCallback(() => setRevision((current) => current + 1), []);
   const activityQuery = useMemo(
-    () => activityWindowForPeriod(period, refreshKey > 0 ? refreshKey : mountedAtMs),
-    [mountedAtMs, period, refreshKey],
+    () => {
+      const window = activityWindowForPeriod(
+        period,
+        refreshKey > 0 ? refreshKey : mountedAtMs,
+      );
+      return window === null ? null : {
+        ...window,
+        applications: scope.applications,
+        clusterIds: [clusterId],
+        namespaces: scope.namespaces,
+      };
+    },
+    [
+      clusterId,
+      mountedAtMs,
+      period,
+      refreshKey,
+      scope.applications,
+      scope.namespaces,
+    ],
   );
   const incidents = useAsyncResource(
-    (signal) => ports.issues.listIssues(clusterId, 3, signal),
-    [clusterId, ports.issues, refreshKey, revision],
-    retry,
+    (signal) => {
+      if (scope.applications.length > 0) {
+        return Promise.reject(new Error("issue application scope unavailable"));
+      }
+      return ports.issues.listIssues(clusterId, 3, signal, {
+        namespaces: scope.namespaces,
+        severities: [],
+        categories: [],
+      });
+    },
+    [clusterId, ports.issues, refreshKey, scope.applications, scope.namespaces],
   );
   const sync = useAsyncResource(
     async (signal) => {
       const [applications, targets] = await Promise.all([
         ports.gitops.listApplications(signal),
-        ports.gitops.listSyncTargets(signal, { clusters: [clusterId] }),
+        ports.gitops.listSyncTargets(signal, {
+          applications: scope.applications,
+          clusters: [clusterId],
+          namespaces: scope.namespaces,
+        }),
       ]);
       const categories = targets.map((target) => gitOpsSyncCategory(target.syncStatus));
       const synced = categories.filter((category) => category === "synced").length;
       const outOfSync = categories.filter((category) => category === "out-of-sync").length;
+      const scopedApplicationIds = new Set(targets.map((target) => target.applicationId));
       return {
         known: synced + outOfSync,
         lastObservedAt: latestObservedAt(targets),
         outOfSync,
         repositories: new Set(
-          applications.map((application) => application.repository).filter(Boolean),
+          applications
+            .filter((application) => scopedApplicationIds.has(application.id))
+            .map((application) => application.repository)
+            .filter(Boolean),
         ).size,
         synced,
         targets,
       };
     },
-    [clusterId, ports.gitops, refreshKey, revision],
-    retry,
+    [clusterId, ports.gitops, refreshKey, scope.applications, scope.namespaces],
   );
   const activity = useAsyncResource(
     (signal) => {
+      if (scope.applications.length > 0) {
+        return Promise.reject(new Error("activity application scope unavailable"));
+      }
       if (activityQuery === null) return Promise.reject(new Error("activity window unavailable"));
       return ports.activity.loadOverview(activityQuery, signal);
     },
-    [activityQuery, ports.activity, refreshKey, revision],
-    retry,
+    [activityQuery, ports.activity, refreshKey, scope.applications],
   );
   const namespaces = useAsyncResource(
     async (signal) => {
       if (!wantsNamespaces) return [];
-      const response = await ports.inventory(clusterId, [], signal);
+      const response = await ports.inventory(clusterId, scope.namespaces, signal);
       return response.namespaces
         .map((namespace) => ({
           namespace: namespace.namespace,
@@ -167,8 +201,7 @@ export function useHomeBoardData({
         .filter((namespace) => namespace.pods > 0)
         .sort((left, right) => right.pods - left.pods || left.namespace.localeCompare(right.namespace));
     },
-    [clusterId, ports.inventory, refreshKey, revision, wantsNamespaces],
-    retry,
+    [clusterId, ports.inventory, refreshKey, scope.namespaces, wantsNamespaces],
   );
   const criticalResources = useAsyncResource(
     async (signal) => {
@@ -180,14 +213,13 @@ export function useHomeBoardData({
       );
       return response.items.slice(0, 5);
     },
-    [clusterId, filterState, ports.resources, refreshKey, revision, wantsCriticalResources],
-    retry,
+    [clusterId, filterState, ports.resources, refreshKey, wantsCriticalResources],
   );
   const cost = useAsyncResource(
     async (signal) => {
       if (!wantsCost) return null;
       const timeRange = costRangeForPeriod(period);
-      if (timeRange === null || activityQuery === null) {
+      if (activityQuery === null) {
         throw new Error("cost period unavailable");
       }
       const overview = await ports.cost.getOverview({
@@ -203,11 +235,9 @@ export function useHomeBoardData({
       period,
       ports.cost,
       refreshKey,
-      revision,
       scope.namespaces,
       wantsCost,
     ],
-    retry,
   );
   const timeline = useAsyncResource(
     async (signal) => {
@@ -229,43 +259,11 @@ export function useHomeBoardData({
       activityQuery,
       ports.timeline,
       refreshKey,
-      revision,
       scope,
       wantsTimeline,
     ],
-    retry,
   );
   return { activity, cost, criticalResources, incidents, namespaces, sync, timeline };
-}
-
-function useAsyncResource<T>(
-  load: (signal: AbortSignal) => Promise<T>,
-  dependencies: readonly unknown[],
-  retry: () => void,
-): HomeBoardResource<T> {
-  const [state, setState] = useState<HomeBoardResource<T>>({ phase: "loading" });
-  useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    queueMicrotask(() => {
-      if (active) setState({ phase: "loading" });
-    });
-    void load(controller.signal).then(
-      (data) => {
-        if (active) setState({ data, phase: "ready", retry });
-      },
-      (error: unknown) => {
-        if (active && !isAbortError(error)) setState({ phase: "failed", retry });
-      },
-    );
-    return () => {
-      active = false;
-      controller.abort();
-    };
-    // Each caller supplies the complete request identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies);
-  return state;
 }
 
 function latestObservedAt(targets: readonly GitOpsSyncTarget[]): string | null {
@@ -280,9 +278,4 @@ function latestObservedAt(targets: readonly GitOpsSyncTarget[]): string | null {
     }
   }
   return latest;
-}
-
-function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error &&
-    error.name === "AbortError";
 }

@@ -79,7 +79,7 @@ export function widgetDefinition(
     W4: {
       description: t("timeline.description"),
       href: timeline,
-      span: "col-span-6 min-[1024px]:col-span-4",
+      span: "col-span-6 min-[1024px]:col-span-8",
       title: t("timeline.toolbar.activity"),
     },
     W5: {
