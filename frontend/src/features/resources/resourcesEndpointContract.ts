@@ -48,6 +48,15 @@ export interface ResourcesEndpointInventorySummary {
       reason_code: "list_permission_not_observed";
     }>;
   };
+  namespaces: Array<{
+    namespace: string;
+    total: number;
+    counts: Array<{
+      resource_type: string;
+      health: string;
+      count: number;
+    }>;
+  }>;
 }
 
 export interface ResourcesEndpointResource {

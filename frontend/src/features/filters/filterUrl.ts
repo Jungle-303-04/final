@@ -77,6 +77,7 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "surface-tab":
     case "time-range":
     case "graph-visibility":
+    case "home-period":
     case "traffic-filter":
     case "traffic-sort":
     case "traffic-flow":

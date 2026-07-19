@@ -1,58 +1,27 @@
 import {
-  acknowledgeAlertEvent,
-  createAlertRule,
-  deleteAlertRule,
-  addDiagnoseTurn,
-  clearDiagnoseHistory,
-  createDiagnoseRun,
-  getAiSuggestions,
-  getClusterNodesSummary,
-  getClusterSummary,
-  getHomeInsights,
-  getCompareCandidates,
-  getCompareResourcePair,
-  getWorkloadDetail,
-  getDiagnoseCapabilities,
-  grantDiagnoseConsent,
-  getScheduledWorkloadRuns,
-  getSettingsAccessProfile,
-  getPrometheusIntegration,
-  getRuntimeDiagnostics,
-  getVersionCheck,
-  getAuditTimeline,
-  getIncidentRecentChanges,
-  getRcaIncident,
-  getRecoveryPlanByCorrelation,
-  getResourceIssues,
-  getNodePodsSummary,
-  getNamespaceScope,
-  getUiPreferences,
-  listAlertEvents,
-  listAlertRules,
-  listClusters,
-  listGlobalFilterFacets,
-  listRcaIssues,
-  listEvidence,
-  listRcaReports,
-  listRcaTimeline,
-  searchResourceIdentities,
-  subscribeHomeDashboardEvents,
-  listDiagnoseRuns,
-  openPodLogStream,
-  openScheduledWorkloadRunLogStream,
-  openWorkloadLogStream,
-  postAiChat,
-  parseResourceFileResult,
-  promoteAlertEvent,
-  startResourceFileCommand,
-  subscribeCommandOperationEvents,
-  stopDiagnoseRun,
-  subscribeDiagnoseEvents,
-  selectRecoveryAction,
-  updateAlertRule,
-  updateNamespaceScope,
+  acknowledgeAlertEvent, addDiagnoseTurn, clearDiagnoseHistory,
+  createAlertRule, createDiagnoseRun, createReleaseFlowClient,
+  deleteAlertRule, executeGitOpsResourceAction, getActivityOverview,
+  getAiSuggestions, getAuditTimeline, getClusterNodesSummary,
+  getClusterSummary, getCompareCandidates, getCompareResourcePair,
+  getCostNodes, getCostOverview, getDiagnoseCapabilities,
+  getGitOpsApplicationDetail, getGitOpsResourceInsights, getGitOpsResourceTree,
+  getHomeInsights, getIncidentRecentChanges, getInventorySummary,
+  getNamespaceScope, getNodePodsSummary, getPrometheusIntegration,
+  getRcaIncident, getRecoveryPlanByCorrelation, getResourceIssues,
+  getRuntimeDiagnostics, getScheduledWorkloadRuns, getSettingsAccessProfile,
+  getUiPreferences, getVersionCheck, getWorkloadDetail,
+  grantDiagnoseConsent, listAlertEvents, listAlertRules,
+  listClusters, listDiagnoseRuns, listEvidence,
+  listFilteredResources, listGitOpsOverview, listGlobalFilterFacets,
+  listRcaIssues, listRcaReports, listRcaTimeline,
+  listResourceFilterFacets, listResourceLabelFacets, openPodLogStream,
+  openScheduledWorkloadRunLogStream, openWorkloadLogStream, parseResourceFileResult,
+  postAiChat, promoteAlertEvent, searchResourceIdentities,
+  selectRecoveryAction, startResourceFileCommand, stopDiagnoseRun,
+  subscribeCommandOperationEvents, subscribeDiagnoseEvents, subscribeHomeDashboardEvents,
+  updateAlertRule, updateNamespaceScope, updatePrometheusIntegration,
   updateUiPreferences,
-  updatePrometheusIntegration,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
@@ -79,6 +48,10 @@ import { desktopBridge } from "../desktop/desktopBridge";
 import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
 import { createResourceIssuesAdapter } from "../features/issues/createResourceIssuesAdapter";
 import { createRcaContextAdapter } from "../features/issues/createRcaContextAdapter";
+import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
+import { createHomeActivityAdapter } from "../features/home-activity/createHomeActivityAdapter";
+import { createCostAdapter } from "../features/cost/createCostAdapter";
+import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
 
 /**
  * The authenticated composition is intentionally small: global providers and
@@ -172,6 +145,21 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     listRcaTimeline,
     selectRecoveryAction,
   }, refreshPolicies);
+  const gitOpsPort = createGitOpsAdapter({
+    ...createReleaseFlowClient(),
+    executeResourceAction: executeGitOpsResourceAction,
+    getApplicationDetail: getGitOpsApplicationDetail,
+    getResourceInsights: getGitOpsResourceInsights,
+    getResourceTree: getGitOpsResourceTree,
+    listOverview: listGitOpsOverview,
+  });
+  const homeActivityPort = createHomeActivityAdapter({ getActivityOverview });
+  const costPort = createCostAdapter({ getCostOverview, getCostNodes }, refreshPolicies);
+  const resourcesFilterPort = createResourcesFilterAdapter({
+    listFilteredResources,
+    listResourceFilterFacets,
+    listResourceLabelFacets,
+  });
   const resourceIssuesPort = createResourceIssuesAdapter({ getResourceIssues });
   const rcaContextPort = createRcaContextAdapter({
     issues: issuesPort,
@@ -188,7 +176,18 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "home",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/home")).loadHomeSurface(registry.homePort),
+        default: (await import("./composition/surfaces/home")).loadHomeSurface(
+          registry.homePort,
+          {
+            activity: homeActivityPort,
+            cost: costPort,
+            gitops: gitOpsPort,
+            inventory: getInventorySummary,
+            issues: issuesPort,
+            resources: resourcesFilterPort,
+            timeline: timelinePort,
+          },
+        ),
       })),
     },
     {
@@ -201,6 +200,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           portForwardSessions,
           resourceFilesPort,
           resourceIssuesPort,
+          resourcesFilterPort,
         ),
       })),
     },
@@ -210,6 +210,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
         default: (await import("./composition/surfaces/deploy")).loadDeploySurface(
           refreshPolicies,
           rcaContextPort,
+          gitOpsPort,
         ),
       })),
     },
@@ -249,6 +250,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
         default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(
           refreshPolicies,
           rcaContextPort,
+          gitOpsPort,
         ),
       })),
     },
@@ -267,7 +269,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "cost",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/cost")).loadCostSurface(refreshPolicies),
+        default: (await import("./composition/surfaces/cost")).loadCostSurface(costPort),
       })),
     },
     {

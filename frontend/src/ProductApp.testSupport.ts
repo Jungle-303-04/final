@@ -111,6 +111,7 @@ export function homeApiResponse(path: string): Response {
         reason_codes: [],
         forbidden: [],
       },
+      namespaces: [],
     },
     "/api/clusters/cluster-1/api-resources": {
       cluster_id: "cluster-1",

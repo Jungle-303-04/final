@@ -13,14 +13,18 @@ type WidgetCollapseProps =
   | {
       collapsible?: false;
       collapseLabel?: never;
+      collapsed?: never;
       defaultCollapsed?: never;
       expandLabel?: never;
+      onCollapsedChange?: never;
     }
   | {
       collapseLabel: string;
+      collapsed?: boolean;
       collapsible: true;
       defaultCollapsed?: boolean;
       expandLabel: string;
+      onCollapsedChange?: (collapsed: boolean) => void;
     };
 
 export type WidgetFrameProps = WidgetCollapseProps & {
@@ -31,6 +35,7 @@ export type WidgetFrameProps = WidgetCollapseProps & {
     label: string;
   };
   description?: string;
+  headerActions?: ReactNode;
   title: ReactNode;
 };
 
@@ -38,14 +43,18 @@ export function WidgetFrame({
   children,
   className,
   collapseLabel,
+  collapsed: controlledCollapsed,
   collapsible = false,
   deepLink,
   defaultCollapsed = false,
   description,
   expandLabel,
+  headerActions,
+  onCollapsedChange,
   title,
 }: WidgetFrameProps) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [uncontrolledCollapsed, setUncontrolledCollapsed] = useState(defaultCollapsed);
+  const collapsed = controlledCollapsed ?? uncontrolledCollapsed;
   const titleId = useId();
   const contentId = useId();
 
@@ -80,6 +89,7 @@ export function WidgetFrame({
           </TooltipProvider>
         ) : null}
         <span className="ml-auto flex shrink-0 items-center gap-1">
+          {headerActions}
           {deepLink ? (
             <a
               aria-label={deepLink.label}
@@ -95,7 +105,11 @@ export function WidgetFrame({
               aria-expanded={!collapsed}
               aria-label={collapsed ? expandLabel : collapseLabel}
               className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
-              onClick={() => setCollapsed((current) => !current)}
+              onClick={() => {
+                const next = !collapsed;
+                if (controlledCollapsed === undefined) setUncontrolledCollapsed(next);
+                onCollapsedChange?.(next);
+              }}
               type="button"
             >
               <ChevronDown

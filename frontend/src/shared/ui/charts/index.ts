@@ -1,4 +1,5 @@
 export { MetricsSummary, type MetricsSummaryLabels } from "./MetricsSummary";
+export { MultiLine, type MultiLineSeries } from "./MultiLine";
 export { SeriesLegend } from "./SeriesLegend";
 export {
   MiniBar,

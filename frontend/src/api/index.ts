@@ -47,6 +47,15 @@ export {
   type ApiPath,
 } from "./client";
 export {
+  ACTIVITY_OVERVIEW_PATH,
+  getActivityOverview,
+  type ActivityOverviewQuery,
+} from "./activity-overview";
+export {
+  activityOverviewSchema,
+  type ActivityOverviewEndpoint,
+} from "./activity-overview-schemas";
+export {
   getNamespaceScope,
   getUiPreferences,
   searchResourceIdentities,

@@ -137,6 +137,7 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     invalid.costRange,
     invalid.timeAt,
     invalid.graph,
+    invalid.homePeriod,
   );
   if (
     detail.resourceSurfaceView === undefined &&
@@ -294,5 +295,6 @@ function createInvalidFilterValues(): MutableInvalidFilterValues {
     applicationsPendingPromotion: [],
     gitopsEnvironment: [], gitopsApproval: [], gitopsChangeType: [],
     checksSeverity: [], checksCategory: [], detailFull: [], timeRange: [], costRange: [], timeAt: [], graph: [],
+    homePeriod: [],
   };
 }

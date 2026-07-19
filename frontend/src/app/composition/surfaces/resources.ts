@@ -16,10 +16,7 @@ import {
   getWorkloadRollbackPreview,
   getResourceManifestSource,
   getResourceMetricsHistory,
-  listFilteredResources,
   listInventoryResourcesByType,
-  listResourceFilterFacets,
-  listResourceLabelFacets,
   openPodTerminal,
   previewResourceManifestEdit,
   resolveServiceAccess,
@@ -38,7 +35,7 @@ import { createResourceCapabilitiesAdapter } from "../../../features/resources/c
 import { createResourceManifestAdapter } from "../../../features/resources/createResourceManifestAdapter";
 import { createResourceMetricsHistoryAdapter } from "../../../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourcesAdapter } from "../../../features/resources/createResourcesAdapter";
-import { createResourcesFilterAdapter } from "../../../features/resources/createResourcesFilterAdapter";
+import type { ResourcesFilterPort } from "../../../features/resources/resourcesFilterContract";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
 import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
 import { createTopologyPorts } from "../topologyPorts";
@@ -60,6 +57,7 @@ export function loadResourcesSurface(
   portForwardSessions: PortForwardSessionPort,
   resourceFilesPort: ResourceFilesPort,
   resourceIssuesPort: ResourceIssuesPort,
+  resourcesFilterPort: ResourcesFilterPort,
 ): ComponentType {
   const topologyPorts = createTopologyPorts();
   return createResourcesSurface(
@@ -69,11 +67,7 @@ export function loadResourcesSurface(
       getInventorySummary,
       listInventoryResourcesByType,
     }),
-    createResourcesFilterAdapter({
-      listFilteredResources,
-      listResourceFilterFacets,
-      listResourceLabelFacets,
-    }),
+    resourcesFilterPort,
     topologyPorts.physical,
     topologyPorts.realtime,
     homePort,

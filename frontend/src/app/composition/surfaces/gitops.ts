@@ -1,13 +1,5 @@
 import type { ComponentType } from "react";
-import {
-  createReleaseFlowClient,
-  executeGitOpsResourceAction,
-  getGitOpsApplicationDetail,
-  getGitOpsResourceInsights,
-  getGitOpsResourceTree,
-  listGitOpsOverview,
-} from "../../../api";
-import { createGitOpsAdapter } from "../../../features/gitops/createGitOpsAdapter";
+import type { GitOpsPort } from "../../../features/gitops/gitOpsContract";
 import { createGitOpsSurface } from "../../../pages/gitops/createGitOpsSurface";
 import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
 import type { RcaContextPort } from "../../../features/issues/rcaContextContract";
@@ -15,16 +7,10 @@ import type { RcaContextPort } from "../../../features/issues/rcaContextContract
 export function loadGitOpsSurface(
   refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts">,
   rcaContextPort: RcaContextPort,
+  port: GitOpsPort,
 ): ComponentType {
   return createGitOpsSurface(
-    createGitOpsAdapter({
-      ...createReleaseFlowClient(),
-      getApplicationDetail: getGitOpsApplicationDetail,
-      getResourceTree: getGitOpsResourceTree,
-      getResourceInsights: getGitOpsResourceInsights,
-      executeResourceAction: executeGitOpsResourceAction,
-      listOverview: listGitOpsOverview,
-    }),
+    port,
     refreshPolicies,
     rcaContextPort,
   );

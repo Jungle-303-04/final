@@ -1,0 +1,300 @@
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import type { UnifiedFilterController } from "../../features/filters/filterContract";
+import { useI18n } from "../../shared/i18n";
+import { cn } from "../../shared/lib/cn";
+import { WidgetFrame } from "../../shared/ui/widgets";
+import {
+  homeBoardPreferenceKey,
+  loadHomeBoardPreferences,
+  saveHomeBoardPreferences,
+  type HomeBoardPreferences,
+  type HomeWidgetId,
+} from "./homeBoardPreferences";
+import {
+  ActivityWidget,
+  IncidentWidget,
+  SyncWidget,
+} from "./HomeBoardWidgets";
+import {
+  CostOverviewWidget,
+  CriticalResourcesWidget,
+  NamespaceWidget,
+  RecentTimelineWidget,
+} from "./HomeOptionalBoardWidgets";
+import {
+  criticalResourceDetailHref,
+  timelineEventHref,
+  WidgetCatalog,
+  widgetDefinition,
+} from "./HomeWidgetCatalog";
+import {
+  useHomeBoardData,
+  type HomeBoardData,
+  type HomeBoardPorts,
+} from "./useHomeBoardData";
+export function HomeWidgetBoard({
+  clusterId,
+  editing,
+  freshness,
+  onOutOfSyncChange,
+  period,
+  ports,
+  refreshKey,
+  workspaceId,
+}: {
+  clusterId: string;
+  editing: boolean;
+  freshness: "live" | "stale" | "partial" | "disconnected";
+  onOutOfSyncChange: (count: number | null) => void;
+  period: HomeBoardPeriod;
+  ports: HomeBoardPorts;
+  refreshKey: number;
+  workspaceId: string;
+}) {
+  const session = useOptionalProductSession();
+  const filter = useUnifiedFilter();
+  const preferenceKey = homeBoardPreferenceKey(
+    session?.workspaceId ?? null,
+    session?.userId ?? null,
+  );
+  const storage = browserStorage();
+  const [preferences, setPreferences] = useState<HomeBoardPreferences>(() =>
+    loadHomeBoardPreferences(storage, preferenceKey)
+  );
+  const visibleIds = preferences.order.filter((id) => preferences.visible.includes(id));
+  const scope = useMemo(() => ({
+    clusterId,
+    freshness,
+    namespaces: filter.state.common.namespaces
+      .filter((namespace) => namespace.clusterId === clusterId)
+      .map((namespace) => namespace.namespace),
+    workspaceId,
+  }), [clusterId, filter.state.common.namespaces, freshness, workspaceId]);
+  const data = useHomeBoardData({
+    clusterId,
+    filterState: filter.state,
+    period,
+    ports,
+    refreshKey,
+    scope,
+    wantsCost: visibleIds.includes("W7"),
+    wantsCriticalResources: visibleIds.includes("W6"),
+    wantsNamespaces: visibleIds.includes("W5"),
+    wantsTimeline: visibleIds.includes("W8"),
+  });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    saveHomeBoardPreferences(storage, preferenceKey, preferences);
+  }, [preferenceKey, preferences, storage]);
+  useEffect(() => {
+    onOutOfSyncChange(data.sync.phase === "ready" ? data.sync.data.outOfSync : null);
+  }, [data.sync, onOutOfSyncChange]);
+
+  const update = (next: HomeBoardPreferences) => setPreferences(next);
+  const toggleVisible = (id: HomeWidgetId) => {
+    const visible = preferences.visible.includes(id)
+      ? preferences.visible.filter((candidate) => candidate !== id)
+      : [...preferences.visible, id];
+    if (visible.length === 0) return;
+    update({
+      ...preferences,
+      collapsed: preferences.collapsed.filter((candidate) => visible.includes(candidate)),
+      visible,
+    });
+  };
+  const dragEnd = (event: DragEndEvent) => {
+    if (!event.over || event.active.id === event.over.id) return;
+    const from = preferences.order.indexOf(event.active.id as HomeWidgetId);
+    const to = preferences.order.indexOf(event.over.id as HomeWidgetId);
+    if (from < 0 || to < 0) return;
+    update({ ...preferences, order: arrayMove([...preferences.order], from, to) });
+  };
+
+  return (
+    <section className="grid min-w-0 gap-4">
+      {editing ? (
+        <WidgetCatalog
+          onToggle={toggleVisible}
+          preferences={preferences}
+        />
+      ) : null}
+      <DndContext
+        collisionDetection={closestCenter}
+        onDragEnd={dragEnd}
+        sensors={sensors}
+      >
+        <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+          <div className="grid min-w-0 grid-cols-6 gap-4 min-[1024px]:grid-cols-12">
+            {visibleIds.map((id) => (
+              <SortableWidget
+                data={data}
+                editing={editing}
+                id={id}
+                key={id}
+                onCollapse={(collapsed) => update({
+                  ...preferences,
+                  collapsed: collapsed
+                    ? [...preferences.collapsed, id]
+                    : preferences.collapsed.filter((candidate) => candidate !== id),
+                })}
+                onRemove={() => toggleVisible(id)}
+                preferences={preferences}
+                period={period}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </section>
+  );
+}
+function SortableWidget({
+  data,
+  editing,
+  id,
+  onCollapse,
+  onRemove,
+  preferences,
+  period,
+}: {
+  data: HomeBoardData;
+  editing: boolean;
+  id: HomeWidgetId;
+  onCollapse: (collapsed: boolean) => void;
+  onRemove: () => void;
+  preferences: HomeBoardPreferences;
+  period: HomeBoardPeriod;
+}) {
+  const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
+    disabled: !editing,
+    id,
+  });
+  const widgetRef = useRef<HTMLDivElement | null>(null);
+  const attachWidget = useCallback((node: HTMLDivElement | null) => {
+    widgetRef.current = node;
+    setNodeRef(node);
+  }, [setNodeRef]);
+  useLayoutEffect(() => {
+    const node = widgetRef.current;
+    if (!node) return;
+    const value = CSS.Transform.toString(transform);
+    if (value) node.style.transform = value;
+    else node.style.removeProperty("transform");
+  }, [transform]);
+  const filter = useUnifiedFilter();
+  const { t } = useI18n();
+  const definition = widgetDefinition(id, t, filter);
+  return (
+    <div
+      className={cn(
+        definition.span,
+        "transition-transform duration-(--motion-layout) ease-(--ease-soft) motion-reduce:transition-none",
+        isDragging && "z-10 opacity-70",
+      )}
+      ref={attachWidget}
+    >
+      <WidgetFrame
+        className="h-full"
+        collapseLabel={t("shell.sidebar.collapse")}
+        collapsed={preferences.collapsed.includes(id)}
+        collapsible
+        deepLink={{ href: definition.href, label: definition.title }}
+        description={definition.description}
+        expandLabel={t("shell.sidebar.expand")}
+        headerActions={editing ? (
+          <>
+            <button
+              {...attributes}
+              {...listeners}
+              aria-label={`${definition.title} · ${t("shell.ai.action.edit")}`}
+              className="grid size-7 touch-none place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
+              type="button"
+            >
+              <GripVertical aria-hidden="true" className="size-4" />
+            </button>
+            <button
+              aria-label={t("shell.filter.remove", {
+                type: t("resources.catalog.title"),
+                label: definition.title,
+              })}
+              className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
+              onClick={onRemove}
+              type="button"
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </>
+        ) : undefined}
+        onCollapsedChange={onCollapse}
+        title={definition.title}
+      >
+        <WidgetBody data={data} filter={filter} href={definition.href} id={id} period={period} />
+      </WidgetFrame>
+    </div>
+  );
+}
+function WidgetBody({
+  data,
+  filter,
+  href,
+  id,
+  period,
+}: {
+  data: HomeBoardData;
+  filter: UnifiedFilterController;
+  href: string;
+  id: HomeWidgetId;
+  period: HomeBoardPeriod;
+}) {
+  if (id === "W2") return <IncidentWidget href={href} resource={data.incidents} />;
+  if (id === "W3") return <SyncWidget resource={data.sync} />;
+  if (id === "W4") return <ActivityWidget resource={data.activity} />;
+  if (id === "W5") return <NamespaceWidget resource={data.namespaces} />;
+  if (id === "W6") {
+    return (
+      <CriticalResourcesWidget
+        hrefForItem={(item) => criticalResourceDetailHref(filter, item)}
+        resource={data.criticalResources}
+      />
+    );
+  }
+  if (id === "W7") return <CostOverviewWidget period={period} resource={data.cost} />;
+  return (
+    <RecentTimelineWidget
+      hrefForEvent={(sourceKey) => timelineEventHref(href, sourceKey)}
+      resource={data.timeline}
+    />
+  );
+}
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}

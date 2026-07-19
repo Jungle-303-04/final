@@ -5,50 +5,18 @@ import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type {
-  HomeClusterChoices,
   HomeClusterOverview,
   HomeInsights,
   HomeNodeCollection,
-  HomePodCollection,
   HomePort,
 } from "../../features/home/homeContract";
 import { I18nProvider } from "../../shared/i18n/I18nProvider";
 import type { SupportedLocale } from "../../shared/i18n/types";
+import { homeBoardPorts } from "./HomeBoard.testSupport";
+import { CLUSTERS, PODS } from "./HomePage.testFixtures";
 import { HomePage } from "./HomePage";
 
-export const CLUSTERS: HomeClusterChoices = {
-  completeness: "unknown",
-  clusters: [
-    {
-      id: "cluster-1",
-      workspaceId: "workspace-main",
-      name: "cluster-1",
-      environment: "production",
-      provider: "eks",
-      connectionStage: null,
-      registrationState: "active",
-      connectionState: "online",
-      lastObservedAt: "2026-07-12T10:00:00.000Z",
-      nodeCount: 2,
-      podCount: 18,
-      incidentCount: 1,
-    },
-    {
-      id: "kubernetes-ops",
-      workspaceId: "workspace-main",
-      name: "kubernetes-ops",
-      environment: "management",
-      provider: "unknown",
-      connectionStage: null,
-      registrationState: "active",
-      connectionState: "online",
-      lastObservedAt: "2026-07-12T10:00:00.000Z",
-      nodeCount: 1,
-      podCount: 4,
-      incidentCount: 0,
-    },
-  ],
-};
+export { homeBoardPorts, CLUSTERS, PODS };
 
 export const OVERVIEW: HomeClusterOverview = {
   clusterId: "cluster-1",
@@ -253,31 +221,12 @@ export const INSIGHTS: HomeInsights = {
   refreshAfterSeconds: 30,
 };
 
-export const PODS: HomePodCollection = {
-  clusterId: "cluster-1",
-  nodeName: "worker-b",
-  completeness: "unknown",
-  pods: [{
-    id: "pod:cluster-1/worker-b/shop/checkout-api-0",
-    identityStability: "ephemeral",
-    name: "checkout-api-0",
-    namespace: "shop",
-    phase: "Running",
-    health: "warning",
-    readiness: { ready: 1, total: 2 },
-    restartCount: 3,
-    owner: { kind: "StatefulSet", name: "checkout-api" },
-    cpuMillicores: 245.5,
-    memoryMebibytes: 382,
-    incidentCorrelationId: "correlation-1",
-  }],
-};
-
 export function renderHome(
   port: HomePort,
   initialEntries = ["/?clusters=cluster-1"],
   reportUnauthorized = vi.fn(),
   locale: SupportedLocale | null = "ko",
+  board = homeBoardPorts(),
 ) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -288,7 +237,7 @@ export function renderHome(
         >
           <UnifiedFilterProvider>
             <ClusterScopeProvider authorityKey="test-workspace:test-user" port={port}>
-              <HomePage port={port} />
+              <HomePage boardPorts={board} port={port} />
               <LocationProbe />
             </ClusterScopeProvider>
           </UnifiedFilterProvider>

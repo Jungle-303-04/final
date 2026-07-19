@@ -1,6 +1,5 @@
 import { CircleAlert } from "lucide-react";
-import { useState } from "react";
-import { routeDefinitionForSurface } from "../../app/productRoutes";
+import { useCallback, useState } from "react";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type {
   ClusterDisconnectPort,
@@ -14,14 +13,8 @@ import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { PollingFreshness } from "../PollingFreshness";
-import { HomeClusterHealth } from "./HomeClusterHealth";
-import { clusterResourcesHref } from "../clusters/clusterNavigation";
 import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeFleetHeader } from "./HomeFleetHeader";
-import { HomeIssuesRail } from "./HomeIssuesRail";
-import { HomeInsightsBand } from "./HomeInsightsBand";
-import { HomeLiveBand } from "./HomeLiveBand";
-import { HomeSourceBands } from "./HomeSourceBands";
 import { useHomePageState } from "./useHomePageState";
 import {
   ClusterDisconnectDialog,
@@ -29,11 +22,16 @@ import {
 } from "../clusters/ClusterDisconnectDialog";
 import { ClusterConnectDialog } from "../clusters/ClusterConnectDialog";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
+import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
+import { HomeWidgetBoard } from "./HomeWidgetBoard";
+import type { HomeBoardPorts } from "./useHomeBoardData";
 
 export function HomePage({
+  boardPorts,
   clusterPort,
   port,
 }: {
+  boardPorts?: HomeBoardPorts;
   clusterPort?: ClustersPort & ClusterDisconnectPort;
   port: HomePort;
 }) {
@@ -44,6 +42,12 @@ export function HomePage({
   const [disconnectCluster, setDisconnectCluster] = useState<HomeClusterChoice | null>(null);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnectPhase, setDisconnectPhase] = useState<DisconnectPhase>("confirm");
+  const [editingBoard, setEditingBoard] = useState(false);
+  const [outOfSync, setOutOfSync] = useState<number | null>(null);
+  const updateOutOfSync = useCallback((count: number | null) => {
+    setOutOfSync((current) => current === count ? current : count);
+  }, []);
+  const boardPeriod: HomeBoardPeriod = filter.detail.homePeriod ?? "today";
   const canManageClusters = clusterPort !== undefined &&
     (session?.roles.includes("service_admin") ?? false);
 
@@ -53,20 +57,21 @@ export function HomePage({
   if (state.choices.phase === "failed") {
     return <HomeFailureScreen failure={state.choices.failure} onRetry={state.refresh} />;
   }
-  const selectedCluster = state.choices.data.clusters.find(
-    (cluster) => cluster.id === state.selectedClusterId,
-  );
   if (state.clusterAccess.kind === "forbidden") {
     return <HomeFailureScreen failure={state.clusterAccess.failure} onRetry={state.refresh} />;
   }
   const refreshing = [state.choices, state.overview, state.insights, state.nodes, state.pods].some(
     (resource) => resource.phase === "ready" && resource.refreshing,
   );
+  const boardCluster = state.choices.data.clusters.find(
+    (cluster) => cluster.id === state.selectedClusterId,
+  ) ?? null;
 
   return (
     <ProductPageFrame>
       <HomeFleetHeader
         clusters={state.choices.data.clusters}
+        editing={editingBoard}
         freshness={state.refreshIntervalSeconds === null ? null : (
           <PollingFreshness
             connectionState={homeConnectionState(state)}
@@ -76,7 +81,16 @@ export function HomePage({
             onRefresh={state.refresh}
           />
         )}
+        onEdit={boardPorts ? () => setEditingBoard((current) => !current) : undefined}
         onConnect={canManageClusters ? () => setConnectOpen(true) : undefined}
+        onPeriodChange={boardPorts ? (period) => {
+          filter.updateDetail(
+            (current) => ({ ...current, homePeriod: period }),
+            "home-period",
+          );
+        } : undefined}
+        outOfSync={outOfSync}
+        period={boardPorts ? boardPeriod : undefined}
       />
       <HomeClusterGrid
         clusters={state.choices.data.clusters}
@@ -104,36 +118,18 @@ export function HomePage({
       ) : (
         <>
           <PartialFailureBanner state={state} />
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="grid min-w-0 content-start gap-4">
-              <HomeClusterHealth
-                cluster={selectedCluster ?? null}
-                links={{
-                  incidents: filter.navigationHref(routeDefinitionForSurface("issues").path),
-                  nodes: clusterResourcesHref(filter.state, state.selectedClusterId!, "node"),
-                  pods: clusterResourcesHref(filter.state, state.selectedClusterId!, "pod"),
-                  restarts: clusterResourcesHref(filter.state, state.selectedClusterId!, "pod"),
-                  warnings: filter.navigationHref(routeDefinitionForSurface("timeline").path),
-                  workloads: clusterResourcesHref(
-                    filter.state,
-                    state.selectedClusterId!,
-                    "workload",
-                  ),
-                }}
-                nodes={state.nodes}
-                onRefresh={state.refresh}
-                overview={state.overview}
-              />
-              <HomeInsightsBand insights={state.insights} onRefresh={state.refresh} />
-              <HomeSourceBands state={state} />
-              <HomeLiveBand state={state} />
-            </div>
-            <HomeIssuesRail
-              cluster={selectedCluster ?? null}
-              onRefresh={state.refresh}
-              overview={state.overview}
+          {boardPorts && state.selectedClusterId && boardCluster ? (
+            <HomeWidgetBoard
+              clusterId={state.selectedClusterId}
+              editing={editingBoard}
+              freshness={homeScopeFreshness(boardCluster.connectionState)}
+              onOutOfSyncChange={updateOutOfSync}
+              period={boardPeriod}
+              ports={boardPorts}
+              refreshKey={state.dataUpdatedAt}
+              workspaceId={boardCluster.workspaceId}
             />
-          </div>
+          ) : null}
         </>
       )}
       {canManageClusters && clusterPort ? (
@@ -177,6 +173,15 @@ function homeConnectionState(state: ReturnType<typeof useHomePageState>) {
     resource.phase === "failed" ||
     (resource.phase === "ready" && resource.refreshFailure !== null)
   ) ? "disconnected" as const : "connected" as const;
+}
+
+function homeScopeFreshness(
+  connectionState: HomeClusterChoice["connectionState"],
+): "live" | "stale" | "partial" | "disconnected" {
+  if (connectionState === "online") return "live";
+  if (connectionState === "stale") return "stale";
+  if (connectionState === "offline") return "disconnected";
+  return "partial";
 }
 
 function HomeClusterBoundary({

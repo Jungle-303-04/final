@@ -15,6 +15,7 @@ export type ResourceSurfaceView = "map" | "list" | "flow";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
 export type CostRange = "6h" | "24h" | "7d";
 export type TrafficSince = "1m" | "5m" | "15m" | "1h";
+export type HomePeriod = "today" | "7d" | "30d";
 export type TrafficProtocol = "tcp" | "udp" | "http" | "grpc" | "dns" | "unknown";
 export type TrafficVerdict = "forwarded" | "dropped" | "error" | "unknown";
 export type TrafficSort = "connections" | "last_seen" | "source" | "destination";
@@ -96,6 +97,7 @@ export interface ProductDetailQuery {
   rightsizingQuery?: string | null;
   timeAt?: number;
   graphCollapsed?: true;
+  homePeriod?: HomePeriod;
   surfaceTab?: "applications" | "repositories" | "helm" | "incidents" | "rules";
   trafficSince?: TrafficSince;
   trafficProtocols?: readonly TrafficProtocol[];
@@ -132,6 +134,7 @@ export interface InvalidFilterValues {
   costRange: readonly string[];
   timeAt: readonly string[];
   graph: readonly string[];
+  homePeriod: readonly string[];
 }
 
 export interface FilterUrlParseResult {
@@ -169,6 +172,7 @@ export type DetailMutationIntent =
   | "time-range"
   | "time-at"
   | "graph-visibility"
+  | "home-period"
   | "surface-tab"
   | "traffic-filter"
   | "traffic-sort"

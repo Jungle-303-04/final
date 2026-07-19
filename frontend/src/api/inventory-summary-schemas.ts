@@ -32,12 +32,30 @@ const inventoryResourceCountsEvidenceSchema = z.strictObject({
   }
 });
 
+const inventoryNamespaceCountSchema = z.strictObject({
+  resource_type: z.string().min(1),
+  health: z.string().min(1),
+  count: z.number().int().nonnegative(),
+});
+
+const inventoryNamespaceSummarySchema = z.strictObject({
+  namespace: z.string().min(1),
+  total: z.number().int().nonnegative(),
+  counts: z.array(inventoryNamespaceCountSchema),
+}).superRefine((value, context) => {
+  const total = value.counts.reduce((sum, count) => sum + count.count, 0);
+  if (total !== value.total) {
+    context.addIssue({ code: "custom", message: "namespace total must equal its counts" });
+  }
+});
+
 /** Runtime contract for `GET /clusters/{cluster_id}/inventory/summary`. */
 export const inventorySummarySchema = z.strictObject({
   cluster_id: z.string(),
   latest_snapshot: jsonMapSchema.nullable(),
   counts: z.array(jsonMapSchema),
   counts_evidence: inventoryResourceCountsEvidenceSchema,
+  namespaces: z.array(inventoryNamespaceSummarySchema),
 });
 
 export type InventorySummary = z.infer<typeof inventorySummarySchema>;

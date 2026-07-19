@@ -2,6 +2,7 @@ import {
   createEmptyProductDetailQuery,
   type ProductDetailQuery,
   type CostRange,
+  type HomePeriod,
   type RightsizingClassFilter,
   type TimelineRange,
 } from "./filterContract";
@@ -25,6 +26,7 @@ const RESOURCE_SURFACE_VIEWS = ["map", "list", "flow"] as const;
 const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 const COST_RANGES = ["6h", "24h", "7d"] as const;
+const HOME_PERIODS = ["today", "7d", "30d"] as const;
 const SURFACE_TABS = ["applications", "repositories", "helm", "incidents", "rules"] as const;
 const RIGHTSIZING_CLASSES = ["increase", "reduction", "review", "in_range", "need_data"] as const;
 const TRAFFIC_SINCE = ["1m", "5m", "15m", "1h"] as const;
@@ -66,6 +68,9 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   appendNullableStableText(pairs, "rfQ", detail.rightsizingQuery ?? null);
   if (detail.timeAt !== undefined) appendText(pairs, "t.at", String(detail.timeAt));
   if (detail.graphCollapsed) appendText(pairs, "graph", "0");
+  if (detail.homePeriod && detail.homePeriod !== "today") {
+    appendText(pairs, "home.period", detail.homePeriod);
+  }
   if (detail.surfaceTab) appendText(pairs, "section", detail.surfaceTab);
   if (detail.trafficSince && detail.trafficSince !== "5m") {
     appendText(pairs, "traffic.since", detail.trafficSince);
@@ -89,6 +94,7 @@ export function parseProductDetailQuery(
   invalidCostRange: string[] = [],
   invalidTimeAt: string[] = [],
   invalidGraph: string[] = [],
+  invalidHomePeriod: string[] = [],
 ): ProductDetailQuery {
   const detail = createEmptyProductDetailQuery();
   detail.detail = readStableText(params, "detail");
@@ -139,6 +145,9 @@ export function parseProductDetailQuery(
   const graph = readScalar(params, "graph", invalidGraph);
   if (graph === "0") detail.graphCollapsed = true;
   else if (graph !== null) invalidGraph.push(graph);
+  const homePeriod = readScalar(params, "home.period", invalidHomePeriod);
+  if (homePeriod !== null && isHomePeriod(homePeriod)) detail.homePeriod = homePeriod;
+  else if (homePeriod !== null) invalidHomePeriod.push(homePeriod);
   const surfaceTab = readStableText(params, "section");
   if (isMember(SURFACE_TABS, surfaceTab)) detail.surfaceTab = surfaceTab;
   const trafficSince = readScalar(params, "traffic.since", []);
@@ -190,6 +199,10 @@ function isTimelineRange(value: string): value is TimelineRange {
 
 function isCostRange(value: string): value is CostRange {
   return COST_RANGES.some((range) => range === value);
+}
+
+function isHomePeriod(value: string): value is HomePeriod {
+  return HOME_PERIODS.some((period) => period === value);
 }
 
 function isRightsizingClass(value: string): value is RightsizingClassFilter {

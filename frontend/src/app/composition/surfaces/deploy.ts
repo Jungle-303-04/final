@@ -6,16 +6,18 @@ import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserR
 import { loadApplicationsSurface } from "./applications";
 import { loadGitOpsSurface } from "./gitops";
 import { loadHelmSurface } from "./helm";
+import type { GitOpsPort } from "../../../features/gitops/gitOpsContract";
 
 export function loadDeploySurface(
   refreshPolicies: BrowserRefreshPolicyRegistry<
     "applications" | "gitops_rows" | "gitops_counts"
   >,
   rcaContextPort: RcaContextPort,
+  gitOpsPort: GitOpsPort,
 ): ComponentType {
   return createDeploySurface({
     Applications: loadApplicationsSurface(refreshPolicies),
-    GitOps: loadGitOpsSurface(refreshPolicies, rcaContextPort),
+    GitOps: loadGitOpsSurface(refreshPolicies, rcaContextPort, gitOpsPort),
     Helm: loadHelmSurface(),
   });
 }

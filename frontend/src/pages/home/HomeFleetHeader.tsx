@@ -1,22 +1,40 @@
-import { Plus } from "lucide-react";
+import { Plus, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 
+import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n";
 import { Surface } from "../../shared/ui/Surface";
 import { TintChip } from "../../shared/ui/status";
 import { Button } from "../../shared/ui/primitives/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../shared/ui/primitives/select";
 
 export function HomeFleetHeader({
   clusters,
+  editing,
   freshness,
+  onEdit,
   onConnect,
+  onPeriodChange,
+  outOfSync,
+  period,
 }: {
   clusters: readonly HomeClusterChoice[];
+  editing?: boolean;
   freshness?: ReactNode;
+  onEdit?: () => void;
   onConnect?: () => void;
+  onPeriodChange?: (period: HomeBoardPeriod) => void;
+  outOfSync?: number | null;
+  period?: HomeBoardPeriod;
 }) {
-  const { formatNumber, t } = useI18n();
+  const { formatNumber, locale, t } = useI18n();
   const nodes = exactSum(clusters.map((cluster) => cluster.nodeCount));
   const pods = exactSum(clusters.map((cluster) => cluster.podCount));
   const critical = exactSum(
@@ -31,6 +49,31 @@ export function HomeFleetHeader({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {freshness}
+          {period && onPeriodChange ? (
+            <Select
+              onValueChange={(value) => {
+                if (isHomeBoardPeriod(value)) onPeriodChange(value);
+              }}
+              value={period}
+            >
+              <SelectTrigger aria-label={t("timeline.strip.range")} size="sm">
+                <SelectValue>{homePeriodLabel(period, locale)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">
+                  {new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "day")}
+                </SelectItem>
+                <SelectItem value="7d">{homePeriodLabel("7d", locale)}</SelectItem>
+                <SelectItem value="30d">{homePeriodLabel("30d", locale)}</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
+          {onEdit ? (
+            <Button onClick={onEdit} size="sm" type="button" variant="ghost">
+              <SlidersHorizontal aria-hidden="true" />
+              {editing ? t("workflows.editor.save") : t("shell.ai.action.edit")}
+            </Button>
+          ) : null}
           {onConnect ? (
             <Button onClick={onConnect} type="button">
               <Plus aria-hidden="true" />
@@ -58,7 +101,7 @@ export function HomeFleetHeader({
         />
         <FleetMetric
           label={t("workflows.sync.status.outOfSync")}
-          value="—"
+          value={outOfSync == null ? "—" : formatNumber(outOfSync)}
         />
         <TintChip
           label={(
@@ -74,6 +117,17 @@ export function HomeFleetHeader({
       </div>
     </Surface>
   );
+}
+
+function homePeriodLabel(period: HomeBoardPeriod, locale: string): string {
+  if (period === "today") {
+    return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "day");
+  }
+  return period;
+}
+
+function isHomeBoardPeriod(value: unknown): value is HomeBoardPeriod {
+  return value === "today" || value === "7d" || value === "30d";
 }
 
 function FleetMetric({ label, value }: { label: string; value: string }) {

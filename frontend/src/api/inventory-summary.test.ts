@@ -22,6 +22,14 @@ const INVENTORY_SUMMARY = {
     reason_codes: [],
     forbidden: [],
   },
+  namespaces: [{
+    namespace: "shop",
+    total: 45,
+    counts: [
+      { resource_type: "pod", health: "healthy", count: 42 },
+      { resource_type: "pod", health: "warning", count: 3 },
+    ],
+  }],
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -64,6 +72,7 @@ describe("inventory summary API", () => {
           reason_codes: ["inventory_snapshot_evidence_unavailable"],
           forbidden: [],
         },
+        namespaces: [],
       }),
     );
 
@@ -78,6 +87,7 @@ describe("inventory summary API", () => {
         reason_codes: ["inventory_snapshot_evidence_unavailable"],
         forbidden: [],
       },
+      namespaces: [],
     });
   });
 

@@ -36,6 +36,14 @@ export const INVENTORY_SUMMARY: ResourcesEndpointInventorySummary = {
       reason_code: "list_permission_not_observed",
     }],
   },
+  namespaces: [{
+    namespace: "shop",
+    total: 3,
+    counts: [
+      { resource_type: "pod", health: "healthy", count: 2 },
+      { resource_type: "pod", health: "degraded", count: 1 },
+    ],
+  }],
 };
 
 export const API_RESOURCES: KubernetesApiResourcesEndpoint = {
