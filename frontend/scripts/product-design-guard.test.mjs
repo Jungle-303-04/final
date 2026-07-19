@@ -98,7 +98,78 @@ describe("product-design-guard debt ceilings", () => {
   });
 });
 
-async function runGuard(files) {
+describe("product-design-guard v3 release rules", () => {
+  it("rejects raw colors outside the token and identity owners", async () => {
+    const result = await runGuard({
+      "pages/Surface.tsx": "export const surfaceColor = 'rgba(0, 0, 0, 0.2)';",
+      "shared/ui/brand/second-registry.css": ".brand { color: #ffffff; }",
+    }, ["--release-gate"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[release-design-token]");
+    expect(result.output).toContain("second-registry.css");
+  });
+
+  it("separates the single editable identity registry from immutable upstream mark payloads", async () => {
+    const result = await runGuard({
+      "shared/brand/azure.svg": "<svg><path fill=\"#0078d4\" /></svg>",
+      "shared/brand/gitops/flux.svg": "<svg><path fill=\"#326ce5\" /></svg>",
+      "shared/ui/brand/brand.css": ".brand { color: #181717; }",
+      "styles/tokens.css": ":root { --surface: oklch(1 0 0); }",
+    }, ["--release-gate"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.output).not.toContain("release-design-token");
+  });
+
+  it("rejects numeric Motion duration literals, including zero", async () => {
+    const result = await runGuard({
+      "motion/Surface.tsx": [
+        "export const reduced = { duration: 0 };",
+        "export const active = { duration: 0.18 };",
+      ].join("\n"),
+    }, ["--release-gate"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[motion-duration-token]");
+    expect(result.output.match(/\[motion-duration-token\]/g)).toHaveLength(2);
+  });
+
+  it("accepts Motion duration token references", async () => {
+    const result = await runGuard({
+      "motion/Surface.tsx": [
+        "const MOTION_DURATION_SECONDS = { quick: 0.18 };",
+        "export const transition = { duration: MOTION_DURATION_SECONDS.quick };",
+      ].join("\n"),
+    }, ["--release-gate"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.output).not.toContain("motion-duration-token");
+  });
+
+  it("requires new visual primitives to live under shared/ui", async () => {
+    const result = await runGuard({
+      "pages/StatusCard.tsx": "export function StatusCard() { return null; }",
+      "shared/ui/StatusChip.tsx": "export function StatusChip() { return null; }",
+    }, ["--release-gate"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[shared-visual-ownership]");
+    expect(result.output).toContain("StatusCard");
+    expect(result.output).not.toContain("New StatusChip");
+  });
+
+  it("rejects new page-local inline styles", async () => {
+    const result = await runGuard({
+      "pages/Surface.tsx": "export function Surface() { return <div style={{ opacity: 1 }} />; }",
+    }, ["--release-gate"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[release-no-inline-style]");
+  });
+});
+
+async function runGuard(files, args = []) {
   const root = await mkdtemp(resolve(tmpdir(), "opsia-design-guard-"));
   temporaryRoots.push(root);
 
@@ -109,8 +180,12 @@ async function runGuard(files) {
   }));
 
   try {
-    const { stderr, stdout } = await execFileAsync("node", [scriptPath], {
-      env: { ...process.env, PRODUCT_DESIGN_GUARD_ROOT: root },
+    const { stderr, stdout } = await execFileAsync("node", [scriptPath, ...args], {
+      env: {
+        ...process.env,
+        PRODUCT_DESIGN_GUARD_BASE: "",
+        PRODUCT_DESIGN_GUARD_ROOT: root,
+      },
     });
     return { exitCode: 0, output: `${stdout}${stderr}` };
   } catch (error) {

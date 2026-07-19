@@ -3,7 +3,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { BRAND_COLOR, BrandIcon } from "./BrandIcon";
+import { BrandIcon } from "./BrandIcon";
 
 describe("BrandIcon", () => {
   it.each(["github", "redis", "postgresql", "argocd"] as const)(
@@ -15,7 +15,6 @@ describe("BrandIcon", () => {
       expect(icon.tagName).toBe("svg");
       expect(icon.querySelector("path")?.getAttribute("d")?.length)
         .toBeGreaterThan(20);
-      expect(BRAND_COLOR[brand]).toMatch(/^#[\dA-F]{6}$/);
     },
   );
 

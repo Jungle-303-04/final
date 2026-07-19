@@ -2,6 +2,8 @@
   color: var(--foreground);
 }
 
+/* Sole source-code exception for immutable upstream service identity colors. */
+
 .brand-icon[data-brand="github"] {
   color: #181717;
 }

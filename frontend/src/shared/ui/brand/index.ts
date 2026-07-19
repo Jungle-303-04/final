@@ -1,7 +1,6 @@
 export {
   ArgoCdBrandIcon,
   AwsBrandIcon,
-  BRAND_COLOR,
   BrandIcon,
   GitHubBrandIcon,
   PostgreSqlBrandIcon,

@@ -7,9 +7,14 @@ import {
 import * as m from "motion/react-m";
 import type { ReactNode } from "react";
 
+import {
+  MOTION_DURATION_SECONDS,
+  STAGGER_MS,
+  staggerDelay,
+} from "./useStagger";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
-const reducedTransition = { duration: 0 } as const;
+const reducedTransition = { duration: MOTION_DURATION_SECONDS.none } as const;
 const turnTransition = {
   damping: 30,
   stiffness: 360,
@@ -65,7 +70,11 @@ export function AiAssistantSuggestionMotion({
       initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
       transition={reducedMotion
         ? reducedTransition
-        : { delay: index * 0.035, duration: 0.18, ease: "easeOut" }}
+        : {
+            delay: staggerDelay(index, STAGGER_MS.suggestion) / 1_000,
+            duration: MOTION_DURATION_SECONDS.quick,
+            ease: "easeOut",
+          }}
     >
       {children}
     </m.div>

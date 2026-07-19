@@ -1,5 +1,5 @@
 import { Activity, Settings } from "lucide-react";
-import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
@@ -160,6 +160,7 @@ function ProductShellFrame({
   const [aiPanelWidth, setAiPanelWidth] = useState(AI_ASSISTANT_PANEL_DEFAULT_WIDTH);
   const diagnosticsDialogRef = useRef<RuntimeDiagnosticsDialogHandle>(null);
   const unifiedFilterRef = useRef<ProductHeaderFilterHandle>(null);
+  const mainScrollRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
@@ -168,6 +169,9 @@ function ProductShellFrame({
   const { t } = useI18n();
   const themeController = useProductTheme();
   const diagnose = useOptionalDiagnoseSession();
+  useLayoutEffect(() => {
+    mainScrollRef.current?.scrollTo?.({ behavior: "auto", left: 0, top: 0 });
+  }, [location.pathname]);
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
   const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
@@ -383,6 +387,7 @@ function ProductShellFrame({
               <main
                 className="relative min-h-0 min-w-0 flex-1 overflow-y-auto"
                 id="product-main"
+                ref={mainScrollRef}
                 tabIndex={-1}
               >
                 <Outlet />

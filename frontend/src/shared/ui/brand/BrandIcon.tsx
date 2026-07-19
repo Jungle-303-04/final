@@ -18,14 +18,6 @@ export type BrandIconKind =
   | "postgresql"
   | "redis";
 
-export const BRAND_COLOR: Readonly<Record<BrandIconKind, string>> = {
-  argocd: "#EF7B4D",
-  aws: "#FF9900",
-  github: "#181717",
-  postgresql: "#4169E1",
-  redis: "#FF4438",
-};
-
 const simpleIconByBrand: Readonly<
   Record<Exclude<BrandIconKind, "aws">, SimpleIcon>
 > = {

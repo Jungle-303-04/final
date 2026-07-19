@@ -177,7 +177,7 @@ gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트
 	PYTHONPATH=src uv run lint-imports --config .importlinter
 	uv run python -m compileall -q src scripts
 	uv run pytest -q $(FAST_TESTS)
-	@changed_files="$$(bash scripts/changed-files.sh)"; \
+	@set -e; changed_files="$$(bash scripts/changed-files.sh)"; \
 	if grep -Eq '^frontend/' <<<"$$changed_files"; then \
 		base="$$(bash scripts/changed-files.sh --base)"; \
 		if [[ ! -d frontend/node_modules ]] || grep -Eq '^frontend/(package.json|package-lock.json)$$' <<<"$$changed_files"; then \
@@ -185,6 +185,7 @@ gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트
 		fi; \
 		(cd frontend && npm run typecheck); \
 		(cd frontend && npm run lint); \
+		(cd frontend && node scripts/product-design-guard.mjs --release-gate --base "$$base"); \
 		if grep -Eq '^frontend/(package.json|package-lock.json|vitest.config.[^/]+|vite.config.[^/]+|tsconfig[^/]*)$$' <<<"$$changed_files"; then \
 			(cd frontend && npm test -- --maxWorkers=2); \
 		else \

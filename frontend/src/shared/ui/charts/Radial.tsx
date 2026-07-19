@@ -1,9 +1,54 @@
+import { Pie, PieChart } from "recharts";
+
 import { cn } from "@/shared/lib/cn";
 import {
-  chartToneColor,
+  ChartContainer,
+  type ChartConfig,
+} from "@/shared/ui/primitives/chart";
+import {
   normalizedRatio,
   type ChartTone,
 } from "./chartPrimitives";
+
+const RADIAL_CHART_CONFIG = {
+  "radial-track": { color: "var(--color-muted)" },
+  "radial-unavailable": { color: "var(--color-caption-foreground)" },
+  "tone-critical": { color: "var(--color-status-critical)" },
+  "tone-healthy": { color: "var(--color-status-healthy)" },
+  "tone-primary": { color: "var(--color-primary)" },
+  "tone-stale": { color: "var(--color-status-stale)" },
+  "tone-unknown": { color: "var(--color-status-unknown)" },
+  "tone-warning": { color: "var(--color-status-warning)" },
+} satisfies ChartConfig;
+
+const TRACK_DATA = [
+  { fill: "var(--color-radial-track)", id: "track", value: 1 },
+];
+
+const UNKNOWN_RING_DATA = Array.from({ length: 32 }, (_, index) => ({
+  fill: "var(--color-radial-unavailable)",
+  id: `unknown-${index}`,
+  value: 1,
+}));
+
+function toneFill(tone: ChartTone) {
+  return `var(--color-tone-${tone})`;
+}
+
+function finiteNonNegative(value: number) {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function CenterLabel({ children }: { children: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 grid place-items-center text-caption font-bold text-foreground"
+    >
+      {children}
+    </span>
+  );
+}
 
 export interface DonutSegment {
   id: string;
@@ -22,63 +67,53 @@ export function Donut({
   className?: string;
   segments: readonly DonutSegment[];
 }) {
-  const total = segments.reduce(
-    (sum, segment) => sum + Math.max(0, segment.value),
-    0,
-  );
-  let offset = 0;
+  const data = segments.map((segment) => ({
+    fill: toneFill(segment.tone),
+    id: segment.id,
+    value: finiteNonNegative(segment.value),
+  }));
+  const total = data.reduce((sum, segment) => sum + segment.value, 0);
 
   return (
-    <svg
+    <ChartContainer
       aria-label={ariaLabel}
-      className={cn("size-24 overflow-visible", className)}
+      className={cn("relative size-24 aspect-square overflow-visible", className)}
+      config={RADIAL_CHART_CONFIG}
+      data-chart-state={total > 0 ? "ready" : "empty"}
       role="img"
-      viewBox="0 0 100 100"
     >
-      <circle
-        cx="50"
-        cy="50"
-        fill="none"
-        pathLength="100"
-        r="38"
-        stroke="var(--color-muted)"
-        strokeWidth="12"
-      />
-      {total > 0
-        ? segments.map((segment) => {
-            const portion = (Math.max(0, segment.value) / total) * 100;
-            const currentOffset = offset;
-            offset += portion;
-            return (
-              <circle
-                cx="50"
-                cy="50"
-                fill="none"
-                key={segment.id}
-                pathLength="100"
-                r="38"
-                stroke={chartToneColor(segment.tone)}
-                strokeDasharray={`${portion} ${100 - portion}`}
-                strokeDashoffset={-currentOffset}
-                strokeWidth="12"
-                transform="rotate(-90 50 50)"
-              />
-            );
-          })
-        : null}
-      {centerLabel ? (
-        <text
-          fill="var(--color-foreground)"
-          fontSize="13"
-          fontWeight="700"
-          textAnchor="middle"
-          x="50"
-          y="54"
-        >
-          {centerLabel}
-        </text>
-      ) : null}
-    </svg>
+      <PieChart>
+        <Pie
+          data={TRACK_DATA}
+          dataKey="value"
+          endAngle={-270}
+          fill="var(--color-radial-track)"
+          innerRadius="64%"
+          isAnimationActive={false}
+          nameKey="id"
+          outerRadius="88%"
+          rootTabIndex={-1}
+          startAngle={90}
+          stroke="none"
+        />
+        {total > 0 ? (
+          <Pie
+            data={data}
+            dataKey="value"
+            endAngle={-270}
+            innerRadius="64%"
+            isAnimationActive={false}
+            nameKey="id"
+            outerRadius="88%"
+            rootTabIndex={-1}
+            startAngle={90}
+            stroke="var(--color-background)"
+            strokeWidth={1}
+          />
+        ) : null}
+      </PieChart>
+      {centerLabel ? <CenterLabel>{centerLabel}</CenterLabel> : null}
+    </ChartContainer>
   );
 }
 
@@ -102,60 +137,67 @@ export function RingGauge({
   value,
 }: RingGaugeProps) {
   const ratio = normalizedRatio(value, max);
+  const valueData = ratio == null
+    ? []
+    : [
+        { fill: toneFill(tone), id: "value", value: ratio },
+        { fill: "transparent", id: "remainder", value: 1 - ratio },
+      ];
+
   return (
-    <svg
+    <ChartContainer
       aria-label={ariaLabel}
-      className={cn("size-24 overflow-visible", className)}
+      className={cn("relative size-24 aspect-square overflow-visible", className)}
+      config={RADIAL_CHART_CONFIG}
+      data-chart-state={ratio == null ? "unknown" : "ready"}
       data-surface={surface}
       role="img"
-      viewBox="0 0 100 100"
     >
-      <circle
-        cx="50"
-        cy="50"
-        fill="none"
-        pathLength="100"
-        r="38"
-        stroke="var(--color-muted)"
-        strokeWidth="10"
-      />
-      {ratio == null ? (
-        <circle
-          cx="50"
-          cy="50"
-          fill="none"
-          pathLength="100"
-          r="38"
-          stroke="var(--color-caption-foreground)"
-          strokeDasharray="2 4"
-          strokeWidth="10"
-          transform="rotate(-90 50 50)"
+      <PieChart>
+        <Pie
+          data={TRACK_DATA}
+          dataKey="value"
+          endAngle={-270}
+          fill="var(--color-radial-track)"
+          innerRadius="66%"
+          isAnimationActive={false}
+          nameKey="id"
+          outerRadius="86%"
+          rootTabIndex={-1}
+          startAngle={90}
+          stroke="none"
         />
-      ) : (
-        <circle
-          className="origin-center transition-[stroke-dasharray] duration-(--motion-value) ease-(--ease-draw) motion-reduce:transition-none"
-          cx="50"
-          cy="50"
-          fill="none"
-          pathLength="100"
-          r="38"
-          stroke={chartToneColor(tone)}
-          strokeDasharray={`${ratio * 100} ${100 - ratio * 100}`}
-          strokeLinecap="round"
-          strokeWidth="10"
-          transform="rotate(-90 50 50)"
-        />
-      )}
-      <text
-        fill="var(--color-foreground)"
-        fontSize="13"
-        fontWeight="700"
-        textAnchor="middle"
-        x="50"
-        y="54"
-      >
-        {displayValue}
-      </text>
-    </svg>
+        {ratio == null ? (
+          <Pie
+            data={UNKNOWN_RING_DATA}
+            dataKey="value"
+            endAngle={-270}
+            innerRadius="66%"
+            isAnimationActive={false}
+            nameKey="id"
+            outerRadius="86%"
+            paddingAngle={4}
+            rootTabIndex={-1}
+            startAngle={90}
+            stroke="none"
+          />
+        ) : (
+          <Pie
+            cornerRadius="50%"
+            data={valueData}
+            dataKey="value"
+            endAngle={-270}
+            innerRadius="66%"
+            isAnimationActive={false}
+            nameKey="id"
+            outerRadius="86%"
+            rootTabIndex={-1}
+            startAngle={90}
+            stroke="none"
+          />
+        )}
+      </PieChart>
+      <CenterLabel>{displayValue}</CenterLabel>
+    </ChartContainer>
   );
 }
