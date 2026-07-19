@@ -7,24 +7,16 @@ import { Info, ChevronRight, ChevronDown } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, inkA, blueA, critA, okA, warnA, IDENT } from "./theme";
 
 // ── WidgetFrame — 유일한 위젯 껍데기: 제목 + ⓘ 툴팁 + `>` 딥링크(실 목적지만) + 접기 ──
-export function WidgetFrame({ title, info, onDeepLink, deepLabel, collapsed, onToggle, editing, onRemove, onMove, children }: {
+export function WidgetFrame({ title, info, onDeepLink, deepLabel, collapsed, onToggle, editing, onRemove, children }: {
   title: string; info?: string; onDeepLink?: () => void; deepLabel?: string;
   collapsed?: boolean; onToggle?: () => void; editing?: boolean; onRemove?: () => void;
-  onMove?: (dir: -1 | 1) => void;
   children: React.ReactNode;
 }) {
   const [tip, setTip] = useState(false);
   return (
-    <div style={{ background: UI.card, border: `1px solid ${editing ? blueA(0.4) : UI.line}`, borderRadius: 14, padding: "13px 15px", display: "flex", flexDirection: "column", gap: 11, minWidth: 0, position: "relative", transition: "border-color .2s" }}>
+    // 편집 = 카드 전체가 드래그 핸들(버튼식 이동 없음) — 파란 점선 보더가 편집 상태 신호
+    <div style={{ background: UI.card, border: editing ? `1.5px dashed ${blueA(0.5)}` : `1px solid ${UI.line}`, borderRadius: 14, padding: "13px 15px", display: "flex", flexDirection: "column", gap: 11, minWidth: 0, position: "relative", transition: "border-color .2s", height: "100%", boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        {editing && onMove && (
-          <span style={{ display: "flex", gap: 2, marginRight: 2 }}>
-            {([[-1, "◀"], [1, "▶"]] as const).map(([d, g]) => (
-              <button key={d} onClick={() => onMove(d)} title={d === -1 ? "앞으로" : "뒤로"}
-                style={{ width: 20, height: 20, borderRadius: 6, border: "none", background: blueA(0.09), color: BLUE, cursor: "pointer", fontSize: TYPE.micro, lineHeight: 1 }}>{g}</button>
-            ))}
-          </span>
-        )}
         <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink }}>{title}</span>
         {info && (
           <span style={{ position: "relative", display: "grid" }} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>

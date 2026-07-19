@@ -1239,13 +1239,15 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
   const [board, setBoard] = useState<BoardState>(readBoard);
   const [editing, setEditing] = useState(false);
   const save = (b: BoardState) => { setBoard(b); try { localStorage.setItem(BOARD_KEY, JSON.stringify(b)); } catch { /* 데모 */ } };
-  const move = (id: string, dir: -1 | 1) => {
-    const vis = board.order.filter((x) => !board.hidden.includes(x));
-    const i = vis.indexOf(id); const j = i + dir;
-    if (j < 0 || j >= vis.length) return;
+  // 드래그 리오더 — 끌고 있는 카드가 다른 카드 위를 지나면 즉시 자리를 바꾼다(라이브 미리보기, motion layout이 스프링으로 따라온다)
+  const [dragId, setDragId] = useState<string | null>(null);
+  const dragOverWidget = (overId: string) => {
+    if (!dragId || dragId === overId) return;
     const order = [...board.order];
-    const a = order.indexOf(vis[i]), b = order.indexOf(vis[j]);
-    [order[a], order[b]] = [order[b], order[a]];
+    const from = order.indexOf(dragId), to = order.indexOf(overId);
+    if (from < 0 || to < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, dragId);
     save({ ...board, order });
   };
 
@@ -1364,20 +1366,28 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} onAddCluster={onConnect} pending={pendingCl} />
 
       {/* ── 위젯 보드 — 4칸 그리드 + 밀집 배치(dense): 숨김·이동으로 생긴 빈칸에 작은 위젯이 위로 올라와 채운다 ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14, alignItems: "start" }}>
+      {/* stretch 정렬 — 같은 행의 위젯은 세로 크기가 동일하다(가장 큰 위젯 기준) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
         {visible.map((id) => {
           const def = W_DEFS.find((w) => w.id === id)!;
           return (
-            <motion.div key={id} layout transition={SPRING} style={{ gridColumn: `span ${Math.min(def.span, 4)}`, minWidth: 0 }}>
+            <motion.div key={id} layout transition={SPRING}
+              style={{ gridColumn: `span ${Math.min(def.span, 4)}`, minWidth: 0, height: "100%", opacity: dragId === id ? 0.55 : 1 }}>
+              {/* 네이티브 드래그는 플레인 래퍼가 담당 — motion의 팬 제스처 onDragStart와 충돌 방지 */}
+              <div draggable={editing}
+                onDragStart={editing ? (e: React.DragEvent) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; } : undefined}
+                onDragOver={editing ? (e: React.DragEvent) => { e.preventDefault(); dragOverWidget(id); } : undefined}
+                onDragEnd={editing ? () => setDragId(null) : undefined}
+                style={{ height: "100%", cursor: editing ? "grab" : undefined }}>
               <WidgetFrame title={def.title} info={def.info}
                 onDeepLink={onWidgetDeepLink ? () => onWidgetDeepLink(id) : undefined} deepLabel="전체 보기"
                 collapsed={board.collapsed.includes(id)}
                 onToggle={() => save({ ...board, collapsed: board.collapsed.includes(id) ? board.collapsed.filter((x) => x !== id) : [...board.collapsed, id] })}
                 editing={editing}
-                onRemove={() => save({ ...board, hidden: [...board.hidden, id] })}
-                onMove={(d) => move(id, d)}>
+                onRemove={() => save({ ...board, hidden: [...board.hidden, id] })}>
                 {body(id)}
               </WidgetFrame>
+              </div>
             </motion.div>
           );
         })}
