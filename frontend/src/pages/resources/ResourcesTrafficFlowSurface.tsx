@@ -15,6 +15,7 @@ import {
   type TrafficFlowUrlState,
 } from "../traffic/TrafficFlowSurface";
 import { useTrafficOverview } from "../traffic/useTrafficOverviewData";
+import { ResourcesTrafficSourcesSection } from "./ResourcesTrafficSourcesSection";
 import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
 
 export function ResourcesTrafficFlowSurface({
@@ -82,6 +83,11 @@ export function ResourcesTrafficFlowSurface({
             {copy.refresh}
           </Button>
         </SurfaceSection>
+        <ResourcesTrafficSourcesSection
+          frame={data.sourcesFrame}
+          onRefresh={data.refresh}
+          port={port}
+        />
         {data.frame.phase === "idle" || data.frame.phase === "loading" ? (
           <ProductStateScreen kind="loading" placement="content" />
         ) : data.frame.phase === "failed" ? (

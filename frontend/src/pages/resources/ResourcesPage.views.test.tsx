@@ -48,7 +48,7 @@ describe("ResourcesPage view contract", () => {
     const trafficPort = trafficFlowPort();
     const rendered = renderResources(
       resourcesPort(),
-      "/resources?view=flow",
+      "/resources?clusters=cluster-1&namespaces=cluster-1%2Fshop&view=flow",
       resourcesClusterPort(),
       undefined,
       "en",
@@ -74,6 +74,31 @@ describe("ResourcesPage view contract", () => {
       expect.objectContaining({ clusterIds: [], namespaces: [] }),
       expect.any(AbortSignal),
     );
+    expect(trafficPort.getSources).toHaveBeenCalledWith(
+      { clusterIds: [] },
+      expect.any(AbortSignal),
+    );
+    expect(rendered.router.state.location.search).toContain("clusters=cluster-1");
+    expect(rendered.router.state.location.search).toContain("namespaces=cluster-1%2Fshop");
+    expect(await screen.findByText("Hubble")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Connect Hubble" }));
+    await user.type(screen.getByLabelText("Reason"), "Connect the observed relay");
+    await user.click(screen.getByRole("button", { name: "Confirm Connect Hubble" }));
+    expect(trafficPort.connectSource).toHaveBeenCalledWith({
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-1",
+        namespaces: [],
+        freshness: "live",
+      },
+      sourceKey: "hubble",
+      capabilityRevision: "a".repeat(64),
+      confirmation: true,
+      idempotencyKey: expect.any(String),
+      reason: "Connect the observed relay",
+    }, expect.any(AbortSignal));
+    expect(await screen.findByText(/corr-traffic-1/u)).toBeTruthy();
 
     await user.click((await screen.findAllByRole("button", { name: /checkout/ }))[0]!);
     expect(rendered.router.state.location.search).toContain("clusters=cluster-1");
@@ -150,14 +175,64 @@ function trafficFlowPort(): TrafficPort {
       availability: "available",
       coverage: {
         availability: "available",
-        scopes: [],
+        scopes: [{
+          workspaceId: "workspace-a",
+          clusterId: "cluster-1",
+          namespaces: [],
+          freshness: "live",
+        }],
         observedAt: "2026-07-19T00:00:00Z",
         reasonCodes: [],
       },
-      clusters: [],
+      clusters: [{
+        scope: {
+          workspaceId: "workspace-a",
+          clusterId: "cluster-1",
+          namespaces: [],
+          freshness: "live",
+        },
+        freshness: "live",
+        observedAt: "2026-07-19T00:00:00Z",
+        activeSource: null,
+        capabilityRevision: "a".repeat(64),
+        cluster: {
+          platform: "eks",
+          cni: "cilium",
+          dataplaneV2: false,
+          kubernetesVersion: "v1.33.1",
+        },
+        sources: [{
+          key: "hubble",
+          label: "Hubble",
+          status: "available",
+          version: "1.17.2",
+          native: true,
+          message: "relay endpoints are ready",
+          actions: [{
+            id: "connect",
+            kind: "connect",
+            label: "Connect Hubble",
+            enabled: true,
+            confirmationRequired: true,
+            reasonCode: null,
+          }],
+        }],
+        reasonCodes: [],
+      }],
       reasonCodes: [],
     }),
-    selectSource: vi.fn(),
-    connectSource: vi.fn(),
+    selectSource: vi.fn().mockResolvedValue(trafficCommandReceipt()),
+    connectSource: vi.fn().mockResolvedValue(trafficCommandReceipt()),
+  };
+}
+
+function trafficCommandReceipt() {
+  return {
+    accepted: true as const,
+    commandId: "cmd-traffic-1",
+    eventId: "evt-traffic-1",
+    auditEventId: "evt-traffic-1",
+    correlationId: "corr-traffic-1",
+    status: "queued" as const,
   };
 }
