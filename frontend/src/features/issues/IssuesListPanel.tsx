@@ -285,7 +285,7 @@ function IssueQueueRow({
         aria-current={selected ? "true" : undefined}
         aria-label={title}
         className={cn(
-          "@container group/issue relative h-auto w-full min-w-0 animate-in cursor-pointer fade-in-0 items-stretch justify-start overflow-hidden whitespace-normal rounded-none border-0 bg-transparent p-0 text-left transition-[background-color,opacity] duration-150 ease-out hover:bg-muted/25 motion-reduce:animate-none motion-reduce:transition-none",
+          "@container group/issue relative h-auto w-full min-w-0 animate-in cursor-pointer fade-in-0 items-stretch justify-start overflow-hidden whitespace-normal rounded-none border-0 bg-transparent p-0 text-left transition-[background-color,opacity] duration-(--motion-instant) ease-(--ease-soft) hover:bg-muted/25 motion-reduce:animate-none motion-reduce:transition-none",
           "before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-full before:bg-transparent",
           selected && "bg-muted/35 before:bg-foreground",
           resolved && !selected && "opacity-65 hover:opacity-100",
@@ -492,7 +492,7 @@ function RecoveryMiniProgress({
         return (
           <span
             className={cn(
-              "block h-1.5 w-2 rounded-full bg-muted-foreground/15 transition-[background-color,opacity,transform] duration-1000 ease-out motion-reduce:transition-none",
+              "block h-1.5 w-2 rounded-full bg-muted-foreground/15 transition-[background-color,opacity,transform] duration-(--motion-draw) ease-(--ease-draw) motion-reduce:transition-none",
               filled && activeClassName,
               filled ? "scale-100 opacity-100" : "scale-90 opacity-45",
             )}

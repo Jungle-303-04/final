@@ -341,8 +341,8 @@ export function IssuesSurface({
         className={selected === null
           ? "min-w-0 flex-1"
           : detailFull
-            ? "hidden min-w-0 lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
-            : "hidden min-w-0 flex-1 lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"}
+            ? "hidden min-w-0 lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-(--motion-page) lg:ease-(--ease-page) motion-reduce:transition-none"
+            : "hidden min-w-0 flex-1 lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-(--motion-page) lg:ease-(--ease-page) motion-reduce:transition-none"}
         role="region"
       >
         <header className="flex min-h-16 flex-row items-center gap-3 border-b px-5 py-4">
@@ -379,7 +379,7 @@ export function IssuesSurface({
       </section>
       {selected === null ? null : (
         <div className={cn(
-          "min-w-0 w-full basis-full shrink-0 border-l animate-in fade-in-0 slide-in-from-right-4 transition-[flex-basis] duration-500 ease-out motion-reduce:animate-none motion-reduce:transition-none",
+          "min-w-0 w-full basis-full shrink-0 border-l animate-in fade-in-0 slide-in-from-right-4 transition-[flex-basis] duration-(--motion-page) ease-(--ease-page) motion-reduce:animate-none motion-reduce:transition-none",
           detailFull ? "lg:basis-full" : "lg:basis-[42rem]",
         )}
         >

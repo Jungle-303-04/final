@@ -58,7 +58,7 @@ export function AiAlertRuleActionCard({
     return (
       <section
         aria-label={t("shell.ai.action.title")}
-        className="flex max-w-full min-w-0 animate-in items-center gap-3 overflow-hidden rounded-xl border border-status-healthy/30 bg-status-healthy/5 p-3 fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+        className="flex max-w-full min-w-0 animate-in items-center gap-3 overflow-hidden rounded-xl border border-status-healthy/30 bg-status-healthy/5 p-3 fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) motion-reduce:animate-none"
         data-action-state="completed"
         data-action-type={action.type}
       >

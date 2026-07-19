@@ -82,31 +82,7 @@ const motionValueLiteralPattern =
 // permits only these file/literal counts, so moving or adding a literal fails
 // while the owning surface track can reduce the baseline incrementally.
 const legacyMotionLiteralBaseline = Object.freeze({
-  'app/AiAlertRuleActionCard.tsx': { 'duration-200': 1 },
-  'features/issues/IssuesListPanel.tsx': {
-    'duration-150': 1,
-    'duration-1000': 1,
-    'ease-out': 2,
-  },
-  'features/issues/IssuesPanels.tsx': {
-    'duration-150': 4,
-    'duration-200': 1,
-    'ease-out': 3,
-  },
-  'features/issues/IssuesSurface.tsx': {
-    'duration-300': 2,
-    'duration-500': 1,
-    'ease-out': 3,
-  },
   'pages/home/HomeClusterHealth.tsx': { 'duration-500': 1 },
-  'pages/resources/ResourcesCatalogParts.tsx': {
-    'duration-200': 2,
-    'ease-out': 2,
-  },
-  'pages/resources/ResourcesPage.tsx': {
-    'duration-300': 3,
-    'ease-out': 3,
-  },
 })
 
 const restrictedNetworkApis = new Set([

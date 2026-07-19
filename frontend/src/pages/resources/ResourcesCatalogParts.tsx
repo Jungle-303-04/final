@@ -40,7 +40,7 @@ export function CatalogDisclosure({
         <ChevronDown
           aria-hidden="true"
           className={cn(
-            "size-3.5 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            "size-3.5 shrink-0 transition-transform duration-(--motion-soft) ease-(--ease-soft) motion-reduce:transition-none",
             !expanded && "-rotate-90",
           )}
         />
@@ -52,7 +52,7 @@ export function CatalogDisclosure({
       </button>
       <div
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+          "grid transition-[grid-template-rows,opacity] duration-(--motion-soft) ease-(--ease-soft) motion-reduce:transition-none",
           expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >

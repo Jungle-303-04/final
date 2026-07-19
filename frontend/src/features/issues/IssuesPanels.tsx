@@ -51,7 +51,7 @@ import type {
 
 const RCA_EVIDENCE_SUMMARY_ID = "issue-rca-evidence-summary";
 const RECOVERY_PANEL_ID = "issue-recovery-panel";
-const DETAIL_TAB_CONTENT_MOTION = "animate-in fade-in-0 slide-in-from-bottom-1 duration-200 ease-out motion-reduce:animate-none";
+const DETAIL_TAB_CONTENT_MOTION = "animate-in fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) ease-(--ease-soft) motion-reduce:animate-none";
 
 export function IssuesPanels({
   capability,
@@ -623,11 +623,11 @@ function ReportCandidateAccordion({
               </span>
               <Sparkle
                 aria-hidden="true"
-                className="size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground/80 group-open:rotate-45 group-open:text-foreground motion-reduce:transition-none"
+                className="size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-(--motion-instant) group-hover:text-foreground/80 group-open:rotate-45 group-open:text-foreground motion-reduce:transition-none"
                 strokeWidth={1.8}
               />
             </summary>
-            <div className="grid gap-2 border-t px-3 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out motion-reduce:animate-none">
+            <div className="grid gap-2 border-t px-3 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-(--motion-instant) ease-(--ease-soft) motion-reduce:animate-none">
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {copy.evidenceCoverage(supportingCount, supportingCount + missingCount)}
               </p>
@@ -1017,7 +1017,7 @@ function RecoveryPanel({
                         <Sparkle
                           aria-hidden="true"
                           className={cn(
-                            "size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground/80 motion-reduce:transition-none",
+                            "size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-(--motion-instant) group-hover:text-foreground/80 motion-reduce:transition-none",
                             open && "rotate-45 text-foreground",
                           )}
                           strokeWidth={1.8}
@@ -1065,7 +1065,7 @@ function RecoveryCandidateDetails({
   selectionPendingId: string | null;
 }) {
   return (
-    <div className={cn("grid min-w-0 gap-5 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out motion-reduce:animate-none", className)}>
+    <div className={cn("grid min-w-0 gap-5 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-(--motion-instant) ease-(--ease-soft) motion-reduce:animate-none", className)}>
       <dl className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <div className="inline-flex min-w-0 items-center gap-1.5">
           <dt className="shrink-0">{copy.actionRisk}</dt>
