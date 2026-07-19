@@ -17,8 +17,6 @@ import {
   testClusterScope,
 } from "./__tests__/ProductShellInteractionSupport";
 
-const RELEASE_GATE_MODULE_IMPORT_TIMEOUT_MS = 60_000;
-
 const testAuthPort: AuthPort = {
   listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
   loadSession: async () => ({ status: "unauthenticated" }),
@@ -461,5 +459,5 @@ describe("ProductShell keyboard and help interaction", () => {
     } finally {
       restore.reverse().forEach((restoreProperty) => restoreProperty());
     }
-  }, RELEASE_GATE_MODULE_IMPORT_TIMEOUT_MS);
+  }, 60_000);
 });
