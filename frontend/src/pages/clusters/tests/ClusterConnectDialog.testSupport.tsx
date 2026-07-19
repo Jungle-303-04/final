@@ -2,11 +2,11 @@ import { render } from "@testing-library/react";
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
-import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
-import type { ClustersPort } from "../../features/clusters/clustersContract";
-import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
-import { I18nProvider, useI18n } from "../../shared/i18n";
-import { ClusterConnectDialog } from "./ClusterConnectDialog";
+import { AuthSessionGateProvider } from "../../../features/auth/AuthSessionGate";
+import type { ClustersPort } from "../../../features/clusters/clustersContract";
+import { UnifiedFilterProvider } from "../../../features/filters/UnifiedFilterProvider";
+import { I18nProvider, useI18n } from "../../../shared/i18n";
+import { ClusterConnectDialog } from "../ClusterConnectDialog";
 
 export function waitingPort(): ClustersPort {
   return {

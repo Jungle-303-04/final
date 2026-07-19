@@ -9,7 +9,7 @@ import {
   renderDialog,
   renderHarness,
   waitingPort,
-} from "./ClusterConnectDialog.testSupport";
+} from "./tests/ClusterConnectDialog.testSupport";
 
 afterEach(() => {
   cleanup();
