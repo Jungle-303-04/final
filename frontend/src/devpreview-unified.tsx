@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
 import { WidgetFrame, KpiValue, RatioBar, MiniBars, Donut, RankList, MultiLine, MiniTimeline, RingGauge } from "./devpreview/widgets";
-import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, costModel, timelineItems } from "./devpreview-surfaces";
+import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, costModel, timelineItems } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
@@ -1139,19 +1139,22 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home }[] = [
   { id: "home", label: "홈", icon: Home },
   { id: "resources", label: "리소스", icon: ListTree },
   { id: "deploy", label: "배포", icon: Rocket },
-  { id: "issues", label: "인시던트", icon: AlertTriangle },
+  { id: "issues", label: "이슈", icon: AlertTriangle },
   { id: "timeline", label: "타임라인", icon: Clock },
   { id: "checks", label: "점검", icon: ShieldCheck },
   { id: "cost", label: "비용", icon: Coins },
+  // 알림·AI 대화 = 내역 모아보기 서피스(벨·AI 패널의 "전체 보기" 목적지) — 주 내비 소속
+  { id: "alerts", label: "알림", icon: Bell },
+  { id: "ai", label: "AI 대화", icon: Sparkles },
 ];
 // 연결은 내비 항목이 아니다(D7·D20) — 클러스터 뷰 '+ 연결' 카드와 배포 탭 '+ 저장소 연결'에서 모달로만 연다.
-// 설정은 전역 앱 설정만(D20) — 연결·클러스터 관리는 각자의 문맥 팝업이 오너.
+// 설정은 전역 앱 설정만(D20).
 const NAV_BOTTOM: { id: string; label: string; icon: typeof Home }[] = [
   { id: "settings", label: "설정", icon: Settings },
 ];
 
-type Surface = "home" | "resources" | "connect" | "deploy" | "issues" | "timeline" | "checks" | "cost" | "settings";
-const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources", deploy: "deploy", issues: "issues", timeline: "timeline", checks: "checks", cost: "cost", settings: "settings" };
+type Surface = "home" | "resources" | "connect" | "deploy" | "issues" | "timeline" | "checks" | "cost" | "alerts" | "ai" | "settings";
+const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources", deploy: "deploy", issues: "issues", timeline: "timeline", checks: "checks", cost: "cost", alerts: "alerts", ai: "ai", settings: "settings" };
 // 리소스 서피스의 관점(D18) — 한 서피스, 세 관점. 스코프는 관점을 넘어 보존된다.
 type ResView = "map" | "list" | "flow";
 
@@ -1201,14 +1204,15 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
 
 // ── 홈 서피스 (D21: 고정 헤더 + 클러스터 섹션 + 위젯 보드 W2~W8) ─────────────
 // 모든 숫자는 단일 인벤토리 파생. 위젯 배치는 localStorage 보존, 편집=숨김·추가·이동(제품은 dnd-kit 드래그).
-const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 }[] = [
-  { id: "W2", title: "인시던트", info: "장애 상태 파드에서 파생된 활성 인시던트 상위 3건", span: 1 },
+const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 | 4 }[] = [
+  // 4칸 그리드 스팬 설계 — 1행 [1+1+2] · 2행 [1+2+1] · 3행 [4]: 기본 배치에서 빈칸 0
+  { id: "W2", title: "이슈", info: "장애 상태 파드에서 파생된 활성 이슈 상위 3건", span: 1 },
   { id: "W3", title: "저장소 동기화", info: "Git 저장소 단위 Synced/OutOfSync — 앱 단위 현황은 배포 서피스", span: 1 },
-  { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", span: 1 },
+  { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", span: 2 },
   { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", span: 1 },
-  { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 1 },
+  { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 2 },
   { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", span: 1 },
-  { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", span: 2 },
+  { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", span: 4 },
 ];
 const BOARD_KEY = "opsia-demo-board-v2"; // v2: W5~W8 기본 노출(D21 위젯 보드 전체가 기본값)
 type BoardState = { order: string[]; hidden: string[]; collapsed: string[] };
@@ -1270,7 +1274,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
     switch (id) {
       case "W2": return crit.length
         ? <RankList onPick={onOpenPod} rows={crit.slice(0, 3).map((p) => ({ id: p.name, tone: "crit" as const, title: `${p.name} · ${p.status}`, sub: `${p.svc} · ${p.ns} · ${p.cluster}`, right: `재시작 ${p.restarts}` }))} />
-        : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>활성 인시던트가 없습니다</span>;
+        : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>활성 이슈가 없습니다</span>;
       case "W3": return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <RatioBar a={repos.length - outSync.length} b={outSync.length} aLabel="Synced" bLabel="OutOfSync" />
@@ -1325,13 +1329,14 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
               <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{pods.length}</b>
                 {pending > 0 && <span style={{ color: TINT.blue.fg }}>· 대기 {pending}</span>}
               </span>
-              {outSync.map((r) => (
-                <span key={r.repo} style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg }}>
-                  <GithubIcon size={11} />OutOfSync · {r.repo.split("/")[1]}
+              {/* 집계 칩까지만 — 개별 항목 나열은 중복(장애 칩 클릭이 실 목적지). 줄이 두 줄로 접히지 않는다 */}
+              {outSync.length > 0 && (
+                <span style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg }}>
+                  <GithubIcon size={11} />OutOfSync <b style={{ ...num, color: TINT.warn.fg }}>{outSync.length}</b>
                 </span>
-              ))}
+              )}
               {crit.length > 0 && (
-                <button onClick={() => onDrillCluster(crit[0].cluster)} title="지도에서 장애 위치 보기"
+                <button onClick={() => onDrillCluster(crit[0].cluster)} title="인프라 지도에서 장애 위치 보기"
                   style={{ ...seg, borderColor: TINT.crit.bd, background: TINT.crit.bg, color: HP.crit, fontWeight: 700, cursor: "pointer" }}>
                   <Activity size={12} />장애 {crit.length}
                 </button>
@@ -1358,12 +1363,12 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
       {/* ── 클러스터 섹션 (보드 밖 고정 — 홈의 본질) ── */}
       <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} onAddCluster={onConnect} pending={pendingCl} />
 
-      {/* ── 위젯 보드 ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, alignItems: "start" }}>
+      {/* ── 위젯 보드 — 4칸 그리드 + 밀집 배치(dense): 숨김·이동으로 생긴 빈칸에 작은 위젯이 위로 올라와 채운다 ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14, alignItems: "start" }}>
         {visible.map((id) => {
           const def = W_DEFS.find((w) => w.id === id)!;
           return (
-            <motion.div key={id} layout transition={SPRING} style={{ gridColumn: def.span === 2 ? "span 2" : undefined, minWidth: 0 }}>
+            <motion.div key={id} layout transition={SPRING} style={{ gridColumn: `span ${Math.min(def.span, 4)}`, minWidth: 0 }}>
               <WidgetFrame title={def.title} info={def.info}
                 onDeepLink={onWidgetDeepLink ? () => onWidgetDeepLink(id) : undefined} deepLabel="전체 보기"
                 collapsed={board.collapsed.includes(id)}
@@ -1588,7 +1593,7 @@ function App() {
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
           <input ref={searchRef} value={q}
             onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface !== "resources") { setSurface("resources"); setResView("list"); } }}
-            placeholder="리소스 검색" style={{ border: "none", outline: "none", background: "transparent", fontSize: TYPE.body, color: UI.ink, width: "100%" }} />
+            placeholder="전체 검색 — 리소스·화면 이동" style={{ border: "none", outline: "none", background: "transparent", fontSize: TYPE.body, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label, color: UI.ink2 }}>
@@ -1713,6 +1718,10 @@ function App() {
         <ChecksSurface onOpenRef={openRef} />
       ) : surface === "cost" ? (
         <CostSurface onOpenRef={openRef} />
+      ) : surface === "alerts" ? (
+        <AlertsSurface onOpenRef={openRef} />
+      ) : surface === "ai" ? (
+        <AiHistorySurface onOpenPanel={() => setAiOpen(true)} />
       ) : surface === "settings" ? (
         <SettingsSurface />
       ) : surface === "home" ? (
@@ -1735,7 +1744,7 @@ function App() {
                 스코프(클러스터·노드·ns·검색어)는 관점을 넘어 보존된다 ── */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
-              {([["map", "지도"], ["list", "목록"], ["flow", "흐름"]] as const).map(([v, l]) => (
+              {([["map", "인프라"], ["list", "쿠버네티스"], ["flow", "트래픽"]] as const).map(([v, l]) => (
                 <button key={v} onClick={() => setResView(v)}
                   style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label2, fontWeight: 700, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
                   {resView === v && <motion.span layoutId="resview" transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
@@ -1751,14 +1760,16 @@ function App() {
 
           {resView === "map" && (
             /* 지도 — 드릴 전체 높이. 종류 선택은 목록 관점의 것: 패널·스트립에서 종류를 고르면 목록으로 전환 */
-            <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo}
-              embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
-              onAddCluster={() => setConnectModal("cluster")}
-              onAddRepo={() => setConnectModal("repo")}
-              stickyTop={topH + 12}
-              clusterMeta={clusterMeta}
-              onOpenKind={(kid) => { setKindId(kid); setResView("list"); }}
-              kindsTab={<KindIndex sel={kindId} onPick={(k) => { setKindId(k.id); setResView("list"); }} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />} />
+            <>
+              <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo}
+                embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
+                onAddCluster={() => setConnectModal("cluster")}
+                onAddRepo={() => setConnectModal("repo")}
+                stickyTop={topH + 12}
+                clusterMeta={clusterMeta}
+                onOpenKind={(kid) => { setKindId(kid); setResView("list"); }} />
+              {/* 종류(kind) 탐색은 쿠버네티스 관점의 본문이 오너 — 인프라 뷰 패널에 같은 목록을 두 번 두지 않는다 */}
+            </>
           )}
 
           {resView === "list" && (
@@ -1811,7 +1822,7 @@ function App() {
             <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
               style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "인시던트" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽 흐름" : resView === "list" ? "리소스 목록" : "리소스 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}

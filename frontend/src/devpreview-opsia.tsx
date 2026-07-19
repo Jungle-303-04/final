@@ -554,13 +554,17 @@ function ClusterRow({ cl, pods, tick, meta, onOpen }: {
 }
 
 // '+ 클러스터 연결' 점선 카드 — 지도 클러스터 뷰와 홈 클러스터 섹션이 하나를 공유(두 번째 구현 금지)
-function AddClusterCard({ onClick, delay = 0 }: { onClick: () => void; delay?: number }) {
+// compact = 홈 섹션용 가로형(카드 높이를 잡아먹지 않는다) · 기본 = 지도 클러스터 뷰의 카드형
+function AddClusterCard({ onClick, delay = 0, compact = false }: { onClick: () => void; delay?: number; compact?: boolean }) {
   return (
     <motion.button initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
       onClick={onClick} whileHover={{ borderColor: TINT.blue.bd, background: blueA(0.03) }}
-      style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
-        border: `1.5px dashed ${LINE3}`, borderRadius: 16, background: "transparent", cursor: "pointer" }}>
-      <span style={{ width: 34, height: 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: TYPE.heading, fontWeight: 600, lineHeight: 1 }}>+</span>
+      style={compact
+        ? { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 60,
+            border: `1.5px dashed ${LINE3}`, borderRadius: 14, background: "transparent", cursor: "pointer" }
+        : { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
+            border: `1.5px dashed ${LINE3}`, borderRadius: 16, background: "transparent", cursor: "pointer" }}>
+      <span style={{ width: compact ? 26 : 34, height: compact ? 26 : 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: compact ? TYPE.bodyStrong : TYPE.heading, fontWeight: 600, lineHeight: 1 }}>+</span>
       <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
       <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>에이전트 설치로 등록</span>
     </motion.button>
@@ -607,12 +611,23 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }:
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1500));
   useEffect(() => { const iv = setInterval(() => setTick(Math.floor(Date.now() / 1500)), 1500); return () => clearInterval(iv); }, []);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14 }}>
+    // 4칸 그리드 — 클러스터 카드 2칸씩, 연결 카드는 가로형 컴팩트 2칸(거대 공백 금지)
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
       {CLUSTERS.map((cl) => (
-        <ClusterRow key={cl.id} cl={cl} pods={pods} tick={tick} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
+        <div key={cl.id} style={{ gridColumn: "span 2", minWidth: 0 }}>
+          <ClusterRow cl={cl} pods={pods} tick={tick} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
+        </div>
       ))}
-      {pending.map((n, i) => <PendingClusterCard key={n} name={n} delay={(CLUSTERS.length + i) * 0.05} />)}
-      {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={(CLUSTERS.length + pending.length) * 0.05} />}
+      {pending.map((n, i) => (
+        <div key={n} style={{ gridColumn: "span 2", minWidth: 0 }}>
+          <PendingClusterCard name={n} delay={(CLUSTERS.length + i) * 0.05} />
+        </div>
+      ))}
+      {onAddCluster && (
+        <div style={{ gridColumn: "span 2", minWidth: 0 }}>
+          <AddClusterCard compact onClick={onAddCluster} delay={(CLUSTERS.length + pending.length) * 0.05} />
+        </div>
+      )}
     </div>
   );
 }
@@ -620,7 +635,7 @@ export function HomeClusterSection({ meta, onOpen, onAddCluster, pending = [] }:
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, kindsTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , lensTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -628,8 +643,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
   /** 셸의 종류 선택과 연결 보기 탭 동기화 (Service→서비스, ConfigMap·Secret→구성, Argo 앱→저장소) — 탭명은 D16(서피스명과 중복 금지) */
   lensTab?: "svc" | "cfg" | "git" | null;
   /** 우측 패널 '리소스' 탭 내용 — 셸의 종류 탐색이 여기로 통합된다 (보조 사이드바 대체) */
-  kindsTab?: React.ReactNode;
-  /** 실서비스 배치: 클러스터 뷰의 '+ 연결' 카드 / 배포 탭의 '+ 저장소 연결' */
+    /** 실서비스 배치: 클러스터 뷰의 '+ 연결' 카드 / 배포 탭의 '+ 저장소 연결' */
   onAddCluster?: () => void;
   onAddRepo?: () => void;
   /** 탐색 패널 고정 오프셋(CSS px) — 셸 sticky 헤더 바로 아래 */
@@ -747,12 +761,13 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
               <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{pods.length}</b>
                 {pending > 0 && <span style={{ color: TINT.blue.fg }}>· 대기 {pending}</span>}
               </span>
-              {outSync.map((r) => (
-                <span key={r} style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg, cursor: "default" }}
-                  onMouseEnter={() => setLens({ kind: "git", id: r })} onMouseLeave={() => setLens(null)}>
-                  <GithubIcon size={11} />OutOfSync · {r.split("/")[1]}
+              {/* 집계 칩까지만(홈 요약 줄과 같은 문법) — 저장소별 상세는 배포 > 저장소·동기화가 오너 */}
+              {outSync.length > 0 && (
+                <span style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg, cursor: "default" }}
+                  onMouseEnter={() => setLens({ kind: "git", id: outSync[0] })} onMouseLeave={() => setLens(null)}>
+                  <GithubIcon size={11} />OutOfSync <b style={{ ...num, color: TINT.warn.fg }}>{outSync.length}</b>
                 </span>
-              ))}
+              )}
               {crit > 0 && <span style={{ width: 1, height: 16, background: UI.line, margin: "0 2px" }} />}
         {crit > 0 && (
           <>
@@ -766,18 +781,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
               }}>
               <Activity size={12} />장애 {crit}
             </motion.button>
-            {pods.filter(isCrit).map((p, i) => (
-              <motion.button key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }}
-                whileHover={{ borderColor: TINT.crit.bd }} whileTap={{ scale: 0.97 }} onClick={() => gotoNode(p)}
-                onMouseEnter={(e) => { onTip(e.clientX, e.clientY, [p]); setLens({ kind: "crit", id: "all" }); }}
-                onMouseMove={(e) => onTip(e.clientX, e.clientY, [p])}
-                onMouseLeave={() => { onTip(0, 0, null); setLens(null); }}
-                style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, cursor: "pointer", background: UI.card, borderRadius: 999, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>
-                <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 99, background: HP.crit }} />
-                <span style={{ fontFamily: MONO }}>{p.name}</span>
-                <span style={{ fontWeight: 600, color: UI.ink3 }}>{p.status} · {p.node}</span>
-              </motion.button>
-            ))}
+            {/* 개별 파드 나열 금지 — "장애 N" 렌즈·핀이 지도 하이라이트로 같은 정보를 준다(줄바꿈 과밀 방지) */}
           </>
         )}
             </div>
@@ -866,7 +870,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
             </AnimatePresence>
           </div>
 
-          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} kindsTab={kindsTab} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} pendingRepos={pendingRepos} />
+          <SidePanel key={lensTab ?? "default"} pods={pods} focusPod={focusPod} setLens={setLens} pin={pin} setPin={setPin} effLens={effLens} clearPod={() => setFocusPod(null)} openNode={openNodeById} forcedTab={lensTab ?? null} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} pendingRepos={pendingRepos} />
         </div>
       </div>
 
@@ -926,10 +930,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lens
 }
 
 // ── 우측 패널 ─────────────────────────────
-function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode, forcedTab, kindsTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
-  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; kindsTab?: React.ReactNode; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number; pendingRepos?: string[];
+function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, openNode , forcedTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
+  pods: Pod[]; focusPod: Pod | null; setLens: (l: Lens) => void; pin: Lens; setPin: (l: Lens) => void; effLens: Lens; clearPod: () => void; openNode: (id: string) => void; forcedTab?: "svc" | "cfg" | "git" | null; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number; pendingRepos?: string[];
 }) {
-  const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? (kindsTab ? "res" : "svc"));
+  const [tab, setTab] = useState<"res" | "svc" | "cfg" | "git">(forcedTab ?? "svc"); // 종류 탐색은 쿠버네티스 뷰 본문이 오너 — 패널 기본은 서비스
   const count = (l: Lens) => { if (!l) return 0; if (l.kind === "crit") return pods.filter(isCrit).length; if (l.kind === "svc") return pods.filter((p) => p.svc === l.id).length; if (l.kind === "cfg") return pods.filter((p) => (SVC_CFG[p.svc] || []).includes(l.id)).length; return pods.filter((p) => SVC[p.svc].repo === l.id).length; };
 
   const Row = ({ l, icon, label, sub, warn }: { l: Lens; icon?: React.ReactNode; label: string; sub: string; warn?: boolean }) => {
@@ -959,10 +963,11 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
           </motion.div>
         ) : (
           <motion.div key="lens" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={SOFT} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>{kindsTab ? "탐색" : "연결 보기"}</div>
+            <div style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>연결 보기</div>
             <div style={{ display: "flex", gap: 3, background: inkA(0.04), borderRadius: 10, padding: 3 }}>
               {/* 아이콘 통일: 서비스=Plug (셸 사이드바 Service와 동일) · 리소스 탭 = 종류 탐색(보조 사이드바 통합) */}
-              {([...(kindsTab ? [["res", "리소스", Box] as const] : []), ["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
+              {/* '리소스' 탭 없음 — kind 탐색은 쿠버네티스 관점 본문(중복 정의 금지) */}
+              {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
                 const on = tab === id;
                 return (
                   <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
@@ -973,8 +978,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
               })}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              {tab === "res" && kindsTab}
-              {tab === "svc" && SERVICES.map((s) => <Row key={s.id} l={{ kind: "svc", id: s.id }} icon={<ServiceIcon id={s.id} size={14} style={{ color: s.color, flexShrink: 0 }} />} label={s.id} sub={s.repo} />)}
+                            {tab === "svc" && SERVICES.map((s) => <Row key={s.id} l={{ kind: "svc", id: s.id }} icon={<ServiceIcon id={s.id} size={14} style={{ color: s.color, flexShrink: 0 }} />} label={s.id} sub={s.repo} />)}
               {tab === "cfg" && CONFIGS.map((c) => <Row key={c.id} l={{ kind: "cfg", id: c.id }} icon={<FileCog size={14} style={{ color: c.kind === "Secret" ? TINT.purple.fg : BLUE, flexShrink: 0 }} />} label={c.id} sub={c.kind} />)}
               {tab === "git" && (<>
                 {REPOS.map((r) => <Row key={r} l={{ kind: "git", id: r }} icon={<GithubIcon size={14} style={{ color: BRAND.github, flexShrink: 0 }} />} label={r} sub={`${REPO_META[r].tool} · ${REPO_META[r].rev} · ${REPO_META[r].sync}`} warn={REPO_META[r].sync === "OutOfSync"} />)}

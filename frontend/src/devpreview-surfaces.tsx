@@ -1,13 +1,13 @@
-// ── 데모 서피스: 배포 · 인시던트 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
+// ── 데모 서피스: 배포 · 이슈 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
 // 원칙: 모든 숫자는 단일 인벤토리(podInventory/nodeInventory/repoInventory) 파생 — 두 화면이 다른 숫자를 말하면 버그.
 // 시각은 공용 부품(KpiValue/MiniBars/RankList/MiniTimeline)과 셸 토큰만 사용. 제품 이식 시 D5 공용 표로 수렴한다.
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins, Server,
-  Building2, Globe, Radio, Check, ChevronDown,
+  Building2, Globe, Radio, Check, ChevronDown, Sparkles, GitBranch, ArrowRight, X,
 } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, inkA, blueA, critA, BRAND } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, inkA, blueA, critA, BRAND } from "./devpreview/theme";
 import { GithubIcon, AwsIcon } from "./devpreview/brandIcons";
 import { podInventory, nodeInventory, repoInventory, svcCatalog } from "./devpreview-opsia";
 import { KpiValue, MiniBars, RankList, MiniTimeline } from "./devpreview/widgets";
@@ -111,15 +111,15 @@ export function costModel() {
 }
 
 // ── 타임라인 단일 소스 — 홈 W8은 이 목록의 상위 5개를 그대로 쓴다 ──
-export type TlItem = { id: string; time: string; tone: "ok" | "warn" | "crit"; cat: "인시던트" | "배포" | "구성"; title: string; ref?: { kind: string; name: string } };
+export type TlItem = { id: string; time: string; tone: "ok" | "warn" | "crit"; cat: "이슈" | "배포" | "구성"; title: string; ref?: { kind: string; name: string } };
 export function timelineItems(): TlItem[] {
   const pods = podInventory(); const repos = repoInventory();
   const crit = pods.filter((p) => p.bad); const out = repos.filter((r) => r.sync === "OutOfSync");
   return [
-    ...crit.slice(0, 1).map((p) => ({ id: `t-${p.name}`, time: "2분 전", tone: "crit" as const, cat: "인시던트" as const, title: `${p.name} ${p.status} — 재시작 ${p.restarts}회`, ref: { kind: "Pod", name: p.name } })),
+    ...crit.slice(0, 1).map((p) => ({ id: `t-${p.name}`, time: "2분 전", tone: "crit" as const, cat: "이슈" as const, title: `${p.name} ${p.status} — 재시작 ${p.restarts}회`, ref: { kind: "Pod", name: p.name } })),
     ...out.map((r) => ({ id: `t-${r.repo}`, time: "17분 전", tone: "warn" as const, cat: "배포" as const, title: `${r.repo} 동기화 지연 · 리비전 ${r.rev}` })),
     { id: "t-scale", time: "44분 전", tone: "ok", cat: "배포", title: `shop-api 스케일 아웃 완료 — 파드 ${pods.filter((p) => p.svc === "shop-api").length}개 유지` },
-    ...crit.slice(1).map((p, i) => ({ id: `t2-${p.name}`, time: `${52 + i * 9}분 전`, tone: "crit" as const, cat: "인시던트" as const, title: `${p.name} ${p.status} 감지 — 근거 수집 시작`, ref: { kind: "Pod", name: p.name } })),
+    ...crit.slice(1).map((p, i) => ({ id: `t2-${p.name}`, time: `${52 + i * 9}분 전`, tone: "crit" as const, cat: "이슈" as const, title: `${p.name} ${p.status} 감지 — 근거 수집 시작`, ref: { kind: "Pod", name: p.name } })),
     { id: "t-node", time: "1시간 전", tone: "ok", cat: "구성", title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
     { id: "t-cfg", time: "2시간 전", tone: "ok", cat: "구성", title: "app-config ConfigMap 갱신 · 3개 서비스 재기동", ref: { kind: "ConfigMap", name: "app-config" } },
     { id: "t-dep2", time: "2시간 전", tone: "ok", cat: "배포", title: `${repos[0]?.repo ?? "Jungle-303-04/final"} main 배포 · 정상` },
@@ -148,8 +148,10 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
   const repoCols: [string, string][] = [["저장소", "minmax(180px,1.6fr)"], ["도구", "minmax(80px,0.7fr)"], ["리비전", "minmax(90px,0.8fr)"], ["동기화", "minmax(110px,1fr)"], ["앱", "48px"]];
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["앱 버전", "minmax(70px,0.7fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["상태", "minmax(90px,0.8fr)"]];
   return (
-    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "저장소·동기화", "Helm 릴리스"]} tab={tab} onTab={setTab}
-      action={tab === "저장소·동기화" ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button> : null}>
+    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "저장소·동기화", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab}
+      action={tab === "저장소·동기화"
+        ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button>
+        : null}>
       <ChipRow chips={[
         { label: "앱", value: apps.length },
         { label: "Synced", value: apps.filter((x) => x.sync !== "OutOfSync").length },
@@ -194,6 +196,7 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
           ))}
         </Card>
       )}
+      {tab === "워크플로우" && <WorkflowsTab repos={repos.map((r) => r.repo)} />}
       {tab === "Helm 릴리스" && (
         <Card pad={0}>
           <THead cols={helmCols} />
@@ -210,11 +213,11 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
   );
 }
 
-// ── 인시던트 /issues — 탭: 인시던트 | 알림 규칙 (5.8) ──
+// ── 이슈 /issues — 탭: 이슈 | 알림 규칙 (5.8) ──
 export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
   sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void;
 }) {
-  const [tab, setTab] = useState("인시던트");
+  const [tab, setTab] = useState("이슈");
   const pods = useMemo(() => podInventory(), []);
   const crit = pods.filter((p) => p.bad);
   const [rules, setRules] = useState(() => [
@@ -222,18 +225,18 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
     { name: "노드 디스크 압박", cond: "disk > 85%", sev: "주의", on: true, ai: false },
     ...sessionRules.map((n) => ({ name: n, cond: "cpu_pct > 70 · 20s", sev: "장애", on: true, ai: true })),
   ]);
-  const incCols: [string, string][] = [["심각도", "96px"], ["인시던트", "minmax(200px,2fr)"], ["대상", "minmax(120px,1fr)"], ["시작", "76px"], ["상태", "80px"]];
+  const incCols: [string, string][] = [["심각도", "96px"], ["이슈", "minmax(200px,2fr)"], ["대상", "minmax(120px,1fr)"], ["시작", "76px"], ["상태", "80px"]];
   const ruleCols: [string, string][] = [["규칙", "minmax(150px,1.4fr)"], ["조건", "minmax(150px,1.3fr)"], ["심각도", "80px"], ["활성", "64px"]];
   return (
-    <Page title="인시던트" icon={AlertTriangle} tabs={["인시던트", "알림 규칙"]} tab={tab} onTab={setTab}
-      action={tab === "인시던트" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+    <Page title="이슈" icon={AlertTriangle} tabs={["이슈", "알림 규칙"]} tab={tab} onTab={setTab}
+      action={tab === "이슈" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
       <ChipRow chips={[
         { label: "장애", value: crit.length, crit: crit.length > 0 },
         { label: "주의", value: pods.filter((p) => !p.bad && p.restarts >= 2).length, warn: true },
         { label: "open", value: crit.length },
         { label: "규칙", value: rules.length },
       ]} />
-      {tab === "인시던트" && (
+      {tab === "이슈" && (
         <Card pad={0}>
           <THead cols={incCols} />
           {crit.map((p, i) => (
@@ -284,7 +287,7 @@ export function TimelineSurface({ onOpenRef }: { onOpenRef: (kind: string, name:
   return (
     <Page title="타임라인" icon={Clock}>
       <div style={{ display: "flex", gap: 6 }}>
-        {(["전체", "배포", "인시던트", "구성"] as const).map((c) => (
+        {(["전체", "배포", "이슈", "구성"] as const).map((c) => (
           <button key={c} onClick={() => setCat(c)}
             style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${cat === c ? blueA(0.45) : UI.line}`, background: cat === c ? blueA(0.07) : UI.card, color: cat === c ? BLUE : UI.ink2, borderRadius: 999, padding: "4px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>{c}
             <span style={{ fontFamily: MONO, fontSize: TYPE.micro, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
@@ -418,6 +421,147 @@ export function SettingsSurface() {
         <SettingsRow icon={GithubIcon as never} title="GitHub" sub="저장소 웹훅 · Jungle-303-04" right={<Pill tone="ok" label="연결됨" />} />
       </Card>
       <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>Opsia Console 0.1.0 · demo</span>
+    </Page>
+  );
+}
+
+// ── 배포 > 워크플로우 — GitOps 배포 파이프라인 정의(원형: archive/codex/gitOpsNode 블루프린트) ──
+// 단계는 소스→…→배포 순서 고정 양끝 + 중간 단계 편집. 데모에서도 추가·삭제·저장이 실동작한다.
+type Wf = { id: string; name: string; repo: string; trigger: string; steps: string[]; last?: string };
+const WF_PRESETS = ["게이트 검증", "승인 대기", "카나리 10%", "알림 발송"];
+function WfPipeline({ steps, editing, onRemove }: { steps: string[]; editing?: boolean; onRemove?: (i: number) => void }) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      {steps.map((s, i) => (
+        <span key={`${s}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: i === 0 || i === steps.length - 1 ? TINT.blue.fg : UI.ink, background: i === 0 || i === steps.length - 1 ? TINT.blue.bg : UI.bg2, border: `1px solid ${i === 0 || i === steps.length - 1 ? TINT.blue.bd : UI.line}`, borderRadius: 8, padding: "5px 10px", whiteSpace: "nowrap" }}>
+            {s}
+            {editing && i > 0 && i < steps.length - 1 && (
+              <button onClick={() => onRemove?.(i)} title="단계 제거" style={{ border: "none", background: "transparent", color: UI.ink3, cursor: "pointer", padding: 0, display: "grid" }}><X size={11} /></button>
+            )}
+          </span>
+          {i < steps.length - 1 && <ArrowRight size={12} style={{ color: UI.ink3, flexShrink: 0 }} />}
+        </span>
+      ))}
+    </span>
+  );
+}
+function WorkflowsTab({ repos }: { repos: string[] }) {
+  const [wfs, setWfs] = useState<Wf[]>([
+    { id: "wf-main", name: "main 자동 배포", repo: repos[0] ?? "Jungle-303-04/final", trigger: "push → main", steps: ["소스", "게이트 검증", "배포"], last: "44분 전 · 성공" },
+  ]);
+  const [draft, setDraft] = useState<Wf | null>(null);
+  const startDraft = () => setDraft({ id: `wf-${Date.now()}`, name: "새 워크플로우", repo: repos[0] ?? "", trigger: "push → main", steps: ["소스", "배포"] });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {wfs.map((w) => (
+        <Card key={w.id}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <GitBranch size={14} style={{ color: TINT.blue.fg }} />
+            <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{w.name}</span>
+            <Mono dim>{w.repo}</Mono>
+            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{w.trigger}</span>
+            <span style={{ marginLeft: "auto" }}>{w.last && <Pill tone="ok" label={w.last} />}</span>
+          </div>
+          <WfPipeline steps={w.steps} />
+        </Card>
+      ))}
+      {draft ? (
+        <Card>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <GitBranch size={14} style={{ color: TINT.blue.fg }} />
+            <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              style={{ border: "none", outline: "none", background: UI.bg2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, width: 180 }} />
+            <select value={draft.repo} onChange={(e) => setDraft({ ...draft, repo: e.target.value })}
+              style={{ border: `1px solid ${UI.line}`, borderRadius: 7, padding: "4px 8px", fontSize: TYPE.label, color: UI.ink2, background: UI.card }}>
+              {repos.map((r) => <option key={r}>{r}</option>)}
+            </select>
+            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{draft.trigger}</span>
+          </div>
+          <WfPipeline steps={draft.steps} editing onRemove={(i) => setDraft({ ...draft, steps: draft.steps.filter((_, j) => j !== i) })} />
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 11, flexWrap: "wrap" }}>
+            <span style={{ fontSize: TYPE.caption2, fontWeight: 700, color: UI.ink3 }}>단계 추가</span>
+            {WF_PRESETS.filter((p) => !draft.steps.includes(p)).map((p) => (
+              <button key={p} onClick={() => setDraft({ ...draft, steps: [...draft.steps.slice(0, -1), p, "배포"] })}
+                style={{ border: `1px dashed ${UI.line}`, background: "transparent", color: UI.ink2, borderRadius: 999, padding: "3px 11px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ {p}</button>
+            ))}
+            <span style={{ marginLeft: "auto", display: "flex", gap: 7 }}>
+              <button onClick={() => setDraft(null)} style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 8, padding: "5px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>취소</button>
+              <button onClick={() => { setWfs([...wfs, draft]); setDraft(null); }}
+                style={{ border: "none", background: BLUE, color: UI.card, borderRadius: 8, padding: "5px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>저장</button>
+            </span>
+          </div>
+        </Card>
+      ) : (
+        <button onClick={startDraft}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, border: `1.5px dashed ${UI.line}`, borderRadius: 14, background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 700, color: BLUE }}>
+          + 새 워크플로우
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── 알림 /alerts — 벨 팝오버의 "전체 보기" 목적지: 진행 중 + 최근 내역(타임라인과 같은 단일 소스) ──
+export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
+  const items = timelineItems();
+  const cols: [string, string][] = [["상태", "88px"], ["내용", "minmax(240px,1.8fr)"], ["분류", "minmax(70px,0.5fr)"], ["시간", "minmax(70px,0.5fr)"]];
+  return (
+    <Page title="알림" icon={Bell}>
+      <ChipRow chips={[
+        { label: "진행 중", value: 1 },
+        { label: "최근", value: items.length },
+        { label: "장애", value: items.filter((x) => x.tone === "crit").length, crit: items.some((x) => x.tone === "crit") },
+      ]} />
+      <Card>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="pulsedot" style={{ width: 7, height: 7, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
+          <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>dev-eks 배포 진행 중</span>
+          <Mono dim>Jungle-303-04/final · 3/5 단계</Mono>
+          <span style={{ marginLeft: "auto", width: 160, height: 6, borderRadius: 999, background: UI.line2, overflow: "hidden" }}>
+            <motion.span initial={{ width: 0 }} animate={{ width: "60%" }} transition={{ duration: DUR.meter, ease: "easeInOut" }} style={{ display: "block", height: "100%", background: BLUE, borderRadius: 999 }} />
+          </span>
+        </div>
+      </Card>
+      <Card pad={0}>
+        <THead cols={cols} />
+        {items.map((n, i) => (
+          <TRow key={n.id} cols={cols} i={i} onClick={n.ref ? () => onOpenRef(n.ref!.kind, n.ref!.name) : undefined} cells={[
+            <Pill key="s" tone={n.tone === "crit" ? "crit" : n.tone === "warn" ? "warn" : "ok"} label={n.tone === "crit" ? "장애" : n.tone === "warn" ? "주의" : "정상"} />,
+            <span key="t" style={{ fontSize: TYPE.label2, color: UI.ink }}>{n.title}</span>,
+            <span key="c" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{n.cat}</span>,
+            <Mono key="w" dim>{n.time}</Mono>,
+          ]} />
+        ))}
+      </Card>
+    </Page>
+  );
+}
+
+// ── AI 대화 /ai — AI 패널 대화 내역 모아보기(행 클릭·새 대화 = 패널 열기, 죽은 컨트롤 없음) ──
+const AI_HISTORY = [
+  { id: "c1", title: "redis-605 OOMKilled 원인 분석", preview: "메모리 한도 512Mi 대비 워킹셋이 반복 초과… 한도 상향 또는 캐시 TTL 조정 제안", ctx: "이슈", time: "10분 전" },
+  { id: "c2", title: "shop-api 배포 워크플로우 구성", preview: "게이트 검증 단계를 소스와 배포 사이에 추가하는 구성을 안내", ctx: "배포", time: "2시간 전" },
+  { id: "c3", title: "prod-eks 비용 증가 원인", preview: "지난달 대비 +4.2%는 노드 그룹 확장 영향 — 스팟 비중 상향 검토 제안", ctx: "비용", time: "어제" },
+];
+export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
+  const cols: [string, string][] = [["대화", "minmax(260px,2fr)"], ["컨텍스트", "minmax(70px,0.5fr)"], ["시간", "minmax(70px,0.5fr)"]];
+  return (
+    <Page title="AI 대화" icon={Sparkles}
+      action={<button onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>새 대화</button>}>
+      <Card pad={0}>
+        <THead cols={cols} />
+        {AI_HISTORY.map((c, i) => (
+          <TRow key={c.id} cols={cols} i={i} onClick={onOpenPanel} cells={[
+            <span key="t" style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+              <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{c.title}</span>
+              <span style={{ fontSize: TYPE.label, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.preview}</span>
+            </span>,
+            <Pill key="c" tone="info" label={c.ctx} />,
+            <Mono key="w" dim>{c.time}</Mono>,
+          ]} />
+        ))}
+      </Card>
     </Page>
   );
 }
