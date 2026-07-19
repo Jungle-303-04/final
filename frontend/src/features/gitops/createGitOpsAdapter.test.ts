@@ -167,7 +167,7 @@ describe("createGitOpsAdapter", () => {
           provider: "argo",
           role: "controller",
           display_name: "Checkout API",
-          application_ids: [],
+          application_ids: ["app-checkout", "app-storefront"],
           binding_id: null,
           scope: {
             workspace_id: "workspace-a",
@@ -223,7 +223,8 @@ describe("createGitOpsAdapter", () => {
 
     await expect(createGitOpsAdapter(endpoints).listSyncTargets()).resolves.toEqual([{
       id: "controller:prod-east:application-uid",
-      applicationId: "application-uid",
+      applicationIds: ["app-checkout", "app-storefront"],
+      applicationId: "app-checkout",
       applicationName: "Checkout API",
       clusterId: "prod-east",
       namespace: "checkout",

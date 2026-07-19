@@ -49,6 +49,8 @@ export interface GitOpsSyncTargetQuery {
 
 export interface GitOpsSyncTarget {
   id: string;
+  /** Every application identity carried by canonical overview adapters; legacy ports may omit it. */
+  applicationIds?: readonly string[];
   applicationId: string;
   applicationName: string;
   clusterId: string | null;

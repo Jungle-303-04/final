@@ -137,6 +137,7 @@ function toOverviewSyncTarget(
   if (item.authority === "controller" && item.resource === null) {
     throw new GitOpsPortFailure("invalid-response");
   }
+  const applicationIds = [...item.application_ids];
   const resourceLocator = item.resource?.namespace
     ? {
       clusterId: item.scope.cluster_id,
@@ -150,7 +151,8 @@ function toOverviewSyncTarget(
     : null;
   return {
     id: item.id,
-    applicationId: item.application_ids[0]
+    applicationIds,
+    applicationId: applicationIds[0]
       ?? item.resource?.uid
       ?? item.binding_id
       ?? item.id,
