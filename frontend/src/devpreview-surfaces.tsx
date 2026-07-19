@@ -426,74 +426,118 @@ export function SettingsSurface() {
 }
 
 // ── 배포 > 워크플로우 — GitOps 배포 파이프라인 정의(원형: archive/codex/gitOpsNode 블루프린트) ──
-// 단계는 소스→…→배포 순서 고정 양끝 + 중간 단계 편집. 데모에서도 추가·삭제·저장이 실동작한다.
-type Wf = { id: string; name: string; repo: string; trigger: string; steps: string[]; last?: string };
-const WF_PRESETS = ["게이트 검증", "승인 대기", "카나리 10%", "알림 발송"];
-function WfPipeline({ steps, editing, onRemove }: { steps: string[]; editing?: boolean; onRemove?: (i: number) => void }) {
+// 노드 클릭 = 해당 단계 설정이 열린다(다이나믹 편집). 단계 추가·삭제·설정 변경·저장 전부 실동작.
+type Wf = { id: string; name: string; repo: string; trigger: string; steps: string[]; cfg: Record<string, string>; last?: string };
+const WF_PRESETS = ["게이트 검증", "승인 대기", "카나리", "알림 발송"];
+// 단계별 설정 스키마 — 키: 단계명, 값: [필드라벨, 옵션들] (옵션 1개 = 자유 입력)
+const STEP_FIELDS: Record<string, [string, string[]][]> = {
+  "소스": [["브랜치", ["main", "release/*", "dev"]], ["트리거", ["push", "tag", "수동"]]],
+  "게이트 검증": [["기준", ["전체 게이트 통과", "필수 게이트만", "경고 허용"]], ["시간 상한", ["10분", "20분", "30분"]]],
+  "승인 대기": [["승인자", ["플랫폼 팀", "서비스 오너", "온콜"]], ["만료", ["1시간", "4시간", "24시간"]]],
+  "카나리": [["비율", ["10%", "25%", "50%"]], ["관찰 시간", ["5분", "15분", "30분"]]],
+  "알림 발송": [["채널", ["Slack #deploy", "Slack #oncall", "Email"]]],
+  "배포": [["전략", ["RollingUpdate", "Recreate", "Blue/Green"]], ["실패 시", ["자동 롤백", "중단 후 대기"]]],
+};
+function WfNode({ label, edge, active, onClick }: { label: string; edge: boolean; active: boolean; onClick: () => void }) {
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-      {steps.map((s, i) => (
-        <span key={`${s}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: i === 0 || i === steps.length - 1 ? TINT.blue.fg : UI.ink, background: i === 0 || i === steps.length - 1 ? TINT.blue.bg : UI.bg2, border: `1px solid ${i === 0 || i === steps.length - 1 ? TINT.blue.bd : UI.line}`, borderRadius: 8, padding: "5px 10px", whiteSpace: "nowrap" }}>
-            {s}
-            {editing && i > 0 && i < steps.length - 1 && (
-              <button onClick={() => onRemove?.(i)} title="단계 제거" style={{ border: "none", background: "transparent", color: UI.ink3, cursor: "pointer", padding: 0, display: "grid" }}><X size={11} /></button>
-            )}
-          </span>
-          {i < steps.length - 1 && <ArrowRight size={12} style={{ color: UI.ink3, flexShrink: 0 }} />}
+    <button onClick={onClick}
+      style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer",
+        color: active ? UI.card : edge ? TINT.blue.fg : UI.ink,
+        background: active ? BLUE : edge ? TINT.blue.bg : UI.bg2,
+        border: `1px solid ${active ? BLUE : edge ? TINT.blue.bd : UI.line}`,
+        borderRadius: 8, padding: "5px 11px", whiteSpace: "nowrap", transition: "background .15s, color .15s" }}>
+      {label}
+    </button>
+  );
+}
+function WfCard({ wf, onChange, onSave, onCancel, isDraft, repos }: {
+  wf: Wf; onChange: (w: Wf) => void; onSave?: () => void; onCancel?: () => void; isDraft?: boolean; repos: string[];
+}) {
+  const [selStep, setSelStep] = useState<number | null>(null);
+  const step = selStep !== null ? wf.steps[selStep] : null;
+  const fields = step ? (STEP_FIELDS[step] ?? []) : [];
+  const cfgKey = (f: string) => `${selStep}:${step}:${f}`;
+  return (
+    <Card>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <GitBranch size={14} style={{ color: TINT.blue.fg }} />
+        {isDraft
+          ? <input value={wf.name} onChange={(e) => onChange({ ...wf, name: e.target.value })}
+              style={{ border: "none", outline: "none", background: UI.bg2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, width: 180 }} />
+          : <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{wf.name}</span>}
+        {isDraft
+          ? <select value={wf.repo} onChange={(e) => onChange({ ...wf, repo: e.target.value })}
+              style={{ border: `1px solid ${UI.line}`, borderRadius: 7, padding: "4px 8px", fontSize: TYPE.label, color: UI.ink2, background: UI.card }}>
+              {repos.map((r) => <option key={r}>{r}</option>)}
+            </select>
+          : <Mono dim>{wf.repo}</Mono>}
+        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{wf.trigger}</span>
+        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 }}>
+          {wf.last && !isDraft && <Pill tone="ok" label={wf.last} />}
+          {isDraft && <>
+            <button onClick={onCancel} style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 8, padding: "5px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>취소</button>
+            <button onClick={onSave} style={{ border: "none", background: BLUE, color: UI.card, borderRadius: 8, padding: "5px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>저장</button>
+          </>}
         </span>
-      ))}
-    </span>
+      </div>
+      {/* 파이프라인 — 노드 클릭 = 설정 열기 */}
+      <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {wf.steps.map((st, i) => (
+          <span key={`${st}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <WfNode label={st} edge={i === 0 || i === wf.steps.length - 1} active={selStep === i} onClick={() => setSelStep(selStep === i ? null : i)} />
+            {i < wf.steps.length - 1 && <ArrowRight size={12} style={{ color: UI.ink3, flexShrink: 0 }} />}
+          </span>
+        ))}
+      </span>
+      {/* 선택 노드 설정 — 다이나믹 확장 */}
+      {step && (
+        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}
+          style={{ marginTop: 11, border: `1px solid ${TINT.blue.bd}`, background: blueA(0.04), borderRadius: 10, padding: "11px 13px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <span style={{ fontSize: TYPE.label, fontWeight: 700, color: TINT.blue.fg }}>{step} 설정</span>
+          {fields.map(([f, opts]) => (
+            <label key={f} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label, color: UI.ink2 }}>
+              {f}
+              <select value={wf.cfg[cfgKey(f)] ?? opts[0]}
+                onChange={(e) => onChange({ ...wf, cfg: { ...wf.cfg, [cfgKey(f)]: e.target.value } })}
+                style={{ border: `1px solid ${UI.line}`, borderRadius: 7, padding: "3px 8px", fontSize: TYPE.label, color: UI.ink, background: UI.card }}>
+                {opts.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </label>
+          ))}
+          {selStep !== null && selStep > 0 && selStep < wf.steps.length - 1 && (
+            <button onClick={() => { onChange({ ...wf, steps: wf.steps.filter((_, j) => j !== selStep) }); setSelStep(null); }}
+              style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, border: "none", background: critA(0.09), color: TINT.crit.fg, borderRadius: 7, padding: "4px 10px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>
+              <X size={11} />단계 제거
+            </button>
+          )}
+        </motion.div>
+      )}
+      {/* 단계 추가 — 소스와 배포 사이에 삽입 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 11, flexWrap: "wrap" }}>
+        <span style={{ fontSize: TYPE.caption2, fontWeight: 700, color: UI.ink3 }}>단계 추가</span>
+        {WF_PRESETS.filter((pz) => !wf.steps.includes(pz)).map((pz) => (
+          <button key={pz} onClick={() => onChange({ ...wf, steps: [...wf.steps.slice(0, -1), pz, wf.steps[wf.steps.length - 1]] })}
+            style={{ border: `1px dashed ${UI.line}`, background: "transparent", color: UI.ink2, borderRadius: 999, padding: "3px 11px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ {pz}</button>
+        ))}
+      </div>
+    </Card>
   );
 }
 function WorkflowsTab({ repos }: { repos: string[] }) {
   const [wfs, setWfs] = useState<Wf[]>([
-    { id: "wf-main", name: "main 자동 배포", repo: repos[0] ?? "Jungle-303-04/final", trigger: "push → main", steps: ["소스", "게이트 검증", "배포"], last: "44분 전 · 성공" },
+    { id: "wf-main", name: "main 자동 배포", repo: repos[0] ?? "Jungle-303-04/final", trigger: "push → main", steps: ["소스", "게이트 검증", "배포"], cfg: {}, last: "44분 전 · 성공" },
   ]);
   const [draft, setDraft] = useState<Wf | null>(null);
-  const startDraft = () => setDraft({ id: `wf-${Date.now()}`, name: "새 워크플로우", repo: repos[0] ?? "", trigger: "push → main", steps: ["소스", "배포"] });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {wfs.map((w) => (
-        <Card key={w.id}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <GitBranch size={14} style={{ color: TINT.blue.fg }} />
-            <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{w.name}</span>
-            <Mono dim>{w.repo}</Mono>
-            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{w.trigger}</span>
-            <span style={{ marginLeft: "auto" }}>{w.last && <Pill tone="ok" label={w.last} />}</span>
-          </div>
-          <WfPipeline steps={w.steps} />
-        </Card>
+        <WfCard key={w.id} wf={w} repos={repos} onChange={(nw) => setWfs(wfs.map((x) => x.id === w.id ? nw : x))} />
       ))}
       {draft ? (
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <GitBranch size={14} style={{ color: TINT.blue.fg }} />
-            <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              style={{ border: "none", outline: "none", background: UI.bg2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, width: 180 }} />
-            <select value={draft.repo} onChange={(e) => setDraft({ ...draft, repo: e.target.value })}
-              style={{ border: `1px solid ${UI.line}`, borderRadius: 7, padding: "4px 8px", fontSize: TYPE.label, color: UI.ink2, background: UI.card }}>
-              {repos.map((r) => <option key={r}>{r}</option>)}
-            </select>
-            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{draft.trigger}</span>
-          </div>
-          <WfPipeline steps={draft.steps} editing onRemove={(i) => setDraft({ ...draft, steps: draft.steps.filter((_, j) => j !== i) })} />
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 11, flexWrap: "wrap" }}>
-            <span style={{ fontSize: TYPE.caption2, fontWeight: 700, color: UI.ink3 }}>단계 추가</span>
-            {WF_PRESETS.filter((p) => !draft.steps.includes(p)).map((p) => (
-              <button key={p} onClick={() => setDraft({ ...draft, steps: [...draft.steps.slice(0, -1), p, "배포"] })}
-                style={{ border: `1px dashed ${UI.line}`, background: "transparent", color: UI.ink2, borderRadius: 999, padding: "3px 11px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ {p}</button>
-            ))}
-            <span style={{ marginLeft: "auto", display: "flex", gap: 7 }}>
-              <button onClick={() => setDraft(null)} style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 8, padding: "5px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>취소</button>
-              <button onClick={() => { setWfs([...wfs, draft]); setDraft(null); }}
-                style={{ border: "none", background: BLUE, color: UI.card, borderRadius: 8, padding: "5px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>저장</button>
-            </span>
-          </div>
-        </Card>
+        <WfCard wf={draft} repos={repos} isDraft onChange={setDraft}
+          onSave={() => { setWfs([...wfs, draft]); setDraft(null); }} onCancel={() => setDraft(null)} />
       ) : (
-        <button onClick={startDraft}
+        <button onClick={() => setDraft({ id: `wf-${Date.now()}`, name: "새 워크플로우", repo: repos[0] ?? "", trigger: "push → main", steps: ["소스", "배포"], cfg: {} })}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, border: `1.5px dashed ${UI.line}`, borderRadius: 14, background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 700, color: BLUE }}>
           + 새 워크플로우
         </button>

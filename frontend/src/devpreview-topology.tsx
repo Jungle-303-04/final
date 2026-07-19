@@ -2,7 +2,7 @@
 // 분업: 맵 = 물리 · 토폴로지 = 호출 · 렌즈 = 의존 · 상세 = 전체 스펙. 설정 의존성은 통합 맵 렌즈가 주인.
 // 드래그 재배치 + 방향 화살표 + 선 호버 = 수치 + 선·노드 클릭 = 리소스 상세 고정.
 import ReactDOM from "react-dom/client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { DoorOpen, Network, Globe, Braces, ShoppingCart, Search, KeyRound, CreditCard, Send } from "lucide-react";
 import { readDevpreviewTopologyFocus } from "./features/filters/devpreviewDeepLinks";
@@ -102,9 +102,11 @@ const edgeMetrics = (e: TEdge) => {
   return { err, p99, st };
 };
 
-export function TopologyView({ embedded = false, onOpenService }: { embedded?: boolean; onOpenService?: (id: string) => void } = {}) {
+export function TopologyView({ embedded = false, onOpenService, focusId }: { embedded?: boolean; onOpenService?: (id: string) => void; focusId?: string | null } = {}) {
   const [pos, setPos] = useState(INIT);
   const [sel, setSel] = useState<string | null>(() => readDevpreviewTopologyFocus(SERVICES.map((s) => s.id)));
+  // 보조 패널(트래픽 뷰)에서 내려주는 외부 포커스 — 그래프 선택과 단일 상태로 동기화
+  useEffect(() => { if (focusId !== undefined && focusId !== null) setSel(focusId); if (focusId === null) setSel(null); }, [focusId]);
   const [etip, setEtip] = useState<{ x: number; y: number; e: TEdge } | null>(null);
   const [pinEdge, setPinEdge] = useState<TEdge | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);

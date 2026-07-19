@@ -45,7 +45,7 @@ export function WidgetFrame({ title, info, onDeepLink, deepLabel, collapsed, onT
           )}
         </span>
       </div>
-      {!collapsed && children}
+      {!collapsed && <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>{children}</div>}
     </div>
   );
 }
@@ -183,8 +183,8 @@ export function MultiLine({ series, height = 92 }: {
   const max = Math.max(...series.flatMap((s) => s.values), 1);
   const path = (vs: number[]) => vs.map((v, i) => `${i === 0 ? "M" : "L"}${(i / (vs.length - 1)) * W},${H - (v / max) * (H - 4) - 2}`).join(" ");
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 0 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", flex: 1, minHeight: height, display: "block" }} preserveAspectRatio="none">
         {[0.25, 0.5, 0.75].map((f) => <line key={f} x1={0} x2={W} y1={H * f} y2={H * f} stroke={UI.line2} strokeWidth={0.4} strokeDasharray="1.5 2.5" />)}
         {/* preserveAspectRatio=none + non-scaling-stroke에서는 pathLength 대시가 왜곡된다 — 페이드 등장으로 대체 */}
         {series.map((s, i) => (
@@ -224,25 +224,33 @@ export function RingGauge({ label, value }: { label: string; value: number }) {
 }
 
 // ── MiniTimeline — 최근 변경 세로 리스트 (P-21 문법: 시간·노드·점선 연결) ──
-export function MiniTimeline({ items, onPick }: {
+export function MiniTimeline({ items, onPick, columns = 1 }: {
   items: { id: string; time: string; tone: "ok" | "warn" | "crit"; title: string; ref?: { kind: string; name: string } }[];
   onPick?: (ref: { kind: string; name: string }) => void;
+  columns?: 1 | 2; // 넓은 스팬(4칸)에서는 2열로 채워 어색한 좌측 쏠림을 없앤다
 }) {
+  const stacks = columns === 2
+    ? [items.slice(0, Math.ceil(items.length / 2)), items.slice(Math.ceil(items.length / 2))]
+    : [items];
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      {items.map((it, i) => (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${stacks.length}, minmax(0, 1fr))`, columnGap: 28 }}>
+      {stacks.map((stack, si) => (
+      <div key={si} style={{ display: "flex", flexDirection: "column" }}>
+      {stack.map((it, i) => (
         <motion.div key={it.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }}
           style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
           <span style={{ width: 52, flexShrink: 0, whiteSpace: "nowrap", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, paddingTop: 2, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.time}</span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "center", alignSelf: "stretch", flexShrink: 0 }}>
             <span style={{ width: 9, height: 9, borderRadius: 999, border: `2px solid ${HP[it.tone]}`, background: it.tone === "crit" ? HP.crit : "transparent", marginTop: 3 }} />
-            {i < items.length - 1 && <span style={{ flex: 1, width: 1, borderLeft: `1.5px dashed ${UI.line}`, minHeight: 14 }} />}
+            {i < stack.length - 1 && <span style={{ flex: 1, width: 1, borderLeft: `1.5px dashed ${UI.line}`, minHeight: 14 }} />}
           </span>
           <button onClick={it.ref && onPick ? () => onPick(it.ref!) : undefined} disabled={!it.ref || !onPick} className={it.ref && onPick ? "rrow" : undefined}
             style={{ border: "none", background: "transparent", textAlign: "left", fontSize: TYPE.label2, color: UI.ink, fontWeight: 600, padding: "0 4px 12px", borderRadius: 6, cursor: it.ref && onPick ? "pointer" : "default", minWidth: 0 }}>
             {it.title}{it.ref && onPick && <ChevronRight size={11} style={{ color: UI.ink3, verticalAlign: -1, marginLeft: 2 }} />}
           </button>
         </motion.div>
+      ))}
+      </div>
       ))}
     </div>
   );

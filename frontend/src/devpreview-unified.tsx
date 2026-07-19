@@ -11,7 +11,7 @@ import {
   Home, ListTree, AlertTriangle, Clock, GitBranch, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen, Box,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
 } from "lucide-react";
-import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory } from "./devpreview-opsia";
+import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory, svcCatalog } from "./devpreview-opsia";
 import { WidgetFrame, KpiValue, RatioBar, MiniBars, Donut, RankList, MultiLine, MiniTimeline, RingGauge } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, costModel, timelineItems } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
@@ -19,7 +19,7 @@ import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
-import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE, DUR, inkA, blueA, INSET, MARK, CODE, cardA, GLASS } from "./devpreview/theme";
+import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE, DUR, inkA, blueA, INSET, MARK, CODE, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -1085,6 +1085,41 @@ ${bad ? `2026-07-18T15:04:31Z ERROR runtime: out of memory
 }
 
 // ── 종류 탐색 — 우측 패널 '리소스' 탭 내용 (보조 사이드바를 통합·대체) ─────────────────────────────
+
+// ── 트래픽 보조 패널 — 서비스 호출 상태·포커스(D22: 세 관점 모두 같은 자리 보조 패널) ──
+function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
+  focus: string | null; onFocus: (id: string | null) => void; onOpen: (id: string) => void; stickyTop: number;
+}) {
+  const pods = useMemo(() => podInventory(), []);
+  const rows = useMemo(() => svcCatalog().map((sv) => {
+    const own = pods.filter((pd) => pd.svc === sv.id);
+    const bad = own.filter((pd) => pd.bad).length;
+    return { id: sv.id, color: sv.color, ns: sv.ns, bad, rps: own.length * 3 + (sv.id.length % 4) };
+  }).sort((x, y) => y.bad - x.bad || y.rps - x.rps), [pods]);
+  return (
+    <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 12, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
+        <span style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>서비스 호출 상태</span>
+        {focus && <button onClick={() => onFocus(null)} style={{ marginLeft: "auto", border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "2px 9px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer" }}>해제</button>}
+      </div>
+      {rows.map((r) => (
+        <button key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.id)} className="rrow"
+          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 3, background: r.color, flexShrink: 0 }} />
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{r.id}</span>
+            <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3 }}>{r.ns} · {r.rps} req/s</span>
+          </span>
+          {r.bad > 0
+            ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg, background: critA(0.09), border: `1px solid ${critA(0.3)}`, borderRadius: 999, padding: "2px 8px", flexShrink: 0 }}>장애 {r.bad}</span>
+            : <span style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok, flexShrink: 0 }} />}
+        </button>
+      ))}
+      <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "7px 2px 0", lineHeight: 1.5 }}>클릭 = 그래프 포커스 · 더블클릭 = 상세</span>
+    </aside>
+  );
+}
+
 function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, filter }: {
   sel: string; onPick: (k: Kind) => void; showEmpty: boolean; setShowEmpty: (v: boolean) => void;
   pinned: string[]; togglePin: (id: string) => void; filter: string; // 상단 ⌘K 검색이 단일 소스 — 자체 검색창 없음
@@ -1293,7 +1328,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
           { label: "장애", color: HP.crit, values: pin(wave(7, Math.min(crit.length, 4), 1.6), crit.length) },
         ]} />;
       }
-      case "W5": return <Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} />;
+      case "W5": return <div style={{ flex: 1, display: "flex", alignItems: "center" }}><Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} /></div>;
       case "W6": return <RankList onPick={onOpenPod} rows={watch} />;
       case "W7": {
         const c = costModel();
@@ -1304,7 +1339,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
           </div>
         );
       }
-      case "W8": return <MiniTimeline items={changes} onPick={(r) => onOpenPod(r.name)} />;
+      case "W8": return <MiniTimeline columns={2} items={changes} onPick={(r) => onOpenPod(r.name)} />;
       default: return null;
     }
   };
@@ -1416,6 +1451,7 @@ const lensTabFor = (id: string): "svc" | "cfg" | "git" | null =>
 function App() {
   const [kindId, setKindId] = useState("Deployment");
   const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
+  const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
   const [showEmpty, setShowEmpty] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
@@ -1810,15 +1846,20 @@ function App() {
                 </motion.div>
               </div>
               {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지) */}
-              <aside style={{ width: 248, flexShrink: 0, position: "sticky", top: topH + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
+              <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: topH + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} />
               </aside>
             </div>
           )}
 
           {resView === "flow" && (
-            /* 흐름 — 호출 그래프(구 토폴로지 서피스 흡수). 서비스 클릭 = 상세 시트 */
-            <TopologyView embedded onOpenService={(id) => openRef("Service", id)} />
+            /* 트래픽 — 호출 그래프 + 보조 패널(서비스 상태·포커스, 세 관점 동일 문법). 서비스 클릭 = 상세 시트 */
+            <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <TopologyView embedded focusId={trafficFocus} onOpenService={(id) => openRef("Service", id)} />
+              </div>
+              <TrafficPanel focus={trafficFocus} onFocus={setTrafficFocus} onOpen={(id) => openRef("Service", id)} stickyTop={topH + 12} />
+            </div>
           )}
         </main>
       )}

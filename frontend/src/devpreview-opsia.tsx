@@ -949,7 +949,7 @@ function SidePanel({ pods, focusPod, setLens, pin, setPin, effLens, clearPod, op
 
   return (
     /* 라운드 모서리 침범 방지: 바깥은 clip, 스크롤·거터는 안쪽 컨테이너 담당 (스크롤바 유무와 무관하게 폭 고정) */
-    <aside style={{ width: 270, flexShrink: 0, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <aside style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
       <AnimatePresence mode="wait">
         {focusPod ? (
