@@ -11,3 +11,7 @@
 2026-07-19 · G5/G7 · 21aa0f2a1 Dev Gate 29679811849는 전체 성공했으나 Dev Deploy 29679991657이 AWS 전 reference-ui-delta unknown destination 17건으로 실패 · 삭제 서피스를 현행 소유자에 재분류한 020d4f078에서 governance 41/41·source-delta 14/14·unknown 0으로 해소
 2026-07-19 · G7 · 9407d4ab9 Dev Gate 29680361414는 Frontend 성공 후 STATUS-REPORT의 과거 제품명 토큰 1건을 product-brand-boundary가 차단했고 Dev Deploy 29680556206은 skipped · 실제 제품 결함이 아닌 증거 문서 표기 결함을 fa396d688에서 일반 경계 명칭으로 정정, 재검증 대기 · 해소 진행
 2026-07-19 · G7 · 005bdf547 Dev Gate 29680841537은 Frontend 성공 후 Backend 3,772 pass/3 fail로 종료했고 Dev Deploy 29681039922는 skipped · 증거 경로 과심도 2파일, docs README 색인 2개 누락, STATUS 문구 경계 1건을 평탄화·색인·현재 상태 문구로 정정해 test_docs_index 11/11 통과 · 해소
+2026-07-19 · G4 D-1 · 라이브 `/deploy` 저장소·동기화 탭에서 저장소 목록·연결 흐름·동기화 상태가 소실되고 플랜 빈 상태만 노출 · GitOps 아카이브 요소를 D19 탭에 중복 없이 이식하고 동일 SHA demo/live 검증 · 미해소
+2026-07-19 · G4 D-2 · 애플리케이션 빈 상태의 GitOps 연결 행동이 실행 가능한 연결 흐름으로 이어지지 않음 · `/deploy` 저장소·동기화 탭의 실제 연결 흐름으로 단일화 · 미해소
+2026-07-19 · G4 D-3 · 라이브 서피스별 라이트/다크 토큰 문법 혼재 · demo 라이트 기준과 단일 제품 토큰으로 8개 canonical 서피스 순차 통일 · 미해소
+2026-07-19 · G4 D-4 · 라이브 홈 카드 수치가 `—`이고 W2~W8 보드가 부재 · 홈 전용 후보 eaa5fdbbb까지 전체 플릿 집계·namespace·exact critical/scope를 구현, 배포·demo 대조 전 · 코드 해소/라이브 미검증
