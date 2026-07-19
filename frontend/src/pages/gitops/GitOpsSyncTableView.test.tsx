@@ -218,7 +218,9 @@ describe("GitOpsSyncTableView", () => {
     let dialog = screen.getByRole("dialog", { name: "Connect Git repository" });
     expect(dialog.querySelector("input[type='password']")).toBeNull();
     expect(within(dialog).queryByLabelText(/token/i)).toBeNull();
-    expect(dialog.querySelectorAll("[data-stage]")).toHaveLength(3);
+    expect(within(dialog).queryByLabelText("Branch")).toBeNull();
+    expect(within(dialog).queryByLabelText("Manifest path")).toBeNull();
+    expect(dialog.querySelectorAll("[data-stage]")).toHaveLength(6);
 
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -230,9 +232,7 @@ describe("GitOpsSyncTableView", () => {
     await user.type(within(dialog).getByLabelText("Git repository"), "team/inventory-api");
     await user.click(within(dialog).getByRole("button", { name: "Connect repository" }));
 
-    expect(dialog.querySelector("[data-stage='register']")?.getAttribute("data-state"))
-      .toBe("active");
-    expect(port.connectApplication).toHaveBeenCalledWith({
+    await waitFor(() => expect(port.connectApplication).toHaveBeenCalledWith({
       name: "Inventory API",
       repository: "team/inventory-api",
       branch: "main",
@@ -240,14 +240,16 @@ describe("GitOpsSyncTableView", () => {
       clusterId: "production-cluster",
       namespace: "default",
       environment: "development",
-    });
+      sourceType: "raw",
+    }));
     expect(vi.mocked(port.connectApplication).mock.calls[0]?.[0]).not.toHaveProperty("token");
 
     await act(async () => resolveRegistration(created));
     await waitFor(() => expect(
       screen.getByRole("dialog", { name: "Connect Git repository" })
-        .querySelector("[data-stage='reflect']")?.getAttribute("data-state"),
+        .querySelector("[data-stage='status']")?.getAttribute("data-state"),
     ).toBe("active"));
+    expect(port.getRepositoryConnectionStatus).toHaveBeenCalledWith("team/inventory-api");
     expect(port.listSyncTargets).toHaveBeenCalled();
 
     await act(async () => resolveReflection([reflected]));
@@ -255,6 +257,16 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.getByText("Inventory API")).toBeTruthy();
     expect(screen.getByTestId("notification-probe").textContent)
       .toBe("repository-connected:inventory-api|/deploy?section=repositories");
+    const calls = [
+      port.probeRepository,
+      port.listRepositoryBranches,
+      port.listRepositoryManifests,
+      port.validateRepositoryManifest,
+      port.connectApplication,
+      port.getRepositoryConnectionStatus,
+      port.listSyncTargets,
+    ].map((mock) => vi.mocked(mock).mock.invocationCallOrder.at(-1) ?? 0);
+    expect(calls).toEqual([...calls].sort((left, right) => left - right));
   });
 });
 
