@@ -4,3 +4,4 @@
 2026-07-19 · G1 · main/dev 이력 1438/3262 분기 + gate blocker(test_inventory_domain I001·frontend 회귀) · dev tree 유지 ancestry merge 후 gate 통과·비활성 Deploy 재확인 뒤 dev/main 순차 push · 미해소
 2026-07-19 · G1 · 비본선 14개 브랜치는 archive tag 검증 후 삭제했고 원격 head는 main/dev/demo만 남음 · G4 MUST+통합 gate 뒤 demo 삭제·main ancestry·dev/main push 재개 · 부분 완료
 2026-07-19 · G4/G7 · 8866399f5 gate-fast Vitest 2,204 pass/60 fail+3 unhandled, host load 180~215에서 다수 timeout·worker 기동 timeout; 결정적 Helm 1건·operation handoff 3건은 C에 반송 · 정상 부하 최종 digest 재검증 · 미해소
+2026-07-19 · G4/G7 · final a4eb1d638 gate 2265 pass/15 fail + 2 worker timeout · 결정적 Alert/apiComposition/Filesystem 반송 · 상태 미해소
