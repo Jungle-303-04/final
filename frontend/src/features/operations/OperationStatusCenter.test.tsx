@@ -14,8 +14,8 @@ import { OperationStatusFeedback } from "./OperationStatusFeedback";
 
 afterEach(cleanup);
 
-describe("operation status center", () => {
-  it("keeps terminal operation feedback in the existing bottom dock after the detail consumer closes", async () => {
+describe("operation status center cutover", () => {
+  it("does not revive the legacy operation center in the logs-only bottom dock", async () => {
     const port: OperationEventsPort = {
       async *subscribeOperationEvents() {
         yield {
@@ -48,10 +48,9 @@ describe("operation status center", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("region", { name: "작업 센터" })).toBeTruthy();
-    expect(screen.getAllByRole("region")).toHaveLength(1);
-    expect(screen.getByText("command-1")).toBeTruthy();
-    expect(screen.getByText("완료됨")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "작업 센터" })).toBeNull();
+    expect(screen.queryByText("command-1")).toBeNull();
+    expect(screen.queryByText("완료됨")).toBeNull();
     store.dispose();
   });
 });

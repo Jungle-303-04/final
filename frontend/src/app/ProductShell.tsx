@@ -54,7 +54,7 @@ import { BottomDock } from "./BottomDock";
 import { ProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
 import { WorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
 import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
-import { AlertEventsProvider, useAlertEvents } from "../features/alerts/AlertEventsProvider";
+import { AlertEventsProvider } from "../features/alerts/AlertEventsProvider";
 import {
   EMPTY_ALERT_EVENTS_PORT,
   type AlertEventsPort,
@@ -84,6 +84,8 @@ import { PortForwardSessionsProvider } from "../features/service-access/PortForw
 import { PortForwardSessionIndicator } from "./PortForwardSessionIndicator";
 import { ShellSessionsProvider } from "../features/shell-sessions/ShellSessionsProvider";
 import { ProductHeaderFilter, type ProductHeaderFilterHandle } from "./ProductHeaderFilter";
+import { ProductNotificationsProvider } from "../features/notifications/ProductNotificationsProvider";
+import { ProductNotificationCenter } from "./ProductNotificationCenter";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -122,14 +124,16 @@ export function ProductShell({
             <ShellSessionsProvider>
               <BottomDockProvider port={logStreamPort}>
                 <AlertEventsProvider port={alertEventsPort}>
-                  <ProductShellFrame
-                    auth={auth}
-                    aiAssistantPort={aiAssistantPort}
-                    globalFilterPort={globalFilterPort}
-                    releasedSurfaceIds={releasedSurfaceIds}
-                    shellStatePort={shellStatePort}
-                    runtimeStatusPort={runtimeStatusPort}
-                  />
+                  <ProductNotificationsProvider>
+                    <ProductShellFrame
+                      auth={auth}
+                      aiAssistantPort={aiAssistantPort}
+                      globalFilterPort={globalFilterPort}
+                      releasedSurfaceIds={releasedSurfaceIds}
+                      shellStatePort={shellStatePort}
+                      runtimeStatusPort={runtimeStatusPort}
+                    />
+                  </ProductNotificationsProvider>
                 </AlertEventsProvider>
               </BottomDockProvider>
             </ShellSessionsProvider>
@@ -160,7 +164,6 @@ function ProductShellFrame({
   const { isMobile } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
-  const alertEvents = useAlertEvents();
   const diagnose = useOptionalDiagnoseSession();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
@@ -286,14 +289,6 @@ function ProductShellFrame({
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
                       <SidebarText>{label}</SidebarText>
-                      {routeDefinition.id === "alerts" && alertEvents.unreadCount > 0 ? (
-                        <span
-                          aria-label={t("alerts.sidebar.unread", { count: alertEvents.unreadCount })}
-                          className="ml-auto min-w-5 rounded-full bg-destructive/15 px-1.5 text-center text-xs font-semibold text-destructive"
-                        >
-                          {alertEvents.unreadCount > 99 ? "99+" : alertEvents.unreadCount}
-                        </span>
-                      ) : null}
                     </SidebarMenuLink>
                   </SidebarMenuItem>
                 );
@@ -359,6 +354,7 @@ function ProductShellFrame({
               resourcesAvailable={releasedSurfaceIds.has("resources")}
             />
             <VersionUpdateNotice port={runtimeStatusPort} />
+            <ProductNotificationCenter />
             {isCommandPaletteOpen ? (
               <Suspense fallback={null}>
                 <ProductCommandPalette

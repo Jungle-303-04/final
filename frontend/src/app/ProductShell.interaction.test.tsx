@@ -376,10 +376,10 @@ describe("ProductShell keyboard and help interaction", () => {
       "테마 선택",
       "키보드 단축키",
       "런타임 진단 열기",
+      "알림 센터 · 미확인 0개",
       "test-use… 프로필 메뉴 열기",
     ]);
   });
-
   it("switches every shell label immediately from the locale control", async () => {
     const user = userEvent.setup();
     renderShell();

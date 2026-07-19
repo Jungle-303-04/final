@@ -12,8 +12,8 @@ import { useNavigate } from "react-router-dom";
 
 import { toast } from "../../shared/ui/primitives/sonner";
 import { useI18n } from "../../shared/i18n";
+import { alertEventResourceHref } from "../filters/alertEventResourceHref";
 import type { AlertEvent, AlertEventsPort } from "./alertEventsContract";
-
 const POLL_INTERVAL_MS = 10_000;
 
 interface AlertEventsContextValue {
@@ -65,12 +65,12 @@ export function AlertEventsProvider({
         const currentIds = new Set(response.map((event) => event.event_id));
         if (seen.current !== null) {
           for (const event of response) {
-            if (event.status !== "firing" || seen.current.has(event.event_id)) continue;
+            if (event.status !== "firing" || event.severity !== "critical" || seen.current.has(event.event_id)) continue;
             toast.warning(event.rule_name ?? translationRef.current("alerts.toast.new"), {
               description: alertTarget(event),
               action: {
                 label: translationRef.current("alerts.toast.view"),
-                onClick: () => navigate("/alerts"),
+                onClick: () => navigate(alertEventResourceHref(event.subject)),
               },
             });
           }
@@ -162,7 +162,7 @@ export function useAlertEvents(): AlertEventsContextValue {
 }
 
 function sortNewest(events: readonly AlertEvent[]): readonly AlertEvent[] {
-  return [...events].sort((left, right) => (
+  return [...new Map(events.map((event) => [event.event_id, event])).values()].sort((left, right) => (
     Date.parse(right.fired_at) - Date.parse(left.fired_at)
   ));
 }

@@ -6,7 +6,6 @@ import type {
   AiAlertRuleAction,
   AiAlertRuleActionPayload,
 } from "../features/ai-assistant/aiAssistantContract";
-import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 import { useI18n, type TranslationFunction } from "../shared/i18n";
 import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
 import { Badge } from "../shared/ui/primitives/badge";
@@ -22,6 +21,7 @@ import {
 import { Input } from "../shared/ui/primitives/input";
 import { Label } from "../shared/ui/primitives/label";
 import { Spinner } from "../shared/ui/primitives/spinner";
+import { useAiAlertRuleCompletion } from "./useAiAlertRuleCompletion";
 
 export function AiAlertRuleActionCard({
   action,
@@ -31,7 +31,7 @@ export function AiAlertRuleActionCard({
   onCreate(action: AiAlertRuleAction, signal?: AbortSignal): Promise<{ ruleId: string }>;
 }) {
   const { formatNumber, t } = useI18n();
-  const filter = useUnifiedFilter();
+  const completion = useAiAlertRuleCompletion();
   const [draft, setDraft] = useState(action.payload);
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
@@ -46,6 +46,7 @@ export function AiAlertRuleActionCard({
       const created = await onCreate({ ...action, payload: draft });
       setReceipt(created.ruleId);
       setEditing(false);
+      completion.publish(created.ruleId, draft.name);
     } catch {
       setFailure(true);
     } finally {
@@ -74,11 +75,7 @@ export function AiAlertRuleActionCard({
             size: "sm",
             variant: "outline",
           })}
-          to={filter.navigationHref("/alerts", {
-            ...filter.detail,
-            detail: receipt,
-            tab: "rules",
-          })}
+          to={completion.href}
         >
           {t("shell.ai.action.viewRules")}
         </Link>
