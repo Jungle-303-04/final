@@ -77,7 +77,7 @@ describe("ClusterCard", () => {
   });
 
   it("does not label a pending registration healthy before it connects", () => {
-    const { container } = renderCard({
+    renderCard({
       ...cluster,
       connectionState: "pending",
       registrationState: "pending",
