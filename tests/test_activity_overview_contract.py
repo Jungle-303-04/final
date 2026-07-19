@@ -77,6 +77,8 @@ def test_activity_repository_zero_fills_30_day_server_buckets_and_fences_sources
         deployment_application_ids={"app-a"},
         alert_cluster_ids={"cluster-a"},
         incident_cluster_ids={"cluster-a"},
+        requested_cluster_ids={"cluster-a"},
+        requested_namespaces={"shop"},
         from_ms=0,
         to_ms=2 * DAY_MS,
         bucket_ms=DAY_MS,
@@ -101,13 +103,17 @@ def test_activity_repository_zero_fills_30_day_server_buckets_and_fences_sources
     deployment_sql, alert_sql, critical_sql = map(_sql, connection.statements)
     assert "workflow_runs.workspace_id = 'workspace-a'" in deployment_sql
     assert "workflow_runs.application_id in ('app-a')" in deployment_sql
+    assert "workflow_runs.cluster_id in ('cluster-a')" in deployment_sql
+    assert "(workflow_runs.metadata ->> 'namespace') in ('shop')" in deployment_sql
     assert "workflow_runs.status in ('failed', 'succeeded')" in deployment_sql
     assert "floor(" in deployment_sql
     assert "alert_events.workspace_id = 'workspace-a'" in alert_sql
     assert "(alert_events.subject ->> 'cluster') in ('cluster-a')" in alert_sql
+    assert "(alert_events.subject ->> 'namespace') in ('shop')" in alert_sql
     assert "alert_events.fired_at >=" in alert_sql
     assert "rca_timeline.workspace_id = 'workspace-a'" in critical_sql
     assert "rca_timeline.cluster_id in ('cluster-a')" in critical_sql
+    assert "rca_timeline.incident_namespace in ('shop')" in critical_sql
     assert "lower(rca_timeline.severity) = 'critical'" in critical_sql
 
 
@@ -146,6 +152,8 @@ class _ActivityDb:
         assert kwargs["deployment_application_ids"] == {"app-a"}
         assert kwargs["alert_cluster_ids"] == {"cluster-inventory"}
         assert kwargs["incident_cluster_ids"] == {"cluster-rca"}
+        assert kwargs["requested_cluster_ids"] == {"cluster-inventory"}
+        assert kwargs["requested_namespaces"] == {"shop"}
         return [
             {
                 "from_ms": kwargs["from_ms"],
@@ -180,7 +188,17 @@ def test_activity_route_exposes_bounded_30_day_aggregate(monkeypatch: pytest.Mon
 
     response = client.get(
         "/activity/overview",
-        params={"from": 0, "to": DAY_MS, "bucket": DAY_MS},
+        params=[
+            ("from", 0),
+            ("to", DAY_MS),
+            ("bucket", DAY_MS),
+            ("clusters", "cluster-inventory"),
+            ("clusters", "cluster-rca"),
+            ("clusters", "cluster-forbidden"),
+            ("namespaces", "shop"),
+            ("applications", "app-a"),
+            ("applications", "app-forbidden"),
+        ],
     )
 
     assert response.status_code == 200

@@ -46,20 +46,35 @@ async def read_activity_overview(
         ge=ACTIVITY_MIN_BUCKET_MS,
         le=ACTIVITY_MAX_BUCKET_MS,
     ),
+    cluster_ids: list[str] = Query(default=[], alias=gateway_params.CLUSTERS_QUERY),
+    namespaces: list[str] = Query(default=[], alias=gateway_params.NAMESPACES_QUERY),
+    applications: list[str] = Query(default=[], alias=gateway_params.APPLICATIONS_QUERY),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ActivityOverviewResponse:
     _validate_activity_window(from_ms=from_ms, to_ms=to_ms, bucket_ms=bucket_ms)
     authorized = await resolve_authorized_timeline_scope(db, current)
+    alert_clusters = set(authorized.cluster_ids)
+    incident_clusters = set(authorized.incident_cluster_ids)
+    deployment_applications = set(authorized.deployment_application_ids)
+    requested_clusters: set[str] = set()
+    if cluster_ids:
+        requested_clusters = alert_clusters.intersection(cluster_ids)
+        alert_clusters.intersection_update(cluster_ids)
+        incident_clusters.intersection_update(cluster_ids)
+    if applications:
+        deployment_applications.intersection_update(applications)
     reader = getattr(db, "activity_overview", None)
     if not callable(reader):
         raise HTTPException(status_code=503, detail=ACTIVITY_UNAVAILABLE)
     buckets = await asyncio.to_thread(
         reader,
         workspace_id=authorized.workspace_id,
-        deployment_application_ids=set(authorized.deployment_application_ids),
-        alert_cluster_ids=set(authorized.cluster_ids),
-        incident_cluster_ids=set(authorized.incident_cluster_ids),
+        deployment_application_ids=deployment_applications,
+        alert_cluster_ids=alert_clusters,
+        incident_cluster_ids=incident_clusters,
+        requested_cluster_ids=requested_clusters,
+        requested_namespaces=set(namespaces),
         from_ms=from_ms,
         to_ms=to_ms,
         bucket_ms=bucket_ms,

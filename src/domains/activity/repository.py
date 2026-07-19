@@ -29,10 +29,14 @@ class ActivityOverviewRepository(DatabaseConnection):
         from_ms: int,
         to_ms: int,
         bucket_ms: int,
+        requested_cluster_ids: Collection[str] = (),
+        requested_namespaces: Collection[str] = (),
     ) -> list[JsonObject]:
         deployment_ids = tuple(sorted(set(deployment_application_ids)))
         alert_ids = tuple(sorted(set(alert_cluster_ids)))
         incident_ids = tuple(sorted(set(incident_cluster_ids)))
+        cluster_ids = tuple(sorted(set(requested_cluster_ids)))
+        namespaces = tuple(sorted(set(requested_namespaces)))
         start = datetime.fromtimestamp(from_ms / 1_000, tz=UTC)
         end = datetime.fromtimestamp(to_ms / 1_000, tz=UTC)
         series: dict[str, dict[int, int]] = {
@@ -52,6 +56,12 @@ class ActivityOverviewRepository(DatabaseConnection):
                         predicates=(
                             run.c.workspace_id == workspace_id,
                             run.c.application_id.in_(deployment_ids),
+                            *((run.c.cluster_id.in_(cluster_ids),) if cluster_ids else ()),
+                            *(
+                                (run.c["metadata"]["namespace"].astext.in_(namespaces),)
+                                if namespaces
+                                else ()
+                            ),
                             run.c.status.in_(
                                 (
                                     WorkflowRunStatus.FAILED.value,
@@ -75,6 +85,11 @@ class ActivityOverviewRepository(DatabaseConnection):
                         predicates=(
                             alert.c.workspace_id == workspace_id,
                             alert.c.subject["cluster"].astext.in_(alert_ids),
+                            *(
+                                (alert.c.subject["namespace"].astext.in_(namespaces),)
+                                if namespaces
+                                else ()
+                            ),
                             alert.c.fired_at >= start,
                             alert.c.fired_at < end,
                         ),
@@ -92,6 +107,11 @@ class ActivityOverviewRepository(DatabaseConnection):
                         predicates=(
                             incident.c.workspace_id == workspace_id,
                             incident.c.cluster_id.in_(incident_ids),
+                            *(
+                                (incident.c.incident_namespace.in_(namespaces),)
+                                if namespaces
+                                else ()
+                            ),
                             incident.c.incident_id.is_not(None),
                             func.lower(incident.c.severity) == "critical",
                             incident.c.created_at >= start,
