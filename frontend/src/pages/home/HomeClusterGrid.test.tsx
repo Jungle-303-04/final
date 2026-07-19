@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
