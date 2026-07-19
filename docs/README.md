@@ -527,3 +527,4 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [G4 홈 시각 대조](evidence/g4/home-visual-comparison.md)
 - [G4 홈 숫자 교차 검증](evidence/g4/home-numeric-cross-check.md)
 - [G4 홈 클릭 경로](evidence/g4/home-click-path.md)
+- [디자인 가이드 (demo-freeze-v3 단일 기준)](DESIGN-GUIDE.md)

@@ -28,6 +28,12 @@ const cluster: HomeClusterChoice = {
 
 afterEach(cleanup);
 
+
+function countsText(container: HTMLElement): string {
+  const counts = container.querySelector("[data-slot='cluster-card-counts']");
+  return (counts?.textContent ?? "").replace(/\s+/gu, " ").trim();
+}
+
 describe("ClusterCard", () => {
   it("renders the D1 status, identity, count line, mini bars, and staggered entrance", () => {
     const { container } = renderCard(cluster, 2);
@@ -35,9 +41,10 @@ describe("ClusterCard", () => {
     expect(screen.getByRole("img", { name: "Amazon Elastic Kubernetes Service" })
       .getAttribute("data-provider")).toBe("eks");
     expect(screen.getByText("Critical 1")).toBeTruthy();
-    expect(screen.getByText(
-      "Nodes —/8 ready · Pods 47 · Critical 1 · Namespaces —",
-    )).toBeTruthy();
+    const counts = countsText(container);
+    expect(counts).toContain("Nodes —/8 ready");
+    expect(counts).toContain("Pods 47 · Critical 1");
+    expect(counts).toContain("Namespaces —");
     expect(screen.getByRole("img", { name: "CPU —" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Memory —" })).toBeTruthy();
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
@@ -45,12 +52,12 @@ describe("ClusterCard", () => {
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
     const card = container.querySelector("[data-cluster-id='cluster-1']");
     expect(card?.className).not.toContain("hover:-translate");
-    expect(card?.className).not.toContain("hover:shadow");
+    expect(card?.className).toContain("hover:shadow-[0_10px_26px_-20px"); // 데모 ELEV.hover 문법
     expect(card?.textContent).not.toContain("Apps 6");
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {
-    renderCard({
+    const { container } = renderCard({
       ...cluster,
       nodeCount: null,
       podCount: null,
@@ -60,14 +67,17 @@ describe("ClusterCard", () => {
       openIncidentCount: null,
     });
 
-    expect(screen.getByText(
-      "Nodes —/— ready · Pods — · Critical — · Namespaces —",
-    )).toBeTruthy();
+    const counts = countsText(container);
+    expect(counts).toContain("Nodes —/— ready");
+    expect(counts).toContain("Pods —");
+    expect(counts).toContain("Namespaces —");
+    // 데모 문법: 장애 0·미상은 표기하지 않는다(빈 값의 침묵)
+    expect(counts).not.toContain("Critical");
     expect(screen.queryByText(/\b0\b/u)).toBeNull();
   });
 
   it("does not label a pending registration healthy before it connects", () => {
-    renderCard({
+    const { container } = renderCard({
       ...cluster,
       connectionState: "pending",
       registrationState: "pending",
@@ -92,7 +102,7 @@ describe("ClusterCard", () => {
   });
 
   it("uses the selected cluster overview as the only CPU and memory evidence", () => {
-    renderCard(cluster, 0, undefined, undefined, {
+    const { container } = renderCard(cluster, 0, undefined, undefined, {
       observedAt: null,
       podsRunning: 45,
       podsTotal: 47,
@@ -103,9 +113,9 @@ describe("ClusterCard", () => {
       memoryPercent: 61.25,
     });
 
-    expect(screen.getByText(
-      "Nodes 7/8 ready · Pods 47 · Critical 1 · Namespaces —",
-    )).toBeTruthy();
+    const counts = countsText(container);
+    expect(counts).toContain("Nodes 7/8 ready");
+    expect(counts).toContain("Pods 47 · Critical 1");
     expect(screen.getByRole("img", { name: "CPU 42.5%" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Memory 61.25%" })).toBeTruthy();
   });

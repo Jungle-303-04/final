@@ -1,4 +1,5 @@
 import { Ellipsis, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
+import { motion } from "motion/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router-dom";
 
@@ -11,7 +12,6 @@ import type {
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { STAGGER_MS, useStagger } from "../../motion/useStagger";
 import { useI18n, type MessageKey } from "../../shared/i18n";
-import { MiniBar } from "../../shared/ui/charts";
 import { StatusPill, type StatusTone } from "../../shared/ui/status";
 import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
@@ -89,8 +89,8 @@ export function ClusterCard({
   return (
     <Card
       className={cn(
-        "motion-node-land relative gap-0 overflow-visible py-0 transition-[box-shadow] duration-(--motion-quick) ease-(--ease-out) hover:ring-foreground/20 motion-reduce:transition-none",
-        variant === "map" ? "min-h-44" : "min-h-52",
+        "motion-node-land relative gap-0 overflow-visible rounded-2xl border-border py-0 shadow-none transition-[box-shadow,border-color] duration-(--motion-quick) ease-(--ease-out) hover:border-[#dadde3] hover:shadow-[0_10px_26px_-20px_rgba(17,19,24,0.16)] motion-reduce:transition-none",
+        variant === "map" ? "min-h-44" : "min-h-48",
       )}
       data-cluster-id={cluster.id}
       data-variant={variant}
@@ -102,39 +102,65 @@ export function ClusterCard({
         onClick={() => captureRouteMorph(document)}
         to={href}
       >
-        <CardHeader className={cn("gap-3 border-b py-4", onDisconnect && "pr-14")}>
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <StatusPill
-              label={incidents != null && incidents > 0
-                ? t("clusters.card.critical", { count: formatNumber(incidents) })
-                : undefined}
-              pulse={tone === "healthy"}
-              tone={tone}
-            />
-            <ClusterProviderIcon appearance="card" provider={cluster.provider} />
-          </div>
-          <div className="min-w-0">
-            <CardTitle className="truncate text-title2" title={cluster.name}>
-              {cluster.name}
-            </CardTitle>
-            <p className="mt-1 truncate text-caption text-caption-foreground">
-              {cluster.kubernetesVersion
-                ? t("clusters.card.kubernetesVersion", { version: cluster.kubernetesVersion })
-                : t("clusters.card.kubernetesVersionUnavailable")}
-            </p>
+        <CardHeader className={cn("gap-0 px-4 pt-4 pb-0", onDisconnect && "pr-12")}>
+          <div className="flex min-w-0 items-start gap-2.5">
+            <span
+              className="grid size-[30px] shrink-0 place-items-center rounded-[9px] text-white"
+              style={{ background: "linear-gradient(135deg, #FF9900, #F76F00)" }}
+            >
+              <ClusterProviderIcon appearance="compact" className="text-white [&_svg]:fill-current" provider={cluster.provider} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <CardTitle
+                  className="truncate font-mono text-title-3 font-bold tracking-[-0.02em]"
+                  title={cluster.name}
+                >
+                  {cluster.name}
+                </CardTitle>
+                {isProductionEnvironment(cluster.environment) ? (
+                  <span className="shrink-0 rounded-[5px] border border-status-warning/45 bg-status-warning/12 px-1.5 py-px text-micro font-semibold text-warning-foreground">
+                    prod
+                  </span>
+                ) : null}
+              </span>
+              <p className="mt-0.5 truncate font-mono text-caption-2 text-caption-foreground">
+                {cluster.kubernetesVersion
+                  ? t("clusters.card.kubernetesVersion", { version: cluster.kubernetesVersion })
+                  : t("clusters.card.kubernetesVersionUnavailable")}
+              </p>
+            </span>
+            {incidents != null && incidents > 0 ? (
+              <span className="shrink-0 rounded-full bg-destructive px-2.5 py-1 text-caption font-bold tabular-nums text-white">
+                {t("clusters.card.criticalLabel")} {formatNumber(incidents)}
+              </span>
+            ) : (
+              <StatusPill pulse={tone === "healthy"} tone={tone} />
+            )}
           </div>
         </CardHeader>
-        <CardContent className="grid flex-1 content-between gap-4 p-4">
-          <p className="min-w-0 text-label text-caption-foreground">
-            {t("clusters.card.counts", {
-              ready: metricValue(usage?.nodesReady, formatNumber),
-              nodes: metricValue(usage?.nodesTotal ?? cluster.nodeCount, formatNumber),
-              pods: metricValue(usage?.podsTotal ?? cluster.podCount, formatNumber),
-              critical: metricValue(incidents, formatNumber),
-              namespaces: metricValue(cluster.namespaceCount, formatNumber),
-            })}
+        <CardContent className="grid flex-1 content-between gap-3 p-4">
+          <p className="flex min-w-0 flex-wrap gap-x-3.5 gap-y-1 text-label tabular-nums text-muted-foreground" data-slot="cluster-card-counts">
+            <span>
+              {t("clusters.card.nodesLabel")}{" "}
+              <b className="font-mono text-foreground">
+                {metricValue(usage?.nodesReady, formatNumber)}/{metricValue(usage?.nodesTotal ?? cluster.nodeCount, formatNumber)}
+              </b>{" "}
+              {t("clusters.card.readySuffix")}
+            </span>
+            <span>
+              {t("clusters.card.podsLabel")}{" "}
+              <b className="font-mono text-foreground">{metricValue(usage?.podsTotal ?? cluster.podCount, formatNumber)}</b>
+              {incidents != null && incidents > 0 ? (
+                <b className="font-mono text-destructive"> · {t("clusters.card.criticalLabel")} {formatNumber(incidents)}</b>
+              ) : null}
+            </span>
+            <span>
+              {t("clusters.card.namespacesLabel")}{" "}
+              <b className="font-mono text-foreground">{metricValue(cluster.namespaceCount, formatNumber)}</b>
+            </span>
           </p>
-          <div className="grid gap-3">
+          <div className="grid gap-[7px]">
             <UsageBar
               label={t("home.metric.cpu")}
               unavailableLabel={t("common.value.unavailable")}
@@ -200,11 +226,32 @@ function UsageBar({
   unavailableLabel: string;
   value: number | null;
 }) {
+  const tone = value == null
+    ? "var(--status-unknown)"
+    : value >= 90
+      ? "var(--destructive)"
+      : value >= 75
+        ? "var(--status-warning)"
+        : "var(--status-healthy)";
   return (
-    <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_3rem] items-center gap-2 text-caption">
-      <span className="font-semibold">{label}</span>
-      <MiniBar ariaLabel={`${label} ${value == null ? unavailableLabel : `${value}%`}`} value={value} />
-      <span className="text-right font-mono tabular-nums text-caption-foreground">
+    <div
+      aria-label={`${label} ${value == null ? unavailableLabel : `${value}%`}`}
+      className="flex min-w-0 items-center gap-2"
+      role="img"
+    >
+      <span className="w-[34px] shrink-0 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
+        {label}
+      </span>
+      <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/[0.07]">
+        <motion.span
+          animate={{ width: `${value ?? 0}%` }}
+          className="block h-full rounded-full"
+          initial={false}
+          style={{ background: tone }}
+          transition={{ duration: 1.2, ease: "easeInOut" }}
+        />
+      </span>
+      <span className="w-[38px] shrink-0 text-right font-mono text-label-2 font-bold tabular-nums text-foreground">
         {value == null ? "—" : `${value}%`}
       </span>
     </div>
@@ -287,4 +334,9 @@ function connectionReasonKey(state: HomeConnectionState): MessageKey {
   if (state === "stale") return "clusters.connection.staleReason";
   if (state === "offline") return "clusters.connection.offlineReason";
   return "clusters.connection.unknownReason";
+}
+
+function isProductionEnvironment(environment: string): boolean {
+  const normalized = environment.trim().toLowerCase();
+  return normalized === "prod" || normalized === "production";
 }
