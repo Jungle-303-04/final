@@ -12,6 +12,7 @@ export type ProductSurfaceId =
   | "cost"
   | "clusters"
   | "alerts"
+  | "ai"
   | "settings";
 
 export type ProductRouteIcon = ProductSurfaceId;
@@ -30,7 +31,7 @@ export interface ProductRouteDefinition {
   family: ProductRouteFamily;
   navigation: boolean;
   redirectTo: ProductSurfaceId | null;
-  redirectSection: "applications" | "repositories" | "helm" | "rules" | null;
+  redirectSection: "applications" | "repositories" | "helm" | null;
 }
 
 /**
@@ -49,6 +50,8 @@ export const PRODUCT_ROUTE_CATALOG = [
     family: "reference-primary",
   }),
   route("cost", "Cost", "/cost", "g c", { family: "reference-primary" }),
+  route("alerts", "Alerts", "/alerts", "g b", { family: "reference-primary" }),
+  route("ai", "AI conversations", "/ai", "g a", { family: "reference-primary" }),
   route("settings", "Settings", "/settings", "g s", { family: "reference-primary" }),
   route("clusters", "Clusters", "/clusters", "g k", {
     navigation: false,
@@ -73,11 +76,6 @@ export const PRODUCT_ROUTE_CATALOG = [
     navigation: false,
     redirectSection: "helm",
     redirectTo: "deploy",
-  }),
-  route("alerts", "Alerts", "/alerts", "g b", {
-    navigation: false,
-    redirectSection: "rules",
-    redirectTo: "issues",
   }),
 ] as const satisfies readonly ProductRouteDefinition[];
 
@@ -158,7 +156,7 @@ interface ProductRouteBehavior {
   landing?: boolean;
   navigation?: boolean;
   redirectTo?: ProductSurfaceId;
-  redirectSection?: "applications" | "repositories" | "helm" | "rules";
+  redirectSection?: "applications" | "repositories" | "helm";
 }
 
 function failToResolveLandingRoute(

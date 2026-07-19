@@ -20,10 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
 import { useClusterScope } from "../cluster-scope/ClusterScopeProvider";
 import { useI18n, type MessageKey } from "../../shared/i18n";
-import {
-  ClusterConnectionMark,
-  clusterDisplayLabel,
-} from "../../shared/ui/ClusterConnectionStatus";
+import { clusterDisplayLabel } from "../../shared/ui/ClusterConnectionStatus";
 import {
   Command,
   CommandEmpty,
@@ -57,6 +54,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../shared/ui/primitives/dialog";
+import { GlobalFilterClusterConnectionMark } from "./GlobalFilterClusterConnectionMark";
 
 type SearchPhase = "idle" | "loading" | "ready" | "failed";
 type SuggestionType = GlobalFilterSuggestion["type"];
@@ -280,21 +278,22 @@ export const UnifiedFilterBar = forwardRef<
   return (
     <>
       <div
-      className="min-w-0 flex-1 sm:max-w-xl"
-      data-slot="unified-filter-bar"
-      onKeyDownCapture={(event) => {
-        if (event.key === "Tab") setOpen(false);
-      }}
-    >
+        className="mx-auto min-w-0 flex-1 sm:max-w-(--product-global-search-width)"
+        data-slot="unified-filter-bar"
+        onKeyDownCapture={(event) => {
+          if (event.key === "Tab") setOpen(false);
+        }}
+      >
       <Popover onOpenChange={changePopoverOpen} open={open}>
         <SearchPillInput
           aria-label={t("shell.filter.placeholder")}
-          className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm shadow-sm focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+          className="h-(--product-global-search-height) w-full gap-2 rounded-[var(--product-radius-md)] border border-border bg-background-subtle px-3 text-body shadow-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
           getRemovePillLabel={(pill) => t("shell.filter.remove", {
             label: pill.label ?? pill.value,
             type: pill.keyLabel ?? pill.key,
           })}
           inputRef={inputRef}
+          inputClassName="text-[length:var(--type-body)] leading-[var(--type-body-line)] md:text-[length:var(--type-body)]"
           leftSlot={(
             <PopoverTrigger
               aria-label={t("shell.filter.placeholder")}
@@ -319,34 +318,13 @@ export const UnifiedFilterBar = forwardRef<
             if (pill.key !== "cluster") return null;
             const cluster = clusterChoices.get(pill.value);
             if (!cluster) return null;
-            const mark = (
-              <ClusterConnectionMark
-                compact
-                connectionState={cluster.connectionState}
-              />
-            );
-            if (cluster.connectionState !== "offline") return mark;
             return (
-              <button
-                aria-busy={clusterScope.collection.phase === "ready" && clusterScope.collection.refreshing}
-                aria-label={t("shell.filter.cluster.refreshStatus", {
-                  cluster: clusterDisplayLabel(cluster),
-                })}
-                className="grid size-4 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:data-[refreshing=true]:animate-pulse motion-reduce:animate-none"
-                data-refreshing={clusterScope.collection.phase === "ready" && clusterScope.collection.refreshing}
-                disabled={clusterScope.collection.phase === "ready" && clusterScope.collection.refreshing}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  clusterScope.refresh();
-                }}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                type="button"
-              >
-                {mark}
-              </button>
+              <GlobalFilterClusterConnectionMark
+                clusterLabel={clusterDisplayLabel(cluster)}
+                connectionState={cluster.connectionState}
+                onRefresh={clusterScope.refresh}
+                refreshing={clusterScope.collection.phase === "ready" && clusterScope.collection.refreshing}
+              />
             );
           }}
           rightSlot={chips.length > 0 || query.length > 0 ? (
@@ -359,7 +337,14 @@ export const UnifiedFilterBar = forwardRef<
             >
               <X aria-hidden="true" className="size-3.5" />
             </button>
-          ) : null}
+          ) : (
+            <kbd
+              aria-hidden="true"
+              className="shrink-0 rounded-[var(--product-radius-tile)] border border-border-subtle px-1.5 py-0.5 font-mono text-caption text-muted-foreground"
+            >
+              {t("shell.filter.shortcutHint")}
+            </kbd>
+          )}
           text={query}
         />
         <PopoverContent

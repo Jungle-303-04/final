@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 03:24 KST다. 원격 소스와 라이브 배포는 `e84748b06ded3450ca3693efb5863ccbfc30eb68`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이며, 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 06:35 KST다. 원격 `dev`는 `5252a85ec49fbaaa1fca1da702dbba74d97f520f`, 라이브는 직전 성공 배포 `e84748b06ded3450ca3693efb5863ccbfc30eb68`로 서로 다르다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이며, 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. `e84748b06` Dev Gate `29694437337`·Deploy `29694651904`가 성공한 상태에서 exact demo와 제품 10개 서피스를 1440으로 직접 대조했다.
-2. 판정은 Home **부분**, 배포·리소스·이슈·타임라인·점검·비용·설정·알림·AI 대화 **9개 불일치**이며 G4 완료 선언은 금지한다.
-3. 결함 D-5~D-9와 화면별 차이를 `surface-parity-audit-2026-07-20.md` 및 `DEMO-DEFECT-LEDGER.md`에 등록했다.
-4. Home 후보는 selected scope·숫자 원장·W2~W8 문법을 맞추고 W3 미관측 저장소를 unknown/partial, W6 장애+주의를 단일 snapshot으로 표시한다.
-5. namespace drill-down은 실제 관측 cluster/namespace 쌍만 전달하고, 비용 30일 선택은 실제 API 범위인 최근 7일 관측을 함께 표시한다.
-6. fleet CPU/MEM fallback은 관측 freshness를 통과할 때만 사용하며 부분 snapshot의 `2/2·6/9`를 전체값으로 승격하지 않는다.
-7. 로컬 저부하 게이트는 Python 100/100, 변경 Vitest 756/756, typecheck·lint·design 1,362파일·build·governance 41/41 모두 종료 코드 0이다.
-8. rollout 후보는 최대 8개 strict wave·동일 wave status 대기·fail-fast·단일 deadline·중복 set-image 제거와 적용 전 redacted spec diff를 갖췄다.
-9. 새 외부 사람 필요 블로커는 0개다. 배포·동일 SHA 브라우저 증거 전이므로 Home과 rollout은 진행 상태다.
-10. 다음 3수는 후보 단일 push→Gate/Deploy 완주·전후 시간 비교 → Home 동일 SHA 증거 → 알림 서피스 실제 alert-events 동등화다.
+1. `5252a85ec` Dev Gate `29704105721`은 성공했지만 Dev Deploy `29704305166`은 빌드 전 reference UI delta의 unknown Opsia destination 11건으로 실패했다.
+2. 실패는 제품 런타임이 아니라 후보에 포함되지 않은 최신 Home/GitOps 계보 분류의 포트 카탈로그 정합 문제이며 BLOCKERS에 run ID와 함께 기록했다.
+3. 로컬 후보는 Home 범위·수치 정렬, 독립 알림·AI 대화, Deploy GitOps/워크플로우 복원, 이슈 RCA, 전역 셸·토큰·모션, 중복 GitOps 구세대 제거를 한 작업 트리에 포함한다.
+4. 결정적 프론트 회귀 11건을 소거했고 셸·라우트·필터 표적 36/36, GitOps·워크플로우 32/32가 통과했다.
+5. 전체 Vitest 443파일·2,271/2,271, `tsc -b`, ESLint, 디자인 가드 1,414파일, production build, `make gate-fast`가 worker 2·저부하 직렬 조건에서 모두 통과했다.
+6. feature 원장은 240행, UI delta 원장은 276파일·pending 0이며 삭제 ApplicationCard와 Home/GitOps 이식 계보를 현행 소유자로 재분류했다.
+7. 로컬 governance의 첫 재현은 미추적 신규 목적지가 index 기반 카탈로그에서 제외돼 21건으로 실패했으나, 후보 전체를 index에 포함한 재검증은 UI delta 276파일·pending 0·feature 240행·41/41·unknown 0으로 성공했다.
+8. `dev=origin/dev` 단일 계보이고 merge/rebase/cherry-pick은 없으며 활성 Gate/Deploy도 0건이다. demo worktree는 read-only로 보존한다.
+9. 새 외부 사람 필요 블로커는 0개다. G4는 라이브와 후보 SHA가 다르므로 Home 포함 **부분**, 나머지도 완료 선언 금지 상태다.
+10. 다음 3수는 index 포함 governance 0 → 단일 후보 커밋·push와 Gate/Deploy 완주 → 같은 SHA demo/live 1280·1440·1920 증거와 GOAL-LOG 갱신이다.
 
 ## 현재 상세 근거
 
@@ -39,7 +39,8 @@
 | `723ab27aa9` | Gate `29692859664`, Deploy `29692918077` | Gate success, Deploy success(5m50s), console/authenticated browser smoke success, rollback skipped | 직전 디자인 배치 기준점 |
 | `fd58268d5` | Gate `29693357340`, Deploy `29693439823` | Gate/Deploy success, 홈 위젯 내부 1:1 콘텐츠 문법 반영 | 이전 기준점 |
 | `e84748b06` | Gate `29694437337`, Deploy `29694651904` | Gate/Deploy success, Home foundation과 fleet 단일 원장 소비 1차 반영 | 현재 원격·라이브 기준점; exact 대조 결과 G4 부분 |
-| 로컬 후보(커밋 전) | gate-fast·build·governance | Python 100/100, changed Vitest 756/756, typecheck/lint/design/build, governance 41/41 모두 success | 배포와 동일 SHA 증거 전; 완료 아님 |
+| `5252a85ec` | Gate `29704105721`, Deploy `29704305166` | Gate success, Deploy는 빌드 전 unknown destination 11건으로 실패 | 로컬 후보 index 정합 후 governance 41/41·unknown 0; 재push 대기 |
+| 로컬 후보(커밋 전) | full Vitest·gate-fast·build·governance | full Vitest 443파일·2,271/2,271, gate-fast changed Vitest 210파일·1,190/1,190, typecheck/lint/design 1,414파일/build, governance 41/41 모두 success | 배포와 동일 SHA 증거 전; 완료 아님 |
 
 현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `e84748b06`으로 일치한다. exact demo `adcf92130`과의 1440 대조에서 Home scope·숫자·편집·차트 델타가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
 

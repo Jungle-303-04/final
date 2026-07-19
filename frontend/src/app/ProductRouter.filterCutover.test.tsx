@@ -171,6 +171,24 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
+  it.each([
+    "/gitops/detail/application/default/storefront",
+    "/gitops/resource",
+  ])("canonicalizes the legacy GitOps path %s to the Deploy repository section", async (path) => {
+    const { router } = renderProductRouter(
+      `${path}${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+      true,
+    );
+
+    await waitFor(() => {
+      expect(currentLocation(router)).toBe(
+        `/deploy${FILTER_ONLY_SEARCH}&section=repositories`,
+      );
+    });
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
   it("redirects Traffic directly to the Resources flow view without dropping filters", async () => {
     const { router } = renderProductRouter(
       `/traffic${FILTER_SEARCH}#detail`,

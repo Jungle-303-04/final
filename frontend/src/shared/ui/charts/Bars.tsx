@@ -1,18 +1,9 @@
-import {
-  Bar,
-  BarChart,
-  Cell,
-  ReferenceLine,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { usePrefersReducedMotion } from "@/motion";
 import { cn } from "@/shared/lib/cn";
-import {
-  ChartContainer,
-  type ChartConfig,
-} from "@/shared/ui/primitives/chart";
+import { ChartContainer, type ChartConfig } from "@/shared/ui/primitives/chart";
+import { MeterFill } from "../meter/MeterFill";
 import {
   chartToneColor,
   finitePositive,
@@ -298,15 +289,7 @@ export function ProgressFill({
           data-slot="progress-unavailable"
         />
       ) : (
-        <span
-          aria-hidden="true"
-          className="block h-full rounded-full transition-[width] duration-(--motion-value) ease-(--ease-draw) motion-reduce:transition-none"
-          data-slot="progress-indicator"
-          style={{
-            backgroundColor: chartToneColor(tone),
-            width: `${ratio * 100}%`,
-          }}
-        />
+        <MeterFill className="h-full" timing="draw" tone={tone} value={ratio * 100} />
       )}
     </div>
   );

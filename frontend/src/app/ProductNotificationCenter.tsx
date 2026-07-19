@@ -10,6 +10,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useAlertEvents } from "../features/alerts/AlertEventsProvider";
+import {
+  buildNotificationLedger,
+  type NotificationLedgerItem,
+} from "../features/alerts/notificationLedger";
 import { useOptionalProductSession } from "../features/auth/ProductSessionContext";
 import { useProductNotifications } from "../features/notifications/ProductNotificationsProvider";
 import { useOptionalOperationStatusSnapshots } from "../features/operations/OperationStatusStore";
@@ -26,13 +30,12 @@ import {
 } from "../shared/ui/primitives/popover";
 import { toast } from "../shared/ui/primitives/sonner";
 import {
-  buildProductNotificationGroups,
+  groupNotificationLedger,
   notificationRelativeTime,
   notificationUnreadCount,
   operationTerminalEventKey,
   persistNotificationPreferences,
   readNotificationPreferences,
-  type ProductNotificationItem,
 } from "./productNotificationModel";
 
 const PREFERENCES_PREFIX = "opsia:notification-center:v1";
@@ -59,13 +62,11 @@ export function ProductNotificationCenter() {
     [preferences.dismissedIds],
   );
   const now = new Date();
-  const groups = buildProductNotificationGroups(
-    alerts.events,
-    operations,
-    local.notifications,
+  const ledger = buildNotificationLedger(alerts.events, operations, local.notifications);
+  const groups = groupNotificationLedger(
+    ledger,
     dismissed,
     now,
-    t,
   );
   const unreadCount = notificationUnreadCount(groups, preferences.lastViewedAt);
   const seenTerminalEvents = useRef(new Set<string>());
@@ -117,8 +118,8 @@ export function ProductNotificationCenter() {
           render={(
             <Button
               aria-label={t("alerts.center.trigger", { count: unreadCount })}
-              className="relative"
-              size="icon-sm"
+              className="relative size-[2.375rem] rounded-full bg-foreground/[0.043] text-muted-foreground hover:bg-foreground/[0.075] hover:text-foreground"
+              size="icon"
               variant="ghost"
             />
           )}
@@ -207,7 +208,7 @@ function NotificationSection({
   now,
   progress = false,
 }: {
-  groups: readonly ProductNotificationItem[];
+  groups: readonly NotificationLedgerItem[];
   icon: typeof Activity;
   label: string;
   locale: "en" | "ko";
@@ -239,12 +240,14 @@ function NotificationSection({
                   {notificationRelativeTime(item.occurredAt, now, locale)}
                 </time>
               </span>
-              <span className="line-clamp-2 pl-4 text-xs leading-5 text-muted-foreground">
-                {item.description}
-              </span>
+              {item.description ? (
+                <span className="line-clamp-2 pl-4 text-xs leading-5 text-muted-foreground">
+                  {item.description}
+                </span>
+              ) : null}
               {progress ? (
                 <ProgressFill
-                  ariaLabel={`${item.title} · ${item.description}`}
+                  ariaLabel={`${item.title} · ${item.description ?? item.title}`}
                   className="ml-4 mt-1"
                   value={item.progress}
                 />
@@ -257,7 +260,7 @@ function NotificationSection({
   );
 }
 
-function toneClass(tone: ProductNotificationItem["tone"]): string {
+function toneClass(tone: NotificationLedgerItem["tone"]): string {
   if (tone === "critical") return "bg-status-critical";
   if (tone === "warning") return "bg-status-warning";
   if (tone === "healthy") return "bg-status-healthy";

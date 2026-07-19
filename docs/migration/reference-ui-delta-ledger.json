@@ -178,7 +178,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationCatalogSignals.tsx",
               "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
               "frontend/src/features/applications/applicationsContract.ts"
             ],
@@ -511,7 +511,7 @@
             "destinations": [
               "frontend/src/features/applications/ApplicationsSurface.tsx",
               "frontend/src/features/applications/ApplicationsTable.tsx",
-              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationCatalogSignals.tsx",
               "frontend/src/features/applications/applicationsContract.ts"
             ],
             "requiredBackendContracts": [
@@ -537,7 +537,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationCatalogSignals.tsx",
               "frontend/src/features/applications/ApplicationsTable.tsx",
               "frontend/src/features/applications/applicationPresentation.ts"
             ],
@@ -838,7 +838,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "frontend/src/features/gitops/gitOpsContract.ts",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/detail_router.py"
@@ -866,7 +866,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "frontend/src/features/gitops/createGitOpsAdapter.ts",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/detail_router.py"
@@ -1185,7 +1185,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "frontend/src/features/gitops/createGitOpsAdapter.ts",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/detail_router.py"
@@ -1651,8 +1651,8 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/gitops/GitOpsPage.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
-              "frontend/src/features/gitops/gitOpsResourceDetailRoute.ts",
+              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceInventory.tsx",
               "src/domains/gitops/detail_router.py",
               "src/domains/gitops/resource_projection.py"
             ],
@@ -8194,8 +8194,8 @@
               "frontend/src/api/gitops-application-detail-schemas.ts",
               "frontend/src/api/gitops-resource-detail-schemas.ts",
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "src/packages/contracts/gitops/detail.py",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/resource_projection.py",
@@ -9371,7 +9371,7 @@
               "frontend/src/api/gitops-resource-detail.ts",
               "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "src/domains/gitops/detail_router.py",
               "src/services/target/cluster-agent/commands/gitops.py"
             ],
@@ -9638,7 +9638,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeInsightsBand.tsx",
+              "frontend/src/features/home/homeInsightsCanonical.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "src/domains/dashboard/fleet_router.py",
               "src/domains/inventory_filter/repository.py"
@@ -9672,7 +9672,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeInsightsBand.tsx",
+              "frontend/src/features/home/homeInsightsCanonical.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "src/domains/dashboard/fleet_router.py",
               "src/domains/helm/release_projection.py"
@@ -9738,7 +9738,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeInsightsBand.tsx",
+              "frontend/src/features/home/homeInsightsCanonical.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/dashboard/fleet_router.py",
@@ -9959,8 +9959,8 @@
               "frontend/src/api/gitops-application-detail.ts",
               "frontend/src/api/gitops-resource-detail.ts",
               "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "src/domains/gitops/detail_router.py",
               "src/domains/gitops/resource_projection.py",
               "src/packages/contracts/gitops/detail.py",
@@ -13132,8 +13132,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
+              "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx",
               "src/domains/gitops/detail_projection.py",
               "src/packages/contracts/gitops/detail.py"
             ],
@@ -13194,10 +13194,10 @@
               "frontend/src/features/gitops/gitOpsPresentation.test.ts",
               "frontend/src/pages/gitops/GitOpsPage.tsx",
               "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
-              "frontend/src/pages/gitops/GitOpsSyncTargetDetails.tsx",
+              "frontend/src/pages/gitops/GitOpsRepositoryApplications.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "src/domains/gitops/detail_router.py"
             ],
             "requiredBackendContracts": [
@@ -13231,8 +13231,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
+              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "frontend/src/features/issues/RcaContextPanel.tsx",
               "src/domains/dashboard/router.py"
             ],
@@ -13277,8 +13277,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
-              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
+              "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
               "src/domains/gitops/detail_projection.py"
             ],
@@ -13893,8 +13893,8 @@
           "motion": {
             "reducedMotion": "loading skeletons and status marks preserve stable geometry and semantic progress without motion-dependent feedback",
             "evidence": [
-              "frontend/src/pages/home/HomeClusterHealth.tsx",
-              "frontend/src/pages/home/HomeClusterHealth.test.tsx"
+              "frontend/src/pages/home/HomeClusterGrid.tsx",
+              "frontend/src/pages/home/HomeClusterGrid.test.tsx"
             ]
           },
           "opsiaPort": {
@@ -13904,7 +13904,7 @@
               "frontend/src/pages/home/HomePage.tsx",
               "frontend/src/pages/home/useHomePageState.ts",
               "frontend/src/pages/home/useHomeClusterFrame.ts",
-              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomeClusterGrid.tsx",
               "frontend/src/pages/home/useHomePageState.contract.test.tsx",
               "src/domains/dashboard/fleet_router.py"
             ],
@@ -13936,7 +13936,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeIssuesRail.tsx",
+              "frontend/src/pages/home/HomeBoardWidgets.tsx",
               "frontend/src/pages/home/HomePage.tsx",
               "frontend/src/pages/home/HomePage.test.tsx",
               "src/domains/dashboard/fleet_router.py",
@@ -13970,7 +13970,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeSourceBands.tsx",
+              "frontend/src/pages/home/HomeWidgetBoard.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/resources/ResourcesPhysicalTopologyScene.tsx",
               "frontend/src/pages/timeline/TimelineSurface.tsx",
@@ -14009,7 +14009,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeSourceBands.tsx",
+              "frontend/src/pages/home/HomeWidgetBoard.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/home/HomePage.test.tsx",
               "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
@@ -14050,7 +14050,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeSourceBands.tsx",
+              "frontend/src/pages/home/HomeWidgetBoard.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/checks/ChecksPage.tsx",
               "frontend/src/pages/gitops/GitOpsPage.tsx",
@@ -14086,7 +14086,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeIssuesRail.tsx",
+              "frontend/src/pages/home/HomeBoardWidgets.tsx",
               "frontend/src/features/issues/resourceIssuesContract.ts",
               "frontend/src/features/issues/ResourceIssuesSection.tsx",
               "frontend/src/features/issues/issuePresentation.test.ts",
@@ -16402,7 +16402,7 @@
             "reducedMotion": "initial loading, background refresh, partial failure, and readiness remain visible through semantic states without relying on animated labels.",
             "evidence": [
               "frontend/src/pages/home/useHomeClusterFrame.ts",
-              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomeClusterGrid.tsx",
               "frontend/src/pages/home/HomePage.tsx"
             ]
           },
@@ -16410,7 +16410,7 @@
             "destinations": [
               "frontend/src/pages/home/useHomeClusterFrame.ts",
               "frontend/src/pages/home/homeRequest.ts",
-              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomeClusterGrid.tsx",
               "frontend/src/pages/home/HomePage.tsx",
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx"
             ],
@@ -16984,7 +16984,7 @@
             "destinations": [
               "frontend/src/features/home/homeContract.ts",
               "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
-              "frontend/src/pages/home/HomeClusterHealth.tsx"
+              "frontend/src/pages/home/HomeClusterGrid.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",

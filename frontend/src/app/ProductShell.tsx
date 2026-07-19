@@ -1,25 +1,13 @@
-import { Activity, Settings } from "lucide-react";
 import { lazy, Suspense, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
 import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import {
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuLink,
-  SidebarNavigation,
-} from "../shared/ui/primitives/sidebar-menu";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
   SidebarInset,
   SidebarProvider,
-  SidebarText,
   useSidebar,
 } from "../shared/ui/primitives/sidebar";
-import { Separator } from "../shared/ui/primitives/separator";
 import { TooltipProvider } from "../shared/ui/primitives/tooltip";
 import { useProductTheme } from "../shared/ui/useProductTheme";
 import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
@@ -44,6 +32,14 @@ import {
   EMPTY_AI_ASSISTANT_PORT,
   type AiAssistantPort,
 } from "../features/ai-assistant/aiAssistantContract";
+import {
+  EMPTY_AI_CONVERSATION_HISTORY_PORT,
+  type AiConversationHistoryPort,
+} from "../features/ai-assistant/aiConversationHistoryContract";
+import {
+  closeAiConversation,
+  useAiConversationSession,
+} from "../features/ai-assistant/aiConversationSession";
 import { Toaster, toast } from "../shared/ui/primitives/sonner";
 import { AiAssistantPanel } from "./AiAssistantPanel";
 import { AI_ASSISTANT_PANEL_DEFAULT_WIDTH } from "./AiAssistantResizeHandle";
@@ -55,7 +51,7 @@ import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-strea
 import { BottomDock } from "./BottomDock";
 import { ProductHeaderProfileMenu } from "./ProductHeaderProfileMenu";
 import { ProductHeaderWorkspaceSwitcher } from "./ProductHeaderWorkspaceSwitcher";
-import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
+import { navLabelKeys } from "./ProductShellNavigation";
 import { AlertEventsProvider } from "../features/alerts/AlertEventsProvider";
 import {
   EMPTY_ALERT_EVENTS_PORT,
@@ -88,6 +84,8 @@ import { ShellSessionsProvider } from "../features/shell-sessions/ShellSessionsP
 import { ProductHeaderFilter, type ProductHeaderFilterHandle } from "./ProductHeaderFilter";
 import { ProductNotificationsProvider } from "../features/notifications/ProductNotificationsProvider";
 import { ProductNotificationCenter } from "./ProductNotificationCenter";
+import { useClusterScope } from "../features/cluster-scope/ClusterScopeProvider";
+import { ProductPrimarySidebar } from "./ProductPrimarySidebar";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -99,6 +97,7 @@ interface ProductShellProps {
   defaultSidebarCollapsed?: boolean;
   globalFilterPort?: GlobalFilterPort;
   aiAssistantPort?: AiAssistantPort;
+  aiConversationHistoryPort?: AiConversationHistoryPort;
   logStreamPort?: LogStreamPort;
   alertEventsPort?: AlertEventsPort;
   shellStatePort?: ShellStatePort;
@@ -112,6 +111,7 @@ export function ProductShell({
   defaultSidebarCollapsed,
   globalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
+  aiConversationHistoryPort = EMPTY_AI_CONVERSATION_HISTORY_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
   shellStatePort = EMPTY_SHELL_STATE_PORT,
@@ -130,6 +130,7 @@ export function ProductShell({
                     <ProductShellFrame
                       auth={auth}
                       aiAssistantPort={aiAssistantPort}
+                      aiConversationHistoryPort={aiConversationHistoryPort}
                       globalFilterPort={globalFilterPort}
                       releasedSurfaceIds={releasedSurfaceIds}
                       shellStatePort={shellStatePort}
@@ -148,12 +149,13 @@ export function ProductShell({
 
 function ProductShellFrame({
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
+  aiConversationHistoryPort = EMPTY_AI_CONVERSATION_HISTORY_PORT,
   auth,
   releasedSurfaceIds,
   globalFilterPort,
   shellStatePort = EMPTY_SHELL_STATE_PORT,
   runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
-}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "runtimeStatusPort" | "shellStatePort">) {
+}: Pick<ProductShellProps, "aiAssistantPort" | "aiConversationHistoryPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "runtimeStatusPort" | "shellStatePort">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
@@ -164,6 +166,8 @@ function ProductShellFrame({
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
+  const clusterScope = useClusterScope();
+  const aiConversationSession = useAiConversationSession();
   const dock = useBottomDock();
   const { isMobile } = useSidebar();
   const { t } = useI18n();
@@ -232,7 +236,7 @@ function ProductShellFrame({
   const landingRoute = landingProductRouteForReleasedSurfaces(releasedSurfaceIds);
   const settingsHref = filter.navigationHref(routeDefinitionForSurface("settings").path);
   const currentRouteLabel = t(navLabelKeys[currentRoute.id]);
-  const assistantOpen = isAiOpen || Boolean(diagnose?.activeRunId);
+  const assistantOpen = isAiOpen || aiConversationSession.mode !== "idle" || Boolean(diagnose?.activeRunId);
   const changeAiOpen = (next: boolean) => {
     if (next && detailWorkspaceOpen && isNarrowAiViewport()) {
       filter.updateDetail(() => ({
@@ -245,7 +249,10 @@ function ProductShellFrame({
       }), "detail-close");
       toast.info(t("shell.ai.narrowDetailClosed"));
     }
-    if (!next) diagnose?.closeRun();
+    if (!next) {
+      diagnose?.closeRun();
+      closeAiConversation();
+    }
     setAiOpen(next);
   };
   return (
@@ -258,87 +265,24 @@ function ProductShellFrame({
         {t("shell.skipToContent")}
       </a>
 
-      <Sidebar
-        aria-label={t("shell.menu.label")}
-        id="product-sidebar"
-        mobileCloseLabel={t("shell.menu.mobileClose")}
-        mobileDescription={t("shell.menu.mobileDescription")}
-        mobileTitle={t("shell.menu.mobileTitle")}
-      >
-        <SidebarHeader className="h-14 flex-row items-center gap-2 px-2 py-0">
-          <Link
-            aria-label={t("shell.brand.landing", { route: t(navLabelKeys[landingRoute.id]) })}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[state=collapsed]/sidebar:justify-center"
-            to={filter.navigationHref(landingRoute.path)}
-          >
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
-              <Activity aria-hidden="true" className="size-4" />
-            </span>
-            <SidebarText className="text-sm font-semibold tracking-tight group-data-[state=collapsed]/sidebar:sr-only">
-              {t("product.name")}
-            </SidebarText>
-          </Link>
-          {!isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
-        </SidebarHeader>
-
-        <SidebarContent className="p-0">
-          <SidebarNavigation aria-label={t("shell.menu.primary")} id="product-primary-navigation">
-            <SidebarMenu>
-              {primaryNavigationRoutes.map((routeDefinition) => {
-                const Icon = routeIcons[routeDefinition.icon];
-                const label = t(navLabelKeys[routeDefinition.id]);
-                return (
-                  <SidebarMenuItem key={routeDefinition.id}>
-                    <SidebarMenuLink
-                      isActive={currentRoute.id === routeDefinition.id}
-                      to={filter.navigationHref(routeDefinition.path)}
-                      tooltip={label}
-                    >
-                      <Icon aria-hidden="true" className="size-4 shrink-0" />
-                      <SidebarText>{label}</SidebarText>
-                    </SidebarMenuLink>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarNavigation>
-          {settingsRoute ? (
-            <>
-              <Separator className="mx-2 data-horizontal:w-auto" />
-              <SidebarNavigation
-                aria-label={t("shell.nav.settings")}
-                className="flex-none"
-              >
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuLink
-                      isActive={currentRoute.id === settingsRoute.id}
-                      to={filter.navigationHref(settingsRoute.path)}
-                      tooltip={t(navLabelKeys[settingsRoute.id])}
-                    >
-                      <Settings aria-hidden="true" className="size-4 shrink-0" />
-                      <SidebarText>{t(navLabelKeys[settingsRoute.id])}</SidebarText>
-                    </SidebarMenuLink>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarNavigation>
-            </>
-          ) : null}
-        </SidebarContent>
-
-      </Sidebar>
+      <ProductPrimarySidebar
+        currentRouteId={currentRoute.id}
+        landingRoute={landingRoute}
+        primaryNavigationRoutes={primaryNavigationRoutes}
+        settingsRoute={settingsRoute}
+      />
 
       <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-background text-foreground">
         <header
-          className="sticky top-0 z-30 grid min-h-14 min-w-0 grid-cols-1 items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75 md:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(12rem,1fr)_auto]"
+          className="sticky top-0 z-[74] flex min-h-(--product-shell-header-height) min-w-0 items-center gap-2.5 border-b border-border bg-card px-[1.125rem] py-3"
           data-slot="product-header"
         >
-          <div className="flex min-w-0 items-center gap-1" data-slot="product-header-workspace">
+          <div className="flex min-w-0 shrink-0 items-center gap-1 pl-[0.28125rem] lg:w-[8.25rem]" data-slot="product-header-workspace">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <ProductHeaderWorkspaceSwitcher auth={auth} />
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
-          <div className="min-w-0 md:col-start-2 md:row-start-1">
+          <div className="min-w-0 flex-1 lg:mx-auto lg:w-(--product-global-search-width) lg:flex-initial">
             <ProductHeaderFilter
               activeSurfaceId={activeSurfaceId ?? ""}
               port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
@@ -346,21 +290,12 @@ function ProductShellFrame({
             />
           </div>
           <div
-            className="flex min-w-0 flex-wrap items-center justify-end gap-1 md:col-span-2 lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:flex-nowrap"
+            className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 lg:flex-nowrap"
             data-slot="product-header-account"
           >
-            <LocaleToggle />
-            <ThemeToggle controller={themeController} />
-            <ShortcutHelpDialog
-              definitions={shortcutDefinitions}
-              onOpenChange={setShortcutHelpOpen}
-              open={isShortcutHelpOpen}
+            <ProductHeaderRefreshStatus
+              refreshing={clusterScope.collection.phase === "ready" && clusterScope.collection.refreshing}
             />
-            <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
-            <PortForwardSessionIndicator
-              resourcesAvailable={releasedSurfaceIds.has("resources")}
-            />
-            <VersionUpdateNotice port={runtimeStatusPort} />
             <ProductNotificationCenter />
             {isCommandPaletteOpen ? (
               <Suspense fallback={null}>
@@ -373,10 +308,26 @@ function ProductShellFrame({
                 />
               </Suspense>
             ) : null}
-            <DesktopLocalTerminalEntry />
             <ProductHeaderProfileMenu
               auth={auth}
               settingsHref={settingsHref}
+              utilities={(
+                <>
+                  <LocaleToggle />
+                  <ThemeToggle controller={themeController} />
+                  <ShortcutHelpDialog
+                    definitions={shortcutDefinitions}
+                    onOpenChange={setShortcutHelpOpen}
+                    open={isShortcutHelpOpen}
+                  />
+                  <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
+                  <PortForwardSessionIndicator
+                    resourcesAvailable={releasedSurfaceIds.has("resources")}
+                  />
+                  <VersionUpdateNotice port={runtimeStatusPort} />
+                  <DesktopLocalTerminalEntry />
+                </>
+              )}
             />
           </div>
         </header>
@@ -394,7 +345,13 @@ function ProductShellFrame({
               </main>
               <AiAssistantPanel
                 context={aiContext}
+                historyPort={aiConversationHistoryPort}
                 onOpenChange={changeAiOpen}
+                onShowHistory={() => {
+                  closeAiConversation();
+                  setAiOpen(false);
+                  navigate(filter.navigationHref("/ai"));
+                }}
                 onWidthChange={setAiPanelWidth}
                 open={assistantOpen}
                 port={aiAssistantPort}
@@ -406,6 +363,25 @@ function ProductShellFrame({
       </SidebarInset>
       <Toaster />
     </>
+  );
+}
+
+function ProductHeaderRefreshStatus({ refreshing }: { refreshing: boolean }) {
+  const { t } = useI18n();
+  return (
+    <span
+      aria-live="polite"
+      className="hidden shrink-0 items-center gap-1.5 text-label text-muted-foreground xl:flex"
+      data-refreshing={refreshing || undefined}
+      data-slot="product-auto-refresh"
+    >
+      <span
+        aria-hidden="true"
+        className="size-2 rounded-full bg-status-healthy motion-safe:data-[refreshing=true]:animate-pulse motion-reduce:animate-none"
+        data-refreshing={refreshing || undefined}
+      />
+      {refreshing ? t("shell.refresh.refreshing") : t("shell.refresh.auto")}
+    </span>
   );
 }
 function isNarrowAiViewport(): boolean {

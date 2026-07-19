@@ -1,7 +1,6 @@
 export {
   appendAiMessage,
   createAiConversation,
-  deleteAiConversation,
   getAiConversation,
   listAiConversations,
   MAX_AI_MESSAGE_LENGTH,

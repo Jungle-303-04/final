@@ -1,14 +1,10 @@
 import type { ComponentType } from "react";
 import type { IssuesPort } from "../../features/issues/issuesContract";
-import type { AlertRulesPort } from "../../features/alerts/alertRulesContract";
-import { IncidentsPage } from "./IncidentsPage";
+import { IssuesPage } from "./IssuesPage";
 
-export function createIssuesSurface(
-  port: IssuesPort,
-  rulesPort: AlertRulesPort,
-): ComponentType {
+export function createIssuesSurface(port: IssuesPort): ComponentType {
   function IssuesSurfaceRoute() {
-    return <IncidentsPage issuesPort={port} rulesPort={rulesPort} />;
+    return <IssuesPage port={port} />;
   }
 
   IssuesSurfaceRoute.displayName = "IssuesSurfaceRoute";

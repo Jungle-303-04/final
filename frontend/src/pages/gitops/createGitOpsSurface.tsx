@@ -10,7 +10,13 @@ export function createGitOpsSurface(
   rcaContextPort: RcaContextPort = EMPTY_RCA_CONTEXT_PORT,
 ): ComponentType {
   function GitOpsSurface() {
-    return <GitOpsPage port={port} rcaContextPort={rcaContextPort} refreshPolicies={refreshPolicies} />;
+    return (
+      <GitOpsPage
+        port={port}
+        rcaContextPort={rcaContextPort}
+        refreshPolicies={refreshPolicies}
+      />
+    );
   }
 
   GitOpsSurface.displayName = "GitOpsSurface";

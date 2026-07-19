@@ -22,6 +22,15 @@ export const alertChannelListSchema = z.strictObject({
   channels: z.array(alertChannelSchema),
 });
 
+export const alertChannelUpsertRequestSchema = z.strictObject({
+  channel_id: z.string().max(120).default(""),
+  name: z.string().trim().min(1).max(120),
+  kind: z.literal("webhook").default("webhook"),
+  url: z.string().trim().url().max(2000),
+  min_severity: z.enum(["info", "warning", "critical"]).default("warning"),
+  enabled: z.boolean().default(false),
+});
+
 export const alertChannelTestRequestSchema = z.strictObject({
   channel_id: z.string().default(""),
   name: z.string().min(1).max(120).default("test"),
@@ -43,5 +52,6 @@ export const alertChannelTestResponseSchema = z.strictObject({
 
 export type AlertChannel = z.output<typeof alertChannelSchema>;
 export type AlertChannelList = z.output<typeof alertChannelListSchema>;
+export type AlertChannelUpsertInput = z.input<typeof alertChannelUpsertRequestSchema>;
 export type AlertChannelTestInput = z.input<typeof alertChannelTestRequestSchema>;
 export type AlertChannelTestResponse = z.output<typeof alertChannelTestResponseSchema>;

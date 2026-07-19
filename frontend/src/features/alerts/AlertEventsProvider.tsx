@@ -21,7 +21,6 @@ interface AlertEventsContextValue {
   error: Error | null;
   initialLoading: boolean;
   pending: Readonly<Record<string, "ack" | "promote">>;
-  unreadCount: number;
   acknowledge(eventId: string): Promise<void>;
   promote(eventId: string): Promise<void>;
   refresh(): void;
@@ -146,7 +145,6 @@ export function AlertEventsProvider({
     error,
     initialLoading,
     pending,
-    unreadCount: events.filter((event) => event.status === "firing").length,
     acknowledge: (eventId) => runMutation(eventId, "ack"),
     promote: (eventId) => runMutation(eventId, "promote"),
     refresh: () => setRefreshKey((current) => current + 1),

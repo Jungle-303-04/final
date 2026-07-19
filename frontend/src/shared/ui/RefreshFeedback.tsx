@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { Button } from "./primitives/button";
 import { useRefreshAnimation, type RefreshPhase } from "./useRefreshAnimation";
@@ -30,9 +30,9 @@ export interface RefreshActionProps extends RefreshFeedbackOptions {
   iconOnly?: boolean;
   label: string;
   renderFeedback: (state: RefreshFeedbackState) => ReactNode;
-  size?: "default" | "sm" | "lg" | "icon" | "icon-sm";
+  size?: ComponentProps<typeof Button>["size"];
   statusCopy: RefreshStatusCopy;
-  variant?: "default" | "outline" | "secondary" | "ghost" | "destructive" | "link";
+  variant?: ComponentProps<typeof Button>["variant"];
 }
 
 /**

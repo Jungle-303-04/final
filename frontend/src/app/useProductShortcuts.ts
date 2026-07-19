@@ -44,7 +44,7 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
         matcher.reset();
         return;
       }
-      if (!current.isHelpOpen && document.querySelector('[role="dialog"]')) {
+      if (!current.isHelpOpen && hasOpenDialog()) {
         matcher.reset();
         return;
       }
@@ -119,4 +119,15 @@ function shortcutDefinitionsIdentity(definitions: readonly ShortcutDefinition[])
     sequence: definition.sequence,
     targetRoute: definition.targetRoute ?? null,
   })));
+}
+
+function hasOpenDialog(): boolean {
+  // Profile utilities stay mounted so their imperative shortcut targets remain available.
+  // Base UI marks that closed popover through a hidden ancestor and `data-closed`.
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).some((dialog) => {
+    if (dialog.hasAttribute("data-closed") || dialog.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+    return dialog.closest("[hidden], [inert]") === null;
+  });
 }

@@ -74,11 +74,12 @@ describe("ProductShell", () => {
     expect(markup).toContain('data-slot="workspace-switcher-trigger"');
     expect(markup).toContain('data-slot="product-header-account"');
     expect(markup).toContain('data-slot="profile-menu-trigger"');
-    expect(markup).not.toContain('data-slot="sidebar-footer"');
-    expect(markup).toContain('aria-label="Current language: English"');
+    expect(markup).toContain('data-slot="sidebar-footer"');
+    expect(markup).toContain('aria-label="Settings"');
     expect(markup).toContain("test-user");
-    expect(markup).toContain("overflow-x-hidden");
-    expect(markup).toContain("data-horizontal:w-auto");
+    expect(markup).toContain('data-slot="sidebar-inset"');
+    expect(markup).toContain("overflow-hidden");
+    expect(markup).toContain("overflow-y-auto");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
@@ -87,12 +88,6 @@ describe("ProductShell", () => {
       markup.indexOf('data-slot="unified-filter-bar"'),
     );
     expect(markup.indexOf('data-slot="unified-filter-bar"')).toBeLessThan(
-      markup.indexOf('aria-label="Current language: English"'),
-    );
-    expect(markup.indexOf('aria-label="Current language: English"')).toBeLessThan(
-      markup.indexOf('aria-label="Choose theme"'),
-    );
-    expect(markup.indexOf('aria-label="Choose theme"')).toBeLessThan(
       markup.indexOf('data-slot="profile-menu-trigger"'),
     );
     expect(markup).toContain('id="product-main"');
@@ -166,7 +161,7 @@ describe("ProductShell", () => {
     expect(markup).toContain("이슈");
     expect(markup).toContain("test-use… 프로필 메뉴 열기");
     expect(markup).toContain("워크스페이스");
-    expect(markup).toContain("언어");
+    expect(markup).toContain("자동 갱신");
   });
 
   it("links the product brand to the released declarative landing route", () => {

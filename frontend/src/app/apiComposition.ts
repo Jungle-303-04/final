@@ -10,22 +10,26 @@ import {
   getNamespaceScope, getNodePodsSummary, getPrometheusIntegration,
   getRcaIncident, getRecoveryPlanByCorrelation, getResourceIssues,
   getRuntimeDiagnostics, getScheduledWorkloadRuns, getSettingsAccessProfile,
-  getUiPreferences, getVersionCheck, getWorkloadDetail,
-  grantDiagnoseConsent, listAlertEvents, listAlertRules,
+  getUiPreferences, getVersionCheck, getWorkloadDetail, getAiConversation,
+  grantDiagnoseConsent, deleteAlertChannel, listAlertChannels, listAlertEvents, listAlertRules,
+  listAiConversations,
   listClusters, listDiagnoseRuns, listEvidence,
   listFilteredResources, listGitOpsOverview, listGlobalFilterFacets,
   listRcaIssues, listRcaReports, listRcaTimeline,
   listResourceFilterFacets, listResourceLabelFacets, openPodLogStream,
   openScheduledWorkloadRunLogStream, openWorkloadLogStream, parseResourceFileResult,
-  postAiChat, promoteAlertEvent, searchResourceIdentities,
+  postAiChat, promoteAlertEvent, saveAlertChannel, searchResourceIdentities,
+  appendAiMessage, createAiConversation,
   selectRecoveryAction, startResourceFileCommand, stopDiagnoseRun,
   subscribeCommandOperationEvents, subscribeDiagnoseEvents, subscribeHomeDashboardEvents,
-  updateAlertRule, updateNamespaceScope, updatePrometheusIntegration,
+  testAlertChannel, updateAlertRule, updateNamespaceScope, updatePrometheusIntegration,
   updateUiPreferences,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
 import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
+import { createAlertChannelsAdapter } from "../features/alerts/createAlertChannelsAdapter";
+import { createAiConversationHistoryAdapter } from "../features/ai-assistant/createAiConversationHistoryAdapter";
 import type { AuthPort } from "../features/auth/authContract";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
 import { createDiagnoseAdapter } from "../features/diagnose/createDiagnoseAdapter";
@@ -104,6 +108,18 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     deleteAlertRule,
     listAlertRules,
     updateAlertRule,
+  });
+  const alertChannelsPort = createAlertChannelsAdapter({
+    deleteAlertChannel,
+    listAlertChannels,
+    saveAlertChannel,
+    testAlertChannel,
+  });
+  const aiConversationHistoryPort = createAiConversationHistoryAdapter({
+    append: appendAiMessage,
+    create: createAiConversation,
+    get: getAiConversation,
+    list: listAiConversations,
   });
   const workloadDetailPort = createWorkloadDetailAdapter({
     getScheduledWorkloadRuns,
@@ -215,7 +231,23 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
       loader: registry.createSurfaceLoader(async () => ({
         default: (await import("./composition/surfaces/issues")).loadIssuesSurface(
           issuesPort,
+        ),
+      })),
+    },
+    {
+      id: "alerts",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/alerts")).loadAlertsSurface(
           alertRulesPort,
+          alertChannelsPort,
+        ),
+      })),
+    },
+    {
+      id: "ai",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/ai")).loadAiHistorySurface(
+          aiConversationHistoryPort,
         ),
       })),
     },
@@ -251,5 +283,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions, rcaContextPort);
+  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions, rcaContextPort, aiConversationHistoryPort);
 }

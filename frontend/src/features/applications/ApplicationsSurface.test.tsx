@@ -25,14 +25,14 @@ describe("S10 Applications surface", () => {
   it("localizes product controls while preserving server-owned identities", async () => {
     renderApplications(applicationsPort(), "/applications", "ko");
 
-    expect(await screen.findByRole("heading", { name: "애플리케이션" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "표 보기" })).toBeTruthy();
-    expect(screen.getByText("checkout-api")).toBeTruthy();
-    expect(screen.getByText("prod")).toBeTruthy();
+    const catalog = await screen.findByRole("region", { name: "애플리케이션" });
+    expect(within(catalog).getByRole("columnheader", { name: "애플리케이션" })).toBeTruthy();
+    expect(within(catalog).getByRole("button", { name: "상세 보기" })).toBeTruthy();
+    expect(within(catalog).getByText("checkout-api")).toBeTruthy();
+    expect(within(catalog).getByText("prod")).toBeTruthy();
   });
 
-  it("forwards the canonical unified filter state and switches the same result set to table view", async () => {
-    const user = userEvent.setup();
+  it("forwards the canonical unified filter state into the dense default table", async () => {
     const port = applicationsPort();
     renderApplications(
       port,
@@ -52,7 +52,6 @@ describe("S10 Applications surface", () => {
     }, expect.any(AbortSignal));
     expect(screen.queryByRole("textbox")).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Table view" }));
     expect(screen.getByRole("region", { name: "Applications" })).toBeTruthy();
     expect(within(screen.getByRole("row", { name: /checkout-api/ })).getByText("checkout-api")).toBeTruthy();
   });
@@ -67,16 +66,15 @@ describe("S10 Applications surface", () => {
     expect(await screen.findByText("No applications to show.")).toBeTruthy();
     const connectLink = screen.getByRole("link", { name: "Connect an application in GitOps" });
     expect(connectLink.tagName).toBe("A");
-    expect(connectLink.getAttribute("href")).toBe("/gitops?clusters=cluster-1&mode=new");
+    expect(connectLink.getAttribute("href")).toBe(
+      "/deploy?clusters=cluster-1&section=repositories",
+    );
 
-    await user.tab();
-    await user.tab();
-    await user.tab();
-    await user.tab();
+    connectLink.focus();
     expect(document.activeElement).toBe(connectLink);
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.getByTestId("location").textContent)
-      .toBe("/gitops?clusters=cluster-1&mode=new"));
+      .toBe("/deploy?clusters=cluster-1&section=repositories"));
   });
 
   it("keeps the last catalog result visible while a manual refresh reports real progress", async () => {
@@ -211,7 +209,8 @@ describe("S10 Applications surface", () => {
     const port = applicationsPort();
     renderApplications(port, "/applications?clusters=cluster-1&labels=team%3Dcheckout");
 
-    await user.click(await screen.findByRole("button", { name: /checkout-api/ }));
+    const catalogRow = await screen.findByRole("row", { name: /checkout-api/ });
+    await user.click(within(catalogRow).getByRole("button", { name: "View details" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("app=app-checkout"));
     expect(screen.getByTestId("location").textContent).toContain("tab=overview");
     expect(await screen.findByText("v2.4.1 deployed")).toBeTruthy();
@@ -456,7 +455,8 @@ describe("S10 Applications surface", () => {
       }),
     });
     renderApplications(port);
-    await user.click(await screen.findByRole("button", { name: /checkout-api/ }));
+    const catalogRow = await screen.findByRole("row", { name: /checkout-api/ });
+    await user.click(within(catalogRow).getByRole("button", { name: "View details" }));
     await user.click(await screen.findByRole("tab", { name: "Deployments" }));
     expect(await screen.findByText("No deployment history is available.")).toBeTruthy();
     await user.click(screen.getByRole("tab", { name: "Drift" }));

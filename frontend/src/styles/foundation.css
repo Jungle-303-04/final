@@ -4,8 +4,12 @@
     border-color: var(--border);
     outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
     scrollbar-color: color-mix(in oklch, var(--muted-foreground) 42%, transparent) transparent;
-    scrollbar-gutter: stable;
     scrollbar-width: thin;
+  }
+
+  #product-main,
+  [data-scroll-gutter="stable"] {
+    scrollbar-gutter: stable;
   }
 
   *::-webkit-scrollbar {

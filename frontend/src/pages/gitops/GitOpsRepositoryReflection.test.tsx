@@ -50,7 +50,7 @@ describe("repository reflection gate", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("No deployment targets");
+    await screen.findByText("team/checkout-api");
     await user.click(screen.getByRole("button", { name: "Connect repository" }));
     const dialog = screen.getByRole("dialog", { name: "Connect Git repository" });
     await user.type(within(dialog).getByLabelText("Target name"), "Inventory API");
@@ -93,7 +93,7 @@ describe("repository reflection gate", () => {
       }]);
     renderView(port);
 
-    await screen.findByText("No deployment targets");
+    await screen.findByText("team/checkout-api");
     await user.click(screen.getByRole("button", { name: "Connect repository" }));
     const dialog = screen.getByRole("dialog", { name: "Connect Git repository" });
     await user.type(within(dialog).getByLabelText("Target name"), "Inventory API");

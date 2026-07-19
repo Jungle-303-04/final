@@ -117,11 +117,11 @@ describe("ProductHeaderWorkspaceSwitcher", () => {
           ? `현재 워크스페이스: ${longWorkspaceId}`
           : `Current workspace: ${longWorkspaceId}`,
       });
-      expect(trigger.className).toContain("sm:w-(--product-toolbar-identity-width)");
+      expect(trigger.className).toContain("sm:max-w-(--product-toolbar-identity-width)");
       expect(trigger.querySelector(".truncate")?.textContent).toBe(
-        locale === "ko" ? "워크스페이스" : "Workspace",
+        longWorkspaceId,
       );
-      expect(trigger.querySelectorAll(".truncate")).toHaveLength(2);
+      expect(trigger.querySelectorAll(".truncate")).toHaveLength(1);
     },
   );
 });

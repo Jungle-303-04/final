@@ -43,25 +43,14 @@ export const ROUTE_CRITICAL_API_CONTRACTS = Object.freeze({
   ]),
   "/deploy": Object.freeze(["/api/applications"]),
   "/issues": Object.freeze(["/api/dashboard/rca"]),
-  "/applications": Object.freeze(["/api/applications"]),
   "/timeline": Object.freeze(["/api/timeline"]),
-  "/traffic": Object.freeze(["/api/traffic"]),
-  "/helm": Object.freeze(["/api/helm"]),
-  "/gitops": Object.freeze([
-    "/api/gitops",
-    "/api/release-plans",
-  ]),
   "/checks": Object.freeze(["/api/checks"]),
   "/cost": Object.freeze([
     "/api/cost",
     "/api/rightsizing",
   ]),
-  "/clusters": Object.freeze(["/api/clusters"]),
-  "/alerts": Object.freeze([
-    "/api/alert-events",
-    "/api/alert-rules",
-    "/api/alert-channels",
-  ]),
+  "/alerts": Object.freeze(["/api/alert-events"]),
+  "/ai": Object.freeze(["/api/ai/conversations"]),
   "/settings": Object.freeze([
     "/api/settings",
     "/api/integrations",

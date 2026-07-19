@@ -8,7 +8,7 @@ export function AiAssistantSuggestions({
   items,
   onChoose,
 }: {
-  items: AiAssistantSuggestion[];
+  items: readonly AiAssistantSuggestion[];
   onChoose(item: AiAssistantSuggestion): void;
 }) {
   return (

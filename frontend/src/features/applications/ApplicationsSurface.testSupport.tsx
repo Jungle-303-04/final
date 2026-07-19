@@ -235,7 +235,7 @@ export function renderApplications(
         </I18nProvider>
       ),
     },
-    { path: "/gitops", element: <LocationProbe /> },
+    { path: "/deploy", element: <LocationProbe /> },
   ], { initialEntries: [initialEntry] });
   return { ...render(<RouterProvider router={router} />), router };
 }

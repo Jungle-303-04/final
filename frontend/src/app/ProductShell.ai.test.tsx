@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiAssistantPort } from "../features/ai-assistant/aiAssistantContract";
+import { closeAiConversation } from "../features/ai-assistant/aiConversationSession";
 import {
   installMatchMedia,
   renderShell,
@@ -13,6 +14,7 @@ import {
 beforeEach(() => installMatchMedia(false));
 afterEach(() => {
   cleanup();
+  closeAiConversation();
   window.localStorage.clear();
 });
 
@@ -44,8 +46,8 @@ describe("ProductShell AI panel", () => {
     expect(panel.getAttribute("aria-hidden")).toBe("false");
     expect(panel.hasAttribute("inert")).toBe(false);
     expect(panel.getAttribute("data-open")).toBe("true");
-    expect(panel.getAttribute("data-width")).toBe("420");
-    expect(inner?.getAttribute("data-inner-width")).toBe("420");
+    expect(panel.getAttribute("data-width")).toBe("550");
+    expect(inner?.getAttribute("data-inner-width")).toBe("550");
     expect(panel.previousElementSibling?.id).toBe("product-main");
     expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Opsia AI 닫기" })).toHaveLength(1);
@@ -58,8 +60,12 @@ describe("ProductShell AI panel", () => {
     fireEvent.keyDown(screen.getByRole("separator", { name: "AI 패널 너비 조절" }), {
       key: "ArrowLeft",
     });
-    expect(panel.getAttribute("data-width")).toBe("440");
-    expect(inner?.getAttribute("data-inner-width")).toBe("440");
+    expect(panel.getAttribute("data-width")).toBe("575");
+    expect(inner?.getAttribute("data-inner-width")).toBe("575");
+
+    await user.click(screen.getByRole("button", { name: "Opsia AI 닫기" }));
+    const restoredTrigger = await screen.findByRole("button", { name: "Opsia AI 열기" });
+    await waitFor(() => expect(document.activeElement).toBe(restoredTrigger));
   });
 
   it("never renders an answer without evidence and links a supported answer", async () => {
@@ -143,6 +149,7 @@ describe("ProductShell AI panel", () => {
     await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
     expect(screen.getByRole("log", { name: "AI 대화" })).toBeTruthy();
 
+    await user.click(screen.getByRole("button", { name: /프로필 메뉴 열기$/u }));
     await user.click(screen.getByRole("combobox", { name: "현재 언어: 한국어" }));
     await user.click(await screen.findByRole("option", { name: "영어" }));
 

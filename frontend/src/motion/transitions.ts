@@ -22,6 +22,9 @@ export const MOTION_SPRING = Object.freeze({
 
 export const EASE_DRAW = Object.freeze([0.22, 1, 0.36, 1] as const);
 
+/** Recharts' closest supported named easing to demo-freeze-v3 EASE_DRAW. */
+export const RECHARTS_EASE_DRAW = "ease-out" as const;
+
 /** Tween-only exceptions from demo-freeze-v3; layout motion uses MOTION_SPRING. */
 export const MOTION_TWEEN = Object.freeze({
   none: Object.freeze({ duration: MOTION_DURATION_SECONDS.none }),

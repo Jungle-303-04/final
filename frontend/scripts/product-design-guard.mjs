@@ -102,9 +102,7 @@ const motionValueLiteralPattern =
 // This is the exact pre-D17 debt on the branch at the start of P1. The guard
 // permits only these file/literal counts, so moving or adding a literal fails
 // while the owning surface track can reduce the baseline incrementally.
-const legacyMotionLiteralBaseline = Object.freeze({
-  'pages/home/HomeClusterHealth.tsx': { 'duration-500': 1 },
-})
+const legacyMotionLiteralBaseline = Object.freeze({})
 
 const restrictedNetworkApis = new Set([
   'EventSource',

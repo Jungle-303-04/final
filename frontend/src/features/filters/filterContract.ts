@@ -98,7 +98,7 @@ export interface ProductDetailQuery {
   timeAt?: number;
   graphCollapsed?: true;
   homePeriod?: HomePeriod;
-  surfaceTab?: "applications" | "repositories" | "helm" | "incidents" | "rules";
+  surfaceTab?: "applications" | "repositories" | "workflows" | "helm";
   trafficSince?: TrafficSince;
   trafficProtocols?: readonly TrafficProtocol[];
   trafficVerdicts?: readonly TrafficVerdict[];

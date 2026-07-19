@@ -24,9 +24,11 @@ describe("shell shortcut registry", () => {
         ["route:timeline", "g l", false],
         ["route:checks", "g u", false],
         ["route:cost", "g c", false],
+        ["route:alerts", "g b", false],
+        ["route:ai", "g a", false],
         ["route:settings", "g s", false],
       ]));
-    expect(definitions.filter((definition) => definition.id.startsWith("route:"))).toHaveLength(8);
+    expect(definitions.filter((definition) => definition.id.startsWith("route:"))).toHaveLength(10);
     expect(definitions.find((definition) => definition.id === "command"))
       .toMatchObject({
         allowInInputs: true,

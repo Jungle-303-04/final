@@ -7,9 +7,10 @@ import {
 import { clampDimension, useRafDimensionPreview } from "../motion";
 import { useI18n } from "../shared/i18n";
 
-export const AI_ASSISTANT_PANEL_MIN_WIDTH = 360;
-export const AI_ASSISTANT_PANEL_MAX_WIDTH = 640;
-export const AI_ASSISTANT_PANEL_DEFAULT_WIDTH = 420;
+export const AI_ASSISTANT_PANEL_MIN_WIDTH = 475;
+export const AI_ASSISTANT_PANEL_MAX_WIDTH = 700;
+export const AI_ASSISTANT_PANEL_DEFAULT_WIDTH = 550;
+const AI_ASSISTANT_PANEL_RESIZE_STEP = 25;
 
 export function AiAssistantResizeHandle({
   hostRef,
@@ -28,13 +29,17 @@ export function AiAssistantResizeHandle({
     min: AI_ASSISTANT_PANEL_MIN_WIDTH,
     onCommit: onWidthCommit,
     previewProperty: "--ai-width",
-    step: 20,
+    step: AI_ASSISTANT_PANEL_RESIZE_STEP,
   });
 
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    onWidthCommit(clamp(width + (event.key === "ArrowLeft" ? 20 : -20)));
+    onWidthCommit(clamp(
+      width + (event.key === "ArrowLeft"
+        ? AI_ASSISTANT_PANEL_RESIZE_STEP
+        : -AI_ASSISTANT_PANEL_RESIZE_STEP),
+    ));
   };
 
   return (
@@ -59,6 +64,6 @@ export function clampAiAssistantPanelWidth(value: number): number {
   return clampDimension(value, {
     max: AI_ASSISTANT_PANEL_MAX_WIDTH,
     min: AI_ASSISTANT_PANEL_MIN_WIDTH,
-    step: 20,
+    step: AI_ASSISTANT_PANEL_RESIZE_STEP,
   });
 }

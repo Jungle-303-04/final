@@ -1115,21 +1115,22 @@
       "frontendContract": "frontend/src/app",
       "desktopContract": null,
       "verification": [
-        "frontend/src/app/ProductRouter.deepRoute.test.tsx",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        "frontend/src/app/ProductRouter.filterCutover.test.tsx",
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
           "state": "not_required",
-          "destination": "frontend/src/app/productRoutes.ts#ownsPath",
-          "reason": "GitOps detail deep links are browser route identity.",
-          "test": "frontend/src/app/ProductRouter.deepRoute.test.tsx"
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "Legacy GitOps detail deep links are browser compatibility routes and preserve filters while canonicalizing into the Deploy repository workspace.",
+          "test": "frontend/src/app/ProductRouter.filterCutover.test.tsx"
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx#GitOpsApplicationDetailPage",
-          "consumer": "frontend/src/features/gitops/gitOpsApplicationDetailRoute.ts#parseGitOpsApplicationDetailRoute",
-          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx#GitOpsApplicationWorkspace",
+          "consumer": "frontend/src/app/ProductRouter.tsx#ProductLegacyRedirect",
+          "reason": "The canonical Deploy repository expansion retains application evidence, resource inventory, actions, and RCA after a legacy detail URL is redirected to the single D19 workspace.",
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -1354,9 +1355,9 @@
         "frontend/src/api/cluster-summary.test.ts",
         "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
         "frontend/src/pages/clusters/clusterNavigation.test.ts",
-        "frontend/src/pages/home/HomeClusterHealth.test.tsx",
+        "frontend/src/pages/home/HomeClusterGrid.test.tsx",
         "frontend/src/pages/home/HomePage.test.tsx",
-        "frontend/src/pages/home/HomePage.semantics.test.tsx",
+        "frontend/src/pages/home/HomePage.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
@@ -1369,10 +1370,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeClusterHealth.tsx#HomeClusterHealth",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "The health card preserves partial and access states, renders observed Kubernetes versions, and links Pod, Node, restart, incident, workload, and warning evidence to the canonical scoped surfaces.",
-          "test": "frontend/src/pages/home/HomePage.test.tsx"
+          "destination": "frontend/src/pages/clusters/ClusterCard.tsx#ClusterCard",
+          "consumer": "frontend/src/pages/home/HomeClusterGrid.tsx#HomeClusterGrid",
+          "reason": "The v3 fleet grid reuses the canonical cluster card to preserve partial and access states, observed Kubernetes versions, and scoped links for Pod, Node, restart, incident, workload, and warning evidence.",
+          "test": "frontend/src/pages/home/HomeClusterGrid.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -1414,9 +1415,9 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeSourceBands.tsx#HomeSourceBands",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "The live observation band renders bounded relation and Timeline evidence, preserves the active filters, and opens Resources relation view instead of reintroducing a standalone Topology route.",
+          "destination": "frontend/src/pages/home/HomeWidgetBoard.tsx#HomeWidgetBoard",
+          "consumer": "frontend/src/pages/home/useHomeBoardData.ts#useHomeBoardData",
+          "reason": "The dense v3 board renders bounded activity and recent Timeline evidence with preserved scope while resource topology remains owned by the canonical Resources surface.",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,
@@ -1460,9 +1461,9 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeSourceBands.tsx#HomeSourceBands",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "The exploration band reuses the canonical Helm card and mounts Traffic or Cost only when their server-owned provider coverage is available.",
+          "destination": "frontend/src/pages/home/HomeWidgetBoard.tsx#HomeWidgetBoard",
+          "consumer": "frontend/src/pages/home/HomeOptionalBoardWidgets.tsx#CostOverviewWidget",
+          "reason": "The dense v3 board renders optional Cost only from provider-backed evidence; Traffic and Helm summaries remain in their canonical owner surfaces without duplicate Home cards.",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,
@@ -1505,9 +1506,9 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeSourceBands.tsx#HomeSourceBands",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "The posture band reuses the certificate card and renders GitOps, Checks, and NetworkPolicy only from observed server evidence, hiding unavailable capabilities without inferred health.",
+          "destination": "frontend/src/pages/home/HomeWidgetBoard.tsx#HomeWidgetBoard",
+          "consumer": "frontend/src/pages/home/HomeBoardWidgets.tsx#SyncWidget",
+          "reason": "The dense v3 board retains observed GitOps synchronization posture while certificate, resource-policy, and Checks evidence remain in their canonical owner surfaces; unavailable capabilities are never inferred as healthy.",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,
@@ -1534,7 +1535,7 @@
       "verification": [
         "tests/test_fleet_router.py",
         "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
-        "frontend/src/pages/home/HomePage.semantics.test.tsx",
+        "frontend/src/pages/home/HomePage.interactions.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
@@ -1546,9 +1547,9 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeIssuesRail.tsx#HomeIssuesRail",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "test": "frontend/src/pages/home/HomePage.semantics.test.tsx"
+          "destination": "frontend/src/pages/home/HomeBoardWidgets.tsx#IncidentWidget",
+          "consumer": "frontend/src/pages/home/HomeWidgetBoard.tsx#HomeWidgetBoard",
+          "test": "frontend/src/pages/home/HomePage.interactions.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -4405,9 +4406,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeInsightsBand.tsx#HomeInsightsBand",
+          "destination": "frontend/src/features/home/homeInsightsCanonical.ts#toHomeInsights",
           "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "test": "frontend/src/pages/home/HomePage.test.tsx"
+          "reason": "The authorized bounded CRD summary remains normalized in the strict Home insights contract while its detailed presentation is owned by Resources after the v3 board consolidation.",
+          "test": "frontend/src/features/home/createHomeAdapter.mapping.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -4448,9 +4450,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeInsightsBand.tsx#HomeInsightsBand",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "test": "frontend/src/pages/home/HomePage.test.tsx"
+          "destination": "frontend/src/features/home/homeInsightsCanonical.ts#toHomeInsights",
+          "consumer": "frontend/src/pages/helm/HelmPage.tsx#HelmPage",
+          "reason": "The authorized Helm summary remains normalized without invented zeros, while release presentation is owned by the canonical Deploy Helm surface after the v3 board consolidation.",
+          "test": "frontend/src/features/home/createHomeAdapter.mapping.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -4807,9 +4810,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/home/HomeInsightsBand.tsx#HomeInsightsBand",
-          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "test": "frontend/src/pages/home/HomePage.test.tsx"
+          "destination": "frontend/src/features/home/homeInsightsCanonical.ts#toHomeInsights",
+          "consumer": "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx#ProviderResourceDetailPanel",
+          "reason": "Certificate-expiry evidence remains normalized in the strict Home contract and is rendered with typed certificate details in the canonical Resources workspace after the v3 board consolidation.",
+          "test": "frontend/src/features/home/createHomeAdapter.mapping.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8617,8 +8621,7 @@
       "verification": [
         "tests/test_gitops_resource_projection.py",
         "tests/test_gitops_resource_router.py",
-        "frontend/src/features/gitops/gitOpsResourceDetailRoute.test.ts",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -8630,10 +8633,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
-          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
-          "reason": "The query-owned detail route renders the observed controller tree, coverage state, and exact selectable resource identities.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "destination": "frontend/src/pages/gitops/GitOpsResourceInventory.tsx#GitOpsResourceInventory",
+          "consumer": "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx#GitOpsResourceWorkspace",
+          "reason": "The repository-owned compact workspace renders the observed controller tree, coverage state, exact selectable resource identities, and prevents the root resource from opening a recursive detail portal.",
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8662,7 +8665,7 @@
         "tests/test_gitops_resource_projection.py",
         "tests/test_gitops_resource_router.py",
         "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -8674,10 +8677,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
-          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
-          "reason": "The detail renders typed controller insights and history while exposing only server-advertised actions.",
-          "test": "frontend/src/features/gitops/createGitOpsAdapter.test.ts"
+          "destination": "frontend/src/pages/gitops/GitOpsResourceInsight.tsx#GitOpsResourceInsight",
+          "consumer": "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx#GitOpsResourceWorkspace",
+          "reason": "The compact repository workspace renders typed controller insights and history while exposing only server-advertised actions.",
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8705,7 +8708,7 @@
       "verification": [
         "tests/test_gitops_resource_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -8717,10 +8720,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
-          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceActionDialog.tsx#GitOpsResourceActionDialog",
+          "consumer": "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx#GitOpsResourceWorkspace",
           "reason": "The shared confirmation flow dispatches reconcile only when present in the current CapabilitySet and follows the existing operation stream.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8748,7 +8751,7 @@
       "verification": [
         "tests/test_gitops_resource_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -8760,10 +8763,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
-          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceActionDialog.tsx#GitOpsResourceActionDialog",
+          "consumer": "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx#GitOpsResourceWorkspace",
           "reason": "Sync-with-source uses the same typed confirmation and receipt flow without conflating product release commands with provider control.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8792,7 +8795,7 @@
       "verification": [
         "tests/test_gitops_resource_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -8804,10 +8807,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
-          "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceActionDialog.tsx#GitOpsResourceActionDialog",
+          "consumer": "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx#GitOpsResourceWorkspace",
           "reason": "Suspend or resume is shown from the latest controller CapabilitySet and uses the common impact-confirmation dialog.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8837,7 +8840,7 @@
         "tests/test_gitops_resource_router.py",
         "tests/test_target_agent_commands.py",
         "frontend/src/api/gitops-resource-detail.test.ts",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -8849,10 +8852,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceActionDialog.tsx#GitOpsResourceActionDialog",
           "consumer": "frontend/src/api/gitops-resource-detail.ts#executeGitOpsResourceAction",
           "reason": "Typed sync controls submit exact selected tree identities and an idempotency key through the shared CommandReceipt contract.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -8880,7 +8883,7 @@
       "verification": [
         "tests/test_gitops_resource_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/features/gitops/createGitOpsAdapter.resourceActions.test.ts"
       ],
       "coverage": {
         "backend": {
@@ -8892,10 +8895,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceActionDialog.tsx#GitOpsResourceActionDialog",
           "consumer": "frontend/src/features/gitops/createGitOpsAdapter.ts#createGitOpsAdapter",
           "reason": "Browser refetch remains separate while the refresh action dialog explicitly selects normal or hard provider refresh.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "test": "frontend/src/features/gitops/createGitOpsAdapter.resourceActions.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -9892,8 +9895,7 @@
         "tests/test_evidence_query_api.py",
         "frontend/src/features/issues/createRcaContextAdapter.test.ts",
         "frontend/src/features/issues/RcaContextPanel.test.tsx",
-        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
-        "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+        "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -9905,10 +9907,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/gitops/GitOpsResourceDetailPage.tsx#GitOpsResourceDetailPage",
+          "destination": "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx#GitOpsResourceWorkspace",
           "consumer": "frontend/src/features/issues/RcaContextPanel.tsx#RcaContextPanel",
-          "reason": "Application and resource detail reuse the same scope-checked panel without changing GitOps routes, actions, or refresh semantics.",
-          "test": "frontend/src/pages/gitops/GitOpsResourceDetailPage.test.tsx"
+          "reason": "Application and resource evidence inside the canonical repository workspace reuse the same scope-checked panel without changing GitOps actions or refresh semantics.",
+          "test": "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

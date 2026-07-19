@@ -49,4 +49,13 @@ describe("product-owned Button", () => {
     expect(screen.getByRole("button", { name: "사이드바 접기" }).getAttribute("data-slot"))
       .toBe("sidebar-trigger");
   });
+
+  it("keeps page action typography independent from its foreground color", () => {
+    render(<Button size="page-action">클러스터 연결</Button>);
+
+    const button = screen.getByRole("button", { name: "클러스터 연결" });
+    expect(button.className).toContain("text-primary-foreground");
+    expect(button.className).toContain("[font-size:var(--type-label-2)]");
+    expect(button.className).toContain("h-[2.40234375rem]");
+  });
 });

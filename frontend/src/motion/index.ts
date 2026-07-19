@@ -40,5 +40,6 @@ export {
   LIST_STAGGER,
   MOTION_SPRING,
   MOTION_TWEEN,
+  RECHARTS_EASE_DRAW,
   listStaggerDelay,
 } from "./transitions";

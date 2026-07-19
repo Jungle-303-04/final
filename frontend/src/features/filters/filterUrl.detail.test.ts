@@ -36,6 +36,20 @@ describe("VP-010 detail URL policy", () => {
     expect(canonicalizeProductFilterUrl("?section=removed")).toBe("");
   });
 
+  it("preserves a workflow run link through merged deploy URL canonicalization", () => {
+    const query = "?detail=run-77&section=workflows&view=runs";
+    const parsed = parseProductFilterUrl(query);
+
+    expect(parsed.detail).toMatchObject({
+      detail: "run-77",
+      surfaceTab: "workflows",
+      workflowView: "runs",
+    });
+    expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe(
+      "?detail=run-77&view=runs&section=workflows",
+    );
+  });
+
   it("round-trips an opaque workload only with its application detail", () => {
     const parsed = parseProductFilterUrl(
       "?app=app-checkout&instance=binding-prod&workload=inventory-key&tab=topology",

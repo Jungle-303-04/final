@@ -1,5 +1,4 @@
-import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   GitOpsPort,
@@ -7,51 +6,61 @@ import type {
   GitOpsSyncTargetQuery,
   ReleaseApplication,
   ReleaseCluster,
-  ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
 import type {
   RepositoryConnectionInput,
   RepositoryConnectionStage,
 } from "../../features/gitops/repositoryConnectionContract";
-import { useI18n } from "../../shared/i18n";
-import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { Button } from "../../shared/ui/primitives/button";
 import type {
   BrowserRefreshPolicy,
   BrowserRefreshPolicyRegistry,
 } from "../../shared/data/browserRefreshPolicyRegistry";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
-import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
-import { GitOpsSyncTargetsTable } from "./GitOpsSyncTargetsTable";
+import { useI18n } from "../../shared/i18n";
+import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
+import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { GitOpsRepositoryWorkspace } from "./GitOpsRepositoryTable";
 import { RepoConnectDialog } from "./RepoConnectDialog";
+import { repositoryGroups } from "./gitOpsRepositoryModel";
 
 type GitOpsRefreshPolicyKey = "gitops_rows" | "gitops_counts";
 
 export function GitOpsSyncTableView({
+  initialApplications,
+  initialRows,
   port,
+  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
   scopeQuery,
   refreshPolicies,
 }: {
+  initialApplications?: ReleaseApplication[];
+  initialRows?: GitOpsSyncTarget[];
   port: GitOpsPort;
+  rcaContextPort?: RcaContextPort;
   scopeQuery?: GitOpsSyncTargetQuery;
   refreshPolicies: BrowserRefreshPolicyRegistry<GitOpsRefreshPolicyKey>;
 }) {
   const { t } = useI18n();
+  const seeded = initialApplications !== undefined && initialRows !== undefined;
   const [request, setRequest] = useState(0);
-  const [rows, setRows] = useState<GitOpsSyncTarget[]>([]);
+  const [applications, setApplications] = useState<ReleaseApplication[]>(initialApplications ?? []);
+  const [rows, setRows] = useState<GitOpsSyncTarget[]>(initialRows ?? []);
   const [clusters, setClusters] = useState<ReleaseCluster[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!seeded);
   const [targetPending, setTargetPending] = useState(false);
   const [error, setError] = useState(false);
   const [policies, setPolicies] = useState<{
     rows: BrowserRefreshPolicy;
     counts: BrowserRefreshPolicy;
   } | null>(null);
-  const [successfulRead, setSuccessfulRead] = useState<{ sequence: number; empty: boolean } | null>(null);
+  const [successfulRead, setSuccessfulRead] = useState<{ sequence: number; empty: boolean } | null>(
+    seeded ? { sequence: 1, empty: initialRows.length === 0 } : null,
+  );
   const requestSharedRefresh = useCallback(() => setRequest((value) => value + 1), []);
   const rowsRefresh = useServerRefreshScheduler(requestSharedRefresh);
   const countsRefresh = useServerRefreshScheduler(requestSharedRefresh);
+  const groups = useMemo(() => repositoryGroups(applications, rows), [applications, rows]);
   const refresh = useCallback(() => {
     setLoading(true);
     setError(false);
@@ -82,15 +91,22 @@ export function GitOpsSyncTableView({
   }, [countsRefresh, policies, rowsRefresh, successfulRead]);
 
   useEffect(() => {
+    if (request === 0 && seeded) return;
     const controller = new AbortController();
     rowsRefresh.backgroundFailure();
     countsRefresh.backgroundFailure();
-    void port.listSyncTargets(controller.signal, scopeQuery).then((nextRows) => {
+    void Promise.all([
+      port.listApplications(controller.signal),
+      port.listSyncTargets(controller.signal, scopeQuery),
+    ]).then(([nextApplications, nextRows]) => {
+      if (controller.signal.aborted) return;
+      setApplications(nextApplications);
       setRows(nextRows);
       setSuccessfulRead((current) => ({
         sequence: (current?.sequence ?? 0) + 1,
         empty: nextRows.length === 0,
       }));
+      setError(false);
       setLoading(false);
     }).catch((reason: unknown) => {
       if (isAbortError(reason)) return;
@@ -100,7 +116,7 @@ export function GitOpsSyncTableView({
       setLoading(false);
     });
     return () => controller.abort();
-  }, [countsRefresh, port, request, rowsRefresh, scopeQuery]);
+  }, [countsRefresh, port, request, rowsRefresh, scopeQuery, seeded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,41 +126,13 @@ export function GitOpsSyncTableView({
     return () => controller.abort();
   }, [port, request]);
 
-  const createTarget = async (
-    input: ReleaseTargetInput,
-  ): Promise<ReleaseApplication | null> => {
-    if (targetPending) return null;
-    setTargetPending(true);
-    setError(false);
-    try {
-      const created = await port.connectApplication(input);
-      try {
-        const nextRows = await port.listSyncTargets(undefined, scopeQuery);
-        if (!nextRows.some((row) => row.applicationId === created.id)) return null;
-        setRows(nextRows);
-        setSuccessfulRead((current) => ({
-          sequence: (current?.sequence ?? 0) + 1,
-          empty: nextRows.length === 0,
-        }));
-      } catch {
-        rowsRefresh.backgroundFailure();
-        countsRefresh.backgroundFailure();
-        return null;
-      }
-      return created;
-    } catch {
-      return null;
-    } finally {
-      setTargetPending(false);
-    }
-  };
-
   const createRepositoryTarget = async (
     input: RepositoryConnectionInput,
     onStage: (stage: RepositoryConnectionStage) => void,
   ): Promise<ReleaseApplication | null> => {
     if (targetPending) return null;
     setTargetPending(true);
+    setError(false);
     try {
       onStage("probe");
       const probe = await port.probeRepository(input.repository);
@@ -158,10 +146,7 @@ export function GitOpsSyncTableView({
       if (!branch) return null;
 
       onStage("manifests");
-      const manifests = await port.listRepositoryManifests(
-        probe.normalizedRepoRef,
-        branch.name,
-      );
+      const manifests = await port.listRepositoryManifests(probe.normalizedRepoRef, branch.name);
       const manifest = manifests.candidates[0];
       if (!manifest) return null;
 
@@ -186,8 +171,15 @@ export function GitOpsSyncTableView({
       onStage("status");
       const status = await waitForRepositoryReady(port, validation.repoRef);
       if (status !== "ready") return null;
-      const nextRows = await port.listSyncTargets(undefined, scopeQuery);
-      if (!nextRows.some((row) => row.applicationId === created.id)) return null;
+      const [nextApplications, nextRows] = await Promise.all([
+        port.listApplications(),
+        port.listSyncTargets(undefined, scopeQuery),
+      ]);
+      if (!nextApplications.some((application) => application.id === created.id) ||
+          !nextRows.some((row) => row.applicationId === created.id || row.applicationIds?.includes(created.id))) {
+        return null;
+      }
+      setApplications(nextApplications);
       setRows(nextRows);
       setSuccessfulRead((current) => ({
         sequence: (current?.sequence ?? 0) + 1,
@@ -203,61 +195,42 @@ export function GitOpsSyncTableView({
     }
   };
 
-  if (loading && rows.length === 0) {
-    return <ProductStateScreen kind="loading" placement="content" />;
-  }
-  if (error && rows.length === 0) {
-    return (
-      <ProductStateScreen
-        issue={{ code: "server", safeDetail: t("workflows.sync.failure") }}
-        kind="error"
-        placement="content"
-        retry={{ onRetry: refresh, pending: false }}
-      />
-    );
-  }
-
   return (
-    <div className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold">{t("workflows.sync.title")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{t("workflows.sync.description")}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <RepoConnectDialog
-            clusters={clusters}
-            onCreate={createRepositoryTarget}
-            pending={targetPending}
-          />
-          <DeploymentTargetDialog
-            clusters={clusters}
-            onCreate={createTarget}
-            pending={targetPending}
-          />
-          <Button
-            aria-label={t("common.action.refresh")}
-            disabled={loading}
-            onClick={refresh}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw aria-hidden="true" className={loading ? "motion-safe:animate-spin" : undefined} />
-          </Button>
-        </div>
+    <section aria-labelledby="gitops-repositories-title" className="grid min-w-0 gap-3">
+      <h2 className="sr-only" id="gitops-repositories-title">{t("workflows.target.repository")}</h2>
+      <div className="absolute top-(--product-page-block-start) right-(--product-page-inline) z-10">
+        <RepoConnectDialog
+          clusters={clusters}
+          onCreate={createRepositoryTarget}
+          pending={targetPending}
+        />
       </div>
-      {error ? (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
-          {t("workflows.sync.stale")}
-        </p>
-      ) : null}
-      <GitOpsSyncTargetsTable
-        onSelect={setSelectedId}
-        rows={rows}
-        selectedId={selectedId}
-      />
-    </div>
+      {loading && groups.length === 0 ? (
+        <ProductStateScreen kind="loading" placement="content" />
+      ) : error && groups.length === 0 ? (
+        <ProductStateScreen
+          issue={{ code: "server", safeDetail: t("workflows.sync.failure") }}
+          kind="error"
+          placement="content"
+          retry={{ onRetry: refresh, pending: false }}
+        />
+      ) : (
+        <>
+          {error ? (
+            <p className="rounded-lg border border-tint-warn-border bg-tint-warn-bg px-3 py-2 text-label text-tint-warn-fg">
+              {t("workflows.sync.stale")}
+            </p>
+          ) : null}
+          <GitOpsRepositoryWorkspace
+            groups={groups}
+            onSelect={setSelectedKey}
+            port={port}
+            rcaContextPort={rcaContextPort}
+            selectedKey={selectedKey}
+          />
+        </>
+      )}
+    </section>
   );
 }
 

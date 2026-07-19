@@ -11,15 +11,18 @@ export function PopoverContent({
   align = "center",
   children,
   className,
+  keepMounted = false,
   side = "bottom",
   sideOffset = 6,
   ...props
 }: PopoverPrimitive.Popup.Props & Pick<
   PopoverPrimitive.Positioner.Props,
   "align" | "side" | "sideOffset"
->) {
+> & {
+  keepMounted?: boolean;
+}) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal keepMounted={keepMounted}>
       <PopoverPrimitive.Positioner
         align={align}
         className="isolate z-50"

@@ -21,11 +21,13 @@ describe("product route release registry", () => {
         ["timeline", "/timeline", "g l"],
         ["checks", "/checks", "g u"],
         ["cost", "/cost", "g c"],
+        ["alerts", "/alerts", "g b"],
+        ["ai", "/ai", "g a"],
         ["settings", "/settings", "g s"],
       ]);
   });
 
-  it("keeps legacy URLs in the catalog but outside the eight-item navigation", () => {
+  it("keeps legacy URLs outside the ten-item reference navigation", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).toEqual([
       "home",
       "resources",
@@ -34,15 +36,16 @@ describe("product route release registry", () => {
       "timeline",
       "checks",
       "cost",
+      "alerts",
+      "ai",
       "settings",
       "clusters",
       "traffic",
       "applications",
       "gitops",
       "helm",
-      "alerts",
     ]);
-    expect(PRODUCT_ROUTE_CATALOG.filter((route) => route.navigation)).toHaveLength(8);
+    expect(PRODUCT_ROUTE_CATALOG.filter((route) => route.navigation)).toHaveLength(10);
     expect(PRODUCT_ROUTE_CATALOG.filter((route) => route.redirectTo !== null)
       .map(({ id, redirectTo, redirectSection }) => [id, redirectTo, redirectSection]))
       .toEqual([
@@ -51,7 +54,6 @@ describe("product route release registry", () => {
         ["applications", "deploy", "applications"],
         ["gitops", "deploy", "repositories"],
         ["helm", "deploy", "helm"],
-        ["alerts", "issues", "rules"],
       ]);
   });
 
@@ -88,6 +90,7 @@ describe("product route release registry", () => {
     ["/deploy", "deploy"],
     ["/applications", "applications"],
     ["/alerts", "alerts"],
+    ["/ai", "ai"],
     ["/timeline", "timeline"],
     ["/traffic", "traffic"],
     ["/helm", "helm"],

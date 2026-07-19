@@ -2,14 +2,12 @@ import { ArrowLeft, PackageSearch } from "lucide-react";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
-  type RefObject,
 } from "react";
-import { useMatch, useNavigate } from "react-router-dom";
+import { useLocation, useMatch, useNavigate } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import {
@@ -22,6 +20,10 @@ import {
   writeHelmChartCatalogSearchParams,
   type HelmChartCatalogUrlState,
 } from "../../features/filters/helmChartCatalogUrlState";
+import {
+  parseDeployHelmReleaseIdentity,
+  writeDeployHelmReleaseSearch,
+} from "../../features/filters/deployHelmReleaseUrlState";
 import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type {
   HelmArtifactKind,
@@ -50,7 +52,6 @@ import { useI18n } from "../../shared/i18n";
 import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { Input } from "../../shared/ui/primitives/input";
 import {
   Table,
   TableBody,
@@ -76,6 +77,7 @@ import { useHelmChartSources } from "./useHelmChartSources";
 
 export function HelmPage({ port }: { port: HelmPort }) {
   const detailMatch = useMatch(HELM_RELEASE_DETAIL_MATCH);
+  const location = useLocation();
   const navigate = useNavigate();
   const searchParams = useFilterSearchParams();
   const artifactUrlState = useMemo(
@@ -96,13 +98,15 @@ export function HelmPage({ port }: { port: HelmPort }) {
     const nextSearch = params.toString();
     navigate({ search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
   }, [navigate, searchParams]);
-  const identity = detailMatch?.params.clusterId && detailMatch.params.namespace && detailMatch.params.releaseName
+  const matchedIdentity = detailMatch?.params.clusterId && detailMatch.params.namespace && detailMatch.params.releaseName
     ? {
       clusterId: detailMatch.params.clusterId,
       namespace: detailMatch.params.namespace,
       releaseName: detailMatch.params.releaseName,
     }
     : null;
+  const queryIdentity = parseDeployHelmReleaseIdentity(searchParams);
+  const identity = queryIdentity ?? matchedIdentity;
 
   if (identity) {
     return (
@@ -110,7 +114,13 @@ export function HelmPage({ port }: { port: HelmPort }) {
         artifactUrlState={artifactUrlState}
         identity={identity}
         onArtifactUrlStateChange={updateArtifactUrlState}
-        onBack={() => navigate("/helm")}
+        onBack={() => {
+          if (queryIdentity) {
+            navigate({ pathname: "/deploy", search: writeDeployHelmReleaseSearch(searchParams, null) });
+          } else {
+            navigate("/helm");
+          }
+        }}
         port={port}
       />
     );
@@ -119,11 +129,21 @@ export function HelmPage({ port }: { port: HelmPort }) {
     <HelmReleaseListPage
       chartCatalogUrlState={chartCatalogUrlState}
       onChartCatalogUrlStateChange={updateChartCatalogUrlState}
-      onOpen={(release) => navigate(helmReleaseDetailHref({
-        clusterId: release.scope.clusterId,
-        namespace: release.storageNamespace,
-        releaseName: release.name,
-      }))}
+      onOpen={(release) => {
+        const releaseIdentity = {
+          clusterId: release.scope.clusterId,
+          namespace: release.storageNamespace,
+          releaseName: release.name,
+        };
+        if (location.pathname === "/deploy") {
+          navigate({
+            pathname: "/deploy",
+            search: writeDeployHelmReleaseSearch(searchParams, releaseIdentity),
+          });
+        } else {
+          navigate(helmReleaseDetailHref(releaseIdentity));
+        }
+      }}
       port={port}
     />
   );
@@ -142,8 +162,7 @@ function HelmReleaseListPage({
 }) {
   const copy = useHelmCopy();
   const scope = useClusterScope();
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
+  const [toolbox, setToolbox] = useState<"catalog" | "sources" | "artifact" | null>(null);
   const scopeResolution = helmScopeClusterIds(scope);
   const data = useHelmReleaseList(port, scopeResolution.clusterIds);
   const chartSources = useHelmChartSources(port);
@@ -155,34 +174,67 @@ function HelmReleaseListPage({
   }
 
   return (
-    <ProductPageFrame className="gap-4">
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-        <div className="grid min-w-0 gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
-        </div>
+    <ProductPageFrame className="gap-3 pt-0">
+      <div className="flex min-w-0 justify-end">
         {scopeResolution.clusterIds.length === 1 ? (
           <HelmReleaseInstallDialog clusterId={scopeResolution.clusterIds[0] as string} port={port} />
         ) : null}
-      </header>
+      </div>
       <HelmListBoundary
         frame={data.frame}
         onOpen={onOpen}
         onRefresh={data.refresh}
-        query={query}
-        searchInputRef={searchInputRef}
-        setQuery={setQuery}
       />
-      <HelmChartCatalogPanel
-        chartSources={chartSources}
-        clusterId={scopeResolution.clusterIds.length === 1 ? scopeResolution.clusterIds[0] ?? null : null}
-        key={`${chartCatalogUrlState.query}\u001f${chartCatalogUrlState.sourceId ?? ""}\u001f${chartCatalogUrlState.provider ?? ""}\u001f${chartCatalogUrlState.allVersions}`}
-        onUrlStateChange={onChartCatalogUrlStateChange}
-        port={port}
-        urlState={chartCatalogUrlState}
-      />
-      <HelmChartSourcesPanelContent data={chartSources} port={port} />
-      <HelmArtifactHubPanel port={port} />
+      <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
+        <Button
+          aria-controls="helm-toolbox-catalog"
+          aria-expanded={toolbox === "catalog"}
+          onClick={() => setToolbox((current) => current === "catalog" ? null : "catalog")}
+          size="sm"
+          type="button"
+          variant={toolbox === "catalog" ? "secondary" : "ghost"}
+        >
+          {copy.chartCatalog}
+        </Button>
+        <Button
+          aria-controls="helm-toolbox-sources"
+          aria-expanded={toolbox === "sources"}
+          onClick={() => setToolbox((current) => current === "sources" ? null : "sources")}
+          size="sm"
+          type="button"
+          variant={toolbox === "sources" ? "secondary" : "ghost"}
+        >
+          {copy.chartSources}
+        </Button>
+        <Button
+          aria-controls="helm-toolbox-artifact"
+          aria-expanded={toolbox === "artifact"}
+          onClick={() => setToolbox((current) => current === "artifact" ? null : "artifact")}
+          size="sm"
+          type="button"
+          variant={toolbox === "artifact" ? "secondary" : "ghost"}
+        >
+          {copy.artifactHub}
+        </Button>
+      </div>
+      {toolbox === "catalog" ? (
+        <div id="helm-toolbox-catalog">
+          <HelmChartCatalogPanel
+            chartSources={chartSources}
+            clusterId={scopeResolution.clusterIds.length === 1 ? scopeResolution.clusterIds[0] ?? null : null}
+            key={`${chartCatalogUrlState.query}\u001f${chartCatalogUrlState.sourceId ?? ""}\u001f${chartCatalogUrlState.provider ?? ""}\u001f${chartCatalogUrlState.allVersions}`}
+            onUrlStateChange={onChartCatalogUrlStateChange}
+            port={port}
+            urlState={chartCatalogUrlState}
+          />
+        </div>
+      ) : null}
+      {toolbox === "sources" ? (
+        <div id="helm-toolbox-sources"><HelmChartSourcesPanelContent data={chartSources} port={port} /></div>
+      ) : null}
+      {toolbox === "artifact" ? (
+        <div id="helm-toolbox-artifact"><HelmArtifactHubPanel port={port} /></div>
+      ) : null}
     </ProductPageFrame>
   );
 }
@@ -191,16 +243,10 @@ function HelmListBoundary({
   frame,
   onOpen,
   onRefresh,
-  query,
-  searchInputRef,
-  setQuery,
 }: {
   frame: ReturnType<typeof useHelmReleaseList>["frame"];
   onOpen: (release: HelmRelease) => void;
   onRefresh: () => void;
-  query: string;
-  searchInputRef: RefObject<HTMLInputElement | null>;
-  setQuery: (value: string) => void;
 }) {
   const copy = useHelmCopy();
   if (frame.phase === "idle" || frame.phase === "loading") {
@@ -212,29 +258,10 @@ function HelmListBoundary({
   return (
     <section aria-labelledby="helm-release-list-title" className="grid min-w-0 gap-3">
       <CoverageNotice availability={coverage.availability} reasons={coverage.reasonCodes} />
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <label className="grid min-w-0 max-w-xl flex-1 gap-1" htmlFor="helm-release-filter">
-          <span className="text-xs font-medium text-muted-foreground">{copy.searchLabel}</span>
-          <Input
-            id="helm-release-filter"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={copy.searchPlaceholder}
-            ref={searchInputRef}
-            value={query}
-          />
-        </label>
-        <HelmRefreshAction
-          hasFailed={frame.refreshFailure !== null}
-          isRefreshing={frame.refreshing}
-          onRefresh={onRefresh}
-        />
-      </div>
       <h2 className="sr-only" id="helm-release-list-title">{copy.title}</h2>
       <HelmReleaseTable
         onOpen={onOpen}
-        query={query}
         releases={releases}
-        searchInputRef={searchInputRef}
         upgrades={upgrades.releases}
       />
     </section>
@@ -243,74 +270,35 @@ function HelmListBoundary({
 
 function HelmReleaseTable({
   onOpen,
-  query,
   releases,
-  searchInputRef,
   upgrades,
 }: {
   onOpen: (release: HelmRelease) => void;
-  query: string;
   releases: readonly HelmRelease[];
-  searchInputRef: RefObject<HTMLInputElement | null>;
   upgrades: Readonly<Record<string, HelmReleaseUpgradeInfo>>;
 }) {
   const copy = useHelmCopy();
-  const filtered = useMemo(() => releases.filter((release) => matchesRelease(release, query)), [query, releases]);
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const activeIndex = Math.min(highlightedIndex, Math.max(filtered.length - 1, 0));
-
-  useLayoutEffect(() => {
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (isSearchShortcutExcluded(event)) return;
-      if (event.key === "/") {
-        event.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
-      if (filtered.length === 0) return;
-      if (event.key === "j" || event.key === "ArrowDown") {
-        event.preventDefault();
-        setHighlightedIndex(Math.min(activeIndex + 1, filtered.length - 1));
-      } else if (event.key === "k" || event.key === "ArrowUp") {
-        event.preventDefault();
-        setHighlightedIndex(Math.max(activeIndex - 1, 0));
-      } else if (event.key === "Enter") {
-        const selected = filtered[activeIndex];
-        if (selected) {
-          event.preventDefault();
-          onOpen(selected);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeIndex, filtered, onOpen, searchInputRef]);
-
-  if (filtered.length === 0) {
-    return <EmptyReleaseList query={query} />;
+  const { t } = useI18n();
+  if (releases.length === 0) {
+    return <EmptyReleaseList />;
   }
   return (
     <Table scrollAreaLabel={copy.title}>
       <TableHeader>
         <TableRow>
           <TableHead>{copy.releaseName}</TableHead>
-          <TableHead>{copy.cluster}</TableHead>
-          <TableHead>{copy.namespace}</TableHead>
           <TableHead>{copy.chart}</TableHead>
+          <TableHead>{copy.chart} {t("applications.version")}</TableHead>
+          <TableHead>{t("applications.applicationScope")} {t("applications.version")}</TableHead>
+          <TableHead>{copy.namespace}</TableHead>
           <TableHead>{copy.status}</TableHead>
-          <TableHead>{copy.resourceHealth}</TableHead>
-          <TableHead>{copy.upgradeAvailability}</TableHead>
-          <TableHead>{copy.revision}</TableHead>
-          <TableHead>{copy.observed}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {filtered.map((release, index) => (
+        {releases.map((release) => (
           <ReleaseRow
-            highlighted={index === activeIndex}
             key={`${release.scope.clusterId}:${release.storageNamespace}:${release.name}:${release.storage.uid}`}
             onOpen={() => onOpen(release)}
-            onPointerEnter={() => setHighlightedIndex(index)}
             release={release}
             upgrade={upgrades[releaseUpgradeKey(release)] ?? null}
           />
@@ -321,15 +309,11 @@ function HelmReleaseTable({
 }
 
 function ReleaseRow({
-  highlighted,
   onOpen,
-  onPointerEnter,
   release,
   upgrade,
 }: {
-  highlighted: boolean;
   onOpen: () => void;
-  onPointerEnter: () => void;
   release: HelmRelease;
   upgrade: HelmReleaseUpgradeInfo | null;
 }) {
@@ -344,22 +328,24 @@ function ReleaseRow({
   return (
     <TableRow
       aria-label={t("helm.ui.openRelease", { name: release.name })}
-      className={highlighted ? "bg-muted" : undefined}
       onClick={onOpen}
       onKeyDown={onKeyDown}
-      onPointerEnter={onPointerEnter}
       role="button"
       tabIndex={0}
     >
       <TableCell className="max-w-56 truncate font-medium">{release.name}</TableCell>
-      <TableCell className="max-w-40 truncate text-muted-foreground">{release.scope.clusterId}</TableCell>
+      <TableCell className="max-w-48 truncate text-muted-foreground">{release.chart ?? copy.unavailableValue}</TableCell>
+      <TableCell>
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="font-mono text-caption-2 text-muted-foreground">
+            {release.chartVersion ?? copy.unavailableValue}
+          </span>
+          <UpgradeAvailability info={upgrade} />
+        </span>
+      </TableCell>
+      <TableCell className="font-mono text-caption-2 text-muted-foreground">{release.appVersion ?? copy.unavailableValue}</TableCell>
       <TableCell className="max-w-40 truncate text-muted-foreground">{release.storageNamespace}</TableCell>
-      <TableCell className="text-muted-foreground">{chartText(release, copy)}</TableCell>
       <TableCell><StatusBadge status={release.status} /></TableCell>
-      <TableCell><ResourceHealthBadge health={release.resourceHealth} /></TableCell>
-      <TableCell><UpgradeAvailability info={upgrade} /></TableCell>
-      <TableCell className="text-muted-foreground">{release.revision ?? copy.unavailableValue}</TableCell>
-      <TableCell className="text-muted-foreground">{formatObservedAt(release.observedAt, copy)}</TableCell>
     </TableRow>
   );
 }
@@ -982,14 +968,13 @@ function helmFailureDetail(code: HelmFailureCode | string, copy: HelmCopy): stri
   return messages[code as HelmFailureCode] ?? copy.requestFailed;
 }
 
-function EmptyReleaseList({ query }: { query: string }) {
+function EmptyReleaseList() {
   const copy = useHelmCopy();
-  const { t } = useI18n();
   return (
     <div className="grid min-h-48 place-items-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
       <div className="grid justify-items-center gap-2">
         <PackageSearch aria-hidden="true" className="size-7" />
-        <span>{query.trim() ? t("helm.releaseList.noMatches") : copy.noReleases}</span>
+        <span>{copy.noReleases}</span>
       </div>
     </div>
   );
@@ -1125,14 +1110,6 @@ function StatusBadge({ status }: { status: string | null }) {
   return <Badge variant={status?.toLowerCase() === "deployed" ? "secondary" : "outline"}>{status ?? copy.unavailableValue}</Badge>;
 }
 
-function ResourceHealthBadge({ health }: { health: HelmResourceHealth }) {
-  const copy = useHelmCopy();
-  if (health.availability === "unavailable") {
-    return <span className="text-muted-foreground">{copy.unavailableValue}</span>;
-  }
-  return <HealthBadge health={health.health} />;
-}
-
 function HealthBadge({ health }: { health: string }) {
   return <Badge variant={health.toLowerCase() === "healthy" ? "secondary" : "outline"}>{health}</Badge>;
 }
@@ -1140,28 +1117,13 @@ function HealthBadge({ health }: { health: string }) {
 function UpgradeAvailability({ info }: { info: HelmReleaseUpgradeInfo | null }) {
   const copy = useHelmCopy();
   if (info?.availability === "available" && info.updateAvailable === true && info.latestVersion) {
-    return <Badge variant="secondary">{info.latestVersion} {copy.upgradeAvailableSuffix}</Badge>;
+    return <Badge variant="outline">{info.latestVersion} {copy.upgradeAvailableSuffix}</Badge>;
   }
-  if (info?.availability === "available" && info.updateAvailable === false) {
-    return <span className="text-muted-foreground">{copy.upgradeUpToDate}</span>;
-  }
-  return <span className="text-muted-foreground">{copy.unavailableValue}</span>;
-}
-
-function chartText(release: HelmRelease, copy: HelmCopy): string {
-  if (release.chart === null || release.chartVersion === null) return copy.unavailableValue;
-  return `${release.chart} ${release.chartVersion}`;
+  return null;
 }
 
 function releaseUpgradeKey(release: HelmRelease): string {
   return [release.scope.clusterId, release.storageNamespace, release.name].join("/");
-}
-
-function matchesRelease(release: HelmRelease, query: string): boolean {
-  const normalized = query.trim().toLocaleLowerCase();
-  if (normalized === "") return true;
-  return [release.name, release.scope.clusterId, release.storageNamespace, release.status ?? ""]
-    .some((value) => value.toLocaleLowerCase().includes(normalized));
 }
 
 function formatObservedAt(value: string | null, copy: HelmCopy): string {
@@ -1172,32 +1134,6 @@ function formatObservedAt(value: string | null, copy: HelmCopy): string {
 
 function scopeText(release: HelmRelease, copy: HelmCopy): string {
   return `${copy.scope}: ${release.scope.clusterId} / ${release.storageNamespace} (${release.scope.freshness})`;
-}
-
-function isSearchShortcutExcluded(event: globalThis.KeyboardEvent): boolean {
-  if (
-    event.defaultPrevented ||
-    event.isComposing ||
-    event.keyCode === 229 ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.getModifierState("AltGraph")
-  ) return true;
-
-  return event.composedPath().some(isSearchShortcutExcludedTarget);
-}
-
-function isSearchShortcutExcludedTarget(target: EventTarget): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (
-    target.isContentEditable ||
-    target.getAttribute("contenteditable") === "true" ||
-    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
-  ) return true;
-
-  const role = target.getAttribute("role");
-  return role === "combobox" || role === "dialog" || role === "textbox" || target.getAttribute("aria-modal") === "true";
 }
 
 function helmScopeClusterIds(scope: ReturnType<typeof useClusterScope>):

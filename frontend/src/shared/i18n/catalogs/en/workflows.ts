@@ -19,7 +19,7 @@ export const workflowsEn = {
   "workflows.sync.empty.title": "No deployment targets",
   "workflows.sync.empty.description": "Register an application deployment target to see its sync status here.",
   "workflows.sync.status.synced": "Synced",
-  "workflows.sync.status.outOfSync": "Needs sync",
+  "workflows.sync.status.outOfSync": "OutOfSync",
   "workflows.sync.status.checking": "Checking",
   "workflows.sync.status.failed": "Check failed",
   "workflows.sync.status.unknown": "Not confirmed",

@@ -12,6 +12,7 @@ import {
   STAGGER_MS,
   staggerDelay,
 } from "./useStagger";
+import { MOTION_SPRING, MOTION_TWEEN, listStaggerDelay } from "./transitions";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 const reducedTransition = { duration: MOTION_DURATION_SECONDS.none } as const;
@@ -34,6 +35,35 @@ export function AiAssistantTurnPresence({ children }: { children: ReactNode }) {
     <AnimatePresence initial={false} mode="popLayout">
       {children}
     </AnimatePresence>
+  );
+}
+
+export function AiAssistantHistoryPresence({ children }: { children: ReactNode }) {
+  return (
+    <AnimatePresence initial={false} mode="popLayout">
+      {children}
+    </AnimatePresence>
+  );
+}
+
+export function AiAssistantHistoryRowMotion({
+  children,
+  index,
+  ...props
+}: HTMLMotionProps<"tr"> & { index: number }) {
+  const reducedMotion = usePrefersReducedMotion();
+  return (
+    <m.tr
+      animate={{ opacity: 1, y: 0 }}
+      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 5 }}
+      transition={reducedMotion
+        ? MOTION_TWEEN.none
+        : { ...MOTION_SPRING.soft, delay: listStaggerDelay(index) }}
+      {...props}
+    >
+      {children}
+    </m.tr>
   );
 }
 

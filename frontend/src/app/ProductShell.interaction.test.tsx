@@ -8,7 +8,6 @@ import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import { I18nProvider } from "../shared/i18n";
 import type { AuthPort } from "../features/auth/authContract";
-import type { GlobalFilterSuggestion } from "../features/global-filter/globalFilterContract";
 import {
   installMatchMedia,
   renderShell,
@@ -36,210 +35,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("ProductShell keyboard and help interaction", () => {
-  it("opens active shortcut help from the toolbar and closes it with Escape", async () => {
-    const user = userEvent.setup();
-    renderShell();
-
-    expect(screen.queryByRole("dialog")).toBeNull();
-    const trigger = screen.getByRole("button", { name: "키보드 단축키" });
-    await user.click(trigger);
-
-    const dialog = screen.getByRole("dialog", { name: "키보드 단축키" });
-    expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
-    expect(dialog.textContent).toContain("홈 화면 열기");
-    expect(dialog.textContent).toContain("이슈 화면 열기");
-    expect(dialog.textContent).toContain("Shift 키와 D 키");
-    expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
-    expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
-    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it("navigates with released route chords and toggles help with question mark", async () => {
-    const user = userEvent.setup();
-    const { container } = renderShell();
-
-    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
-    expect(screen.getByRole("button", {
-      name: "클러스터, 앱, 라벨, 리소스 필터",
-    })).toBeTruthy();
-    expect(screen.getByRole("button", {
-      name: "클러스터 필터 cluster-1 제거",
-    })).toBeTruthy();
-
-    await user.keyboard("g");
-    await user.keyboard("i");
-    expect(screen.getByText("Issue content")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "이슈", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "이슈" }).getAttribute("aria-current")).toBe("page");
-    await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
-
-    await user.keyboard("?");
-    expect(screen.getByRole("dialog", { name: "키보드 단축키" })).toBeTruthy();
-    await user.keyboard("?");
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
-
-    await user.keyboard("t");
-    expect(window.localStorage.getItem("theme")).toBe("system");
-    await user.click(screen.getByRole("button", { name: "테마 선택" }));
-    expect(screen.getByRole("button", { name: "운영체제" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "다크" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "라이트" })).toBeTruthy();
-  });
-
-  it("dispatches Resources actions and route chords from one shortcut authority", async () => {
-    const user = userEvent.setup();
-    renderShell({
-      initialEntry: "/resources",
-      releasedSurfaceIds: new Set(["home", "resources"]),
-    });
-
-    await user.keyboard("j");
-    expect(screen.getByTestId("resources-shortcut").textContent).toBe("resources:next-row");
-    await user.keyboard("G");
-    expect(screen.getByTestId("resources-shortcut").textContent).toBe("resources:last-row");
-    await user.keyboard("gg");
-    expect(screen.getByTestId("resources-shortcut").textContent).toBe("resources:first-row");
-    await user.keyboard("gh");
-    await waitFor(() => expect(screen.getByText("Home content")).toBeTruthy());
-  });
-
-  it("does not run global shortcuts while an editable control owns focus", async () => {
-    const user = userEvent.setup();
-    renderShell();
-    const input = screen.getByRole("textbox", { name: "화면 입력" });
-
-    await user.click(input);
-    await user.keyboard("gi?");
-
-    expect(screen.getByText("Home content")).toBeTruthy();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect((input as HTMLInputElement).value).toBe("gi?");
-  });
-
-  it("opens authenticated runtime diagnostics from Ctrl+Shift+D while an input owns focus", async () => {
-    const user = userEvent.setup();
-    renderShell();
-    const input = screen.getByRole("textbox", { name: "화면 입력" });
-
-    await user.click(input);
-    await user.keyboard("{Control>}{Shift>}d{/Shift}{/Control}");
-
-    expect(await screen.findByRole("dialog", { name: "런타임 진단" })).toBeTruthy();
-    expect((input as HTMLInputElement).value).toBe("");
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(
-      screen.queryByRole("dialog", { name: "런타임 진단" }),
-    ).toBeNull());
-  });
-
-  it("opens namespace and cluster switchers from their single-key global shortcuts", async () => {
-    vi.stubGlobal("ResizeObserver", class {
-      disconnect() {}
-      observe() {}
-      unobserve() {}
-    });
-    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
-    const user = userEvent.setup();
-    try {
-      renderShell({
-        globalFilterPort: {
-          search: vi.fn(async (): Promise<readonly GlobalFilterSuggestion[]> => [
-            {
-              type: "cluster",
-              id: "cluster-1",
-              label: "cluster-1",
-              count: 1,
-              count_completeness: "exact",
-            },
-            {
-              type: "namespace",
-              id: "cluster-1/shop",
-              label: "shop",
-              clusterId: "cluster-1",
-              count: 3,
-              count_completeness: "exact",
-            },
-          ]),
-        },
-      });
-
-      await user.keyboard("n");
-      expect(await screen.findByText("네임스페이스")).toBeTruthy();
-      expect(screen.queryByText("클러스터")).toBeNull();
-      await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-      document.getElementById("product-main")?.focus();
-
-      await user.keyboard("c");
-      expect(await screen.findByText("클러스터")).toBeTruthy();
-      expect(screen.queryByText("네임스페이스")).toBeNull();
-    } finally {
-      restoreScrollIntoView();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("focuses the current screen search with slash", async () => {
-    vi.stubGlobal("ResizeObserver", class {
-      disconnect() {}
-      observe() {}
-      unobserve() {}
-    });
-    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
-    const user = userEvent.setup();
-    try {
-      renderShell();
-
-      await user.keyboard("/");
-
-      const input = screen.getByRole("textbox", {
-        name: "클러스터, 앱, 라벨, 리소스 필터",
-      });
-      await waitFor(() => expect(document.activeElement).toBe(input));
-    } finally {
-      restoreScrollIntoView();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("opens the descriptor-backed command palette and excludes the removed Topology route", async () => {
-    vi.stubGlobal("ResizeObserver", class {
-      disconnect() {}
-      observe() {}
-      unobserve() {}
-    });
-    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
-    const user = userEvent.setup();
-    try {
-      renderShell();
-
-      await user.keyboard("{Meta>}k{/Meta}");
-      const dialog = await screen.findByRole("dialog", { name: "명령 팔레트" });
-      expect(dialog.textContent).not.toContain("토폴로지");
-      expect(dialog.textContent).toContain("준비되지 않음");
-      await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
-      await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
-
-      await user.keyboard("{Control>}k{/Control}");
-      expect(await screen.findByRole("dialog", { name: "명령 팔레트" })).toBeTruthy();
-      await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
-
-      await user.keyboard("gt");
-      expect(screen.getByText("Home content")).toBeTruthy();
-      expect(screen.queryByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeNull();
-    } finally {
-      restoreScrollIntoView();
-      vi.unstubAllGlobals();
-    }
-  });
-
+describe("ProductShell shell layout and release boundary interaction", () => {
   it("collapses the desktop rail without remounting links and exposes focus tooltips only when slim", async () => {
     const user = userEvent.setup();
     const { container } = renderShell();
@@ -274,7 +70,7 @@ describe("ProductShell keyboard and help interaction", () => {
     const profileTrigger = screen.getByRole("button", { name: "test-use… 프로필 메뉴 열기" });
     expect(workspaceTrigger.closest('[data-slot="product-header-workspace"]')).toBeTruthy();
     expect(profileTrigger.closest('[data-slot="product-header-account"]')).toBeTruthy();
-    expect(container.querySelector('[data-slot="sidebar-footer"]')).toBeNull();
+    expect(container.querySelector('[data-slot="sidebar-footer"]')).toBeTruthy();
 
     await user.click(workspaceTrigger);
     expect(await screen.findByText(
@@ -349,7 +145,9 @@ describe("ProductShell keyboard and help interaction", () => {
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "모든 필터 지우기" }));
       await user.tab();
-      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "현재 언어: 한국어" }));
+      expect(document.activeElement).toBe(screen.getByRole("button", {
+        name: "알림 센터 · 미확인 0개",
+      }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     } finally {
       vi.unstubAllGlobals();
@@ -372,38 +170,10 @@ describe("ProductShell keyboard and help interaction", () => {
       "클러스터, 앱, 라벨, 리소스 필터",
       "클러스터, 앱, 라벨, 리소스 필터",
       "모든 필터 지우기",
-      "현재 언어: 한국어",
-      "테마 선택",
-      "키보드 단축키",
-      "런타임 진단 열기",
       "알림 센터 · 미확인 0개",
       "test-use… 프로필 메뉴 열기",
     ]);
   });
-  it("switches every shell label immediately from the locale control", async () => {
-    const user = userEvent.setup();
-    renderShell();
-
-    const locale = screen.getByRole("combobox", { name: "현재 언어: 한국어" });
-    await user.click(locale);
-    await user.click(await screen.findByRole("option", { name: "영어" }));
-
-    expect(screen.getByRole("combobox", { name: "Current language: English" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Choose theme" }));
-    expect(screen.getByRole("button", { name: "Operating system" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Dark" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Light" })).toBeTruthy();
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "Open profile menu for test-use…" }));
-    expect(screen.getByRole("link", { name: "Profile" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Operating system" })).toBeNull();
-    expect(window.localStorage.getItem("opsia.locale")).toBe("en");
-  });
-
   it("keeps the production release gate shell-free and network-silent without API approvals", async () => {
     vi.useFakeTimers();
     const fetchSpy = vi.fn();

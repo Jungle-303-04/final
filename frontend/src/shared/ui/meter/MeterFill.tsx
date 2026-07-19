@@ -1,38 +1,32 @@
-import { motion } from "motion/react";
-
-import { MOTION_TWEEN } from "../../../motion/transitions";
+import {
+  MotionMeterFill,
+  type MotionMeterFillTiming,
+  type MotionMeterFillTone,
+} from "../../../motion/MotionMeterFill";
 import { usePrefersReducedMotion } from "../../../motion/usePrefersReducedMotion";
 import { cn } from "../../lib/cn";
 
-export type MeterTone = "healthy" | "warning" | "critical" | "unknown";
+export type MeterTone = Exclude<MotionMeterFillTone, "primary" | "stale">;
 
 export interface MeterFillProps {
   className?: string;
-  tone: MeterTone;
+  timing?: MotionMeterFillTiming;
+  tone: MotionMeterFillTone;
   value: number;
 }
 
-const METER_TONE_VARIABLE = Object.freeze({
-  healthy: "var(--status-healthy)",
-  warning: "var(--status-warning)",
-  critical: "var(--status-critical)",
-  unknown: "var(--status-unknown)",
-} satisfies Record<MeterTone, string>);
-
 /** Shared meter fill matching demo-freeze-v3's tokenized draw motion. */
-export function MeterFill({ className, tone, value }: MeterFillProps) {
+export function MeterFill({ className, timing = "meter", tone, value }: MeterFillProps) {
   const reducedMotion = usePrefersReducedMotion();
   const normalizedValue = clampMeterValue(value);
 
   return (
-    <motion.span
-      animate={{ width: `${normalizedValue}%` }}
-      aria-hidden="true"
-      className={cn("block h-full rounded-full", className)}
-      data-meter-tone={tone}
-      initial={false}
-      style={{ backgroundColor: METER_TONE_VARIABLE[tone] }}
-      transition={reducedMotion ? MOTION_TWEEN.none : MOTION_TWEEN.meter}
+    <MotionMeterFill
+      className={cn("motion-meter-fill block h-full rounded-full", className)}
+      percentage={normalizedValue}
+      reducedMotion={reducedMotion}
+      timing={timing}
+      tone={tone}
     />
   );
 }

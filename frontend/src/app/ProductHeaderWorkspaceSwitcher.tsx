@@ -1,4 +1,4 @@
-import { Building2, Check, ChevronsUpDown } from "lucide-react";
+import { Building2, Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -77,26 +77,17 @@ export function ProductHeaderWorkspaceSwitcher({ auth }: { auth: AuthenticatedAu
         render={(
           <Button
             aria-label={label}
-            className="min-w-0 gap-2 px-2 sm:w-(--product-toolbar-identity-width) sm:justify-start"
+            className="h-(--product-global-search-height) min-w-0 gap-[0.546875rem] rounded-none border-r border-border-subtle px-0 pr-[0.9375rem] text-[length:var(--type-body)] leading-[1.5234375rem] font-bold sm:w-auto sm:max-w-(--product-toolbar-identity-width) sm:justify-start"
             data-slot="workspace-switcher-trigger"
             title={label}
             variant="ghost"
           />
         )}
       >
-        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-accent-foreground">
-          <Building2 aria-hidden="true" className="size-4" />
+        <span className="grid size-[1.09375rem] shrink-0 place-items-center text-muted-foreground">
+          <Building2 aria-hidden="true" className="size-[1.09375rem]" />
         </span>
-        <span className="hidden min-w-0 flex-1 flex-col items-start leading-tight sm:flex">
-          <span className="block w-full truncate text-[0.625rem] font-normal text-muted-foreground">
-            {t("shell.workspace.label")}
-          </span>
-          <span className="block w-full truncate text-xs">{workspaceId}</span>
-        </span>
-        <ChevronsUpDown
-          aria-hidden="true"
-          className="hidden size-3.5 shrink-0 text-muted-foreground sm:block"
-        />
+        <span className="hidden min-w-0 flex-1 truncate sm:block">{workspaceId}</span>
       </PopoverTrigger>
       <PopoverContent
         align="start"

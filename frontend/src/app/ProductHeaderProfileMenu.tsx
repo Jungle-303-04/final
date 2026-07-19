@@ -1,5 +1,5 @@
 import { LogOut, Settings, UserRound } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
@@ -15,9 +15,11 @@ import { Spinner } from "../shared/ui/primitives/spinner";
 export function ProductHeaderProfileMenu({
   auth,
   settingsHref,
+  utilities,
 }: {
   auth: AuthenticatedAuthState;
   settingsHref: string;
+  utilities?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useI18n();
@@ -36,7 +38,7 @@ export function ProductHeaderProfileMenu({
         render={(
           <Button
             aria-label={openLabel}
-            className="rounded-full p-0"
+            className="size-[2.375rem] rounded-full p-0"
             data-slot="profile-menu-trigger"
             size="icon"
             title={profile.fullIdentity}
@@ -44,7 +46,7 @@ export function ProductHeaderProfileMenu({
           />
         )}
       >
-        <span className="grid size-7 place-items-center rounded-full bg-primary text-[0.65rem] font-semibold text-primary-foreground">
+        <span className="grid size-[2.375rem] place-items-center rounded-full border border-transparent bg-primary/15 text-label font-extrabold text-primary">
           {profile.avatarLabel}
         </span>
       </PopoverTrigger>
@@ -52,6 +54,7 @@ export function ProductHeaderProfileMenu({
         align="end"
         aria-label={t("shell.profile.label")}
         className="w-72 max-w-[calc(100vw-1rem)] p-2"
+        keepMounted
         side="bottom"
       >
         <div className="flex min-w-0 items-center gap-3 px-2 py-2">
@@ -64,6 +67,18 @@ export function ProductHeaderProfileMenu({
           </div>
         </div>
         <Separator className="my-1" />
+        {utilities ? (
+          <>
+            <div
+              aria-label={t("shell.profile.utilities")}
+              className="grid grid-cols-4 items-center justify-items-center gap-1 px-1 py-1"
+              role="group"
+            >
+              {utilities}
+            </div>
+            <Separator className="my-1" />
+          </>
+        ) : null}
         <Link
           className={cn(buttonVariants({ variant: "ghost" }), "w-full justify-start")}
           onClick={() => setOpen(false)}

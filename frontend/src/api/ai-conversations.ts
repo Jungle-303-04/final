@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestNoContent, type ApiPath } from "./client";
+import { apiRequest, type ApiPath } from "./client";
 import {
   MAX_AI_CONVERSATION_PAGE_LIMIT,
   aiConversationAcceptedSchema,
@@ -70,18 +70,6 @@ export function getAiConversation(
   }
   const path = `${basePath}${query.size > 0 ? `?${query.toString()}` : ""}` as ApiPath;
   return apiRequest(path, aiConversationDetailSchema, { signal });
-}
-
-/** Deletes one conversation and its stored messages for the signed-in user. */
-export function deleteAiConversation(
-  conversationId: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (!conversationId.trim()) {
-    throw new TypeError("conversationId must not be empty");
-  }
-  const path = `/api/ai/conversations/${encodePathSegment(conversationId)}` as ApiPath;
-  return apiRequestNoContent(path, { method: "DELETE", signal });
 }
 
 /** Creates a conversation and queues its first user message. */

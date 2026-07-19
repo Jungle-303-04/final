@@ -1,14 +1,16 @@
+import { Rocket } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
+import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import {
   Tabs,
   TabsList,
   TabsTrigger,
 } from "../../shared/ui/primitives/tabs";
 
-type DeployTab = "applications" | "repositories" | "helm";
+type DeployTab = "applications" | "repositories" | "workflows" | "helm";
 
 export function DeployPage({
   Applications,
@@ -33,27 +35,36 @@ export function DeployPage({
   };
 
   return (
-    <section aria-labelledby="deploy-title" className="grid min-w-0 gap-4">
-      <header className="grid gap-3 border-b bg-background px-4 pt-4 sm:px-6 sm:pt-6">
-        <div className="grid gap-1">
-          <h1 className="text-title1" id="deploy-title">{t("shell.deploy.title")}</h1>
-          <p className="text-body text-muted-foreground">{t("shell.deploy.description")}</p>
-        </div>
+    <section aria-labelledby="deploy-title" className="relative grid min-w-0 gap-4">
+      <header className="grid gap-5 bg-background px-(--product-page-inline) pt-(--product-page-block-start)">
+        <ProductSurfaceTitle icon={Rocket} id="deploy-title" title={t("shell.deploy.title")} />
         <Tabs onValueChange={changeTab} value={tab}>
-          <TabsList aria-label={t("shell.deploy.tabs")} variant="line">
-            <TabsTrigger value="applications">{t("shell.deploy.applications")}</TabsTrigger>
-            <TabsTrigger value="repositories">{t("shell.deploy.repositories")}</TabsTrigger>
-            <TabsTrigger value="helm">{t("shell.deploy.helm")}</TabsTrigger>
+          <TabsList
+            aria-label={t("shell.deploy.tabs")}
+            className="gap-[0.15625rem] rounded-[0.703125rem] bg-muted p-[0.15625rem] data-[orientation=horizontal]:h-[2.55859375rem]"
+          >
+            <TabsTrigger className="h-[2.24609375rem] flex-none rounded-[0.546875rem] px-[1.1875rem] py-[0.390625rem] [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="applications">
+              {t("shell.deploy.applications")}
+            </TabsTrigger>
+            <TabsTrigger className="h-[2.24609375rem] flex-none rounded-[0.546875rem] px-[1.1875rem] py-[0.390625rem] [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="repositories">
+              {t("shell.deploy.repositories")}
+            </TabsTrigger>
+            <TabsTrigger className="h-[2.24609375rem] flex-none rounded-[0.546875rem] px-[1.1875rem] py-[0.390625rem] [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="workflows">
+              {t("workflows.detail.workflow")}
+            </TabsTrigger>
+            <TabsTrigger className="h-[2.24609375rem] flex-none rounded-[0.546875rem] px-[1.1875rem] py-[0.390625rem] [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="helm">
+              {t("shell.deploy.helm")}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </header>
+      <GitOps />
       {tab === "applications" ? <Applications /> : null}
-      {tab === "repositories" ? <GitOps /> : null}
       {tab === "helm" ? <Helm /> : null}
     </section>
   );
 }
 
 function isDeployTab(value: string | null | undefined): value is DeployTab {
-  return value === "applications" || value === "repositories" || value === "helm";
+  return value === "applications" || value === "repositories" || value === "workflows" || value === "helm";
 }

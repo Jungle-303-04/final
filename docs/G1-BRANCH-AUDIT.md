@@ -20,7 +20,7 @@
 | `codex/aws-real-data-rebuild-20260718` | `16ff84521` | #607 open | 미채택 후 삭제. PR이 conflict이며 backend/full gate가 실패한다. 현재 지시서·목표 로그를 삭제하는 큰 tree diff를 포함하고, 채택 가능한 관리 클러스터 변경 제어는 PR #608로 dev에 분리 병합됐다. 실패한 769파일 묶음을 통합하지 않는다. |
 | `codex/deploy-gate-simplify-20260719` | `82e7aa10d` | #623 merged | 삭제. PR #623 merge commit `fba57b25e`로 dev에 병합됐다. |
 | `codex/frontAlarm` | `45de68145` | - | 미채택 후 삭제. 별도 `ActivityNotificationsProvider`, 알림 미리보기와 개발 테스트 이벤트는 D4의 벨+sonner 단일 표면 및 실 SSE 발화 계약과 충돌한다. |
-| `codex/gitOpsNode` | `106a1859c` | - | 미채택 후 삭제. 별도 `DeploymentBlueprint*` 편집기와 preview entry를 추가한다. dev의 `WorkflowGraph`·`PlanEditor`·`PlanWizard`가 D10 오너이므로 두 번째 워크플로 구현을 채택하지 않는다. |
+| `codex/gitOpsNode` | `106a1859c` | - | 기능을 현행 구조로 통합한 뒤 삭제. 별도 `DeploymentBlueprint*` preview 계층은 만들지 않고, `DeployWorkflowWorkspace → DeployWorkflowCards → DeployWorkflowNodes / DeployWorkflowPlanActions / DeployWorkflowSupport` 단일 체인에 단계 추가·편집·삭제·저장을 수렴했다. |
 | 리소스 패리티 통합 브랜치 | `855ff3fd0` | - | 가치 통합 후 삭제. dev가 import하지만 누락한 서버 단일 리소스 분류는 `b3e61d534`→`ef4015c7f`, 추가 종류 정합은 `855ff3fd0`→`281bbcfae`로 선별 cherry-pick했다. 나머지 이전 패리티/UI 묶음은 후속 평면 서피스 PR #609~#614와 Master D1~D21이 대체한다. |
 | `feat/minmings111/cluster-infra-map-ui` | `023d70c2e` | #606 open | 미채택 후 삭제. PR이 conflict이고 네 gate가 실패/취소 상태다. 신규 `ResourcesInfraMap*` 계보는 D12의 `ResourcesPhysicalTopologyScene` 단일 오너와 “병렬 맵 금지”에 정면 충돌한다. |
 | `feat/minmings111/internal-site-mcp` | `7e97c6a5e` | #604 merged | 미채택 잔여 보존 후 삭제. PR #604의 검토 범위는 dev에 병합됐다. 병합 뒤 추가된 `42faee42c`는 별도 PR·게이트 없이 AI 런타임 1,481줄을 바꾸는 G1/프론트 목표 밖 묶음이므로 이번 본선화에는 넣지 않는다. |

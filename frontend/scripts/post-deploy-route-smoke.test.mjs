@@ -137,20 +137,19 @@ describe("post-deploy route smoke helpers", () => {
       "/resources",
       "/deploy",
       "/issues",
-      "/applications",
       "/timeline",
-      "/traffic",
-      "/helm",
-      "/gitops",
       "/checks",
       "/cost",
-      "/clusters",
       "/alerts",
+      "/ai",
       "/settings",
     ]);
     expect(Object.values(ROUTE_CRITICAL_API_CONTRACTS).every(
       (contracts) => contracts.length > 0,
     )).toBe(true);
+    expect(ROUTE_CRITICAL_API_CONTRACTS["/alerts"]).toEqual([
+      "/api/alert-events",
+    ]);
   });
 
   it("preserves DOM order when the current URL is not a released navigation route", () => {
@@ -649,44 +648,44 @@ describe("post-deploy route smoke helpers", () => {
 
   it("emits bounded structured route diagnostics before preserving the smoke failure", async () => {
     const diagnostics = createRouteSmokeDiagnostics();
-    diagnostics.failingRoute = "/traffic";
+    diagnostics.failingRoute = "/resources";
     diagnostics.requestFailures.push({
       error: "net::ERR_CONNECTION_RESET",
       method: "GET",
-      url: "/api/traffic",
+      url: "/api/resources",
     });
-    diagnostics.apiErrors.push({ status: 503, url: "/api/traffic" });
-    diagnostics.pageErrors.push("Traffic surface crashed");
+    diagnostics.apiErrors.push({ status: 503, url: "/api/resources" });
+    diagnostics.pageErrors.push("Resources surface crashed");
     const emitted = [];
 
     await expect(
       withRouteSmokeDiagnostics(
         async () => {
-          throw new Error("route /traffic rendered product state error");
+          throw new Error("route /resources rendered product state error");
         },
         diagnostics,
         (message) => emitted.push(message),
       ),
-    ).rejects.toThrow("route /traffic rendered product state error");
+    ).rejects.toThrow("route /resources rendered product state error");
 
     expect(emitted).toHaveLength(1);
     expect(JSON.parse(emitted[0])).toEqual({
       event: "authenticated_route_smoke_failure",
-      failingRoute: "/traffic",
-      error: "route /traffic rendered product state error",
+      failingRoute: "/resources",
+      error: "route /resources rendered product state error",
       requestFailures: [{
         error: "net::ERR_CONNECTION_RESET",
         method: "GET",
-        url: "/api/traffic",
+        url: "/api/resources",
       }],
-      apiErrors: [{ status: 503, url: "/api/traffic" }],
-      pageErrors: ["Traffic surface crashed"],
+      apiErrors: [{ status: 503, url: "/api/resources" }],
+      pageErrors: ["Resources surface crashed"],
       changeTimelineLimits: [],
     });
     expect(formatRouteSmokeFailureDiagnostics(
       new Error("same failure"),
       diagnostics,
-    )).toContain('"failingRoute":"/traffic"');
+    )).toContain('"failingRoute":"/resources"');
   });
 
   it("redacts credentials from structured browser diagnostics", () => {

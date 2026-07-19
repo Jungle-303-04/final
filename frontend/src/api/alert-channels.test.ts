@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
-import { listAlertChannels, testAlertChannel } from "./alert-channels";
+import {
+  deleteAlertChannel,
+  listAlertChannels,
+  saveAlertChannel,
+  testAlertChannel,
+} from "./alert-channels";
 
 const CHANNEL = {
   channel_id: "chan-ops",
@@ -78,6 +83,27 @@ describe("alert channel API", () => {
       }),
     });
     expect(new Headers(init?.headers).get("x-service-csrf")).toBe("same-origin");
+  });
+
+  it("persists and deletes the same channel identity through the mutation contract", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(CHANNEL))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(saveAlertChannel({
+      channel_id: "chan-ops",
+      enabled: false,
+      kind: "webhook",
+      min_severity: "warning",
+      name: "운영 웹훅",
+      url: "https://hooks.example/ops",
+    })).resolves.toEqual(CHANNEL);
+    await expect(deleteAlertChannel("chan-ops")).resolves.toBeUndefined();
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/alert-channels");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/alert-channels/chan-ops");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "DELETE" });
   });
 
   it("keeps an unsuccessful real delivery result instead of inventing success", async () => {

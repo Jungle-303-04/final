@@ -1,5 +1,5 @@
-import { Activity, Box, Cpu, Pencil, Plus, Server } from "lucide-react";
-import type { ReactNode } from "react";
+import { Activity, Box, Cpu, Pencil, Server } from "lucide-react";
+import type { ReactNode, RefObject } from "react";
 import { Link } from "react-router-dom";
 
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
@@ -13,6 +13,7 @@ import { ButtonGroup } from "../../shared/ui/primitives/button-group";
 
 export function HomeFleetHeader({
   clusters,
+  connectButtonRef,
   criticalCount,
   criticalHref,
   editing,
@@ -25,6 +26,7 @@ export function HomeFleetHeader({
   period,
 }: {
   clusters: readonly HomeClusterChoice[];
+  connectButtonRef?: RefObject<HTMLButtonElement | null>;
   criticalCount?: number | null;
   criticalHref?: string;
   editing?: boolean;
@@ -57,11 +59,11 @@ export function HomeFleetHeader({
   );
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 xl:flex-nowrap">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-6 2xl:flex-nowrap 2xl:gap-y-2">
       <h1 className="sr-only">{t("home.cluster.available")}</h1>
       <div
         aria-label={t("home.cluster.grid.aria")}
-        className="flex min-w-0 flex-wrap items-center gap-2 xl:flex-nowrap"
+        className="flex min-w-0 flex-wrap items-center gap-2 2xl:flex-nowrap"
         role="group"
       >
         <FleetMetric
@@ -99,17 +101,17 @@ export function HomeFleetHeader({
           criticalChip
         )}
       </div>
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
+      <div className="ml-auto flex w-full min-w-0 flex-wrap items-center justify-end gap-2 2xl:w-auto 2xl:flex-nowrap">
         {freshness ? <div className="shrink-0">{freshness}</div> : null}
         {period && onPeriodChange ? (
           <ButtonGroup aria-label={t("timeline.strip.range")} className="rounded-lg bg-muted p-0.5">
             {(["today", "7d", "30d"] as const).map((value) => (
               <Button
                 aria-pressed={period === value}
-                className="h-auto border-0 px-2.5 py-[3px] text-caption-2 font-semibold"
+                className="border-0"
                 key={value}
                 onClick={() => onPeriodChange(value)}
-                size="sm"
+                size="compact-segment"
                 type="button"
                 variant={period === value ? "outline" : "ghost"}
               >
@@ -119,14 +121,20 @@ export function HomeFleetHeader({
           </ButtonGroup>
         ) : null}
         {onEdit ? (
-          <Button onClick={onEdit} size="sm" type="button" variant="outline">
+          <Button onClick={onEdit} size="page-secondary" type="button" variant="outline">
             <Pencil aria-hidden="true" />
             {editing ? t("shell.home.layout.done") : t("shell.home.layout.edit")}
           </Button>
         ) : null}
         {onConnect ? (
-          <Button className="rounded-[9px] text-label-2 font-bold" onClick={onConnect} type="button">
-            <Plus aria-hidden="true" />
+          <Button
+            className="gap-0"
+            onClick={onConnect}
+            ref={connectButtonRef}
+            size="page-action"
+            type="button"
+          >
+            <span aria-hidden="true" className="mr-[0.15625rem]">+</span>
             {t("clusters.action.add")}
           </Button>
         ) : null}

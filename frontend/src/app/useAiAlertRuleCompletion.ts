@@ -8,9 +8,9 @@ export function useAiAlertRuleCompletion() {
   const filter = useUnifiedFilter();
   const notifications = useOptionalProductNotifications();
   const { t } = useI18n();
-  const href = filter.navigationHref("/issues", {
+  const href = filter.navigationHref("/alerts", {
     ...createEmptyProductDetailQuery(),
-    surfaceTab: "rules",
+    tab: "rules",
   });
   return {
     href,

@@ -1,5 +1,5 @@
-import { CircleAlert } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type {
   ClusterDisconnectPort,
@@ -7,30 +7,38 @@ import type {
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
-import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
-import { useI18n } from "../../shared/i18n/I18nProvider";
-import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import type {
+  HomeClusterChoice,
+  HomePort,
+} from "../../features/home/homeContract";
+import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
-import { Surface } from "../../shared/ui/Surface";
-import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
-import { PollingFreshness } from "../PollingFreshness";
-import { HomeClusterGrid } from "./HomeClusterGrid";
-import { HomeFleetHeader } from "./HomeFleetHeader";
-import { useHomePageState } from "./useHomePageState";
+import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ClusterConnectDialog } from "../clusters/ClusterConnectDialog";
 import {
   ClusterDisconnectDialog,
   type DisconnectPhase,
 } from "../clusters/ClusterDisconnectDialog";
-import { ClusterConnectDialog } from "../clusters/ClusterConnectDialog";
-import type { HomeClusterChoice } from "../../features/home/homeContract";
-import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
-import { HomeWidgetBoard } from "./HomeWidgetBoard";
+import { PollingFreshness } from "../PollingFreshness";
 import type { HomeBoardPorts } from "./useHomeBoardData";
+import { HomeClusterGrid } from "./HomeClusterGrid";
+import { HomeFleetHeader } from "./HomeFleetHeader";
+import {
+  exactIncidentSum,
+  HomeClusterBoundary,
+  homeConnectionState,
+  HomeFailureScreen,
+  isResumableDisconnectPhase,
+  PartialFailureBanner,
+  UnknownCluster,
+} from "./HomePageSupport";
+import { HomeWidgetBoard } from "./HomeWidgetBoard";
 import {
   projectHomeFleetClusters,
   summarizeHomeFleetUsage,
   useHomeClusterCardsData,
 } from "./useHomeClusterCardsData";
+import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({
   boardPorts,
@@ -45,6 +53,7 @@ export function HomePage({
   const filter = useUnifiedFilter();
   const session = useOptionalProductSession();
   const [connectOpen, setConnectOpen] = useState(false);
+  const connectButtonRef = useRef<HTMLButtonElement>(null);
   const [disconnectCluster, setDisconnectCluster] = useState<HomeClusterChoice | null>(null);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnectPhase, setDisconnectPhase] = useState<DisconnectPhase>("confirm");
@@ -105,6 +114,7 @@ export function HomePage({
     <ProductPageFrame>
       <HomeFleetHeader
         clusters={boardClusters}
+        connectButtonRef={connectButtonRef}
         criticalCount={fleetCriticalCount}
         criticalHref={filter.navigationHref("/issues")}
         editing={editingBoard}
@@ -170,7 +180,10 @@ export function HomePage({
             existingNames={state.choices.data.clusters.map((cluster) => cluster.name)}
             onConnected={state.refresh}
             onRegistered={state.refresh}
-            onOpenChange={setConnectOpen}
+            onOpenChange={(open) => {
+              setConnectOpen(open);
+              if (!open) queueMicrotask(() => connectButtonRef.current?.focus());
+            }}
             open={connectOpen}
             port={clusterPort}
           />
@@ -193,134 +206,5 @@ export function HomePage({
         </>
       ) : null}
     </ProductPageFrame>
-  );
-}
-
-function exactIncidentSum(clusters: readonly HomeClusterChoice[]): number | null {
-  if (clusters.length === 0) return null;
-  let total = 0;
-  for (const cluster of clusters) {
-    const count = cluster.openIncidentCount ?? cluster.incidentCount;
-    if (count == null) return null;
-    total += count;
-  }
-  return total;
-}
-
-function isResumableDisconnectPhase(phase: DisconnectPhase): boolean {
-  return phase === "submitting" || phase === "uninstalling" || phase === "cleanup-required";
-}
-
-function homeConnectionState(state: ReturnType<typeof useHomePageState>) {
-  const resources = [state.choices, state.overview, state.insights, state.nodes, state.pods];
-  return resources.some((resource) =>
-    resource.phase === "failed" ||
-    (resource.phase === "ready" && resource.refreshFailure !== null)
-  ) ? "disconnected" as const : "connected" as const;
-}
-
-function HomeClusterBoundary({
-  variant,
-}: {
-  variant: "catalog-unconfirmed" | "multiple" | "required";
-}) {
-  const { t } = useI18n();
-  const key = variant === "catalog-unconfirmed" ? "catalogUnconfirmed" : variant;
-  return (
-    <Surface aria-labelledby="home-cluster-boundary-title" className="grid min-h-72 place-items-center p-6">
-      <div className="grid max-w-md justify-items-center gap-3 text-center">
-        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
-        <h2 className="text-lg font-semibold" id="home-cluster-boundary-title">
-          {t(`home.cluster.${key}.title`)}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {t(`home.cluster.${key}.description`)}
-        </p>
-      </div>
-    </Surface>
-  );
-}
-
-function UnknownCluster({ clusterId }: { clusterId: string | null }) {
-  const { t } = useI18n();
-  return (
-    <Surface aria-labelledby="unknown-cluster-title" className="grid min-h-72 place-items-center p-6">
-      <div className="grid max-w-md justify-items-center gap-3 text-center">
-        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
-        <h2 className="text-lg font-semibold" id="unknown-cluster-title">
-          {t("home.cluster.unknown.title")}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {t("home.cluster.unknown.description", {
-            cluster: clusterId ?? t("home.cluster.label"),
-          })}
-        </p>
-      </div>
-    </Surface>
-  );
-}
-
-function PartialFailureBanner({
-  clusterCardsPartial,
-  state,
-}: {
-  clusterCardsPartial: boolean;
-  state: ReturnType<typeof useHomePageState>;
-}) {
-  const { t } = useI18n();
-  const failures = [state.overview, state.insights, state.nodes].filter(
-    (section) => section.phase === "failed" ||
-      (section.phase === "ready" && section.refreshFailure !== null),
-  );
-  if (failures.length === 0 && !clusterCardsPartial) return null;
-  return (
-    <Alert>
-      <CircleAlert aria-hidden="true" />
-      <AlertTitle>{t("home.partial.title")}</AlertTitle>
-      <AlertDescription>
-        {t("home.partial.description")}
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-function HomeFailureScreen({
-  failure,
-  onRetry,
-}: {
-  failure: HomePortFailure;
-  onRetry: () => void;
-}) {
-  const { t } = useI18n();
-  if (failure.code === "forbidden") {
-    return (
-      <ProductStateScreen
-        issue={{ code: "forbidden" }}
-        kind="forbidden"
-        placement="content"
-      />
-    );
-  }
-  if (failure.code === "offline") {
-    return (
-      <ProductStateScreen
-        issue={{ code: "network" }}
-        kind="offline"
-        placement="content"
-        retry={{ label: t("home.action.reconnect"), onRetry, pending: false }}
-      />
-    );
-  }
-  return (
-    <ProductStateScreen
-      issue={{ code: failure.code === "invalid-response" ? "invalid-response" : "server" }}
-      kind="error"
-      placement="content"
-      retry={{
-        label: t("home.action.reload"),
-        onRetry,
-        pending: false,
-      }}
-    />
   );
 }

@@ -60,6 +60,7 @@ export function ProductRouter({
               auth={auth}
               globalFilterPort={composition.globalFilter}
               aiAssistantPort={composition.aiAssistant}
+              aiConversationHistoryPort={composition.aiConversationHistory}
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
               shellStatePort={composition.shellState}

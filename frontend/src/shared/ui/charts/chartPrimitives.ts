@@ -1,4 +1,4 @@
-import { MOTION_DURATION_MS } from "@/motion";
+import { MOTION_DURATION_MS, RECHARTS_EASE_DRAW } from "@/motion";
 
 export type ChartTone =
   | "critical"
@@ -7,9 +7,6 @@ export type ChartTone =
   | "stale"
   | "unknown"
   | "warning";
-
-/** Recharts' closest supported named easing to demo-freeze-v3 EASE_DRAW. */
-const RECHARTS_EASE_DRAW = "ease-out" as const;
 
 export const RECHARTS_DRAW_ANIMATION = Object.freeze({
   animationDuration: MOTION_DURATION_MS.draw,

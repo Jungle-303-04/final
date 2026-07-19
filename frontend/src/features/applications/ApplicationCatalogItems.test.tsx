@@ -4,42 +4,15 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../shared/i18n";
-import { ApplicationCard } from "./ApplicationCard";
 import { ApplicationsTable } from "./ApplicationsTable";
 import type { ApplicationCardModel } from "./applicationsContract";
 
 afterEach(cleanup);
 
 describe("application catalog items", () => {
-  it("separates runtime readiness, latest delivery, last success, and batch evidence on a card", async () => {
+  it("keeps every operational channel in the dense table without inventing readiness", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
-    const { container } = renderUi(<ApplicationCard application={application} onOpen={onOpen} />);
-
-    const ready = screen.getByTestId("application-ready-bar");
-    expect(ready.textContent).toContain("2/3");
-    expect(within(ready).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("2");
-    expect(
-      ready.querySelector<HTMLElement>('[data-slot="application-ready-fill"]')?.style.width,
-    ).toBe("67%");
-
-    const deployment = screen.getByTestId("application-deployment-channel");
-    expect(within(deployment).getByText("v2.4.1")).toBeTruthy();
-    expect(within(deployment).getByText("a3f9c2e")).toBeTruthy();
-    expect(screen.getByTestId("application-delivery-state-channel").textContent).toContain("Failed");
-    expect(screen.getByTestId("application-batch-runtime-channel").textContent).toContain("Running");
-    expect(screen.getByTestId("application-batch-runtime-channel").textContent).toContain("active 1");
-
-    expect(screen.getByTestId("application-drift-channel").textContent).toContain("spec.replicas differs");
-    expect(screen.getByTestId("application-incident-channel").textContent).toContain("Open incidents 1");
-    expect(container.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
-    expect(screen.getByTestId("application-deployment-panel").className).not.toMatch(/rounded|bg-/u);
-
-    await user.click(screen.getByRole("button", { name: /checkout-api/i }));
-    expect(onOpen).toHaveBeenCalledOnce();
-  });
-
-  it("keeps version and SHA distinct in the table and never invents absent readiness", () => {
     renderUi(
       <ApplicationsTable
         applications={[
@@ -62,15 +35,25 @@ describe("application catalog items", () => {
             openIncidents: null,
           },
         ]}
-        onOpen={vi.fn()}
+        onOpen={onOpen}
       />,
     );
 
     const checkoutRow = screen.getByRole("row", { name: /checkout-api/i });
+    const ready = within(checkoutRow).getByTestId("application-ready-bar");
+    expect(ready.textContent).toContain("2/3");
+    expect(within(ready).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("2");
     expect(within(checkoutRow).getByText("v2.4.1")).toBeTruthy();
     expect(within(checkoutRow).getByText("a3f9c2e")).toBeTruthy();
+    expect(within(checkoutRow).getByTestId("application-delivery-state-channel").textContent)
+      .toContain("Failed");
+    expect(within(checkoutRow).getByTestId("application-batch-runtime-channel").textContent)
+      .toContain("active 1");
     expect(within(checkoutRow).getByTestId("application-drift-channel")).toBeTruthy();
     expect(within(checkoutRow).getByTestId("application-incident-channel")).toBeTruthy();
+
+    await user.click(within(checkoutRow).getByRole("button", { name: "View details" }));
+    expect(onOpen).toHaveBeenCalledWith("app-checkout");
 
     const workerRow = screen.getByRole("row", { name: /worker/i });
     expect(within(workerRow).queryByRole("progressbar")).toBeNull();

@@ -178,7 +178,7 @@ describe("UnifiedFilterBar", () => {
     );
 
     const control = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]');
-    expect(control?.className).toContain("h-9");
+    expect(control?.className).toContain("h-(--product-global-search-height)");
     expect(control?.className).toContain("border");
     expect(control?.className).toContain("overflow-x-auto");
     expect(control?.className).not.toContain("flex-wrap");
@@ -205,7 +205,7 @@ describe("UnifiedFilterBar", () => {
     );
 
     const control = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]');
-    expect(control?.className).toContain("h-9");
+    expect(control?.className).toContain("h-(--product-global-search-height)");
     expect(control?.className).toContain("overflow-x-auto");
     expect(control?.className).not.toContain("flex-wrap");
     expect(await screen.findByText("prod-cluster · Production · cluster-a")).toBeTruthy();

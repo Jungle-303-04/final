@@ -86,6 +86,7 @@ describe("HelmPage", () => {
     });
     renderRoute("/helm", port);
 
+    fireEvent.click(await screen.findByRole("button", { name: "ArtifactHub discovery" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "Search ArtifactHub charts" }), {
       target: { value: "redis" },
     });
@@ -157,6 +158,7 @@ describe("HelmPage", () => {
     });
     renderRoute("/helm", port);
 
+    fireEvent.click(await screen.findByRole("button", { name: "Registered chart catalog" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "Search registered charts" }), {
       target: { value: "redis" },
     });
@@ -282,39 +284,17 @@ describe("HelmPage", () => {
     );
   });
 
-  it("moves focus to the release search when the list shortcut is used", async () => {
+  it("opens release detail in the canonical deploy surface without a legacy redirect", async () => {
     const port = helmPort();
-    renderRoute("/helm", port);
+    renderRoute("/deploy?section=helm", port);
 
-    const search = await screen.findByRole("textbox", { name: "Filter releases" });
-    fireEvent.keyDown(window, { key: "/" });
+    fireEvent.click(await screen.findByRole("button", { name: "Open storefront" }));
 
-    await waitFor(() => expect(document.activeElement).toBe(search));
-  });
-
-  it("does not steal the list search shortcut from editable, modal, or already-handled owners", async () => {
-    const port = helmPort();
-    renderRoute("/helm", port);
-
-    const search = await screen.findByRole("textbox", { name: "Filter releases" });
-    const editor = document.createElement("div");
-    editor.setAttribute("contenteditable", "true");
-    document.body.append(editor);
-    fireEvent.keyDown(editor, { key: "/" });
-
-    const modal = document.createElement("div");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("role", "dialog");
-    document.body.append(modal);
-    fireEvent.keyDown(modal, { key: "/" });
-
-    const handled = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "/" });
-    handled.preventDefault();
-    window.dispatchEvent(handled);
-
-    expect(document.activeElement).not.toBe(search);
-    editor.remove();
-    modal.remove();
+    const location = (await screen.findByTestId("location")).textContent;
+    expect(location).toContain("/deploy?section=helm");
+    expect(location).toContain("helm.release.cluster=cluster-a");
+    expect(location).toContain("helm.release.namespace=storefront");
+    expect(location).toContain("helm.release.name=storefront");
   });
 
   it("renders safe availability copy without exposing internal provider or executor codes", async () => {

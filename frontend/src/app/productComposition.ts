@@ -13,6 +13,10 @@ import {
   type AiAssistantPort,
 } from "../features/ai-assistant/aiAssistantContract";
 import {
+  EMPTY_AI_CONVERSATION_HISTORY_PORT,
+  type AiConversationHistoryPort,
+} from "../features/ai-assistant/aiConversationHistoryContract";
+import {
   EMPTY_LOG_STREAM_PORT,
   type LogStreamPort,
 } from "../features/log-stream/logStreamContract";
@@ -65,6 +69,7 @@ export interface ProductComposition {
   clusterScope: ClusterScopePort;
   globalFilter: GlobalFilterPort;
   aiAssistant: AiAssistantPort;
+  aiConversationHistory: AiConversationHistoryPort;
   logStream: LogStreamPort;
   alertEvents: AlertEventsPort;
   workloadDetail: WorkloadDetailPort;
@@ -97,6 +102,7 @@ export function createProductComposition(
   runtimeStatus: RuntimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
   portForwardSessions: PortForwardSessionPort = EMPTY_PORT_FORWARD_SESSION_PORT,
   rcaContext: RcaContextPort = EMPTY_RCA_CONTEXT_PORT,
+  aiConversationHistory: AiConversationHistoryPort = EMPTY_AI_CONVERSATION_HISTORY_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -123,6 +129,7 @@ export function createProductComposition(
     clusterScope,
     globalFilter,
     aiAssistant,
+    aiConversationHistory,
     logStream,
     alertEvents,
     workloadDetail,

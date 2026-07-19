@@ -1,4 +1,5 @@
 import { Boxes } from "lucide-react";
+import type { ReactNode } from "react";
 import { useI18n } from "../../shared/i18n";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -26,9 +27,11 @@ import {
 export function ApplicationsTable({
   applications,
   onOpen,
+  refreshControl,
 }: {
   applications: readonly ApplicationCardModel[];
   onOpen: (applicationId: string) => void;
+  refreshControl?: ReactNode;
 }) {
   const { t } = useI18n();
   const copy = applicationsCopy(t);
@@ -65,10 +68,13 @@ export function ApplicationsTable({
             <TableHead>{copy.drift}</TableHead>
             <TableHead>{copy.incidents}</TableHead>
             <TableHead>{copy.resources}</TableHead>
-            <TableHead><span className="sr-only">{copy.details}</span></TableHead>
+            <TableHead className="text-right">
+              <span className="sr-only">{copy.details}</span>
+              {refreshControl}
+            </TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody>
+        <TableBody className="[&_td]:py-[0.34375rem]">
           {applications.map((application) => (
             <TableRow key={application.id}>
               <TableCell>

@@ -56,9 +56,9 @@ describe("AI alert action card", () => {
     expect(completed?.className).toContain("max-w-full");
     expect(completed?.className).toContain("overflow-hidden");
     const rulesLink = screen.getByRole("link", { name: "알림 규칙 보기" });
-    expect(rulesLink.getAttribute("href")).toBe("/issues?section=rules");
+    expect(rulesLink.getAttribute("href")).toBe("/alerts?tab=rules");
     expect(screen.getByTestId("notification-probe").textContent)
-      .toBe("alert-rule-created:rule-42|/issues?section=rules");
+      .toBe("alert-rule-created:rule-42|/alerts?tab=rules");
     expect(rulesLink.className).toContain("whitespace-nowrap");
     expect(screen.queryByText("등록 완료")).toBeNull();
   });

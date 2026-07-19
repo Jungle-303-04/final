@@ -18,7 +18,7 @@ import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Surface } from "../../shared/ui/Surface";
-import { NativeSelect } from "./PlanEditor";
+import { NativeSelect } from "./WorkflowFormControls";
 import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 
 export function ManifestWorkspace({
