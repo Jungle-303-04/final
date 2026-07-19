@@ -202,7 +202,7 @@ describe("HomePage three-layer board", () => {
 
     const sync = await screen.findByRole("region", { name: "동기화 상태" });
     await waitFor(() => {
-      expect(within(sync).getByText("저장소·동기화").nextElementSibling?.textContent).toBe("2");
+      expect(within(sync).getByText("GitOps").nextElementSibling?.textContent).toBe("2");
     });
   });
 
