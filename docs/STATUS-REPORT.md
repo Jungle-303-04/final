@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-19 22:02 KST다. 원격 기준 소스는 `1b45b699c302b90d45e70c1a1ca24f532ae6bc72`, 로컬 파이프라인 복구 후보는 `a55ee88a8`이다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-19 22:11 KST다. 원격 기준 소스는 `8f017558a1841ba376f3da29aa04111db5a3e207`, 로컬 파이프라인 복구 후보는 `16b3bc5fd`다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
 1. 홈 v3 P0와 로컬 대조 증거를 담은 `d48f3652a`를 dev에 push했으나 배포되지는 않았다.
 2. `d48f3652a` Dev Gate `29686718943`은 Backend 문서 심도·색인 2건이 실패했고 후속 push로 전체 run은 cancelled됐다.
-3. 문서 실패는 제품 결함이 아니며 rebased `c54b8b659`에서 G4 증거 6파일을 평탄화하고 Markdown 3개를 docs 루트에 색인했다.
+3. 문서 실패는 제품 결함이 아니며 rebased `7fb2e0a8e`에서 G4 증거 6파일을 평탄화하고 Markdown 3개를 docs 루트에 색인했다.
 4. 후속 프론트 SHA `6d3c7bc76`, `1d57d4b1b`, `8d43b5023` Gate는 shallow checkout의 기준 SHA 객체 누락으로 실패했고 Deploy는 모두 skipped다.
-5. 원격 `1b45b699c`의 첫 CI 보강은 제목 컨벤션으로 Gate `29687838966`이 source-proof에서 실패했다. 로컬 `c54b8b659`은 기준 SHA를 명시 fetch·검증하고 표적 계약 34/34를 통과했다.
+5. 원격 `1b45b699c`의 첫 CI 보강은 제목 컨벤션으로 Gate `29687838966`이 source-proof에서 실패했다. 후속 `8f017558a` Gate `29688137124`는 Backend 3건과 Frontend 어휘 테스트 1건으로 실패했다.
 6. 로컬 전체 Backend 첫 실행은 3,774 pass/3 skip/1 timing fail, 두 번째도 3,774 pass/3 skip/1 timing fail로 제품 변경과 무관한 부하 민감 테스트 2건을 드러냈다.
-7. rebased `fe330e4f1`과 `a55ee88a8`은 node-drain timeout과 metrics 비차단 회귀를 wall-clock 대신 이벤트 순서 계약으로 결정화했고 rebase 전 동일 tree의 전체 Backend `3,775 passed/3 skipped`를 통과했다.
+7. rebased `9abd922b5`와 `718c9d7e4`는 node-drain timeout과 metrics 비차단 회귀를 wall-clock 대신 이벤트 순서 계약으로 결정화했고 rebase 전 동일 tree의 전체 Backend `3,775 passed/3 skipped`를 통과했다.
 8. 홈 P0 로컬 수치는 클러스터 3, Node 0/0, Pod 108(21+64+23), OutOfSync 0, namespace Pod 707로 교차 일치한다.
 9. G4 홈은 **부분**이다. D-4 코드는 해소됐지만 배포 동일 SHA 라이브 증거가 없고, 잔여 우선순위는 D-3 토큰 → D-1 GitOps 정보 복원 → D-2 연결 흐름 단일화다.
-10. 사람 필요 절대 블로커는 0건이며 다음 3수는 rebased 표적 계약, 단일 push→Gate→Deploy 완주, 동일 SHA 홈 라이브 대조다. 3시간 보고 상한 초과는 본 갱신으로 복구했다.
+10. Backend 3건은 로컬 `7fb2e0a8e`에서 해소됐다. Frontend 1건은 D22 어휘에 맞춘 테스트 기대값 갱신을 frontend 소유자에게 반송했고, 다음 3수는 그 커밋 rebase·직렬 게이트·단일 push다.
 
 ## 현재 상세 근거
 
@@ -27,7 +27,8 @@
 | `1d57d4b1b` | Gate `29686939839`, Deploy `29686974817` | Frontend가 기준 `6d3c7bc76` 객체 부재로 시작 전 실패, Deploy skipped | 같은 CI 결함 재현 |
 | `8d43b5023` | Gate `29687770231`, Deploy `29687802090` | Frontend가 기준 `1d57d4b1b` 객체 부재로 실패, Deploy skipped | 같은 CI 결함 재현 |
 | `1b45b699c` | Gate `29687838966`, Deploy `29687854429` | source-proof가 제목 끝의 모호한 `수정`을 거부, Deploy skipped | 코드 실행 전 커밋 계약 실패 |
-| `a55ee88a8` | 로컬 후보 | rebased timing 계약 후보. rebase 전 전체 Backend 3,775 pass/3 skip, manifest·gate-fast·governance 통과 | rebased 표적 재검증 후 push 후보 |
+| `8f017558a` | Gate `29688137124`, Deploy `29688334831` | Backend 3,772 pass/3 skip/3 fail, Frontend 2,291 pass/1 fail, Deploy skipped | Backend는 로컬 해소, Frontend 어휘 테스트 반송 |
+| `16b3bc5fd` | 로컬 후보 | 문서·CI·timing 계약과 E smoke 증거. pre-rebase 전체 Backend 3,775 pass/3 skip, rebased 표적 140/140 | Frontend 수정 rebase 후 최종 직렬 검증 후보 |
 
 현재 활성 Deploy는 0이다. `d48f3652a` 이후 라이브 digest는 바뀌지 않았으므로 홈 P0를 배포 완주로 기록하지 않는다. 로컬 `gate-fast`, `release-governance-web-patch`, 전체 Backend 3,775 pass/3 skip은 모두 통과했다. 다음 push 전 `origin/dev`를 rebase하고 push 뒤에는 Gate→Deploy 종료까지 추가 push를 금지한다.
 
@@ -63,7 +64,7 @@
 
 ### 현재 블로커와 다음 3수
 
-사람이나 오케스트레이터만 해결할 항목은 0개다. CI shallow-base fetch 구현은 끝났고 전체 GitHub Gate 검증이 남았다. 로컬 게이트는 통과했고, activity overview 500은 원인을 확정했으며, 19:50 E smoke 누락은 21:58에 보충했다. 남은 자체 해소 대상은 단일 배포와 동일 SHA 라이브 증거다. 직전 STATUS가 17:35이고 이번 갱신이 22:02이므로 3시간 상한을 87분 초과했으며, 이후 배포/G# 완료/3시간 중 빠른 시점으로 복구한다.
+사람이나 오케스트레이터만 해결할 절대 블로커는 0개다. CI shallow-base fetch·문서 경계·timing 계약은 로컬 해소됐고, activity overview 500은 원인을 확정했으며, 19:50 E smoke 누락은 21:58에 보충했다. Frontend 어휘 테스트는 소유권 경계에 따라 클로드가 D22 기대값을 갱신 중이다. 남은 자체 해소 대상은 해당 커밋 rebase, 단일 배포와 동일 SHA 라이브 증거다. 직전 STATUS가 17:35이고 이번 갱신이 22:11이므로 3시간 상한을 96분 초과했으며, 이후 배포/G# 완료/3시간 중 빠른 시점으로 복구한다.
 
 1. rebased 원격 변경을 포함한 표적 계약과 `gate-fast`, release governance를 직렬 재검증한다.
 2. `origin/dev`를 다시 rebase하고 검증 후보 한 번만 push해 Gate→Deploy 완주까지 창을 잠근다.
