@@ -6,3 +6,4 @@
 2026-07-19 · G4/G7 · 8866399f5 gate-fast Vitest 2,204 pass/60 fail+3 unhandled, host load 180~215에서 다수 timeout·worker 기동 timeout; 결정적 Helm 1건·operation handoff 3건은 C에 반송 · 정상 부하 최종 digest 재검증 · 미해소
 2026-07-19 · G4/G7 · final a4eb1d638 gate 2265 pass/15 fail + 2 worker timeout · 결정적 Alert/apiComposition/Filesystem 반송 · 상태 미해소
 2026-07-19 · G1/G7 · 870474c44 Dev Gate 29678856691은 main 계보 병합으로 push 범위에 유입된 기존 비준수 커밋을 commit-msg gate가 검사해 실패, Dev Deploy 29678871947은 skipped · 원격 dev 기준점 갱신 후 컨벤션 준수 체크포인트로 동일 검증 tree 재실행 · 해소 진행
+2026-07-19 · G4/G7 · 512f967d1 Dev Gate 29679510750은 Frontend 성공·Backend 3,774 pass/1 fail로 종료, 테스트 support 파일이 runtime source로 오인된 경계 1건; Dev Deploy 29679703660은 skipped · support를 명시적 tests 경계로 이동한 165f7f5c3으로 재검증 · 해소 진행
