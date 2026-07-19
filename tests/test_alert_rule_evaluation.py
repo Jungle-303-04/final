@@ -140,6 +140,46 @@ class StubEvaluationDb:
         return dict(event)
 
 
+class ConcurrentActivationDb(StubEvaluationDb):
+    def __init__(self) -> None:
+        super().__init__()
+        self.activation_results: list[dict[str, Any]] = []
+        self._activation_arrivals = 0
+        self._activation_gate: asyncio.Event | None = None
+        self._activation_lock: asyncio.Lock | None = None
+
+    async def activate_alert_rule_event(
+        self,
+        state: dict[str, Any],
+        event: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        if self._activation_gate is None:
+            self._activation_gate = asyncio.Event()
+            self._activation_lock = asyncio.Lock()
+        self._activation_arrivals += 1
+        if self._activation_arrivals == 2:
+            self._activation_gate.set()
+        await self._activation_gate.wait()
+        assert self._activation_lock is not None
+        key = (state["workspace_id"], state["rule_id"], state["subject_key"])
+        async with self._activation_lock:
+            active_event_id = self.states[key].get("active_event_id")
+            if active_event_id:
+                saved = dict(self.events[str(active_event_id)])
+                created = False
+            else:
+                saved = dict(event)
+                self.events[str(event["event_id"])] = saved
+                self.states[key] = {
+                    **self.states[key],
+                    **state,
+                    "active_event_id": event["event_id"],
+                }
+                created = True
+            self.activation_results.append(saved)
+            return saved, created
+
+
 def run_once(
     db: StubEvaluationDb,
     value: float,
@@ -179,6 +219,49 @@ def test_alert_rule_waits_for_full_duration_then_fires_once() -> None:
     assert len(db.events) == 1
     assert next(iter(db.events.values()))["observed_value"] == 95
     assert [item["transition"] for item in notifications] == ["firing"]
+
+
+def test_concurrent_evaluators_publish_only_the_winning_active_event() -> None:
+    db = ConcurrentActivationDb()
+    current = measurement(92, observed_at=BASE_TIME + timedelta(seconds=20))
+    key = (RULE["workspace_id"], RULE["rule_id"], current.subject_key)
+    db.states[key] = {
+        "workspace_id": RULE["workspace_id"],
+        "rule_id": RULE["rule_id"],
+        "subject_key": current.subject_key,
+        "subject": current.subject,
+        "condition_since": BASE_TIME,
+        "active_event_id": None,
+        "last_observed_value": 90.0,
+        "last_evidence": [
+            {
+                "type": "metric_sample",
+                "observed_at": BASE_TIME.isoformat(),
+            }
+        ],
+        "last_evaluated_at": BASE_TIME,
+    }
+    notifications: list[dict[str, Any]] = []
+
+    async def load(_rule: dict[str, Any]) -> list[AlertMeasurement]:
+        return [current]
+
+    async def run_concurrently() -> list[list[dict[str, Any]]]:
+        engines = [
+            AlertEvaluationEngine(db, load_measurements=load, notify=notifications.append)
+            for _ in range(2)
+        ]
+        return await asyncio.gather(
+            *(engine.evaluate_once(now=current.observed_at) for engine in engines)
+        )
+
+    transitions = asyncio.run(run_concurrently())
+
+    assert len(db.events) == 1
+    assert len(notifications) == 1
+    assert sorted(len(items) for items in transitions) == [0, 1]
+    assert len({item["event_id"] for item in db.activation_results}) == 1
+    assert notifications[0]["event_id"] == next(iter(db.events))
 
 
 def test_alert_rule_resets_pending_and_resolves_only_on_observed_recovery() -> None:

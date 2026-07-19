@@ -195,6 +195,15 @@ class StubInventoryDb:
         assert namespaces == ()
         return [{"resource_type": "workload", "health": "healthy", "count": 1}]
 
+    def inventory_namespace_resource_counts(
+        self,
+        _workspace_id: str,
+        _cluster_id: str,
+        *,
+        namespaces: tuple[str, ...] = (),
+    ) -> list[dict[str, object]]:
+        return []
+
 
 class StubInventoryEvents:
     def __init__(self) -> None:

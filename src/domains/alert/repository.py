@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.alert.models import AlertChannel, AlertEvent, AlertRule, AlertRuleTargetState
@@ -421,52 +421,66 @@ class AlertRuleRepository(DatabaseConnection):
         event_table = AlertEvent.__table__
         rule_table = AlertRule.__table__
         with self.unit_of_work() as conn:
-            current = (
+            insert = pg_insert(event_table).values(**event)
+            saved_event = (
                 conn.execute(
-                    select(state_table)
-                    .where(
-                        state_table.c.workspace_id == state["workspace_id"],
-                        state_table.c.rule_id == state["rule_id"],
-                        state_table.c.subject_key == state["subject_key"],
-                    )
-                    .with_for_update()
+                    insert.on_conflict_do_nothing(
+                        index_elements=[event_table.c.rule_id, event_table.c.subject_key],
+                        index_where=text("status in ('firing', 'acked')"),
+                    ).returning(event_table)
                 )
                 .mappings()
                 .first()
             )
-            if current is not None and current.get("active_event_id"):
-                existing = (
+            created = saved_event is not None
+            if saved_event is None:
+                saved_event = (
                     conn.execute(
                         select(event_table).where(
                             event_table.c.workspace_id == state["workspace_id"],
-                            event_table.c.event_id == current["active_event_id"],
+                            event_table.c.rule_id == state["rule_id"],
+                            event_table.c.subject_key == state["subject_key"],
+                            event_table.c.status.in_(("firing", "acked")),
                         )
                     )
                     .mappings()
                     .one()
                 )
-                return serialize_alert_event(dict(existing)), False
-            saved_event = (
-                conn.execute(pg_insert(event_table).values(**event).returning(event_table))
-                .mappings()
-                .one()
-            )
-            self.upsert_alert_rule_target_state(
-                {**state, "active_event_id": str(event["event_id"])}
+            active_event_id = str(saved_event["event_id"])
+            state_insert = pg_insert(state_table).values(
+                **state,
+                active_event_id=active_event_id,
+                updated_at=func.now(),
             )
             conn.execute(
-                rule_table.update()
-                .where(
-                    rule_table.c.workspace_id == state["workspace_id"],
-                    rule_table.c.rule_id == state["rule_id"],
-                )
-                .values(
-                    last_fired_at=event["fired_at"],
-                    occurrence_count=rule_table.c.occurrence_count + 1,
-                    updated_at=func.now(),
+                state_insert.on_conflict_do_update(
+                    index_elements=[state_table.c.rule_id, state_table.c.subject_key],
+                    set_={
+                        "workspace_id": state_insert.excluded.workspace_id,
+                        "subject": state_insert.excluded.subject,
+                        "condition_since": state_insert.excluded.condition_since,
+                        "active_event_id": state_insert.excluded.active_event_id,
+                        "last_observed_value": state_insert.excluded.last_observed_value,
+                        "last_evidence": state_insert.excluded.last_evidence,
+                        "last_evaluated_at": state_insert.excluded.last_evaluated_at,
+                        "updated_at": func.now(),
+                    },
                 )
             )
-        return serialize_alert_event(dict(saved_event)), True
+            if created:
+                conn.execute(
+                    rule_table.update()
+                    .where(
+                        rule_table.c.workspace_id == state["workspace_id"],
+                        rule_table.c.rule_id == state["rule_id"],
+                    )
+                    .values(
+                        last_fired_at=event["fired_at"],
+                        occurrence_count=rule_table.c.occurrence_count + 1,
+                        updated_at=func.now(),
+                    )
+                )
+        return serialize_alert_event(dict(saved_event)), created
 
     def refresh_alert_rule_event(
         self,

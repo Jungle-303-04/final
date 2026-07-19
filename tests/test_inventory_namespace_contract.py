@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
@@ -160,3 +161,76 @@ def test_inventory_summary_returns_namespace_distribution_from_server() -> None:
 
     assert response.namespaces[0].namespace == "shop"
     assert response.namespaces[0].counts[0].count == 1
+
+
+class _UnavailableNamespaceDb:
+    def __init__(self, *, allowed: bool = True) -> None:
+        self.allowed = allowed
+        self.count_reads = 0
+
+    def can_access(self, *_args: Any) -> bool:
+        return self.allowed
+
+    def latest_inventory_snapshot(self, _workspace_id: str, _cluster_id: str) -> None:
+        return None
+
+    def inventory_product_resource_counts(
+        self,
+        _workspace_id: str,
+        _cluster_id: str,
+        *,
+        namespaces: tuple[str, ...],
+    ) -> list[dict[str, object]]:
+        self.count_reads += 1
+        return []
+
+
+def test_inventory_summary_fails_closed_when_namespace_projection_is_unavailable() -> None:
+    db = _UnavailableNamespaceDb()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            get_inventory_summary(
+                "cluster-a",
+                namespaces=None,
+                current=SimpleNamespace(user_id="user-a", workspace_id="workspace-a"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 503
+    assert db.count_reads == 0
+
+
+def test_inventory_summary_denies_cluster_before_reading_any_projection() -> None:
+    db = _UnavailableNamespaceDb(allowed=False)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            get_inventory_summary(
+                "cluster-forbidden",
+                namespaces=None,
+                current=SimpleNamespace(user_id="user-a", workspace_id="workspace-a"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert db.count_reads == 0
+
+
+def test_inventory_summary_rejects_invalid_namespace_scope_before_count_queries() -> None:
+    db = _UnavailableNamespaceDb()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            get_inventory_summary(
+                "cluster-a",
+                namespaces="shop,,system",
+                current=SimpleNamespace(user_id="user-a", workspace_id="workspace-a"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert db.count_reads == 0

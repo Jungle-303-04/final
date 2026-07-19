@@ -9,6 +9,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 import domains.gitops.repository_discovery as repository_discovery
 import domains.gitops.repository_discovery_router as repository_discovery_router
@@ -21,13 +23,14 @@ from domains.gitops.repository_discovery import (
     manifest_candidates_from_tree,
     normalize_github_repo_ref,
 )
-from domains.gitops.repository_discovery_router import discovery_service, validate_repo_for_wizard
+from domains.gitops.repository_discovery_router import discovery_service, probe_repository
+from domains.identity.dependencies import require_session
 from packages.contracts.gateway.requests import (
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
-    RepoValidateRequest,
 )
 from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
+from packages.runtime.dependencies import get_db
 
 
 class StubGitHubClient:
@@ -232,6 +235,9 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
         def __init__(self) -> None:
             self.saved: list[dict[str, object]] = []
 
+        def accessible_resource_ids(self, *_args):
+            return {"cluster-a"}
+
         def upsert_workspace_credential(self, payload: dict[str, object]) -> dict[str, object]:
             self.saved.append(payload)
             return {**payload, "credential_id": "cred-1"}
@@ -242,10 +248,18 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
     db = StubDb()
 
     async def run():
-        return await validate_repo_for_wizard(
-            RepoValidateRequest(url="https://github.com/owner/service.git", token="ghp_secret"),
-            current=type("Session", (), {"workspace_id": "workspace-1"})(),
+        return await probe_repository(
+            RepositoryProbeRequest(
+                repo_ref="https://github.com/owner/service.git",
+                token="ghp_secret",
+            ),
+            current=type(
+                "Session",
+                (),
+                {"user_id": "user-1", "workspace_id": "workspace-1", "roles": ()},
+            )(),
             db=db,
+            service=RepositoryDiscoveryService(StubGitHubClient()),
         )
 
     response = asyncio.run(run())
@@ -254,9 +268,9 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
         {"workspace_id": "workspace-1", "repo_ref": "owner/service"}
     )
     expected_scope = f"repository:{repository_id}"
-    assert response.accessible is True
-    assert response.normalized == "owner/service"
-    assert response.credential_ref == f"db:github:{expected_scope}"
+    assert response.reachable is True
+    assert response.normalized_repo_ref == "owner/service"
+    assert "ghp_secret" not in response.model_dump_json()
     assert db.saved[0]["workspace_id"] == "workspace-1"
     assert db.saved[0]["scope"] == expected_scope
     assert db.saved[0]["metadata"]["repository_id"] == repository_id
@@ -290,6 +304,9 @@ def test_repo_validate_uses_existing_legacy_repository_id_for_credential_scope(
                 "repo_ref": repo_ref,
             }
 
+        def accessible_resource_ids(self, *_args):
+            return {"cluster-a"}
+
         def upsert_workspace_credential(self, payload: dict[str, object]) -> dict[str, object]:
             self.saved.append(payload)
             return {**payload, "credential_id": "cred-legacy"}
@@ -300,16 +317,21 @@ def test_repo_validate_uses_existing_legacy_repository_id_for_credential_scope(
     db = StubDb()
 
     async def run():
-        return await validate_repo_for_wizard(
-            RepoValidateRequest(url="owner/service", token="ghp_rotated"),
-            current=type("Session", (), {"workspace_id": "workspace-1"})(),
+        return await probe_repository(
+            RepositoryProbeRequest(repo_ref="owner/service", token="ghp_rotated"),
+            current=type(
+                "Session",
+                (),
+                {"user_id": "user-1", "workspace_id": "workspace-1", "roles": ()},
+            )(),
             db=db,
+            service=RepositoryDiscoveryService(StubGitHubClient()),
         )
 
     response = asyncio.run(run())
 
     expected_scope = "repository:repo-legacy-client-id"
-    assert response.credential_ref == f"db:github:{expected_scope}"
+    assert response.reachable is True
     assert db.saved[0]["scope"] == expected_scope
     assert db.saved[0]["metadata"]["repository_id"] == "repo-legacy-client-id"
 
@@ -327,7 +349,103 @@ def test_session_discovery_service_does_not_inherit_ambient_github_token(monkeyp
     service = discovery_service()
 
     assert isinstance(service.client, GitHubRepositoryClient)
-    assert service.client.token == ""
+    assert service.client.token is None
+
+
+def test_repository_probe_token_is_write_only_and_never_returned() -> None:
+    payload = RepositoryProbeRequest(repo_ref="owner/service", token="ghp_do-not-log")
+
+    assert "ghp_do-not-log" not in repr(payload)
+    assert "ghp_do-not-log" not in payload.model_dump_json()
+    schema = RepositoryProbeRequest.model_json_schema()
+    assert schema["properties"]["token"]["writeOnly"] is True
+
+
+def test_repository_discovery_requires_deploy_permission_before_github_access() -> None:
+    class DeniedDb:
+        def accessible_resource_ids(self, *_args):
+            return set()
+
+    class DeniedClient(StubGitHubClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.called = False
+
+        async def repository(self, repo_ref: str) -> dict[str, object]:
+            self.called = True
+            return await super().repository(repo_ref)
+
+    client = DeniedClient()
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            probe_repository(
+                RepositoryProbeRequest(repo_ref="owner/service"),
+                current=type(
+                    "Session",
+                    (),
+                    {"user_id": "user-1", "workspace_id": "workspace-1", "roles": ()},
+                )(),
+                db=DeniedDb(),
+                service=RepositoryDiscoveryService(client),
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert client.called is False
+
+
+def test_all_repository_discovery_endpoints_fail_closed_without_deploy_permission() -> None:
+    class DeniedDb:
+        def accessible_resource_ids(self, *_args):
+            return set()
+
+    class DeniedClient(StubGitHubClient):
+        async def repository(self, _repo_ref: str) -> dict[str, object]:
+            raise AssertionError("GitHub must not be called before DEPLOY_RUN authorization")
+
+    app = FastAPI()
+    app.include_router(repository_discovery_router.router)
+    app.dependency_overrides[require_session] = lambda: type(
+        "Session",
+        (),
+        {"user_id": "user-1", "workspace_id": "workspace-1", "roles": ()},
+    )()
+    app.dependency_overrides[get_db] = DeniedDb
+    app.dependency_overrides[discovery_service] = lambda: RepositoryDiscoveryService(DeniedClient())
+    client = TestClient(app)
+
+    responses = [
+        client.post("/repositories/discovery/probe", json={"repo_ref": "owner/service"}),
+        client.get(
+            "/repositories/discovery/branches",
+            params={"repo_ref": "owner/service"},
+        ),
+        client.get(
+            "/repositories/discovery/manifests",
+            params={"repo_ref": "owner/service", "branch": "trunk"},
+        ),
+        client.post(
+            "/repositories/discovery/validate",
+            json={
+                "repo_ref": "owner/service",
+                "branch": "trunk",
+                "manifest_path": "deploy.yaml",
+            },
+        ),
+    ]
+
+    assert [response.status_code for response in responses] == [403, 403, 403, 403]
+
+
+def test_legacy_admin_repository_discovery_routes_are_removed() -> None:
+    app = FastAPI()
+    app.include_router(repository_discovery_router.router)
+
+    paths = app.openapi()["paths"]
+
+    assert "/repos/validate" not in paths
+    assert "/repos/branches" not in paths
+    assert "/repos/manifests" not in paths
 
 
 def test_admin_wizard_reuses_scoped_token_for_followup_discovery(monkeypatch) -> None:
@@ -366,7 +484,7 @@ def test_admin_wizard_reuses_scoped_token_for_followup_discovery(monkeypatch) ->
                 "encrypted_value": encrypt_credential("ghp_wizard-followup"),
             }
 
-    fallback = RepositoryDiscoveryService(GitHubRepositoryClient(token=""))
+    fallback = RepositoryDiscoveryService(GitHubRepositoryClient(token=None))
     current = type("Session", (), {"workspace_id": "workspace-1"})()
 
     scoped = repository_discovery_router.wizard_discovery_service(

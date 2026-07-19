@@ -58,7 +58,7 @@ async def read_activity_overview(
         reader,
         workspace_id=authorized.workspace_id,
         deployment_application_ids=set(authorized.deployment_application_ids),
-        alert_cluster_ids=set(authorized.readable_cluster_ids),
+        alert_cluster_ids=set(authorized.cluster_ids),
         incident_cluster_ids=set(authorized.incident_cluster_ids),
         from_ms=from_ms,
         to_ms=to_ms,

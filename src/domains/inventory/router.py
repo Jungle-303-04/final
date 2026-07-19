@@ -58,6 +58,7 @@ from packages.runtime.dependencies import (
 )
 
 router = APIRouter()
+INVENTORY_NAMESPACE_SUMMARY_UNAVAILABLE = "inventory namespace summary is unavailable"
 
 
 @router.post(
@@ -473,6 +474,9 @@ async def get_inventory_summary(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_inventory_access(db, current, workspace_id, cluster_id)
     namespace_scope = _inventory_count_namespaces(namespaces)
+    namespace_reader = getattr(db, "inventory_namespace_resource_counts", None)
+    if not callable(namespace_reader):
+        raise HTTPException(status_code=503, detail=INVENTORY_NAMESPACE_SUMMARY_UNAVAILABLE)
     snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
     evidence = project_inventory_resource_counts_evidence(
         snapshot,
@@ -485,15 +489,10 @@ async def get_inventory_summary(
     )
     if evidence.completeness == "observed":
         counts = include_discoverable_zero_counts(counts, snapshot=snapshot)
-    namespace_reader = getattr(db, "inventory_namespace_resource_counts", None)
-    namespace_counts = (
-        namespace_reader(
-            workspace_id,
-            cluster_id,
-            namespaces=namespace_scope,
-        )
-        if callable(namespace_reader)
-        else []
+    namespace_counts = namespace_reader(
+        workspace_id,
+        cluster_id,
+        namespaces=namespace_scope,
     )
     return InventorySummaryResponse(
         cluster_id=cluster_id,

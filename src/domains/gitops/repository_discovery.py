@@ -80,6 +80,7 @@ STATIC_PARSE_WARNING = "static manifest parse only; Kubernetes server dry-run is
 RENDER_PARSE_WARNING = "rendered manifest parse only; Kubernetes server dry-run is not executed"
 
 JsonMap = dict[str, Any]
+_AMBIENT_GITHUB_TOKEN = object()
 
 
 class RepositoryDiscoveryError(Exception):
@@ -139,12 +140,12 @@ class GitHubRepositoryClient:
         self,
         *,
         api_base: str | None = None,
-        token: str | None = None,
+        token: str | None | object = _AMBIENT_GITHUB_TOKEN,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.api_base = (api_base or env(GITHUB_API_BASE_ENV, DEFAULT_GITHUB_API_BASE)).rstrip("/")
-        self.token = github_token() if token is None else token
+        self.token = github_token() if token is _AMBIENT_GITHUB_TOKEN else token
         self.timeout = timeout
         self.transport = transport
 

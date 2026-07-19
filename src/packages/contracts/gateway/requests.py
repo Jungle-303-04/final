@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.demo_seed import (
@@ -676,11 +676,12 @@ class ApplicationConnectRequest(StrictModel):
 
 class RepositoryProbeRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
-
-
-class RepoValidateRequest(StrictModel):
-    url: str = Field(min_length=1, max_length=500)
-    token: str | None = Field(default=None, min_length=1, max_length=500)
+    token: SecretStr | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        json_schema_extra={"writeOnly": True},
+    )
 
 
 class RepositoryManifestValidationRequest(StrictModel):

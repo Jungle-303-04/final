@@ -17,8 +17,9 @@
 - 범위: `to - from`은 0초 초과, 최대 30일. 버킷은 최소 60초이며 최대 366개다.
 - 집계: 서버가 PostgreSQL에서 배포·알림·critical 장애를 버킷별로 집계하고 빈
   버킷을 0으로 채운다. 브라우저가 raw timeline을 30일 집계하지 않는다.
-- 권한: 배포는 `DEPLOYMENT_READ` 애플리케이션, 알림은 읽을 수 있는 클러스터,
-  장애는 `RCA_READ` 클러스터로 각각 제한한다. source 권한을 서로 확대하지 않는다.
+- 권한: 배포는 `DEPLOYMENT_READ` 애플리케이션, 알림은 `INVENTORY_READ` 클러스터,
+  장애는 `RCA_READ` 클러스터로 각각 제한한다. `RCA_READ`만 가진 클러스터가 알림
+  집계에 섞이지 않으며 source 권한을 서로 확대하지 않는다.
 - 캐시: `Cache-Control: no-store`.
 
 ```json
@@ -71,6 +72,11 @@
 `resource_type`은 inventory의 기존 workload projection을 재사용한다. 따라서 raw
 Kubernetes kind를 프론트에서 다시 분류하지 않는다.
 
+namespace projection reader가 런타임 Database에 없으면 빈 배열을 정상값처럼 반환하지
+않고 HTTP 503 `inventory namespace summary is unavailable`로 닫는다. cluster
+`INVENTORY_READ` 거부와 잘못된 namespace scope는 어떤 count query보다 먼저 각각
+403/422로 종료한다.
+
 구현 기준: `InventoryRepository.inventory_namespace_resource_counts`,
 `InventoryNamespaceSummary`, `InventorySummaryResponse.namespaces`.
 
@@ -105,6 +111,14 @@ SSE가 없는 현재 계약에서는 **서버가 주는 상태와 polling interv
 5. `POST /applications/connect`
 6. `GET /repositories/connection-status?repo_ref={owner/repo}`
 
+모든 `/repositories/discovery/*` 호출은 세션 외에도 하나 이상의 concrete target에
+대한 `DEPLOY_RUN` 권한을 요구한다. private repository token은 첫 probe body의
+write-only `token`으로만 받고 Pydantic 표현·JSON에서 redacted된다. probe 성공 뒤
+workspace와 파생 repository ID에 한정된 credential scope로 즉시 암호화하며, 이후
+branches/manifests/validate/connect는 그 암호문을 복호화해 재사용한다. token 원문과
+credential 암호문은 어떤 응답에도 포함하지 않는다. 중복 관리자 전용
+`/repos/validate|branches|manifests` endpoint는 제거됐다.
+
 각 discovery/connect 응답 성공이 위저드의 실제 단계 전환 근거다. 마지막 polling
 응답은 persisted repository 상태를 아래처럼 투영한다.
 
@@ -130,6 +144,10 @@ SSE가 없는 현재 계약에서는 **서버가 주는 상태와 polling interv
   반환한다.
 - 충돌 경로는 새 event ledger나 outbox row를 만들지 않는다. event/outbox에도
   `event_id` conflict guard가 있다.
+- Opsia rule의 최초 동시 activation은 active partial unique index를 conflict target으로
+  사용해 `INSERT ... ON CONFLICT DO NOTHING`으로 경쟁한다. loser는 같은 트랜잭션에서
+  winning active event를 다시 읽고 target state를 그 `event_id`로 upsert한다. 따라서
+  occurrence count와 firing notification은 winner 한 번만 증가·발화한다.
 
 ## 검증 증거와 라이브 간극
 

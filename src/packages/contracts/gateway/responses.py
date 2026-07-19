@@ -3595,16 +3595,6 @@ class RepositoryProbeResponse(StrictModel):
     errors: list[str] = Field(default_factory=list)
 
 
-class RepoValidateResponse(StrictModel):
-    accessible: bool
-    private: bool | None = None
-    default_branch: str | None = None
-    normalized: str
-    reason: str | None = None
-    code: str | None = None
-    credential_ref: str | None = None
-
-
 class RepositoryBranchItem(StrictModel):
     name: str
     protected: bool = False

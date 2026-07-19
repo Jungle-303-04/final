@@ -171,6 +171,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [architecture/agent-port-forward-boundary](architecture/agent-port-forward-boundary.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
 - [argocd-reference-learning-lab](argocd-reference-learning-lab.md)
+- [api-requests/G3-BACKEND-CONTRACTS-RESOLVED](api-requests/G3-BACKEND-CONTRACTS-RESOLVED.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [backend-f-progress](backend-f-progress.md)
 - [backend-f-workqueue](backend-f-workqueue.md)
