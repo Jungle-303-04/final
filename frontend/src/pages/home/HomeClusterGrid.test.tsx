@@ -45,20 +45,17 @@ describe("HomeClusterGrid", () => {
       .getAttribute("href")).toBe("/resources?clusters=cluster-production");
   });
 
-  it("keeps cluster connection as a named Home action", async () => {
-    const connect = vi.fn();
-    const user = userEvent.setup();
+  it("keeps the grid free of a connect card so the header button stays the single entry (D22)", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/home"]}>
           <UnifiedFilterProvider>
-            <HomeClusterGrid clusters={clusters} onConnect={connect} />
+            <HomeClusterGrid clusters={clusters} />
           </UnifiedFilterProvider>
         </MemoryRouter>
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Connect cluster" }));
-    expect(connect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Connect cluster" })).toBeNull();
   });
 });

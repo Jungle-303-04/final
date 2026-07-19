@@ -173,7 +173,7 @@ export function HomeWidgetBoard({
         sensors={sensors}
       >
         <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
-          <div className="grid min-w-0 grid-cols-6 gap-4 min-[1024px]:grid-cols-12">
+          <div className="grid min-w-0 grid-cols-6 gap-3.5 [grid-auto-flow:row_dense] min-[1024px]:grid-cols-12">
             {visibleIds.map((id) => (
               <SortableWidget
                 data={data}

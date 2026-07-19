@@ -112,7 +112,7 @@ export function MultiLine({
               stroke={`var(--color-${dataKey})`}
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={2}
+              strokeWidth={1.4}
               type="monotone"
             />
           ))}
