@@ -144,8 +144,8 @@ class _ActivityDb:
     def activity_overview(self, **kwargs: Any) -> list[dict[str, int]]:
         assert kwargs["workspace_id"] == "workspace-a"
         assert kwargs["deployment_application_ids"] == {"app-a"}
-        assert kwargs["alert_cluster_ids"] == {"cluster-a"}
-        assert kwargs["incident_cluster_ids"] == {"cluster-a", "cluster-rca-only"}
+        assert kwargs["alert_cluster_ids"] == {"cluster-inventory"}
+        assert kwargs["incident_cluster_ids"] == {"cluster-rca"}
         return [
             {
                 "from_ms": kwargs["from_ms"],
@@ -162,9 +162,9 @@ def test_activity_route_exposes_bounded_30_day_aggregate(monkeypatch: pytest.Mon
         return SimpleNamespace(
             workspace_id="workspace-a",
             deployment_application_ids=frozenset({"app-a"}),
-            cluster_ids=frozenset({"cluster-a"}),
-            incident_cluster_ids=frozenset({"cluster-a", "cluster-rca-only"}),
-            readable_cluster_ids=frozenset({"cluster-a", "cluster-rca-only"}),
+            cluster_ids=frozenset({"cluster-inventory"}),
+            incident_cluster_ids=frozenset({"cluster-rca"}),
+            readable_cluster_ids=frozenset({"cluster-inventory", "cluster-rca"}),
         )
 
     monkeypatch.setattr("domains.activity.router.resolve_authorized_timeline_scope", resolve_scope)
