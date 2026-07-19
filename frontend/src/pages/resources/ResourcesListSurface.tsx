@@ -34,6 +34,7 @@ import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
+import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
 
 export function ResourcesListSurface({
   filterList,
@@ -181,7 +182,8 @@ export function ResourcesListSurface({
     listedResources,
   );
   return (
-    <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
+    <div className="grid min-w-0 gap-4" data-slot="resources-view-surface">
+      <ResourcesViewSwitcher onChange={state.setView} view={state.view} />
       <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="sticky top-4 hidden min-w-0 lg:block" data-slot="resources-catalog-rail">
           <ResourcesCatalog
@@ -198,41 +200,38 @@ export function ResourcesListSurface({
             onSelect={state.selectResourceType}
             selectedResourceType={state.selectedResourceType}
           />
-          <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
-            <ResourcesGraphShell
-              breadcrumbs={breadcrumbs}
-              clusterId={state.selectedClusterId ?? "unknown"}
-              frame={physicalTopology}
-              includeDeleted={state.includeDeleted}
-              relationFrame={relationTopology}
-              onSelectRelationResource={selectRelationResource}
-              selectedRelationResourceId={selectedRelationResourceId}
-              onOpenPod={openPod}
-              nodePodsPort={nodePodsPort}
-              onNodePodsUnauthorized={onNodePodsUnauthorized}
-              onRevealServer={revealServer}
-              onSelectAll={rewindToAll}
-              skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
-              topologyPinned={topologyPinned}
-              topologyView={topologyView}
-              onTopologyViewChange={onTopologyViewChange}
-              timelineAtMs={filter.detail.timeAt}
-              timelineFrame={timelineFrame}
-              timelineRange={timelineRange}
-              timelineReplayStatus={replay.status}
-              timelineReplayWindow={{
-                fromMs: replay.availableFromMs,
-                toMs: replay.availableToMs,
-              }}
-              onTimelineAtChange={changeTimelineAt}
-              onTimelineRangeChange={changeTimelineRange}
-              collapsed={filter.detail.graphCollapsed === true}
-              onCollapsedChange={changeGraphCollapsed}
-              onIncludeDeletedChange={state.setIncludeDeleted}
-            />
-          </Surface>
-
-          {listFallback ?? (
+          {state.view === "graph" ? (
+            <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
+              <ResourcesGraphShell
+                breadcrumbs={breadcrumbs}
+                clusterId={state.selectedClusterId ?? "unknown"}
+                frame={physicalTopology}
+                includeDeleted={state.includeDeleted}
+                relationFrame={relationTopology}
+                onSelectRelationResource={selectRelationResource}
+                selectedRelationResourceId={selectedRelationResourceId}
+                onOpenPod={openPod}
+                nodePodsPort={nodePodsPort}
+                onNodePodsUnauthorized={onNodePodsUnauthorized}
+                onRevealServer={revealServer}
+                onSelectAll={rewindToAll}
+                skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
+                topologyPinned={topologyPinned}
+                topologyView={topologyView}
+                onTopologyViewChange={onTopologyViewChange}
+                timelineAtMs={filter.detail.timeAt}
+                timelineFrame={timelineFrame}
+                timelineRange={timelineRange}
+                timelineReplayStatus={replay.status}
+                timelineReplayWindow={{ fromMs: replay.availableFromMs, toMs: replay.availableToMs }}
+                onTimelineAtChange={changeTimelineAt}
+                onTimelineRangeChange={changeTimelineRange}
+                collapsed={filter.detail.graphCollapsed === true}
+                onCollapsedChange={changeGraphCollapsed}
+                onIncludeDeletedChange={state.setIncludeDeleted}
+              />
+            </Surface>
+          ) : listFallback ?? (
             <Surface
               aria-labelledby="resources-list-title"
               className="min-w-0 overflow-hidden"

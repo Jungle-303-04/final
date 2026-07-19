@@ -148,7 +148,7 @@ export type ResourcesMessageKey =
   | "resources.graph.relations.freshness.refreshFailed"
   | "resources.graph.view.aria"
   | "resources.graph.view.physical"
-  | "resources.graph.view.relations"
+  | "resources.graph.view.relations" | "resources.surface.view.aria" | "resources.surface.view.map" | "resources.surface.view.list"
   | "resources.graph.collapse"
   | "resources.graph.expand"
   | "resources.graph.resize"

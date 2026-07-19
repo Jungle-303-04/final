@@ -246,11 +246,6 @@ export function ResourcesPage({
     items: detailNavigationItems,
     onNavigate: state.navigateDetail,
   });
-  const resourcesView = state.view;
-  const setResourcesView = state.setView;
-  useEffect(() => {
-    if (resourcesView === "graph") setResourcesView("table");
-  }, [resourcesView, setResourcesView]);
   useEffect(() => {
     const handleShortcut = (event: Event) => {
       const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;

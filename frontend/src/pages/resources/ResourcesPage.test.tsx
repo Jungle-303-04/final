@@ -299,15 +299,10 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(
       screen.queryByRole("searchbox", { name: "Search displayed results" }),
     ).toBeNull();
-    const includeInactive = screen.getByRole("button", {
-      name: "Include inactive resources",
-    });
-    expect(includeInactive.className).toContain("h-7");
-    expect(includeInactive.closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
-    expect(document.querySelector('[aria-label="Resource filters"]')).toBeNull();
-    expect(screen.getByText("Types currently observed in this cluster")).toBeTruthy();
     expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
+    expect(document.querySelector('[aria-label="Resource filters"]')).toBeNull();
+    expect(screen.getByText("Types currently observed in this cluster")).toBeTruthy();
   });
 
 });

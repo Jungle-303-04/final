@@ -22,15 +22,15 @@ describe("ResourcesPage S4 physical topology", () => {
   it("renders verified servers and pods without re-filtering the response", async () => {
     const physicalPort = resourcesPhysicalTopologyPort();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
       physicalPort,
     );
 
-    expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
+    expect(await screen.findByText("Physical placement")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Resource filters" })).toBeNull();
     expect(screen.getByRole("button", { name: "Include inactive resources" })
       .closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
-    expect(screen.getByText("Physical placement")).toBeTruthy();
     expect(screen.getByRole("group", { name: "Server placement view" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("Topology");
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
@@ -88,7 +88,7 @@ describe("ResourcesPage S4 physical topology", () => {
       loadPhysicalTopology: vi.fn(() => pending.promise),
     });
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
       physicalPort,
     );
 
@@ -108,7 +108,7 @@ describe("ResourcesPage S4 physical topology", () => {
   it("uses content height for servers and keeps collapse in graph=0", async () => {
     const user = userEvent.setup();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
       resourcesPhysicalTopologyPort(),
     );
 
@@ -150,14 +150,14 @@ describe("ResourcesPage S4 physical topology", () => {
       .mockResolvedValueOnce(freshTopology);
     const physicalPort = resourcesPhysicalTopologyPort({ loadPhysicalTopology });
     const rendered = renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
       physicalPort,
     );
     await waitFor(() => expect(loadPhysicalTopology).toHaveBeenCalledTimes(1));
     const firstSignal = loadPhysicalTopology.mock.calls[0]?.[2] as AbortSignal;
 
     await rendered.router.navigate(
-      "/resources?clusters=cluster-1&resources.types=pod&resources.q=fresh",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.q=fresh&resources.view=graph",
     );
     await waitFor(() => expect(loadPhysicalTopology).toHaveBeenCalledTimes(2));
     expect(firstSignal.aborted).toBe(true);
@@ -170,17 +170,17 @@ describe("ResourcesPage S4 physical topology", () => {
 
   it("loads physical placement for a Cluster-only zoom before a resource type is chosen", async () => {
     const physicalPort = resourcesPhysicalTopologyPort();
-    renderEnglishResources("/resources?clusters=cluster-1", physicalPort);
+    renderEnglishResources("/resources?clusters=cluster-1&resources.view=graph", physicalPort);
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "All resources" })).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledOnce();
   });
 
   it("zooms from the unfiltered cluster grid into servers and rewinds to All", async () => {
     const user = userEvent.setup();
     const physicalPort = resourcesPhysicalTopologyPort();
-    renderEnglishResources("/resources?resources.types=pod", physicalPort);
+    renderEnglishResources("/resources?resources.types=pod&resources.view=graph", physicalPort);
 
     expect(await screen.findByRole("region", { name: "Cluster zoom overview" }))
       .toBeTruthy();
@@ -201,7 +201,7 @@ describe("ResourcesPage S4 physical topology", () => {
   it("opens the real node pod summary for an omitted-pod drill-in", async () => {
     const user = userEvent.setup();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
       resourcesPhysicalTopologyPort(),
     );
 
@@ -218,7 +218,7 @@ describe("ResourcesPage S4 physical topology", () => {
   it("keeps multi-Cluster scope honest and skips the physical request", async () => {
     const physicalPort = resourcesPhysicalTopologyPort();
     renderEnglishResources(
-      "/resources?clusters=cluster-1,kubernetes-ops&resources.types=pod",
+      "/resources?clusters=cluster-1,kubernetes-ops&resources.types=pod&resources.view=graph",
       physicalPort,
     );
 
@@ -232,7 +232,7 @@ describe("ResourcesPage S4 physical topology", () => {
   it("opens the real resource detail from a matching physical pod", async () => {
     const user = userEvent.setup();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
       resourcesPhysicalTopologyPort(),
     );
 
@@ -249,7 +249,7 @@ describe("ResourcesPage S4 physical topology", () => {
     const port = resourcesPort();
     renderResources(
       port,
-      "/resources?clusters=cluster-1&resources.types=pod&resources.q=checkout",
+      "/resources?clusters=cluster-1&resources.types=pod&resources.q=checkout&resources.view=graph",
       resourcesClusterPort(),
       undefined,
       "en",
