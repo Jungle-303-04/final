@@ -212,7 +212,7 @@
       "rationale": "The visible catalog and detail must refresh on the shared sixty-second cadence, pause while hidden, retain last-success data, and resume without duplicating an active request."
     },
     "home.load-state.contract": {
-      "destination": "frontend/src/pages/home/HomePage.semantics.test.tsx",
+      "destination": "frontend/src/pages/home/useHomePageState.contract.test.tsx",
       "rationale": "Home must distinguish pending, partial, disconnected, and forbidden cluster evidence without converting an incomplete section into a completed dashboard."
     },
     "home.source-bands.contract": {
@@ -253,7 +253,7 @@
     },
     "gitops.list.search-input": {
       "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
-      "rationale": "GitOps list search must remain a controlled, keyboard-accessible query without duplicating raw input behavior."
+      "rationale": "GitOps rows must not recreate a local search input; deployment discovery belongs to the controlled, keyboard-accessible global filter."
     },
     "gitops.list.status-normalization": {
       "destination": "frontend/src/features/gitops/gitOpsPresentation.test.ts",
@@ -368,7 +368,7 @@
       "rationale": "A future values preview must use the shared portal, focus, Escape, pending, custom-label, and confirmation safety boundary."
     },
     "traffic.overview.unavailable": {
-      "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
+      "destination": "frontend/src/pages/resources/ResourcesPage.views.test.tsx",
       "rationale": "The route shows authorized scope freshness and explicit collector absence; unavailable traffic evidence never becomes zero counts or an empty graph."
     },
     "traffic.overview.contract": {
@@ -376,7 +376,7 @@
       "rationale": "The Python boundary applies workspace, cluster, namespace, and inventory-read scope to outbound-Agent evidence and keeps unavailable flow fields null."
     },
     "traffic.filters.collector-gate": {
-      "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
+      "destination": "frontend/src/pages/resources/ResourcesPage.views.test.tsx",
       "rationale": "Namespace, time, protocol, verdict, sort, page, and drawer state consume collector-backed records and server-owned facets through the shared URL contract."
     },
     "cost.overview.unavailable": {
@@ -705,7 +705,7 @@
     },
     "shell.bottom-dock.sessions": {
       "destination": "frontend/src/app/BottomDock.operationP2.test.tsx",
-      "rationale": "The dock must preserve bounded log sessions and audited operation progress across tabs, collapse state, focus restoration, and terminal outcomes."
+      "rationale": "The dock preserves bounded log sessions, collapse state, and focus restoration while audited operation progress remains available through the single header notification center."
     },
     "shell.namespace-facets.search": {
       "destination": "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
@@ -780,8 +780,8 @@
       "rationale": "The adapter must reject mismatched owner or lifecycle identity and consume server-owned outcomes without parsing Kubernetes names or status in the browser."
     },
     "execution.catalog.presentation": {
-      "destination": "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx",
-      "rationale": "The run rail, selected lifecycle, and bounded log handoff must use only server-issued immutable identities and guidance."
+      "destination": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+      "rationale": "The canonical Resource detail workspace is the sole destination for the planned run rail, selected lifecycle, and bounded log handoff, using only server-issued immutable identities and guidance."
     },
     "execution.definition.safe-contract": {
       "destination": "tests/test_workload_detail.py",
@@ -1024,8 +1024,8 @@
       "rationale": "The workload route must expose only sections backed by the exact authorized Python workload projection and keep unsupported topology, metrics, cost, ownership, GitOps, and Helm evidence explicitly unavailable."
     },
     "workload.execution.integrations": {
-      "destination": "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx",
-      "rationale": "Scheduled execution selection, lifecycle evidence, active refresh, and log handoff must use immutable server-issued run identities without client parsing or guessed ownership."
+      "destination": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+      "rationale": "Scheduled execution selection, lifecycle evidence, active refresh, and log handoff belong to the canonical Resource detail workspace and must use immutable server-issued run identities without client parsing or guessed ownership."
     }
   },
   "classifications": {
@@ -1195,7 +1195,7 @@
               "frontend/src/pages/home/useHomePageState.ts",
               "frontend/src/pages/home/useHomeClusterFrame.ts",
               "frontend/src/pages/home/HomeClusterHealth.tsx",
-              "frontend/src/pages/home/HomePage.semantics.test.tsx",
+              "frontend/src/pages/home/useHomePageState.contract.test.tsx",
               "src/domains/dashboard/fleet_router.py"
             ],
             "requiredBackendContracts": [
@@ -1228,7 +1228,7 @@
             "destinations": [
               "frontend/src/pages/home/HomeIssuesRail.tsx",
               "frontend/src/pages/home/HomePage.tsx",
-              "frontend/src/pages/home/HomePage.semantics.test.tsx",
+              "frontend/src/pages/home/HomePage.test.tsx",
               "src/domains/dashboard/fleet_router.py",
               "src/packages/contracts/gateway/responses.py"
             ],
@@ -1302,7 +1302,7 @@
               "frontend/src/pages/home/HomeSourceBands.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/home/HomePage.test.tsx",
-              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
               "frontend/src/pages/helm/HelmPage.tsx",
               "frontend/src/pages/cost/CostPage.tsx",
               "src/domains/dashboard/home_bands.py",
@@ -6348,7 +6348,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
               "frontend/src/features/traffic/trafficContract.ts"
             ],
             "requiredBackendContracts": [
@@ -6384,7 +6384,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
               "frontend/src/features/traffic/createTrafficAdapter.ts",
               "src/domains/traffic/router.py"
             ],
@@ -7953,13 +7953,13 @@
         {
           "sourceKey": "upstream-ui:shell:bottom-dock:session-tabs:v1",
           "legacyContractIds": [],
-          "symbol": "BottomDock",
-          "interaction": "the bottom dock owns concurrent bounded log tabs and audited operation progress, supports selection, retry, collapse, resize, close, unseen counts, AI handoff, and accessible focus restoration",
+          "symbol": "BottomDock and ProductNotificationCenter session split",
+          "interaction": "the bottom dock owns concurrent bounded log tabs, while the single header notification center owns audited operation progress; together they preserve retry, collapse, resize, close, unseen counts, AI handoff, and accessible focus restoration without duplicate operation UI",
           "transport": "sse",
           "realtime": {
-            "resume": "each log or command tab reconnects with its server cursor and remains independently resumable after another tab becomes active",
-            "backpressure": "bounded stream reducers cap retained lines and operation events while connection generations discard superseded readers",
-            "merge": "events merge only into the tab whose stream or audited command identity matches the server frame"
+            "resume": "each log tab reconnects with its server cursor while each header-owned command status resumes from its audited command identity",
+            "backpressure": "bounded log reducers and the shared operation store cap retained evidence while connection generations discard superseded readers",
+            "merge": "log events merge only into their stream tab and operation events only into the matching header-owned audited command"
           },
           "motion": {
             "reducedMotion": "dock resize and collapse feedback retain semantic state while product motion tokens disable transforms and transitions under reduced motion",
@@ -7971,7 +7971,7 @@
             "destinations": [
               "frontend/src/app/BottomDock.tsx",
               "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
-              "frontend/src/features/operations/OperationStatusCenter.tsx",
+              "frontend/src/app/ProductNotificationCenter.tsx",
               "frontend/src/app/LogStreamTab.tsx"
             ],
             "requiredBackendContracts": [
@@ -7985,7 +7985,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The dock composes two reusable session stores: bounded redacted log SSE and persisted command OperationEvent streams, without duplicating their lifecycle reducers."
+            "rationale": "The dock composes bounded redacted log SSE; persisted command OperationEvent state is surfaced once by ProductNotificationCenter, without restoring the deleted independent OperationStatusCenter."
           }
         },
         {
@@ -8714,7 +8714,7 @@
             "destinations": [
               "src/packages/contracts/log_stream.py",
               "src/domains/log_stream/service.py",
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx"
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -8812,7 +8812,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx",
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
             ],
             "requiredBackendContracts": [
@@ -8838,7 +8838,7 @@
           "opsiaPort": {
             "destinations": [
               "tests/test_log_stream.py",
-              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx"
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream"
@@ -8887,7 +8887,7 @@
           "opsiaPort": {
             "destinations": [
               "tests/test_workload_detail.py",
-              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx"
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.workload_detail"
@@ -8921,12 +8921,12 @@
             "reducedMotion": "refresh status and selected-row feedback remain visible without depending on spin animation",
             "evidence": [
               "references/upstream/web/src/components/execution/BatchExecutionView.tsx",
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx"
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx"
             ]
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
               "frontend/src/features/workload-detail/workloadDetailContract.ts",
               "src/domains/workload_detail/projection.py"
@@ -8941,7 +8941,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product route reveals the execution tab only from collected scheduled-run capability evidence and renders the bounded server catalog without kind-name heuristics."
+            "rationale": "The scheduled-run contract and adapter remain typed, but D3 removed the unique workload execution UI. ResourceDetailWorkspace is the canonical owner where bounded run presentation remains in progress; this classification does not claim that the run rail is currently rendered."
           }
         },
         {
@@ -8958,7 +8958,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
               "frontend/src/features/log-stream/createLogStreamAdapter.ts",
               "src/domains/log_stream/router.py",
               "src/domains/log_stream/service.py"
@@ -8973,7 +8973,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "Log access is checked independently from inventory history and the server re-resolves owner, run, and Pod ownership before each persisted stream batch."
+            "rationale": "Log access is checked independently from inventory history and the server re-resolves owner, run, and Pod ownership before each persisted stream batch. The scheduled-run handoff still has to be exposed from the canonical Resource detail workspace."
           }
         },
         {
@@ -9019,7 +9019,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
               "src/packages/contracts/log_stream.py",
               "tests/test_log_stream.py"
             ],
@@ -9031,8 +9031,8 @@
               "execution.catalog.presentation"
             ],
             "state": "blocked",
-            "blockedReason": "The shipped run rail lacks accessible phase filters and name search, and the Python catalog lacks retention-limit provenance required for truthful retention copy.",
-            "rationale": "The current catalog is bounded and ordered, but the remaining controls are explicitly tracked instead of being reported as complete."
+            "blockedReason": "D3 removed the unique workload run rail; the canonical Resource detail workspace has not yet exposed accessible phase filters or name search, and the Python catalog lacks retention-limit provenance required for truthful retention copy.",
+            "rationale": "The backend catalog is bounded and ordered, but no current Resource detail control claims these presentation features."
           }
         },
         {
@@ -9056,7 +9056,7 @@
             "destinations": [
               "src/packages/contracts/workload_detail.py",
               "src/domains/workload_detail/projection.py",
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx"
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.workload_detail",
@@ -12385,7 +12385,7 @@
             "destinations": [
               "frontend/src/api/log-stream.ts",
               "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
               "src/domains/log_stream/router.py",
               "src/domains/log_stream/service.py",
               "src/packages/contracts/log_stream.py"
@@ -12401,7 +12401,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product already owns a strict scheduled-run catalog and authenticated fetch-SSE log stream with exact owner and run identity; arbitrary source command strings remain excluded."
+            "rationale": "The product owns a strict scheduled-run backend contract and authenticated fetch-SSE log stream with exact owner and run identity; the canonical Resource detail presentation remains in progress and arbitrary source command strings remain excluded."
           }
         },
         {
@@ -12715,13 +12715,13 @@
             "reference.feature.074",
             "reference.feature.206"
           ],
-          "symbol": "GitOpsView fleet list, controlled search, status presentation, and application detail route",
-          "interaction": "the GitOps surface lists authorized deployment observations, normalizes status through one reusable model, filters the visible projection with a controlled accessible search, clears an empty result, expands stable row details, and routes exact application identity to provider-neutral evidence",
+          "symbol": "GitOpsView fleet list, global discovery, status presentation, and application detail route",
+          "interaction": "the GitOps surface lists authorized deployment observations, normalizes status through one reusable model, leaves discovery to the controlled accessible global filter, expands stable row details, and routes exact application identity to provider-neutral evidence without a duplicate local search",
           "transport": "poll",
           "realtime": {
             "resume": "restart the bounded deployment reads on explicit refresh and restart exact detail reads on route identity change",
-            "backpressure": "abort stale reads, keep search local to the already authorized projection, and never issue a request per keystroke",
-            "merge": "replace rows by stable application and binding identity while the search query only changes visibility"
+            "backpressure": "abort stale GitOps reads while the global filter independently debounces and aborts superseded discovery requests",
+            "merge": "replace rows by stable application and binding identity while global scope chips drive the authorized server query"
           },
           "motion": {
             "reducedMotion": "row disclosure keeps expanded state while the shared transition utility suppresses chevron animation for reduced-motion users.",
@@ -12735,7 +12735,7 @@
               "frontend/src/features/gitops/gitOpsPresentation.ts",
               "frontend/src/features/gitops/gitOpsPresentation.test.ts",
               "frontend/src/pages/gitops/GitOpsPage.tsx",
-              "frontend/src/pages/gitops/GitOpsSyncSearch.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTargetDetails.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
@@ -12754,7 +12754,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The current product surface reuses authorized applications and deployment bindings rather than raw controller objects, and the new search/status model contains no provider logic or fake rows. External GitOps CR discovery, labels, topology, health, and managed-resource inventory remain separate typed contract work."
+            "rationale": "The current product surface reuses authorized applications and deployment bindings rather than raw controller objects; ProductHeaderFilter owns discovery and GitOpsSyncTableView renders server-scoped rows without a local search or fake rows. External GitOps CR discovery, labels, topology, health, and managed-resource inventory remain separate typed contract work."
           }
         },
         {
@@ -15246,26 +15246,26 @@
         {
           "sourceKey": "upstream-ui:workload:web:authorized-detail-execution-and-logs:v1",
           "legacyContractIds": [],
-          "symbol": "WorkloadViewRoute typed detail, scheduled execution and log composition",
-          "interaction": "the web workload route loads an exact authorized observation, exposes only available tabs, refreshes active scheduled runs, opens immutable server-selected log targets in the shared dock, and preserves explicit partial and unavailable evidence",
+          "symbol": "WorkloadViewRoute redirect to canonical Resource detail and retained scheduled-run contracts",
+          "interaction": "the legacy workload route redirects an exact identity into the canonical Resource detail workspace; typed scheduled-run and log contracts remain available for the in-progress canonical presentation without restoring unique workload UI",
           "transport": "poll",
           "realtime": {
-            "resume": "reload the workload detail on visibility resume and continue the accepted log stream from its durable cursor",
-            "backpressure": "one abortable detail request, one five-second active-run refresh, and bounded dock lines protect the browser",
-            "merge": "apply detail, runs, lifecycle, and logs only to their exact workload and immutable run identities"
+            "resume": "reload the canonical Resource detail on visibility resume and continue any accepted log stream from its durable cursor",
+            "backpressure": "one abortable Resource detail request and bounded dock lines protect the browser; an active-run refresh is not claimed until the canonical presentation mounts it",
+            "merge": "apply detail and logs only to their exact workload identity; future run lifecycle frames must additionally match immutable run identity"
           },
           "motion": {
             "reducedMotion": "refresh, tab, run selection, stream, partial, and failure feedback remain textual and semantic without animation",
             "evidence": [
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx",
-              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx"
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
             ]
           },
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
-              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
               "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
               "src/domains/workload_detail/router.py"
             ],
@@ -15282,7 +15282,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The Python route and strict adapter replace source hooks and raw status parsing. Scheduled run identity and lifecycle guidance are server-owned."
+            "rationale": "The Python route and strict adapter replace source hooks and raw status parsing, while D3 routes the user to ResourceDetailWorkspace. Scheduled run identity and lifecycle guidance are server-owned, but their canonical Resource detail presentation remains in progress."
           }
         },
         {
