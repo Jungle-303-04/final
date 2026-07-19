@@ -78,7 +78,7 @@ G0 기준은 `fba57b25ef837cc3fa329511ebdd7782b5e25425`다. Dev Gate `2966370207
 
 | KST | SHA | Gate | 실패/결과 | Deploy |
 | --- | --- | --- | --- | --- |
-| 07:49 | `0a53ca1e` | `29664142316` failure | `ResourceDetailSheet` typecheck 1건 + `test_service_entrypoints.py`의 legacy RADAR brand boundary 위반 | `29664157007` cancelled, `29664177831` skipped |
+| 07:49 | `0a53ca1e` | `29664142316` failure | `ResourceDetailSheet` typecheck 1건 + `test_service_entrypoints.py`의 legacy brand token 경계 위반 | `29664157007` cancelled, `29664177831` skipped |
 | 07:53 | `1d98a7ab` | `29664251098` failure | 같은 typecheck와 brand boundary 위반 | `29664292813` skipped |
 | 16:53 | `870474c44` | `29678856691` failure | ancestry 병합으로 유입된 비준수 commit message | `29678871947` skipped |
 | 17:15 | `512f967d1` | `29679510750` failure | Frontend 성공, Backend 3,774 pass/1 fail: test support/runtime 경계 오인 | `29679703660` skipped |
