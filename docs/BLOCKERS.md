@@ -5,3 +5,4 @@
 2026-07-19 · G1 · 비본선 14개 브랜치는 archive tag 검증 후 삭제했고 원격 head는 main/dev/demo만 남음 · G4 MUST+통합 gate 뒤 demo 삭제·main ancestry·dev/main push 재개 · 부분 완료
 2026-07-19 · G4/G7 · 8866399f5 gate-fast Vitest 2,204 pass/60 fail+3 unhandled, host load 180~215에서 다수 timeout·worker 기동 timeout; 결정적 Helm 1건·operation handoff 3건은 C에 반송 · 정상 부하 최종 digest 재검증 · 미해소
 2026-07-19 · G4/G7 · final a4eb1d638 gate 2265 pass/15 fail + 2 worker timeout · 결정적 Alert/apiComposition/Filesystem 반송 · 상태 미해소
+2026-07-19 · G1/G7 · 870474c44 Dev Gate 29678856691은 main 계보 병합으로 push 범위에 유입된 기존 비준수 커밋을 commit-msg gate가 검사해 실패, Dev Deploy 29678871947은 skipped · 원격 dev 기준점 갱신 후 컨벤션 준수 체크포인트로 동일 검증 tree 재실행 · 해소 진행
