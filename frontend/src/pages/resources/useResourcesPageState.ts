@@ -28,10 +28,10 @@ import { resolveResourceType } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 import { useResourcesDetailState } from "./useResourcesDetailState";
 import { useResourceSurfaceView } from "./useResourceSurfaceView";
-
 export function useResourcesPageState(
   port: ResourcesPort,
   refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
+  editorRefreshPaused = false,
 ) {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterScope = useClusterScope();
@@ -94,7 +94,7 @@ export function useResourcesPageState(
     selectedResourceType,
     setRetryBlocks,
   );
-  const automaticRefreshPaused = hasRetryBlocks(retryBlocks);
+  const automaticRefreshPaused = editorRefreshPaused || hasRetryBlocks(retryBlocks);
   const [catalogRevision, setCatalogRevision] = useState(0);
   const [revision, setRevision] = useState(0);
   const [podRevision, setPodRevision] = useState(0);
@@ -124,6 +124,11 @@ export function useResourcesPageState(
   const listRefresh = useServerRefreshScheduler(
     () => setRevision((current) => current + 1),
   );
+  useEffect(() => {
+    if (!editorRefreshPaused) return;
+    catalogRefresh.backgroundFailure();
+    listRefresh.backgroundFailure();
+  }, [catalogRefresh, editorRefreshPaused, listRefresh]);
   const acceptPolicy = useCallback((
     key: "resource_list" | "resource_list_slow" | "metrics_kubernetes",
     controller: ServerRefreshController,
@@ -169,29 +174,29 @@ export function useResourcesPageState(
     const next = withoutRetryBlock(retryBlocksRef.current, target);
     retryBlocksRef.current = next;
     setRetryBlocks(next);
-    if (target === "catalog") {
+      if (editorRefreshPaused) {
+        if (target === "catalog") catalogRefresh.backgroundFailure();
+        else listRefresh.backgroundFailure();
+      } else if (target === "catalog") {
       acceptPolicy("resource_list", catalogRefresh);
     } else if (next.list === undefined && next.detail === undefined) {
       acceptPolicy(listRefreshPolicyKey, listRefresh);
     } else {
       listRefresh.backgroundFailure();
     }
-  }, [acceptPolicy, catalogRefresh, listRefresh, listRefreshPolicyKey]);
+  }, [acceptPolicy, catalogRefresh, editorRefreshPaused, listRefresh, listRefreshPolicyKey]);
   const refresh = useCallback(() => {
     catalogRefresh.requestRefresh();
     listRefresh.requestRefresh();
     setPodRevision((current) => current + 1);
     clusterScope.refresh();
   }, [catalogRefresh, clusterScope, listRefresh]);
-
   useEffect(() => {
     catalogRefresh.backgroundFailure();
   }, [catalogRefresh, selectedClusterId]);
-
   useEffect(() => {
     listRefresh.backgroundFailure();
   }, [includeDeleted, listRefresh, namespace, selectedClusterId, selectedResourceType]);
-
   useEffect(() => {
     const retryAt = scheduledRateLimitRetryAt(retryBlocks);
     if (retryAt === null) return;
@@ -204,7 +209,6 @@ export function useResourcesPageState(
     }, Math.max(0, retryAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [catalogRefresh, listRefresh, retryBlocks]);
-
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
     catalogNamespaces,

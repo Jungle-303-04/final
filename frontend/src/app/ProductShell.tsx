@@ -46,6 +46,8 @@ import {
 } from "../features/ai-assistant/aiAssistantContract";
 import { Toaster, toast } from "../shared/ui/primitives/sonner";
 import { AiAssistantPanel } from "./AiAssistantPanel";
+import { AI_ASSISTANT_PANEL_DEFAULT_WIDTH } from "./AiAssistantResizeHandle";
+import { AiAssistantLayoutProvider } from "../features/ai-assistant/AiAssistantLayoutContext";
 import { createAiAssistantContext } from "./aiAssistantContext";
 import { ProductSidebarTrigger } from "./ProductShellSidebar";
 import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
@@ -155,6 +157,7 @@ function ProductShellFrame({
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
+  const [aiPanelWidth, setAiPanelWidth] = useState(AI_ASSISTANT_PANEL_DEFAULT_WIDTH);
   const diagnosticsDialogRef = useRef<RuntimeDiagnosticsDialogHandle>(null);
   const unifiedFilterRef = useRef<ProductHeaderFilterHandle>(null);
   const location = useLocation();
@@ -225,6 +228,7 @@ function ProductShellFrame({
   const landingRoute = landingProductRouteForReleasedSurfaces(releasedSurfaceIds);
   const settingsHref = filter.navigationHref(routeDefinitionForSurface("settings").path);
   const currentRouteLabel = t(navLabelKeys[currentRoute.id]);
+  const assistantOpen = isAiOpen || Boolean(diagnose?.activeRunId);
   const changeAiOpen = (next: boolean) => {
     if (next && detailWorkspaceOpen && isNarrowAiViewport()) {
       filter.updateDetail(() => ({
@@ -240,7 +244,6 @@ function ProductShellFrame({
     if (!next) diagnose?.closeRun();
     setAiOpen(next);
   };
-
   return (
     <>
       <NamespaceScopeSync port={shellStatePort} />
@@ -375,21 +378,24 @@ function ProductShellFrame({
         </header>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-            <main
-              className="min-h-0 min-w-0 flex-1 overflow-y-auto"
-              id="product-main"
-              tabIndex={-1}
-            >
-              <Outlet />
-            </main>
-            <AiAssistantPanel
-              context={aiContext}
-              onOpenChange={changeAiOpen}
-              open={isAiOpen || Boolean(diagnose?.activeRunId)}
-              port={aiAssistantPort}
-            />
-          </div>
+          <AiAssistantLayoutProvider value={{ open: assistantOpen, width: aiPanelWidth }}>
+            <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+              <main
+                className="relative min-h-0 min-w-0 flex-1 overflow-y-auto"
+                id="product-main"
+                tabIndex={-1}
+              >
+                <Outlet />
+              </main>
+              <AiAssistantPanel
+                context={aiContext}
+                onOpenChange={changeAiOpen}
+                onWidthChange={setAiPanelWidth}
+                open={assistantOpen}
+                port={aiAssistantPort}
+              />
+            </div>
+          </AiAssistantLayoutProvider>
           <BottomDock onAskAi={() => changeAiOpen(true)} />
         </div>
       </SidebarInset>

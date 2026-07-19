@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
+import { ResourceManifestPortFailure } from "../../features/resources/resourceManifestContract";
 import {
   OperationStatusStoreProvider,
   type OperationStatusStore,
@@ -198,6 +199,73 @@ describe("ResourceManifestEditor", () => {
     await waitFor(() => expect(port.applyNow).toHaveBeenCalledOnce());
     expect(start).toHaveBeenCalledWith("cmd-manifest-1");
     expect(await screen.findByText("클러스터 적용 접수")).toBeTruthy();
+  });
+
+  it("pauses refresh while inline editing and rebuilds a stale diff on the latest base", async () => {
+    const user = userEvent.setup();
+    const editing = vi.fn();
+    const yaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: checkout-api-0\n";
+    const source = (base: string) => ({
+      resourceId: POD_DETAIL.resource.inventoryKey,
+      status: "available" as const,
+      choices: [],
+      selected: {
+        applicationId: "app-1",
+        applicationName: "checkout",
+        repositoryRef: "project/checkout",
+        branch: "main",
+        manifestPath: "deploy/app.yaml",
+        environment: "staging",
+      },
+      baseSha: base.repeat(40),
+      sourceSha256: `sha256:${base.repeat(64)}`,
+      content: yaml,
+      reason: null,
+    });
+    const preview = (base: string) => ({
+      valid: true,
+      changed: true,
+      baseSha: base.repeat(40),
+      sourceSha256: `sha256:${base.repeat(64)}`,
+      desiredSha256: `sha256:${"c".repeat(64)}`,
+      diff: `+  generation: ${base}\n`,
+      errors: [],
+      warnings: [],
+      applyAvailability: "available" as const,
+      applyReasonCodes: [],
+      impact: [],
+    });
+    const port: ResourceManifestPort = {
+      loadSource: vi.fn().mockResolvedValueOnce(source("a")).mockResolvedValueOnce(source("d")),
+      preview: vi.fn().mockResolvedValueOnce(preview("a")).mockResolvedValueOnce(preview("d")),
+      approve: vi.fn().mockRejectedValue(new ResourceManifestPortFailure("stale")),
+      applyNow: vi.fn(),
+    };
+    const view = render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourceManifestEditor
+          detail={POD_DETAIL}
+          inline
+          onEditingChange={editing}
+          port={port}
+        />
+      </I18nProvider>,
+    );
+    expect(editing).toHaveBeenCalledWith(true);
+    fireEvent.change(await screen.findByRole("textbox", { name: "YAML 원문" }), {
+      target: { value: `${yaml}  generation: edited\n` },
+    });
+    await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
+    await user.type(screen.getByPlaceholderText("이 Git 변경을 검토해야 하는 이유"), "충돌 검증");
+    await user.click(screen.getByRole("button", { name: "Safe PR 승인" }));
+    expect(await screen.findByText(/서버 최신 원문으로 diff를 다시 만들었습니다/u)).toBeTruthy();
+    expect(screen.getByText(/generation: d/u)).toBeTruthy();
+    expect(port.preview).toHaveBeenLastCalledWith(
+      POD_DETAIL.resource.inventoryKey,
+      expect.objectContaining({ baseSha: "d".repeat(40) }),
+    );
+    view.unmount();
+    expect(editing).toHaveBeenLastCalledWith(false);
   });
 });
 

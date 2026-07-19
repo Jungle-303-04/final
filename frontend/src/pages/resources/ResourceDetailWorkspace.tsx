@@ -20,14 +20,9 @@ import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
-import {
-  ResourceManifestEditor,
-  type ResourceManifestEditorHandle,
-} from "./ResourceManifestEditor";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
 import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
-import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
 import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalCoordinates,
@@ -40,6 +35,7 @@ import { ServiceAccessActions } from "./ServiceAccessActions";
 import type { ChecksPort } from "../../features/checks/checksContract";
 import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
 import { ResourceFilesystemBrowser } from "./ResourceFilesystemBrowser";
+import { useResourceDetailLogTab } from "./useResourceDetailLogTab";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -50,11 +46,13 @@ export function ResourceDetailWorkspace({
   onFullChange,
   onTabChange,
   full,
+  forceFull = false,
   metricHistory,
   resourceIssues,
   checksPort,
   manifestPort,
   onUnauthorized,
+  onManifestEditingChange,
   onNavigateResource,
   onResourceActionInvalidation,
   tab,
@@ -71,11 +69,13 @@ export function ResourceDetailWorkspace({
   onFullChange: (full: boolean) => void;
   onTabChange: (tab: string) => void;
   full: boolean;
+  forceFull?: boolean;
   metricHistory: ResourceMetricsHistoryFrame;
   resourceIssues: ResourceIssuesFrame;
   checksPort?: ChecksPort;
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
+  onManifestEditingChange?: (editing: boolean) => void;
   onNavigateResource: (identity: ResourceIdentity) => void;
   onResourceActionInvalidation?: () => void;
   tab: string;
@@ -90,7 +90,6 @@ export function ResourceDetailWorkspace({
   const clusterScope = useClusterScope();
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
-  const manifestEditorRef = useRef<ResourceManifestEditorHandle>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
@@ -102,12 +101,13 @@ export function ResourceDetailWorkspace({
     ? t("resources.detail.title", { name: identity.name })
     : t("resources.detail.errorTitle");
   const labels = contextLabels(filter.state, t);
-  const logTarget = detail.phase === "ready" ? logStreamTargetFromDetail(detail.data) : null;
+  const { content: logContent, target: logTarget } = useResourceDetailLogTab(detail, dock, tab);
   const managementReadOnly = clusterScope.selectedCluster !== null
     && isManagementCluster(clusterScope.selectedCluster);
   const managementReadOnlyReason = managementReadOnly
     ? t("resources.detail.managementReadOnlyDescription")
     : null;
+  const effectiveFull = full || forceFull;
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -130,7 +130,8 @@ export function ResourceDetailWorkspace({
       aria-labelledby="resource-detail-workspace-title"
       className="motion-detail-workspace grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background shadow-2xl shadow-black/5"
       data-closing={closing || undefined}
-      data-detail-size={full ? "full" : "peek"}
+      data-detail-size={effectiveFull ? "full" : "peek"}
+      data-force-full={forceFull || undefined}
       data-slot="resource-detail-workspace"
       onKeyDown={(event) => {
         if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {
@@ -180,14 +181,15 @@ export function ResourceDetailWorkspace({
             />
           ) : null}
           <Button
-            aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
+            aria-label={effectiveFull ? t("resources.detail.collapse") : t("resources.detail.expand")}
             className="relative shrink-0"
-            onClick={() => onFullChange(!full)}
+            disabled={forceFull}
+            onClick={() => onFullChange(!effectiveFull)}
             size="icon"
             type="button"
             variant="outline"
           >
-            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+            {effectiveFull ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
           </Button>
           <Button
             aria-label={t("resources.detail.close")}
@@ -267,22 +269,13 @@ export function ResourceDetailWorkspace({
               onInvalidate={onResourceActionInvalidation}
               onTerminalReady={setPreferredTerminalTarget}
             />
-            {manifestPort ? (
-              <ResourceManifestEditor
-                detail={detail.data}
-                disabledReason={managementReadOnlyReason}
-                onUnauthorized={onUnauthorized}
-                port={manifestPort}
-                ref={manifestEditorRef}
-              />
-            ) : null}
           </div>
         ) : null}
       </header>
       <div className="min-h-0 min-w-0 overflow-y-auto px-4 pb-6 sm:px-6">
         <ResourceDetailBody
           detail={detail}
-          full={full}
+          full={effectiveFull}
           identity={identity}
           metricHistory={metricHistory}
           metricRange={filter.detail.timeRange ?? "1h"}
@@ -297,6 +290,8 @@ export function ResourceDetailWorkspace({
           resourceIssues={resourceIssues}
           checksPort={checksPort}
           manifestPort={managementReadOnly ? undefined : manifestPort}
+          onManifestEditingChange={onManifestEditingChange}
+          logContent={logContent}
           onManifestUnauthorized={onUnauthorized}
           onTabChange={onTabChange}
           tab={tab}

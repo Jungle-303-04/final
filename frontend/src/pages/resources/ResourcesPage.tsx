@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import {
   isProductContextShortcutId,
@@ -72,6 +72,8 @@ import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefr
 import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
 import type { TrafficPort } from "../../features/traffic/trafficContract";
 import { ResourcesTrafficFlowSurface } from "./ResourcesTrafficFlowSurface";
+import { useAiAssistantLayout } from "../../features/ai-assistant/AiAssistantLayoutContext";
+import { ResourceDetailOverlay } from "./ResourceDetailOverlay";
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
@@ -119,7 +121,9 @@ export function ResourcesPage({
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
-  const state = useResourcesPageState(port, refreshPolicies);
+  const aiLayout = useAiAssistantLayout();
+  const [manifestEditing, setManifestEditing] = useState(false);
+  const state = useResourcesPageState(port, refreshPolicies, manifestEditing);
   const topology = useResourceTopologyViewController();
   const authorityKey = session
     ? `${session.workspaceId}:${session.userId}`
@@ -282,20 +286,22 @@ export function ResourcesPage({
     && filter.state.common.namespaces[0].clusterId === state.selectedClusterId
     ? filter.state.common.namespaces[0].namespace
     : null;
+  const detailFull = state.detailFull || aiLayout.open;
+  const detailInset = aiLayout.open ? aiLayout.width : 0;
   return (
     <div
-      className="flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
-      data-detail-layout={state.detailRequested ? (state.detailFull ? "full" : "peek") : "closed"}
+      className="relative flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
+      data-detail-layout={state.detailRequested ? (detailFull ? "full" : "peek") : "closed"}
     >
       <div
-        aria-hidden={state.detailFull}
+        aria-hidden={detailFull}
         className={state.detailRequested
-          ? state.detailFull
+          ? detailFull
             ? "hidden min-w-0 overflow-y-auto lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-(--motion-page) lg:ease-(--ease-page) motion-reduce:transition-none"
             : "hidden min-w-0 flex-1 overflow-y-auto lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-(--motion-page) lg:ease-(--ease-page) motion-reduce:transition-none"
           : "min-w-0 flex-1 overflow-y-auto"}
         data-slot="resources-list-column"
-        inert={state.detailFull}
+        inert={detailFull}
       >
         <ProductPageFrame>
           <header className="flex min-w-0 justify-end">
@@ -413,25 +419,20 @@ export function ResourcesPage({
         </ProductPageFrame>
       </div>
       {state.detailRequested ? (
-        <div
-          className={cn(
-            "min-w-0 w-full basis-full shrink-0 bg-background transition-[flex-basis,border-color] duration-(--motion-page) ease-(--ease-page) motion-reduce:transition-none",
-            state.detailFull ? "border-l-0 lg:basis-full" : "border-l lg:basis-[42rem]",
-          )}
-          data-detail-size={state.detailFull ? "full" : "peek"}
-          data-slot="resources-detail-column"
-        >
+        <ResourceDetailOverlay forceFull={detailFull} rightInset={detailInset}>
           <ResourceDetailWorkspace
             actionsPort={resourceActionsPort}
             capabilities={resourceCapabilities}
             detail={state.detail}
             full={state.detailFull}
+            forceFull={aiLayout.open}
             identity={state.detailIdentity}
             metricHistory={metricHistory}
             resourceIssues={resourceIssues}
             checksPort={checksPort}
             manifestPort={resourceManifestPort}
             onUnauthorized={reportUnauthorized}
+            onManifestEditingChange={setManifestEditing}
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
             onNavigateResource={state.navigateDetail}
@@ -443,7 +444,7 @@ export function ResourcesPage({
             portForwardSessions={portForwardSessions}
             resourceFilesPort={resourceFilesPort}
           />
-        </div>
+        </ResourceDetailOverlay>
       ) : null}
     </div>
   );
@@ -452,7 +453,6 @@ export function ResourcesPage({
 const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
   loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
 };
-
 function isResourceManifestCreatePort(
   port: ResourceManifestPort | undefined,
 ): port is ResourceManifestPort & ResourceManifestCreatePort {

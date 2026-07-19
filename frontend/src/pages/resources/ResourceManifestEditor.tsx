@@ -44,12 +44,14 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
   inline?: boolean;
   port: ResourceManifestPort;
   onUnauthorized?: () => void;
+  onEditingChange?: (editing: boolean) => void;
 }>(function ResourceManifestEditor({
   detail,
   disabledReason = null,
   inline = false,
   port,
   onUnauthorized,
+  onEditingChange,
 }, ref) {
   const { t } = useI18n();
   const operationStore = useOptionalOperationStatusStore();
@@ -70,6 +72,11 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
   );
 
   useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    if (!inline || disabledReason !== null) return;
+    onEditingChange?.(true);
+    return () => onEditingChange?.(false);
+  }, [disabledReason, inline, onEditingChange]);
 
   const load = async (selectedApplicationId?: string | null) => {
     controller.current?.abort();
@@ -94,7 +101,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
       setPhase("ready");
     } catch (error) {
       if (nextController.signal.aborted) return;
-      handleFailure(error);
+      await handleFailure(error);
     }
   };
   loadRef.current = load;
@@ -116,7 +123,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
       setPreview(result);
       setPhase("ready");
     } catch (error) {
-      handleFailure(error);
+      await handleFailure(error, true);
     }
   };
 
@@ -133,7 +140,7 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
       setReceipt(result);
       setPhase("ready");
     } catch (error) {
-      handleFailure(error);
+      await handleFailure(error, true);
     }
   };
 
@@ -152,13 +159,45 @@ export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
       operationStore?.start(result.commandId);
       setPhase("ready");
     } catch (error) {
-      handleFailure(error);
+      await handleFailure(error, true);
     }
   };
 
-  function handleFailure(error: unknown) {
+  async function handleFailure(error: unknown, recoverStale = false) {
     if (error instanceof ResourceManifestPortFailure && error.code === "unauthorized") {
       onUnauthorized?.();
+    }
+    if (
+      recoverStale &&
+      error instanceof ResourceManifestPortFailure &&
+      error.code === "stale"
+    ) {
+      try {
+        const latest = await port.loadSource(
+          detail.resource.inventoryKey,
+          applicationId || null,
+        );
+        const selected = latest.selected?.applicationId ?? applicationId;
+        const input = editInput(latest, selected, yaml);
+        if (!input) throw new ResourceManifestPortFailure("unavailable");
+        const nextPreview = await port.preview(detail.resource.inventoryKey, input);
+        setSource(latest);
+        setApplicationId(selected);
+        setPreview(nextPreview);
+        setReason("");
+        setReceipt(null);
+        setApplyReceipt(null);
+        setFailure("stale");
+        setPhase("ready");
+        return;
+      } catch (recoveryError) {
+        if (
+          recoveryError instanceof ResourceManifestPortFailure &&
+          recoveryError.code === "unauthorized"
+        ) {
+          onUnauthorized?.();
+        }
+      }
     }
     setFailure(
       error instanceof ResourceManifestPortFailure && error.code === "stale"

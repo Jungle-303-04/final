@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -19,11 +18,9 @@ import type { ResourceDetail } from "../../features/resources/resourcesContract"
 import { I18nProvider } from "../../shared/i18n";
 import { ResourceDetailActions } from "./ResourceDetailActions";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
-
 afterEach(cleanup);
-
 describe("ResourceDetailActions operation handoff", () => {
-  it("keeps receipts A and B exactly once in the notification center after the detail consumer closes", async () => {
+  it("keeps receipts A and B exactly once in the unified Bell after the detail consumer closes", async () => {
     const user = userEvent.setup();
     const actionsPort: ResourceActionsPort = {
       execute: vi.fn()
@@ -34,29 +31,23 @@ describe("ResourceDetailActions operation handoff", () => {
     };
     const store = createOperationStatusStore(completedOperations());
     const view = renderSurface(store, actionsPort, true);
-
     await submitRestart(user);
     await submitRestart(user);
     await waitFor(() => expect(store.getSnapshot("command-b").status).toBe("completed"));
-    await user.click(screen.getByRole("button", { name: /Notifications/u }));
-
+    await user.click(screen.getByRole("button", { name: /^Notifications/u }));
     expect(screen.getAllByText("command-a")).toHaveLength(1);
     expect(screen.getAllByText("command-b")).toHaveLength(1);
     expect(screen.getByText(/correlation-b/u)).toBeTruthy();
-
     view.rerender(renderSurfaceTree(store, actionsPort, false));
-
     expect(screen.queryByText(/correlation-b/u)).toBeNull();
     expect(screen.getAllByText("command-a")).toHaveLength(1);
     expect(screen.getAllByText("command-b")).toHaveLength(1);
     expect(screen.getAllByRole("region")).toHaveLength(1);
     store.dispose();
   });
-
   it("launches a resource investigation with the server identity carried by the detail contract", async () => {
     const user = userEvent.setup();
     const diagnose = diagnosePort();
-
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ProductSessionProvider session={{
@@ -78,7 +69,6 @@ describe("ResourceDetailActions operation handoff", () => {
         </ProductSessionProvider>
       </I18nProvider>,
     );
-
     await user.click(screen.getByRole("button", { name: "Opsia AI" }));
 
     await waitFor(() => expect(diagnose.startResourceRun).toHaveBeenCalledWith(

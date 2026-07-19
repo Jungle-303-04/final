@@ -50,7 +50,6 @@ import { DiagnoseSurface } from "../features/diagnose/DiagnoseSurface";
 import { useOptionalDiagnoseSession } from "../features/diagnose/DiagnoseSessionContext";
 
 const AI_ASSISTANT_PANEL_WIDTH_STORAGE_KEY = "opsia.ai-assistant.panel-width";
-
 interface TranscriptEntry {
   id: number;
   contextKey: string;
@@ -62,15 +61,16 @@ interface ContextSuggestions {
   contextKey: string;
   items: AiAssistantSuggestion[];
 }
-
 export function AiAssistantPanel({
   context,
   onOpenChange,
+  onWidthChange,
   open,
   port,
 }: {
   context: AiAssistantContext;
   onOpenChange: (open: boolean) => void;
+  onWidthChange?: (width: number) => void;
   open: boolean;
   port: AiAssistantPort;
 }) {
@@ -128,6 +128,7 @@ export function AiAssistantPanel({
   }, [contextKey, open, pending, visibleEntries.length]);
 
   useEffect(() => () => pendingController.current?.abort(), [contextKey, open]);
+  useEffect(() => onWidthChange?.(width), [onWidthChange, width]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -167,7 +168,7 @@ export function AiAssistantPanel({
       <aside
         aria-label={t("shell.ai.title")}
         aria-hidden={!open}
-        className="motion-ai-panel relative h-full max-h-full min-h-0 max-w-dvw shrink-0 overflow-hidden border-l-0 bg-background data-[open=true]:border-l"
+        className="motion-ai-panel absolute inset-y-0 right-0 z-40 h-full max-h-full min-h-0 max-w-dvw overflow-hidden border-l-0 bg-background data-[open=true]:border-l"
         data-open={open || undefined}
         data-side="right"
         data-slot="ai-assistant-panel"
@@ -372,7 +373,6 @@ export function AiAssistantPanel({
     dispatchRequest({ type: "cancelled" });
     inputRef.current?.focus();
   }
-
   function commitPanelWidth(nextWidth: number) {
     const committedWidth = clampAiAssistantPanelWidth(nextWidth);
     setWidth(committedWidth);

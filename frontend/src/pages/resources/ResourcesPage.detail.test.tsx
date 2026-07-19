@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -70,7 +70,7 @@ describe("ResourcesPage URL-backed detail", () => {
       .toContain("detail=Pod%2Fshop%2Fcheckout-api-0");
   });
 
-  it("opens as a 480px side panel and expands to a full detail workspace", async () => {
+  it("opens as a resizable inset sheet with the five canonical tabs and expands full", async () => {
     const user = userEvent.setup();
     renderResources(
       resourcesPort(),
@@ -82,12 +82,20 @@ describe("ResourcesPage URL-backed detail", () => {
     const layout = document.querySelector('[data-detail-layout="peek"]');
     const detailColumn = document.querySelector('[data-slot="resources-detail-column"]');
     expect(layout).toBeTruthy();
-    expect(detailColumn?.className).toContain("lg:basis-[42rem]");
+    expect((detailColumn as HTMLElement | null)?.style.getPropertyValue("--resource-detail-width"))
+      .toBe("672px");
     expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
     expect(within(dialog).getByRole("tab", { name: "개요" })).toBeTruthy();
-    expect(within(dialog).queryByRole("tab", { name: "YAML" })).toBeNull();
-    expect(within(dialog).getByRole("tab", { name: "메트릭" })).toBeTruthy();
-    expect(within(dialog).queryByRole("tab", { name: /로그/u })).toBeNull();
+    expect(within(dialog).getByRole("tab", { name: "YAML" })).toBeTruthy();
+    expect(within(dialog).getByRole("tab", { name: /이벤트/u })).toBeTruthy();
+    expect(within(dialog).getByRole("tab", { name: "로그" })).toBeTruthy();
+    expect(within(dialog).getByRole("tab", { name: "RBAC" })).toBeTruthy();
+    expect(within(dialog).queryByRole("tab", { name: "메트릭" })).toBeNull();
+    expect(within(dialog).queryByRole("tab", { name: /관련/u })).toBeNull();
+    const resize = screen.getByRole("separator", { name: "리소스 상세 패널 너비 조절" });
+    fireEvent.keyDown(resize, { key: "ArrowLeft" });
+    expect((detailColumn as HTMLElement).style.getPropertyValue("--resource-detail-width"))
+      .toBe("696px");
     expect(within(dialog).getByRole("button", { name: "선택 리소스 로그 열기" })).toBeTruthy();
     expect(within(dialog).queryByRole("button", { name: /터미널|terminal/iu })).toBeNull();
     const context = within(dialog).getByLabelText("읽기 전용 필터 맥락");
@@ -121,7 +129,7 @@ describe("ResourcesPage URL-backed detail", () => {
     expect(restoredList?.hasAttribute("inert")).toBe(false);
   });
 
-  it("opens the real log stream contract from the detail command bar", async () => {
+  it("opens the real log stream contract inside the detail Logs tab", async () => {
     const user = userEvent.setup();
     const close = vi.fn();
     const logStreamPort = { open: vi.fn(() => close) };
@@ -140,21 +148,23 @@ describe("ResourcesPage URL-backed detail", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
-    await user.click(within(dialog).getByRole("button", { name: "선택 리소스 로그 열기" }));
+    await user.click(within(dialog).getByRole("tab", { name: "로그" }));
 
-    expect(logStreamPort.open).toHaveBeenCalledWith(
-      {
-        type: "pod",
-        clusterId: "cluster-1",
-        namespace: "shop",
-        name: "checkout-api-0",
-        container: null,
-      },
-      expect.objectContaining({
-        onEvent: expect.any(Function),
-        onFailure: expect.any(Function),
-      }),
-    );
+    await waitFor(() => {
+      expect(logStreamPort.open).toHaveBeenCalledWith(
+        {
+          type: "pod",
+          clusterId: "cluster-1",
+          namespace: "shop",
+          name: "checkout-api-0",
+          container: null,
+        },
+        expect.objectContaining({
+          onEvent: expect.any(Function),
+          onFailure: expect.any(Function),
+        }),
+      );
+    });
   });
 
   it("keeps initial focus without trapping sibling surfaces and closes with Escape", async () => {
