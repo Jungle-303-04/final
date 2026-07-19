@@ -84,7 +84,7 @@ const DETAIL_QUERY: ProductDetailQuery = {
 };
 
 const FILTER_SEARCH = serializeProductFilterUrl(FILTER_STATE, DETAIL_QUERY);
-const FILTER_ONLY_SEARCH = serializeProductFilterUrl(FILTER_STATE);
+const FILTER_ONLY_SEARCH = serializeProductFilterUrl({ ...FILTER_STATE, resources: { ...FILTER_STATE.resources, view: "table" } });
 
 const authPort: AuthPort = {
   listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
@@ -178,7 +178,7 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
-  it("redirects the previous workflow path to the current workflow surface", async () => {
+  it("redirects the previous workflow path to Deploy repositories", async () => {
     const { router } = renderProductRouter(
       `/workflows${FILTER_SEARCH}#detail`,
       emptyClusterScope,
@@ -186,7 +186,7 @@ describe("ProductRouter unified filter cutover", () => {
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/gitops${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/deploy${FILTER_ONLY_SEARCH}&section=repositories`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
