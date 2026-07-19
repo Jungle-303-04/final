@@ -135,6 +135,7 @@ describe("post-deploy route smoke helpers", () => {
     expect(Object.keys(ROUTE_CRITICAL_API_CONTRACTS)).toEqual([
       "/home",
       "/resources",
+      "/deploy",
       "/issues",
       "/applications",
       "/timeline",
