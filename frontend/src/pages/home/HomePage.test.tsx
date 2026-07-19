@@ -132,7 +132,7 @@ describe("HomePage three-layer board", () => {
     ]);
 
     await user.click(await screen.findByRole("combobox", { name: "시간 범위" }));
-    await user.click(screen.getByRole("option", { name: "30d" }));
+    await user.click(await screen.findByRole("option", { name: "30d" }));
 
     await waitFor(() => {
       const location = screen.getByTestId("home-location").textContent ?? "";
