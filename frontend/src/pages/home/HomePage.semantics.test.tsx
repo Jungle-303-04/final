@@ -120,8 +120,11 @@ describe("HomePage data semantics", () => {
       }),
     }), ["/?clusters=cluster-1"]);
 
-    expect(await screen.findByText("142.5%", {}, { timeout: 5_000 })).toBeTruthy();
-    const progress = screen.getByRole("progressbar", { name: "CPU 사용률" });
+    const clusterStatus = await screen.findByRole("region", {
+      name: "클러스터 상태",
+    }, { timeout: 5_000 });
+    expect(await within(clusterStatus).findByText("142.5%")).toBeTruthy();
+    const progress = await within(clusterStatus).findByRole("progressbar", { name: "CPU 사용률" });
     expect(progress.getAttribute("aria-valuenow")).toBe("100");
     expect(progress.getAttribute("aria-valuetext")).toContain("142.5%");
   });

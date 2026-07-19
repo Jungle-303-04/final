@@ -1,5 +1,11 @@
 import { CircleAlert } from "lucide-react";
+import { useState } from "react";
 import { routeDefinitionForSurface } from "../../app/productRoutes";
+import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import type {
+  ClusterDisconnectPort,
+  ClustersPort,
+} from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
@@ -11,15 +17,35 @@ import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
 import { clusterResourcesHref } from "../clusters/clusterNavigation";
 import { HomeClusterGrid } from "./HomeClusterGrid";
+import { HomeFleetHeader } from "./HomeFleetHeader";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeInsightsBand } from "./HomeInsightsBand";
 import { HomeLiveBand } from "./HomeLiveBand";
 import { HomeSourceBands } from "./HomeSourceBands";
 import { useHomePageState } from "./useHomePageState";
+import {
+  ClusterDisconnectDialog,
+  type DisconnectPhase,
+} from "../clusters/ClusterDisconnectDialog";
+import { ClusterConnectDialog } from "../clusters/ClusterConnectDialog";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
 
-export function HomePage({ port }: { port: HomePort }) {
+export function HomePage({
+  clusterPort,
+  port,
+}: {
+  clusterPort?: ClustersPort & ClusterDisconnectPort;
+  port: HomePort;
+}) {
   const state = useHomePageState(port);
   const filter = useUnifiedFilter();
+  const session = useOptionalProductSession();
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [disconnectCluster, setDisconnectCluster] = useState<HomeClusterChoice | null>(null);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [disconnectPhase, setDisconnectPhase] = useState<DisconnectPhase>("confirm");
+  const canManageClusters = clusterPort !== undefined &&
+    (session?.roles.includes("service_admin") ?? false);
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -27,10 +53,6 @@ export function HomePage({ port }: { port: HomePort }) {
   if (state.choices.phase === "failed") {
     return <HomeFailureScreen failure={state.choices.failure} onRetry={state.refresh} />;
   }
-  if (state.choices.data.clusters.length === 0) {
-    return <HomeClusterBoundary variant="catalog-unconfirmed" />;
-  }
-
   const selectedCluster = state.choices.data.clusters.find(
     (cluster) => cluster.id === state.selectedClusterId,
   );
@@ -43,8 +65,9 @@ export function HomePage({ port }: { port: HomePort }) {
 
   return (
     <ProductPageFrame>
-      <header className="flex min-w-0 justify-end">
-        {state.refreshIntervalSeconds === null ? null : (
+      <HomeFleetHeader
+        clusters={state.choices.data.clusters}
+        freshness={state.refreshIntervalSeconds === null ? null : (
           <PollingFreshness
             connectionState={homeConnectionState(state)}
             dataUpdatedAt={state.dataUpdatedAt}
@@ -53,10 +76,26 @@ export function HomePage({ port }: { port: HomePort }) {
             onRefresh={state.refresh}
           />
         )}
-      </header>
-      {!state.selectedClusterExists ? (
+        onConnect={canManageClusters ? () => setConnectOpen(true) : undefined}
+      />
+      <HomeClusterGrid
+        clusters={state.choices.data.clusters}
+        disconnectClusterId={disconnectCluster?.id}
+        disconnectPhase={disconnectPhase}
+        onConnect={canManageClusters ? () => setConnectOpen(true) : undefined}
+        onDisconnect={canManageClusters ? (cluster) => {
+          setDisconnectCluster(cluster);
+          setDisconnectOpen(true);
+        } : undefined}
+        onRefresh={state.refresh}
+        selectedClusterId={state.selectedClusterId}
+        selectedUsage={state.overview.phase === "ready" ? state.overview.data.usage : null}
+      />
+      {state.choices.data.clusters.length === 0 ? (
+        canManageClusters ? null : <HomeClusterBoundary variant="catalog-unconfirmed" />
+      ) : !state.selectedClusterExists ? (
         state.clusterSelection.kind === "unfiltered" ? (
-          <HomeClusterGrid clusters={state.choices.data.clusters} />
+          null
         ) : state.clusterSelection.kind === "multiple" ? (
           <HomeClusterBoundary variant="multiple" />
         ) : (
@@ -97,8 +136,39 @@ export function HomePage({ port }: { port: HomePort }) {
           </div>
         </>
       )}
+      {canManageClusters && clusterPort ? (
+        <>
+          <ClusterConnectDialog
+            existingNames={state.choices.data.clusters.map((cluster) => cluster.name)}
+            onConnected={state.refresh}
+            onOpenChange={setConnectOpen}
+            open={connectOpen}
+            port={clusterPort}
+          />
+          <ClusterDisconnectDialog
+            cluster={disconnectCluster}
+            key={disconnectCluster?.id ?? "closed"}
+            onDisconnected={() => state.refresh()}
+            onOpenChange={(open) => {
+              setDisconnectOpen(open);
+              if (!open && !isResumableDisconnectPhase(disconnectPhase)) {
+                setDisconnectCluster(null);
+              }
+            }}
+            onPhaseChange={(clusterId, phase) => {
+              if (disconnectCluster?.id === clusterId) setDisconnectPhase(phase);
+            }}
+            open={disconnectOpen && disconnectCluster !== null}
+            port={clusterPort}
+          />
+        </>
+      ) : null}
     </ProductPageFrame>
   );
+}
+
+function isResumableDisconnectPhase(phase: DisconnectPhase): boolean {
+  return phase === "submitting" || phase === "uninstalling" || phase === "cleanup-required";
 }
 
 function homeConnectionState(state: ReturnType<typeof useHomePageState>) {

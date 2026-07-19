@@ -29,27 +29,24 @@ const cluster: HomeClusterChoice = {
 afterEach(cleanup);
 
 describe("ClusterCard", () => {
-  it("renders the canonical provider, verified metrics, and staggered card entrance", () => {
+  it("renders the D1 status, identity, count line, mini bars, and staggered entrance", () => {
     const { container } = renderCard(cluster, 2);
 
     expect(screen.getByRole("img", { name: "Amazon Elastic Kubernetes Service" })
       .getAttribute("data-provider")).toBe("eks");
-    expect(screen.getByText("Servers 8")).toBeTruthy();
-    expect(screen.getByText("Pods 47")).toBeTruthy();
-    expect(screen.getByText("Apps 6")).toBeTruthy();
-    expect(screen.getByText("Incidents 1")).toBeTruthy();
+    expect(screen.getByText("Critical 1")).toBeTruthy();
+    expect(screen.getByText(
+      "Nodes —/8 ready · Pods 47 · Critical 1 · Namespaces —",
+    )).toBeTruthy();
+    expect(screen.getByRole("img", { name: "CPU —" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Memory —" })).toBeTruthy();
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
     const card = container.querySelector("[data-cluster-id='cluster-1']");
     expect(card?.className).not.toContain("hover:-translate");
     expect(card?.className).not.toContain("hover:shadow");
-    const serverMetric = screen.getByText("Servers 8").parentElement;
-    expect(serverMetric?.className).not.toContain("rounded");
-    expect(serverMetric?.className).not.toContain("bg-muted");
-    expect(serverMetric?.parentElement?.className).toContain("grid-cols-1");
-    expect(serverMetric?.parentElement?.className).toContain("min-[26rem]:grid-cols-2");
-    expect(serverMetric?.parentElement?.className).toContain("sm:grid-cols-4");
+    expect(card?.textContent).not.toContain("Apps 6");
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {
@@ -63,10 +60,10 @@ describe("ClusterCard", () => {
       openIncidentCount: null,
     });
 
-    expect(screen.getByText("Servers —")).toBeTruthy();
-    expect(screen.getByText("Pods —")).toBeTruthy();
-    expect(screen.getByText("Apps —")).toBeTruthy();
-    expect(screen.getByText("Incidents —")).toBeTruthy();
+    expect(screen.getByText(
+      "Nodes —/— ready · Pods — · Critical — · Namespaces —",
+    )).toBeTruthy();
+    expect(screen.queryByText(/\b0\b/u)).toBeNull();
   });
 
   it("does not label a pending registration healthy before it connects", () => {
@@ -77,7 +74,7 @@ describe("ClusterCard", () => {
       openIncidentCount: 0,
     });
 
-    expect(screen.getByText("Waiting for connection")).toBeTruthy();
+    expect(screen.getByText("Warning")).toBeTruthy();
     expect(screen.getByText("Waiting for the outbound agent's first heartbeat.")).toBeTruthy();
   });
 
@@ -91,8 +88,26 @@ describe("ClusterCard", () => {
 
     const card = container.querySelector("[data-cluster-id='cluster-1']");
     expect(card?.className).not.toContain("saturate-0");
-    expect(screen.getByText("Demo simulation")).toBeTruthy();
     expect(screen.getByText("Synthetic read-only evidence; cluster actions are unavailable.")).toBeTruthy();
+  });
+
+  it("uses the selected cluster overview as the only CPU and memory evidence", () => {
+    renderCard(cluster, 0, undefined, undefined, {
+      observedAt: null,
+      podsRunning: 45,
+      podsTotal: 47,
+      nodesReady: 7,
+      nodesTotal: 8,
+      restartCount: 2,
+      cpuPercent: 42.5,
+      memoryPercent: 61.25,
+    });
+
+    expect(screen.getByText(
+      "Nodes 7/8 ready · Pods 47 · Critical 1 · Namespaces —",
+    )).toBeTruthy();
+    expect(screen.getByRole("img", { name: "CPU 42.5%" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Memory 61.25%" })).toBeTruthy();
   });
 
   it("links the whole card to the canonical Resources URL", () => {
@@ -135,6 +150,16 @@ function renderCard(
   index = 0,
   onDisconnect?: () => void,
   disconnectPhase?: "uninstalling",
+  usage?: {
+    observedAt: string | null;
+    podsRunning: number;
+    podsTotal: number;
+    nodesReady: number;
+    nodesTotal: number;
+    restartCount: number;
+    cpuPercent: number | null;
+    memoryPercent: number | null;
+  },
 ) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
@@ -145,6 +170,7 @@ function renderCard(
           index={index}
           disconnectPhase={disconnectPhase}
           onDisconnect={onDisconnect}
+          usage={usage}
         />
       </MemoryRouter>
     </I18nProvider>,

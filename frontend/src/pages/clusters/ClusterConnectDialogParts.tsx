@@ -4,6 +4,11 @@ import type { I18nController } from "../../shared/i18n";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { Spinner } from "../../shared/ui/primitives/spinner";
+import {
+  ConnectStages,
+  type ConnectStageState,
+  type ConnectStageTriplet,
+} from "../../shared/ui/connect";
 import type { ConnectPhase } from "./ClusterConnectDialog";
 
 export function ConnectionCommandStep({
@@ -114,13 +119,6 @@ export function ConnectionCommandStep({
   );
 }
 
-const progressStages = [
-  ["awaiting_install", "clusters.connect.progress.command"],
-  ["agent_connected", "clusters.connect.progress.agent"],
-  ["snapshot_received", "clusters.connect.progress.inventory"],
-  ["ready", "clusters.connect.progress.ready"],
-] as const;
-
 function ConnectionProgress({
   elapsedSeconds,
   stage,
@@ -131,7 +129,6 @@ function ConnectionProgress({
   t: I18nController["t"];
 }) {
   const effectiveStage = stage === "token_issued" ? "awaiting_install" : stage;
-  const currentIndex = Math.max(0, progressStages.findIndex(([value]) => value === effectiveStage));
   const statusKey = effectiveStage === "ready"
     ? "clusters.connect.progress.finalizing"
     : effectiveStage === "agent_connected"
@@ -139,35 +136,10 @@ function ConnectionProgress({
       : effectiveStage === "snapshot_received"
         ? "clusters.connect.progress.prepare"
         : "clusters.connect.progress.waitAgent";
+  const stages = connectionStages(effectiveStage, t);
   return (
     <div className="grid min-h-28 gap-3 rounded-xl border bg-card p-3" role="status">
-      <ol aria-label={t("clusters.connect.progress.aria")} className="grid grid-cols-4 gap-2">
-        {progressStages.map(([value, labelKey], index) => {
-          const complete = index < currentIndex || effectiveStage === "ready";
-          const active = index === currentIndex && effectiveStage !== "ready";
-          return (
-            <li
-              className="motion-live-preview grid min-w-0 justify-items-center gap-1 rounded-lg py-1 text-center"
-              data-complete={complete}
-              key={value}
-            >
-              <span className={complete
-                ? "grid size-6 place-items-center rounded-full bg-status-healthy text-white transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
-                : active
-                  ? "grid size-6 place-items-center rounded-full bg-primary/15 text-primary transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
-                  : "grid size-6 place-items-center rounded-full bg-muted text-muted-foreground transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
-              }>
-                {complete ? <Check aria-hidden="true" className="size-3.5" /> : active
-                  ? <Spinner className="size-3.5" decorative />
-                  : <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}
-              </span>
-              <span className="w-full truncate text-[11px] text-muted-foreground" title={t(labelKey)}>
-                {t(labelKey)}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+      <ConnectStages ariaLabel={t("clusters.connect.progress.aria")} stages={stages} />
       <div className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
         <span className="truncate">{t(statusKey)}</span>
         <span className="shrink-0 tabular-nums">{t("clusters.connect.progress.elapsed", { seconds: elapsedSeconds })}</span>
@@ -177,4 +149,40 @@ function ConnectionProgress({
       ) : null}
     </div>
   );
+}
+
+function connectionStages(
+  stage: ClusterConnectStage,
+  t: I18nController["t"],
+): ConnectStageTriplet {
+  const order: readonly ClusterConnectStage[] = [
+    "awaiting_install",
+    "agent_connected",
+    "snapshot_received",
+    "ready",
+  ];
+  const current = Math.max(0, order.indexOf(stage));
+  const failed = stage === "error" || stage === "expired";
+  const state = (index: number): ConnectStageState => {
+    if (failed) return index === Math.min(current, 2) ? "error" : "pending";
+    if (stage === "ready" || index < current) return "complete";
+    return index === current ? "active" : "pending";
+  };
+  return [
+    {
+      id: "install",
+      label: t("clusters.connect.progress.command"),
+      state: state(0),
+    },
+    {
+      id: "handshake",
+      label: t("clusters.connect.progress.agent"),
+      state: state(1),
+    },
+    {
+      id: "sync",
+      label: t("clusters.connect.progress.inventory"),
+      state: state(2),
+    },
+  ];
 }

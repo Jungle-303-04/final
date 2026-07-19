@@ -9,12 +9,16 @@ import {
 import { createClustersAdapter } from "../../../features/clusters/createClustersAdapter";
 import { createClustersSurface } from "../../../pages/clusters/createClustersSurface";
 
-export function loadClustersSurface(): ComponentType {
-  return createClustersSurface(createClustersAdapter({
+export function createClustersProductPort() {
+  return createClustersAdapter({
     connectCluster,
     getClusterConnectionStatus,
     getCommandStatus,
     reissueClusterConnectCommand,
     unregisterCluster,
-  }));
+  });
+}
+
+export function loadClustersSurface(): ComponentType {
+  return createClustersSurface(createClustersProductPort());
 }

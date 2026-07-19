@@ -22,9 +22,10 @@ describe("HomePage", () => {
     expect(screen.getByRole("img", {
       name: "Amazon Elastic Kubernetes Service",
     })).toBeTruthy();
-    expect(screen.getByText("서버 2")).toBeTruthy();
-    expect(screen.getByText("파드 18")).toBeTruthy();
-    expect(screen.getByText("인시던트 1")).toBeTruthy();
+    expect(screen.getByText(
+      "노드 —/2 ready · 파드 18 · 임계 1 · 네임스페이스 —",
+    )).toBeTruthy();
+    expect(screen.getByText("임계 1")).toBeTruthy();
 
     await user.click(screen.getByRole("link", { name: "cluster-1 리소스 열기" }));
     expect(screen.getByTestId("home-location").textContent)
@@ -48,8 +49,8 @@ describe("HomePage", () => {
 
     expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
       .toBeTruthy();
-    expect(await screen.findByText("42.5%", {}, { timeout: 5_000 })).toBeTruthy();
     const health = screen.getByRole("region", { name: "클러스터 상태" });
+    expect(await within(health).findByText("42.5%", {}, { timeout: 5_000 })).toBeTruthy();
     expect(within(health).getByText("Kubernetes v1.30.7")).toBeTruthy();
     expect(within(health).getByRole("link", { name: /Pod/u }).getAttribute("href"))
       .toBe("/resources?clusters=cluster-1&resources.types=pod");

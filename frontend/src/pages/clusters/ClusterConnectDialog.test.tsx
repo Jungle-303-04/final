@@ -106,7 +106,7 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.loadConnection).mockResolvedValue({
       status: "connected",
       stage: "ready",
-      refreshAfterSeconds: 0.5,
+      refreshAfterSeconds: null,
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -210,32 +210,26 @@ describe("ClusterConnectDialog", () => {
     expect(port.connect).not.toHaveBeenCalled();
   });
 
-  it("shows the server-confirmed ready stage before revealing the completion screen", async () => {
+  it("closes from the server terminal state without inventing a second finalizing poll", async () => {
     const user = userEvent.setup();
+    const onConnected = vi.fn();
     const port = waitingPort();
     const connected = {
       status: "connected" as const,
       stage: "ready" as const,
-      refreshAfterSeconds: 0.5,
+      refreshAfterSeconds: null,
       agentVersion: "2026.07.15",
       lastSeenAt: "2026-07-15T01:02:03Z",
     };
-    let confirmReady: ((value: typeof connected) => void) | undefined;
-    vi.mocked(port.loadConnection)
-      .mockResolvedValueOnce(connected)
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        confirmReady = resolve;
-      }));
-    renderDialog(port);
+    vi.mocked(port.loadConnection).mockResolvedValue(connected);
+    renderHarness(port, onConnected);
 
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     fireEvent.click(screen.getByRole("button", { name: "Generate install command" }));
 
-    expect((await screen.findAllByText("Finalizing the connection")).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Cluster connected")).toBeNull();
-    await waitFor(() => expect(port.loadConnection).toHaveBeenCalledTimes(2), { timeout: 4_000 });
-    confirmReady?.(connected);
-    expect(await screen.findByText("Cluster connected", {}, { timeout: 4_000 })).toBeTruthy();
+    await waitFor(() => expect(onConnected).toHaveBeenCalledOnce());
+    expect(port.loadConnection).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
@@ -285,13 +279,13 @@ function renderDialog(
   );
 }
 
-function renderHarness(port: ClustersPort) {
+function renderHarness(port: ClustersPort, onConnected = vi.fn()) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
         <MemoryRouter>
           <UnifiedFilterProvider>
-            <ConnectionHarness port={port} />
+            <ConnectionHarness onConnected={onConnected} port={port} />
           </UnifiedFilterProvider>
         </MemoryRouter>
       </AuthSessionGateProvider>
@@ -299,14 +293,20 @@ function renderHarness(port: ClustersPort) {
   );
 }
 
-function ConnectionHarness({ port }: { port: ClustersPort }) {
+function ConnectionHarness({
+  onConnected,
+  port,
+}: {
+  onConnected: () => void;
+  port: ClustersPort;
+}) {
   const [open, setOpen] = useState(true);
   return (
     <>
       <button onClick={() => setOpen(true)} type="button">Open connection</button>
       <ClusterConnectDialog
         existingNames={[]}
-        onConnected={vi.fn()}
+        onConnected={onConnected}
         onOpenChange={setOpen}
         open={open}
         port={port}

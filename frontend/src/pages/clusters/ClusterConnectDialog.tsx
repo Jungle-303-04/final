@@ -102,19 +102,15 @@ export function ClusterConnectDialog({
         nextPollAfterSeconds.current = connection.refreshAfterSeconds;
         setConnectionStage(connection.stage);
         if (connection.status === "connected") {
-          if (phase === "finishing") {
-            setPhase("connected");
-            setStep(3);
-            onConnected();
-            return;
-          }
-          setPhase("finishing");
+          setPhase("connected");
+          setStep(3);
+          onConnected();
+          onOpenChange(false);
+          return;
         } else if (connection.status === "expired") {
           setPhase("expired");
         } else if (connection.stage === "error") {
           setPhase("failed");
-        } else if (phase === "finishing") {
-          setPhase("waiting");
         }
       } catch (error) {
         if (!active || isAbortError(error)) return;
@@ -150,7 +146,7 @@ export function ClusterConnectDialog({
       controller.abort();
       if (timeout !== undefined) window.clearTimeout(timeout);
     };
-  }, [onConnected, open, phase, port, receipt, reportUnauthorized, step]);
+  }, [onConnected, onOpenChange, open, phase, port, receipt, reportUnauthorized, step]);
 
   useEffect(() => {
     if (!open || step !== 2 || phase !== "waiting") return;
@@ -187,6 +183,9 @@ export function ClusterConnectDialog({
     setCopyState("idle");
     setServerNameConflict(false);
   };
+  useEffect(() => {
+    if (!open && phase === "connected") reset();
+  }, [open, phase]);
   const register = async () => {
     if (!name.trim() || nameConflict || phase === "submitting") return;
     const controller = new AbortController();
