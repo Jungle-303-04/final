@@ -224,16 +224,32 @@ def test_backend_scope_skips_only_the_redundant_frontend_full_gate() -> None:
 
 def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() -> None:
     frontend = workflow_document()["jobs"]["frontend"]
+    fetch_base = next(
+        step for step in frontend["steps"] if step.get("name") == "Fetch changed frontend base"
+    )
     changed = next(
         step for step in frontend["steps"] if step.get("name") == "Run changed frontend gate"
     )
 
+    assert fetch_base == {
+        "name": "Fetch changed frontend base",
+        "if": "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}",
+        "env": {
+            "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+        },
+        "run": (
+            "set -euo pipefail\n"
+            'test -n "${BASE_SHA}"\n'
+            '! [[ "${BASE_SHA}" =~ ^0+$ ]]\n'
+            'git fetch --no-tags --depth=1 origin "${BASE_SHA}"\n'
+            'git cat-file -e "${BASE_SHA}^{commit}"\n'
+        ),
+    }
     assert changed["name"] == "Run changed frontend gate"
     assert changed["if"] == "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}"
     assert changed["env"] == {
         "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
     }
-    # 얕은 체크아웃에서도 기준 커밋을 확보한 뒤 변경 게이트를 실행한다(부재 시 HEAD^ 폴백)
     assert 'git fetch --no-tags --depth=1 origin "${BASE_SHA}"' in changed["run"]
     assert 'GATE_BASE="${BASE_SHA}" make gate-frontend-changed' in changed["run"]
 

@@ -188,6 +188,17 @@ jobs:
         if: ${{ needs.source-proof.outputs.gate_scope == 'BACKEND' }}
         run: echo "Backend-only change; contract and manifest coverage remains in the backend gate."
 
+      - name: Fetch changed frontend base
+        if: ${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          test -n "${BASE_SHA}"
+          ! [[ "${BASE_SHA}" =~ ^0+$ ]]
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+          git cat-file -e "${BASE_SHA}^{commit}"
+
       - name: Run changed frontend gate
         if: ${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}
         env:

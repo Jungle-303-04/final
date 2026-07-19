@@ -15,3 +15,5 @@
 2026-07-19 · G4 D-2 · 애플리케이션 빈 상태의 GitOps 연결 행동이 실행 가능한 연결 흐름으로 이어지지 않음 · `/deploy` 저장소·동기화 탭의 실제 연결 흐름으로 단일화 · 미해소
 2026-07-19 · G4 D-3 · 라이브 서피스별 라이트/다크 토큰 문법 혼재 · demo 라이트 기준과 단일 제품 토큰으로 8개 canonical 서피스 순차 통일 · 미해소
 2026-07-19 · G4 D-4 · 라이브 홈 카드 수치가 `—`이고 W2~W8 보드가 부재 · 홈 전용 후보 eaa5fdbbb까지 전체 플릿 집계·namespace·exact critical/scope를 구현, 배포·demo 대조 전 · 코드 해소/라이브 미검증
+2026-07-19 · G4/G7 · d48f3652a Dev Gate 29686718943의 Backend job 88192169125는 전체 3,773 pass/3 skip/2 fail로 종료; `docs/evidence/g4/home/*` 6파일이 문서 최대 깊이를 초과하고 Markdown 3파일이 docs 루트 색인에서 누락됨 · 제품/백엔드 결함 아님, `docs/evidence/g4/home-*` 평탄화+README 색인 후 동일 저부하 게이트 재검증 · 해소 진행
+2026-07-19 · G7 · 프론트 전용 6d3c7bc76 Dev Gate 29686856764와 1d57d4b1b Dev Gate 29686939839는 shallow checkout에 각 `github.event.before` 객체가 없어 `gate-frontend-changed`가 `git cat-file` 단계에서 즉시 실패, Deploy 29686902495 등 skipped · FRONTEND 범위에서 기준 SHA를 명시 fetch하고 객체를 확인한 뒤 영향 게이트를 실행하도록 CI 계약 보강 · 해소 진행
