@@ -190,6 +190,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
 - [evidence/live-smoke-2026-07-19-1750](evidence/live-smoke-2026-07-19-1750.md)
+- [evidence/live-smoke-2026-07-19-2158](evidence/live-smoke-2026-07-19-2158.md)
 - [f-coordination-plan](f-coordination-plan.md)
 - [frontend-framework-design](frontend-framework-design.md)
 - [frontend-metrics-queries](frontend-metrics-queries.md)

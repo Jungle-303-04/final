@@ -1,5 +1,76 @@
 # 실행 상태 자기 진단
 
+기준 시각은 2026-07-19 22:02 KST다. 원격 기준 소스는 `1b45b699c302b90d45e70c1a1ca24f532ae6bc72`, 로컬 파이프라인 복구 후보는 `a55ee88a8`이다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+
+## 이전 보고 대비 델타 — 10줄 요약
+
+1. 홈 v3 P0와 로컬 대조 증거를 담은 `d48f3652a`를 dev에 push했으나 배포되지는 않았다.
+2. `d48f3652a` Dev Gate `29686718943`은 Backend 문서 심도·색인 2건이 실패했고 후속 push로 전체 run은 cancelled됐다.
+3. 문서 실패는 제품 결함이 아니며 rebased `c54b8b659`에서 G4 증거 6파일을 평탄화하고 Markdown 3개를 docs 루트에 색인했다.
+4. 후속 프론트 SHA `6d3c7bc76`, `1d57d4b1b`, `8d43b5023` Gate는 shallow checkout의 기준 SHA 객체 누락으로 실패했고 Deploy는 모두 skipped다.
+5. 원격 `1b45b699c`의 첫 CI 보강은 제목 컨벤션으로 Gate `29687838966`이 source-proof에서 실패했다. 로컬 `c54b8b659`은 기준 SHA를 명시 fetch·검증하고 표적 계약 34/34를 통과했다.
+6. 로컬 전체 Backend 첫 실행은 3,774 pass/3 skip/1 timing fail, 두 번째도 3,774 pass/3 skip/1 timing fail로 제품 변경과 무관한 부하 민감 테스트 2건을 드러냈다.
+7. rebased `fe330e4f1`과 `a55ee88a8`은 node-drain timeout과 metrics 비차단 회귀를 wall-clock 대신 이벤트 순서 계약으로 결정화했고 rebase 전 동일 tree의 전체 Backend `3,775 passed/3 skipped`를 통과했다.
+8. 홈 P0 로컬 수치는 클러스터 3, Node 0/0, Pod 108(21+64+23), OutOfSync 0, namespace Pod 707로 교차 일치한다.
+9. G4 홈은 **부분**이다. D-4 코드는 해소됐지만 배포 동일 SHA 라이브 증거가 없고, 잔여 우선순위는 D-3 토큰 → D-1 GitOps 정보 복원 → D-2 연결 흐름 단일화다.
+10. 사람 필요 절대 블로커는 0건이며 다음 3수는 rebased 표적 계약, 단일 push→Gate→Deploy 완주, 동일 SHA 홈 라이브 대조다. 3시간 보고 상한 초과는 본 갱신으로 복구했다.
+
+## 현재 상세 근거
+
+### 파이프라인과 배포
+
+| SHA | Gate/Deploy | 결과 | 판정 |
+| --- | --- | --- | --- |
+| `fdd75a4f2` | Gate `29682394308`, Deploy `29682449227` | 둘 다 success, 신 IA 인증 8라우트 smoke 통과 | 마지막 배포 완주 기준점 |
+| `d48f3652a` | Gate `29686718943` | Backend 3,773 pass/3 skip/2 fail: G4 증거 경로 과심도 6파일과 미색인 Markdown 3파일. 후속 push로 전체 run cancelled | 제품 결함 아님, Deploy 없음 |
+| `6d3c7bc76` | Gate `29686856764`, Deploy `29686902495` | Frontend가 기준 `d48f3652a` 객체 부재로 시작 전 실패, Deploy skipped | CI shallow checkout 결함 |
+| `1d57d4b1b` | Gate `29686939839`, Deploy `29686974817` | Frontend가 기준 `6d3c7bc76` 객체 부재로 시작 전 실패, Deploy skipped | 같은 CI 결함 재현 |
+| `8d43b5023` | Gate `29687770231`, Deploy `29687802090` | Frontend가 기준 `1d57d4b1b` 객체 부재로 실패, Deploy skipped | 같은 CI 결함 재현 |
+| `1b45b699c` | Gate `29687838966`, Deploy `29687854429` | source-proof가 제목 끝의 모호한 `수정`을 거부, Deploy skipped | 코드 실행 전 커밋 계약 실패 |
+| `a55ee88a8` | 로컬 후보 | rebased timing 계약 후보. rebase 전 전체 Backend 3,775 pass/3 skip, manifest·gate-fast·governance 통과 | rebased 표적 재검증 후 push 후보 |
+
+현재 활성 Deploy는 0이다. `d48f3652a` 이후 라이브 digest는 바뀌지 않았으므로 홈 P0를 배포 완주로 기록하지 않는다. 로컬 `gate-fast`, `release-governance-web-patch`, 전체 Backend 3,775 pass/3 skip은 모두 통과했다. 다음 push 전 `origin/dev`를 rebase하고 push 뒤에는 Gate→Deploy 종료까지 추가 push를 금지한다.
+
+### G4 홈과 가시 변화
+
+- 구현 digest: `ed2de67b1`과 선행 홈 계약 커밋. 증거를 포함한 최초 push digest는 `d48f3652a`다.
+- 가시 변화: 한 줄 플릿 요약, 최대 2열 실데이터 클러스터 카드, W2~W8 기본 보드, 공용 Recharts 차트, 실행 가능한 빈/오류 상태, 서피스 이동 시 스크롤 최상단 초기화.
+- 로컬 Chrome: 1280/1440/1920 가로 overflow 0, 연결 모달 실동작, 기간 선택 URL 반영, 리소스·배포 deep link 실재, page error 0.
+- 증거: `docs/evidence/g4/home-demo-v3-1440.png`, `home-product-candidate-light-1440.png`, `home-visual-comparison.md`, `home-numeric-cross-check.md`, `home-click-path.md`.
+- 라이브 activity overview는 epoch-ms `from=2147483648`부터 HTTP 500이다. bucket 산식의 바인드가 PostgreSQL int4로 추론되는 원인을 확정했고, 제품은 값을 만들지 않고 `사용할 수 없음`과 실제 재시도를 노출한다. `BigInteger` 명시와 현재 epoch 회귀 계약은 다음 백엔드 배치다.
+- G4 완료 선언은 금지한다. 같은 배포 SHA의 라이브 캡처·숫자·클릭 증거와 세부 카드/위젯 parity가 아직 없다.
+
+프론트 소유권은 클로드에게 이전됐다. 코덱스는 `frontend/**`를 더 수정·커밋하지 않는다. G4 잔여 우선순위는 공통 재작업을 줄이기 위해 **D-3 토큰 문법 통일 → D-1 저장소·동기화 정보 복원 → D-2 모든 GitOps 연결 행동의 단일 흐름 수렴**이다.
+
+### 클로드가 쓸 수 있는 홈 API 계약
+
+| 요구 | 현재 계약 | 상태 |
+| --- | --- | --- |
+| 클러스터 카드 | `GET /api/fleet/summary` | 즉시 사용 가능: cluster별 nodes/pods, nullable CPU/MEM, health, last_seen |
+| 인시던트 상위 N | `GET /api/issues?issues.status=open&limit=N` | 즉시 사용 가능: 권한 범위 최신순 |
+| namespace Pod 분포 | `GET /api/clusters/{id}/inventory/summary` | 즉시 사용 가능: counts evidence 포함, 전체 fleet은 bounded fan-out 필요 |
+| 비용 요약 | `GET /api/cost/overview?clusters=...&range=24h` | 즉시 사용 가능: micro-unit 비용과 availability/reason codes |
+| 저장소 동기화 합계 | `GET /api/gitops/overview` | 부분: item status/coverage는 있으나 provider-normalized sync counts와 500행 초과 완전성 없음 |
+| 최근 5 Timeline | `POST /api/timeline/snapshots` | 부분: canonical evidence는 있으나 JSON `limit=5`/`has_more` 계약 없음 |
+
+다음 백엔드 우선순위는 (1) GitOps `sync_counts`+completeness, (2) canonical Home recent-five JSON projection, (3) fleet summary 관측 완전성 강화다. 이번 홈 UI 배치가 새로 만든 백엔드 API는 0개이며 기존 계약을 연결했다.
+
+### 아카이브 병합 감사
+
+- `archive/codex/deploy-gate-simplify-20260719`의 `82e7aa10d`는 dev `fba57b25e`와 patch-id가 같아 완전 병합됐다.
+- `archive/codex/frontAlarm`의 실 alert 원장/확인/승격은 현행이 더 강하다. 고정 `cluster-1`, CPU 92%를 원장에 넣는 `/alert-events/test`만 빠졌으며 fake 금지에 따라 의도적으로 제외한다.
+- `archive/ux/rca-incident-card`의 recovery router와 nullable 설명 필드는 의미 이식됐다. 실제 builtin 31개 설명값이 null인 것은 아카이브 미병합이 아니라 source-backed 설명을 채울 별도 인시던트 과제다.
+
+### 현재 블로커와 다음 3수
+
+사람이나 오케스트레이터만 해결할 항목은 0개다. CI shallow-base fetch 구현은 끝났고 전체 GitHub Gate 검증이 남았다. 로컬 게이트는 통과했고, activity overview 500은 원인을 확정했으며, 19:50 E smoke 누락은 21:58에 보충했다. 남은 자체 해소 대상은 단일 배포와 동일 SHA 라이브 증거다. 직전 STATUS가 17:35이고 이번 갱신이 22:02이므로 3시간 상한을 87분 초과했으며, 이후 배포/G# 완료/3시간 중 빠른 시점으로 복구한다.
+
+1. rebased 원격 변경을 포함한 표적 계약과 `gate-fast`, release governance를 직렬 재검증한다.
+2. `origin/dev`를 다시 rebase하고 검증 후보 한 번만 push해 Gate→Deploy 완주까지 창을 잠근다.
+3. 배포 SHA로 라이브 홈 카드 수치·W2~W8·클릭·리사이즈를 demo-freeze-v3와 재대조하고 GOAL/BLOCKERS/STATUS를 갱신한다.
+
+## 이전 보고 상세 — 2026-07-19 17:35 KST
+
 기준 시각은 2026-07-19 17:35 KST다. 기준 소스는 `21aa0f2a1c3f2b1ce41e00b1218d942c4301a9e0`이다. 이 보고서는 구현 완료를 주장하는 문서가 아니다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 1. G4 실체

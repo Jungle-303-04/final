@@ -203,12 +203,7 @@ jobs:
         if: ${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
-        run: |
-          # 얕은 체크아웃에는 BASE_SHA가 없다 — source-proof와 같은 방식으로 확보(없으면 HEAD^ 폴백)
-          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            git fetch --no-tags --depth=1 origin "${BASE_SHA}" || BASE_SHA="$(git rev-parse HEAD^)"
-          fi
-          GATE_BASE="${BASE_SHA}" make gate-frontend-changed
+        run: GATE_BASE="${BASE_SHA}" make gate-frontend-changed
 
       - name: Run deployment smoke frontend gate
         if: ${{ needs.source-proof.outputs.gate_scope == 'SMOKE' }}
