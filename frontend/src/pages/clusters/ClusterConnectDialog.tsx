@@ -40,6 +40,7 @@ const providers: readonly {
   { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
   { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
   { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
+  { id: "onprem", logo: "onprem", labelKey: "clusters.connect.provider.onprem" },
 ];
 
 type WizardStep = 1 | 2 | 3;
@@ -58,12 +59,14 @@ const STEP_MOTION = "motion-wizard-stage";
 export function ClusterConnectDialog({
   existingNames,
   onConnected,
+  onRegistered,
   onOpenChange,
   open,
   port,
 }: {
   existingNames: readonly string[];
   onConnected: () => void;
+  onRegistered?: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   port: ClustersPort;
@@ -201,6 +204,7 @@ export function ClusterConnectDialog({
       nextPollAfterSeconds.current = null;
       setPhase("waiting");
       setStep(2);
+      onRegistered?.();
     } catch (error) {
       if (isAbortError(error)) return;
       if (error instanceof ClustersPortFailure && error.code === "unauthorized") {

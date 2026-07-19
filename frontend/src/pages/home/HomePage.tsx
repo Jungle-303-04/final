@@ -137,6 +137,7 @@ export function HomePage({
           <ClusterConnectDialog
             existingNames={state.choices.data.clusters.map((cluster) => cluster.name)}
             onConnected={state.refresh}
+            onRegistered={state.refresh}
             onOpenChange={setConnectOpen}
             open={connectOpen}
             port={clusterPort}

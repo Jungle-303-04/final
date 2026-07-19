@@ -24,6 +24,17 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.connect).mockReturnValue(pending.promise);
     renderDialog(port);
 
+    expect([
+      "AWS EKS",
+      "Google GKE",
+      "Azure AKS",
+      "Your servers",
+    ].every((name) => screen.getByRole("button", { name }))).toBe(true);
+    const dialog = screen.getByRole("dialog");
+    screen.getByRole("button", { name: "Close" }).focus();
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     await user.click(screen.getByRole("button", { name: "Generate install command" }));
 
@@ -213,6 +224,7 @@ describe("ClusterConnectDialog", () => {
   it("closes from the server terminal state without inventing a second finalizing poll", async () => {
     const user = userEvent.setup();
     const onConnected = vi.fn();
+    const onRegistered = vi.fn();
     const port = waitingPort();
     const connected = {
       status: "connected" as const,
@@ -222,11 +234,12 @@ describe("ClusterConnectDialog", () => {
       lastSeenAt: "2026-07-15T01:02:03Z",
     };
     vi.mocked(port.loadConnection).mockResolvedValue(connected);
-    renderHarness(port, onConnected);
+    renderHarness(port, onConnected, onRegistered);
 
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     fireEvent.click(screen.getByRole("button", { name: "Generate install command" }));
 
+    await waitFor(() => expect(onRegistered).toHaveBeenCalledOnce());
     await waitFor(() => expect(onConnected).toHaveBeenCalledOnce());
     expect(port.loadConnection).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -279,13 +292,21 @@ function renderDialog(
   );
 }
 
-function renderHarness(port: ClustersPort, onConnected = vi.fn()) {
+function renderHarness(
+  port: ClustersPort,
+  onConnected = vi.fn(),
+  onRegistered = vi.fn(),
+) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
         <MemoryRouter>
           <UnifiedFilterProvider>
-            <ConnectionHarness onConnected={onConnected} port={port} />
+            <ConnectionHarness
+              onConnected={onConnected}
+              onRegistered={onRegistered}
+              port={port}
+            />
           </UnifiedFilterProvider>
         </MemoryRouter>
       </AuthSessionGateProvider>
@@ -295,9 +316,11 @@ function renderHarness(port: ClustersPort, onConnected = vi.fn()) {
 
 function ConnectionHarness({
   onConnected,
+  onRegistered,
   port,
 }: {
   onConnected: () => void;
+  onRegistered: () => void;
   port: ClustersPort;
 }) {
   const [open, setOpen] = useState(true);
@@ -307,6 +330,7 @@ function ConnectionHarness({
       <ClusterConnectDialog
         existingNames={[]}
         onConnected={onConnected}
+        onRegistered={onRegistered}
         onOpenChange={setOpen}
         open={open}
         port={port}
