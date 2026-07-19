@@ -19,9 +19,23 @@ describe("repository reflection gate", () => {
   it("keeps the modal in an error state when the connected row cannot be reflected", async () => {
     const user = userEvent.setup();
     const port = gitOpsPort();
-    vi.mocked(port.listSyncTargets)
-      .mockResolvedValueOnce([])
-      .mockRejectedValueOnce(new Error("overview unavailable"));
+    let connected = false;
+    vi.mocked(port.connectApplication).mockImplementation(async () => {
+      connected = true;
+      return {
+        id: "inventory-api",
+        name: "Inventory API",
+        repository: "team/inventory-api",
+        branch: "main",
+        clusterId: "production-cluster",
+        manifestPath: "deploy.yaml",
+      };
+    });
+    vi.mocked(port.listSyncTargets).mockImplementation(() => (
+      connected
+        ? Promise.reject(new Error("overview unavailable"))
+        : Promise.resolve([])
+    ));
     render(
       <MemoryRouter>
         <I18nProvider navigatorLanguage="en-US" storage={null}>
