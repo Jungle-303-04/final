@@ -37,7 +37,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     const user = userEvent.setup();
     const relationPort = resourcesRelationTopologyPort();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&applications=checkout",
+      "/resources?clusters=cluster-1&applications=checkout&view=map",
       relationPort,
     );
 
@@ -48,7 +48,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     )).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')
       ?.getAttribute("data-view")).toBe("relations");
-    expect(readResourcesQuery().has("view")).toBe(false);
+    expect(readResourcesQuery().get("view")).toBe("map");
     expect(relationPort.loadRelationTopology).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ applications: ["checkout"] }),
@@ -79,7 +79,7 @@ describe("ResourcesPage S9 relationship topology", () => {
   it("pins a manual view in the URL and preserves the same Pod morph identity", async () => {
     const user = userEvent.setup();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&view=map",
       resourcesRelationTopologyPort(),
     );
 
@@ -135,7 +135,7 @@ describe("ResourcesPage S9 relationship topology", () => {
       value: animate,
     });
     const rendered = renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&view=map",
       relationPort,
       physicalPort,
     );
@@ -144,7 +144,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(relationPort.loadRelationTopology).not.toHaveBeenCalled();
     await act(async () => {
       await rendered.router.navigate(
-        "/resources?clusters=cluster-1&applications=checkout",
+        "/resources?clusters=cluster-1&applications=checkout&view=map",
       );
     });
     await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
@@ -195,7 +195,7 @@ describe("ResourcesPage S9 relationship topology", () => {
       }),
     });
     const partial = renderEnglishResources(
-      "/resources?clusters=cluster-1&applications=checkout",
+      "/resources?clusters=cluster-1&applications=checkout&view=map",
       partialPort,
     );
 
@@ -220,7 +220,7 @@ describe("ResourcesPage S9 relationship topology", () => {
       }),
     });
     renderEnglishResources(
-      "/resources?clusters=cluster-1&applications=checkout",
+      "/resources?clusters=cluster-1&applications=checkout&view=map",
       unavailablePort,
     );
 

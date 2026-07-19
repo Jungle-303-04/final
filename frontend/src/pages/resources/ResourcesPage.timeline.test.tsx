@@ -24,7 +24,7 @@ describe("ResourcesPage S11 timeline strip", () => {
     const timelinePort = resourcesChangeTimelinePort();
     renderResources(
       resourcesPort(),
-      "/resources?clusters=cluster-1",
+      "/resources?clusters=cluster-1&view=map",
       resourcesClusterPort(),
       vi.fn(),
       "ko",
@@ -120,7 +120,7 @@ describe("ResourcesPage S11 timeline strip", () => {
 function renderTimelineResources(timelinePort: ReturnType<typeof resourcesChangeTimelinePort>) {
   return renderResources(
     resourcesPort(),
-    "/resources?clusters=cluster-1&resources.types=pod",
+    "/resources?clusters=cluster-1&resources.types=pod&view=map",
     resourcesClusterPort(),
     vi.fn(),
     "en",

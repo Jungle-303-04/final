@@ -138,6 +138,14 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     invalid.timeAt,
     invalid.graph,
   );
+  if (
+    detail.resourceSurfaceView === undefined &&
+    hasQueryKey(params, "resources.view") &&
+    invalid.resourcesView.length === 0
+  ) {
+    detail.resourceSurfaceView = state.resources.view === "graph" ? "map" : "list";
+    state.resources.view = "table";
+  }
   return {
     state,
     detail,
@@ -158,7 +166,12 @@ export function serializeProductFilterUrl(
   appendApplicationFilters(pairs, state);
   appendGitOpsFilters(pairs, state);
   appendCheckFilters(pairs, state);
-  appendProductDetail(pairs, detail);
+  appendProductDetail(
+    pairs,
+    detail.resourceSurfaceView === undefined && state.resources.view === "graph"
+      ? { ...detail, resourceSurfaceView: "map" }
+      : detail,
+  );
   return pairs.length > 0 ? `?${pairs.join("&")}` : "";
 }
 
@@ -178,7 +191,6 @@ function appendResourceFilters(pairs: string[], state: UnifiedFilterState) {
   appendList(pairs, "resources.health", normalizeStableList(state.resources.health));
   appendBoolean(pairs, "resources.includeDeleted", state.resources.includeDeleted);
   appendText(pairs, "resources.q", state.resources.query);
-  if (state.resources.view === "graph") appendText(pairs, "resources.view", "graph");
 }
 
 function appendIssueFilters(pairs: string[], state: UnifiedFilterState) {

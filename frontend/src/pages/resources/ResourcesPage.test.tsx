@@ -55,7 +55,6 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "파드, 3개" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "클러스터, 리소스 2개" }));
     await user.click(screen.getByRole("button", { name: "노드, 2개" }));
 
     await waitFor(() => expect(listResources).toHaveBeenLastCalledWith(

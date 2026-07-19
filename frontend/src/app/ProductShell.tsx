@@ -26,10 +26,6 @@ import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 import {
-  UnifiedFilterBar,
-  type UnifiedFilterBarHandle,
-} from "../features/global-filter/UnifiedFilterBar";
-import {
   EMPTY_GLOBAL_FILTER_PORT,
   type GlobalFilterPort,
 } from "../features/global-filter/globalFilterContract";
@@ -87,6 +83,7 @@ import {
 import { PortForwardSessionsProvider } from "../features/service-access/PortForwardSessionsProvider";
 import { PortForwardSessionIndicator } from "./PortForwardSessionIndicator";
 import { ShellSessionsProvider } from "../features/shell-sessions/ShellSessionsProvider";
+import { ProductHeaderFilter, type ProductHeaderFilterHandle } from "./ProductHeaderFilter";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -155,7 +152,7 @@ function ProductShellFrame({
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
   const diagnosticsDialogRef = useRef<RuntimeDiagnosticsDialogHandle>(null);
-  const unifiedFilterRef = useRef<UnifiedFilterBarHandle>(null);
+  const unifiedFilterRef = useRef<ProductHeaderFilterHandle>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
@@ -340,7 +337,8 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="min-w-0 md:col-start-2 md:row-start-1">
-            <UnifiedFilterBar
+            <ProductHeaderFilter
+              activeSurfaceId={activeSurfaceId ?? ""}
               port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
               ref={unifiedFilterRef}
             />

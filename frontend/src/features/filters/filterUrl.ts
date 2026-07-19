@@ -73,6 +73,7 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "topology-view-reset":
       return "replace";
     case "topology-view":
+    case "resource-surface-view":
     case "surface-tab":
     case "time-range":
     case "graph-visibility":

@@ -19,7 +19,7 @@ import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
-import { ResourcesCatalog, ResourcesCatalogMobile } from "./ResourcesCatalog";
+import { ResourcesCatalog } from "./ResourcesCatalog";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
 import { ResourcesListScopeStatus } from "./ResourcesListScopeStatus";
 import {
@@ -35,6 +35,7 @@ import { useResourcesPageState } from "./useResourcesPageState";
 import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
+import { ResourcesToolbar } from "./ResourcesToolbar";
 
 export function ResourcesListSurface({
   filterList,
@@ -184,8 +185,8 @@ export function ResourcesListSurface({
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-view-surface">
       <ResourcesViewSwitcher onChange={state.setView} view={state.view} />
-      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="sticky top-4 hidden min-w-0 lg:block" data-slot="resources-catalog-rail">
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
+        <aside className="min-w-0 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1" data-slot="resources-catalog-rail">
           <ResourcesCatalog
             discovery={state.catalog.phase === "ready" ? state.catalog.data.apiDiscovery : undefined}
             items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
@@ -193,14 +194,8 @@ export function ResourcesListSurface({
             selectedResourceType={state.selectedResourceType}
           />
         </aside>
-        <div className="grid min-w-0 gap-4 overflow-x-hidden">
-          <ResourcesCatalogMobile
-            discovery={state.catalog.phase === "ready" ? state.catalog.data.apiDiscovery : undefined}
-            items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
-            onSelect={state.selectResourceType}
-            selectedResourceType={state.selectedResourceType}
-          />
-          {state.view === "graph" ? (
+        <div className="grid min-w-0 gap-4 overflow-x-hidden lg:col-start-1 lg:row-start-1">
+          {state.view === "map" ? (
             <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
               <ResourcesGraphShell
                 breadcrumbs={breadcrumbs}
@@ -237,12 +232,16 @@ export function ResourcesListSurface({
               className="min-w-0 overflow-hidden"
               id="resources-list-surface"
             >
-              <div className="border-b px-4 py-3">
+              <div className="flex min-w-0 items-center justify-between gap-2 border-b px-4 py-3">
                 <h3 className="font-medium" id="resources-list-title">
                   {filter.state.resources.types.length === 0
                     ? t("resources.list.allTitle")
                     : filter.state.resources.types.map(humanizeFilterValue).join(", ")}
                 </h3>
+                <ResourcesToolbar
+                  includeDeleted={state.includeDeleted}
+                  onIncludeDeletedChange={state.setIncludeDeleted}
+                />
               </div>
               <ResourcesListBody
                 filterList={filterList}

@@ -27,6 +27,7 @@ import {
 import { resolveResourceType } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 import { useResourcesDetailState } from "./useResourcesDetailState";
+import { useResourceSurfaceView } from "./useResourceSurfaceView";
 
 export function useResourcesPageState(
   port: ResourcesPort,
@@ -65,12 +66,17 @@ export function useResourcesPageState(
     filter.state.common.labels.length === 0 &&
     filter.state.resources.health.length === 0 &&
     filter.state.resources.query.length === 0;
-  const view = filter.state.resources.view;
   const listQuerySupported = listFiltersSupported;
   const includeDeleted = filter.state.resources.includeDeleted;
   const choices = clusterScope.collection;
   const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
   const retryBlocksRef = useRef(retryBlocks);
+  const clearMapRetryBlocks = useCallback(() => {
+    setRetryBlocks((current) =>
+      withoutRetryBlock(withoutRetryBlock(current, "catalog"), "list"),
+    );
+  }, []);
+  const surface = useResourceSurfaceView(clearMapRetryBlocks);
   useEffect(() => {
     retryBlocksRef.current = retryBlocks;
   }, [retryBlocks]);
@@ -81,6 +87,7 @@ export function useResourcesPageState(
     detailTarget,
     navigateDetail,
     openDetail,
+    openDetailTarget,
     registerRowButton,
   } = useResourcesDetailState(
     selectedClusterId,
@@ -257,7 +264,7 @@ export function useResourcesPageState(
       detailFull: filter.detail.full,
       filterProjectionUnsupported:
         !listFiltersSupported,
-      view,
+      view: surface.view,
       search: filter.state.resources.query,
       namespace,
       includeDeleted,
@@ -336,20 +343,7 @@ export function useResourcesPageState(
           value ? "chip-add" : "chip-remove",
         );
       },
-      setView(value: typeof view) {
-        if (value === "graph") {
-          setRetryBlocks((current) =>
-            withoutRetryBlock(withoutRetryBlock(current, "catalog"), "list"),
-          );
-        }
-        filter.updateFilters(
-          (current) => ({
-            ...current,
-            resources: { ...current.resources, view: value },
-          }),
-          "view-change",
-        );
-      },
+      setView: surface.setView,
       setDetailTab(value: string) {
         filter.updateDetail(
           (current) => ({ ...current, tab: value }),
@@ -363,6 +357,7 @@ export function useResourcesPageState(
         );
       },
       openDetail,
+      openDetailTarget,
       navigateDetail,
       closeDetail,
       registerRowButton,
@@ -378,6 +373,7 @@ export function useResourcesPageState(
       namespace,
       navigateDetail,
       openDetail,
+      openDetailTarget,
       refresh,
       refreshAfterSeconds,
       requestResourceEventInvalidation,
@@ -395,7 +391,7 @@ export function useResourcesPageState(
       canonicalTypes.length,
       listFiltersSupported,
       clusterScope.selection,
-      view,
+      surface,
       legacyTypeResolution.kind,
     ],
   );

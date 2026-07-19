@@ -16,6 +16,7 @@ import {
   decodeResourceDetail,
   decodeResourceTarget,
   encodeResourceDetail,
+  encodeResourceTarget,
 } from "./resourcesUrlState";
 
 export function useResourcesDetailState(
@@ -160,6 +161,21 @@ export function useResourcesDetailState(
     );
   }, [filter, selectedResourceType]);
 
+  const openDetailTarget = useCallback((clusterId: string, identity: ResourceIdentity) => {
+    const target = encodeResourceTarget(clusterId, identity);
+    filter.updateDetail(
+      (current) => ({
+        ...current,
+        detail: null,
+        full: false,
+        resource: target.resource,
+        resourceKind: target.kind,
+        tab: null,
+      }),
+      "detail-open",
+    );
+  }, [filter]);
+
   const registerRowButton = useCallback(
     (identity: ResourceIdentity, element: HTMLButtonElement | null) => {
       const key = identityKey(identity);
@@ -175,6 +191,7 @@ export function useResourcesDetailState(
     detailRequested,
     detailTarget,
     openDetail,
+    openDetailTarget,
     navigateDetail,
     registerRowButton,
   };

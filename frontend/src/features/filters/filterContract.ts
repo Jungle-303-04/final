@@ -11,6 +11,7 @@ export interface KubernetesLabelFilter {
 }
 
 export type ResourceView = "graph" | "table";
+export type ResourceSurfaceView = "map" | "list" | "flow";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
 export type CostRange = "6h" | "24h" | "7d";
 export type TrafficSince = "1m" | "5m" | "15m" | "1h";
@@ -82,6 +83,7 @@ export interface ProductDetailQuery {
   tab: string | null;
   full: boolean;
   node: string | null;
+  resourceSurfaceView?: ResourceSurfaceView | null;
   resourceTopologyView?: "physical" | "relations" | null;
   workflowPlan?: string | null;
   workflowView?: "overview" | "edit" | "runs" | "yaml" | null;
@@ -161,6 +163,7 @@ export type DetailMutationIntent =
   | "detail-workload-default"
   | "detail-workload-recovery"
   | "detail-expand"
+  | "resource-surface-view"
   | "topology-view"
   | "topology-view-reset"
   | "time-range"

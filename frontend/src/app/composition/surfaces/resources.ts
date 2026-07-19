@@ -25,6 +25,10 @@ import {
   resolveServiceAccess,
   runScopedMetricQuery,
   startServiceRequest,
+  connectTrafficSource,
+  getTrafficOverview,
+  getTrafficSources,
+  setTrafficSource,
 } from "../../../api";
 import type { HomePort } from "../../../features/home/homeContract";
 import { createPodTerminalAdapter } from "../../../features/pod-terminal/createPodTerminalAdapter";
@@ -45,6 +49,7 @@ import type { PortForwardSessionPort } from "../../../features/service-access/po
 import type { ResourceFilesPort } from "../../../features/resource-files/resourceFilesContract";
 import { createChecksProductPort } from "./checks";
 import type { ResourceIssuesPort } from "../../../features/issues/resourceIssuesContract";
+import { createTrafficAdapter } from "../../../features/traffic/createTrafficAdapter";
 
 export function loadResourcesSurface(
   homePort: HomePort,
@@ -109,5 +114,11 @@ export function loadResourcesSurface(
     }),
     portForwardSessions,
     resourceFilesPort,
+    createTrafficAdapter({
+      connectTrafficSource,
+      getTrafficOverview,
+      getTrafficSources,
+      setTrafficSource,
+    }),
   );
 }

@@ -23,6 +23,7 @@ export function useResourceTopologyViewController() {
   const pin = (nextView: ResourceTopologyView) => filter.updateDetail(
     (current) => ({
       ...current,
+      resourceSurfaceView: null,
       resourceTopologyView: nextView,
       workflowView: null,
     }),

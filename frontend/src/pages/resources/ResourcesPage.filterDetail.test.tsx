@@ -24,7 +24,7 @@ describe("ResourcesPage unified-filter detail identity", () => {
     const port = resourcesPort();
     const view = renderEnglishResources(
       port,
-      "/resources?clusters=cluster-1&resources.types=pod",
+      "/resources?clusters=cluster-1&resources.types=pod&view=list",
     );
     const row = await screen.findByRole("button", { name: "Open details for checkout-api-0" });
     fireEvent.click(row);
@@ -125,7 +125,7 @@ describe("ResourcesPage unified-filter detail identity", () => {
     const filterPort = resourcesFilterPort();
     renderEnglishResources(
       port,
-      "/resources/node?cluster=cluster-1&clusters=cluster-1&resources.types=pod",
+      "/resources/node?cluster=cluster-1&clusters=cluster-1&resources.types=pod&view=list",
       resourcesClusterPort(),
       filterPort,
     );

@@ -76,6 +76,7 @@ describe("VP-010 detail URL policy", () => {
     expect(detailHistoryMode("detail-instance-default")).toBe("replace");
     expect(detailHistoryMode("detail-workload-default")).toBe("replace");
     expect(detailHistoryMode("detail-workload-recovery")).toBe("replace");
+    expect(detailHistoryMode("resource-surface-view")).toBe("push");
     expect(detailHistoryMode("traffic-filter")).toBe("push");
     expect(detailHistoryMode("traffic-sort")).toBe("push");
     expect(detailHistoryMode("traffic-flow")).toBe("push");

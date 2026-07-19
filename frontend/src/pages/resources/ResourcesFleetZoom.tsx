@@ -33,7 +33,7 @@ export function ResourcesFleetZoom({ clusters }: { clusters: HomeClusterChoice[]
         {clusters.map((cluster, index) => (
           <ClusterCard
             cluster={cluster}
-            href={clusterResourcesHref(filter.state, cluster.id)}
+            href={clusterResourcesHref(filter.state, cluster.id, undefined, filter.detail)}
             index={index}
             key={cluster.id}
           />

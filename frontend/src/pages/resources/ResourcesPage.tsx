@@ -70,7 +70,8 @@ import type { PortForwardSessionPort } from "../../features/service-access/portF
 import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
-
+import type { TrafficPort } from "../../features/traffic/trafficContract";
+import { ResourcesTrafficFlowSurface } from "./ResourcesTrafficFlowSurface";
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
@@ -90,6 +91,7 @@ export function ResourcesPage({
   resourceIssuesPort,
   checksPort,
   resourceFilesPort,
+  trafficPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
@@ -110,6 +112,7 @@ export function ResourcesPage({
   resourceIssuesPort?: ResourceIssuesPort;
   checksPort?: ChecksPort;
   resourceFilesPort?: ResourceFilesPort;
+  trafficPort?: TrafficPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -342,7 +345,9 @@ export function ResourcesPage({
             </div>
           </header>
 
-          {!state.selectedClusterExists ? (
+          {state.view === "flow" && trafficPort ? (
+            <ResourcesTrafficFlowSurface onOpenService={state.openDetailTarget} port={trafficPort} setView={state.setView} />
+          ) : !state.selectedClusterExists ? (
             state.clusterSelection.kind === "unknown" ? (
               <UnknownSelection value={state.selectedClusterId} variant="cluster" />
             ) : state.clusterSelection.kind === "unfiltered" ? (

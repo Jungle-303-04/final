@@ -32,7 +32,6 @@ import type {
   BrowserRefreshPolicy,
   BrowserRefreshPolicyRegistry,
 } from "../../shared/data/browserRefreshPolicyRegistry";
-
 export {
   CATALOG,
   CLUSTERS,
@@ -65,6 +64,7 @@ export function renderResources(
   nodePodsPort: Pick<HomePort, "loadNodePods"> = resourcesNodePodsPort(),
   refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey> = resourcesRefreshPolicies(),
   resourceManifestPort?: ResourceManifestPort,
+  trafficPort?: import("../../features/traffic/trafficContract").TrafficPort,
 ) {
   const router = createMemoryRouter(
     [
@@ -93,7 +93,7 @@ export function renderResources(
                       refreshPolicies={refreshPolicies}
                       resourceCapabilitiesPort={resourceCapabilitiesPort}
                       resourceActionsPort={resourceActionsPort}
-                      resourceManifestPort={resourceManifestPort}
+                      resourceManifestPort={resourceManifestPort} trafficPort={trafficPort}
                       port={port}
                     />
                   </BottomDockProvider>

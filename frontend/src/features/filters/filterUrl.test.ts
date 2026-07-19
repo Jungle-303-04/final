@@ -70,7 +70,6 @@ describe("VP-010 unified filter URL", () => {
       "&resources.health=degraded,healthy" +
       "&resources.includeDeleted=true" +
       "&resources.q=checkout%20api" +
-      "&resources.view=graph" +
       "&issues.severity=critical,warning" +
       "&issues.category=container_restart,scheduling" +
       "&issues.status=open" +
@@ -86,7 +85,8 @@ describe("VP-010 unified filter URL", () => {
       "&gitops.q=release" +
       "&checks.severity=critical" +
       "&checks.category=security" +
-      "&checks.q=policy",
+      "&checks.q=policy" +
+      "&view=map",
     );
     expect(parseProductFilterUrl(search).state).toEqual({
       ...state,
@@ -103,13 +103,19 @@ describe("VP-010 unified filter URL", () => {
           { key: "tier", value: "critical" },
         ],
       },
-      resources: { ...state.resources, types: ["Deployment", "Pod"], health: ["degraded", "healthy"] },
+      resources: {
+        ...state.resources,
+        types: ["Deployment", "Pod"],
+        health: ["degraded", "healthy"],
+        view: "table",
+      },
       issues: {
         ...state.issues,
         severity: ["critical", "warning"],
         category: ["container_restart", "scheduling"],
       },
     });
+    expect(parseProductFilterUrl(search).detail.resourceSurfaceView).toBe("map");
   });
 
   it("keeps Label as an AND axis, including contradictory values for the same key", () => {

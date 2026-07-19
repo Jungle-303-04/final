@@ -1,11 +1,15 @@
 import { routeDefinitionForSurface } from "../../app/productRoutes";
 import { serializeProductFilterUrl } from "../../features/filters/filterUrl";
-import type { UnifiedFilterState } from "../../features/filters/filterContract";
+import type {
+  ProductDetailQuery,
+  UnifiedFilterState,
+} from "../../features/filters/filterContract";
 
 export function clusterResourcesHref(
   state: UnifiedFilterState,
   clusterId: string,
   resourceType?: string,
+  detail?: ProductDetailQuery,
 ): string {
   const next = {
     ...state,
@@ -14,5 +18,5 @@ export function clusterResourcesHref(
       ? state.resources
       : { ...state.resources, types: [resourceType] },
   };
-  return `${routeDefinitionForSurface("resources").path}${serializeProductFilterUrl(next)}`;
+  return `${routeDefinitionForSurface("resources").path}${serializeProductFilterUrl(next, detail)}`;
 }

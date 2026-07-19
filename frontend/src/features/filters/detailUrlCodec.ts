@@ -21,6 +21,7 @@ import {
 
 const LEGACY_RESOURCE_KIND_QUERY_KEY = "kind";
 const WORKFLOW_VIEWS = ["overview", "edit", "runs", "yaml"] as const;
+const RESOURCE_SURFACE_VIEWS = ["map", "list", "flow"] as const;
 const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 const COST_RANGES = ["6h", "24h", "7d"] as const;
@@ -50,7 +51,7 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   appendNullableStableText(
     pairs,
     "view",
-    detail.resourceTopologyView ?? detail.workflowView ?? null,
+    detail.resourceSurfaceView ?? detail.resourceTopologyView ?? detail.workflowView ?? null,
   );
   appendNullableStableText(pairs, "mode", detail.workflowMode ?? null);
   if (detail.timeRange && detail.timeRange !== "1h") {
@@ -108,6 +109,7 @@ export function parseProductDetailQuery(
   if (workflowPlan !== null) detail.workflowPlan = workflowPlan;
   const workflowView = readStableText(params, "view");
   if (isWorkflowView(workflowView)) detail.workflowView = workflowView;
+  if (isResourceSurfaceView(workflowView)) detail.resourceSurfaceView = workflowView;
   if (isResourceTopologyView(workflowView)) detail.resourceTopologyView = workflowView;
   if (readStableText(params, "mode") === "new") detail.workflowMode = "new";
   const timeRange = readScalar(params, "t.range", invalidTimeRange);
@@ -207,6 +209,12 @@ function isResourceTopologyView(
   value: string | null,
 ): value is NonNullable<ProductDetailQuery["resourceTopologyView"]> {
   return value !== null && RESOURCE_TOPOLOGY_VIEWS.some((view) => view === value);
+}
+
+function isResourceSurfaceView(
+  value: string | null,
+): value is NonNullable<ProductDetailQuery["resourceSurfaceView"]> {
+  return value !== null && RESOURCE_SURFACE_VIEWS.some((view) => view === value);
 }
 
 function isWorkflowView(value: string | null): value is NonNullable<ProductDetailQuery["workflowView"]> {

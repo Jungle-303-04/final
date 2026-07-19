@@ -3,12 +3,8 @@ import { useRef, type KeyboardEvent } from "react";
 
 import type {
   TrafficOverview,
-  TrafficProtocol,
+  TrafficEndpoint,
   TrafficRelationship,
-  TrafficSince,
-  TrafficSort,
-  TrafficSortOrder,
-  TrafficVerdict,
 } from "../../features/traffic/trafficContract";
 import { trafficCopy, type TrafficCopy } from "../../features/traffic/trafficCopy";
 import { useI18n } from "../../shared/i18n";
@@ -30,27 +26,27 @@ import {
   TableHeader,
   TableRow,
 } from "../../shared/ui/primitives/table";
-
-export interface TrafficFlowUrlState {
-  since: TrafficSince;
-  protocols: readonly TrafficProtocol[];
-  verdicts: readonly TrafficVerdict[];
-  sort: TrafficSort;
-  order: TrafficSortOrder;
-  selectedFlowId: string | null;
-}
+import {
+  TrafficFlowFilters,
+  type TrafficFlowUrlState,
+} from "./TrafficFlowFilters";
+export type { TrafficFlowUrlState } from "./TrafficFlowFilters";
 
 export function TrafficFlowSurface({
   overview,
   onChangeFilters,
   onNextPage,
+  onOpenEndpoint,
   onSelectFlow,
+  isEndpointOpenable,
   state,
 }: {
   overview: TrafficOverview;
   onChangeFilters: (update: Partial<Omit<TrafficFlowUrlState, "selectedFlowId">>) => void;
   onNextPage: (cursor: string) => void;
+  onOpenEndpoint?: (endpoint: TrafficEndpoint) => void;
   onSelectFlow: (flowId: string | null) => void;
+  isEndpointOpenable?: (endpoint: TrafficEndpoint) => boolean;
   state: TrafficFlowUrlState;
 }) {
   const { t } = useI18n();
@@ -86,7 +82,12 @@ export function TrafficFlowSurface({
         onChange={onChangeFilters}
         state={state}
       />
-      <TrafficFlowMap edges={relationships.edges.slice(0, 8)} onSelect={selectFlow} />
+      <TrafficFlowMap
+        edges={relationships.edges.slice(0, 8)}
+        isEndpointOpenable={isEndpointOpenable}
+        onOpenEndpoint={onOpenEndpoint}
+        onSelect={selectFlow}
+      />
       <SurfaceSection className="min-w-0" role="region" aria-labelledby="traffic-relationships-title">
         <header className="border-b p-4">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -114,9 +115,23 @@ export function TrafficFlowSurface({
               {relationships.edges.map((edge) => (
                 <TableRow data-state={edge.flowId === state.selectedFlowId ? "selected" : undefined} key={edge.flowId}>
                   <TableCell>
-                    <FlowButton edge={edge} endpoint="source" onSelect={selectFlow} />
+                    <EndpointAction
+                      edge={edge}
+                      endpoint="source"
+                      isEndpointOpenable={isEndpointOpenable}
+                      onOpenEndpoint={onOpenEndpoint}
+                      onSelectFlow={selectFlow}
+                    />
                   </TableCell>
-                  <TableCell><EndpointLabel edge={edge} endpoint="target" /></TableCell>
+                  <TableCell>
+                    <EndpointAction
+                      edge={edge}
+                      endpoint="target"
+                      isEndpointOpenable={isEndpointOpenable}
+                      onOpenEndpoint={onOpenEndpoint}
+                      onSelectFlow={selectFlow}
+                    />
+                  </TableCell>
                   <TableCell>{edge.protocol.toUpperCase()}{edge.port ? `:${edge.port}` : ""}</TableCell>
                   <TableCell><Badge variant={edge.verdict === "forwarded" ? "secondary" : "outline"}>{edge.verdict}</Badge></TableCell>
                   <TableCell className="text-right tabular-nums">{edge.connections.toLocaleString()}</TableCell>
@@ -146,112 +161,15 @@ export function TrafficFlowSurface({
   );
 }
 
-function TrafficFlowFilters({
-  facets,
-  onChange,
-  state,
-}: {
-  facets: {
-    protocols: readonly { value: TrafficProtocol; count: number }[];
-    verdicts: readonly { value: TrafficVerdict; count: number }[];
-  };
-  onChange: (update: Partial<Omit<TrafficFlowUrlState, "selectedFlowId">>) => void;
-  state: TrafficFlowUrlState;
-}) {
-  const copy = useTrafficCopy();
-  const protocol = state.protocols.length === 1 ? state.protocols[0] : "";
-  const verdict = state.verdicts.length === 1 ? state.verdicts[0] : "";
-  return (
-    <SurfaceSection className="flex min-w-0 flex-wrap items-end gap-3 p-4">
-      <FilterSelect
-        id="time-range"
-        label={copy.timeRange}
-        onChange={(value) => onChange({ since: value as TrafficSince })}
-        options={[
-          ["1m", copy.oneMinute],
-          ["5m", copy.fiveMinutes],
-          ["15m", copy.fifteenMinutes],
-          ["1h", copy.oneHour],
-        ]}
-        value={state.since}
-      />
-      <FilterSelect
-        id="protocol"
-        label={copy.protocol}
-        onChange={(value) => onChange({ protocols: value ? [value as TrafficProtocol] : [] })}
-        options={[["", copy.allProtocols], ...facets.protocols.map((item) => [
-          item.value,
-          `${item.value.toUpperCase()} (${item.count})`,
-        ] as const)]}
-        value={protocol}
-      />
-      <FilterSelect
-        id="verdict"
-        label={copy.verdict}
-        onChange={(value) => onChange({ verdicts: value ? [value as TrafficVerdict] : [] })}
-        options={[["", copy.allVerdicts], ...facets.verdicts.map((item) => [
-          item.value,
-          `${item.value} (${item.count})`,
-        ] as const)]}
-        value={verdict}
-      />
-      <FilterSelect
-        id="sort"
-        label={copy.sort}
-        onChange={(value) => onChange({ sort: value as TrafficSort })}
-        options={[
-          ["connections", copy.connections],
-          ["last_seen", copy.observedAt],
-          ["source", copy.source],
-          ["destination", copy.destination],
-        ]}
-        value={state.sort}
-      />
-      <FilterSelect
-        id="order"
-        label={copy.order}
-        onChange={(value) => onChange({ order: value as TrafficSortOrder })}
-        options={[["desc", copy.descending], ["asc", copy.ascending]]}
-        value={state.order}
-      />
-    </SurfaceSection>
-  );
-}
-
-function FilterSelect({
-  id,
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  id: string;
-  label: string;
-  onChange: (value: string) => void;
-  options: readonly (readonly [string, string])[];
-  value: string;
-}) {
-  const inputId = `traffic-${id}`;
-  return (
-    <label className="grid min-w-36 gap-1 text-xs text-muted-foreground" htmlFor={inputId}>
-      {label}
-      <select
-        className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
-        id={inputId}
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        {options.map(([option, copy]) => <option key={option || "all"} value={option}>{copy}</option>)}
-      </select>
-    </label>
-  );
-}
-
 function TrafficFlowMap({
   edges,
+  isEndpointOpenable,
+  onOpenEndpoint,
   onSelect,
 }: {
   edges: readonly TrafficRelationship[];
+  isEndpointOpenable?: (endpoint: TrafficEndpoint) => boolean;
+  onOpenEndpoint?: (endpoint: TrafficEndpoint) => void;
   onSelect: (flowId: string) => void;
 }) {
   const copy = useTrafficCopy();
@@ -267,19 +185,61 @@ function TrafficFlowMap({
             className="border-t first:border-t-0 lg:odd:border-r lg:[&:nth-child(2)]:border-t-0"
             key={edge.flowId}
           >
-            <button
-              className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none"
-              onClick={() => onSelect(edge.flowId)}
-              type="button"
-            >
-              <EndpointLabel edge={edge} endpoint="source" />
+            <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-3">
+              <EndpointAction
+                edge={edge}
+                endpoint="source"
+                isEndpointOpenable={isEndpointOpenable}
+                onOpenEndpoint={onOpenEndpoint}
+                onSelectFlow={onSelect}
+              />
               <ArrowRight aria-hidden="true" className="text-muted-foreground" />
-              <EndpointLabel edge={edge} endpoint="target" />
-            </button>
+              <EndpointAction
+                edge={edge}
+                endpoint="target"
+                isEndpointOpenable={isEndpointOpenable}
+                onOpenEndpoint={onOpenEndpoint}
+                onSelectFlow={onSelect}
+              />
+            </div>
           </li>
         ))}
       </ul>
     </SurfaceSection>
+  );
+}
+
+function EndpointAction({
+  edge,
+  endpoint,
+  isEndpointOpenable,
+  onOpenEndpoint,
+  onSelectFlow,
+}: {
+  edge: TrafficRelationship;
+  endpoint: "source" | "target";
+  isEndpointOpenable?: (endpoint: TrafficEndpoint) => boolean;
+  onOpenEndpoint?: (endpoint: TrafficEndpoint) => void;
+  onSelectFlow: (flowId: string) => void;
+}) {
+  const value = edge[endpoint];
+  if (onOpenEndpoint && (isEndpointOpenable?.(value) ?? true)) {
+    return (
+      <button
+        className="min-w-0 rounded text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+        data-traffic-flow-row={endpoint === "source" ? edge.flowId : undefined}
+        onClick={() => onOpenEndpoint(value)}
+        onKeyDown={moveFlowFocus}
+        type="button"
+      >
+        <EndpointLabel edge={edge} endpoint={endpoint} />
+      </button>
+    );
+  }
+  return endpoint === "source" ? (
+    <FlowButton edge={edge} endpoint={endpoint} onSelect={onSelectFlow} />
+  ) : (
+    <EndpointLabel edge={edge} endpoint={endpoint} />
   );
 }
 
