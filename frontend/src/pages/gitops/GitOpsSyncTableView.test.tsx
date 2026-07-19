@@ -1,16 +1,25 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
 import { I18nProvider } from "../../shared/i18n";
+import {
+  ProductNotificationsProvider,
+  useProductNotifications,
+} from "../../features/notifications/ProductNotificationsProvider";
+import type {
+  GitOpsSyncTarget,
+  ReleaseApplication,
+} from "../../features/gitops/gitOpsContract";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
 import { gitOpsPort, gitOpsRefreshPolicies } from "./GitOpsPage.testSupport";
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.useRealTimers();
 });
 
@@ -170,6 +179,93 @@ describe("GitOpsSyncTableView", () => {
 
     expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
   });
+
+  it("connects with the authorized server credential and reflects the registered repository", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    const created: ReleaseApplication = {
+      id: "inventory-api",
+      name: "Inventory API",
+      repository: "team/inventory-api",
+      branch: "main",
+      clusterId: "production-cluster",
+      manifestPath: "deploy.yaml",
+    };
+    const reflected: GitOpsSyncTarget = {
+      id: "inventory-api:production-cluster",
+      applicationId: "inventory-api",
+      applicationName: "Inventory API",
+      clusterId: "production-cluster",
+      namespace: "default",
+      environment: "development",
+      syncStatus: null,
+      revision: null,
+      observedAt: null,
+      authority: "registered",
+      provider: "internal",
+      kind: "GitOpsApplication",
+    };
+    let resolveRegistration!: (value: ReleaseApplication) => void;
+    let resolveReflection!: (value: GitOpsSyncTarget[]) => void;
+    let registrationComplete = false;
+    const reflection = new Promise<GitOpsSyncTarget[]>((resolve) => {
+      resolveReflection = resolve;
+    });
+    vi.mocked(port.listSyncTargets).mockImplementation(() => (
+      registrationComplete ? reflection : Promise.resolve([])
+    ));
+    vi.mocked(port.connectApplication).mockImplementation(() => new Promise((resolve) => {
+      resolveRegistration = (value) => {
+        registrationComplete = true;
+        resolve(value);
+      };
+    }));
+    renderView(port);
+
+    await screen.findByText("No deployment targets");
+    const trigger = screen.getByRole("button", { name: "Connect repository" });
+    await user.click(trigger);
+    let dialog = screen.getByRole("dialog", { name: "Connect Git repository" });
+    expect(dialog.querySelector("input[type='password']")).toBeNull();
+    expect(within(dialog).queryByLabelText(/token/i)).toBeNull();
+    expect(dialog.querySelectorAll("[data-stage]")).toHaveLength(3);
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+
+    await user.click(trigger);
+    dialog = screen.getByRole("dialog", { name: "Connect Git repository" });
+    await user.type(within(dialog).getByLabelText("Target name"), "Inventory API");
+    await user.type(within(dialog).getByLabelText("Git repository"), "team/inventory-api");
+    await user.click(within(dialog).getByRole("button", { name: "Connect repository" }));
+
+    expect(dialog.querySelector("[data-stage='register']")?.getAttribute("data-state"))
+      .toBe("active");
+    expect(port.connectApplication).toHaveBeenCalledWith({
+      name: "Inventory API",
+      repository: "team/inventory-api",
+      branch: "main",
+      manifestPath: "deploy.yaml",
+      clusterId: "production-cluster",
+      namespace: "default",
+      environment: "development",
+    });
+    expect(vi.mocked(port.connectApplication).mock.calls[0]?.[0]).not.toHaveProperty("token");
+
+    await act(async () => resolveRegistration(created));
+    await waitFor(() => expect(
+      screen.getByRole("dialog", { name: "Connect Git repository" })
+        .querySelector("[data-stage='reflect']")?.getAttribute("data-state"),
+    ).toBe("active"));
+    expect(port.listSyncTargets).toHaveBeenCalled();
+
+    await act(async () => resolveReflection([reflected]));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("Inventory API")).toBeTruthy();
+    expect(screen.getByTestId("notification-probe").textContent)
+      .toBe("repository-connected:inventory-api|/deploy?section=repositories");
+  });
 });
 
 function renderView(
@@ -179,8 +275,21 @@ function renderView(
   return render(
     <MemoryRouter>
       <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} />
+        <ProductNotificationsProvider>
+          <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} />
+          <NotificationProbe />
+        </ProductNotificationsProvider>
       </I18nProvider>
     </MemoryRouter>,
+  );
+}
+
+function NotificationProbe() {
+  const { notifications } = useProductNotifications();
+  const first = notifications[0];
+  return (
+    <output data-testid="notification-probe">
+      {first ? `${first.id}|${first.href}` : ""}
+    </output>
   );
 }
