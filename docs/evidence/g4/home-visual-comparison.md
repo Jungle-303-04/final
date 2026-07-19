@@ -2,9 +2,9 @@
 
 - Reference: read-only `demo-freeze-v3`, `/devpreview-unified.html`, 1440 px
 - Product candidate: `ed2de67b1` (with its ancestors), `/home`, live API, 1440 px, light theme
-- Reference capture: `demo-v3-home-1440.png`
-- Product capture: `product-candidate-home-light-1440.png`
-- Dark-theme token check: `product-candidate-home-1440.png`
+- Reference capture: `home-demo-v3-1440.png`
+- Product capture: `home-product-candidate-light-1440.png`
+- Dark-theme token check: `home-product-candidate-1440.png`
 
 ## P0 result
 

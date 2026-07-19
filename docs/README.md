@@ -523,3 +523,6 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [team/target-telemetry-tasks/12-gateway-contract-connection](team/target-telemetry-tasks/12-gateway-contract-connection.md)
 - [team/target-telemetry-tasks/13-loki-otel-ingest-path](team/target-telemetry-tasks/13-loki-otel-ingest-path.md)
 - [team/target-telemetry-tasks/README](team/target-telemetry-tasks/README.md)
+- [G4 홈 시각 대조](evidence/g4/home-visual-comparison.md)
+- [G4 홈 숫자 교차 검증](evidence/g4/home-numeric-cross-check.md)
+- [G4 홈 클릭 경로](evidence/g4/home-click-path.md)

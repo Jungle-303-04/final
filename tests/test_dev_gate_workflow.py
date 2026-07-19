@@ -228,14 +228,14 @@ def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() 
         step for step in frontend["steps"] if step.get("name") == "Run changed frontend gate"
     )
 
-    assert changed == {
-        "name": "Run changed frontend gate",
-        "if": "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}",
-        "env": {
-            "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
-        },
-        "run": 'GATE_BASE="${BASE_SHA}" make gate-frontend-changed',
+    assert changed["name"] == "Run changed frontend gate"
+    assert changed["if"] == "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}"
+    assert changed["env"] == {
+        "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
     }
+    # 얕은 체크아웃에서도 기준 커밋을 확보한 뒤 변경 게이트를 실행한다(부재 시 HEAD^ 폴백)
+    assert 'git fetch --no-tags --depth=1 origin "${BASE_SHA}"' in changed["run"]
+    assert 'GATE_BASE="${BASE_SHA}" make gate-frontend-changed' in changed["run"]
 
 
 def test_smoke_scope_runs_only_bounded_deployment_gates() -> None:
