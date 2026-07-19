@@ -1,19 +1,43 @@
-# Home surface visual comparison — P0 candidate
+# Home surface visual comparison — demo v3 ↔ live `333c65734`
 
 - Reference: read-only `demo-freeze-v3`, `/devpreview-unified.html`, 1440 px
-- Product candidate: `ed2de67b1` (with its ancestors), `/home`, live API, 1440 px, light theme
-- Reference capture: `home-demo-v3-1440.png`
-- Product capture: `home-product-candidate-light-1440.png`
-- Dark-theme token check: `home-product-candidate-1440.png`
+- Live product: `https://k8s.woonyong.org/home?clusters=demo-server`, 1920 px viewport; the top bitmap is 1909 px after scrollbar exclusion
+- Live digest: `333c657345271e5d924fbb9e01983f9142335098`
+- Pipeline: Dev Gate `29689900163`, Dev Deploy `29690120559`, both success
 
-## P0 result
+| demo-freeze-v3 reference | deployed product |
+| --- | --- |
+| ![demo v3 Home reference](home-demo-v3-1440.png) | ![live Home top](home-live-333c65734-1920.jpg) |
+| reference includes the complete vertical board | ![live Home W2-W8 board](home-live-333c65734-board-1920.jpg) |
 
-| Element | v3 rule | Product candidate | Result |
+## Surface verdict
+
+| Element | v3 rule | Same-SHA live observation | Result |
 | --- | --- | --- | --- |
-| Fleet summary | one-row chips, period segment, actions on the right | same structure; values use the live API | pass |
-| Cluster cards | two-column maximum, status/provider/version/usage, connection empty tile | same information grammar; unavailable live CPU/MEM stays `—` | pass with honest unavailable data |
-| Widget board | W2–W8 visible, shared card/chart primitives | W2–W8 visible and Recharts-backed shared primitives used | P0 pass |
-| Theme | one token system across the surface | light and dark are both rendered by the same tokens | pass |
-| Motion | token durations only, reduced-motion retained | release design gate passes | pass |
+| Fleet summary | one-row chips, period segment, actions on the right | structure present | visual structure pass |
+| Cluster cards | two-column maximum, health/provider/version/usage, connection action | structure present, CPU/MEM honestly unavailable | visual structure pass |
+| Card facts | summary, cards and APIs must tell one fact | card node/pod/health values differ from `/api/fleet/summary` | **fail** |
+| Widget board | W2–W8 visible with shared chart/card grammar | all seven widgets present | structure pass |
+| Activity | stable across scheduled refreshes | chart renders initially, then becomes unavailable after 30 seconds | **fail** |
+| Empty states | executable next action, no dead legacy route | captured actions resolve to canonical routes | pass for captured paths |
+| Theme/motion | common tokens and motion grammar | light surface visually coherent; static screenshots cannot finish motion parity | partial |
+| Responsive | no wrap/overflow break at 1280–1920 | deployed 1920 horizontal overflow 0 | partial; deployed 1280/1440 still required |
 
-This is a local P0 candidate comparison, not a G4 Home completion declaration. The live capture on the deployed digest and the remaining detailed widget/card parity pass are still required before declaring the Home surface complete.
+## Deterministic activity regression
+
+| Initial load | After one 30-second refresh |
+| --- | --- |
+| ![activity initial chart](home-live-333c65734-activity-initial.jpg) | ![activity unavailable after refresh](home-live-333c65734-activity-after-refresh.jpg) |
+
+The backend endpoint is healthy in the same deployment: a 2026 one-hour request returns HTTP 200 and 12 five-minute buckets. The transition above is caused by frontend refresh-window construction, not by the deployed bigint fix.
+
+## Completion judgment
+
+This pack proves that the Home UI reached live and that W2–W8 are present. It also proves two blockers. It is **not** a G4 Home completion pack because:
+
+1. card/fleet numbers disagree;
+2. activity breaks on the first scheduled refresh;
+3. reference and live captures are not yet the same viewport;
+4. deployed 1280 and 1440 resize checks remain outstanding.
+
+No G4 completion line may be added until the two product defects are fixed and the same-viewport demo/live comparison is repeated on the new deployed digest.

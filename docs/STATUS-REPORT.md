@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-19 22:57 KST다. 원격 기준 소스는 `0916099f9e947c350a1224ddbc73d885d63ec409`, 로컬 후보는 원격 위 파이프라인 복구 5커밋과 activity bigint hotfix `9b022f2f1`을 합친 tree다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-19 23:55 KST다. 원격 소스와 라이브 배포는 `07527f0b89da4376fd55bfd549f0be1b0c343285`이고, 이번 결함 판정의 완전한 홈 실브라우저 팩은 직전 성공 SHA `333c657345271e5d924fbb9e01983f9142335098`이다. 코드, 자동 게이트, API 계약, 라이브 상태와 브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. `f2774f10d` Gate `29688414550`의 유일한 Frontend 라벨 기대 실패는 `0916099f9`에서 D22 `동기화 상태` 어휘로 정합화됐다.
-2. `0916099f9` Dev Gate `29688722835`는 Backend와 Frontend 모두 성공했다.
-3. 이어진 Dev Deploy `29688782222`는 이미지 rollout과 기본 smoke까지 성공했지만 인증 브라우저 `/resources` smoke의 `/api/activity/overview` HTTP 500으로 실패했다.
-4. 배포는 이전 release로 정상 롤백됐고 성공 SHA 기록은 생략됐다. 현재 활성 Gate/Deploy는 0이다.
-5. 직접 원인은 2026 epoch-ms와 최대 30일 bucket bind가 PostgreSQL `Integer/int4`로 추론된 것이다. 결과 `CAST BIGINT`는 입력 overflow를 막지 못했다.
-6. `9b022f2f1`은 multiplier·from·bucket을 모두 `literal(..., BigInteger())`로 고정하고 2026년 빈 결과와 populated series를 같은 계약에서 검증한다.
-7. 표적 33/33, 전체 Backend 3,776 pass/3 skip+manifest, `gate-fast`, release governance 276 pending 0·41/41을 저부하 직렬로 통과했다. 실제 DB는 재배포 direct read/browser smoke가 최종 증거다.
-8. 쿠키 없는 `/api/clusters` 200은 라우트 가드 누락이 아니라 canonical hostname의 `console-dev` trusted-proxy 주입이다. IN-4 인증 전환 보류 상태로 BLOCKERS에 명시했다.
-9. G4 홈은 **부분**이다. D-4 코드는 해소됐지만 rollback 때문에 동일 SHA 라이브 수치·W2~W8 증거가 없고, 잔여 우선순위는 D-3 토큰 → D-1 GitOps 정보 복원 → D-2 연결 흐름 단일화다.
-10. 다음 3수는 저부하 직렬 전체 게이트, 원격 재base 뒤 단일 push, 성공 배포 SHA의 activity·홈 실브라우저 대조다.
+1. activity bigint hotfix를 포함한 `333c65734`가 Dev Gate `29689900163`과 Dev Deploy `29690120559`를 모두 통과했다.
+2. Deploy의 2026년 실제 DB activity read, 인증 canonical 8라우트(`/resources` 포함) browser smoke가 성공했고 rollback은 실행되지 않았다.
+3. 라이브 bundle `index-BKNoNEP4.js`가 전체 SHA `333c657345271e5d924fbb9e01983f9142335098`을 포함해 배포·화면 계보가 일치한다.
+4. 라이브 홈에는 플릿 요약·클러스터 카드·W2~W8이 렌더되고 1920 viewport의 가로 overflow는 0이다. 상단과 하단 보드 캡처를 증거로 고정했다.
+5. `/api/activity/overview`는 2026년 12 bucket을 HTTP 200으로 반환하지만, 화면은 최초 로드 후 첫 30초 갱신에서 `사용할 수 없음`으로 회귀한다.
+6. 원인은 `boardRefreshRevision` 카운터 `1`을 `activityWindowForPeriod`의 epoch-ms로 전달하는 frontend 시간창 계산이며, 초기/갱신 후 캡처로 재현했다.
+7. 라이브 카드 `0/0·21`, `0/0·66`, `0/0·23`은 같은 SHA `/api/fleet/summary`의 `2/3·36`, `2/2·793`, `3/4·13`과 다르며 health도 일치하지 않는다.
+8. 따라서 activity backend P0와 배포 P0는 해소됐지만 G4 홈 D-4는 **부분**이다. 숫자 단일 원장과 refresh 시간창을 frontend 소유자에게 반송한다.
+9. 후속 `80e3244ad`/`6c46950d09` Gate는 같은 unused `container`로 연속 실패했지만 `07527f0b89`에서 제거되어 Gate `29691325987`·Deploy `29691403364`가 완주했다.
+10. 다음 3수는 검증된 증거·보고 rebase/push, 그 배포 창 완주, frontend D-4 수정 SHA의 동일 viewport demo/live 재대조다.
 
 ## 현재 상세 근거
 
@@ -21,7 +21,7 @@
 
 | SHA | Gate/Deploy | 결과 | 판정 |
 | --- | --- | --- | --- |
-| `fdd75a4f2` | Gate `29682394308`, Deploy `29682449227` | 둘 다 success, 신 IA 인증 8라우트 smoke 통과 | 마지막 배포 완주 기준점 |
+| `fdd75a4f2` | Gate `29682394308`, Deploy `29682449227` | 둘 다 success, 신 IA 인증 8라우트 smoke 통과 | 이전 배포 완주 기준점 |
 | `d48f3652a` | Gate `29686718943` | Backend 3,773 pass/3 skip/2 fail: G4 증거 경로 과심도 6파일과 미색인 Markdown 3파일. 후속 push로 전체 run cancelled | 제품 결함 아님, Deploy 없음 |
 | `6d3c7bc76` | Gate `29686856764`, Deploy `29686902495` | Frontend가 기준 `d48f3652a` 객체 부재로 시작 전 실패, Deploy skipped | CI shallow checkout 결함 |
 | `1d57d4b1b` | Gate `29686939839`, Deploy `29686974817` | Frontend가 기준 `6d3c7bc76` 객체 부재로 시작 전 실패, Deploy skipped | 같은 CI 결함 재현 |
@@ -30,33 +30,39 @@
 | `8f017558a` | Gate `29688137124`, Deploy `29688334831` | Backend 3,772 pass/3 skip/3 fail, Frontend 2,291 pass/1 fail, Deploy skipped | Backend는 로컬 해소, Frontend 어휘 테스트 반송 |
 | `f2774f10d` | Gate `29688414550`, Deploy `29688613147` | Backend 성공, Frontend `HomePage.test.tsx` 라벨 기대 1건 실패, Deploy skipped | D22 어휘 정합 결함 |
 | `0916099f9` | Gate `29688722835`, Deploy `29688782222` | Gate 성공. Deploy 인증 browser smoke `/resources`에서 activity API 500, 이전 release 롤백 성공 | PostgreSQL epoch-ms int4 overflow |
-| `9b022f2f1` | 로컬 검증 | activity bucket 산술 3 bind bigint, 2026 빈/populated series, direct deploy read probe. 표적 33/33, Backend 3,776 pass/3 skip, gate-fast/governance 성공 | 최종 rebase 뒤 단일 push 대기 |
+| `9b022f2f1` | 로컬 검증 | activity 산술 3 bind bigint, 2026 빈/populated series, direct deploy read probe. 표적 33/33, Backend 3,776 pass/3 skip, gate-fast/governance 성공 | `333c65734` ancestry로 배포됨 |
+| `333c65734` | Gate `29689900163`, Deploy `29690120559` | Gate success. 실제 DB activity read와 인증 8라우트 browser smoke success, rollback skipped | 현재 라이브 기준점 |
+| `80e3244ad` | Gate `29691097907`, Deploy `29691204415` | Backend success. Frontend ESLint가 `ClusterCard.test.tsx:80` 미사용 `container` 1건으로 실패, Deploy skipped | 원격 전용, 라이브 미반영 |
+| `6c46950d09` | Gate `29691225543`, Deploy `29691288392` | Backend success. 같은 unused `container`로 Frontend/Full gate 실패, Deploy skipped | 같은 원인 연속 재발, 현재 원격 |
+| `07527f0b89` | Gate `29691325987`, Deploy `29691403364` | proof/backend/frontend/full gate와 post-deploy/authenticated browser smoke success, rollback skipped | 현재 원격·라이브 기준점 |
 
-현재 활성 Gate/Deploy는 0이다. `0916099f9` release가 롤백됐으므로 라이브 성공 기준점은 계속 `fdd75a4f2`이고 홈 P0를 배포 완주로 기록하지 않는다. activity 변경 후 `gate-fast`, `release-governance-web-patch`, 전체 Backend 3,776 pass/3 skip을 모두 다시 통과했다. 다음 push 전 `origin/dev`를 rebase하고 push 뒤에는 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 활성 Gate/Deploy는 0이다. 원격 `dev`와 라이브 성공 기준점은 `07527f0b89`로 다시 일치한다. 직전 완전 홈 증거 SHA `333c65734`의 activity backend 해소와 D-4 두 frontend 회귀 판정은 유효하며, `07527f0b89`는 해당 시간창/플릿 소비 로직을 수정하지 않았다. 문서 커밋을 최신 dev 위에 rebase한 뒤 push하고, 그 Gate→Deploy 종료까지 추가 push를 금지한다.
 
 ### G4 홈과 가시 변화
 
-- 구현 digest: `ed2de67b1`과 선행 홈 계약 커밋. 증거를 포함한 최초 push digest는 `d48f3652a`다.
-- 가시 변화: 한 줄 플릿 요약, 최대 2열 실데이터 클러스터 카드, W2~W8 기본 보드, 공용 Recharts 차트, 실행 가능한 빈/오류 상태, 서피스 이동 시 스크롤 최상단 초기화.
-- 로컬 Chrome: 1280/1440/1920 가로 overflow 0, 연결 모달 실동작, 기간 선택 URL 반영, 리소스·배포 deep link 실재, page error 0.
-- 증거: `docs/evidence/g4/home-demo-v3-1440.png`, `home-product-candidate-light-1440.png`, `home-visual-comparison.md`, `home-numeric-cross-check.md`, `home-click-path.md`.
-- 실패 release의 activity overview는 epoch-ms `from=2147483648`부터 HTTP 500이었다. `9b022f2f1`은 bucket 산술의 `1_000`, `from_ms`, `bucket_ms`를 모두 PostgreSQL bigint로 고정했으며 2026 epoch와 30일 최대 bucket의 빈/populated 결과를 회귀로 잠근다. post-deploy read smoke도 2026년 5분 bucket API를 직접 호출하므로 실제 DB 해소는 direct read와 `/resources` 인증 browser smoke가 함께 증명한다.
-- G4 완료 선언은 금지한다. 같은 배포 SHA의 라이브 캡처·숫자·클릭 증거와 세부 카드/위젯 parity가 아직 없다.
+- 라이브 digest: `333c657345271e5d924fbb9e01983f9142335098`; bundle `index-BKNoNEP4.js`에서 전체 SHA를 확인했다.
+- 가시 변화: 한 줄 플릿 요약, 최대 2열 클러스터 카드, W2~W8 기본 보드, 공용 Recharts 차트, 실행 가능한 빈/오류 상태가 라이브에 배포됐다.
+- 실브라우저 증거: `home-live-333c65734-1920.jpg`, `home-live-333c65734-board-1920.jpg`, `home-live-333c65734-activity-initial.jpg`, `home-live-333c65734-activity-after-refresh.jpg`. 1920 viewport에서 document/main 가로 overflow는 0이다.
+- activity backend는 해소됐다. 2026년 5분 bucket 12개를 실제 DB에서 HTTP 200으로 반환하고 Deploy read smoke도 통과했다.
+- activity frontend는 미해소다. 최초 로드 차트는 보이지만 첫 30초 refresh 후 `사용할 수 없음`이 된다. `useHomeBoardData.ts`가 revision counter를 epoch-ms로 사용한다.
+- 숫자도 미해소다. UI는 legacy cluster overview의 workload 합계와 node 0/0을 표시하는 반면 `/api/fleet/summary`는 실제 node/pod fleet 값을 반환한다. 동일 화면 안의 카드·집계·API 단일 원장이 아니다.
+- demo 기준 캡처는 1440, 이번 live 캡처는 1920이므로 강화된 동일 viewport 나란히 대조 조건도 아직 충족하지 않는다. G4 홈 완료 선언은 금지한다.
 
-프론트 소유권은 클로드에게 이전됐다. 코덱스는 `frontend/**`를 더 수정·커밋하지 않는다. G4 잔여 우선순위는 공통 재작업을 줄이기 위해 **D-3 토큰 문법 통일 → D-1 저장소·동기화 정보 복원 → D-2 모든 GitOps 연결 행동의 단일 흐름 수렴**이다.
+프론트 소유권은 클로드에게 있다. 코덱스는 `frontend/**`를 수정하지 않고 위 두 D-4 P0를 근거와 함께 반송한다. 후속 G4 순서는 **D-4 숫자/refresh → D-3 토큰 문법 통일 → D-1 저장소·동기화 정보 복원 → D-2 모든 GitOps 연결 행동의 단일 흐름 수렴**이다.
 
 ### 클로드가 쓸 수 있는 홈 API 계약
 
 | 요구 | 현재 계약 | 상태 |
 | --- | --- | --- |
-| 클러스터 카드 | `GET /api/fleet/summary` | 즉시 사용 가능: cluster별 nodes/pods, nullable CPU/MEM, health, last_seen |
+| 클러스터 카드 | `GET /api/fleet/summary` | 즉시 사용 가능. 라이브는 cluster별 node/pod/health/incident를 정상 반환하지만 frontend가 아직 소비하지 않아 카드 수치가 불일치한다. |
+| 활동 | `GET /api/activity/overview` | 즉시 사용 가능. 2026년 실제 DB 12 bucket HTTP 200; frontend refresh 시간창만 실패한다. |
 | 인시던트 상위 N | `GET /api/issues?issues.status=open&limit=N` | 즉시 사용 가능: 권한 범위 최신순 |
 | namespace Pod 분포 | `GET /api/clusters/{id}/inventory/summary` | 즉시 사용 가능: counts evidence 포함, 전체 fleet은 bounded fan-out 필요 |
 | 비용 요약 | `GET /api/cost/overview?clusters=...&range=24h` | 즉시 사용 가능: micro-unit 비용과 availability/reason codes |
 | 저장소 동기화 합계 | `GET /api/gitops/overview` | 부분: item status/coverage는 있으나 provider-normalized sync counts와 500행 초과 완전성 없음 |
 | 최근 5 Timeline | `POST /api/timeline/snapshots` | 부분: canonical evidence는 있으나 JSON `limit=5`/`has_more` 계약 없음 |
 
-다음 백엔드 우선순위는 (1) GitOps `sync_counts`+completeness, (2) canonical Home recent-five JSON projection, (3) fleet summary 관측 완전성 강화다. 이번 홈 UI 배치가 새로 만든 백엔드 API는 0개이며 기존 계약을 연결했다.
+다음 백엔드 우선순위는 (1) GitOps `sync_counts`+completeness, (2) canonical Home recent-five JSON projection, (3) alert-events 분류/페이지네이션이다. 이번 activity hotfix로 클로드가 쓸 수 있게 된 계약은 2026 epoch와 최대 30일 bucket을 안전하게 처리하는 `/api/activity/overview`다.
 
 ### 아카이브 병합 감사
 
@@ -66,11 +72,11 @@
 
 ### 현재 블로커와 다음 3수
 
-사람이나 오케스트레이터만 해결할 절대 블로커는 0개다. Frontend 어휘 결함은 `0916099f9`와 Gate `29688722835`로 해소됐다. 현재 유일한 배포 P0는 activity epoch bucket의 PostgreSQL 정수폭이며 로컬 수정까지 완료했다. IN-4는 발행자 결정에 따른 의도된 보류지만 canonical hostname이 trusted service-admin identity를 주입한다는 잔여 위험을 BLOCKERS에 남겼다. 남은 자체 해소 대상은 저부하 전체 검증, 단일 배포, 동일 SHA 라이브 증거다.
+activity bigint 배포 블로커는 `333c65734`와 Deploy `29690120559`로 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. 현재 G4 홈을 막는 것은 같은 SHA에서 발견한 frontend 숫자 투영 불일치와 refresh counter 시간창 결함이다. 파일 소유권상 수정 주체는 클로드지만, 계약·배포·재검증은 코덱스가 계속 맡는다.
 
-1. activity 2026 빈/populated 회귀와 전체 Backend, `gate-fast`, release governance를 load ≤30에서 하나씩 직렬 재검증한다.
-2. `origin/dev`를 다시 rebase하고 검증 후보 한 번만 push해 Gate→Deploy 완주까지 창을 잠근다.
-3. 배포 SHA로 activity 실제 DB 응답과 홈 카드 수치·W2~W8·클릭·리사이즈를 demo-freeze-v3와 재대조하고 GOAL/BLOCKERS/STATUS를 갱신한다.
+1. 같은 SHA의 demo/live 캡처, 숫자 표, 30초 전후 증거와 이번 상태 보고를 검증·push하고 그 Gate→Deploy 창을 완주한다.
+2. 클로드가 D-4 두 frontend P0를 반영하면 `/api/fleet/summary` 단일 원장과 activity 30초 refresh를 같은 SHA에서 재대조한다.
+3. G4 D-3/D-1/D-2 배치에 필요한 GitOps completeness와 alert-events 계약을 작게 제공하고 매 push의 Gate→Deploy를 지킨다.
 
 ## 이전 보고 상세 — 2026-07-19 17:35 KST
 
