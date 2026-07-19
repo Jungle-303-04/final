@@ -8,7 +8,10 @@ import { cn } from "@/shared/lib/cn";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
-import { serializeProductFilterUrl } from "../../features/filters/filterUrl";
+import {
+  productResourceHealthHref,
+  serializeProductFilterUrl,
+} from "../../features/filters/filterUrl";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
 import { formatCostMicros } from "../../features/cost/costFormat";
@@ -381,20 +384,11 @@ function resourceHealthDetailHref(
   href: string,
   health: ResourcesFilterResourceItem["resource"]["health"],
 ): string {
-  return resourceHealthHref(href, health);
+  return productResourceHealthHref(href, [health]);
 }
 
 function attentionResourcesHref(href: string): string {
-  return resourceHealthHref(href, "critical,warning");
-}
-
-function resourceHealthHref(href: string, health: string): string {
-  const [pathAndQuery = "", hash] = href.split("#", 2);
-  const [path = "", query] = pathAndQuery.split("?", 2);
-  const params = new URLSearchParams(query);
-  params.set("resources.health", health);
-  const serialized = params.toString();
-  return `${path}${serialized ? `?${serialized}` : ""}${hash ? `#${hash}` : ""}`;
+  return productResourceHealthHref(href, ["critical", "warning"]);
 }
 
 function toneDotClass(tone: ChartTone): string {
