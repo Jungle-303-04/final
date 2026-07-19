@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
@@ -70,14 +70,16 @@ describe("ResourcesPage view contract", () => {
     expect(await screen.findByRole("region", { name: "Flow map" })).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')).toBeNull();
-    expect(trafficPort.getOverview).toHaveBeenCalledWith(
-      expect.objectContaining({ clusterIds: [], namespaces: [] }),
-      expect.any(AbortSignal),
-    );
-    expect(trafficPort.getSources).toHaveBeenCalledWith(
-      { clusterIds: [] },
-      expect.any(AbortSignal),
-    );
+    await waitFor(() => {
+      expect(trafficPort.getOverview).toHaveBeenCalledWith(
+        expect.objectContaining({ clusterIds: [], namespaces: [] }),
+        expect.any(AbortSignal),
+      );
+      expect(trafficPort.getSources).toHaveBeenCalledWith(
+        { clusterIds: [] },
+        expect.any(AbortSignal),
+      );
+    });
     expect(rendered.router.state.location.search).toContain("clusters=cluster-1");
     expect(rendered.router.state.location.search).toContain("namespaces=cluster-1%2Fshop");
     expect(await screen.findByText("Hubble")).toBeTruthy();
@@ -85,7 +87,7 @@ describe("ResourcesPage view contract", () => {
     await user.click(screen.getByRole("button", { name: "Connect Hubble" }));
     await user.type(screen.getByLabelText("Reason"), "Connect the observed relay");
     await user.click(screen.getByRole("button", { name: "Confirm Connect Hubble" }));
-    expect(trafficPort.connectSource).toHaveBeenCalledWith({
+    await waitFor(() => expect(trafficPort.connectSource).toHaveBeenCalledWith({
       scope: {
         workspaceId: "workspace-a",
         clusterId: "cluster-1",
@@ -97,7 +99,7 @@ describe("ResourcesPage view contract", () => {
       confirmation: true,
       idempotencyKey: expect.any(String),
       reason: "Connect the observed relay",
-    }, expect.any(AbortSignal));
+    }, expect.any(AbortSignal)));
     expect(await screen.findByText(/corr-traffic-1/u)).toBeTruthy();
 
     await user.click((await screen.findAllByRole("button", { name: /checkout/ }))[0]!);
