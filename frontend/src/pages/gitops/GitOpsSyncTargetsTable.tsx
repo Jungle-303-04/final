@@ -1,4 +1,4 @@
-import { ChevronDown, GitBranch, Search } from "lucide-react";
+import { ChevronDown, GitBranch } from "lucide-react";
 import { Fragment } from "react";
 import { Link } from "react-router-dom";
 
@@ -24,17 +24,13 @@ import {
 import { GitOpsSyncTargetDetails } from "./GitOpsSyncTargetDetails";
 
 export function GitOpsSyncTargetsTable({
-  onClearQuery,
   onSelect,
   rows,
   selectedId,
-  visibleRows,
 }: {
-  onClearQuery: () => void;
   onSelect: (id: string | null) => void;
   rows: GitOpsSyncTarget[];
   selectedId: string | null;
-  visibleRows: GitOpsSyncTarget[];
 }) {
   const { formatDate, t } = useI18n();
   return (
@@ -42,7 +38,7 @@ export function GitOpsSyncTargetsTable({
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <h3 className="font-medium" id="gitops-sync-table-title">{t("workflows.sync.table.title")}</h3>
         <span className="text-xs tabular-nums text-muted-foreground">
-          {t("workflows.sync.table.count", { count: visibleRows.length })}
+          {t("workflows.sync.table.count", { count: rows.length })}
         </span>
       </div>
       {rows.length === 0 ? (
@@ -53,16 +49,6 @@ export function GitOpsSyncTargetsTable({
             </span>
             <p className="font-medium">{t("workflows.sync.empty.title")}</p>
             <p className="text-sm text-muted-foreground">{t("workflows.sync.empty.description")}</p>
-          </div>
-        </div>
-      ) : visibleRows.length === 0 ? (
-        <div className="grid min-h-52 place-items-center p-8 text-center">
-          <div className="grid max-w-md justify-items-center gap-3 rounded-xl border border-dashed p-6">
-            <Search aria-hidden="true" className="size-5 text-muted-foreground" />
-            <p className="font-medium">{t("workflows.sync.search.empty")}</p>
-            <Button onClick={onClearQuery} type="button" variant="outline">
-              {t("workflows.sync.search.clear")}
-            </Button>
           </div>
         </div>
       ) : (
@@ -81,7 +67,7 @@ export function GitOpsSyncTargetsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visibleRows.map((row) => {
+            {rows.map((row) => {
               const status = syncStatus(row.syncStatus, t);
               const selected = row.id === selectedId;
               return (

@@ -204,11 +204,9 @@ export function GitOpsSyncTableView({
         </p>
       ) : null}
       <GitOpsSyncTargetsTable
-        onClearQuery={() => undefined}
         onSelect={setSelectedId}
         rows={rows}
         selectedId={selectedId}
-        visibleRows={rows}
       />
     </div>
   );
