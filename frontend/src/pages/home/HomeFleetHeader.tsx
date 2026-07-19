@@ -105,7 +105,7 @@ export function HomeFleetHeader({
             {(["today", "7d", "30d"] as const).map((value) => (
               <Button
                 aria-pressed={period === value}
-                className="border-0"
+                className="h-auto border-0 px-2.5 py-[3px] text-caption-2 font-semibold"
                 key={value}
                 onClick={() => onPeriodChange(value)}
                 size="sm"
@@ -124,7 +124,7 @@ export function HomeFleetHeader({
           </Button>
         ) : null}
         {onConnect ? (
-          <Button onClick={onConnect} type="button">
+          <Button className="rounded-[9px] text-label-2 font-bold" onClick={onConnect} type="button">
             <Plus aria-hidden="true" />
             {t("clusters.action.add")}
           </Button>
@@ -153,9 +153,9 @@ function FleetMetric({ icon, label, tone = "neutral", value }: {
 }) {
   return (
     <TintChip
-      className="rounded-full px-3 py-1.5"
-      icon={<span className="[&_svg]:size-3">{icon}</span>}
-      label={<span className="inline-flex items-baseline gap-1.5"><span>{label}</span><strong className="font-mono text-bodyStrong tabular-nums text-foreground">{value}</strong></span>}
+      className="gap-[5px] rounded-full px-[11px] py-[5px] text-label font-semibold"
+      icon={<span className="text-caption-foreground [&_svg]:size-[11px]">{icon}</span>}
+      label={<span className="inline-flex items-baseline gap-1"><span>{label}</span><strong className="font-mono text-label font-bold tabular-nums text-foreground">{value}</strong></span>}
       tone={tone}
     />
   );

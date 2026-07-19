@@ -1,4 +1,4 @@
-import { ChevronDown, Info, MoveRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
 import { cn } from "@/shared/lib/cn";
@@ -62,15 +62,15 @@ export function WidgetFrame({
     <section
       aria-labelledby={titleId}
       className={cn(
-        "grid min-h-0 overflow-hidden rounded-card border border-border-subtle bg-card",
+        "grid min-h-0 overflow-hidden rounded-card border border-border bg-card",
         className,
       )}
       data-collapsed={collapsed || undefined}
       data-slot="widget-frame"
     >
-      <header className="flex min-w-0 items-center gap-2 border-b border-border-subtle px-4 py-3">
+      <header className="flex min-w-0 items-center gap-[7px] px-[15px] pt-[13px]">
         <h2
-          className="min-w-0 truncate text-body-strong font-semibold text-foreground"
+          className="min-w-0 truncate text-body font-bold tracking-[-0.01em] text-foreground"
           id={titleId}
         >
           {title}
@@ -93,10 +93,11 @@ export function WidgetFrame({
           {deepLink ? (
             <a
               aria-label={deepLink.label}
-              className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="flex items-center gap-0.5 rounded-md px-1 py-0.5 text-caption-2 font-bold text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
               href={deepLink.href}
             >
-              <MoveRight aria-hidden="true" className="size-4" />
+              {deepLink.label}
+              <ChevronRight aria-hidden="true" className="size-3" />
             </a>
           ) : null}
           {collapsible ? (
@@ -104,7 +105,7 @@ export function WidgetFrame({
               aria-controls={contentId}
               aria-expanded={!collapsed}
               aria-label={collapsed ? expandLabel : collapseLabel}
-              className="grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="grid size-[22px] place-items-center rounded-full bg-foreground/5 text-caption-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
               onClick={() => {
                 const next = !collapsed;
                 if (controlledCollapsed === undefined) setUncontrolledCollapsed(next);
@@ -131,7 +132,7 @@ export function WidgetFrame({
         id={contentId}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="h-full min-h-0 p-4">{children}</div>
+          <div className="h-full min-h-0 px-[15px] pt-[11px] pb-[13px]">{children}</div>
         </div>
       </div>
     </section>
