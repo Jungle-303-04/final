@@ -25,7 +25,7 @@
 
 1. **배포 창(Deploy Window) 규칙 — 이번에 확정된 병목의 해소책.** Dev Deploy 실행이 시작되면 **완주(성공/실패)까지 dev 푸시 금지, 실행 취소 절대 금지.** 지금까지 배포가 한 번도 완주 못 한 원인은 코드가 아니라 "새 반복을 위해 실행 중 배포를 취소"하는 루프였다(run 29662399433 취소 실측). 개발 커밋은 작업 브랜치에 쌓고, dev 푸시는 **배포 완주 후 배치로**.
 2. push 전 `git fetch origin dev` — 타인 커밋 reset/revert 금지, force-push 금지.
-3. 데모(`demo/motion-animations`, 태그 `demo-freeze-v2`)는 **읽기 전용 견본**이다. 수정 금지, 코드 복사 금지 — 사양을 보고 제품 규칙(토큰·i18n·가드)으로 재구현한다.
+3. 데모(`demo/motion-animations`, 태그 `demo-freeze-v3`, digest `adcf92130`)는 **읽기 전용 견본**이다. 수정 금지, 코드 복사 금지 — 사양을 보고 제품 규칙(토큰·i18n·가드)으로 재구현한다.
 4. 커밋: 한국어 conventional(`<type>: 명사 키워드 / 명사 키워드`), author `choi woo-nyong <woonyong.kr@gmail.com>`, 페이즈=커밋 단위.
 5. 게이트: 모든 커밋은 `make gate-fast` 통과 후 푸시(로컬 훅 실패 시 원인은 대개 conda 셸의 volta PATH 가림 — `conda deactivate` 후 재시도, 코드 탓하지 말 것).
 6. 완료 선언 금지 조항: "버그 0" 선언으로 목표를 닫지 않는다 — 자동 테스트·API 계약·라이브 상태·실브라우저 E2E가 **같은 digest**를 가리킬 때만 닫는다(HANDOVER §11).
@@ -58,7 +58,7 @@
 **완료 조건(발행자 확정 정책)**: 원격 브랜치 = **`main` + `dev` 둘만**. 그 외 전부(작업 브랜치·`demo/motion-animations` 포함) — ① 가치 있는 내용은 dev로 머지 ② `archive/<이름>` 태그로 아카이브 ③ 브랜치 삭제.
 
 - D: 미병합 브랜치는 diff 검토 — **같은 기능이 두 벌이면 더 통일된 쪽(결정표 D# 준수 쪽)을 채택**하고 나머지는 삭제. 채택 근거를 커밋 메시지에 인용.
-- D: 데모 브랜치는 견본 가치가 문서·태그(`demo-freeze-v2`)로 보존되므로, G4 서피스 이식이 MUST 범위를 넘긴 시점에 태그만 남기고 삭제한다(그 전에는 읽기 전용 참조로 유지).
+- D: 데모 브랜치는 견본 가치가 문서·태그(`demo-freeze-v3`, `adcf92130`)로 보존되므로, G4 서피스 이식이 MUST 범위를 넘긴 시점에 태그만 남기고 삭제한다(그 전에는 읽기 전용 참조로 유지).
 - D: main은 "배포 완주 SHA의 승격 대상"으로 정의 — G0 완주 digest를 main에 fast-forward.
 
 ## G2. 파운데이션 (Master Spec P0~P2)

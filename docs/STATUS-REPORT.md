@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 00:54 KST다. 원격 소스와 라이브 배포는 `fd58268d5210be92896a90f8ecd1a2ee4130fcb5`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이며, 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 03:24 KST다. 원격 소스와 라이브 배포는 `e84748b06ded3450ca3693efb5863ccbfc30eb68`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이며, 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. `fd58268d5`가 Dev Gate `29693357340`와 Dev Deploy `29693439823`을 통과해 원격 dev와 라이브 digest가 다시 일치한다.
-2. 직전 `723ab27aa9` 배포에 이어 홈 위젯 내부 1:1 콘텐츠 문법이 반영됐고, 두 배포 모두 console·인증 browser smoke 성공 및 rollback 미실행이다.
-3. `demo-freeze-v3` 기준 `adcf92130`과 제품 `723ab27aa9`의 디자인 계보를 감사했다. 토큰 정의는 일부 이식됐지만 소비자 전환은 미완료다.
-4. P0 잔여는 TINT 21종 소비, 모션 토큰 소비, 카드 radius/elevation 통일, `ClusterCard`의 raw color 제거다.
-5. P1 잔여는 `font-medium` 300회/125파일과 named palette 79회/24파일이며, 페이지 로컬 visual ownership 후보는 31개다.
-6. 따라서 v3 디자인 가이드 병합과 G4는 **부분**이다. 토큰 파일 존재만으로 완료를 선언하지 않고 실제 consumer 0-잔여와 화면 대조를 요구한다.
-7. 직전 Home D-4의 fleet 숫자 단일 원장 및 activity 30초 refresh 결함도 완료 증거가 없어 기존 블로커를 유지한다.
-8. 새 외부 사람 필요 블로커는 0개다. 현 잔여는 저장소 코드·검증·배포 권한 안에서 자체 해소 가능하다.
-9. 다음 배치는 home foundation을 먼저 제품 소비자로 전환하고, 같은 SHA demo/live 대조 뒤 배포한다.
-10. 다음 3수는 home foundation → deploy/issues table → resources table 순서의 소배치 cutover·Gate→Deploy다.
+1. `e84748b06` Dev Gate `29694437337`·Deploy `29694651904`가 성공한 상태에서 exact demo와 제품 10개 서피스를 1440으로 직접 대조했다.
+2. 판정은 Home **부분**, 배포·리소스·이슈·타임라인·점검·비용·설정·알림·AI 대화 **9개 불일치**이며 G4 완료 선언은 금지한다.
+3. 결함 D-5~D-9와 화면별 차이를 `surface-parity-audit-2026-07-20.md` 및 `DEMO-DEFECT-LEDGER.md`에 등록했다.
+4. Home 후보는 selected scope·숫자 원장·W2~W8 문법을 맞추고 W3 미관측 저장소를 unknown/partial, W6 장애+주의를 단일 snapshot으로 표시한다.
+5. namespace drill-down은 실제 관측 cluster/namespace 쌍만 전달하고, 비용 30일 선택은 실제 API 범위인 최근 7일 관측을 함께 표시한다.
+6. fleet CPU/MEM fallback은 관측 freshness를 통과할 때만 사용하며 부분 snapshot의 `2/2·6/9`를 전체값으로 승격하지 않는다.
+7. 로컬 저부하 게이트는 Python 100/100, 변경 Vitest 756/756, typecheck·lint·design 1,362파일·build·governance 41/41 모두 종료 코드 0이다.
+8. rollout 후보는 최대 8개 strict wave·동일 wave status 대기·fail-fast·단일 deadline·중복 set-image 제거와 적용 전 redacted spec diff를 갖췄다.
+9. 새 외부 사람 필요 블로커는 0개다. 배포·동일 SHA 브라우저 증거 전이므로 Home과 rollout은 진행 상태다.
+10. 다음 3수는 후보 단일 push→Gate/Deploy 완주·전후 시간 비교 → Home 동일 SHA 증거 → 알림 서피스 실제 alert-events 동등화다.
 
 ## 현재 상세 근거
 
@@ -37,25 +37,41 @@
 | `07527f0b89` | Gate `29691325987`, Deploy `29691403364` | proof/backend/frontend/full gate와 post-deploy/authenticated browser smoke success, rollback skipped | 이전 성공 기준점 |
 | `fc94c6979` | Gate `29692135864`, Deploy `29692193340` | `HomeClusterGrid.test.tsx` 미사용 `userEvent`·`vi`로 Frontend lint 실패, Deploy skipped | 제품 실행 전 정적 게이트 실패 |
 | `723ab27aa9` | Gate `29692859664`, Deploy `29692918077` | Gate success, Deploy success(5m50s), console/authenticated browser smoke success, rollback skipped | 직전 디자인 배치 기준점 |
-| `fd58268d5` | Gate `29693357340`, Deploy `29693439823` | Gate/Deploy success, 홈 위젯 내부 1:1 콘텐츠 문법 반영 | 현재 원격·라이브 기준점 |
+| `fd58268d5` | Gate `29693357340`, Deploy `29693439823` | Gate/Deploy success, 홈 위젯 내부 1:1 콘텐츠 문법 반영 | 이전 기준점 |
+| `e84748b06` | Gate `29694437337`, Deploy `29694651904` | Gate/Deploy success, Home foundation과 fleet 단일 원장 소비 1차 반영 | 현재 원격·라이브 기준점; exact 대조 결과 G4 부분 |
+| 로컬 후보(커밋 전) | gate-fast·build·governance | Python 100/100, changed Vitest 756/756, typecheck/lint/design/build, governance 41/41 모두 success | 배포와 동일 SHA 증거 전; 완료 아님 |
 
-현재 활성 Gate/Deploy는 0이다. 원격 `dev`와 라이브 성공 기준점은 `fd58268d5`로 일치한다. 직전 완전 홈 증거 SHA `333c65734`의 activity backend 해소와 D-4 두 frontend 회귀 판정은 후속 동일 SHA 화면 대조로 해소됐다는 증거가 없으므로 유지한다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `e84748b06`으로 일치한다. exact demo `adcf92130`과의 1440 대조에서 Home scope·숫자·편집·차트 델타가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
 
 ### G4 홈과 가시 변화
 
-- 라이브 digest: `333c657345271e5d924fbb9e01983f9142335098`; bundle `index-BKNoNEP4.js`에서 전체 SHA를 확인했다.
-- 가시 변화: 한 줄 플릿 요약, 최대 2열 클러스터 카드, W2~W8 기본 보드, 공용 Recharts 차트, 실행 가능한 빈/오류 상태가 라이브에 배포됐다.
-- 실브라우저 증거: `home-live-333c65734-1920.jpg`, `home-live-333c65734-board-1920.jpg`, `home-live-333c65734-activity-initial.jpg`, `home-live-333c65734-activity-after-refresh.jpg`. 1920 viewport에서 document/main 가로 overflow는 0이다.
-- activity backend는 해소됐다. 2026년 5분 bucket 12개를 실제 DB에서 HTTP 200으로 반환하고 Deploy read smoke도 통과했다.
-- activity frontend는 미해소다. 최초 로드 차트는 보이지만 첫 30초 refresh 후 `사용할 수 없음`이 된다. `useHomeBoardData.ts`가 revision counter를 epoch-ms로 사용한다.
-- 숫자도 미해소다. UI는 legacy cluster overview의 workload 합계와 node 0/0을 표시하는 반면 `/api/fleet/summary`는 실제 node/pod fleet 값을 반환한다. 동일 화면 안의 카드·집계·API 단일 원장이 아니다.
-- demo 기준 캡처는 1440, 이번 live 캡처는 1920이므로 강화된 동일 viewport 나란히 대조 조건도 아직 충족하지 않는다. G4 홈 완료 선언은 금지한다.
+- 라이브 digest는 `e84748b06ded3450ca3693efb5863ccbfc30eb68`이며 Dev Gate `29694437337`와 Dev Deploy `29694651904`가 모두 성공했다.
+- exact demo `adcf92130`과 제품을 1440 viewport로 대조했다. 대조 자체는 수행했지만 동일 후보 SHA의 최종 숫자·클릭·1280~1920 증거는 아직 없다.
+- 대조 결과 selected cluster를 골라도 전체 fleet 카드가 남는 scope 모순, 헤더·카드 장애 숫자 불일치, W2~W8 편집 및 차트 문법 델타가 확인됐다.
+- 현재 로컬 후보는 선택된 scope만 카드에 반영하고 헤더 장애 수를 같은 카드 원장에서 계산하며, exact 위젯 제목·`전체 보기`·편집 tray·차트 legend/labels를 재구현한다.
+- latest accepted snapshot의 `노드 2/2·파드 6/9`는 현재 관측 범위의 값이지만 `resources_complete=false`다. 이를 전체값으로 승격해 기존 `2/3·41` critical 상태를 숨기는 후보는 자기감사에서 반려했고, count/health는 보수적 read model을 유지한 채 CPU/MEM 실측 fallback만 연결한다.
+- namespace 전체 수는 snapshot의 `resources_complete=false` 때문에 정확한 총계로 주장하지 않는다. 사용 가능한 완전성 증거가 없으면 `—`를 표시한다.
+- 따라서 Home G4는 **부분**이며, 다음 배포와 같은 SHA의 demo/live 1440·숫자 교차·편집 클릭 경로가 모두 일치할 때만 완료를 재판정한다.
 
-직전 분할 소유 상태에서 반송했던 D-4 P0는 해소 증거가 없으므로 그대로 유지한다. 후속 G4는 demo-freeze-v3 소비자 전환과 함께 **Home foundation·D-4 숫자/refresh → Deploy/Issues table·D-1/D-2 → Resources table → D-3 전역 잔여 0** 순서로 진행한다.
+직전 D-4 P0는 제품 코드 후보와 로컬 게이트만 준비됐고 배포·동일 SHA 증거가 없으므로 미해소로 유지한다. 후속 G4는 **Home → 알림 → AI 대화 → 배포/GitOps/워크플로우 → 리소스 3관점·트래픽 → 이슈 상세 → 타임라인 → 점검 → 비용 → 설정** 순서를 따른다.
+
+### G4 전 서피스 직접 대조
+
+`demo-freeze-v3`의 `devpreview-unified.html?polish=1`과 제품 `e84748b06`을 1440에서 직접 열어 구조·숫자·클릭을 비교했다. 상세 표는 `docs/evidence/g4/surface-parity-audit-2026-07-20.md`에 있다.
+
+| 판정 | 서피스 | 핵심 잔여 |
+| --- | --- | --- |
+| 부분 | Home | 후보 배포와 동일 SHA CPU/MEM·W3/W6/W7·편집·3 viewport 증거 |
+| 불일치 | 알림 | 독립 내비/서피스, 진행 중 카드, 이벤트 표, 벨·토스트 단일 원장 |
+| 불일치 | AI 대화 | 독립 내비/내역, 저장·재개·새 대화; 기존 보조 패널과 원장 통일 |
+| 불일치 | 배포 | GitOps 연결·동기화 정보, 워크플로우 편집, Helm의 실행 가능한 상태 |
+| 불일치 | 리소스 | 인프라·쿠버네티스·트래픽 3관점, RPS/오류, sticky relation focus |
+| 불일치 | 이슈 | compact 목록, 상세 RCA 근거, 복구 실행과 실패 재시도 |
+| 불일치 | 타임라인·점검·비용·설정 | 정보 밀도·번역·실관측·연결/재시도, `준비 중` 가짜 컨트롤 0 |
 
 ### demo-freeze-v3 디자인 계보 감사
 
-감사 기준은 read-only 견본 `demo-freeze-v3`의 `adcf92130`, 제품 기준은 라이브 SHA `723ab27aa9`다. 토큰 정의 자체는 제품에 일부 들어왔지만 각 페이지와 공용 부품의 실제 소비 전환은 끝나지 않았다. 따라서 디자인 가이드가 문서·토큰 파일에 존재한다는 사실만으로 병합 완료로 판정하지 않는다.
+감사 기준은 read-only 견본 `demo-freeze-v3`의 `adcf92130`, 제품 기준은 라이브 SHA `e84748b06`이다. 토큰 정의 자체는 제품에 일부 들어왔지만 각 페이지와 공용 부품의 실제 소비 전환은 끝나지 않았다. 따라서 디자인 가이드가 문서·토큰 파일에 존재한다는 사실만으로 병합 완료로 판정하지 않는다.
 
 | 우선순위 | 잔여 | 실측 | 완료 조건 |
 | --- | --- | --- | --- |
@@ -65,21 +81,21 @@
 | P1 | named palette | 79회/24파일 | 의미 토큰으로 전환 후 서비스 identity 외 잔여 0 |
 | P1 | visual ownership | 페이지 로컬 후보 31개 | 카드·칩·표·게이지를 `shared/ui` 소유로 수렴하고 페이지는 조합만 담당 |
 
-현재 G4 판정은 **부분**이다. 다음 배치는 home foundation을 먼저 전환하고 demo/live 동일 viewport·클릭 경로·숫자 대조를 붙인 뒤, deploy/issues table과 resources table을 각각 별도 소배치로 완료한다.
+현재 G4 판정은 **부분**이다. 다음 배치는 Home의 selected scope·숫자·편집·차트 델타를 먼저 닫고 demo/live 동일 viewport·클릭 경로·숫자 대조를 붙인다. 반려 델타 해소 전 다음 서피스로 이동하지 않는다.
 
 ### 클로드가 쓸 수 있는 홈 API 계약
 
 | 요구 | 현재 계약 | 상태 |
 | --- | --- | --- |
-| 클러스터 카드 | `GET /api/fleet/summary` | 즉시 사용 가능. 라이브는 cluster별 node/pod/health/incident를 정상 반환하지만 frontend가 아직 소비하지 않아 카드 수치가 불일치한다. |
-| 활동 | `GET /api/activity/overview` | 즉시 사용 가능. 2026년 실제 DB 12 bucket HTTP 200; frontend refresh 시간창만 실패한다. |
+| 클러스터 카드 | `GET /api/fleet/summary` | 라이브 소비 중. `2/2·6/9` 부분 snapshot을 전체값으로 승격하면 장애 노드를 숨길 수 있어 count 변경은 반려했다. 현재 후보는 보수적 count/health를 유지하고 실측 CPU/MEM fallback만 추가한다. |
+| 활동 | `GET /api/activity/overview` | 즉시 사용 가능. 2026년 실제 DB 12 bucket HTTP 200이며 bigint overflow는 배포 해소됐다. |
 | 인시던트 상위 N | `GET /api/issues?issues.status=open&limit=N` | 즉시 사용 가능: 권한 범위 최신순 |
 | namespace Pod 분포 | `GET /api/clusters/{id}/inventory/summary` | 즉시 사용 가능: counts evidence 포함, 전체 fleet은 bounded fan-out 필요 |
 | 비용 요약 | `GET /api/cost/overview?clusters=...&range=24h` | 즉시 사용 가능: micro-unit 비용과 availability/reason codes |
 | 저장소 동기화 합계 | `GET /api/gitops/overview` | 부분: item status/coverage는 있으나 provider-normalized sync counts와 500행 초과 완전성 없음 |
 | 최근 5 Timeline | `POST /api/timeline/snapshots` | 부분: canonical evidence는 있으나 JSON `limit=5`/`has_more` 계약 없음 |
 
-다음 백엔드 우선순위는 (1) GitOps `sync_counts`+completeness, (2) canonical Home recent-five JSON projection, (3) alert-events 분류/페이지네이션이다. 이번 activity hotfix로 클로드가 쓸 수 있게 된 계약은 2026 epoch와 최대 30일 bucket을 안전하게 처리하는 `/api/activity/overview`다.
+현재 화면 P0 백엔드 우선순위는 fleet의 보수적 node/pod health를 훼손하지 않고 CPU/MEM 실측을 Home 카드에 공급하는 계약이다. exact node/pod 총계는 authoritative full-cluster sweep 계약 없이는 단정하지 않는다. GitOps·최근 Timeline·alert-events 확장은 Home 반려 델타 해소와 배포 증거가 끝난 뒤 해당 서피스 배치에서 처리한다.
 
 ### 아카이브 병합 감사
 
@@ -87,13 +103,22 @@
 - `archive/codex/frontAlarm`의 실 alert 원장/확인/승격은 현행이 더 강하다. 고정 `cluster-1`, CPU 92%를 원장에 넣는 `/alert-events/test`만 빠졌으며 fake 금지에 따라 의도적으로 제외한다.
 - `archive/ux/rca-incident-card`의 recovery router와 nullable 설명 필드는 의미 이식됐다. 실제 builtin 31개 설명값이 null인 것은 아카이브 미병합이 아니라 source-backed 설명을 채울 별도 인시던트 과제다.
 
+### 배포 rollout 병목 진단
+
+- 최근 성공/실패 Deploy 표본에서 immutable service rollout은 1분44초~2분06초, console rollout은 21~22초였다. 20분 이상 동일 단계 대기는 현재 로그에서 재현되지 않았다.
+- 라이브 management inventory는 노드 2/2 Ready이고 현재 console pod는 2개 모두 Ready·restart 0이다. 노드 0/0 표시는 Home 데이터 연결 결함이지 management node capacity 고갈 증거가 아니다.
+- 최근 console 관련 이슈 32건은 모두 resolved이고 현재 pod 2개는 Ready 1/1·restart 0이다. 정상 rollout의 짧은 NotReady까지 이슈로 수집한 정황이며 리소스 고갈 근거는 없다.
+- 로컬 후보는 readiness를 API/SPA fallback과 분리된 `/index.html`에서 3초 뒤 2초 주기·1초 timeout으로 확인하고 console spec reconcile을 맞춘다. 장기 연결을 강제로 끊는 5초 종료 후보는 근거 부족과 스트림 절단 위험으로 반려했다.
+- 실제 단축 후보는 최대 8개 workload의 strict wave(`patch → 같은 wave rollout status → 다음 wave`), 첫 실패 후 다음 wave 금지, spec reconcile의 중복 image set 제거, 모든 kubectl 동작이 공유하는 단일 deadline이다.
+- 첫 spec reconcile 전에 라이브 v4 rollback capture와 fresh live spec의 exact 동일성을 fail-closed로 확인하고, 비밀값·임의 annotation payload를 제거한 diff artifact를 mode 0600으로 먼저 쓴다. 다음 Deploy에서 service 102~130초와 console 17~22초를 각각 같은 로그 구간으로 비교한다.
+
 ### 현재 블로커와 다음 3수
 
-activity bigint 배포 블로커는 `333c65734`와 Deploy `29690120559`로 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. 기존 D-1~D-4도 같은 SHA의 완료 증거가 생기기 전까지 유지한다. 이번 감사에서 새로 확인된 **외부 사람 필요 블로커는 0개**이며, 디자인 소비자 전환은 현재 저장소·검증·배포 권한 안에서 자체 해소한다.
+activity bigint 배포 블로커는 `333c65734`와 Deploy `29690120559`로 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. D-1~D-4도 같은 SHA의 완료 증거가 생기기 전까지 유지한다. 새로 확인된 **외부 사람 필요 블로커는 0개**다.
 
-1. **Home foundation**: TINT·TYPE·motion·card shape/elevation과 `ClusterCard` raw visual 값을 공용 토큰 소비로 전환하고 D-4 숫자/refresh를 같은 SHA에서 재대조한다.
-2. **Deploy/Issues table**: 공용 표·칩·상태 문법으로 전환하고 D-1 저장소·동기화 정보와 D-2 연결 행동을 실동작 경로로 검증한다.
-3. **Resources table**: 같은 공용 table grammar로 수렴시키고 1280~1920 overflow·ellipsis·chip wrap·클릭 경로를 검증한 뒤 잔여 named palette/visual ownership을 재계수한다.
+1. **단일 배포·rollout 계측**: 검증된 후보 하나만 push하고 Gate→Deploy 완주까지 추가 push를 금지하며 console/service 시간을 이전 17~22초/102~130초와 비교한다.
+2. **동일 SHA 증거**: 라이브에서 exact demo `adcf92130`과 1440 나란히 캡처하고 W3/W6/W7 실데이터·편집 클릭·1280~1920 overflow를 확인한 뒤 Home을 재판정한다.
+3. **알림 동등화**: 독립 주 내비·진행 중 카드·분류/페이지 목록·벨 배지를 기존 alert-events 원장에 연결하고 demo 문법으로 다음 소배치를 만든다.
 
 ## 이전 보고 상세 — 2026-07-19 17:35 KST
 
