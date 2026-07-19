@@ -5,9 +5,18 @@ export function requestCount(
   path: string,
 ) {
   return fetchMock.mock.calls.filter(
-    ([input]) =>
-      (typeof input === "string" ? input : input.toString()) === path,
+    ([input]) => requestPath(input) === path,
   ).length;
+}
+
+export function requestPath(input: Parameters<typeof globalThis.fetch>[0]): string {
+  const raw = typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url;
+  const url = new URL(raw, "http://test.local");
+  return `${url.pathname}${url.search}`;
 }
 
 export function homeApiResponse(path: string): Response {

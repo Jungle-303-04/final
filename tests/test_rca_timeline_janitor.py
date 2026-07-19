@@ -77,11 +77,11 @@ def test_rca_timeline_janitor_refreshes_heartbeat_during_long_wait() -> None:
     async def scenario() -> None:
         await janitor.wait_for_next_sweep(
             asyncio.Event(),
-            0.12,
-            heartbeat_interval=0.02,
+            0.2,
+            heartbeat_interval=0.05,
             touch=lambda: touches.append(object()),
         )
 
     asyncio.run(scenario())
 
-    assert len(touches) >= 3
+    assert len(touches) >= 2

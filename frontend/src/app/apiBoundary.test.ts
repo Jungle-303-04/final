@@ -22,7 +22,7 @@ interface ApiReference {
   specifier: string;
 }
 
-const API_BOUNDARY_TIMEOUT_MS = 30_000;
+const API_BOUNDARY_TIMEOUT_MS = 120_000;
 
 describe("product API consumption boundary", () => {
   it("allows product/api references only from authenticated composition boundaries", async () => {

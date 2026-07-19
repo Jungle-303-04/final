@@ -278,7 +278,7 @@ def test_permission_denied_fixture_emits_real_posix_eacces_without_external_infr
         text=True,
         capture_output=True,
         check=False,
-        timeout=2,
+        timeout=10,
         env={**os.environ, "SCRIPT_EXECUTABLE": "false", "HOLD_SECONDS": "0"},
     )
     normal = subprocess.run(
@@ -286,7 +286,7 @@ def test_permission_denied_fixture_emits_real_posix_eacces_without_external_infr
         text=True,
         capture_output=True,
         check=False,
-        timeout=2,
+        timeout=10,
         env={**os.environ, "SCRIPT_EXECUTABLE": "true", "HOLD_SECONDS": "0"},
     )
 

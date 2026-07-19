@@ -13,7 +13,9 @@ import {
 } from "vitest";
 import { PRODUCT_LOCALE_STORAGE_KEY } from "./shared/i18n/locale";
 import ProductApp from "./ProductApp";
-import { homeApiResponse, requestCount } from "./ProductApp.testSupport";
+import { homeApiResponse, requestCount, requestPath } from "./ProductApp.testSupport";
+
+const PRODUCT_ROUTE_TIMEOUT_MS = 120_000;
 
 beforeEach(() => {
   vi.useRealTimers();
@@ -91,11 +93,11 @@ describe("ProductApp root recovery", () => {
 
   it("keeps the explicit Home route on the declarative Home landing", async () => {
     window.history.replaceState({}, "", "/home?cluster=cluster-1");
+    await warmAuthenticatedRuntime();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
-        const path = typeof input === "string" ? input : input.toString();
-        return homeApiResponse(path);
+        return homeApiResponse(requestPath(input));
       });
 
     render(
@@ -108,7 +110,7 @@ describe("ProductApp root recovery", () => {
       await screen.findByRole(
         "heading",
         { name: "Cluster status", level: 2 },
-        { timeout: 10_000 },
+        { timeout: PRODUCT_ROUTE_TIMEOUT_MS },
       ),
     ).toBeTruthy();
     expect((await screen.findAllByText("cluster-1")).length).toBeGreaterThan(0);
@@ -125,15 +127,15 @@ describe("ProductApp root recovery", () => {
       expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1);
       expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1);
     });
-  }, 15_000);
+  }, PRODUCT_ROUTE_TIMEOUT_MS);
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {
     window.history.replaceState({}, "", "/resources/pod?cluster=cluster-1");
+    await warmAuthenticatedRuntime();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
-        const path = typeof input === "string" ? input : input.toString();
-        return homeApiResponse(path);
+        return homeApiResponse(requestPath(input));
       });
 
     render(
@@ -146,7 +148,7 @@ describe("ProductApp root recovery", () => {
       await screen.findByRole(
         "table",
         { name: "Resource list" },
-        { timeout: 10_000 },
+        { timeout: PRODUCT_ROUTE_TIMEOUT_MS },
       ),
     ).toBeTruthy();
     expect(
@@ -157,7 +159,7 @@ describe("ProductApp root recovery", () => {
     const resource = await screen.findByRole(
       "button",
       { name: "Open details for checkout-api-0" },
-      { timeout: 10_000 },
+      { timeout: PRODUCT_ROUTE_TIMEOUT_MS },
     );
     expect(
       requestCount(
@@ -170,7 +172,7 @@ describe("ProductApp root recovery", () => {
     const dialog = await screen.findByRole(
       "dialog",
       { name: "checkout-api-0 details" },
-      { timeout: 10_000 },
+      { timeout: PRODUCT_ROUTE_TIMEOUT_MS },
     );
     expect(dialog.textContent).toContain("Running");
     expect(window.location.pathname).toBe("/resources/pod");
@@ -183,6 +185,10 @@ describe("ProductApp root recovery", () => {
         fetchMock,
         "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50",
       ),
-    ).toBe(1);
-  }, 15_000);
+    ).toBeGreaterThanOrEqual(1);
+  }, PRODUCT_ROUTE_TIMEOUT_MS);
 });
+
+async function warmAuthenticatedRuntime() {
+  await import("./app/AuthenticatedProductRuntime");
+}

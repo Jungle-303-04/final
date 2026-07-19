@@ -36,7 +36,7 @@ describe("product build and document boundary", () => {
     const manifest = await readManifest();
 
     expect(manifest.scripts.typecheck).toBe("tsc -b");
-    expect(manifest.scripts.test).toBe("vitest run");
+    expect(manifest.scripts.test).toBe("vitest run --maxWorkers=2 --testTimeout=120000");
     expect(manifest).not.toHaveProperty("main");
     expect(manifest).not.toHaveProperty("exports");
   });
