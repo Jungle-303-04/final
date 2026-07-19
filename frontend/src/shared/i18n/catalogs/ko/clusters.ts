@@ -14,7 +14,7 @@ export const clustersKo = {
   "clusters.metric.servers": "서버 {count}",
   "clusters.metric.pods": "파드 {count}",
   "clusters.metric.apps": "앱 {count}",
-  "clusters.metric.incidents": "인시던트 {count}",
+  "clusters.metric.incidents": "이슈 {count}",
   "clusters.metric.unavailableReason": "이 지표에 필요한 완전한 인벤토리 또는 discovery 근거를 에이전트가 아직 보내지 않았습니다.",
   "clusters.connection.online": "연결됨",
   "clusters.connection.stale": "응답 지연",

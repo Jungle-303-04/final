@@ -11,15 +11,15 @@ describe("WidgetFrame", () => {
       <WidgetFrame
         collapseLabel="접기"
         collapsible
-        deepLink={{ href: "/issues", label: "인시던트 열기" }}
+        deepLink={{ href: "/issues", label: "이슈 열기" }}
         expandLabel="펼치기"
-        title="인시던트"
+        title="이슈"
       >
         <span>실데이터</span>
       </WidgetFrame>,
     );
 
-    expect(screen.getByRole("link", { name: "인시던트 열기" })
+    expect(screen.getByRole("link", { name: "이슈 열기" })
       .getAttribute("href")).toBe("/issues");
     const toggle = screen.getByRole("button", { name: "접기" });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");

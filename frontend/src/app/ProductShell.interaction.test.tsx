@@ -48,7 +48,7 @@ describe("ProductShell keyboard and help interaction", () => {
     const dialog = screen.getByRole("dialog", { name: "키보드 단축키" });
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(dialog.textContent).toContain("홈 화면 열기");
-    expect(dialog.textContent).toContain("인시던트 화면 열기");
+    expect(dialog.textContent).toContain("이슈 화면 열기");
     expect(dialog.textContent).toContain("Shift 키와 D 키");
     expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
     expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
@@ -73,8 +73,8 @@ describe("ProductShell keyboard and help interaction", () => {
     await user.keyboard("g");
     await user.keyboard("i");
     expect(screen.getByText("Issue content")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "인시던트" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "이슈", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "이슈" }).getAttribute("aria-current")).toBe("page");
     await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
 
     await user.keyboard("?");
@@ -326,10 +326,10 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(document.activeElement).toBe(open);
 
     await user.click(open);
-    await user.click(await screen.findByRole("link", { name: "인시던트" }));
+    await user.click(await screen.findByRole("link", { name: "이슈" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByText("Issue content")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "이슈", level: 1 })).toBeTruthy();
   });
 
   it("lets Tab leave the non-modal mobile filter popup for the next header control", async () => {

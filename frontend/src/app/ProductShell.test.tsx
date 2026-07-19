@@ -163,7 +163,7 @@ describe("ProductShell", () => {
     );
 
     expect(markup).toContain("홈");
-    expect(markup).toContain("인시던트");
+    expect(markup).toContain("이슈");
     expect(markup).toContain("test-use… 프로필 메뉴 열기");
     expect(markup).toContain("워크스페이스");
     expect(markup).toContain("언어");

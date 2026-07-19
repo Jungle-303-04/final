@@ -26,7 +26,7 @@ describe("ProductShell surface scroll contract", () => {
       renderShell();
       scrollTo.mockClear();
 
-      await user.click(screen.getByRole("link", { name: "인시던트" }));
+      await user.click(screen.getByRole("link", { name: "이슈" }));
 
       await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({
         behavior: "auto",

@@ -490,7 +490,7 @@ export const resourcesKo = {
   "resources.detail.history.description": "이 리소스의 시간별 이력은 아직 준비되지 않았습니다.",
   "resources.detail.history.metrics": "CPU·메모리 이력",
   "resources.detail.history.logs": "선택 시각 로그",
-  "resources.detail.history.incident": "관련 인시던트",
+  "resources.detail.history.incident": "관련 이슈",
   "resources.detail.value.yes": "예",
   "resources.detail.value.no": "아니요",
   "resources.detail.fact.phase": "Phase",

@@ -115,9 +115,9 @@ describe("product-owned Item", () => {
       variant: "outline",
     } as unknown as ItemProps;
 
-    render(<Item {...unsafeProps}>인시던트 보기</Item>);
+    render(<Item {...unsafeProps}>이슈 보기</Item>);
 
-    const link = screen.getByRole("link", { name: "인시던트 보기" });
+    const link = screen.getByRole("link", { name: "이슈 보기" });
     expect(link.getAttribute("data-slot")).toBe("item");
     expect(link.getAttribute("data-size")).toBe("sm");
     expect(link.getAttribute("data-variant")).toBe("outline");
