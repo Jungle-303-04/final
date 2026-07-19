@@ -34,6 +34,7 @@ export interface ApplicationConnectInput {
   clusterId: string;
   namespace: string;
   environment: string;
+  sourceType?: string;
   token?: string;
 }
 
@@ -66,6 +67,7 @@ export function connectApplication(
         cluster_id: input.clusterId,
         namespace: input.namespace,
         environment: input.environment,
+        ...(input.sourceType ? { source_type: input.sourceType } : {}),
         ...(input.token ? { token: input.token } : {}),
       }),
       signal,

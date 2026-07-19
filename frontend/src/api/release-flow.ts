@@ -2,6 +2,13 @@ import { apiRequest, type ApiPath } from "./client";
 import { connectApplication, listApplications } from "./applications";
 import { listClusters } from "./clusters";
 import {
+  getRepositoryConnectionStatus,
+  listRepositoryBranches,
+  listRepositoryManifests,
+  probeRepository,
+  validateRepositoryManifest,
+} from "./repository-discovery";
+import {
   releaseGeneratedManifestSchema,
   releasePlanListSchema,
   releasePlanResponseSchema,
@@ -27,6 +34,11 @@ export function createReleaseFlowClient() {
   return {
     listApplications: (signal?: AbortSignal) => listApplications({ signal }),
     listClusters: (signal?: AbortSignal) => listClusters({}, signal),
+    probeRepository,
+    listRepositoryBranches,
+    listRepositoryManifests,
+    validateRepositoryManifest,
+    getRepositoryConnectionStatus,
     connectApplication,
     listPlans: (signal?: AbortSignal) =>
       apiRequest("/api/release-plans", releasePlanListSchema, { signal }),

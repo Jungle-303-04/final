@@ -102,6 +102,13 @@ export {
   type ReleaseRunAction,
 } from "../release-flow";
 export {
+  getRepositoryConnectionStatus,
+  listRepositoryBranches,
+  listRepositoryManifests,
+  probeRepository,
+  validateRepositoryManifest,
+} from "../repository-discovery";
+export {
   releaseGeneratedManifestSchema,
   releasePlanListSchema,
   releasePlanResponseSchema,

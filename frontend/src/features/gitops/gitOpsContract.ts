@@ -1,3 +1,4 @@
+import type { RepositoryConnectionPort } from "./repositoryConnectionContract";
 export type ReleasePlanStatus = "draft" | "active" | "paused" | "archived";
 export type GitOpsFailureCode =
   | "unauthorized"
@@ -7,7 +8,6 @@ export type GitOpsFailureCode =
   | "not-found"
   | "rate-limited"
   | "error";
-
 export class GitOpsPortFailure extends Error {
   readonly code: GitOpsFailureCode;
   readonly retryAfter: number | null;
@@ -251,6 +251,7 @@ export interface ReleaseTargetInput {
   clusterId: string;
   namespace: string;
   environment: string;
+  sourceType?: string;
   token?: string;
 }
 
@@ -415,7 +416,7 @@ export type ReleaseRunAction =
   | "cancel"
   | "notify";
 
-export interface GitOpsPort {
+export interface GitOpsPort extends RepositoryConnectionPort {
   listApplications(signal?: AbortSignal): Promise<ReleaseApplication[]>;
   listSyncTargets(
     signal?: AbortSignal,
@@ -428,7 +429,6 @@ export interface GitOpsPort {
   listClusters(signal?: AbortSignal): Promise<ReleaseCluster[]>;
   listPlans(signal?: AbortSignal): Promise<ReleasePlan[]>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<ReleaseRun[]>;
-  connectApplication(input: ReleaseTargetInput, signal?: AbortSignal): Promise<ReleaseApplication>;
   savePlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePlan>;
   previewPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePreview>;
   checkReadiness(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseReadiness>;

@@ -5,10 +5,13 @@ import { useOptionalProductNotifications } from "../../features/notifications/Pr
 import type {
   ReleaseApplication,
   ReleaseCluster,
-  ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
+import type {
+  RepositoryConnectionInput,
+  RepositoryConnectionStage,
+} from "../../features/gitops/repositoryConnectionContract";
 import { useI18n } from "../../shared/i18n";
-import { ConnectStages, type ConnectStageTriplet } from "../../shared/ui/connect";
+import { ConnectStages, type ConnectStage } from "../../shared/ui/connect";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -24,14 +27,11 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Spinner } from "../../shared/ui/primitives/spinner";
 import { FormField, NativeSelect } from "./WorkflowFormControls";
 
-type ConnectPhase = "configure" | "registering" | "reflecting" | "failed";
-type FailureStage = "register" | "reflect";
+type ConnectPhase = "configure" | "running" | "failed";
 
-const INITIAL_INPUT: ReleaseTargetInput = {
+const INITIAL_INPUT: RepositoryConnectionInput = {
   name: "",
   repository: "",
-  branch: "main",
-  manifestPath: "deploy.yaml",
   clusterId: "",
   namespace: "default",
   environment: "development",
@@ -44,8 +44,8 @@ export function RepoConnectDialog({
 }: {
   clusters: ReleaseCluster[];
   onCreate: (
-    input: ReleaseTargetInput,
-    onRegistered?: () => void,
+    input: RepositoryConnectionInput,
+    onStage: (stage: RepositoryConnectionStage) => void,
   ) => Promise<ReleaseApplication | null>;
   pending: boolean;
 }) {
@@ -53,8 +53,8 @@ export function RepoConnectDialog({
   const notifications = useOptionalProductNotifications();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<ConnectPhase>("configure");
-  const [failureStage, setFailureStage] = useState<FailureStage>("register");
-  const [input, setInput] = useState<ReleaseTargetInput>(INITIAL_INPUT);
+  const [activeStage, setActiveStage] = useState<RepositoryConnectionStage>("probe");
+  const [input, setInput] = useState<RepositoryConnectionInput>(INITIAL_INPUT);
   const connectedClusters = useMemo(
     () => clusters.filter((cluster) => (
       ["connected", "online"].includes(cluster.connectionStatus.toLowerCase())
@@ -67,44 +67,38 @@ export function RepoConnectDialog({
   const complete = [
     input.name,
     input.repository,
-    input.branch,
-    input.manifestPath,
     clusterId,
     input.namespace,
     input.environment,
   ].every((value) => value.trim() !== "");
-  const stages = repoConnectStages(phase, pending, complete, t, failureStage);
+  const stages = repoConnectStages(phase, activeStage, t);
 
   const changeOpen = (next: boolean) => {
     if (pending) return;
     setOpen(next);
     setPhase("configure");
-    setFailureStage("register");
+    setActiveStage("probe");
     if (!next) setInput(INITIAL_INPUT);
   };
-  const update = (field: keyof ReleaseTargetInput, value: string) => {
+  const update = (field: keyof RepositoryConnectionInput, value: string) => {
     setInput((current) => ({ ...current, [field]: value }));
     setPhase("configure");
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!complete || pending) return;
-    let registered = false;
-    setPhase("registering");
+    setPhase("running");
+    setActiveStage("probe");
     const created = await onCreate({
       name: input.name,
       repository: input.repository,
-      branch: input.branch,
-      manifestPath: input.manifestPath,
       clusterId,
       namespace: input.namespace,
       environment: input.environment,
-    }, () => {
-      registered = true;
-      setPhase("reflecting");
+    }, (stage) => {
+      setActiveStage(stage);
     });
     if (created === null) {
-      setFailureStage(registered ? "reflect" : "register");
       setPhase("failed");
       return;
     }
@@ -154,7 +148,7 @@ export function RepoConnectDialog({
             </AlertDescription>
           </Alert>
           {phase === "failed" ? (
-            <Alert variant="destructive">
+            <Alert role="alert" variant="destructive">
               <AlertDescription>{t("connections.repository.failed")}</AlertDescription>
             </Alert>
           ) : null}
@@ -173,22 +167,6 @@ export function RepoConnectDialog({
                 placeholder={t("workflows.target.repositoryPlaceholder")}
                 spellCheck={false}
                 value={input.repository}
-              />
-            </FormField>
-            <FormField label={t("workflows.target.branch")}>
-              <Input
-                autoCapitalize="none"
-                onChange={(event) => update("branch", event.currentTarget.value)}
-                spellCheck={false}
-                value={input.branch}
-              />
-            </FormField>
-            <FormField label={t("workflows.target.manifestPath")}>
-              <Input
-                autoCapitalize="none"
-                onChange={(event) => update("manifestPath", event.currentTarget.value)}
-                spellCheck={false}
-                value={input.manifestPath}
               />
             </FormField>
             <FormField
@@ -252,38 +230,27 @@ export function RepoConnectDialog({
 
 function repoConnectStages(
   phase: ConnectPhase,
-  pending: boolean,
-  complete: boolean,
+  activeStage: RepositoryConnectionStage,
   t: ReturnType<typeof useI18n>["t"],
-  failureStage: FailureStage = "register",
-): ConnectStageTriplet {
-  const registrationComplete = phase === "reflecting" ||
-    (phase === "failed" && failureStage === "reflect");
-  return [
-    {
-      id: "configure",
-      label: t("connections.repository.stage.configure"),
-      state: complete ? "complete" : "active",
-    },
-    {
-      id: "register",
-      label: t("connections.repository.stage.register"),
-      state: registrationComplete
-        ? "complete"
-        : phase === "failed"
-          ? "error"
-          : phase === "registering" || pending
-            ? "active"
-            : "pending",
-    },
-    {
-      id: "reflect",
-      label: t("connections.repository.stage.reflect"),
-      state: phase === "failed" && failureStage === "reflect"
-        ? "error"
-        : phase === "reflecting"
-          ? "active"
-          : "pending",
-    },
+): readonly ConnectStage[] {
+  const order: readonly RepositoryConnectionStage[] = [
+    "probe",
+    "branches",
+    "manifests",
+    "validate",
+    "connect",
+    "status",
   ];
+  const activeIndex = order.indexOf(activeStage);
+  return order.map((stage, index) => ({
+    id: stage,
+    label: t(`connections.repository.stage.${stage}`),
+    state: phase === "configure"
+      ? "pending"
+      : index < activeIndex
+        ? "complete"
+        : index === activeIndex
+          ? phase === "failed" ? "error" : "active"
+          : "pending",
+  }));
 }

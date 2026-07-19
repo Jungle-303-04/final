@@ -9,6 +9,10 @@ import type {
   ReleaseCluster,
   ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
+import type {
+  RepositoryConnectionInput,
+  RepositoryConnectionStage,
+} from "../../features/gitops/repositoryConnectionContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
@@ -108,16 +112,15 @@ export function GitOpsSyncTableView({
 
   const createTarget = async (
     input: ReleaseTargetInput,
-    onRegistered?: () => void,
   ): Promise<ReleaseApplication | null> => {
     if (targetPending) return null;
     setTargetPending(true);
     setError(false);
     try {
       const created = await port.connectApplication(input);
-      onRegistered?.();
       try {
         const nextRows = await port.listSyncTargets(undefined, scopeQuery);
+        if (!nextRows.some((row) => row.applicationId === created.id)) return null;
         setRows(nextRows);
         setSuccessfulRead((current) => ({
           sequence: (current?.sequence ?? 0) + 1,
@@ -126,28 +129,74 @@ export function GitOpsSyncTableView({
       } catch {
         rowsRefresh.backgroundFailure();
         countsRefresh.backgroundFailure();
-        setError(true);
-        setRows((current) => current.some((row) => row.applicationId === created.id)
-          ? current
-          : [{
-            id: `${created.id}:${input.clusterId}`,
-            applicationId: created.id,
-            applicationName: created.name,
-            clusterId: input.clusterId,
-            namespace: input.namespace,
-            environment: input.environment,
-            syncStatus: null,
-            revision: null,
-            observedAt: null,
-            authority: "registered",
-            provider: "internal",
-            kind: "GitOpsApplication",
-            freshness: "stale",
-            partialReasonCodes: ["post_mutation_refresh_failed"],
-          }, ...current]);
+        return null;
       }
       return created;
     } catch {
+      return null;
+    } finally {
+      setTargetPending(false);
+    }
+  };
+
+  const createRepositoryTarget = async (
+    input: RepositoryConnectionInput,
+    onStage: (stage: RepositoryConnectionStage) => void,
+  ): Promise<ReleaseApplication | null> => {
+    if (targetPending) return null;
+    setTargetPending(true);
+    try {
+      onStage("probe");
+      const probe = await port.probeRepository(input.repository);
+      if (!probe.valid || !probe.reachable) return null;
+
+      onStage("branches");
+      const branches = await port.listRepositoryBranches(probe.normalizedRepoRef);
+      const branch = branches.branches.find((candidate) => candidate.default)
+        ?? branches.branches.find((candidate) => candidate.name === branches.defaultBranch)
+        ?? branches.branches[0];
+      if (!branch) return null;
+
+      onStage("manifests");
+      const manifests = await port.listRepositoryManifests(
+        probe.normalizedRepoRef,
+        branch.name,
+      );
+      const manifest = manifests.candidates[0];
+      if (!manifest) return null;
+
+      onStage("validate");
+      const validation = await port.validateRepositoryManifest({
+        repoRef: probe.normalizedRepoRef,
+        branch: branch.name,
+        manifestPath: manifest.path,
+        sourceType: manifest.sourceType,
+      });
+      if (!validation.valid) return null;
+
+      onStage("connect");
+      const created = await port.connectApplication({
+        ...input,
+        repository: validation.repoRef,
+        branch: validation.branch,
+        manifestPath: validation.manifestPath,
+        sourceType: validation.sourceType,
+      });
+
+      onStage("status");
+      const status = await waitForRepositoryReady(port, validation.repoRef);
+      if (status !== "ready") return null;
+      const nextRows = await port.listSyncTargets(undefined, scopeQuery);
+      if (!nextRows.some((row) => row.applicationId === created.id)) return null;
+      setRows(nextRows);
+      setSuccessfulRead((current) => ({
+        sequence: (current?.sequence ?? 0) + 1,
+        empty: nextRows.length === 0,
+      }));
+      return created;
+    } catch {
+      rowsRefresh.backgroundFailure();
+      countsRefresh.backgroundFailure();
       return null;
     } finally {
       setTargetPending(false);
@@ -178,7 +227,7 @@ export function GitOpsSyncTableView({
         <div className="flex shrink-0 items-center gap-2">
           <RepoConnectDialog
             clusters={clusters}
-            onCreate={createTarget}
+            onCreate={createRepositoryTarget}
             pending={targetPending}
           />
           <DeploymentTargetDialog
@@ -214,4 +263,26 @@ export function GitOpsSyncTableView({
 
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
+
+async function waitForRepositoryReady(
+  port: GitOpsPort,
+  repoRef: string,
+): Promise<"ready" | "error"> {
+  while (true) {
+    const status = await port.getRepositoryConnectionStatus(repoRef);
+    if (status.connectionStage === "ready") {
+      return status.repositoryStatus === "active" &&
+        status.terminal &&
+        status.refreshAfterSeconds === null &&
+        status.repositoryId !== null
+        ? "ready"
+        : "error";
+    }
+    if (status.connectionStage === "error" || status.terminal) return "error";
+    if (status.refreshAfterSeconds === null) return "error";
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, status.refreshAfterSeconds! * 1_000);
+    });
+  }
 }

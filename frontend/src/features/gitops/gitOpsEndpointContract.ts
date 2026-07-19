@@ -10,6 +10,13 @@ import type {
   GitOpsReasonCode,
   GitOpsSyncTargetQuery,
 } from "./gitOpsContract";
+import type {
+  RepositoryBranchListEndpoint,
+  RepositoryConnectionStatusEndpoint,
+  RepositoryManifestCatalogEndpoint,
+  RepositoryManifestValidationEndpoint,
+  RepositoryProbeEndpoint,
+} from "./repositoryConnectionEndpointContract";
 
 type EndpointResourceRef = GitOpsApplicationDetailEndpoint["application"]["resource"];
 type EndpointClusterScope = NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>;
@@ -210,6 +217,29 @@ export interface GitOpsEndpointDependencies {
     applications: Record<string, unknown>[];
   }>;
   listClusters(signal?: AbortSignal): Promise<{ clusters: ReleaseClusterEndpoint[] }>;
+  probeRepository(repoRef: string, signal?: AbortSignal): Promise<RepositoryProbeEndpoint>;
+  listRepositoryBranches(
+    repoRef: string,
+    signal?: AbortSignal,
+  ): Promise<RepositoryBranchListEndpoint>;
+  listRepositoryManifests(
+    repoRef: string,
+    branch: string,
+    signal?: AbortSignal,
+  ): Promise<RepositoryManifestCatalogEndpoint>;
+  validateRepositoryManifest(
+    input: {
+      repoRef: string;
+      branch: string;
+      manifestPath: string;
+      sourceType: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<RepositoryManifestValidationEndpoint>;
+  getRepositoryConnectionStatus(
+    repoRef: string,
+    signal?: AbortSignal,
+  ): Promise<RepositoryConnectionStatusEndpoint>;
   listPlans(signal?: AbortSignal): Promise<{ plans: ReleasePlan[] }>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<{ runs: ReleaseRun[] }>;
   connectApplication(

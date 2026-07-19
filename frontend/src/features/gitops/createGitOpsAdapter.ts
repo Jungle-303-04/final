@@ -21,9 +21,10 @@ import type {
   GitOpsEndpointDependencies,
   GitOpsOverviewItemEndpoint,
 } from "./gitOpsEndpointContract";
-
+import { createRepositoryConnectionAdapter } from "./createRepositoryConnectionAdapter";
 export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitOpsPort {
   return {
+    ...createRepositoryConnectionAdapter(endpoints),
     async getApplicationDetail(applicationId, signal) {
       return withPortFailure(async () => toApplicationDetail(
         (await endpoints.getApplicationDetail(applicationId, signal)).application,
@@ -127,7 +128,6 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
   };
 }
-
 function toOverviewSyncTarget(
   item: GitOpsOverviewItemEndpoint,
 ): GitOpsSyncTarget {

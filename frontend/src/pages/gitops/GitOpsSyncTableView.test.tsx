@@ -174,25 +174,16 @@ describe("GitOpsSyncTableView", () => {
     const user = userEvent.setup();
     const port = gitOpsPort();
     const created: ReleaseApplication = {
-      id: "inventory-api",
-      name: "Inventory API",
-      repository: "team/inventory-api",
-      branch: "main",
-      clusterId: "production-cluster",
+      id: "inventory-api", name: "Inventory API",
+      repository: "team/inventory-api", branch: "main", clusterId: "production-cluster",
       manifestPath: "deploy.yaml",
     };
     const reflected: GitOpsSyncTarget = {
-      id: "inventory-api:production-cluster",
-      applicationId: "inventory-api",
-      applicationName: "Inventory API",
-      clusterId: "production-cluster",
-      namespace: "default",
-      environment: "development",
-      syncStatus: null,
-      revision: null,
-      observedAt: null,
-      authority: "registered",
-      provider: "internal",
+      id: "inventory-api:production-cluster", applicationId: "inventory-api",
+      applicationName: "Inventory API", clusterId: "production-cluster",
+      namespace: "default", environment: "development",
+      syncStatus: null, revision: null, observedAt: null,
+      authority: "registered", provider: "internal",
       kind: "GitOpsApplication",
     };
     let resolveRegistration!: (value: ReleaseApplication) => void;
@@ -265,11 +256,13 @@ describe("GitOpsSyncTableView", () => {
       port.connectApplication,
       port.getRepositoryConnectionStatus,
       port.listSyncTargets,
-    ].map((mock) => vi.mocked(mock).mock.invocationCallOrder.at(-1) ?? 0);
+    ].map((mock) => {
+      const callOrder = vi.mocked(mock).mock.invocationCallOrder;
+      return callOrder[callOrder.length - 1] ?? 0;
+    });
     expect(calls).toEqual([...calls].sort((left, right) => left - right));
   });
 });
-
 function renderView(
   port: ReturnType<typeof gitOpsPort>,
   refreshPolicies = gitOpsRefreshPolicies(),

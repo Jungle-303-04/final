@@ -27,7 +27,7 @@ export type ConnectStageTriplet = readonly [
 export interface ConnectStagesProps {
   ariaLabel: string;
   className?: string;
-  stages: ConnectStageTriplet;
+  stages: readonly ConnectStage[];
 }
 
 const stageIcon: Readonly<Record<ConnectStageState, LucideIcon>> = {
@@ -58,7 +58,7 @@ export function ConnectStages({
   return (
     <ol
       aria-label={ariaLabel}
-      className={cn("grid min-w-0 grid-cols-3 gap-2", className)}
+      className={cn("grid min-w-0 grid-cols-3 gap-2 lg:grid-cols-6", className)}
       data-slot="connect-stages"
     >
       {stages.map((stage, index) => {
