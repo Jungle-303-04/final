@@ -25,6 +25,7 @@ from domains.gitops.repository_discovery import (
 )
 from domains.gitops.repository_discovery_router import discovery_service, probe_repository
 from domains.identity.dependencies import require_session
+from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
@@ -87,6 +88,17 @@ class StubGitHubClient:
         assert repo_ref == "owner/service"
         assert branch == "trunk"
         return "a" * 40
+
+
+def test_manifest_candidate_route_uses_post_contract() -> None:
+    matching_routes = [
+        route
+        for route in repository_discovery_router.router.routes
+        if route.path == gateway_routes.REPOSITORY_DISCOVERY_MANIFESTS_PATH
+    ]
+
+    assert len(matching_routes) == 1
+    assert matching_routes[0].methods == {"POST"}
 
 
 def test_manifest_candidates_filter_to_attachable_paths() -> None:
