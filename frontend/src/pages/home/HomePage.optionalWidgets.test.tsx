@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -25,7 +24,7 @@ afterEach(() => {
 
 describe("HomePage optional widgets", () => {
   it("binds W5-W8 to the complete unfiltered fleet scope", async () => {
-    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
+    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v2", JSON.stringify({
       collapsed: [],
       order: ["W2", "W3", "W4", "W5", "W6", "W7", "W8"],
       visible: ["W2", "W3", "W4", "W5", "W6", "W7", "W8"],
@@ -75,7 +74,7 @@ describe("HomePage optional widgets", () => {
   });
 
   it("keeps equal namespace names cluster-qualified for W2, W3, and W7", async () => {
-    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
+    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v2", JSON.stringify({
       collapsed: [],
       order: ["W2", "W3", "W7"],
       visible: ["W2", "W3", "W7"],
@@ -127,7 +126,7 @@ describe("HomePage optional widgets", () => {
   });
 
   it("keeps successful namespace totals and marks a partial fleet fan-out", async () => {
-    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v1", JSON.stringify({
+    window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v2", JSON.stringify({
       collapsed: [],
       order: ["W5"],
       visible: ["W5"],
@@ -167,8 +166,7 @@ describe("HomePage optional widgets", () => {
     expect(inventory).toHaveBeenCalledTimes(2);
   });
 
-  it("adds W5 from the catalog and uses the inventory namespace projection", async () => {
-    const user = userEvent.setup();
+  it("renders W5 by default and uses the inventory namespace projection", async () => {
     const inventory = vi.fn().mockResolvedValue({
       cluster_id: "cluster-1",
       latest_snapshot: null,
@@ -194,16 +192,12 @@ describe("HomePage optional widgets", () => {
       homeBoardPorts({ inventory }),
     );
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(catalog).getByRole("button", { name: "Namespace별 Pod 수" }));
-
     expect(await screen.findByRole("img", { name: "Namespace별 Pod 수" })).toBeTruthy();
     expect(screen.getByText("shop")).toBeTruthy();
     expect(inventory).toHaveBeenCalledWith("cluster-1", ["shop"], expect.any(AbortSignal));
   });
 
-  it("loads W6 from the scoped critical resource adapter and opens the D3 detail", async () => {
+  it("loads default-visible W6 from the scoped critical resource adapter and opens the D3 detail", async () => {
     const listResourcePage = vi.fn().mockResolvedValue({
       items: [{
         resource: {
@@ -249,7 +243,6 @@ describe("HomePage optional widgets", () => {
       excludedCount: 0,
       dataQualityWarnings: [],
     });
-    const user = userEvent.setup();
     renderHome(
       homePort(),
       ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop&applications=checkout"],
@@ -257,10 +250,6 @@ describe("HomePage optional widgets", () => {
       "ko",
       homeBoardPorts({ resources: { listResourcePage } }),
     );
-
-    await user.click(await screen.findByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(catalog).getByRole("button", { name: "임계 · 리소스 종류" }));
 
     const row = await screen.findByRole("link", { name: "Pod checkout-api-0" });
     const href = new URL(row.getAttribute("href")!, "https://product.test");
@@ -277,10 +266,9 @@ describe("HomePage optional widgets", () => {
     );
   });
 
-  it("renders W7 for 30d from a bounded 7d source projection and scoped namespaces", async () => {
+  it("renders default-visible W7 for 30d from a bounded 7d source projection and scoped namespaces", async () => {
     const ports = homeBoardPorts();
     const getOverview = vi.mocked(ports.cost.getOverview);
-    const user = userEvent.setup();
     renderHome(
       homePort(),
       ["/?clusters=cluster-1&namespaces=cluster-1%2Fshop&home.period=30d"],
@@ -289,12 +277,11 @@ describe("HomePage optional widgets", () => {
       ports,
     );
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(catalog).getByRole("button", { name: "비용 요약" }));
-
     const bars = await screen.findByRole("img", { name: "비용률 추세" });
-    expect(bars.querySelector("rect")?.getAttribute("fill")).toBe("var(--color-status-warning)");
+    expect(bars.getAttribute("data-state")).toBe("measured");
+    expect(bars.querySelector(":scope > style")?.textContent).toContain(
+      "--color-value: var(--color-status-warning)",
+    );
     expect(getOverview).toHaveBeenCalledWith({
       clusterIds: ["cluster-1"],
       namespaces: ["cluster-1/shop"],
@@ -302,7 +289,7 @@ describe("HomePage optional widgets", () => {
     }, expect.any(AbortSignal));
   });
 
-  it("renders W8 as the existing Timeline latest-five mini view", async () => {
+  it("renders default-visible W8 as the existing Timeline latest-five mini view", async () => {
     const ports = homeBoardPorts();
     const originalRead = ports.timeline.readTimeline;
     const events = Array.from({ length: 6 }, (_, index) =>
@@ -313,12 +300,7 @@ describe("HomePage optional widgets", () => {
       events,
     }));
     ports.timeline = { ...ports.timeline, readTimeline };
-    const user = userEvent.setup();
     renderHome(homePort(), ["/?clusters=cluster-1"], vi.fn(), "ko", ports);
-
-    await user.click(await screen.findByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(catalog).getByRole("button", { name: "최근 변경" }));
 
     const list = await screen.findByRole("list", { name: "타임라인 이벤트" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(5);

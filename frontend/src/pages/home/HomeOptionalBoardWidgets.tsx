@@ -17,15 +17,17 @@ import type {
 import { Metric, WidgetEmpty, WidgetResource } from "./HomeBoardWidgets";
 
 export function NamespaceWidget({
+  href,
   resource,
 }: {
+  href: string;
   resource: HomeBoardResource<HomeNamespacePodProjection>;
 }) {
   const { formatNumber, t } = useI18n();
   return (
     <WidgetResource resource={resource}>
       {(data) => {
-        if (data.items.length === 0) return <WidgetEmpty />;
+        if (data.items.length === 0) return <WidgetEmpty href={href} />;
         const top = data.items.slice(0, 5);
         const other = data.items.slice(5).reduce((sum, item) => sum + item.pods, 0);
         const visible = other > 0
@@ -82,9 +84,11 @@ export function NamespaceWidget({
 }
 
 export function CriticalResourcesWidget({
+  emptyHref,
   hrefForItem,
   resource,
 }: {
+  emptyHref: string;
   hrefForItem: (item: ResourcesFilterResourceItem) => string;
   resource: HomeBoardResource<HomeCriticalResourcesProjection>;
 }) {
@@ -97,7 +101,7 @@ export function CriticalResourcesWidget({
           : data.filteredCountCompleteness === "unavailable" || data.filteredCount === null
           ? t("resources.list.unknownTotal")
           : null;
-        if (data.items.length === 0 && countStatus === null) return <WidgetEmpty />;
+        if (data.items.length === 0 && countStatus === null) return <WidgetEmpty href={emptyHref} />;
         return (
           <div className="grid gap-2">
             {countStatus ? (
@@ -124,7 +128,7 @@ export function CriticalResourcesWidget({
                   value: null,
                 }))}
               />
-            ) : <WidgetEmpty />}
+            ) : <WidgetEmpty href={emptyHref} />}
           </div>
         );
       }}
@@ -133,9 +137,11 @@ export function CriticalResourcesWidget({
 }
 
 export function CostOverviewWidget({
+  href,
   period,
   resource,
 }: {
+  href: string;
   period: string;
   resource: HomeBoardResource<HomeCostProjection | null>;
 }) {
@@ -143,7 +149,7 @@ export function CostOverviewWidget({
   return (
     <WidgetResource resource={resource}>
       {(data) => {
-        if (data === null || data.values.length === 0) return <WidgetEmpty />;
+        if (data === null || data.values.length === 0) return <WidgetEmpty href={href} />;
         return (
           <div className="grid gap-3">
             <div className="flex items-end justify-between gap-3">
@@ -173,9 +179,11 @@ export function CostOverviewWidget({
 }
 
 export function RecentTimelineWidget({
+  href,
   hrefForEvent,
   resource,
 }: {
+  href: string;
   hrefForEvent: (sourceKey: string) => string;
   resource: HomeBoardResource<TimelineSnapshot | null>;
 }) {
@@ -183,7 +191,7 @@ export function RecentTimelineWidget({
   return (
     <WidgetResource resource={resource}>
       {(snapshot) => {
-        if (snapshot === null || snapshot.events.length === 0) return <WidgetEmpty />;
+        if (snapshot === null || snapshot.events.length === 0) return <WidgetEmpty href={href} />;
         const events = [...snapshot.events]
           .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
           .slice(0, 5);

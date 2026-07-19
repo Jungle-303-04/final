@@ -305,20 +305,22 @@ function WidgetBody({
   period: HomeBoardPeriod;
 }) {
   if (id === "W2") return <IncidentWidget href={href} resource={data.incidents} />;
-  if (id === "W3") return <SyncWidget resource={data.sync} />;
-  if (id === "W4") return <ActivityWidget resource={data.activity} />;
-  if (id === "W5") return <NamespaceWidget resource={data.namespaces} />;
+  if (id === "W3") return <SyncWidget href={href} resource={data.sync} />;
+  if (id === "W4") return <ActivityWidget href={href} resource={data.activity} />;
+  if (id === "W5") return <NamespaceWidget href={href} resource={data.namespaces} />;
   if (id === "W6") {
     return (
       <CriticalResourcesWidget
+        emptyHref={href}
         hrefForItem={(item) => criticalResourceDetailHref(filter, item)}
         resource={data.criticalResources}
       />
     );
   }
-  if (id === "W7") return <CostOverviewWidget period={period} resource={data.cost} />;
+  if (id === "W7") return <CostOverviewWidget href={href} period={period} resource={data.cost} />;
   return (
     <RecentTimelineWidget
+      href={href}
       hrefForEvent={(sourceKey) => timelineEventHref(href, sourceKey)}
       resource={data.timeline}
     />

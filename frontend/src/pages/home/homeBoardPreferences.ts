@@ -12,7 +12,7 @@ export interface HomeBoardPreferences {
 export const DEFAULT_HOME_BOARD_PREFERENCES: HomeBoardPreferences = {
   collapsed: [],
   order: HOME_WIDGET_IDS,
-  visible: ["W2", "W3", "W4"],
+  visible: HOME_WIDGET_IDS,
 };
 
 export function loadHomeBoardPreferences(
@@ -41,7 +41,7 @@ export function homeBoardPreferenceKey(
   userId: string | null,
 ): string | null {
   return workspaceId && userId
-    ? `opsia:home-board:${workspaceId}:${userId}:v1`
+    ? `opsia:home-board:${workspaceId}:${userId}:v2`
     : null;
 }
 

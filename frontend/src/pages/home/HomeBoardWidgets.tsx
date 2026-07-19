@@ -4,6 +4,7 @@ import {
   RatioBar,
 } from "../../shared/ui/charts";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "../../shared/ui/primitives/button";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { useI18n } from "../../shared/i18n";
@@ -32,7 +33,7 @@ export function IncidentWidget({
     <WidgetResource resource={resource}>
       {(data) => {
         const items = sortIssuesForQueue(data.items).slice(0, 3);
-        if (items.length === 0) return <WidgetEmpty />;
+        if (items.length === 0) return <WidgetEmpty href={href} />;
         return (
           <div className="grid gap-2">
             {data.completeness === "exact" && data.visibility.completeness === "exact" ? null : (
@@ -63,14 +64,17 @@ export function IncidentWidget({
 }
 
 export function SyncWidget({
+  href,
   resource,
 }: {
+  href: string;
   resource: HomeBoardResource<HomeSyncSummary>;
 }) {
   const { formatDate, formatNumber, t } = useI18n();
   return (
     <WidgetResource resource={resource}>
       {(data) => {
+        if (data.known === 0 && data.repositories === 0) return <WidgetEmpty href={href} />;
         const syncedPercent = data.known > 0
           ? Math.round((data.synced / data.known) * 100)
           : null;
@@ -80,7 +84,7 @@ export function SyncWidget({
               ariaLabel={t("workflows.sync.table.status")}
               segments={[
                 { id: "synced", tone: "healthy", value: data.synced },
-                { id: "out-of-sync", tone: "critical", value: data.outOfSync },
+                { id: "out-of-sync", tone: "warning", value: data.outOfSync },
               ]}
             />
             <div className="grid grid-cols-2 gap-3">
@@ -114,14 +118,16 @@ export function SyncWidget({
 }
 
 export function ActivityWidget({
+  href,
   resource,
 }: {
+  href: string;
   resource: HomeBoardResource<HomeActivityOverview>;
 }) {
   const { formatDate, t } = useI18n();
   return (
     <WidgetResource resource={resource}>
-      {(data) => (
+      {(data) => data.buckets.length === 0 ? <WidgetEmpty href={href} /> : (
         <MultiLine
           ariaLabel={t("timeline.toolbar.activity")}
           formatPoint={(index) => {
@@ -197,15 +203,16 @@ export function WidgetResource<T>({
   return children(resource.data);
 }
 
-export function WidgetEmpty() {
+export function WidgetEmpty({ href }: { href: string }) {
   const { t } = useI18n();
   return (
     <div
-      aria-live="polite"
-      className="grid min-h-28 place-items-center text-body text-muted-foreground"
-      role="status"
+      className="grid min-h-28 place-items-center gap-3 text-center text-body text-muted-foreground"
     >
-      {t("common.state.empty")}
+      <span aria-live="polite" role="status">{t("common.state.empty")}</span>
+      <Button nativeButton={false} render={<Link to={href} />} size="sm" variant="outline">
+        {t("common.action.open")}
+      </Button>
     </div>
   );
 }

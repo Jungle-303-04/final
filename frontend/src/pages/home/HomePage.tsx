@@ -26,6 +26,10 @@ import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityC
 import { HomeWidgetBoard } from "./HomeWidgetBoard";
 import { homeCriticalResourcesHref } from "./HomeWidgetCatalog";
 import type { HomeBoardPorts } from "./useHomeBoardData";
+import {
+  summarizeHomeFleetUsage,
+  useHomeClusterCardsData,
+} from "./useHomeClusterCardsData";
 
 export function HomePage({
   boardPorts,
@@ -62,6 +66,18 @@ export function HomePage({
       ? state.choices.data.clusters
       : state.choices.data.clusters.filter((cluster) => requestedClusterIds.has(cluster.id));
   }, [filter.state.common.clusters, state.choices]);
+  const allClusters = state.choices.phase === "ready" ? state.choices.data.clusters : [];
+  const clusterCards = useHomeClusterCardsData({
+    clusters: allClusters,
+    port,
+    refreshRevision: state.boardRefreshRevision,
+    selectedClusterId: state.selectedClusterId,
+    selectedOverview: state.overview,
+  });
+  const fleetUsage = useMemo(
+    () => summarizeHomeFleetUsage(boardClusters, clusterCards.overviews),
+    [boardClusters, clusterCards.overviews],
+  );
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -82,6 +98,7 @@ export function HomePage({
         criticalCount={boardClusters.length === 0 ? null : criticalResourceCount}
         criticalHref={homeCriticalResourcesHref(filter)}
         editing={editingBoard}
+        fleetUsage={fleetUsage}
         freshness={state.refreshIntervalSeconds === null ? null : (
           <PollingFreshness
             connectionState={homeConnectionState(state)}
@@ -112,8 +129,7 @@ export function HomePage({
           setDisconnectOpen(true);
         } : undefined}
         onRefresh={state.refresh}
-        selectedClusterId={state.selectedClusterId}
-        selectedUsage={state.overview.phase === "ready" ? state.overview.data.usage : null}
+        overviews={clusterCards.overviews}
       />
       {state.choices.data.clusters.length === 0 ? (
         canManageClusters ? null : <HomeClusterBoundary variant="catalog-unconfirmed" />
@@ -125,7 +141,7 @@ export function HomePage({
         )
       ) : (
         <>
-          <PartialFailureBanner state={state} />
+          <PartialFailureBanner clusterCardsPartial={clusterCards.hasPartialData} state={state} />
           {boardPorts ? (
             <HomeWidgetBoard
               clusters={boardClusters}
@@ -224,13 +240,19 @@ function UnknownCluster({ clusterId }: { clusterId: string | null }) {
   );
 }
 
-function PartialFailureBanner({ state }: { state: ReturnType<typeof useHomePageState> }) {
+function PartialFailureBanner({
+  clusterCardsPartial,
+  state,
+}: {
+  clusterCardsPartial: boolean;
+  state: ReturnType<typeof useHomePageState>;
+}) {
   const { t } = useI18n();
   const failures = [state.overview, state.insights, state.nodes].filter(
     (section) => section.phase === "failed" ||
       (section.phase === "ready" && section.refreshFailure !== null),
   );
-  if (failures.length === 0) return null;
+  if (failures.length === 0 && !clusterCardsPartial) return null;
   return (
     <Alert>
       <CircleAlert aria-hidden="true" />

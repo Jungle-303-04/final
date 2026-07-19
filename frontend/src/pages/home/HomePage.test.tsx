@@ -26,18 +26,18 @@ afterEach(() => {
 });
 
 describe("HomePage three-layer board", () => {
-  it("renders only the fixed summary, cluster section, and W2-W4 default board", async () => {
+  it("renders the fixed summary, cluster section, and W2-W8 default board", async () => {
     renderHome(homePort());
 
     expect(await screen.findByRole("heading", { name: "조회 가능한 클러스터" }))
       .toBeTruthy();
-    expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
-      clusters: "1",
-      nodes: "2",
-      pods: "18",
+    await waitFor(() => {
+      expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
+        clusters: "1",
+        nodes: "2/2",
+        pods: "18",
+      });
     });
-    expect(screen.getByRole("heading", { name: "클러스터별 리소스 탐색" }))
-      .toBeTruthy();
     expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "동기화 상태" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "활동" })).toBeTruthy();
@@ -66,10 +66,12 @@ describe("HomePage three-layer board", () => {
     expect(await screen.findByRole("heading", { name: "이슈" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "동기화 상태" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "활동" })).toBeTruthy();
-    expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
-      clusters: "2",
-      nodes: "3",
-      pods: "22",
+    await waitFor(() => {
+      expectFleetMetrics(screen.getByRole("group", { name: "클러스터 리소스 탐색" }), {
+        clusters: "2",
+        nodes: "3/3",
+        pods: "22",
+      });
     });
     await waitFor(() => {
       expect(ports.issues.listIssues).toHaveBeenCalledWith(
@@ -104,6 +106,7 @@ describe("HomePage three-layer board", () => {
   });
 
   it("uses the scoped resource total for the fixed critical summary even when W6 is hidden", async () => {
+    seedMinimalHomeBoard();
     const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "exact", 5));
     renderHome(
       homePort(),
@@ -140,7 +143,6 @@ describe("HomePage three-layer board", () => {
   });
 
   it("does not present a partial resource total as an exact critical count", async () => {
-    const user = userEvent.setup();
     const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "partial", 5));
     renderHome(
       homePort(),
@@ -154,9 +156,6 @@ describe("HomePage three-layer board", () => {
       name: "클러스터 리소스 탐색",
     });
     await waitFor(() => expect(listResourcePage).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole("button", { name: "수정" }));
-    const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
-    await user.click(within(catalog).getByRole("button", { name: "임계 · 리소스 종류" }));
     const widgetHeading = await screen.findByRole("heading", { name: "임계 · 리소스 종류" });
     const widget = widgetHeading.closest<HTMLElement>("[data-slot='widget-frame']")!;
     expect(await within(widget).findByText("일부 데이터")).toBeTruthy();
@@ -275,15 +274,16 @@ describe("HomePage three-layer board", () => {
     await user.click(collapse);
     expect(collapse.getAttribute("aria-expanded")).toBe("false");
 
-    const period = screen.getByRole("combobox", { name: "시간 범위" });
-    expect(period.textContent).toContain("오늘");
+    const period = screen.getByRole("group", { name: "시간 범위" });
+    expect(within(period).getByRole("button", { name: "오늘" }).getAttribute("aria-pressed"))
+      .toBe("true");
     await user.click(screen.getByRole("button", { name: "수정" }));
     const catalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
     const namespaceToggle = within(catalog).getByRole("button", {
       name: "Namespace별 Pod 수",
     });
     expect(namespaceToggle.tagName).toBe("BUTTON");
-    expect(namespaceToggle.getAttribute("aria-pressed")).toBe("false");
+    expect(namespaceToggle.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("shares one URL period across W4 and preserves unrelated filters", async () => {
@@ -292,8 +292,7 @@ describe("HomePage three-layer board", () => {
       "/?clusters=cluster-1&namespaces=cluster-1%2Fshop&applications=checkout",
     ]);
 
-    await user.click(await screen.findByRole("combobox", { name: "시간 범위" }));
-    await user.click(await screen.findByRole("option", { name: "30d" }));
+    await user.click(await screen.findByRole("button", { name: "30일" }));
 
     await waitFor(() => {
       const location = screen.getByTestId("home-location").textContent ?? "";
@@ -351,6 +350,9 @@ describe("HomePage three-layer board", () => {
 
   it("commits layout preferences only when editing completes", async () => {
     const user = userEvent.setup();
+    seedMinimalHomeBoard();
+    const key = "opsia:home-board:test-workspace:test-user:v2";
+    const preferencesBeforeEditing = window.localStorage.getItem(key);
     renderHome(homePort());
     await screen.findByRole("heading", { name: "이슈" });
 
@@ -360,17 +362,18 @@ describe("HomePage three-layer board", () => {
     const issues = screen.getByRole("region", { name: "이슈" });
     await user.click(within(issues).getByRole("button", { name: /접기/u }));
 
-    const key = "opsia:home-board:test-workspace:test-user:v1";
-    expect(window.localStorage.getItem(key)).toBeNull();
+    expect(window.localStorage.getItem(key)).toBe(preferencesBeforeEditing);
     await user.click(screen.getByRole("button", { name: "변경 저장" }));
-    await waitFor(() => expect(window.localStorage.getItem(key)).not.toBeNull());
+    await waitFor(() => expect(window.localStorage.getItem(key)).not.toBe(preferencesBeforeEditing));
     const committed = JSON.parse(window.localStorage.getItem(key)!);
     expect(committed.visible).toContain("W5");
     expect(committed.collapsed).toContain("W2");
+    const preferencesAfterSaving = window.localStorage.getItem(key);
 
     await user.click(screen.getByRole("button", { name: "수정" }));
-    await user.click(within(catalog).getByRole("button", { name: "Namespace별 Pod 수" }));
-    expect(JSON.parse(window.localStorage.getItem(key) ?? "{}").visible).toContain("W5");
+    const reopenedCatalog = screen.getByRole("heading", { name: "리소스 종류" }).parentElement!;
+    await user.click(within(reopenedCatalog).getByRole("button", { name: "Namespace별 Pod 수" }));
+    expect(window.localStorage.getItem(key)).toBe(preferencesAfterSaving);
   });
 
   it("keeps authorization failures global and never renders cached board content", async () => {
@@ -407,6 +410,14 @@ function expectFleetMetrics(
     .toBe(expected.nodes);
   expect(within(summary).getByText("Pod").nextElementSibling?.textContent)
     .toBe(expected.pods);
+}
+
+function seedMinimalHomeBoard(): void {
+  window.localStorage.setItem("opsia:home-board:test-workspace:test-user:v2", JSON.stringify({
+    collapsed: [],
+    order: ["W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+    visible: ["W2", "W3", "W4"],
+  }));
 }
 
 function criticalResourcePage(

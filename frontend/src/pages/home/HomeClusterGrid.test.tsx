@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { HomeClusterGrid } from "./HomeClusterGrid";
+
+afterEach(cleanup);
 
 const clusters: HomeClusterChoice[] = [{
   id: "cluster-production",
@@ -25,7 +27,7 @@ const clusters: HomeClusterChoice[] = [{
 }];
 
 describe("HomeClusterGrid", () => {
-  it("explains the same Resources exploration destination used by every cluster tile", () => {
+  it("keeps v3 cluster tiles inside the named Resources explorer", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/home"]}>
@@ -36,9 +38,10 @@ describe("HomeClusterGrid", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "Explore resources by cluster" })).toBeTruthy();
-    expect(screen.getByText("Choose a cluster to explore its resources.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open resources for Production" })
+    const explorer = screen.getByRole("region", { name: "Cluster resource explorer" });
+    expect(within(explorer).queryByRole("heading", { name: "Explore resources by cluster" }))
+      .toBeNull();
+    expect(within(explorer).getByRole("link", { name: "Open resources for Production" })
       .getAttribute("href")).toBe("/resources?clusters=cluster-production");
   });
 

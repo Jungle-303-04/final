@@ -270,7 +270,22 @@ export function homePort(overrides: Partial<HomePort> = {}): HomePort {
       postMutationRefreshAfterSeconds: null,
     }),
     listClusterChoices: vi.fn().mockResolvedValue(CLUSTERS),
-    loadClusterOverview: vi.fn().mockResolvedValue(OVERVIEW),
+    loadClusterOverview: vi.fn().mockImplementation(async (clusterId: string) =>
+      clusterId === OVERVIEW.clusterId
+        ? OVERVIEW
+        : {
+            ...OVERVIEW,
+            clusterId,
+            name: clusterId,
+            usage: {
+              ...OVERVIEW.usage!,
+              nodesReady: 1,
+              nodesTotal: 1,
+              podsRunning: 4,
+              podsTotal: 4,
+            },
+          }
+    ),
     loadInsights: vi.fn().mockResolvedValue(INSIGHTS),
     loadNodes: vi.fn().mockResolvedValue(NODES),
     loadNodePods: vi.fn().mockResolvedValue(PODS),

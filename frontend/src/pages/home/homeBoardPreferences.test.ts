@@ -10,7 +10,7 @@ import {
 describe("home board preferences", () => {
   it("scopes persisted layout to the authenticated user and workspace", () => {
     expect(homeBoardPreferenceKey("workspace-a", "user-a"))
-      .toBe("opsia:home-board:workspace-a:user-a:v1");
+      .toBe("opsia:home-board:workspace-a:user-a:v2");
     expect(homeBoardPreferenceKey(null, "user-a")).toBeNull();
   });
 

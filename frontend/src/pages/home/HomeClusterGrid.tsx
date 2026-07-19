@@ -2,13 +2,14 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { Plus } from "lucide-react";
 import type {
   HomeClusterChoice,
+  HomeClusterOverview,
   HomeUsageSnapshot,
 } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n";
-import { Surface } from "../../shared/ui/Surface";
 import type { DisconnectPhase } from "../clusters/ClusterDisconnectDialog";
 import { ClusterCard } from "../clusters/ClusterCard";
 import { clusterResourcesHref } from "../clusters/clusterNavigation";
+import type { HomeResourceState } from "./homePageStateModel";
 
 export function HomeClusterGrid({
   clusters,
@@ -17,8 +18,7 @@ export function HomeClusterGrid({
   onConnect,
   onDisconnect,
   onRefresh,
-  selectedClusterId,
-  selectedUsage,
+  overviews = {},
 }: {
   clusters: HomeClusterChoice[];
   disconnectClusterId?: string | null;
@@ -26,24 +26,17 @@ export function HomeClusterGrid({
   onConnect?: () => void;
   onDisconnect?: (cluster: HomeClusterChoice) => void;
   onRefresh?: () => void;
-  selectedClusterId?: string | null;
-  selectedUsage?: HomeUsageSnapshot | null;
+  overviews?: Readonly<Record<string, HomeResourceState<HomeClusterOverview>>>;
 }) {
   const filter = useUnifiedFilter();
   const { t } = useI18n();
   return (
-    <Surface
+    <section
       aria-label={t("home.cluster.grid.aria")}
-      className="min-w-0 overflow-hidden"
+      className="min-w-0"
     >
-      <div className="border-b px-4 py-3">
-        <h2 className="text-base font-semibold">{t("home.cluster.grid.title")}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t("home.cluster.grid.description")}
-        </p>
-      </div>
       <div
-        className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3"
+        className="grid max-w-6xl gap-4 md:grid-cols-2"
         data-slot="home-cluster-grid"
       >
         {clusters.map((cluster, index) => (
@@ -58,7 +51,7 @@ export function HomeClusterGrid({
             disconnectPhase={disconnectClusterId === cluster.id ? disconnectPhase : undefined}
             onDisconnect={onDisconnect ? () => onDisconnect(cluster) : undefined}
             onRefresh={onRefresh}
-            usage={selectedClusterId === cluster.id ? selectedUsage : null}
+            usage={overviewUsage(overviews[cluster.id])}
           />
         ))}
         {onConnect ? (
@@ -74,6 +67,12 @@ export function HomeClusterGrid({
           </button>
         ) : null}
       </div>
-    </Surface>
+    </section>
   );
+}
+
+function overviewUsage(
+  overview: HomeResourceState<HomeClusterOverview> | undefined,
+): HomeUsageSnapshot | null {
+  return overview?.phase === "ready" ? overview.data.usage : null;
 }

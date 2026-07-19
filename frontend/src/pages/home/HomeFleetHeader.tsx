@@ -1,20 +1,14 @@
-import { Plus, SlidersHorizontal } from "lucide-react";
+import { Box, CircleAlert, Cpu, GitBranch, Plus, Server, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import type { HomeBoardPeriod } from "../../features/home-activity/homeActivityContract";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
+import type { HomeFleetUsageSummary } from "./useHomeClusterCardsData";
 import { useI18n } from "../../shared/i18n";
-import { Surface } from "../../shared/ui/Surface";
 import { TintChip } from "../../shared/ui/status";
 import { Button } from "../../shared/ui/primitives/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../shared/ui/primitives/select";
+import { ButtonGroup } from "../../shared/ui/primitives/button-group";
 
 export function HomeFleetHeader({
   clusters,
@@ -22,6 +16,7 @@ export function HomeFleetHeader({
   criticalHref,
   editing,
   freshness,
+  fleetUsage,
   onEdit,
   onConnect,
   onPeriodChange,
@@ -33,6 +28,7 @@ export function HomeFleetHeader({
   criticalHref?: string;
   editing?: boolean;
   freshness?: ReactNode;
+  fleetUsage?: HomeFleetUsageSummary | null;
   onEdit?: () => void;
   onConnect?: () => void;
   onPeriodChange?: (period: HomeBoardPeriod) => void;
@@ -40,82 +36,52 @@ export function HomeFleetHeader({
   period?: HomeBoardPeriod;
 }) {
   const { formatNumber, locale, t } = useI18n();
-  const nodes = exactSum(clusters.map((cluster) => cluster.nodeCount));
-  const pods = exactSum(clusters.map((cluster) => cluster.podCount));
+  const nodes = fleetUsage === undefined
+    ? formatMetric(exactSum(clusters.map((cluster) => cluster.nodeCount)), formatNumber)
+    : fleetUsage === null
+      ? "—"
+      : `${formatNumber(fleetUsage.nodesReady)}/${formatNumber(fleetUsage.nodesTotal)}`;
+  const pods = fleetUsage === undefined
+    ? formatMetric(exactSum(clusters.map((cluster) => cluster.podCount)), formatNumber)
+    : fleetUsage === null
+      ? "—"
+      : formatNumber(fleetUsage.podsTotal);
   const criticalChip = (
-    <TintChip
-      label={(
-        <>
-          <span>{t("status.tone.critical")}</span>
-          <span className="font-mono tabular-nums">
-            {criticalCount == null ? "—" : formatNumber(criticalCount)}
-          </span>
-        </>
-      )}
+    <FleetMetric
+      icon={<CircleAlert />}
+      label={t("status.tone.critical")}
       tone={criticalCount == null ? "neutral" : criticalCount > 0 ? "critical" : "healthy"}
+      value={criticalCount == null ? "—" : formatNumber(criticalCount)}
     />
   );
 
   return (
-    <Surface as="div" className="grid gap-4 p-4 sm:p-5">
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-title1">{t("home.cluster.available")}</h1>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {freshness}
-          {period && onPeriodChange ? (
-            <Select
-              onValueChange={(value) => {
-                if (isHomeBoardPeriod(value)) onPeriodChange(value);
-              }}
-              value={period}
-            >
-              <SelectTrigger aria-label={t("timeline.strip.range")} size="sm">
-                <SelectValue>{homePeriodLabel(period, locale)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">
-                  {new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "day")}
-                </SelectItem>
-                <SelectItem value="7d">{homePeriodLabel("7d", locale)}</SelectItem>
-                <SelectItem value="30d">{homePeriodLabel("30d", locale)}</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : null}
-          {onEdit ? (
-            <Button onClick={onEdit} size="sm" type="button" variant="ghost">
-              <SlidersHorizontal aria-hidden="true" />
-              {editing ? t("workflows.editor.save") : t("shell.ai.action.edit")}
-            </Button>
-          ) : null}
-          {onConnect ? (
-            <Button onClick={onConnect} type="button">
-              <Plus aria-hidden="true" />
-              {t("clusters.action.add")}
-            </Button>
-          ) : null}
-        </div>
-      </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <h1 className="sr-only">{t("home.cluster.available")}</h1>
       <div
         aria-label={t("home.cluster.grid.aria")}
-        className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-t pt-4"
+        className="flex min-w-0 flex-wrap items-center gap-2"
         role="group"
       >
         <FleetMetric
+          icon={<Server />}
           label={t("home.cluster.label")}
           value={formatNumber(clusters.length)}
         />
         <FleetMetric
+          icon={<Cpu />}
           label={t("home.metric.nodes")}
-          value={formatMetric(nodes, formatNumber)}
+          value={nodes}
         />
         <FleetMetric
+          icon={<Box />}
           label={t("home.metric.pods")}
-          value={formatMetric(pods, formatNumber)}
+          value={pods}
         />
         <FleetMetric
+          icon={<GitBranch />}
           label={t("workflows.sync.status.outOfSync")}
+          tone={outOfSync == null ? "neutral" : outOfSync > 0 ? "warning" : "healthy"}
           value={outOfSync == null ? "—" : formatNumber(outOfSync)}
         />
         {criticalHref ? (
@@ -132,7 +98,39 @@ export function HomeFleetHeader({
           criticalChip
         )}
       </div>
-    </Surface>
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+        {freshness}
+        {period && onPeriodChange ? (
+          <ButtonGroup aria-label={t("timeline.strip.range")} className="rounded-lg bg-muted p-0.5">
+            {(["today", "7d", "30d"] as const).map((value) => (
+              <Button
+                aria-pressed={period === value}
+                className="border-0"
+                key={value}
+                onClick={() => onPeriodChange(value)}
+                size="sm"
+                type="button"
+                variant={period === value ? "outline" : "ghost"}
+              >
+                {homePeriodLabel(value, locale)}
+              </Button>
+            ))}
+          </ButtonGroup>
+        ) : null}
+        {onEdit ? (
+          <Button onClick={onEdit} size="sm" type="button" variant="outline">
+            <SlidersHorizontal aria-hidden="true" />
+            {editing ? t("workflows.editor.save") : t("shell.ai.action.edit")}
+          </Button>
+        ) : null}
+        {onConnect ? (
+          <Button onClick={onConnect} type="button">
+            <Plus aria-hidden="true" />
+            {t("clusters.action.add")}
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -140,19 +138,26 @@ function homePeriodLabel(period: HomeBoardPeriod, locale: string): string {
   if (period === "today") {
     return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "day");
   }
-  return period;
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "day",
+    unitDisplay: "short",
+  }).format(period === "7d" ? 7 : 30);
 }
 
-function isHomeBoardPeriod(value: unknown): value is HomeBoardPeriod {
-  return value === "today" || value === "7d" || value === "30d";
-}
-
-function FleetMetric({ label, value }: { label: string; value: string }) {
+function FleetMetric({ icon, label, tone = "neutral", value }: {
+  icon: ReactNode;
+  label: string;
+  tone?: "neutral" | "healthy" | "warning" | "critical";
+  value: string;
+}) {
   return (
-    <span className="inline-flex items-baseline gap-1.5">
-      <span className="text-label text-caption-foreground">{label}</span>
-      <strong className="font-mono text-bodyStrong tabular-nums">{value}</strong>
-    </span>
+    <TintChip
+      className="rounded-full px-3 py-1.5"
+      icon={<span className="[&_svg]:size-3">{icon}</span>}
+      label={<span className="inline-flex items-baseline gap-1.5"><span>{label}</span><strong className="font-mono text-bodyStrong tabular-nums text-foreground">{value}</strong></span>}
+      tone={tone}
+    />
   );
 }
 
