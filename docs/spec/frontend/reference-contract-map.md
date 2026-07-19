@@ -67,7 +67,7 @@ wire 계약 사이에 view-neutral adapter가 필요하다.
 |---|---|---|---|---|---|
 | `REF-API-001` | `GET /health` | `HEALTHZ_PATH` `GET /api/healthz` → `HealthResponse` | `BE-Gap` | `BE-Gap-001`: `status,service`만 있어 runtime·timeline·resource count 진단을 제공하지 못함 | backend 선행 |
 | `REF-API-002` | `GET /diagnostics` | 없음 | `BE-Gap` | `BE-Gap-002`: informer·cache·drop·runtime 진단 계약 없음 | backend 선행 |
-| `REF-API-003` | `GET /auth/me` | `AUTH_SESSION_PATH` `GET /api/auth/session` → `AuthSessionResponse` | `어댑터` | session barrier·user identity·저장소 group/role·auth mode·semantic logout으로 변환; 원본 전용 cloud role·raw logout URL은 제외 | `getSession`, `createAuthAdapter`, `SidebarProfileMenu` |
+| `REF-API-003` | `GET /auth/me` | `AUTH_SESSION_PATH` `GET /api/auth/session` → `AuthSessionResponse` | `어댑터` | session barrier·user identity·저장소 group/role·auth mode·semantic logout으로 변환; 원본 전용 cloud role·raw logout URL은 제외 | `getSession`, `createAuthAdapter`, `ProductHeaderProfileMenu` |
 | `REF-API-004` | `GET /version-check` | 없음 | `BE-Gap` | `BE-Gap-003`: 제품·최신 version 비교 계약 없음 | backend 선행 |
 | `REF-API-005` | `GET /connection` | `CLUSTERS_PATH` `GET /api/clusters` → `ClusterListResponse`; `CLUSTER_CONNECTION_STATUS_PATH` `GET .../connection-status` → `ClusterConnectionStatusResponse` | `어댑터` | current context를 URL cluster로 치환하고 agent last-seen·connection 결합 | `listClusters` `API 완성: 257581398`; `getClusterConnectionStatus` `API 완성: 3d99514d6` |
 | `REF-API-006` | `POST /connection/retry` | 없음 | `BE-Gap` | `BE-Gap-004`: 사용자 주도 agent/connection retry operation 없음 | backend 선행 |

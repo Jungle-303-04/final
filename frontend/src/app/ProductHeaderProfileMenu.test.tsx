@@ -4,15 +4,15 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AuthenticatedAuthState } from "../../../features/auth/authContract";
-import { I18nProvider } from "../../i18n";
-import { ProfileMenu } from "./SidebarProfileMenu";
+import type { AuthenticatedAuthState } from "../features/auth/authContract";
+import { I18nProvider } from "../shared/i18n";
+import { ProductHeaderProfileMenu } from "./ProductHeaderProfileMenu";
 
 afterEach(() => {
   cleanup();
 });
 
-describe("ProfileMenu auth semantics", () => {
+describe("ProductHeaderProfileMenu auth semantics", () => {
   it("prevents a false sign-out claim when trusted proxy identity will be re-injected", () => {
     const onSignOut = vi.fn();
     const auth: AuthenticatedAuthState = {
@@ -39,7 +39,7 @@ describe("ProfileMenu auth semantics", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter>
-          <ProfileMenu
+          <ProductHeaderProfileMenu
             auth={auth}
             settingsHref="/settings"
           />
@@ -79,7 +79,7 @@ describe("ProfileMenu auth semantics", () => {
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
         <MemoryRouter>
-          <ProfileMenu
+          <ProductHeaderProfileMenu
             auth={auth}
             settingsHref="/settings"
           />

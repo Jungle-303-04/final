@@ -53,8 +53,8 @@ import { ProductSidebarTrigger } from "./ProductShellSidebar";
 import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
 import { BottomDock } from "./BottomDock";
-import { ProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
-import { WorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
+import { ProductHeaderProfileMenu } from "./ProductHeaderProfileMenu";
+import { ProductHeaderWorkspaceSwitcher } from "./ProductHeaderWorkspaceSwitcher";
 import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
 import { AlertEventsProvider } from "../features/alerts/AlertEventsProvider";
 import {
@@ -331,7 +331,7 @@ function ProductShellFrame({
         >
           <div className="flex min-w-0 items-center gap-1" data-slot="product-header-workspace">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
-            <WorkspaceSwitcher auth={auth} />
+            <ProductHeaderWorkspaceSwitcher auth={auth} />
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="min-w-0 md:col-start-2 md:row-start-1">
@@ -370,7 +370,7 @@ function ProductShellFrame({
               </Suspense>
             ) : null}
             <DesktopLocalTerminalEntry />
-            <ProfileMenu
+            <ProductHeaderProfileMenu
               auth={auth}
               settingsHref={settingsHref}
             />

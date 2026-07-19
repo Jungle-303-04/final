@@ -7,9 +7,9 @@ import type {
   AuthenticatedAuthState,
   ProductSession,
   ProductWorkspaceList,
-} from "../../../features/auth/authContract";
-import { I18nProvider, type SupportedLocale } from "../../i18n";
-import { WorkspaceSwitcher } from "./SidebarWorkspaceSwitcher";
+} from "../features/auth/authContract";
+import { I18nProvider, type SupportedLocale } from "../shared/i18n";
+import { ProductHeaderWorkspaceSwitcher } from "./ProductHeaderWorkspaceSwitcher";
 
 const SESSION: ProductSession = {
   authEnabled: true,
@@ -48,7 +48,7 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("WorkspaceSwitcher", () => {
+describe("ProductHeaderWorkspaceSwitcher", () => {
   it("exposes loading and an accessible English selection catalog", async () => {
     const catalog = deferred<ProductWorkspaceList>();
     renderSwitcher("en", vi.fn(() => catalog.promise));
@@ -142,7 +142,7 @@ function renderSwitcher(
   };
   return render(
     <I18nProvider navigatorLanguage={locale} storage={null}>
-      <WorkspaceSwitcher auth={auth} />
+      <ProductHeaderWorkspaceSwitcher auth={auth} />
     </I18nProvider>,
   );
 }

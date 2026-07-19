@@ -834,7 +834,7 @@
         "tests/test_identity_repository.py",
         "frontend/src/api/auth.test.ts",
         "frontend/src/features/auth/createAuthAdapter.test.ts",
-        "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx",
+        "frontend/src/app/ProductHeaderProfileMenu.test.tsx",
         "scripts/reference-feature-ledger.test.mjs"
       ],
       "coverage": {
@@ -847,10 +847,10 @@
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/shared/ui/blocks/SidebarProfileMenu.tsx#SidebarProfileMenu",
+          "destination": "frontend/src/app/ProductHeaderProfileMenu.tsx#ProductHeaderProfileMenu",
           "consumer": "frontend/src/features/auth/createAuthAdapter.ts#createAuthAdapter",
           "reason": "The strict session schema and existing AuthBarrier carry server-owned identity and prevent the user menu from claiming a sign-out that trusted-proxy injection cannot perform.",
-          "test": "frontend/src/shared/ui/blocks/SidebarProfileMenu.test.tsx"
+          "test": "frontend/src/app/ProductHeaderProfileMenu.test.tsx"
         }
       }
     },

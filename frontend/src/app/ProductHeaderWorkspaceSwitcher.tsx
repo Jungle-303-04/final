@@ -4,12 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AuthenticatedAuthState,
   ProductWorkspaceList,
-} from "../../../features/auth/authContract";
-import { cn } from "../../lib/cn";
-import { useI18n } from "../../i18n";
-import { Button } from "../primitives/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../primitives/popover";
-import { Spinner } from "../primitives/spinner";
+} from "../features/auth/authContract";
+import { cn } from "../shared/lib/cn";
+import { useI18n } from "../shared/i18n";
+import { Button } from "../shared/ui/primitives/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/primitives/popover";
+import { Spinner } from "../shared/ui/primitives/spinner";
 
 type CatalogState =
   | { kind: "idle" }
@@ -17,7 +17,7 @@ type CatalogState =
   | { kind: "ready"; catalog: ProductWorkspaceList }
   | { kind: "error" };
 
-export function WorkspaceSwitcher({ auth }: { auth: AuthenticatedAuthState }) {
+export function ProductHeaderWorkspaceSwitcher({ auth }: { auth: AuthenticatedAuthState }) {
   const [open, setOpen] = useState(false);
   const [catalogState, setCatalogState] = useState<CatalogState>({ kind: "idle" });
   const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);

@@ -2,17 +2,17 @@ import { LogOut, Settings, UserRound } from "lucide-react";
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { AuthenticatedAuthState } from "../../../features/auth/authContract";
-import { presentProductSession } from "../../../features/auth/sessionPresentation";
-import { useI18n } from "../../i18n";
-import { Alert, AlertDescription, AlertTitle } from "../primitives/alert";
-import { Button, buttonVariants } from "../primitives/button";
+import type { AuthenticatedAuthState } from "../features/auth/authContract";
+import { presentProductSession } from "../features/auth/sessionPresentation";
+import { useI18n } from "../shared/i18n";
+import { Alert, AlertDescription, AlertTitle } from "../shared/ui/primitives/alert";
+import { Button, buttonVariants } from "../shared/ui/primitives/button";
 import { cn } from "@/shared/lib/cn";
-import { Popover, PopoverContent, PopoverTrigger } from "../primitives/popover";
-import { Separator } from "../primitives/separator";
-import { Spinner } from "../primitives/spinner";
+import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/primitives/popover";
+import { Separator } from "../shared/ui/primitives/separator";
+import { Spinner } from "../shared/ui/primitives/spinner";
 
-export function ProfileMenu({
+export function ProductHeaderProfileMenu({
   auth,
   settingsHref,
 }: {
