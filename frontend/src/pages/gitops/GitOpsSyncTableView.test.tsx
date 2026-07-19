@@ -102,8 +102,7 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
   });
 
-  it("filters the authorized projection and clears an empty result without another request", async () => {
-    const user = userEvent.setup();
+  it("leaves deployment discovery to the global command search", async () => {
     const port = gitOpsPort();
     vi.mocked(port.listSyncTargets).mockResolvedValue([{
       id: "checkout-api:production",
@@ -128,18 +127,9 @@ describe("GitOpsSyncTableView", () => {
     }]);
     renderView(port);
 
-    const search = await screen.findByRole("searchbox", { name: "Search deployments" });
-    await user.type(search, "production");
-    expect(screen.getByText("Checkout API")).toBeTruthy();
-    expect(screen.queryByText("Inventory API")).toBeNull();
-
-    await user.clear(search);
-    await user.type(search, "missing");
-    expect(screen.getByText("No matching deployments")).toBeTruthy();
-    await user.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
-
-    expect(screen.getByText("Checkout API")).toBeTruthy();
+    expect(await screen.findByText("Checkout API")).toBeTruthy();
     expect(screen.getByText("Inventory API")).toBeTruthy();
+    expect(screen.queryByRole("searchbox")).toBeNull();
     expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
   });
 

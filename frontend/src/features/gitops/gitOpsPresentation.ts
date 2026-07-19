@@ -1,5 +1,3 @@
-import type { GitOpsSyncTarget } from "./gitOpsContract";
-
 export type GitOpsSyncCategory =
   | "synced"
   | "out-of-sync"
@@ -25,29 +23,4 @@ export function gitOpsSyncCategory(value: string | null): GitOpsSyncCategory {
     return "failed";
   }
   return "unknown";
-}
-
-export function filterGitOpsSyncTargets(
-  rows: readonly GitOpsSyncTarget[],
-  query: string,
-): GitOpsSyncTarget[] {
-  const normalizedQuery = normalizeSearchText(query);
-  if (normalizedQuery === "") return [...rows];
-  return rows.filter((row) => searchableTargetText(row).includes(normalizedQuery));
-}
-
-function searchableTargetText(row: GitOpsSyncTarget): string {
-  return normalizeSearchText([
-    row.applicationName,
-    row.applicationId,
-    row.clusterId,
-    row.namespace,
-    row.environment,
-    row.syncStatus,
-    row.revision,
-  ].filter((value): value is string => value !== null).join(" "));
-}
-
-function normalizeSearchText(value: string): string {
-  return value.trim().toLocaleLowerCase().replace(/[\s_-]+/g, " ");
 }

@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
   GitOpsPort,
@@ -9,7 +9,6 @@ import type {
   ReleaseCluster,
   ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
-import { filterGitOpsSyncTargets } from "../../features/gitops/gitOpsPresentation";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
@@ -19,7 +18,6 @@ import type {
 } from "../../shared/data/browserRefreshPolicyRegistry";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
-import { GitOpsSyncSearch } from "./GitOpsSyncSearch";
 import { GitOpsSyncTargetsTable } from "./GitOpsSyncTargetsTable";
 import { RepoConnectDialog } from "./RepoConnectDialog";
 
@@ -42,13 +40,11 @@ export function GitOpsSyncTableView({
   const [loading, setLoading] = useState(true);
   const [targetPending, setTargetPending] = useState(false);
   const [error, setError] = useState(false);
-  const [query, setQuery] = useState("");
   const [policies, setPolicies] = useState<{
     rows: BrowserRefreshPolicy;
     counts: BrowserRefreshPolicy;
   } | null>(null);
   const [successfulRead, setSuccessfulRead] = useState<{ sequence: number; empty: boolean } | null>(null);
-  const visibleRows = useMemo(() => filterGitOpsSyncTargets(rows, query), [query, rows]);
   const requestSharedRefresh = useCallback(() => setRequest((value) => value + 1), []);
   const rowsRefresh = useServerRefreshScheduler(requestSharedRefresh);
   const countsRefresh = useServerRefreshScheduler(requestSharedRefresh);
@@ -202,20 +198,17 @@ export function GitOpsSyncTableView({
           </Button>
         </div>
       </div>
-      {rows.length > 0 ? (
-        <GitOpsSyncSearch onChange={setQuery} query={query} />
-      ) : null}
       {error ? (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
           {t("workflows.sync.stale")}
         </p>
       ) : null}
       <GitOpsSyncTargetsTable
-        onClearQuery={() => setQuery("")}
+        onClearQuery={() => undefined}
         onSelect={setSelectedId}
         rows={rows}
         selectedId={selectedId}
-        visibleRows={visibleRows}
+        visibleRows={rows}
       />
     </div>
   );
