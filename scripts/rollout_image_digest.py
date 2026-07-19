@@ -3,8 +3,11 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
+import os
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +16,13 @@ from capture_image_digests import image_repository, live_deployment_images, requ
 from revert_image_digests import IMAGE_DIGEST, TIMEOUT, RollbackPlan, load_plan
 
 MAX_ROLLOUT_STATUS_WORKERS = 8
+MAX_SPEC_PATCH_WORKERS = 8
+
+
+def bounded_waves[T](items: tuple[T, ...], *, size: int) -> tuple[tuple[T, ...], ...]:
+    if size < 1:
+        raise ValueError("wave size must be positive")
+    return tuple(items[index : index + size] for index in range(0, len(items), size))
 
 
 def rollout_targets(plan: RollbackPlan) -> tuple[Any, ...]:
@@ -213,30 +223,104 @@ def apply_existing_deployment_specs(
     context: str,
     manifest: Path,
     image: str,
+    max_workers: int = MAX_SPEC_PATCH_WORKERS,
 ) -> int:
     patches = existing_deployment_spec_patches(plan, manifest=manifest, image=image)
-    for namespace, resource, patch in patches:
-        subprocess.run(
-            (
-                "kubectl",
-                "--context",
-                context,
-                "-n",
-                namespace,
-                "patch",
-                resource,
-                "--type=json",
-                "--patch-file=/dev/stdin",
-            ),
-            check=True,
-            input=json.dumps(patch, separators=(",", ":")),
-            text=True,
-        )
+    if not patches:
+        return 0
+    worker_count = min(MAX_SPEC_PATCH_WORKERS, max_workers, len(patches))
+    if worker_count < 1:
+        raise ValueError("max_workers must be positive")
+
+    for wave in bounded_waves(patches, size=worker_count):
+        _apply_existing_deployment_spec_wave(wave, context=context)
     return len(patches)
 
 
-def live_deployments(*, context: str, namespace: str) -> Any:
-    result = subprocess.run(
+def _apply_existing_deployment_spec_wave(
+    patches: tuple[tuple[str, str, list[dict[str, Any]]], ...],
+    *,
+    context: str,
+    deadline: float | None = None,
+) -> None:
+    if not patches:
+        return
+
+    failures: list[tuple[tuple[str, str], Exception]] = []
+    cancelled: list[tuple[str, str]] = []
+    with ThreadPoolExecutor(
+        max_workers=len(patches),
+        thread_name_prefix="deployment-spec-patch",
+    ) as executor:
+        futures = {
+            executor.submit(
+                _run_with_deadline,
+                (
+                    "kubectl",
+                    "--context",
+                    context,
+                    "-n",
+                    namespace,
+                    "patch",
+                    resource,
+                    "--type=json",
+                    "--patch-file=/dev/stdin",
+                ),
+                deadline=deadline,
+                label=f"deployment spec patch {namespace}/{resource}",
+                check=True,
+                input=json.dumps(patch, separators=(",", ":")),
+                text=True,
+            ): (namespace, resource)
+            for namespace, resource, patch in patches
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except CancelledError:
+                cancelled.append(futures[future])
+            except Exception as error:  # noqa: BLE001 - wait for and report every patch failure
+                failures.append((futures[future], error))
+                for pending in futures:
+                    if pending is not future:
+                        pending.cancel()
+
+    if failures:
+        failures.sort(key=lambda failure: failure[0])
+        resources = sorted(
+            [f"{namespace}/{resource}" for (namespace, resource), _error in failures]
+            + [f"{namespace}/{resource}" for namespace, resource in cancelled]
+        )
+        first_error = failures[0][1]
+        raise RuntimeError(
+            f"deployment spec reconciliation failed for {resources!r}"
+        ) from first_error
+    if cancelled:
+        resources = sorted(f"{namespace}/{resource}" for namespace, resource in cancelled)
+        raise RuntimeError(f"deployment spec reconciliation cancelled for {resources!r}")
+
+
+def _remaining_seconds(deadline: float, *, before: str) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"shared rollout deadline expired before {before}")
+    return remaining
+
+
+def _run_with_deadline(
+    command: tuple[str, ...],
+    *,
+    deadline: float | None,
+    label: str,
+    **kwargs: Any,
+) -> subprocess.CompletedProcess[str]:
+    if deadline is not None:
+        kwargs["timeout"] = _remaining_seconds(deadline, before=label)
+    return subprocess.run(command, **kwargs)
+
+
+def live_deployments(*, context: str, namespace: str, deadline: float | None = None) -> Any:
+    result = _run_with_deadline(
         (
             "kubectl",
             "--context",
@@ -248,6 +332,8 @@ def live_deployments(*, context: str, namespace: str) -> Any:
             "-o",
             "json",
         ),
+        deadline=deadline,
+        label="live deployment inventory",
         check=True,
         capture_output=True,
         text=True,
@@ -362,6 +448,7 @@ def create_bootstrap_deployments(
     context: str,
     image: str,
     manifest: Path | None,
+    deadline: float | None = None,
 ) -> None:
     if not plan.bootstrap_targets:
         return
@@ -372,7 +459,7 @@ def create_bootstrap_deployments(
         raise ValueError("bootstrap plan must target exactly one namespace")
     namespace = next(iter(namespaces))
     rendered = render_bootstrap_manifest(plan, manifest=manifest, image=image)
-    subprocess.run(
+    _run_with_deadline(
         (
             "kubectl",
             "--context",
@@ -383,6 +470,8 @@ def create_bootstrap_deployments(
             "--filename",
             "-",
         ),
+        deadline=deadline,
+        label="bootstrap deployment creation",
         check=True,
         input=rendered,
         text=True,
@@ -413,35 +502,291 @@ def rollout_commands(
     return (context_command, *set_image_commands, *rollout_status_commands)
 
 
-def wait_for_rollout_statuses(
+def timeout_seconds(timeout: str) -> float:
+    if not TIMEOUT.fullmatch(timeout):
+        raise ValueError("timeout must be a positive Kubernetes duration such as 300s")
+    multipliers = {"s": 1, "m": 60, "h": 3600}
+    return float(int(timeout[:-1]) * multipliers[timeout[-1]])
+
+
+def _run_rollout_status(command: tuple[str, ...], *, deadline: float) -> None:
+    remaining = _remaining_seconds(deadline, before=command[-2])
+    bounded_command = (*command[:-1], f"--timeout={max(1, math.ceil(remaining))}s")
+    subprocess.run(bounded_command, check=True, timeout=remaining)
+
+
+def _require_rollout_deadline(deadline: float, *, before: str) -> None:
+    _remaining_seconds(deadline, before=before)
+
+
+def _wait_for_rollout_status_wave(
     commands: tuple[tuple[str, ...], ...],
     *,
-    max_workers: int = MAX_ROLLOUT_STATUS_WORKERS,
+    deadline: float,
 ) -> None:
-    if not commands:
-        return
-    worker_count = min(max_workers, len(commands))
-    if worker_count < 1:
-        raise ValueError("max_workers must be positive")
-
     failures: list[tuple[tuple[str, ...], Exception]] = []
+    cancelled: list[tuple[str, ...]] = []
     with ThreadPoolExecutor(
-        max_workers=worker_count,
+        max_workers=len(commands),
         thread_name_prefix="rollout-status",
     ) as executor:
         futures = {
-            executor.submit(subprocess.run, command, check=True): command for command in commands
+            executor.submit(_run_rollout_status, command, deadline=deadline): command
+            for command in commands
         }
         for future in as_completed(futures):
             try:
                 future.result()
-            except Exception as error:  # noqa: BLE001 - aggregate every kubectl failure
+            except CancelledError:
+                cancelled.append(futures[future])
+            except Exception as error:  # noqa: BLE001 - stop before submitting the next wave
                 failures.append((futures[future], error))
+                for pending in futures:
+                    if pending is not future:
+                        pending.cancel()
 
     if failures:
         failures.sort(key=lambda failure: failure[0])
-        resources = [command[-2] for command, _error in failures]
+        resources = sorted(
+            [command[-2] for command, _error in failures] + [command[-2] for command in cancelled]
+        )
         raise RuntimeError(f"rollout status failed for {resources!r}") from failures[0][1]
+    if cancelled:
+        resources = sorted(command[-2] for command in cancelled)
+        raise RuntimeError(f"rollout status cancelled for {resources!r}")
+
+
+def wait_for_rollout_statuses(
+    commands: tuple[tuple[str, ...], ...],
+    *,
+    timeout: str,
+    max_workers: int = MAX_ROLLOUT_STATUS_WORKERS,
+    deadline: float | None = None,
+) -> None:
+    if not commands:
+        return
+    worker_count = min(MAX_ROLLOUT_STATUS_WORKERS, max_workers, len(commands))
+    if worker_count < 1:
+        raise ValueError("max_workers must be positive")
+
+    duration = timeout_seconds(timeout)
+    shared_deadline = deadline
+    if shared_deadline is None:
+        shared_deadline = time.monotonic() + duration
+    for wave in bounded_waves(commands, size=worker_count):
+        _wait_for_rollout_status_wave(wave, deadline=shared_deadline)
+
+
+def _rollout_statuses_by_deployment(
+    commands: tuple[tuple[str, ...], ...],
+) -> dict[tuple[str, str], tuple[str, ...]]:
+    statuses: dict[tuple[str, str], tuple[str, ...]] = {}
+    for command in commands:
+        identity = (command[4], command[-2])
+        statuses.setdefault(identity, command)
+    return statuses
+
+
+def _status_commands_for_identities(
+    statuses: dict[tuple[str, str], tuple[str, ...]],
+    identities: tuple[tuple[str, str], ...],
+) -> tuple[tuple[str, ...], ...]:
+    missing = sorted(set(identities) - set(statuses))
+    if missing:
+        raise RuntimeError(f"rollout status command is missing for {missing!r}")
+    return tuple(statuses[identity] for identity in identities)
+
+
+_SECRET_REF_FIELDS = {
+    "secretRef": frozenset({"name", "optional"}),
+    "secretKeyRef": frozenset({"name", "key", "optional"}),
+    "secret": frozenset({"secretName", "optional", "defaultMode", "items"}),
+}
+_SENSITIVE_ENV_MARKERS = (
+    "API_KEY",
+    "AUTH",
+    "CONNECTION",
+    "CREDENTIAL",
+    "DATABASE_URL",
+    "DSN",
+    "PASSWORD",
+    "PRIVATE_KEY",
+    "REDIS_URL",
+    "SECRET",
+    "TOKEN",
+    "WEBHOOK_URL",
+)
+_SAFE_ANNOTATION_VALUE_KEYS = frozenset(
+    {
+        # Rollout identity and immutable content checksums remain useful evidence.
+        "deployment.kubernetes.io/revision",
+        "kubectl.kubernetes.io/restartedAt",
+        "opsia.io/deployment-scope",
+        "opsia.io/release-id",
+        "opsia.io/release-sha",
+        "opsia.io/rollout-id",
+        "opsia.io/source-sha",
+        "checksum/config",
+        # These fixed Prometheus settings are public service-discovery metadata.
+        "prometheus.io/path",
+        "prometheus.io/port",
+        "prometheus.io/scrape",
+    }
+)
+
+
+def _sanitized_spec_evidence(value: Any, *, owner_key: str | None = None) -> Any:
+    if isinstance(value, list):
+        if owner_key in {"args", "command"}:
+            return ["<redacted>" for _item in value]
+        return [_sanitized_spec_evidence(item, owner_key=owner_key) for item in value]
+    if not isinstance(value, dict):
+        return copy.deepcopy(value)
+    if owner_key == "annotations":
+        return {
+            str(key): (
+                _sanitized_spec_evidence(item, owner_key=str(key))
+                if str(key) in _SAFE_ANNOTATION_VALUE_KEYS
+                else "<redacted>"
+            )
+            for key, item in value.items()
+        }
+
+    env_name = value.get("name")
+    env_entry = isinstance(env_name, str) and "value" in value
+    sensitive_name = isinstance(env_name, str) and any(
+        marker in env_name.upper() for marker in _SENSITIVE_ENV_MARKERS
+    )
+    sanitized: dict[str, Any] = {}
+    for key, item in value.items():
+        allowed_ref_fields = _SECRET_REF_FIELDS.get(key)
+        if allowed_ref_fields is not None and isinstance(item, dict):
+            sanitized[key] = {
+                field: _sanitized_spec_evidence(field_value, owner_key=field)
+                for field, field_value in item.items()
+                if field in allowed_ref_fields
+            }
+            continue
+        if key == "value" and (env_entry or sensitive_name):
+            sanitized[key] = "<redacted>"
+            continue
+        if key in {"data", "stringData"}:
+            sanitized[key] = "<redacted>"
+            continue
+        if key == "imagePullSecrets" and isinstance(item, list):
+            sanitized[key] = [
+                {"name": entry.get("name")}
+                for entry in item
+                if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+            ]
+            continue
+        if any(marker in key.upper() for marker in _SENSITIVE_ENV_MARKERS):
+            sanitized[key] = "<redacted>"
+            continue
+        sanitized[key] = _sanitized_spec_evidence(item, owner_key=key)
+    return sanitized
+
+
+def _live_deployment_specs(
+    live_document: Any,
+    *,
+    identities: set[tuple[str, str]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    document = require_mapping(live_document, "live deployments")
+    items = document.get("items")
+    if not isinstance(items, list):
+        raise ValueError("live deployments must contain an items list")
+    by_resource: dict[str, set[str]] = {}
+    for namespace, resource in identities:
+        by_resource.setdefault(resource, set()).add(namespace)
+    result: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, raw_item in enumerate(items):
+        item = require_mapping(raw_item, f"live deployments.items[{index}]")
+        metadata = require_mapping(
+            item.get("metadata"), f"live deployments.items[{index}].metadata"
+        )
+        name = metadata.get("name")
+        if not isinstance(name, str):
+            continue
+        resource = f"deployment/{name}"
+        matching_namespaces = by_resource.get(resource, set())
+        if not matching_namespaces:
+            continue
+        namespace = metadata.get("namespace")
+        if namespace is None and len(matching_namespaces) == 1:
+            namespace = next(iter(matching_namespaces))
+        identity = (namespace, resource)
+        if identity not in identities:
+            continue
+        if identity in result:
+            raise RuntimeError(f"duplicate live deployment spec: {identity!r}")
+        spec = require_mapping(item.get("spec"), f"live deployment {identity!r}.spec")
+        result[identity] = {
+            "strategy": copy.deepcopy(spec.get("strategy", {})),
+            "template": copy.deepcopy(
+                require_mapping(spec.get("template"), f"live deployment {identity!r}.template")
+            ),
+        }
+    missing = sorted(identities - set(result))
+    if missing:
+        raise RuntimeError(f"live deployment specs are missing for {missing!r}")
+    return result
+
+
+def spec_diff_document(
+    plan: RollbackPlan,
+    *,
+    patches: tuple[tuple[str, str, list[dict[str, Any]]], ...],
+    live_document: Any,
+) -> dict[str, Any]:
+    states = {(state.namespace, state.resource): state for state in plan.deployment_states}
+    identities = {(namespace, resource) for namespace, resource, _patch in patches}
+    live_specs = _live_deployment_specs(live_document, identities=identities)
+    deployments: list[dict[str, Any]] = []
+    for namespace, resource, patch in sorted(patches, key=lambda item: item[:2]):
+        state = states[(namespace, resource)]
+        captured = {"strategy": state.strategy, "template": state.template}
+        before = live_specs[(namespace, resource)]
+        if before != captured:
+            raise RuntimeError(
+                f"live deployment spec drifted after rollback capture: {namespace}/{resource}"
+            )
+        desired = {operation["path"]: operation["value"] for operation in patch}
+        deployments.append(
+            {
+                "namespace": namespace,
+                "resource": resource,
+                "changed_paths": sorted(desired),
+                "before": _sanitized_spec_evidence(before),
+                "desired": _sanitized_spec_evidence(
+                    {
+                        "strategy": desired["/spec/strategy"],
+                        "template": desired["/spec/template"],
+                    }
+                ),
+            }
+        )
+    return {
+        "version": 1,
+        "previous_release_sha": plan.previous_release_sha,
+        "capture": "fresh-live-before-mutation-verified-against-rollback-plan-v4",
+        "deployments": deployments,
+    }
+
+
+def write_spec_diff_evidence(
+    plan: RollbackPlan,
+    *,
+    patches: tuple[tuple[str, str, list[dict[str, Any]]], ...],
+    live_document: Any,
+    output: Path,
+) -> None:
+    document = spec_diff_document(plan, patches=patches, live_document=live_document)
+    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(descriptor, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, indent=2, sort_keys=True)
+        handle.write("\n")
 
 
 def rollout(
@@ -452,61 +797,130 @@ def rollout(
     timeout: str,
     manifest: Path | None = None,
     reconcile_existing_specs: bool = False,
+    spec_diff_out: Path | None = None,
 ) -> None:
     if reconcile_existing_specs and manifest is None:
         raise ValueError("manifest is required when reconciling existing deployment specs")
     if reconcile_existing_specs and plan.targets and not plan.deployment_states:
         raise ValueError("deployment rollback states are required before spec reconciliation")
+    if spec_diff_out is not None and not reconcile_existing_specs:
+        raise ValueError("spec diff evidence requires spec reconciliation")
     commands = rollout_commands(plan, context=context, image=image, timeout=timeout)
-    context_result = subprocess.run(commands[0], check=True, capture_output=True, text=True)
+    rollout_deadline = time.monotonic() + timeout_seconds(timeout)
+    context_result = _run_with_deadline(
+        commands[0],
+        deadline=rollout_deadline,
+        label="kubectl context validation",
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     if context_result.stdout.strip() != context:
         raise RuntimeError(f"kubectl context was not found: {context}")
     targets = rollout_targets(plan)
+    target_count = len(targets)
+    set_image_commands = commands[1 : 1 + target_count]
+    rollout_status_commands = commands[1 + target_count :]
+    statuses_by_deployment = _rollout_statuses_by_deployment(rollout_status_commands)
+    patches: tuple[tuple[str, str, list[dict[str, Any]]], ...] = ()
+    if reconcile_existing_specs:
+        assert manifest is not None
+        patches = existing_deployment_spec_patches(plan, manifest=manifest, image=image)
     namespaces = {target.namespace for target in targets}
     if len(namespaces) != 1:
         raise ValueError("rollout plan must target exactly one namespace")
     namespace = next(iter(namespaces))
-    live_before = live_deployments(context=context, namespace=namespace)
+    live_before = live_deployments(
+        context=context,
+        namespace=namespace,
+        deadline=rollout_deadline,
+    )
     if plan.bootstrap_targets:
         verify_pre_rollout_state(plan, image=image, live_document=live_before)
+    else:
+        verify_repository_rollout(
+            plan,
+            image=image,
+            live_document=live_before,
+            require_exact_digest=False,
+        )
+    if spec_diff_out is not None:
+        write_spec_diff_evidence(
+            plan,
+            patches=patches,
+            live_document=live_before,
+            output=spec_diff_out,
+        )
+
+    if plan.bootstrap_targets:
         create_bootstrap_deployments(
             plan,
             context=context,
             image=image,
             manifest=manifest,
+            deadline=rollout_deadline,
         )
-        live_before = live_deployments(context=context, namespace=namespace)
-    verify_repository_rollout(
-        plan,
-        image=image,
-        live_document=live_before,
-        require_exact_digest=False,
-    )
-    if reconcile_existing_specs:
-        assert manifest is not None
-        apply_existing_deployment_specs(
-            plan,
+        live_before = live_deployments(
             context=context,
-            manifest=manifest,
-            image=image,
+            namespace=namespace,
+            deadline=rollout_deadline,
         )
-        live_before = live_deployments(context=context, namespace=namespace)
         verify_repository_rollout(
             plan,
             image=image,
             live_document=live_before,
-            require_exact_digest=True,
+            require_exact_digest=False,
         )
-    target_count = len(targets)
-    set_image_commands = commands[1 : 1 + target_count]
-    rollout_status_commands = commands[1 + target_count :]
-    for command in set_image_commands:
-        subprocess.run(command, check=True)
-    wait_for_rollout_statuses(rollout_status_commands)
+    if reconcile_existing_specs:
+        bootstrap_identities = tuple(
+            dict.fromkeys((target.namespace, target.resource) for target in plan.bootstrap_targets)
+        )
+        if bootstrap_identities:
+            wait_for_rollout_statuses(
+                _status_commands_for_identities(statuses_by_deployment, bootstrap_identities),
+                timeout=timeout,
+                deadline=rollout_deadline,
+            )
+        for patch_wave in bounded_waves(patches, size=MAX_SPEC_PATCH_WORKERS):
+            _require_rollout_deadline(rollout_deadline, before="deployment spec patch wave")
+            _apply_existing_deployment_spec_wave(
+                patch_wave,
+                context=context,
+                deadline=rollout_deadline,
+            )
+            identities = tuple((namespace, resource) for namespace, resource, _patch in patch_wave)
+            wait_for_rollout_statuses(
+                _status_commands_for_identities(statuses_by_deployment, identities),
+                timeout=timeout,
+                deadline=rollout_deadline,
+            )
+    else:
+        mutation_waves = bounded_waves(
+            tuple(zip(set_image_commands, rollout_status_commands, strict=True)),
+            size=MAX_ROLLOUT_STATUS_WORKERS,
+        )
+        for mutation_wave in mutation_waves:
+            _require_rollout_deadline(rollout_deadline, before="set-image wave")
+            for set_image_command, _status_command in mutation_wave:
+                _run_with_deadline(
+                    set_image_command,
+                    deadline=rollout_deadline,
+                    label=f"set image {set_image_command[-2]}",
+                    check=True,
+                )
+            wait_for_rollout_statuses(
+                tuple(status_command for _set_image_command, status_command in mutation_wave),
+                timeout=timeout,
+                deadline=rollout_deadline,
+            )
     count = verify_repository_rollout(
         plan,
         image=image,
-        live_document=live_deployments(context=context, namespace=namespace),
+        live_document=live_deployments(
+            context=context,
+            namespace=namespace,
+            deadline=rollout_deadline,
+        ),
         require_exact_digest=True,
     )
     print(f"verified {count} repository-matched deployment container(s) at {image}")
@@ -521,6 +935,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image", required=True)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--reconcile-existing-specs", action="store_true")
+    parser.add_argument("--spec-diff-out", type=Path)
     parser.add_argument("--timeout", default="300s")
     return parser.parse_args()
 
@@ -535,6 +950,7 @@ def main() -> int:
         timeout=args.timeout,
         manifest=args.manifest,
         reconcile_existing_specs=args.reconcile_existing_specs,
+        spec_diff_out=args.spec_diff_out,
     )
     print(f"rolled out immutable digest to {len(rollout_targets(plan))} deployment container(s)")
     return 0

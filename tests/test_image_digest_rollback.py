@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import subprocess
@@ -788,7 +789,6 @@ spec:
         previous_release_sha=SHA,
     )
     desired = "registry.example/opsia/service@sha256:" + "c" * 64
-
     _, _, patch = rollout_image_digest.existing_deployment_spec_patches(
         plan,
         manifest=manifest,
@@ -808,12 +808,96 @@ spec:
     ]
 
 
-def test_rollout_reconciles_existing_spec_before_idempotent_digest_set(
+def test_spec_diff_evidence_captures_v4_before_and_desired_specs_without_secret_values(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    manifest = deployment_manifest(tmp_path)
-    live = {"items": [live_deployments()["items"][0]]}
+    manifest = tmp_path / "services.yaml"
+    manifest.write_text(
+        """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: management
+spec:
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        opsia.io/source-sha: "${SOURCE_SHA}"
+        internal.opsia.io/debug-payload: desired-debug-secret
+        vault.hashicorp.com/agent-inject-template-config: desired-vault-template-secret
+    spec:
+      containers:
+        - name: api-gateway
+          image: service:latest
+          args: ["--webhook=https://desired-user:desired-pass@example.test"]
+          env:
+            - name: DATABASE_PASSWORD
+              value: desired-secret-value
+            - name: TOKEN_REF
+              valueFrom:
+                secretKeyRef:
+                  name: management-runtime-secret
+                  key: token
+                  optional: false
+                  value: impossible-secret-value
+            - name: DATABASE_URL
+              value: postgresql://desired-user:desired-pass@database
+""",
+        encoding="utf-8",
+    )
+    live = {
+        "items": [
+            {
+                "metadata": {"name": "api-gateway"},
+                "spec": {
+                    "strategy": {"type": "RollingUpdate"},
+                    "template": {
+                        "metadata": {
+                            "annotations": {
+                                "opsia.io/source-sha": SHA,
+                                "internal.opsia.io/debug-payload": "live-debug-secret",
+                                "vault.hashicorp.com/agent-inject-template-config": (
+                                    "live-vault-template-secret"
+                                ),
+                            }
+                        },
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": "api-gateway",
+                                    "image": DIGEST,
+                                    "args": ["--webhook=https://live-user:live-pass@example.test"],
+                                    "env": [
+                                        {
+                                            "name": "DATABASE_PASSWORD",
+                                            "value": "live-secret-value",
+                                        },
+                                        {
+                                            "name": "DATABASE_URL",
+                                            "value": "postgresql://live-user:live-pass@database",
+                                        },
+                                        {
+                                            "name": "TOKEN_REF",
+                                            "valueFrom": {
+                                                "secretKeyRef": {
+                                                    "name": "management-runtime-secret",
+                                                    "key": "token",
+                                                    "optional": False,
+                                                    "value": "impossible-live-secret-value",
+                                                }
+                                            },
+                                        },
+                                    ],
+                                }
+                            ]
+                        },
+                    },
+                },
+            }
+        ]
+    }
     plan = capture_image_digests.build_plan(
         expected=(("api-gateway", "api-gateway"),),
         live_document=live,
@@ -821,33 +905,139 @@ def test_rollout_reconciles_existing_spec_before_idempotent_digest_set(
         previous_release_sha=SHA,
     )
     desired = "registry.example/opsia/service@sha256:" + "c" * 64
+    patches = rollout_image_digest.existing_deployment_spec_patches(
+        plan,
+        manifest=manifest,
+        image=desired,
+    )
+    output = tmp_path / "spec-diff.json"
+
+    rollout_image_digest.write_spec_diff_evidence(
+        plan,
+        patches=patches,
+        live_document=live,
+        output=output,
+    )
+
+    assert output.stat().st_mode & 0o777 == 0o600
+    source = output.read_text(encoding="utf-8")
+    assert "live-secret-value" not in source
+    assert "desired-secret-value" not in source
+    assert "impossible-secret-value" not in source
+    assert "impossible-live-secret-value" not in source
+    assert "desired-user" not in source
+    assert "live-user" not in source
+    assert "desired-debug-secret" not in source
+    assert "live-debug-secret" not in source
+    assert "desired-vault-template-secret" not in source
+    assert "live-vault-template-secret" not in source
+    document = json.loads(source)
+    deployment = document["deployments"][0]
+    assert document["capture"] == ("fresh-live-before-mutation-verified-against-rollback-plan-v4")
+    assert deployment["changed_paths"] == ["/spec/strategy", "/spec/template"]
+    assert deployment["before"]["strategy"] == {"type": "RollingUpdate"}
+    assert deployment["desired"]["strategy"] == {"type": "Recreate"}
+    before_annotations = deployment["before"]["template"]["metadata"]["annotations"]
+    desired_annotations = deployment["desired"]["template"]["metadata"]["annotations"]
+    assert before_annotations == {
+        "internal.opsia.io/debug-payload": "<redacted>",
+        "opsia.io/source-sha": SHA,
+        "vault.hashicorp.com/agent-inject-template-config": "<redacted>",
+    }
+    assert desired_annotations == {
+        "internal.opsia.io/debug-payload": "<redacted>",
+        "opsia.io/source-sha": "${SOURCE_SHA}",
+        "vault.hashicorp.com/agent-inject-template-config": "<redacted>",
+    }
+    before_env = deployment["before"]["template"]["spec"]["containers"][0]["env"]
+    desired_env = deployment["desired"]["template"]["spec"]["containers"][0]["env"]
+    before_env_by_name = {entry["name"]: entry for entry in before_env}
+    desired_env_by_name = {entry["name"]: entry for entry in desired_env}
+    assert deployment["before"]["template"]["spec"]["containers"][0]["args"] == ["<redacted>"]
+    assert deployment["desired"]["template"]["spec"]["containers"][0]["args"] == ["<redacted>"]
+    assert before_env_by_name["DATABASE_PASSWORD"]["value"] == "<redacted>"
+    assert desired_env_by_name["DATABASE_PASSWORD"]["value"] == "<redacted>"
+    assert before_env_by_name["TOKEN_REF"]["valueFrom"]["secretKeyRef"] == {
+        "key": "token",
+        "name": "management-runtime-secret",
+        "optional": False,
+    }
+    assert desired_env_by_name["TOKEN_REF"]["valueFrom"]["secretKeyRef"] == {
+        "key": "token",
+        "name": "management-runtime-secret",
+        "optional": False,
+    }
+    assert before_env_by_name["DATABASE_URL"]["value"] == "<redacted>"
+    assert desired_env_by_name["DATABASE_URL"]["value"] == "<redacted>"
+
+
+def test_spec_diff_fails_closed_when_live_spec_drifted_after_v4_capture(tmp_path: Path) -> None:
+    manifest = deployment_manifest(tmp_path)
+    live = live_deployments()
+    plan = capture_image_digests.build_plan(
+        expected=capture_image_digests.expected_deployment_containers(manifest),
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+    desired = "registry.example/opsia/service@sha256:" + "c" * 64
+    patches = rollout_image_digest.existing_deployment_spec_patches(
+        plan,
+        manifest=manifest,
+        image=desired,
+    )
+    drifted = copy.deepcopy(live)
+    drifted["items"][0]["spec"]["template"]["spec"]["containers"][0]["env"] = [
+        {"name": "UNPLANNED", "value": "drift"}
+    ]
+
+    with pytest.raises(RuntimeError, match="drifted after rollback capture"):
+        rollout_image_digest.spec_diff_document(
+            plan,
+            patches=patches,
+            live_document=drifted,
+        )
+
+
+def test_rollout_reconciles_existing_spec_without_redundant_digest_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = deployment_manifest(tmp_path)
+    live = live_deployments()
+    plan = capture_image_digests.build_plan(
+        expected=(
+            ("api-gateway", "api-gateway"),
+            ("audit-worker", "audit-worker"),
+        ),
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+    desired = "registry.example/opsia/service@sha256:" + "c" * 64
+    evidence = tmp_path / "spec-diff.json"
     events: list[str] = []
     live_calls = 0
 
-    def fake_live_deployments(*, context: str, namespace: str) -> dict[str, object]:
+    def fake_live_deployments(
+        *, context: str, namespace: str, deadline: float | None = None
+    ) -> dict[str, object]:
+        assert deadline is not None
         nonlocal live_calls
         assert (context, namespace) == ("opsia-dev", "management")
         live_calls += 1
         events.append(f"live-{live_calls}")
         image = DIGEST if live_calls == 1 else desired
-        return {
-            "items": [
-                {
-                    "metadata": {"name": "api-gateway"},
-                    "spec": {
-                        "template": {
-                            "spec": {"containers": [{"name": "api-gateway", "image": image}]}
-                        }
-                    },
-                }
-            ]
-        }
+        document = live_deployments(second_image=image)
+        document["items"][0]["spec"]["template"]["spec"]["containers"][0]["image"] = image
+        return document
 
     def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
         if command[1:3] == ("config", "get-contexts"):
             return subprocess.CompletedProcess(command, 0, stdout="opsia-dev\n")
         if command[5] == "patch":
-            events.append("patch")
+            assert evidence.exists()
+            events.append(f"patch:{command[6]}")
             payload = kwargs.get("input")
             assert isinstance(payload, str)
             assert desired in payload
@@ -857,6 +1047,7 @@ def test_rollout_reconciles_existing_spec_before_idempotent_digest_set(
 
     monkeypatch.setattr(rollout_image_digest, "live_deployments", fake_live_deployments)
     monkeypatch.setattr(rollout_image_digest.subprocess, "run", fake_run)
+    monkeypatch.setattr(rollout_image_digest, "MAX_SPEC_PATCH_WORKERS", 1)
 
     rollout_image_digest.rollout(
         plan,
@@ -865,16 +1056,95 @@ def test_rollout_reconciles_existing_spec_before_idempotent_digest_set(
         timeout="300s",
         manifest=manifest,
         reconcile_existing_specs=True,
+        spec_diff_out=evidence,
     )
 
     assert events == [
         "live-1",
-        "patch",
-        "live-2",
-        "set:deployment/api-gateway",
+        "patch:deployment/api-gateway",
         "rollout:deployment/api-gateway",
-        "live-3",
+        "patch:deployment/audit-worker",
+        "rollout:deployment/audit-worker",
+        "live-2",
     ]
+
+
+def test_existing_spec_reconciliation_attempts_patches_in_parallel_and_reports_deterministically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = deployment_manifest(tmp_path)
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8")
+        + """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timeline-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: timeline-worker
+          image: service:latest
+""",
+        encoding="utf-8",
+    )
+    live = live_deployments()
+    items = live["items"]
+    assert isinstance(items, list)
+    items.append(
+        {
+            "metadata": {"name": "timeline-worker"},
+            "spec": {
+                "template": {"spec": {"containers": [{"name": "timeline-worker", "image": DIGEST}]}}
+            },
+        }
+    )
+    plan = capture_image_digests.build_plan(
+        expected=(
+            ("api-gateway", "api-gateway"),
+            ("audit-worker", "audit-worker"),
+            ("timeline-worker", "timeline-worker"),
+        ),
+        live_document=live,
+        namespace="management",
+        previous_release_sha=SHA,
+    )
+    desired = "registry.example/opsia/service@sha256:" + "c" * 64
+    barrier = threading.Barrier(2)
+    attempted: list[str] = []
+
+    def fail_together(
+        command: tuple[str, ...],
+        **_kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        resource = command[6]
+        attempted.append(resource)
+        barrier.wait(timeout=2)
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(rollout_image_digest.subprocess, "run", fail_together)
+
+    with pytest.raises(RuntimeError) as captured:
+        rollout_image_digest.apply_existing_deployment_specs(
+            plan,
+            context="opsia-dev",
+            manifest=manifest,
+            image=desired,
+            max_workers=2,
+        )
+
+    assert set(attempted) == {"deployment/api-gateway", "deployment/audit-worker"}
+    assert str(captured.value) == (
+        "deployment spec reconciliation failed for "
+        "['management/deployment/api-gateway', 'management/deployment/audit-worker']"
+    )
+    assert isinstance(captured.value.__cause__, subprocess.CalledProcessError)
+    assert captured.value.__cause__.cmd[6] == "deployment/api-gateway"
+    assert [
+        state.template["spec"]["containers"][0]["image"] for state in plan.deployment_states
+    ] == [DIGEST, DIGEST, DIGEST]
 
 
 def test_rollback_restores_captured_deployment_template_before_digest(
@@ -1275,7 +1545,10 @@ def test_rollout_creates_recorded_bootstrap_before_setting_all_images(
             )
         return {"items": items}
 
-    def fake_live_deployments(*, context: str, namespace: str) -> dict[str, object]:
+    def fake_live_deployments(
+        *, context: str, namespace: str, deadline: float | None = None
+    ) -> dict[str, object]:
+        assert deadline is not None
         nonlocal live_calls
         assert (context, namespace) == ("opsia-dev", "management")
         live_calls += 1
@@ -1358,6 +1631,10 @@ def test_parallel_rollout_status_collects_concurrent_failures(
         image=next_digest,
         timeout="300s",
     )[3:]
+    status_commands = (
+        *status_commands,
+        (*status_commands[0][:-2], "deployment/timeline-worker", status_commands[0][-1]),
+    )
     barrier = threading.Barrier(2)
     started: list[str] = []
 
@@ -1372,9 +1649,53 @@ def test_parallel_rollout_status_collects_concurrent_failures(
     monkeypatch.setattr(rollout_image_digest.subprocess, "run", fail_together)
 
     with pytest.raises(RuntimeError, match="api-gateway.*audit-worker|audit-worker.*api-gateway"):
-        rollout_image_digest.wait_for_rollout_statuses(status_commands, max_workers=2)
+        rollout_image_digest.wait_for_rollout_statuses(
+            status_commands,
+            timeout="300s",
+            max_workers=2,
+        )
 
     assert set(started) == {"deployment/api-gateway", "deployment/audit-worker"}
+
+
+def test_rollout_status_queue_uses_one_shared_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = revert_image_digests.load_plan(write_two_target_plan(tmp_path))
+    next_digest = "registry.example/opsia/service@sha256:" + "c" * 64
+    status_commands = rollout_image_digest.rollout_commands(
+        plan,
+        context="opsia-dev",
+        image=next_digest,
+        timeout="1s",
+    )[3:]
+    now = [0.0]
+    calls: list[tuple[str, ...]] = []
+
+    def fake_monotonic() -> float:
+        return now[0]
+
+    def consume_deadline(
+        command: tuple[str, ...],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        assert kwargs["timeout"] == 1.0
+        now[0] = 1.1
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(rollout_image_digest.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(rollout_image_digest.subprocess, "run", consume_deadline)
+
+    with pytest.raises(RuntimeError, match="audit-worker"):
+        rollout_image_digest.wait_for_rollout_statuses(
+            status_commands,
+            timeout="1s",
+            max_workers=1,
+        )
+
+    assert len(calls) == 1
 
 
 def test_rollout_verifies_exact_digest_only_after_every_status_succeeds(
@@ -1386,7 +1707,10 @@ def test_rollout_verifies_exact_digest_only_after_every_status_succeeds(
     events: list[str] = []
     live_calls = 0
 
-    def fake_live_deployments(*, context: str, namespace: str) -> dict[str, object]:
+    def fake_live_deployments(
+        *, context: str, namespace: str, deadline: float | None = None
+    ) -> dict[str, object]:
+        assert deadline is not None
         nonlocal live_calls
         assert context == "opsia-dev"
         assert namespace == "management"

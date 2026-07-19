@@ -542,9 +542,21 @@ def test_full_deploy_reconciles_canonical_workload_specs_with_rollback_evidence(
     assert '--manifest "${RUNNER_TEMP}/management-rendered.yaml"' in service_rollout
     assert "--reconcile-existing-specs" in service_rollout
     assert "--manifest deploy/management/console-dev.yaml" in console_rollout
-    assert "--reconcile-existing-specs" not in console_rollout
+    assert "--reconcile-existing-specs" in console_rollout
+    assert '--spec-diff-out "${RUNNER_TEMP}/console-spec-diff.json"' in console_rollout
+    evidence = steps["Upload console spec reconciliation evidence"]
+    assert evidence["uses"] == "actions/upload-artifact@v4"
+    assert "steps.console_rollout.outcome != 'skipped'" in evidence["if"]
+    assert evidence["with"]["path"] == "${{ runner.temp }}/console-spec-diff.json"
+    assert evidence["with"]["if-no-files-found"] == "error"
     assert names.index("Capture current service digest rollback plan") < names.index(
         "Roll out immutable service digest"
+    )
+    assert names.index("Roll out immutable console digest") < names.index(
+        "Upload console spec reconciliation evidence"
+    )
+    assert names.index("Upload console spec reconciliation evidence") < names.index(
+        "Verify live auth bypass policy after rollout"
     )
 
 
@@ -669,6 +681,31 @@ def test_console_manifests_pin_the_observed_ecr_digest_instead_of_latest() -> No
     assert "console-dev.yaml" in kustomization
     assert "console.yaml" not in kustomization
     assert not (ROOT / "deploy/management/console.yaml").exists()
+
+
+def test_console_rollout_uses_static_readiness_with_a_bounded_failure_window() -> None:
+    documents = [
+        document
+        for document in yaml.safe_load_all(
+            (ROOT / "deploy/management/console-dev.yaml").read_text(encoding="utf-8")
+        )
+        if document
+    ]
+    deployment = next(
+        document
+        for document in documents
+        if document.get("kind") == "Deployment"
+        and document.get("metadata", {}).get("name") == "console-dev"
+    )
+    pod_spec = deployment["spec"]["template"]["spec"]
+    probe = pod_spec["containers"][0]["readinessProbe"]
+
+    assert probe["httpGet"]["path"] == "/index.html"
+    assert probe["httpGet"]["port"] == "http"
+    assert probe["initialDelaySeconds"] == 3
+    assert probe["periodSeconds"] == 2
+    assert probe["timeoutSeconds"] == 1
+    assert probe["failureThreshold"] * max(probe["periodSeconds"], probe["timeoutSeconds"]) <= 30
 
 
 def test_deploy_retires_legacy_console_only_after_release_evidence_is_recorded() -> None:

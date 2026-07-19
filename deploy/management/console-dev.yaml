@@ -129,12 +129,13 @@ spec:
               containerPort: 8080
           readinessProbe:
             httpGet:
-              path: /
+              # SPA fallback/API upstream과 무관한 정적 산출물만 확인한다.
+              path: /index.html
               port: http
             initialDelaySeconds: 3
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 6
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 15
           volumeMounts:
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d

@@ -822,6 +822,7 @@ jobs:
             --timeout 600s
 
       - name: Roll out immutable console digest
+        id: console_rollout
         if: steps.release_lease.outputs.mode == 'deploy'
         shell: bash
         env:
@@ -831,9 +832,23 @@ jobs:
           uv run python scripts/rollout_image_digest.py \
             --plan "${RUNNER_TEMP}/console-rollback-plan.json" \
             --manifest deploy/management/console-dev.yaml \
+            --reconcile-existing-specs \
+            --spec-diff-out "${RUNNER_TEMP}/console-spec-diff.json" \
             --context "${MGMT_CONTEXT}" \
             --image "${CONSOLE_DEPLOY_IMAGE}" \
             --timeout 600s
+
+      - name: Upload console spec reconciliation evidence
+        if: >-
+          always() &&
+          steps.release_lease.outputs.mode == 'deploy' &&
+          steps.console_rollout.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-spec-reconciliation-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/console-spec-diff.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Verify live auth bypass policy after rollout
         if: steps.release_lease.outputs.mode == 'deploy'
