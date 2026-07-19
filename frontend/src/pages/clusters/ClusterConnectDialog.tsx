@@ -1,11 +1,8 @@
-import { Check } from "lucide-react";
 import {
   useEffect,
   useRef,
   useState,
-  type ComponentType,
 } from "react";
-import { Link } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import {
   ClustersPortFailure,
@@ -15,44 +12,23 @@ import {
   type ClustersPort,
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import { useI18n, type MessageKey } from "../../shared/i18n";
-import { ProviderLogo, type ProviderLogoKind } from "../../shared/brand/ProviderLogo";
-import { Button, buttonVariants } from "../../shared/ui/primitives/button";
-import { cn } from "@/shared/lib/cn";
+import { useI18n } from "../../shared/i18n";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "../../shared/ui/primitives/dialog";
-import { Input } from "../../shared/ui/primitives/input";
-import { Spinner } from "../../shared/ui/primitives/spinner";
 import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
+import {
+  ClusterConnectedStep,
+  ClusterRegistrationStep,
+} from "./ClusterConnectDialogPanels";
+import {
+  isAbortError, normalizeDisplayName, type ConnectPhase, type WizardStep,
+} from "./ClusterConnectDialogTypes";
 import { clusterResourcesHref } from "./clusterNavigation";
-
-const providers: readonly {
-  id: ClusterConnectProvider;
-  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
-  labelKey: MessageKey;
-}[] = [
-  { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
-  { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
-  { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
-  { id: "onprem", logo: "onprem", labelKey: "clusters.connect.provider.onprem" },
-];
-
-type WizardStep = 1 | 2 | 3;
-export type ConnectPhase =
-  | "idle"
-  | "submitting"
-  | "waiting"
-  | "reissuing"
-  | "finishing"
-  | "connected"
-  | "expired"
-  | "failed";
 
 const STEP_MOTION = "motion-wizard-stage";
 
@@ -278,57 +254,19 @@ export function ClusterConnectDialog({
         </DialogHeader>
 
         {step === 1 ? (
-          <div className={cn("grid gap-5", STEP_MOTION)}>
-            <label className="grid gap-2 text-sm font-medium">
-              {t("clusters.connect.name.label")}
-              <Input
-                aria-describedby={nameConflict ? "cluster-connect-name-error" : undefined}
-                aria-invalid={nameConflict || undefined}
-                autoFocus
-                onChange={(event) => {
-                  setName(event.currentTarget.value);
-                  setServerNameConflict(false);
-                }}
-                placeholder={t("clusters.connect.name.placeholder")}
-                value={name}
-              />
-              {nameConflict ? (
-                <span className="text-xs text-destructive" id="cluster-connect-name-error" role="alert">
-                  {t("clusters.connect.name.conflict")}
-                </span>
-              ) : null}
-            </label>
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 text-sm font-medium">{t("clusters.connect.provider.label")}</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {providers.map(({ id, logo, labelKey }) => (
-                  <button
-                    aria-pressed={provider === id}
-                    className={cn(
-                      "grid min-h-24 place-items-center gap-2 rounded-xl border bg-card p-3 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
-                      provider === id && "border-ring bg-muted",
-                    )}
-                    key={id}
-                    onClick={() => setProvider(id)}
-                    type="button"
-                  >
-                    <ConnectProviderLogo logo={logo} />
-                    <span>{t(labelKey)}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            <DialogFooter className="mt-1">
-              <Button
-                aria-busy={phase === "submitting"}
-                disabled={!name.trim() || nameConflict || phase === "submitting"}
-                onClick={() => void register()}
-              >
-                {phase === "submitting" ? <Spinner decorative /> : null}
-                {t("clusters.connect.action.register")}
-              </Button>
-            </DialogFooter>
-          </div>
+          <ClusterRegistrationStep
+            name={name}
+            nameConflict={nameConflict}
+            onNameChange={(nextName) => {
+              setName(nextName);
+              setServerNameConflict(false);
+            }}
+            onProviderChange={setProvider}
+            onRegister={() => void register()}
+            phase={phase}
+            provider={provider}
+            t={t}
+          />
         ) : null}
 
         {step === 2 ? (
@@ -349,44 +287,12 @@ export function ClusterConnectDialog({
         ) : null}
 
         {step === 3 && receipt ? (
-          <div className={cn("grid justify-items-center gap-4 py-6 text-center", STEP_MOTION)}>
-            <span className="grid size-12 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
-              <Check aria-hidden="true" className="size-6" />
-            </span>
-            <div className="grid gap-1">
-              <h3 className="text-lg font-semibold">{t("clusters.connect.connected.title")}</h3>
-              <p className="text-sm text-muted-foreground">{t("clusters.connect.connected.description")}</p>
-            </div>
-            <Link
-              className={buttonVariants()}
-              to={clusterResourcesHref(filter.state, receipt.clusterId)}
-            >
-              {t("clusters.connect.action.view")}
-            </Link>
-          </div>
+          <ClusterConnectedStep
+            href={clusterResourcesHref(filter.state, receipt.clusterId)}
+            t={t}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
   );
-}
-
-function normalizeDisplayName(value: string): string {
-  return value.trim().toLocaleLowerCase();
-}
-
-function ConnectProviderLogo({
-  logo,
-}: {
-  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
-}) {
-  if (typeof logo === "string") {
-    return <ProviderLogo className="size-6" provider={logo} />;
-  }
-  const ProviderIcon = logo;
-  return <ProviderIcon className="size-6" />;
-}
-
-function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error &&
-    error.name === "AbortError";
 }

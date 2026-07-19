@@ -9,7 +9,7 @@ import {
   type ConnectStageState,
   type ConnectStageTriplet,
 } from "../../shared/ui/connect";
-import type { ConnectPhase } from "./ClusterConnectDialog";
+import type { ConnectPhase } from "./ClusterConnectDialogTypes";
 
 export function ConnectionCommandStep({
   copyState,
