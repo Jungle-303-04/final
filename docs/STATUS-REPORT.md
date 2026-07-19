@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-19 22:11 KST다. 원격 기준 소스는 `8f017558a1841ba376f3da29aa04111db5a3e207`, 로컬 파이프라인 복구 후보는 `16b3bc5fd`다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-19 22:57 KST다. 원격 기준 소스는 `0916099f9e947c350a1224ddbc73d885d63ec409`, 로컬 후보는 원격 위 파이프라인 복구 5커밋과 activity bigint hotfix `9b022f2f1`을 합친 tree다. 코드, 로컬 게이트, GitHub Actions, 라이브 배포, 실브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. 홈 v3 P0와 로컬 대조 증거를 담은 `d48f3652a`를 dev에 push했으나 배포되지는 않았다.
-2. `d48f3652a` Dev Gate `29686718943`은 Backend 문서 심도·색인 2건이 실패했고 후속 push로 전체 run은 cancelled됐다.
-3. 문서 실패는 제품 결함이 아니며 rebased `7fb2e0a8e`에서 G4 증거 6파일을 평탄화하고 Markdown 3개를 docs 루트에 색인했다.
-4. 후속 프론트 SHA `6d3c7bc76`, `1d57d4b1b`, `8d43b5023` Gate는 shallow checkout의 기준 SHA 객체 누락으로 실패했고 Deploy는 모두 skipped다.
-5. 원격 `1b45b699c`의 첫 CI 보강은 제목 컨벤션으로 Gate `29687838966`이 source-proof에서 실패했다. 후속 `8f017558a` Gate `29688137124`는 Backend 3건과 Frontend 어휘 테스트 1건으로 실패했다.
-6. 로컬 전체 Backend 첫 실행은 3,774 pass/3 skip/1 timing fail, 두 번째도 3,774 pass/3 skip/1 timing fail로 제품 변경과 무관한 부하 민감 테스트 2건을 드러냈다.
-7. rebased `9abd922b5`와 `718c9d7e4`는 node-drain timeout과 metrics 비차단 회귀를 wall-clock 대신 이벤트 순서 계약으로 결정화했고 rebase 전 동일 tree의 전체 Backend `3,775 passed/3 skipped`를 통과했다.
-8. 홈 P0 로컬 수치는 클러스터 3, Node 0/0, Pod 108(21+64+23), OutOfSync 0, namespace Pod 707로 교차 일치한다.
-9. G4 홈은 **부분**이다. D-4 코드는 해소됐지만 배포 동일 SHA 라이브 증거가 없고, 잔여 우선순위는 D-3 토큰 → D-1 GitOps 정보 복원 → D-2 연결 흐름 단일화다.
-10. Backend 3건은 로컬 `7fb2e0a8e`에서 해소됐다. Frontend 1건은 D22 어휘에 맞춘 테스트 기대값 갱신을 frontend 소유자에게 반송했고, 다음 3수는 그 커밋 rebase·직렬 게이트·단일 push다.
+1. `f2774f10d` Gate `29688414550`의 유일한 Frontend 라벨 기대 실패는 `0916099f9`에서 D22 `동기화 상태` 어휘로 정합화됐다.
+2. `0916099f9` Dev Gate `29688722835`는 Backend와 Frontend 모두 성공했다.
+3. 이어진 Dev Deploy `29688782222`는 이미지 rollout과 기본 smoke까지 성공했지만 인증 브라우저 `/resources` smoke의 `/api/activity/overview` HTTP 500으로 실패했다.
+4. 배포는 이전 release로 정상 롤백됐고 성공 SHA 기록은 생략됐다. 현재 활성 Gate/Deploy는 0이다.
+5. 직접 원인은 2026 epoch-ms와 최대 30일 bucket bind가 PostgreSQL `Integer/int4`로 추론된 것이다. 결과 `CAST BIGINT`는 입력 overflow를 막지 못했다.
+6. `9b022f2f1`은 multiplier·from·bucket을 모두 `literal(..., BigInteger())`로 고정하고 2026년 빈 결과와 populated series를 같은 계약에서 검증한다.
+7. 표적 33/33, 전체 Backend 3,776 pass/3 skip+manifest, `gate-fast`, release governance 276 pending 0·41/41을 저부하 직렬로 통과했다. 실제 DB는 재배포 direct read/browser smoke가 최종 증거다.
+8. 쿠키 없는 `/api/clusters` 200은 라우트 가드 누락이 아니라 canonical hostname의 `console-dev` trusted-proxy 주입이다. IN-4 인증 전환 보류 상태로 BLOCKERS에 명시했다.
+9. G4 홈은 **부분**이다. D-4 코드는 해소됐지만 rollback 때문에 동일 SHA 라이브 수치·W2~W8 증거가 없고, 잔여 우선순위는 D-3 토큰 → D-1 GitOps 정보 복원 → D-2 연결 흐름 단일화다.
+10. 다음 3수는 저부하 직렬 전체 게이트, 원격 재base 뒤 단일 push, 성공 배포 SHA의 activity·홈 실브라우저 대조다.
 
 ## 현재 상세 근거
 
@@ -28,9 +28,11 @@
 | `8d43b5023` | Gate `29687770231`, Deploy `29687802090` | Frontend가 기준 `1d57d4b1b` 객체 부재로 실패, Deploy skipped | 같은 CI 결함 재현 |
 | `1b45b699c` | Gate `29687838966`, Deploy `29687854429` | source-proof가 제목 끝의 모호한 `수정`을 거부, Deploy skipped | 코드 실행 전 커밋 계약 실패 |
 | `8f017558a` | Gate `29688137124`, Deploy `29688334831` | Backend 3,772 pass/3 skip/3 fail, Frontend 2,291 pass/1 fail, Deploy skipped | Backend는 로컬 해소, Frontend 어휘 테스트 반송 |
-| `16b3bc5fd` | 로컬 후보 | 문서·CI·timing 계약과 E smoke 증거. pre-rebase 전체 Backend 3,775 pass/3 skip, rebased 표적 140/140 | Frontend 수정 rebase 후 최종 직렬 검증 후보 |
+| `f2774f10d` | Gate `29688414550`, Deploy `29688613147` | Backend 성공, Frontend `HomePage.test.tsx` 라벨 기대 1건 실패, Deploy skipped | D22 어휘 정합 결함 |
+| `0916099f9` | Gate `29688722835`, Deploy `29688782222` | Gate 성공. Deploy 인증 browser smoke `/resources`에서 activity API 500, 이전 release 롤백 성공 | PostgreSQL epoch-ms int4 overflow |
+| `9b022f2f1` | 로컬 검증 | activity bucket 산술 3 bind bigint, 2026 빈/populated series, direct deploy read probe. 표적 33/33, Backend 3,776 pass/3 skip, gate-fast/governance 성공 | 최종 rebase 뒤 단일 push 대기 |
 
-현재 활성 Deploy는 0이다. `d48f3652a` 이후 라이브 digest는 바뀌지 않았으므로 홈 P0를 배포 완주로 기록하지 않는다. 로컬 `gate-fast`, `release-governance-web-patch`, 전체 Backend 3,775 pass/3 skip은 모두 통과했다. 다음 push 전 `origin/dev`를 rebase하고 push 뒤에는 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 활성 Gate/Deploy는 0이다. `0916099f9` release가 롤백됐으므로 라이브 성공 기준점은 계속 `fdd75a4f2`이고 홈 P0를 배포 완주로 기록하지 않는다. activity 변경 후 `gate-fast`, `release-governance-web-patch`, 전체 Backend 3,776 pass/3 skip을 모두 다시 통과했다. 다음 push 전 `origin/dev`를 rebase하고 push 뒤에는 Gate→Deploy 종료까지 추가 push를 금지한다.
 
 ### G4 홈과 가시 변화
 
@@ -38,7 +40,7 @@
 - 가시 변화: 한 줄 플릿 요약, 최대 2열 실데이터 클러스터 카드, W2~W8 기본 보드, 공용 Recharts 차트, 실행 가능한 빈/오류 상태, 서피스 이동 시 스크롤 최상단 초기화.
 - 로컬 Chrome: 1280/1440/1920 가로 overflow 0, 연결 모달 실동작, 기간 선택 URL 반영, 리소스·배포 deep link 실재, page error 0.
 - 증거: `docs/evidence/g4/home-demo-v3-1440.png`, `home-product-candidate-light-1440.png`, `home-visual-comparison.md`, `home-numeric-cross-check.md`, `home-click-path.md`.
-- 라이브 activity overview는 epoch-ms `from=2147483648`부터 HTTP 500이다. bucket 산식의 바인드가 PostgreSQL int4로 추론되는 원인을 확정했고, 제품은 값을 만들지 않고 `사용할 수 없음`과 실제 재시도를 노출한다. `BigInteger` 명시와 현재 epoch 회귀 계약은 다음 백엔드 배치다.
+- 실패 release의 activity overview는 epoch-ms `from=2147483648`부터 HTTP 500이었다. `9b022f2f1`은 bucket 산술의 `1_000`, `from_ms`, `bucket_ms`를 모두 PostgreSQL bigint로 고정했으며 2026 epoch와 30일 최대 bucket의 빈/populated 결과를 회귀로 잠근다. post-deploy read smoke도 2026년 5분 bucket API를 직접 호출하므로 실제 DB 해소는 direct read와 `/resources` 인증 browser smoke가 함께 증명한다.
 - G4 완료 선언은 금지한다. 같은 배포 SHA의 라이브 캡처·숫자·클릭 증거와 세부 카드/위젯 parity가 아직 없다.
 
 프론트 소유권은 클로드에게 이전됐다. 코덱스는 `frontend/**`를 더 수정·커밋하지 않는다. G4 잔여 우선순위는 공통 재작업을 줄이기 위해 **D-3 토큰 문법 통일 → D-1 저장소·동기화 정보 복원 → D-2 모든 GitOps 연결 행동의 단일 흐름 수렴**이다.
@@ -64,11 +66,11 @@
 
 ### 현재 블로커와 다음 3수
 
-사람이나 오케스트레이터만 해결할 절대 블로커는 0개다. CI shallow-base fetch·문서 경계·timing 계약은 로컬 해소됐고, activity overview 500은 원인을 확정했으며, 19:50 E smoke 누락은 21:58에 보충했다. Frontend 어휘 테스트는 소유권 경계에 따라 클로드가 D22 기대값을 갱신 중이다. 남은 자체 해소 대상은 해당 커밋 rebase, 단일 배포와 동일 SHA 라이브 증거다. 직전 STATUS가 17:35이고 이번 갱신이 22:11이므로 3시간 상한을 96분 초과했으며, 이후 배포/G# 완료/3시간 중 빠른 시점으로 복구한다.
+사람이나 오케스트레이터만 해결할 절대 블로커는 0개다. Frontend 어휘 결함은 `0916099f9`와 Gate `29688722835`로 해소됐다. 현재 유일한 배포 P0는 activity epoch bucket의 PostgreSQL 정수폭이며 로컬 수정까지 완료했다. IN-4는 발행자 결정에 따른 의도된 보류지만 canonical hostname이 trusted service-admin identity를 주입한다는 잔여 위험을 BLOCKERS에 남겼다. 남은 자체 해소 대상은 저부하 전체 검증, 단일 배포, 동일 SHA 라이브 증거다.
 
-1. rebased 원격 변경을 포함한 표적 계약과 `gate-fast`, release governance를 직렬 재검증한다.
+1. activity 2026 빈/populated 회귀와 전체 Backend, `gate-fast`, release governance를 load ≤30에서 하나씩 직렬 재검증한다.
 2. `origin/dev`를 다시 rebase하고 검증 후보 한 번만 push해 Gate→Deploy 완주까지 창을 잠근다.
-3. 배포 SHA로 라이브 홈 카드 수치·W2~W8·클릭·리사이즈를 demo-freeze-v3와 재대조하고 GOAL/BLOCKERS/STATUS를 갱신한다.
+3. 배포 SHA로 activity 실제 DB 응답과 홈 카드 수치·W2~W8·클릭·리사이즈를 demo-freeze-v3와 재대조하고 GOAL/BLOCKERS/STATUS를 갱신한다.
 
 ## 이전 보고 상세 — 2026-07-19 17:35 KST
 
