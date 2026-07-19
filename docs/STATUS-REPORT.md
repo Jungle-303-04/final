@@ -100,7 +100,7 @@ G6도 완전 미착수는 아니다. `b0bfa726c` 디자인 가드, `ec2e963e0` �
 | B 파운데이션 | G2 완료 후 게이트 중 빌드 중지, 디자인 계약 보수 | 디자인/Helm 픽스처 `b0bfa726c`; G2 완료 기준 `74ff3c0f1`은 이미 `GOAL-LOG`에 기록 |
 | C 서피스 | G4 MUST 구현과 결정적 회귀 제거 | 트래픽 소스 `40e028ca1`, 저장소 6단계 `661213de1`, POST 계약 `ccfa3bca2`, ProductApp/홈/키보드 안정화 `fa07801ed`·`ec2e963e0`·`c2e5e8171` |
 | D 정리 | C와 충돌 없는 G5 잔재 제거 | 레거시 1,793줄 `4e76fee14`, D15 `cd178ffb1`, D6 `a0b565cc9`/`03393d810`, D20 `2ab07097a`; 현재 tanstack·미사용 파일·병합 route shell 잔여 감사 |
-| E QA | 독립 계약 감사, 라이브 발표 smoke, 배포 게이트 원인 분류 | G4의 repo reflection/traffic source P1을 찾아 C로 반송했고 현재 해결 커밋에 반영. 15-fail 묶음과 `29679991657`의 17 destination을 분류. G0 이후 2시간 주기 live smoke 기록은 아직 없음 |
+| E QA | 독립 계약 감사, 라이브 발표 smoke, 배포 게이트 원인 분류 | G4의 repo reflection/traffic source P1을 찾아 C로 반송했고 현재 해결 커밋에 반영. 15-fail 묶음과 `29679991657`의 17 destination을 분류. G0 이후 2시간 주기 live smoke 기록은 첫 회차 증거 수집 대기 |
 
 ## 7. 막힌 것 총목록
 

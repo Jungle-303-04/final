@@ -10,3 +10,4 @@
 2026-07-19 · STATUS §7 · 사람·오케스트레이터만 해결할 절대 블로커 0건; reference destination 17건·배포·화면 증거는 현재 권한으로 자체 해소 가능, 외부 CPU 포화는 직렬화·worker 2로 우선 회피 · 이관할 사람 필요 항목 없음
 2026-07-19 · G5/G7 · 21aa0f2a1 Dev Gate 29679811849는 전체 성공했으나 Dev Deploy 29679991657이 AWS 전 reference-ui-delta unknown destination 17건으로 실패 · 삭제 서피스를 현행 소유자에 재분류한 020d4f078에서 governance 41/41·source-delta 14/14·unknown 0으로 해소
 2026-07-19 · G7 · 9407d4ab9 Dev Gate 29680361414는 Frontend 성공 후 STATUS-REPORT의 과거 제품명 토큰 1건을 product-brand-boundary가 차단했고 Dev Deploy 29680556206은 skipped · 실제 제품 결함이 아닌 증거 문서 표기 결함을 fa396d688에서 일반 경계 명칭으로 정정, 재검증 대기 · 해소 진행
+2026-07-19 · G7 · 005bdf547 Dev Gate 29680841537은 Frontend 성공 후 Backend 3,772 pass/3 fail로 종료했고 Dev Deploy 29681039922는 skipped · 증거 경로 과심도 2파일, docs README 색인 2개 누락, STATUS 문구 경계 1건을 평탄화·색인·현재 상태 문구로 정정해 test_docs_index 11/11 통과 · 해소
