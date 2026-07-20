@@ -7,6 +7,9 @@ MGMT_CLUSTER ?=
 TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
 LOCAL_TEST_ENV ?= .env.local-test
+FRONTEND_PORT ?= 5175
+FRONTEND_HOST ?= 127.0.0.1
+FRONTEND_BACKEND_ORIGIN ?= https://k8s.woonyong.org
 FAST_TESTS ?= tests/test_dev_gate_contract.py
 REFERENCE_PROVENANCE ?= references/provenance/source.json
 REFERENCE_REVISION ?= $(shell node scripts/reference-provenance.mjs revision)
@@ -22,7 +25,7 @@ export REFERENCE_UI_BASE_REVISION
 export REFERENCE_UPSTREAM_GIT
 export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-deploy-smoke-backend gate-deploy-smoke-frontend gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env frontend-live local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-deploy-smoke-backend gate-deploy-smoke-frontend gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,6 +47,9 @@ local-test-env: ## 로컬 smoke/Bruno 테스트용 .env.local-test 생성
 		cp config/env/local-test.env.example "$(LOCAL_TEST_ENV)"; \
 		echo "created $(LOCAL_TEST_ENV)"; \
 	fi
+
+frontend-live: ## dev 프론트를 실제 라이브 백엔드에 연결해 실행
+	HOST="$(FRONTEND_HOST)" PORT="$(FRONTEND_PORT)" BACKEND_ORIGIN="$(FRONTEND_BACKEND_ORIGIN)" bash scripts/dev-live-frontend.sh
 
 sync: ## Python 의존성 설치/동기화
 	uv sync
