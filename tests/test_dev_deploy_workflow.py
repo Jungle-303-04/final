@@ -115,7 +115,10 @@ def test_manual_deploy_requires_exact_gate_and_previous_release_proofs() -> None
 
     assert document["permissions"]["actions"] == "read"
     gate_proof = steps["Verify manual gated SHA"]["run"]
-    assert 'gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev"' in gate_proof
+    assert 'gh_api_retry "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev"' in gate_proof
+    assert "grep -Eq '\\(HTTP (429|5[0-9]{2})\\)'" in gate_proof
+    assert "while (( attempt <= 12 ))" in gate_proof
+    assert "GitHub API retry budget exhausted" in gate_proof
     assert "compare/${SOURCE_SHA}...${remote_dev}" in gate_proof
     assert '"ahead"|"identical"' in gate_proof
     assert "/actions/workflows/dev-gate.yml/runs" in gate_proof

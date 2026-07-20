@@ -193,15 +193,62 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          remote_dev="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev" --jq '.object.sha')"
-          comparison="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_SHA}...${remote_dev}" \
-            --jq '.status')"
+
+          gh_api_retry() {
+            local route="$1"
+            local attempt=1
+            local delay_seconds=2
+            local response_file
+            local error_file
+            response_file="$(mktemp "${RUNNER_TEMP}/gh-api-response.XXXXXX")"
+            error_file="$(mktemp "${RUNNER_TEMP}/gh-api-error.XXXXXX")"
+
+            while (( attempt <= 12 )); do
+              if gh api "${route}" >"${response_file}" 2>"${error_file}"; then
+                cat "${response_file}"
+                rm -f "${response_file}" "${error_file}"
+                return 0
+              fi
+
+              if ! grep -Eq '\(HTTP (429|5[0-9]{2})\)' "${error_file}"; then
+                cat "${error_file}" >&2
+                rm -f "${response_file}" "${error_file}"
+                return 1
+              fi
+
+              echo "GitHub API transient failure for ${route}; retry ${attempt}/12 in ${delay_seconds}s" >&2
+              cat "${error_file}" >&2
+              if (( attempt == 12 )); then
+                break
+              fi
+              sleep "${delay_seconds}"
+              attempt=$((attempt + 1))
+              if (( delay_seconds < 30 )); then
+                delay_seconds=$((delay_seconds * 2))
+                if (( delay_seconds > 30 )); then
+                  delay_seconds=30
+                fi
+              fi
+            done
+
+            echo "GitHub API retry budget exhausted for ${route}" >&2
+            rm -f "${response_file}" "${error_file}"
+            return 1
+          }
+
+          remote_dev="$(
+            gh_api_retry "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev" \
+              | jq -er '.object.sha'
+          )"
+          comparison="$(
+            gh_api_retry "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_SHA}...${remote_dev}" \
+              | jq -er '.status'
+          )"
           case "${comparison}" in
             "ahead"|"identical") ;;
             *) echo "source SHA is not an ancestor of dev: ${comparison}" >&2; exit 1 ;;
           esac
-          gh api \
+          gh_api_retry \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/dev-gate.yml/runs?branch=dev&event=push&status=success&per_page=100" \
             | jq -e '.workflow_runs[] | select(.head_sha == env.SOURCE_SHA) | select(.conclusion == "success")' \
               >/dev/null
