@@ -31,6 +31,7 @@ const IconBrandDocker = ({ size = 21, style }: BrandIconProps) => (
 );
 import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
+import { DEV_PREVIEW_CLUSTER_FIXTURE, projectCluster } from "./devpreview/contracts";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -54,11 +55,15 @@ const MANIFESTS = [
   { file: "hpa.yaml", kind: "HorizontalPodAutoscaler", sub: "shop-api" },
 ];
 // 이미 연결된 클러스터(데모) — 배포 대상 후보
-const CLUSTERS = [
-  { id: "prod-eks", env: "prod", region: "ap-northeast-2", dot: "dot-r" },
-  { id: "dev-eks", env: "dev", region: "ap-northeast-2", dot: "dot-o" },
-  
-];
+const CLUSTERS = DEV_PREVIEW_CLUSTER_FIXTURE.clusters
+  .map(projectCluster)
+  .filter((cluster) => cluster.role === "target")
+  .map((cluster) => ({
+    id: cluster.id,
+    env: cluster.environment,
+    region: "ap-northeast-2",
+    dot: cluster.environment === "production" ? "dot-r" : "dot-o",
+  }));
 const REPO_STEPS = ["저장소", "매니페스트", "배포"];
 const CLUSTER_STEPS = ["정보", "설치", "연결"];
 const CLUSTER_ENVS = ["prod", "staging", "dev"];
@@ -335,7 +340,7 @@ function ManifestStep({ repo, onBack, onNext }: { repo: string; onBack: () => vo
 }
 
 function DeployStep({ onBack, onDeploy }: { onBack: () => void; onDeploy: (clusters: string[], ns: string) => void }) {
-  const [sel, setSel] = useState<Record<string, boolean>>({ "dev-eks": true });
+  const [sel, setSel] = useState<Record<string, boolean>>({ "demo-server": true });
   const chosen = CLUSTERS.filter((c) => sel[c.id]).map((c) => c.id);
   const [ns, setNs] = useState("shop");
   const [autoSync, setAutoSync] = useState(true);
@@ -435,7 +440,7 @@ function ClusterInfoStep({ name, setName, platform, setPlatform, env, setEnv, on
         <span className="px-0.5 text-[12.5px] font-semibold c-2">클러스터 이름</span>
         <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
           <Server className="size-[18px] c-3" />
-          <input autoFocus value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="prod-eks-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+          <input autoFocus value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
       <div className="grid gap-2.5">
@@ -527,7 +532,7 @@ function ClusterDoneStep({ platform, name, env, onDone }: { platform: PlatformId
 
 function ClusterWizard({ onClose, onToast }: { onClose: () => void; onToast: (t: ToastData) => void }) {
   const [step, setStep] = useState(0);
-  const [name, setName] = useState("prod-eks-apne2");
+  const [name, setName] = useState("game-server-apne2");
   const [platform, setPlatform] = useState<PlatformId>("aws");
   const [env, setEnv] = useState("prod");
   const el = {

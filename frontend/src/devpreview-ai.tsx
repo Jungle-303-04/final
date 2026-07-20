@@ -351,7 +351,7 @@ function scriptedReply(id: string, q: string): AiTurn {
   const base = { id, role: "assistant" as const, collapsed: false, createdAt: now() };
   if (/알람|알림|alert|걸어/.test(q)) {
     return { ...base, parts: [
-      { kind: "action", proposal: { type: "create_alert_rule", rationale: "현재 화면 필터에서 CPU가 70%를 20초 이상 넘으면 알리도록 제안했습니다.", payload: { name: "파드 CPU 70% 알림", metric: "cpu_pct", comparator: ">", threshold: 70, forSeconds: 20, severity: "high", scope: { clusters: ["prod-eks"], namespaces: [], applications: [], labels: [] }, channels: [], enabled: true } } },
+      { kind: "action", proposal: { type: "create_alert_rule", rationale: "현재 화면 필터에서 CPU가 70%를 20초 이상 넘으면 알리도록 제안했습니다.", payload: { name: "파드 CPU 70% 알림", metric: "cpu_pct", comparator: ">", threshold: 70, forSeconds: 20, severity: "high", scope: { clusters: ["game-server"], namespaces: [], applications: [], labels: [] }, channels: [], enabled: true } } },
     ] };
   }
   if (/위험|상태|어때|health|문제|이상/.test(q)) {
@@ -378,7 +378,7 @@ function scriptedReply(id: string, q: string): AiTurn {
   ] };
 }
 
-export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "prod-eks" }: {
+export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "game-server" }: {
   /** 셸 임베드: 닫기 버튼 동작 */
   onClose?: () => void;
   /** 셸 임베드: 고정 460px 대신 컨테이너 폭을 따른다 (리사이즈 핸들 대응) */

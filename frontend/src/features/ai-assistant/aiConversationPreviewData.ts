@@ -96,7 +96,7 @@ export const DUMMY_CONVERSATION: AiConversation = {
               threshold: 70,
               forSeconds: 20,
               severity: "high",
-              scope: { clusters: ["prod-eks"], namespaces: [], applications: [], labels: [] },
+              scope: { clusters: ["game-server"], namespaces: [], applications: [], labels: [] },
               channels: [],
               enabled: true,
             },
@@ -139,6 +139,6 @@ export const DUMMY_SUGGESTIONS = [
 
 export const DUMMY_CONVERSATION_LIST = [
   { id: "aic-dummy", title: "redis 장애 분석", updatedAt: "방금" },
-  { id: "aic-2", title: "prod-eks CPU 알림 설정", updatedAt: "12분 전" },
+  { id: "aic-2", title: "game-server CPU 알림 설정", updatedAt: "12분 전" },
   { id: "aic-3", title: "shop-frontend 롤백 확인", updatedAt: "1시간 전" },
 ];

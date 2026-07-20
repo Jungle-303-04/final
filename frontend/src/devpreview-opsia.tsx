@@ -25,20 +25,18 @@ import "./styles/foundation.css";
 // state: Ready(가동) · Provisioning(예약됨 — 아직 스케줄 불가) · Cordoned(비활성)
 type NodeState = "Ready" | "Provisioning" | "Cordoned";
 const NODES: { id: string; cluster: string; zone: string; instance: string; cap: number; state: NodeState }[] = [
-  { id: "ip-10-0-1-24", cluster: "prod-eks", zone: "apne2-a", instance: "m5.xlarge", cap: 20, state: "Ready" },
-  { id: "ip-10-0-2-91", cluster: "prod-eks", zone: "apne2-b", instance: "m5.xlarge", cap: 20, state: "Ready" },
-  { id: "ip-10-0-3-15", cluster: "prod-eks", zone: "apne2-c", instance: "m5.2xlarge", cap: 30, state: "Ready" },
-  { id: "ip-10-0-4-63", cluster: "prod-eks", zone: "apne2-a", instance: "m5.xlarge", cap: 20, state: "Provisioning" },
-  { id: "ip-10-1-0-11", cluster: "dev-eks", zone: "apne2-a", instance: "t3.large", cap: 10, state: "Ready" },
-  { id: "ip-10-1-0-42", cluster: "dev-eks", zone: "apne2-b", instance: "t3.large", cap: 10, state: "Cordoned" },
+  { id: "ip-10-0-1-24", cluster: "game-server", zone: "apne2-a", instance: "m5.xlarge", cap: 20, state: "Ready" },
+  { id: "ip-10-0-2-91", cluster: "game-server", zone: "apne2-b", instance: "m5.xlarge", cap: 20, state: "Ready" },
+  { id: "ip-10-0-3-15", cluster: "game-server", zone: "apne2-c", instance: "m5.2xlarge", cap: 30, state: "Ready" },
+  { id: "ip-10-0-4-63", cluster: "game-server", zone: "apne2-a", instance: "m5.xlarge", cap: 20, state: "Provisioning" },
+  { id: "ip-10-1-0-11", cluster: "demo-server", zone: "apne2-a", instance: "t3.large", cap: 10, state: "Ready" },
+  { id: "ip-10-1-0-42", cluster: "demo-server", zone: "apne2-b", instance: "t3.large", cap: 10, state: "Cordoned" },
 ];
 
 function mappedClusterId(legacyId: string, clusters: readonly DevpreviewCluster[]): string {
+  if (clusters.some((cluster) => cluster.id === legacyId)) return legacyId;
   const targets = clusters.filter((cluster) => cluster.role === "target");
-  if (legacyId === "prod-eks") {
-    return targets.find((cluster) => cluster.id === "game-server")?.id ?? targets[0]?.id ?? clusters[0]?.id ?? legacyId;
-  }
-  return targets.find((cluster) => cluster.id === "demo-server")?.id ?? targets[1]?.id ?? targets[0]?.id ?? clusters[0]?.id ?? legacyId;
+  return targets[0]?.id ?? clusters[0]?.id ?? legacyId;
 }
 
 function contractTopology(clusters: readonly DevpreviewCluster[]) {

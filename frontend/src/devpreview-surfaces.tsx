@@ -120,7 +120,7 @@ export function timelineItems(): TlItem[] {
     ...out.map((r) => ({ id: `t-${r.repo}`, time: "17분 전", tone: "warn" as const, cat: "배포" as const, title: `${r.repo} 동기화 지연 · 리비전 ${r.rev}` })),
     { id: "t-scale", time: "44분 전", tone: "ok", cat: "배포", title: `shop-api 스케일 아웃 완료 — 파드 ${pods.filter((p) => p.svc === "shop-api").length}개 유지` },
     ...crit.slice(1).map((p, i) => ({ id: `t2-${p.name}`, time: `${52 + i * 9}분 전`, tone: "crit" as const, cat: "이슈" as const, title: `${p.name} ${p.status} 감지 — 근거 수집 시작`, ref: { kind: "Pod", name: p.name } })),
-    { id: "t-node", time: "1시간 전", tone: "ok", cat: "구성", title: "prod-eks 노드 그룹 롤링 업데이트 종료" },
+    { id: "t-node", time: "1시간 전", tone: "ok", cat: "구성", title: "game-server 노드 그룹 롤링 업데이트 종료" },
     { id: "t-cfg", time: "2시간 전", tone: "ok", cat: "구성", title: "app-config ConfigMap 갱신 · 3개 서비스 재기동", ref: { kind: "ConfigMap", name: "app-config" } },
     { id: "t-dep2", time: "2시간 전", tone: "ok", cat: "배포", title: `${repos[0]?.repo ?? "Jungle-303-04/final"} main 배포 · 정상` },
     { id: "t-hpa", time: "3시간 전", tone: "ok", cat: "구성", title: "shop-api HPA 상한 8 → 12 조정", ref: { kind: "HPA", name: "shop-api" } },
@@ -416,7 +416,7 @@ export function SettingsSurface() {
           </button>} />
       </Card>
       <Card pad={0}>
-        <SettingsRow icon={Radio} title="Prometheus" sub="메트릭 수집 · prod-eks, dev-eks" right={<Pill tone="ok" label="연결됨" />} />
+        <SettingsRow icon={Radio} title="Prometheus" sub="메트릭 수집 · game-server, demo-server" right={<Pill tone="ok" label="연결됨" />} />
         <SettingsRow icon={AwsIcon as never} title="Amazon EKS" sub="클러스터 프로바이더 자격 증명" right={<Pill tone="ok" label="유효" />} />
         <SettingsRow icon={GithubIcon as never} title="GitHub" sub="저장소 웹훅 · Jungle-303-04" right={<Pill tone="ok" label="연결됨" />} />
       </Card>
@@ -560,7 +560,7 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
       <Card>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="pulsedot" style={{ width: 7, height: 7, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
-          <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>dev-eks 배포 진행 중</span>
+          <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>demo-server 배포 진행 중</span>
           <Mono dim>Jungle-303-04/final · 3/5 단계</Mono>
           <span style={{ marginLeft: "auto", width: 160, height: 6, borderRadius: 999, background: UI.line2, overflow: "hidden" }}>
             <motion.span initial={{ width: 0 }} animate={{ width: "60%" }} transition={{ duration: DUR.meter, ease: "easeInOut" }} style={{ display: "block", height: "100%", background: BLUE, borderRadius: 999 }} />
@@ -586,7 +586,7 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
 const AI_HISTORY = [
   { id: "c1", title: "redis-605 OOMKilled 원인 분석", preview: "메모리 한도 512Mi 대비 워킹셋이 반복 초과… 한도 상향 또는 캐시 TTL 조정 제안", ctx: "이슈", time: "10분 전" },
   { id: "c2", title: "shop-api 배포 워크플로우 구성", preview: "게이트 검증 단계를 소스와 배포 사이에 추가하는 구성을 안내", ctx: "배포", time: "2시간 전" },
-  { id: "c3", title: "prod-eks 비용 증가 원인", preview: "지난달 대비 +4.2%는 노드 그룹 확장 영향 — 스팟 비중 상향 검토 제안", ctx: "비용", time: "어제" },
+  { id: "c3", title: "game-server 비용 증가 원인", preview: "지난달 대비 +4.2%는 노드 그룹 확장 영향 — 스팟 비중 상향 검토 제안", ctx: "비용", time: "어제" },
 ];
 export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
   const cols: [string, string][] = [["대화", "minmax(260px,2fr)"], ["컨텍스트", "minmax(70px,0.5fr)"], ["시간", "minmax(70px,0.5fr)"]];

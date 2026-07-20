@@ -53,8 +53,6 @@ function clusterOf(name: string, clusterIds: readonly string[]): string {
 function contractClusterOf(row: Row, clusterIds: readonly string[]): string {
   const explicit = typeof row.cluster === "string" ? row.cluster : "";
   if (clusterIds.includes(explicit)) return explicit;
-  if (explicit === "prod-eks") return clusterIds.find((id) => id === "game-server") ?? clusterOf(String(row.name ?? ""), clusterIds);
-  if (explicit === "dev-eks") return clusterIds.find((id) => id === "demo-server") ?? clusterOf(String(row.name ?? ""), clusterIds);
   return clusterOf(String(row.name ?? ""), clusterIds);
 }
 // 이미지를 이름 기반으로 결정 — 리소스 이름과 이미지가 어긋나는 논리 모순 방지
@@ -305,7 +303,7 @@ const SPEC: Record<string, { cols: Col[]; rows: (r: () => number) => Row[] }> = 
 
 // ── 종류 인덱스 (레퍼런스 구조 그대로) ─────────────────────────────
 type Kind = { id: string; label: string; icon: typeof Rocket; group: string; count: number };
-// 그룹·종류·개수는 실제 기준 인스턴스(cluster-1)에서 확인한 값 그대로
+// 그룹·종류·개수는 계약 fixture의 관측 인벤토리와 같은 분류를 사용한다.
 const GROUPS = ["워크로드", "네트워킹", "구성", "스토리지", "접근 제어", "클러스터", "ARGO", "AWS VPC CNI", "API 등록"] as const;
 const BASE_KINDS: Kind[] = [
   { id: "CronJob", label: "CronJob", icon: Timer, group: "워크로드", count: 1 },
