@@ -1,5 +1,6 @@
 .DS_Store
 .env*
+!frontend/.env.local.example
 .env.local-test
 *.local.bru
 docs/api/.certs/
@@ -19,6 +20,7 @@ infra/*.tfstate
 infra/*.tfstate.*
 *.py[cod]
 dist/
+frontend/dist-ui/
 build/
 *.egg-info/
 

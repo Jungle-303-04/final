@@ -5,14 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:ui": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "dev:product": "vite --host 127.0.0.1 --port 5175 --strictPort",
     "build": "tsc -b && vite build",
+    "build:ui": "tsc -b && vite build --config vite.ui.config.ts",
     "typecheck": "tsc -b",
     "test": "vitest run --maxWorkers=2 --testTimeout=120000",
     "lint": "eslint src scripts/product-design-guard.mjs --max-warnings 0",
     "check:design": "node scripts/product-design-guard.mjs",
     "check:bundle": "npm run build && node scripts/check-initial-bundle.mjs",
     "check": "npm run typecheck && npm run lint && npm run test && npm run check:design && npm run check:bundle",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "preview:ui": "vite preview --config vite.ui.config.ts --host 127.0.0.1 --port 5174 --strictPort"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.20",
