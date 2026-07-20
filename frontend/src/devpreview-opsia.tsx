@@ -9,6 +9,7 @@ import { Box, ChevronRight, ChevronLeft, X, Plug, FileCog, Cpu, Activity, Server
 import { readDevpreviewOpsiaPin } from "./features/filters/devpreviewDeepLinks";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, INSET, IDENT, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, RedisIcon, GithubIcon } from "./devpreview/brandIcons";
+import { DevpreviewContractProvider, useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -21,10 +22,6 @@ import "./styles/foundation.css";
 // 상태 팔레트 — 플릿 뷰에서 검증된 톤(애플 시스템 컬러 계열)
 
 // ── 도메인 ─────────────────────────────
-const CLUSTERS = [
-  { id: "prod-eks", env: "prod", region: "ap-northeast-2", platform: "Amazon EKS" },
-  { id: "dev-eks", env: "dev", region: "ap-northeast-2", platform: "Amazon EKS" },
-];
 // state: Ready(가동) · Provisioning(예약됨 — 아직 스케줄 불가) · Cordoned(비활성)
 type NodeState = "Ready" | "Provisioning" | "Cordoned";
 const NODES: { id: string; cluster: string; zone: string; instance: string; cap: number; state: NodeState }[] = [
@@ -35,6 +32,26 @@ const NODES: { id: string; cluster: string; zone: string; instance: string; cap:
   { id: "ip-10-1-0-11", cluster: "dev-eks", zone: "apne2-a", instance: "t3.large", cap: 10, state: "Ready" },
   { id: "ip-10-1-0-42", cluster: "dev-eks", zone: "apne2-b", instance: "t3.large", cap: 10, state: "Cordoned" },
 ];
+
+function mappedClusterId(legacyId: string, clusters: readonly DevpreviewCluster[]): string {
+  const targets = clusters.filter((cluster) => cluster.role === "target");
+  if (legacyId === "prod-eks") {
+    return targets.find((cluster) => cluster.id === "game-server")?.id ?? targets[0]?.id ?? clusters[0]?.id ?? legacyId;
+  }
+  return targets.find((cluster) => cluster.id === "demo-server")?.id ?? targets[1]?.id ?? targets[0]?.id ?? clusters[0]?.id ?? legacyId;
+}
+
+function contractTopology(clusters: readonly DevpreviewCluster[]) {
+  const nodes = NODES.map((node) => ({
+    ...node,
+    cluster: mappedClusterId(node.cluster, clusters),
+  }));
+  const pods = genPods().map((pod) => ({
+    ...pod,
+    cluster: mappedClusterId(pod.cluster, clusters),
+  }));
+  return { nodes, pods };
+}
 // 노드 정렬: 가동(0) → 예약됨(1) → 비활성(2) — 아직 못 쓰는 노드는 뒤로
 const nodeRank = (n: { state: NodeState }) => (n.state === "Ready" ? 0 : n.state === "Provisioning" ? 1 : 2);
 const nodeIdle = (n: { state: NodeState }) => n.state !== "Ready";
@@ -447,14 +464,14 @@ function NodeWidget({ node, pods, expanded, dimFn, litFn, hideFn, live, tick, on
 // 세그먼트 링 — 상태 분포를 원형으로 (파드 ok/warn/crit/대기, 노드 ready/예약/차단)
 
 // 클러스터 통계 — 카드·개요 스트립 공용 (단일 계산)
-function clusterStats(clId: string, pods: Pod[], tick: number) {
+function clusterStats(clId: string, pods: Pod[], nodesSource: typeof NODES, tick: number) {
   const cp = pods.filter((p) => p.cluster === clId);
   const act = cp.filter((p) => p.status === "Running");
   const hsh = clId.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
   const drift = Math.sin(tick * 0.7 + hsh) * 2 + Math.sin(tick * 0.23 + hsh * 1.3);
   const avgC = pct(act.reduce((s, p) => s + p.cpu, 0) / (act.length || 1) + drift);
   const avgM = pct(act.reduce((s, p) => s + p.mem, 0) / (act.length || 1) + drift * 0.8);
-  const nodes = NODES.filter((n) => n.cluster === clId);
+  const nodes = nodesSource.filter((n) => n.cluster === clId);
   const ready = nodes.filter((n) => n.state === "Ready");
   const cores = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 8 : n.instance.includes("xlarge") ? 4 : 2), 0);
   const memGi = ready.reduce((s, n) => s + (n.instance.includes("2xlarge") ? 32 : n.instance.includes("xlarge") ? 16 : 8), 0);
@@ -483,10 +500,10 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number }) {
 
 
 // 클러스터 개요 스트립 — 드릴 후 상세 정보의 자리 (GKE/OpenShift 관례: 상세는 클릭 후)
-function ClusterOverview({ clId, pods, tick, meta, onKind }: {
-  clId: string; pods: Pod[]; tick: number; meta?: Record<string, number>; onKind?: (kindId: string) => void;
+function ClusterOverview({ clId, pods, nodes, tick, meta, onKind }: {
+  clId: string; pods: Pod[]; nodes: typeof NODES; tick: number; meta?: Record<string, number>; onKind?: (kindId: string) => void;
 }) {
-  const st = clusterStats(clId, pods, tick);
+  const st = clusterStats(clId, pods, nodes, tick);
   const KIND_LINKS: [string, string][] = [["StatefulSet", "StatefulSets"], ["DaemonSet", "DaemonSets"], ["Service", "Services"], ["Ingress", "Ingresses"], ["Job", "Jobs"], ["CronJob", "CronJobs"]];
   return (
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "12px 16px", marginBottom: 14 }}>
@@ -510,12 +527,12 @@ function ClusterOverview({ clId, pods, tick, meta, onKind }: {
   );
 }
 
-function ClusterRow({ cl, pods, tick, meta, onOpen }: {
-  cl: (typeof CLUSTERS)[number]; pods: Pod[]; tick: number;
+function ClusterRow({ cl, pods, nodes, tick, meta, onOpen }: {
+  cl: DevpreviewCluster; pods: Pod[]; nodes: typeof NODES; tick: number;
   meta?: Record<string, number>; onOpen: () => void;
 }) {
-  const st = clusterStats(cl.id, pods, tick);
-  const healthy = st.chot === 0;
+  const st = clusterStats(cl.id, pods, nodes, tick);
+  const healthy = cl.connectionStatus === "online" && st.chot === 0;
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
@@ -530,9 +547,10 @@ function ClusterRow({ cl, pods, tick, meta, onOpen }: {
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
-            {cl.env === "prod" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
+            {cl.environment === "production" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
+            {cl.readOnly && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · {st.ver}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>{cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? st.ver}</span>
         </span>
         {healthy
           ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
@@ -572,29 +590,45 @@ function AddClusterCard({ onClick, delay = 0, compact = false }: { onClick: () =
 }
 
 // 방금 등록한 클러스터 — 에이전트 부트스트랩 대기 상태(데이터가 아직 없으므로 드릴 불가가 사실)
+// 방금 등록한 클러스터 — 에이전트 부트스트랩 대기 후 자체적으로 "연결됨(더미 관측)"으로 승격(데모 시연 스토리)
 export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: number }) {
+  const [live, setLive] = useState(false);
+  // 이름 파생 더미 지표 — 새로고침해도 같은 값(무작위 흔들림 없이 안정)
+  const seed = useMemo(() => [...name].reduce((a, c) => a + c.charCodeAt(0), 0), [name]);
+  const cpu = 18 + (seed % 34);
+  const mem = 24 + (seed % 41);
+  const nodes = 2 + (seed % 3);
+  useEffect(() => { const t = setTimeout(() => setLive(true), 3400); return () => clearTimeout(t); }, []);
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
-      style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 200, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
+      style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 200, background: UI.card, border: `1px solid ${live ? UI.line : blueA(0.3)}`, borderRadius: 16, padding: 16, boxSizing: "border-box", transition: "border-color .4s" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 9, background: inkA(0.06), display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <AwsIcon size={17} style={{ color: UI.ink3 }} />
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: live ? `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})` : inkA(0.06), display: "grid", placeItems: "center", flexShrink: 0, transition: "background .4s" }}>
+          <AwsIcon size={17} style={{ color: live ? UI.card : UI.ink3 }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · 버전 확인 중</span>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · {live ? "v1.30.4-eks-036c24b" : "버전 확인 중"}</span>
         </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>
-          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />연결 중
-        </span>
+        {live
+          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
+          : <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />연결 중</span>}
       </div>
-      <div style={{ fontSize: TYPE.label, color: UI.ink2 }}>에이전트 부트스트랩 · 첫 인벤토리 수집 대기</div>
+      {live
+        ? <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
+            <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{nodes}/{nodes}</b> ready</span>
+            <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{nodes * 6 + (seed % 7)}</b></span>
+            <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{2 + (seed % 4)}</b></span>
+          </div>
+        : <div style={{ fontSize: TYPE.label, color: UI.ink2 }}>에이전트 부트스트랩 · 첫 인벤토리 수집 대기</div>}
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 7 }}>
-        {["CPU", "MEM"].map((l) => (
+        {([["CPU", cpu], ["MEM", mem]] as const).map(([l, v]) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 34, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{l}</span>
-            <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(0.05) }} />
-            <span style={{ width: 38, textAlign: "right", fontSize: TYPE.label2, fontFamily: MONO, color: UI.ink3 }}>—</span>
+            <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(live ? 0.07 : 0.05), overflow: "hidden" }}>
+              {live && <motion.span initial={{ width: 0 }} animate={{ width: `${v}%` }} transition={{ duration: DUR.meter, ease: "easeInOut" }} style={{ display: "block", height: "100%", borderRadius: 999, background: v >= 90 ? HP.crit : v >= 75 ? HP.warn : HP.ok }} />}
+            </span>
+            <span style={{ width: 38, textAlign: "right", fontSize: TYPE.label2, fontFamily: MONO, fontWeight: live ? 700 : 400, color: live ? UI.ink : UI.ink3 }}>{live ? `${v}%` : "—"}</span>
           </div>
         ))}
       </div>
@@ -606,21 +640,23 @@ export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: 
 export function HomeClusterSection({ meta, onOpen, pending = [] }: {
   meta?: Record<string, Record<string, number>>; onOpen: (clId: string) => void; pending?: string[];
 }) {
-  const pods = useMemo(() => genPods(), []);
+  const { clusters } = useDevpreviewContracts();
+  const topology = useMemo(() => contractTopology(clusters), [clusters]);
+  const { nodes, pods } = topology;
   // 벽시계 기반 tick — 홈 카드와 지도 카드가 같은 순간 같은 숫자를 말하게 한다(두 화면 숫자 불일치 = 버그)
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1500));
   useEffect(() => { const iv = setInterval(() => setTick(Math.floor(Date.now() / 1500)), 1500); return () => clearInterval(iv); }, []);
   return (
     // 4칸 그리드 — 클러스터 카드 2칸씩, 연결 카드는 가로형 컴팩트 2칸(거대 공백 금지)
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
-      {CLUSTERS.map((cl) => (
+      {clusters.map((cl) => (
         <div key={cl.id} style={{ gridColumn: "span 2", minWidth: 0 }}>
-          <ClusterRow cl={cl} pods={pods} tick={tick} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
+          <ClusterRow cl={cl} pods={pods} nodes={nodes} tick={tick} meta={meta?.[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (
         <div key={n} style={{ gridColumn: "span 2", minWidth: 0 }}>
-          <PendingClusterCard name={n} delay={(CLUSTERS.length + i) * 0.05} />
+          <PendingClusterCard name={n} delay={(clusters.length + i) * 0.05} />
         </div>
       ))}
       {/* 홈에는 연결 카드 없음 — 고정 헤더의 "+ 클러스터 연결" 버튼이 유일한 진입(중복 금지). 카드는 지도 클러스터 뷰 전용 */}
@@ -654,7 +690,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
   pendingClusters?: string[];
   pendingRepos?: string[];
 } = {}) {
-  const pods = useMemo(() => genPods(), []);
+  const { clusters } = useDevpreviewContracts();
+  const topology = useMemo(() => contractTopology(clusters), [clusters]);
+  const { nodes, pods } = topology;
   // 벽시계 기반 tick — HomeClusterSection과 동일 위상(같은 순간 같은 숫자)
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1500));
   useEffect(() => { const iv = setInterval(() => setTick(Math.floor(Date.now() / 1500)), 1500); return () => clearInterval(iv); }, []);
@@ -692,7 +730,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
   const crit = pods.filter(isCrit).length;
 
   // 임베드에서 상세는 셸 오버레이 하나로 일원화 — 내부 미니 상세(focusPod 패널)를 두 번째 상세로 쓰지 않는다
-  const openNodeById = (id: string) => { const n = NODES.find((x) => x.id === id); if (n) go({ level: "pods", cluster: n.cluster, node: n.id }, 1); };
+  const openNodeById = (id: string) => { const n = nodes.find((x) => x.id === id); if (n) go({ level: "pods", cluster: n.cluster, node: n.id }, 1); };
   const selectPod = (p: Pod) => {
     // 임베드 모드에서는 상세를 셸의 최상위 오버레이 하나로 일원화한다 (내부 패널과 이원화 금지)
     if (embedded && onOpenResource) {
@@ -719,7 +757,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
             <h1 style={{ margin: 0, fontSize: TYPE.title1, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />
-              실시간 · {CLUSTERS.length} 클러스터 · {NODES.length} 노드 · {pods.length} 파드 · 장애 <b style={{ color: crit ? HP.crit : UI.ink, fontFamily: MONO }}>{crit}</b>
+              실시간 · {clusters.length} 클러스터 · {nodes.length} 노드 · {pods.length} 파드 · 장애 <b style={{ color: crit ? HP.crit : UI.ink, fontFamily: MONO }}>{crit}</b>
             </div>
             {/* 뷰 내비게이션 — 맵/토폴로지/연결/AI 공통 문법 */}
             <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: 8, paddingLeft: 14, borderLeft: `1px solid ${UI.line}` }}>
@@ -738,18 +776,18 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
 
         {/* 상태 요약 줄 — 인벤토리 파생 한눈 개요 + 장애 스트립 (호버: 에러 미리보기 / 클릭: 필터 고정) */}
         {(() => {
-          const prov = NODES.filter((n) => n.state === "Provisioning").length;
-          const cord = NODES.filter((n) => n.state === "Cordoned").length;
+          const prov = nodes.filter((n) => n.state === "Provisioning").length;
+          const cord = nodes.filter((n) => n.state === "Cordoned").length;
           const pending = pods.filter((p) => p.status === "Pending").length;
           const outSync = REPOS.filter((r) => REPO_META[r].sync === "OutOfSync");
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{CLUSTERS.length}</b>
+              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>
                 {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingClusters!.length}</span>}
               </span>
-              <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{NODES.length}</b>
+              <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{nodes.length}</b>
                 {prov > 0 && <span style={{ color: TINT.blue.fg }}>· 예약 {prov}</span>}
                 {cord > 0 && <span style={{ color: UI.ink3 }}>· 차단 {cord}</span>}
               </span>
@@ -830,22 +868,22 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
                 {view.level === "clusters" && (
                   /* 클러스터: 가로 최대 2개 · 카드 폭을 제한해 정사각에 가깝게 */
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14, alignItems: "stretch" }}>
-                    {CLUSTERS.map((cl, i) => (
+                    {clusters.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
-                        <ClusterRow cl={cl} pods={pods} tick={tick} meta={clusterMeta?.[cl.id]}
+                        <ClusterRow cl={cl} pods={pods} nodes={nodes} tick={tick} meta={clusterMeta?.[cl.id]}
                           onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
                       </motion.div>
                     ))}
-                    {(pendingClusters ?? []).map((n, i) => <PendingClusterCard key={n} name={n} delay={(CLUSTERS.length + i) * 0.05} />)}
-                    {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={(CLUSTERS.length + (pendingClusters?.length ?? 0)) * 0.05} />}
+                    {(pendingClusters ?? []).map((n, i) => <PendingClusterCard key={n} name={n} delay={(clusters.length + i) * 0.05} />)}
+                    {onAddCluster && <AddClusterCard onClick={onAddCluster} delay={(clusters.length + (pendingClusters?.length ?? 0)) * 0.05} />}
                   </div>
                 )}
 
                 {view.level === "nodes" && (<>
-                  <ClusterOverview clId={view.cluster} pods={pods} tick={tick} meta={clusterMeta?.[view.cluster]} onKind={onOpenKind} />
+                  <ClusterOverview clId={view.cluster} pods={pods} nodes={nodes} tick={tick} meta={clusterMeta?.[view.cluster]} onKind={onOpenKind} />
                   {/* 노드: 4칸 그리드 + 파드 10개당 1칸 병합 — 20개 노드 두 장이 한 줄에 맞물린다 */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "dense", gap: 12 }}>
-                    {NODES.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
+                    {nodes.filter((n) => n.cluster === view.cluster).sort((a, b) => nodeRank(a) - nodeRank(b)).map((node, i) => (
                       <motion.div key={node.id} style={{ gridColumn: `span ${spanOf(node.cap)}`, minWidth: 0, maxWidth: "100%", overflow: "hidden" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
                         <NodeWidget node={node} pods={pods} expanded={false} dimFn={dimFn} litFn={litFn} live={live} tick={tick}
                           onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.id }, 1)} onPod={selectPod} onTip={onTip}
@@ -856,7 +894,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
                 </>)}
 
                 {view.level === "pods" && (() => {
-                  const node = NODES.find((n) => n.id === view.node)!;
+                  const node = nodes.find((n) => n.id === view.node)!;
                   {/* 파드뷰: 렌즈 선택 시 일치 파드만 표시(실제 필터) — 노드뷰의 딤 처리와 역할 분리 */}
                   return <NodeWidget node={node} pods={pods} expanded dimFn={dimFn} litFn={litFn} hideFn={effLens ? dimFn : undefined} live={live} tick={tick} onOpen={() => {}} onPod={selectPod} onTip={onTip}
                     onCritEnter={() => setLens({ kind: "crit", id: "all" })} onCritLeave={() => setLens(null)} onCritClick={() => setPin(pin?.kind === "crit" ? null : { kind: "crit", id: "all" })} />;
@@ -1058,5 +1096,9 @@ function PodDetail({ pod, setLens, setPin, clearPod, openNode }: { pod: Pod; set
 
 // 단독 페이지(devpreview-opsia.html)에서만 마운트 — 셸에 임베드될 땐 컴포넌트로만 사용
 if (window.location.pathname.includes("devpreview-opsia")) {
-  ReactDOM.createRoot(document.getElementById("root")!).render(<OpsiaMap />);
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <DevpreviewContractProvider>
+      <OpsiaMap />
+    </DevpreviewContractProvider>,
+  );
 }

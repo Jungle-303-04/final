@@ -19,7 +19,8 @@ import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
-import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE, DUR, inkA, blueA, INSET, MARK, CODE, cardA, GLASS, critA } from "./devpreview/theme";
+import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
+import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, EASE_DRAW, PRESENT_SCALE, DUR, inkA, blueA, MARK, CODE, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -41,9 +42,20 @@ function nsFor(name: string): string {
   return "sandbox";
 }
 // 이름 → 클러스터 결정 귀속 — 맵 드릴 범위와 표를 실제로 연동하기 위한 기준
-function clusterOf(name: string): string {
+function clusterOf(name: string, clusterIds: readonly string[]): string {
+  const mutable = clusterIds.filter((id) => id !== "management-server");
+  const primary = mutable.find((id) => id === "game-server") ?? mutable[0] ?? clusterIds[0] ?? "game-server";
+  const secondary = mutable.find((id) => id === "demo-server") ?? mutable[1] ?? primary;
   let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return h % 4 === 0 ? "dev-eks" : "prod-eks";
+  return h % 4 === 0 ? secondary : primary;
+}
+
+function contractClusterOf(row: Row, clusterIds: readonly string[]): string {
+  const explicit = typeof row.cluster === "string" ? row.cluster : "";
+  if (clusterIds.includes(explicit)) return explicit;
+  if (explicit === "prod-eks") return clusterIds.find((id) => id === "game-server") ?? clusterOf(String(row.name ?? ""), clusterIds);
+  if (explicit === "dev-eks") return clusterIds.find((id) => id === "demo-server") ?? clusterOf(String(row.name ?? ""), clusterIds);
+  return clusterOf(String(row.name ?? ""), clusterIds);
 }
 // 이미지를 이름 기반으로 결정 — 리소스 이름과 이미지가 어긋나는 논리 모순 방지
 const imgFor = (name: string) => {
@@ -1449,6 +1461,8 @@ const lensTabFor = (id: string): "svc" | "cfg" | "git" | null =>
   : null;
 
 function App() {
+  const contract = useDevpreviewContracts();
+  const clusterIds = useMemo(() => contract.clusters.map((cluster) => cluster.id), [contract.clusters]);
   const [kindId, setKindId] = useState("Deployment");
   const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
   const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
@@ -1519,7 +1533,7 @@ function App() {
   const allRows = useMemo(() => { const spec = SPEC[kindId]; return spec ? spec.rows(rng(kindId.length * 977 + 13)) : []; }, [kindId]);
   const inScope = scope.level !== "clusters" && !!scope.cluster;
   // 행에 실제 클러스터 귀속(cluster 필드)이 있으면 그것을 쓰고, 없으면 결정적 귀속으로 보완
-  const scopedRows = useMemo(() => (inScope ? allRows.filter((r) => String(r.cluster ?? clusterOf(String(r.name ?? ""))) === scope.cluster) : allRows), [allRows, inScope, scope.cluster]);
+  const scopedRows = useMemo(() => (inScope ? allRows.filter((row) => contractClusterOf(row, clusterIds) === scope.cluster) : allRows), [allRows, clusterIds, inScope, scope.cluster]);
   const nsRows = useMemo(() => (ns === "모든 네임스페이스" ? scopedRows : scopedRows.filter((r) => r.ns === undefined || String(r.ns) === ns)), [scopedRows, ns]);
   const shownRows = useMemo(() => (q ? nsRows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : nsRows), [nsRows, q]);
   // 클러스터 카드 메타 — 표 스코프 필터와 같은 귀속 로직에서 파생 (숫자 모순 불가)
@@ -1527,14 +1541,14 @@ function App() {
     const kinds = ["Deployment", "StatefulSet", "DaemonSet", "Service", "Ingress", "Job", "CronJob", "Namespace"] as const;
     const count = (kid: string, cl: string) => {
       const rows = SPEC[kid] ? SPEC[kid].rows(rng(kid.length * 977 + 13)) : [];
-      return rows.filter((r) => String(r.cluster ?? clusterOf(String(r.name ?? ""))) === cl).length;
+      return rows.filter((row) => contractClusterOf(row, clusterIds) === cl).length;
     };
     const meta: Record<string, Record<string, number>> = {};
-    for (const cl of ["prod-eks", "dev-eks"]) {
+    for (const cl of clusterIds) {
       meta[cl] = {}; for (const k of kinds) meta[cl][k] = count(k, cl);
     }
     return meta;
-  }, []);
+  }, [clusterIds]);
   const openFromMap = (kid: string, data: Record<string, unknown>) => {
     const k = KINDS.find((x) => x.id === kid); if (k) setDetail({ kind: k, row: data });
   };
@@ -1604,8 +1618,15 @@ function App() {
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
         <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
-          <Building2 size={14} style={{ color: UI.ink3 }} />jungle-303
+          <Building2 size={14} style={{ color: UI.ink3 }} />{contract.workspaceId ?? "워크스페이스 확인 중"}
         </span>
+        <button type="button" onClick={contract.refresh}
+          title={contract.error ?? (contract.source === "live" ? "실제 백엔드 계약" : "계약 fixture")}
+          style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", padding: 0, fontSize: TYPE.caption, color: contract.status === "error" ? HP.crit : UI.ink3, cursor: "pointer" }}>
+          <span className={contract.status === "loading" ? "livedot" : undefined}
+            style={{ width: 6, height: 6, borderRadius: 999, background: contract.status === "error" ? HP.crit : contract.status === "ready" ? HP.ok : HP.pending }} />
+          {contract.source === "live" ? "실제 계약" : "계약 fixture"}
+        </button>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>
@@ -1893,24 +1914,13 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* 환경 연결 — 문맥 모달 (서피스 전환 없이 그 자리에서) */}
+      {/* 환경 연결 — 문맥 모달. 위저드가 자체 백드롭·중앙정렬·스크롤을 소유(이중 모달 금지) */}
       <AnimatePresence>
         {connectModal && (
-          <>
-            <motion.div key="cmb" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-              onClick={() => setConnectModal(null)}
-              style={{ position: "fixed", top: topH, right: 0, bottom: 0, left: navCollapsed ? 60 : 208, background: inkA(0.18), zIndex: 68 }} />
-            <motion.div key="cmw" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.99 }} transition={SOFT}
-              style={{ position: "fixed", top: `calc(${topH}px + 5vh / ${PRESENT_SCALE})`, left: `calc(50% + ${(navCollapsed ? 60 : 208) / 2}px)`, transform: "translateX(-50%)",
-                width: 680, maxWidth: `calc(${"100%"} - ${(navCollapsed ? 60 : 208) + 48}px)`, height: `calc(78vh / ${PRESENT_SCALE})`, zIndex: 69,
-                background: INSET, borderRadius: 18, boxShadow: `0 40px 90px -30px ${inkA(0.45)}`, overflow: "hidden" }}>
-              <button onClick={() => setConnectModal(null)}
-                style={{ position: "absolute", top: 12, right: 12, zIndex: 5, width: 28, height: 28, borderRadius: 999, border: "none", background: inkA(0.08), color: UI.ink2, cursor: "pointer", fontSize: TYPE.body }}>✕</button>
-              <div style={{ position: "relative", width: "100%", height: "100%" }}>
-                <ConnectWizard key={connectModal} embedded initialView={connectModal} />
-              </div>
-            </motion.div>
-          </>
+          <motion.div key="cmw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
+            style={{ position: "fixed", top: topH, left: navCollapsed ? 60 : 208, right: 0, bottom: 0, zIndex: 69 }}>
+            <ConnectWizard key={connectModal} embedded initialView={connectModal} onDismiss={() => setConnectModal(null)} />
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -1967,4 +1977,8 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <DevpreviewContractProvider>
+    <App />
+  </DevpreviewContractProvider>,
+);

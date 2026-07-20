@@ -606,8 +606,10 @@ function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
 }
 
 // ── 루트 ─────────────────────────────
-export function ConnectWizard({ embedded = false, initialView = null }: { embedded?: boolean; initialView?: null | "repo" | "cluster" } = {}) {
+export function ConnectWizard({ embedded = false, initialView = null, onDismiss }: { embedded?: boolean; initialView?: null | "repo" | "cluster"; onDismiss?: () => void } = {}) {
   const [view, setView] = useState<null | "repo" | "cluster">(initialView);
+  // 컨텍스트 모달 모드: 뒤로가기가 없는 단일 위저드 진입이므로 닫기는 모달을 닫는다(런처로 돌아가지 않음)
+  const closeView = () => { if (onDismiss) onDismiss(); else setView(null); };
   const [toast, setToast] = useState<ToastData | null>(null);
   const fireToast = (t: ToastData) => {
     setView(null); setToast(t);
@@ -631,14 +633,14 @@ export function ConnectWizard({ embedded = false, initialView = null }: { embedd
       <AnimatePresence>
         {view && (
           <>
-            <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setView(null)} />
+            <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeView} />
             <div className="absolute inset-0 overflow-y-auto">
-              <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "8vh", paddingBottom: "8vh" }}>
+              <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "6vh", paddingBottom: "6vh" }}>
                 <motion.div key={view} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
                   style={{ width: 580, maxWidth: "100%", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
-                    ? <RepoWizard onClose={() => setView(null)} onToast={fireToast} />
-                    : <ClusterWizard onClose={() => setView(null)} onToast={fireToast} />}
+                    ? <RepoWizard onClose={closeView} onToast={fireToast} />
+                    : <ClusterWizard onClose={closeView} onToast={fireToast} />}
                 </motion.div>
               </div>
             </div>
