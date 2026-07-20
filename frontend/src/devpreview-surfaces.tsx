@@ -1,13 +1,13 @@
 // ── 데모 서피스: 배포 · 이슈 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
 // 원칙: 모든 숫자는 단일 인벤토리(podInventory/nodeInventory/repoInventory) 파생 — 두 화면이 다른 숫자를 말하면 버그.
 // 시각은 공용 부품(KpiValue/MiniBars/RankList/MiniTimeline)과 셸 토큰만 사용. 제품 이식 시 D5 공용 표로 수렴한다.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins, Server,
   Building2, Globe, Radio, Check, ChevronDown, Sparkles, GitBranch, ArrowRight, X,
 } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, inkA, blueA, critA, BRAND } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, cardA, BRAND, IDENT, CODE } from "./devpreview/theme";
 import { GithubIcon, AwsIcon } from "./devpreview/brandIcons";
 import { podInventory, nodeInventory, repoInventory, svcCatalog } from "./devpreview-opsia";
 import { KpiValue, MiniBars, RankList, MiniTimeline } from "./devpreview/widgets";
@@ -299,18 +299,24 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
     </div>
   );
 }
-function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi }: {
-  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void;
+function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi, onRecovered }: {
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void;
 }) {
   const m = useMemo(() => rcaModel(name, symptom, cluster, svc, ns), [name, symptom, cluster, svc, ns]);
   const conf = Math.round(m.confidence * 100);
   const riskTone = (r: RecoveryAction["risk"]) => r === "높음" ? TINT.crit : r === "보통" ? TINT.warn : TINT.ok;
+  const [recover, setRecover] = useState<RecoveryAction | null>(null); // 복구 액션 진입 시 이 서브 화면으로 전환
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-      onClick={onClose} style={{ position: "absolute", inset: 0, background: inkA(0.28), backdropFilter: "blur(5px)", zIndex: 40, overflowY: "auto" }}>
-      <div style={{ display: "flex", minHeight: "100%", justifyContent: "center", padding: "6vh 24px" }}>
-        <motion.div initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16 }} transition={SOFT}
-          onClick={(e) => e.stopPropagation()} style={{ width: 720, maxWidth: "100%", alignSelf: "flex-start", background: UI.card, borderRadius: 20, boxShadow: `0 44px 100px -30px ${inkA(0.4)}`, overflow: "hidden" }}>
+    <>
+      {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
+        onClick={onClose} style={{ position: "fixed", inset: 0, background: inkA(0.22), zIndex: 55 }} />
+      {/* RCA 보고서 — 우측 사이드바(드로어) */}
+      <motion.div initial={{ x: 480 }} animate={{ x: 0 }} exit={{ x: 480 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+        style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: `calc(480px / ${PRESENT_SCALE})`, maxWidth: "94vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 70px -30px ${inkA(0.4)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {recover
+          ? <RecoveryFlow action={recover} podName={name} svc={svc} onBack={() => setRecover(null)} onDone={() => { onRecovered?.(svc); onClose(); }} />
+          : <>
           {/* 헤더 */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: `1px solid ${UI.line}` }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: critA(0.1), display: "grid", placeItems: "center", flexShrink: 0 }}><AlertTriangle size={19} style={{ color: TINT.crit.fg }} /></span>
@@ -325,7 +331,7 @@ function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAs
             </div>
             <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0 }}><X size={15} /></button>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
             {/* 근본 원인 + 확신도 */}
             <RcaSection title="근본 원인">
               <div style={{ background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14 }}>
@@ -415,21 +421,108 @@ function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAs
                         {r.checks.length > 0 && <span style={{ flex: "1 1 200px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>검증</span><ul style={{ margin: "4px 0 0", paddingLeft: 15 }}>{r.checks.map((c) => <li key={c} style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>{c}</li>)}</ul></span>}
                       </div>
                     )}
-                    {r.picked && (
-                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                        <button onClick={onClose} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>{r.route} <ArrowRight size={14} /></button>
-                        <button onClick={onAskAi} style={{ border: `1px solid ${blueA(0.4)}`, background: blueA(0.06), color: BLUE, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI에게 계속 질문</button>
-                      </div>
-                    )}
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button onClick={() => setRecover(r)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: r.picked ? BLUE : UI.card, color: r.picked ? UI.card : UI.ink, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer", boxShadow: r.picked ? "none" : `inset 0 0 0 1px ${UI.line}` }}>복구 <ArrowRight size={14} /></button>
+                      {r.picked && <button onClick={onAskAi} style={{ border: `1px solid ${blueA(0.4)}`, background: blueA(0.06), color: BLUE, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI에게 계속 질문</button>}
+                    </div>
                   </div>
                 ); })}
               </div>
             </RcaSection>
             <button onClick={() => onOpenRef("Pod", name)} style={{ alignSelf: "flex-start", border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer", padding: 0 }}>대상 리소스 스펙 보기 →</button>
           </div>
-        </motion.div>
+          </>}
+      </motion.div>
+    </>
+  );
+}
+
+// ── 복구 액션 흐름 — AI 진단 스트리밍 → 매니페스트 diff → 승인 → Git 동기화 → 복구 완료 ──
+type RecStep = "diagnose" | "diff" | "applying" | "syncing" | "done";
+function RecoveryFlow({ action, podName, svc, onBack, onDone }: {
+  action: RecoveryAction; podName: string; svc: string; onBack: () => void; onDone: () => void;
+}) {
+  const oom = action.title.includes("한도");
+  const line = oom ? "CPU·메모리 한도를 늘려보겠습니다" : "누락된 구성 키를 복원하겠습니다";
+  const [step, setStep] = useState<RecStep>("diagnose");
+  const [typed, setTyped] = useState("");
+  // AI 진단 문장 타이핑 스트리밍
+  useEffect(() => {
+    if (step !== "diagnose") return;
+    let i = 0; const full = `${podName} — ${action.title}. ${line}. 매니페스트 패치를 준비했습니다.`;
+    const iv = setInterval(() => { i += 2; setTyped(full.slice(0, i)); if (i >= full.length) { clearInterval(iv); setTimeout(() => setStep("diff"), 400); } }, 24);
+    return () => clearInterval(iv);
+  }, [step, action.title, line, podName]);
+  const diff = oom
+    ? [{ t: "ctx", s: "    resources:" }, { t: "ctx", s: "      limits:" }, { t: "del", s: "        cpu: \"500m\"" }, { t: "add", s: "        cpu: \"1000m\"" }, { t: "del", s: "        memory: \"512Mi\"" }, { t: "add", s: "        memory: \"768Mi\"" }, { t: "add", s: "      # cache TTL 300s 적용" }]
+    : [{ t: "ctx", s: "    envFrom:" }, { t: "ctx", s: "      - configMapRef:" }, { t: "del", s: "          name: app-config" }, { t: "add", s: "          name: app-config-v2" }, { t: "add", s: "      # 누락 키 DB_URL·CACHE_HOST 복원" }];
+  const apply = () => {
+    setStep("applying");
+    setTimeout(() => setStep("syncing"), 1400);
+    setTimeout(() => setStep("done"), 3200);
+  };
+  const busy = step === "applying" || step === "syncing";
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 20px", borderBottom: `1px solid ${UI.line}` }}>
+        <button onClick={onBack} disabled={busy} style={{ border: "none", background: "transparent", color: busy ? UI.ink3 : UI.ink2, cursor: busy ? "default" : "pointer", fontSize: TYPE.label2, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>← RCA</button>
+        <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink, marginLeft: 4 }}>복구 · {action.title}</span>
       </div>
-    </motion.div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18, padding: "18px 20px" }}>
+        {/* AI 진단 */}
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <span style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg, ${BLUE}, ${IDENT.teal})`, display: "grid", placeItems: "center", flexShrink: 0 }}><Sparkles size={16} style={{ color: UI.card }} /></span>
+          <div style={{ minWidth: 0, flex: 1, background: blueA(0.05), border: `1px solid ${blueA(0.2)}`, borderRadius: 12, padding: "11px 13px" }}>
+            <div style={{ fontSize: TYPE.label2, color: UI.ink, lineHeight: 1.55 }}>{typed}{step === "diagnose" && <span style={{ opacity: 0.5 }}>▍</span>}</div>
+          </div>
+        </div>
+        {/* 매니페스트 diff */}
+        {step !== "diagnose" && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
+            <div style={{ fontSize: TYPE.caption, fontWeight: 700, letterSpacing: "0.04em", color: UI.ink3, textTransform: "uppercase", marginBottom: 7 }}>매니페스트 패치 · {svc}-deployment.yaml</div>
+            <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${UI.line}`, fontFamily: MONO, fontSize: TYPE.caption2, background: CODE.bg }}>
+              {diff.map((d, i) => (
+                <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }}
+                  style={{ display: "flex", gap: 8, padding: "3px 12px", background: d.t === "add" ? "rgba(48,209,88,0.14)" : d.t === "del" ? "rgba(255,95,85,0.13)" : "transparent" }}>
+                  <span style={{ width: 12, color: d.t === "add" ? HP.ok : d.t === "del" ? HP.crit : "rgba(255,255,255,0.3)", flexShrink: 0 }}>{d.t === "add" ? "+" : d.t === "del" ? "−" : ""}</span>
+                  <span style={{ color: d.t === "ctx" ? "rgba(214,219,229,0.6)" : CODE.fg, whiteSpace: "pre" }}>{d.s}</span>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+        {/* 검증·롤백 요약 */}
+        {step !== "diagnose" && (
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: TYPE.caption, color: UI.ink3 }}>
+            <span>검증 · <b style={{ color: UI.ink2, fontWeight: 600 }}>{action.checks.join(", ")}</b></span>
+            <span>롤백 · <b style={{ color: UI.ink2, fontWeight: 600 }}>{action.rollback}</b></span>
+          </div>
+        )}
+        {/* 진행 상태 */}
+        {step === "syncing" && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: "flex", alignItems: "center", gap: 9, background: blueA(0.06), border: `1px solid ${blueA(0.2)}`, borderRadius: 10, padding: "10px 13px" }}>
+            <GithubIcon size={15} style={{ color: BLUE }} />
+            <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink }}>Git 커밋·push → 클러스터 pull·롤아웃 중…</span>
+          </motion.div>
+        )}
+        {step === "done" && (
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={SOFT} style={{ display: "flex", alignItems: "center", gap: 10, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 12, padding: "13px 15px" }}>
+            <span style={{ width: 30, height: 30, borderRadius: 999, background: HP.ok, display: "grid", placeItems: "center", flexShrink: 0 }}><Check size={17} style={{ color: UI.card }} strokeWidth={3} /></span>
+            <div><div style={{ fontSize: TYPE.body, fontWeight: 700, color: TINT.ok.fg }}>복구 완료</div><div style={{ fontSize: TYPE.label, color: UI.ink2, marginTop: 1 }}>{svc} 롤아웃 반영 · 파드 정상화 중</div></div>
+          </motion.div>
+        )}
+      </div>
+      {/* 액션 바 */}
+      <div style={{ padding: "14px 20px", borderTop: `1px solid ${UI.line}`, display: "flex", gap: 8 }}>
+        {step === "done"
+          ? <button onClick={onDone} style={{ flex: 1, border: "none", background: HP.ok, color: UI.card, borderRadius: 11, padding: "12px 0", fontSize: TYPE.bodyStrong, fontWeight: 700, cursor: "pointer" }}>닫고 정상화 확인</button>
+          : <button onClick={apply} disabled={step === "diagnose" || busy}
+              style={{ flex: 1, border: "none", background: (step === "diagnose" || busy) ? inkA(0.15) : BLUE, color: UI.card, borderRadius: 11, padding: "12px 0", fontSize: TYPE.bodyStrong, fontWeight: 700, cursor: (step === "diagnose" || busy) ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {busy && <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} style={{ width: 15, height: 15, borderRadius: 999, border: `2px solid ${cardA(0.4)}`, borderTopColor: UI.card }} />}
+              {step === "applying" ? "패치 적용 중…" : step === "syncing" ? "동기화 중…" : action.approval ? "승인하고 복구 실행" : "복구 실행"}
+            </button>}
+      </div>
+    </>
   );
 }
 
