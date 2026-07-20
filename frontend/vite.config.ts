@@ -25,8 +25,22 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
+    cacheDir: process.env.VITE_DEV_CACHE_DIR ?? "node_modules/.vite",
     plugins: [react(), tailwindcss()],
-    resolve: { alias: { "@": sourceRoot } },
+    resolve: { alias: { "@": sourceRoot }, dedupe: ["react", "react-dom"] },
+    optimizeDeps: {
+      // 단일 React 인스턴스로 사전번들해 dev에서 @dnd-kit가 별도 React 사본을
+      // 물어 "Invalid hook call"이 나는 것을 막는다.
+      include: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@dnd-kit/core",
+        "@dnd-kit/sortable",
+        "@dnd-kit/modifiers",
+        "@dnd-kit/utilities",
+      ],
+    },
     server: { proxy },
     preview: { proxy },
     test: {
