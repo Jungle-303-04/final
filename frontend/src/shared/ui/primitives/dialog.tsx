@@ -44,16 +44,18 @@ function DialogContent({
   children,
   showCloseButton = true,
   closeLabel,
+  overlayClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   closeLabel?: string;
+  overlayClassName?: string;
 }) {
   const t = usePrimitiveTranslation();
   const resolvedCloseLabel = closeLabel?.trim() || t("common.action.close");
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(

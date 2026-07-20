@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { ArrowRight, Check, Server } from "lucide-react";
 import { Link } from "react-router-dom";
 import type {
   ClusterConnectEnvironment,
@@ -8,28 +8,30 @@ import { ProviderLogo, type ProviderLogoKind } from "../../shared/brand/Provider
 import type { I18nController, MessageKey } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import { Button, buttonVariants } from "../../shared/ui/primitives/button";
-import { DialogFooter } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
 import { Spinner } from "../../shared/ui/primitives/spinner";
 import type { ConnectPhase } from "./ClusterConnectDialogTypes";
 
 const providers: readonly {
+  displayName: string;
   id: ClusterConnectProvider;
   logo: ProviderLogoKind;
   labelKey: MessageKey;
+  subLabel: string;
 }[] = [
-  { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
-  { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
-  { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
-  { id: "onprem", logo: "onprem", labelKey: "clusters.connect.provider.onprem" },
+  { displayName: "Amazon EKS", id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws", subLabel: "AWS" },
+  { displayName: "Google GKE", id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp", subLabel: "GCP" },
+  { displayName: "Azure AKS", id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure", subLabel: "Azure" },
+  { displayName: "Docker", id: "onprem", logo: "docker", labelKey: "clusters.connect.provider.onprem", subLabel: "Local Kubernetes" },
 ];
 const environments: readonly {
+  displayLabel: string;
   id: ClusterConnectEnvironment;
   labelKey: MessageKey;
 }[] = [
-  { id: "development", labelKey: "clusters.connect.environment.development" },
-  { id: "staging", labelKey: "clusters.connect.environment.staging" },
-  { id: "production", labelKey: "clusters.connect.environment.production" },
+  { displayLabel: "dev", id: "development", labelKey: "clusters.connect.environment.development" },
+  { displayLabel: "staging", id: "staging", labelKey: "clusters.connect.environment.staging" },
+  { displayLabel: "prod", id: "production", labelKey: "clusters.connect.environment.production" },
 ];
 
 export function ClusterRegistrationStep({
@@ -56,79 +58,96 @@ export function ClusterRegistrationStep({
   t: I18nController["t"];
 }) {
   return (
-    <div className="motion-wizard-stage grid gap-5">
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">
+    <div className="motion-wizard-stage grid gap-6">
+      <fieldset className="grid gap-2.5">
+        <legend className="mb-1 text-[0.8125rem] font-semibold text-muted-foreground">
           {t("clusters.connect.provider.label")}
         </legend>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {providers.map(({ id, logo, labelKey }) => (
+        <div className="grid grid-cols-2 gap-2.5">
+          {providers.map(({ displayName, id, logo, labelKey, subLabel }) => (
             <button
+              aria-label={t(labelKey)}
               aria-pressed={provider === id}
               className={cn(
-                "grid min-h-24 place-items-center gap-2 rounded-xl border bg-card p-3 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
-                provider === id && "border-ring bg-muted",
+                "relative grid min-h-16 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-2 rounded-[0.875rem] border border-transparent bg-muted/80 px-2.5 py-2.5 pr-7 text-left outline-none transition-[background-color,border-color,box-shadow] hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 sm:gap-3 sm:px-3.5 sm:pr-8 motion-reduce:transition-none",
+                provider === id && "border-primary/50 bg-card shadow-sm",
               )}
               key={id}
               onClick={() => onProviderChange(id)}
               type="button"
             >
-              <ProviderLogo className="size-6" provider={logo} />
-              <span>{t(labelKey)}</span>
+              <span className={cn(
+                "grid size-9 place-items-center rounded-[0.625rem]",
+                id === "aws" ? "bg-orange-500/10 text-orange-500" : "bg-primary/10 text-primary",
+              )}>
+                <ProviderLogo className="size-5" provider={logo} />
+              </span>
+              <span className="min-w-0 text-center">
+                <span className="block truncate text-[0.8125rem] font-bold text-foreground">{displayName}</span>
+                <span className="mt-0.5 block truncate text-[0.6875rem] text-muted-foreground">{subLabel}</span>
+              </span>
+              <span className="absolute right-2.5 grid size-[1.125rem] place-items-center sm:right-3.5">
+                {provider === id ? <Check aria-hidden="true" className="size-[1.125rem] text-primary" strokeWidth={3} /> : null}
+              </span>
             </button>
           ))}
         </div>
       </fieldset>
-      <label className="grid gap-2 text-sm font-medium">
-        {t("clusters.connect.name.label")}
-        <Input
-          aria-describedby={nameConflict ? "cluster-connect-name-error" : undefined}
-          aria-invalid={nameConflict || undefined}
-          autoFocus
-          onChange={(event) => onNameChange(event.currentTarget.value)}
-          placeholder={t("clusters.connect.name.placeholder")}
-          value={name}
-        />
+      <label className="grid gap-2.5 text-[0.8125rem] font-semibold text-muted-foreground">
+        <span>{t("clusters.connect.name.label")}</span>
+        <span className="relative block">
+          <Server aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 z-10 size-[1.125rem] -translate-y-1/2 text-muted-foreground/70" />
+          <Input
+            aria-describedby={nameConflict ? "cluster-connect-name-error" : undefined}
+            aria-invalid={nameConflict || undefined}
+            autoFocus
+            className="h-14 rounded-[0.875rem] border-transparent bg-muted/80 pr-4 pl-12 font-mono text-sm shadow-none focus-visible:bg-background"
+            onChange={(event) => onNameChange(event.currentTarget.value)}
+            placeholder={t("clusters.connect.name.placeholder")}
+            value={name}
+          />
+        </span>
         {nameConflict ? (
           <span className="text-xs text-destructive" id="cluster-connect-name-error" role="alert">
             {t("clusters.connect.name.conflict")}
           </span>
         ) : null}
       </label>
-      <fieldset className="grid gap-2">
-        <legend className="flex items-baseline gap-2 text-sm font-medium">
+      <fieldset className="grid gap-2.5">
+        <legend className="flex items-baseline gap-2 text-[0.8125rem] font-semibold text-muted-foreground">
           <span>{t("clusters.connect.environment.label")}</span>
-          <span className="text-xs font-normal text-muted-foreground">
+          <span className="text-[0.6875rem] font-normal text-muted-foreground/70">
             {t("clusters.connect.environment.hint")}
           </span>
         </legend>
         <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-          {environments.map(({ id, labelKey }) => (
+          {environments.map(({ displayLabel, id, labelKey }) => (
             <button
+              aria-label={t(labelKey)}
               aria-pressed={environment === id}
               className={cn(
-                "min-w-0 rounded-lg px-2 py-2 text-sm font-semibold text-muted-foreground outline-none transition-[background-color,box-shadow,color] duration-(--motion-quick) ease-(--ease-soft) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
+                "min-w-0 rounded-[0.625rem] px-2 py-2.5 text-sm font-bold text-muted-foreground/65 outline-none transition-[background-color,box-shadow,color] duration-(--motion-quick) ease-(--ease-soft) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
                 environment === id && "bg-card text-foreground shadow-xs",
               )}
               key={id}
               onClick={() => onEnvironmentChange(id)}
               type="button"
             >
-              <span className="block truncate">{t(labelKey)}</span>
+              <span className="block truncate">{displayLabel}</span>
             </button>
           ))}
         </div>
       </fieldset>
-      <DialogFooter className="mt-1">
-        <Button
-          aria-busy={phase === "submitting"}
-          disabled={!name.trim() || nameConflict || phase === "submitting"}
-          onClick={onRegister}
-        >
-          {phase === "submitting" ? <Spinner decorative /> : null}
-          {t("clusters.connect.action.register")}
-        </Button>
-      </DialogFooter>
+      <Button
+        aria-busy={phase === "submitting"}
+        className="h-[3.375rem] w-full rounded-[0.875rem] text-[0.9375rem] font-bold shadow-sm"
+        disabled={!name.trim() || nameConflict || phase === "submitting"}
+        onClick={onRegister}
+      >
+        {phase === "submitting" ? <Spinner decorative /> : null}
+        {t("clusters.connect.action.register")}
+        {phase !== "submitting" ? <ArrowRight aria-hidden="true" className="size-[1.125rem]" /> : null}
+      </Button>
     </div>
   );
 }

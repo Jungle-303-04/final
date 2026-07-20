@@ -71,7 +71,7 @@ export const clustersEn = {
   "clusters.disconnect.failure.title": "Could not disconnect the cluster",
   "clusters.disconnect.failure.description": "Check the connection and try again.",
   "clusters.connect.title": "Connect a cluster",
-  "clusters.connect.description": "Install the Kyro agent from one server-generated command.",
+  "clusters.connect.description": "Install the agent to securely register and observe this cluster.",
   "clusters.connect.step": "Step {current} of {total}",
   "clusters.connect.name.label": "Cluster name",
   "clusters.connect.name.placeholder": "production",

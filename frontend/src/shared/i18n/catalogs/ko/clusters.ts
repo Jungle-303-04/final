@@ -71,7 +71,7 @@ export const clustersKo = {
   "clusters.disconnect.failure.title": "연결을 해제하지 못했습니다",
   "clusters.disconnect.failure.description": "연결 상태를 확인한 뒤 다시 시도하세요.",
   "clusters.connect.title": "클러스터 연결",
-  "clusters.connect.description": "서버가 만든 한 줄 명령으로 Kyro 에이전트를 설치합니다.",
+  "clusters.connect.description": "에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다.",
   "clusters.connect.step": "{total}단계 중 {current}단계",
   "clusters.connect.name.label": "클러스터 이름",
   "clusters.connect.name.placeholder": "production",
